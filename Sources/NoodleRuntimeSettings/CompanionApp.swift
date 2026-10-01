@@ -11,7 +11,7 @@ public enum CompanionApp: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
-    var name: String {
+    public var name: String {
         switch self {
         case .computer: ComputerBuildIdentity.current.appName
         case .applet: AppletBuildIdentity.current.appName

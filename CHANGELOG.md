@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- The Window menu opens Noodle Browser, Noodle Computer and Noodle Applet; those not installed are dimmed.
+
 ## [0.38.0] - 2026-10-01
 
 ### Added
