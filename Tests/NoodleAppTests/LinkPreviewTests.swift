@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import NoodleCore
 import Observation
 import XCTest
 @preconcurrency import LinkPresentation
@@ -188,6 +189,18 @@ import XCTest
         selection.visible = false; await Task.yield(); selection.visible = true
         _ = try await control("Open link: Article title", in: view)
         XCTAssertEqual(f.metadata.count, 1)
+    }
+
+    func testWebLinkAttachmentLooksLikeAnUnfurledLink() throws {
+        let url = URL(string: "https://www.example.com/\(UUID().uuidString)")!
+        let link = ConversationAttachment(conversationID: UUID(), originalFilename: "www.example.com.webloc",
+            storedFilename: "www.example.com.webloc", mediaType: "application/x-webloc", byteCount: 7, url: url)
+        let attachment = AttachmentInlinePreview(attachment: link, fileURL: URL(fileURLWithPath: "/nonexistent.webloc"),
+            shouldLoad: false, isSelected: false, select: {}, preview: {})
+        let card = try XCTUnwrap(ImageRenderer(content: LinkPreviewCard(url: url, shouldLoad: false)).nsImage)
+        let rendered = try XCTUnwrap(ImageRenderer(content: attachment).nsImage)
+        XCTAssertEqual(rendered.size, card.size)
+        XCTAssertEqual(rendered.tiffRepresentation, card.tiffRepresentation)
     }
 
     func testRecreatedPreviewRendersCachedImageBeforeBecomingVisible() async throws {

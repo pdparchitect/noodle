@@ -252,6 +252,9 @@ struct AttachmentInlinePreview: View {
                 NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
             } else if let card = attachment.card {
                 linkCardPreview(card)
+            } else if let webLink {
+                // A shared web page looks like one unfurled from a message, not like its bookmark file.
+                LinkPreviewCard(url: webLink, shouldLoad: shouldLoad)
             } else if displaysAsImage {
                 imagePreview
             } else {
@@ -288,10 +291,15 @@ struct AttachmentInlinePreview: View {
         .accessibilityAddTraits(.isButton)
         .task(id: shouldLoad) {
             guard shouldLoad,
-                  attachment.url.flatMap(NoodletLink.id) == nil,
+                  attachment.url.flatMap(NoodletLink.id) == nil, webLink == nil,
                   attachment.annotation == nil || attachment.mediaType.hasPrefix("image/") else { return }
             await loadThumbnail()
         }
+    }
+
+    private var webLink: URL? {
+        guard attachment.card == nil else { return nil }
+        return attachment.url.flatMap { MessageLink.publicWebURL(from: $0, preservingFragment: true) }
     }
 
     private var openHint: String {

@@ -6,6 +6,28 @@ import SwiftUI
 @preconcurrency import LinkPresentation
 
 struct MessageLinkPreview: View {
+    let url: URL
+    let shouldLoad: Bool
+    private let cache: LinkPreviewMetadataCache?
+    private let openURL: ((URL) -> Void)?
+    @Environment(\.openURL) private var environmentOpenURL
+
+    init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache? = nil, openURL: ((URL) -> Void)? = nil) {
+        self.url = url; self.shouldLoad = shouldLoad; self.cache = cache; self.openURL = openURL
+    }
+
+    var body: some View {
+        Button {
+            if let openURL { openURL(url) } else { environmentOpenURL(url) }
+        } label: {
+            LinkPreviewCard(url: url, shouldLoad: shouldLoad, cache: cache)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A web page's picture, title and site, as unfurled from a message or shared as a link attachment.
+struct LinkPreviewCard: View {
     private let cardWidth: CGFloat = 280
     private let imageHeight: CGFloat = 158
     private let cardHeight: CGFloat = 220
@@ -13,8 +35,6 @@ struct MessageLinkPreview: View {
     let url: URL
     let shouldLoad: Bool
     private let cache: LinkPreviewMetadataCache
-    private let openURL: ((URL) -> Void)?
-    @Environment(\.openURL) private var environmentOpenURL
 
     @State private var metadata: LPLinkMetadata?
     @State private var previewImage: NSImage?
@@ -22,11 +42,10 @@ struct MessageLinkPreview: View {
     @State private var loading = false
     @State private var requestID = UUID()
 
-    @MainActor init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache? = nil,
-         openURL: ((URL) -> Void)? = nil) {
+    @MainActor init(url: URL, shouldLoad: Bool, cache: LinkPreviewMetadataCache? = nil) {
         self.url = url; self.shouldLoad = shouldLoad
         let cache = cache ?? .shared
-        self.cache = cache; self.openURL = openURL
+        self.cache = cache
         // Lazy rows need their cached content before the first visible frame.
         let result = cache.cachedResult(for: url)
         _metadata = State(initialValue: result?.metadata)
@@ -35,63 +54,59 @@ struct MessageLinkPreview: View {
     }
 
     var body: some View {
-        Button {
-            if let openURL { openURL(url) } else { environmentOpenURL(url) }
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack {
-                    Color.black.opacity(0.28)
-                    if let previewImage {
-                        Image(nsImage: previewImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: cardWidth, height: imageHeight, alignment: .topLeading)
-                            .clipped()
-                            .transition(.opacity)
-                    } else if loading {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: mapLink == nil ? "link" : "map")
-                            .font(.system(size: 26, weight: .light))
-                            .foregroundStyle(.secondary)
-                    }
-                    if isYouTubeLink, metadata != nil {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(14)
-                            .background(.black.opacity(0.7), in: Circle())
-                    }
-                }
-                .frame(width: cardWidth, height: imageHeight)
-                .clipped()
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text(siteLabel)
-                        .font(.system(size: 10.5))
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                Color.black.opacity(0.28)
+                if let previewImage {
+                    Image(nsImage: previewImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: cardWidth, height: imageHeight, alignment: .topLeading)
+                        .clipped()
+                        .transition(.opacity)
+                } else if loading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: mapLink == nil ? "link" : "map")
+                        .font(.system(size: 26, weight: .light))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 9)
-                .frame(width: cardWidth, alignment: .leading)
-                .frame(minHeight: cardHeight - imageHeight, alignment: .leading)
+                if isYouTubeLink, metadata != nil {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(14)
+                        .background(.black.opacity(0.7), in: Circle())
+                }
             }
-            .frame(width: cardWidth, height: cardHeight, alignment: .top)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.white.opacity(0.12), lineWidth: 1)
+            .frame(width: cardWidth, height: imageHeight)
+            .clipped()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text(siteLabel)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(width: cardWidth, alignment: .leading)
+            .frame(minHeight: cardHeight - imageHeight, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .frame(width: cardWidth, height: cardHeight, alignment: .top)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(mapLink == nil ? "Open link: \(title)" : "Open in Maps: \(title)")
         .onChange(of: url) { _, _ in
             requestID = UUID()
