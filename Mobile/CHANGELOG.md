@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### What to Test
+
+- Open a conversation and tap the message field: the field sits a little above the keyboard, not on it, and drops back level with Search when the keyboard goes.
+
+### Fixed
+
+- With the keyboard up, the message field sat right on the keyboard.
+
 ## [0.13.0] - 2026-10-01
 
 ### What to Test

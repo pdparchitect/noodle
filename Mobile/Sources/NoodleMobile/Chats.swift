@@ -1063,8 +1063,8 @@ struct ChatView: View {
     /// The height of a one-line message field, which the buttons beside it match.
     static let controlHeight: CGFloat = 48
 
-    /// How far the composer's bottom sits above the screen's, given the home bar's room under it, none
-    /// with the keyboard up: as low as the system's search field, partly over the home bar.
+    /// How far the composer's bottom sits above the screen's, given the home bar's room under it: as low
+    /// as the system's search field, partly over the home bar.
     static func composerGap(homeBar: CGFloat) -> CGFloat { max(8, homeBar - 6) }
     let chats: HubChats
     let threadID: UUID
@@ -1090,8 +1090,10 @@ struct ChatView: View {
     @State private var attaching = false
     @Namespace private var attachGlass
     @State private var recorder: VoiceRecorder
-    /// The home bar's room under the composer, none with the keyboard up.
+    /// The home bar's room under the composer.
     @State private var homeBar: CGFloat = 0
+    /// Whether the keyboard is up, when the composer sits just above it rather than as low as search.
+    @State private var keyboardUp = false
     @Environment(\.dismiss) private var dismiss
 
     init(chats: HubChats, threadID: UUID) {
@@ -1154,18 +1156,20 @@ struct ChatView: View {
         }
         // The conversation keeps room for a one-line composer at its end. A longer message grows the
         // composer over the conversation, as in Messages, instead of moving it.
-        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: Self.controlHeight + 8 + Self.composerGap(homeBar: homeBar) - homeBar) }
+        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: Self.controlHeight + 8 + composerLift) }
         .overlay(alignment: .bottom) {
             // Moved down past the safe area's edge rather than ignoring it, which iOS 26 does not let an
             // overlay do.
             composer
-                .padding(.bottom, Self.composerGap(homeBar: homeBar) - homeBar)
+                .padding(.bottom, composerLift)
                 .background {
                     Color.clear
                         .ignoresSafeArea(.container, edges: .bottom)
                         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { homeBar = $0 }
                 }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -1246,6 +1250,9 @@ struct ChatView: View {
             }
         }
     }
+
+    /// How far the composer sits above the safe area's bottom edge, which the keyboard moves up.
+    private var composerLift: CGFloat { keyboardUp ? 8 : Self.composerGap(homeBar: homeBar) - homeBar }
 
     private var composer: some View {
         VStack(spacing: 6) {

@@ -1065,6 +1065,38 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(abs(fieldBottom - ChatView.controlHeight - end - 16) < 1)
     }
 
+    /// With the keyboard up, the message field keeps 8 points clear of it, and the conversation still
+    /// ends 16 points above the field.
+    @Test func theComposerSitsClearOfTheKeyboard() async throws {
+        let hub = FakeHub()
+        for index in 1..<40 { await hub.botSays(String(repeating: "Message \(index) says something. ", count: 1 + index % 4)) }
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: NavigationStack { ChatView(chats: chats, threadID: scout.id) })
+        window.isHidden = false
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .seconds(1))
+        let field = try #require(Self.view(PastingTextView.self, in: window) { _ in true })
+        // The simulator shows no keyboard, and SwiftUI does not make room for a posted notice of one,
+        // so the field is measured from the edge the keyboard would take: the safe area's.
+        NotificationCenter.default.post(name: UIResponder.keyboardWillShowNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(500))
+
+        let keyboardTop = window.bounds.maxY - window.safeAreaInsets.bottom
+        let conversation = try #require(Self.view(UIScrollView.self, in: window) { !($0 is UITextView) && $0.contentSize.height > window.bounds.height })
+        // The text sits 13 points inside the glass around it.
+        let fieldBottom = field.convert(field.bounds, to: window).maxY + 13
+        let end = conversation.convert(conversation.bounds, to: window).maxY - conversation.adjustedContentInset.bottom
+
+        #expect(abs(keyboardTop - fieldBottom - 8) < 1)
+        #expect(abs(fieldBottom - ChatView.controlHeight - end - 16) < 1)
+    }
+
     private static func view<V: UIView>(_ type: V.Type, in view: UIView, where test: (V) -> Bool) -> V? {
         if let match = view as? V, test(match) { return match }
         for subview in view.subviews { if let match = self.view(type, in: subview, where: test) { return match } }
