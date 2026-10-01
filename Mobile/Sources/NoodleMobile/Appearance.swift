@@ -62,6 +62,8 @@ struct BackgroundEditor: View {
     @State private var creating = false
     @State private var busy = false
     @State private var problem: String?
+    @State private var sourceImage: Image?
+    @State private var screen: CGSize?
 
     var body: some View {
         let background = chats.background(for: thread)
@@ -106,8 +108,16 @@ struct BackgroundEditor: View {
             await apply { try await photo.loadTransferable(type: BackgroundPhoto.self)?.data }
             self.photo = nil
         }
-        .imagePlaygroundSheet(isPresented: $creating, concepts: [], sourceImage: nil) { url in
+        .imagePlaygroundSheet(isPresented: $creating, sourceImage: sourceImage) { url in
             Task { await apply { try Data(contentsOf: url) } }
+        }
+        .noodleImagePlayground(shapedLike: screen)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
+        // Image Playground starts from the photo in use, as on the Mac.
+        .task(id: chats.backgroundImageURL(for: thread)) {
+            sourceImage = nil
+            guard let url = chats.backgroundImageURL(for: thread) else { return }
+            sourceImage = await Task.detached { UIImage(contentsOfFile: url.path) }.value.map(Image.init(uiImage:))
         }
     }
 
@@ -237,7 +247,7 @@ struct BotPictureEditor: View {
         .imagePlaygroundSheet(isPresented: $creating, concepts: avatar.concepts, sourceImage: draft.avatarImageData.flatMap(UIImage.init(data:)).map(Image.init(uiImage:))) { url in
             Task { await load { try Data(contentsOf: url) } }
         }
-        .withoutPhotosPeople()
+        .noodleImagePlayground()
     }
 
     private func load(_ source: () async throws -> Data?) async {
@@ -249,18 +259,6 @@ struct BotPictureEditor: View {
             draft.avatarImageData = try BotPicture.prepare(data)
         } catch {
             problem = error.localizedDescription
-        }
-    }
-}
-
-private extension View {
-    /// Keeps people from Photos out of Image Playground, as the Mac's Bot Icon does,
-    /// so a bot's picture is never made to look like someone real.
-    @ViewBuilder func withoutPhotosPeople() -> some View {
-        if #available(iOS 26.4, *) {
-            imagePlaygroundOptions({ var options = ImagePlaygroundOptions(); options.personalization = .disabled; return options }())
-        } else {
-            imagePlaygroundPersonalizationPolicy(.disabled)
         }
     }
 }

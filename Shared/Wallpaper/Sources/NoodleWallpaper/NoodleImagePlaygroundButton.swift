@@ -1,5 +1,6 @@
 import AppKit
 import ImagePlayground
+import NoodleWallpaperCore
 import SwiftUI
 
 @available(macOS 15.1, *)
@@ -8,32 +9,23 @@ public struct NoodleImagePlaygroundButton: View {
     @State private var isPresented = false
     let sourceImageData: Data?
     let concepts: [ImagePlaygroundConcept]
+    let shape: CGSize?
     let onCompletion: (URL) -> Void
 
-    public init(sourceImageData: Data?, concepts: [ImagePlaygroundConcept] = [], onCompletion: @escaping (URL) -> Void) {
+    /// `shape` is the screen a background fills; pictures leave it out and stay square.
+    public init(sourceImageData: Data?, concepts: [ImagePlaygroundConcept] = [], shape: CGSize? = nil,
+                onCompletion: @escaping (URL) -> Void) {
         self.sourceImageData = sourceImageData
         self.concepts = concepts
+        self.shape = shape
         self.onCompletion = onCompletion
     }
 
     public var body: some View {
-        if supportsImagePlayground { configuredButton }
-    }
-    @ViewBuilder private var configuredButton: some View {
-        if #available(macOS 26.4, *) {
+        if supportsImagePlayground {
             triggerButton
                 .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
-                .imagePlaygroundPersonalizationPolicy(.disabled)
-                .imagePlaygroundOptions(imagePlaygroundOptions)
-                .imagePlaygroundGenerationStyle(.illustration)
-        } else if #available(macOS 15.4, *) {
-            triggerButton
-                .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
-                .imagePlaygroundPersonalizationPolicy(.disabled)
-                .imagePlaygroundGenerationStyle(.illustration)
-        } else {
-            triggerButton
-                .imagePlaygroundSheet(isPresented: $isPresented, concepts: concepts, sourceImage: sourceImage, onCompletion: onCompletion)
+                .noodleImagePlayground(shapedLike: shape)
         }
     }
     private var triggerButton: some View {
@@ -41,11 +33,6 @@ public struct NoodleImagePlaygroundButton: View {
             Label("Create Image…", systemImage: "apple.intelligence").frame(maxWidth: .infinity)
                 .frame(height: 20)
         }.buttonStyle(.bordered)
-    }
-    @available(macOS 26.4, *) private var imagePlaygroundOptions: ImagePlaygroundOptions {
-        var options = ImagePlaygroundOptions()
-        options.personalization = .disabled
-        return options
     }
     private var sourceImage: Image? {
         guard let sourceImageData, let image = NSImage(data: sourceImageData) else { return nil }

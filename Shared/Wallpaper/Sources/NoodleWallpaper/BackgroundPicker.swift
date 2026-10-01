@@ -54,7 +54,7 @@ public struct BackgroundPicker: View {
                 chooseWallpaper: { wallpapers = SystemWallpaper.available() })
                 .frame(minWidth: 0, maxWidth: .infinity)
             if #available(macOS 15.1, *) {
-                NoodleImagePlaygroundButton(sourceImageData: sourceImageData) { url in
+                NoodleImagePlaygroundButton(sourceImageData: sourceImageData, shape: NSScreen.main?.frame.size) { url in
                     load { try Self.generatedImage(at: url) }
                 }
                 .frame(minWidth: 0, maxWidth: .infinity)
