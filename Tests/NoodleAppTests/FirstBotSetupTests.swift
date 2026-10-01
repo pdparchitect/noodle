@@ -81,6 +81,11 @@ import XCTest
         XCTAssertTrue(setup.canContinue)
     }
 
+    func testSettingsListsHarnessesInTheWelcomeOrder() {
+        XCTAssertEqual(controller.displayedInstallations.map(\.provider),
+                       FirstBotSetup.featured + [.fx, .openCode, .antigravity, .apple])
+    }
+
     func testOnlyTheFourAccountsAreOffered() async throws {
         XCTAssertEqual(FirstBotSetup.featured, [.codex, .claudeCode, .muse, .grokBuild])
         // A harness set up outside the four is left to Settings, even when it is the one ready.

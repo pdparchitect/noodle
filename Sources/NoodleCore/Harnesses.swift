@@ -1,11 +1,12 @@
 import Foundation
 
+/// Listed everywhere in this order: the four the welcome offers, then the rest, experimental last.
 public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case codex
     case claudeCode = "claude-code"
-    case fx
-    case grokBuild = "grok-build"
     case muse
+    case grokBuild = "grok-build"
+    case fx
     case openCode = "opencode"
     case antigravity
     case apple

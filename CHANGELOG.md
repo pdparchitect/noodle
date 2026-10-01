@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 - Help > Set Up a Bot… is now Help > Welcome and plays the welcome from the start. Once you have bots, it only sets up the account you choose and returns you to your conversations. The empty window's Set Up Your First Bot opens the welcome too, instead of a sheet.
 - Noodle's window opens in the middle of the screen the first time; after that it opens where you left it.
 - Closing the window during the welcome asks first; leaving counts as Not Now.
+- Harnesses are listed in the welcome's order everywhere, including Settings > Harness: Codex, Claude Code, Muse Code and Grok Build, then FX and OpenCode, with Antigravity and Apple Intelligence last.
 - Bots that run on a Hub no longer offer folders from this Mac, which they could never use.
 - Settings > Hub tags Tailscale addresses as tailscale, lowercase like home and internet.
 
