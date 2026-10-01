@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-01
+
 ### Changed
 
 - Retire the clean-up of noodlet copies from before 0.12.0 and of Swift noodlet builds from before 0.19.0. Updates already pass through both releases.

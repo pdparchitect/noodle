@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-01
+
 ### What to Test
 
 - Open a conversation: the message field sits at the same height as Search in the list of bots.

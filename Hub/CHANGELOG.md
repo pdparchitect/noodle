@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-01
+
 ### Added
 
 - Network shows whether devices away from home can reach the Hub, through Tailscale, the internet or your own address, and turns orange when the router could not open the port and nothing else reaches it.
