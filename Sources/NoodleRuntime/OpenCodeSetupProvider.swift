@@ -17,6 +17,7 @@ public final class OpenCodeSetupProvider: HarnessSetupProviding {
         // OpenCode's login is an interactive prompt.
         throw HarnessSetupError("Run \(Self.command(for: installation)) auth login in Terminal, complete sign-in, then choose Check Again here.")
     }
+    public func terminalSignIn(for installation: HarnessInstallation) -> String? { Self.command(for: installation) + " auth login" }
 
     /// A copy Noodle installed is not on the shell's PATH, so name it in full;
     /// Terminal can run it from there. `environment` points it at a profile.

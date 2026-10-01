@@ -33,6 +33,12 @@ public struct HarnessSetupError: LocalizedError {
     var installationGuide: HarnessInstallationGuide { get }
     func signIn(for installation: HarnessInstallation,
                 onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus
+    /// A harness with no login Noodle can run gives the command the person runs in Terminal instead.
+    func terminalSignIn(for installation: HarnessInstallation) -> String?
+}
+
+public extension HarnessSetupProviding {
+    func terminalSignIn(for installation: HarnessInstallation) -> String? { nil }
 }
 
 public enum HarnessStorage {

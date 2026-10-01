@@ -18,6 +18,8 @@ public final class HarnessSetupController {
     public private(set) var errors: [HarnessProvider: String] = [:]
     public private(set) var activity: [HarnessProvider: String] = [:]
     public private(set) var challenges: [HarnessProvider: HarnessSignInChallenge] = [:]
+    /// The command a harness signs in with from Terminal, once the person asks to.
+    public private(set) var terminalSignIns: [HarnessProvider: String] = [:]
     /// Download fraction while Noodle installs a harness; absent when indeterminate.
     public private(set) var installProgress: [HarnessProvider: Double] = [:]
     public private(set) var checking: Set<HarnessProvider> = []
@@ -63,6 +65,7 @@ public final class HarnessSetupController {
     }
 
     private func record(_ installation: HarnessInstallation, authentication status: HarnessAuthenticationStatus?) {
+        if status != .unauthenticated { terminalSignIns[installation.provider] = nil }
         let previous = snapshots[installation.provider]
         let snapshot = HarnessPresentationSnapshot(installation: installation, authentication: status,
             version: previous?.installation == installation ? previous?.version : nil)
@@ -170,10 +173,14 @@ public final class HarnessSetupController {
     public func signIn(_ installation: HarnessInstallation) {
         let id = installation.provider
         guard operations[id] == nil, let provider = providers[id] else { return }
+        errors[id] = nil
+        if let command = provider.terminalSignIn(for: installation) {
+            terminalSignIns[id] = command
+            return
+        }
         retireStatusCheck(id)
         let token = UUID()
         signInAttempts[id] = (token, installation)
-        errors[id] = nil
         activity[id] = "Starting sign-in…"
         operations[id] = Task { [weak self] in
             defer { self?.finishSignIn(id, token: token) }
@@ -315,6 +322,7 @@ public final class HarnessSetupController {
         signInAttempts[id] = nil; activity[id] = nil; challenges[id] = nil; operations[id] = nil
     }
     public func cancel(_ id: HarnessProvider) {
+        terminalSignIns[id] = nil
         operations[id]?.cancel()
         if let token = signInAttempts[id]?.id { finishSignIn(id, token: token) }
         if installs[id] != nil { finishInstall(id) }

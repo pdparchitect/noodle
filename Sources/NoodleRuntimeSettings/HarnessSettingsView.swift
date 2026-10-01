@@ -170,6 +170,11 @@ public struct HarnessInstallationRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 actionButtons
+                if let command = setup.terminalSignIns[id] {
+                    HarnessTerminalSignInView(command: command) {
+                        Task { await setup.refresh([liveInstallation ?? installation]) }
+                    }
+                }
                 if installation.isAvailable {
                     updateGuide
                 }
@@ -294,17 +299,7 @@ public struct HarnessInstallationRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func openTerminal() {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
-            terminalError = "Open your preferred terminal and paste the installation command."
-            return
-        }
-        NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
-            Task { @MainActor in
-                terminalError = error == nil ? nil : "Could not open Terminal. Open it manually and paste the installation command."
-            }
-        }
-    }
+    private func openTerminal() { HarnessCommandView.openTerminal { terminalError = $0 } }
 
     /// Where the harness lives, shown on the version line once it is installed.
     @ViewBuilder private var locationText: some View {
@@ -466,8 +461,48 @@ public struct HarnessInstallationRow: View {
     }
 }
 
+/// A harness that signs in from Terminal, set out like its installation and update commands.
+public struct HarnessTerminalSignInView: View {
+    let command: String
+    let checkAgain: () -> Void
+    @State private var terminalError: String?
+
+    public init(command: String, checkAgain: @escaping () -> Void) {
+        self.command = command
+        self.checkAgain = checkAgain
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Run this command in Terminal and complete sign-in, then choose Check Again.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HarnessCommandView(command: command)
+            HStack {
+                Button("Open Terminal") { HarnessCommandView.openTerminal { terminalError = $0 } }
+                    .buttonStyle(.link)
+                Button("Check Again", action: checkAgain)
+                    .buttonStyle(.link)
+            }
+            if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
+        }
+    }
+}
+
 private struct HarnessCommandView: View {
     let command: String
+
+    /// Reports why Terminal could not be opened, or nil once it is.
+    static func openTerminal(_ failed: @escaping @MainActor (String?) -> Void) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
+            failed("Open your preferred terminal and paste the command.")
+            return
+        }
+        NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
+            Task { @MainActor in
+                failed(error == nil ? nil : "Could not open Terminal. Open it manually and paste the command.")
+            }
+        }
+    }
 
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {

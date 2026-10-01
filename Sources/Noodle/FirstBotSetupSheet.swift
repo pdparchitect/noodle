@@ -216,6 +216,11 @@ struct FirstBotSetupSheet: View {
         if let challenge = setup.challenges[id] {
             HarnessSignInChallengeView(challenge: challenge)
         }
+        if let command = setup.terminalSignIns[id] {
+            HarnessTerminalSignInView(command: command) {
+                Task { await setup.refreshAll(store.runtime) }
+            }
+        }
         if let error = setup.errors[id] {
             Text(error).font(.caption).foregroundStyle(.red)
                 .textSelection(.enabled)

@@ -44,17 +44,14 @@ import XCTest
         XCTAssertTrue(controller.errors.isEmpty)
     }
 
-    func testAntigravitySignInSendsThePersonToTerminalWithTheProfilesHome() async throws {
+    func testAntigravitySignInSendsThePersonToTerminalWithTheProfilesHome() throws {
         let (controller, store) = try controller()
         let profile = try controller.create(provider: .antigravity, named: "Work")
         controller.signIn(profile, installation: HarnessInstallation(provider: .antigravity, executablePath: "/fixtures/agy"))
-        XCTAssertEqual(controller.activity[profile.id], "Starting sign-in…")
-        await settle(controller, profile)
         XCTAssertNil(controller.activity[profile.id])
         XCTAssertNil(controller.authentication[profile.id])
-        let error = try XCTUnwrap(controller.errors[profile.id])
-        XCTAssertTrue(error.contains("HOME='\(store.loginHome(profile).path)' '/fixtures/agy'"), error)
-        XCTAssertTrue(error.contains("Check Again"), error)
+        XCTAssertNil(controller.errors[profile.id], "A Terminal sign-in is a command to copy, not an error")
+        XCTAssertEqual(controller.terminalSignIns[profile.id], "HOME='\(store.loginHome(profile).path)' '/fixtures/agy'")
     }
 
     func testFxSignInGoesThroughTheAgentHostNotTerminal() async throws {
@@ -69,16 +66,14 @@ import XCTest
         XCTAssertFalse(error.contains("Terminal"), error)
     }
 
-    func testOpenCodeSignInSendsThePersonToTerminalWithTheProfilesFolders() async throws {
+    func testOpenCodeSignInSendsThePersonToTerminalWithTheProfilesFolders() throws {
         let (controller, store) = try controller()
         let profile = try controller.create(provider: .openCode, named: "Work")
         controller.signIn(profile, installation: HarnessInstallation(provider: .openCode, executablePath: "/fixtures/opencode"))
-        await settle(controller, profile)
         XCTAssertNil(controller.authentication[profile.id])
-        let error = try XCTUnwrap(controller.errors[profile.id])
+        XCTAssertNil(controller.errors[profile.id])
         let home = store.loginHome(profile).path
-        XCTAssertTrue(error.contains("XDG_CACHE_HOME='\(home)/.cache' XDG_CONFIG_HOME='\(home)/.config' XDG_DATA_HOME='\(home)/.local/share' XDG_STATE_HOME='\(home)/.local/state' '/fixtures/opencode' auth login --standalone"), error)
-        XCTAssertTrue(error.contains("Check Again"), error)
+        XCTAssertEqual(controller.terminalSignIns[profile.id], "XDG_CACHE_HOME='\(home)/.cache' XDG_CONFIG_HOME='\(home)/.config' XDG_DATA_HOME='\(home)/.local/share' XDG_STATE_HOME='\(home)/.local/state' '/fixtures/opencode' auth login --standalone")
     }
 
     func testRefreshWithoutAnInstallationClearsStatusAndDeleteClearsErrors() async throws {
@@ -86,14 +81,14 @@ import XCTest
         let profile = try controller.create(provider: .antigravity, named: "Work")
         let installation = HarnessInstallation(provider: .antigravity, executablePath: "/fixtures/agy")
         controller.signIn(profile, installation: installation)
-        await settle(controller, profile)
-        XCTAssertNotNil(controller.errors[profile.id])
+        XCTAssertNotNil(controller.terminalSignIns[profile.id])
 
         await controller.refresh(HarnessInstallation(provider: .antigravity, executablePath: nil))
         XCTAssertNil(controller.authentication[profile.id])
 
         try controller.delete(profile)
         XCTAssertNil(controller.errors[profile.id])
+        XCTAssertNil(controller.terminalSignIns[profile.id])
         XCTAssertTrue(controller.profiles.isEmpty)
     }
 

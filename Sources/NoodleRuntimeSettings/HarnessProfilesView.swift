@@ -115,6 +115,9 @@ public struct HarnessProfilesView: View {
             if let challenge = controller.challenges[profile.id] {
                 HarnessSignInChallengeView(challenge: challenge)
             }
+            if let command = controller.terminalSignIns[profile.id] {
+                HarnessTerminalSignInView(command: command) { Task { await controller.refresh(installation) } }
+            }
             if let error = controller.errors[profile.id] {
                 Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }

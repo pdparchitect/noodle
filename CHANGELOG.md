@@ -16,6 +16,10 @@ All notable changes to Noodle are documented here, following
 - Settings > Hub says which ways reach This Mac from anywhere, Tailscale, the internet or your own address, and no longer says "on this network" for a Mac that Tailscale reaches.
 - Retire upgrade steps for data from before the 0.28.0 milestone: harness login stamps from earlier versions, the old bot inbox location, the access settings kept before per-bot grants, and MCP skill names ending in a connection ID. Updates already pass through 0.28.0.
 
+### Fixed
+
+- Signing in to Antigravity or OpenCode, or to one of their profiles, shows the Terminal command in the same copyable box as harness updates, with Open Terminal and Check Again, instead of a red error.
+
 ## [0.38.0] - 2026-10-01
 
 ### Added

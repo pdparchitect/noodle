@@ -15,6 +15,7 @@ public final class AntigravitySetupProvider: HarnessSetupProviding {
     public func signIn(for installation: HarnessInstallation, onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
         throw HarnessSetupError("Run \(Self.command(for: installation)) in Terminal, complete sign-in, then choose Check Again here.")
     }
+    public func terminalSignIn(for installation: HarnessInstallation) -> String? { Self.command(for: installation) }
 
     /// Antigravity signs in from its interactive prompt. A copy Noodle installed is
     /// not on the shell's PATH, so name it in full. A profile is a separate home.

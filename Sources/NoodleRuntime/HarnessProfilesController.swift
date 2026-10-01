@@ -11,6 +11,8 @@ public final class HarnessProfilesController {
     public private(set) var errors: [UUID: String] = [:]
     public private(set) var activity: [UUID: String] = [:]
     public private(set) var challenges: [UUID: HarnessSignInChallenge] = [:]
+    /// The command a profile signs in with from Terminal, once the person asks to.
+    public private(set) var terminalSignIns: [UUID: String] = [:]
     @ObservationIgnored private let store: HarnessProfileStore
     @ObservationIgnored private var operations: [UUID: (id: UUID, task: Task<Void, Never>)] = [:]
 
@@ -47,6 +49,7 @@ public final class HarnessProfilesController {
         try store.delete(profile)
         authentication[profile.id] = nil
         errors[profile.id] = nil
+        terminalSignIns[profile.id] = nil
         reload()
     }
 
@@ -54,6 +57,7 @@ public final class HarnessProfilesController {
         for profile in profiles(for: installation.provider) where operations[profile.id] == nil {
             guard installation.isAvailable, let provider = setupProvider(for: profile) else {
                 authentication[profile.id] = nil
+                terminalSignIns[profile.id] = nil
                 continue
             }
             do {
@@ -61,6 +65,7 @@ public final class HarnessProfilesController {
                 guard operations[profile.id] == nil, self.profile(profile.id) != nil else { continue }
                 authentication[profile.id] = status
                 errors[profile.id] = nil
+                if status != .unauthenticated { terminalSignIns[profile.id] = nil }
             } catch is CancellationError { return }
             catch { errors[profile.id] = error.localizedDescription }
         }
@@ -70,6 +75,10 @@ public final class HarnessProfilesController {
         guard operations[profile.id] == nil, installation.isAvailable, let provider = setupProvider(for: profile) else { return }
         let id = profile.id, token = UUID()
         errors[id] = nil
+        if let command = terminalSignIn(for: profile, installation: installation) {
+            terminalSignIns[id] = command
+            return
+        }
         activity[id] = "Starting sign-in…"
         let task = Task { [weak self] in
             defer { self?.finish(id, token: token) }
@@ -91,6 +100,7 @@ public final class HarnessProfilesController {
     }
 
     public func cancel(_ profile: HarnessProfile) {
+        terminalSignIns[profile.id] = nil
         guard let operation = operations[profile.id] else { return }
         operation.task.cancel()
         finish(profile.id, token: operation.id)
@@ -106,16 +116,18 @@ public final class HarnessProfilesController {
     private func setupProvider(for profile: HarnessProfile) -> (any HarnessProfileAccount)? {
         switch profile.provider {
         case .codex: CodexAccountProvider(codexHome: store.accountHome(profile), profile: profile.id)
-        case .grokBuild, .muse, .claudeCode, .fx: HostProfileSetupProvider(profile: profile)
-        case .antigravity:
-            HostProfileSetupProvider(profile: profile) { [home = store.loginHome(profile)] in
-                AntigravitySetupProvider.command(for: $0, home: home)
-            }
+        case .grokBuild, .muse, .claudeCode, .fx, .antigravity, .openCode: HostProfileSetupProvider(profile: profile)
+        default: nil
+        }
+    }
+
+    /// Antigravity and OpenCode have no login the host can run; the person signs
+    /// in from Terminal, pointed at the profile's folders.
+    private func terminalSignIn(for profile: HarnessProfile, installation: HarnessInstallation) -> String? {
+        switch profile.provider {
+        case .antigravity: AntigravitySetupProvider.command(for: installation, home: store.loginHome(profile))
         // A private server, so no background service is left running for the profile.
-        case .openCode:
-            HostProfileSetupProvider(profile: profile) { [environment = store.environment(profile)] in
-                OpenCodeSetupProvider.command(for: $0, environment: environment) + " auth login --standalone"
-            }
+        case .openCode: OpenCodeSetupProvider.command(for: installation, environment: store.environment(profile)) + " auth login --standalone"
         default: nil
         }
     }
@@ -132,22 +144,17 @@ extension CodexAccountProvider: HarnessProfileAccount {}
 
 /// Grok Build, Muse Code, Claude Code and FX sign in through the Agent Host, which
 /// resolves the profile's folder itself and runs the harness's own login.
-/// Antigravity and OpenCode have no such login: the host checks the profile, and
-/// the user signs in from Terminal with the command given here as `terminal`.
+/// Antigravity and OpenCode have no such login: the host only checks the profile.
 @MainActor private final class HostProfileSetupProvider: HarnessProfileAccount {
     private let profile: HarnessProfile
-    private let terminal: ((HarnessInstallation) -> String)?
-    init(profile: HarnessProfile, terminal: ((HarnessInstallation) -> String)? = nil) { self.profile = profile; self.terminal = terminal }
+    init(profile: HarnessProfile) { self.profile = profile }
 
     func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
         try await run(installation, signIn: false, onChallenge: nil)
     }
     func signIn(for installation: HarnessInstallation,
                 onChallenge: @escaping @MainActor (HarnessSignInChallenge) -> Void) async throws -> HarnessAuthenticationStatus {
-        if let terminal {
-            throw HarnessSetupError("Run \(terminal(installation)) in Terminal, complete sign-in, then choose Check Again here.")
-        }
-        return try await run(installation, signIn: true, onChallenge: onChallenge)
+        try await run(installation, signIn: true, onChallenge: onChallenge)
     }
     private func run(_ installation: HarnessInstallation, signIn: Bool,
                      onChallenge: (@MainActor (HarnessSignInChallenge) -> Void)?) async throws -> HarnessAuthenticationStatus {

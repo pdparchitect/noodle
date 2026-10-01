@@ -11,6 +11,8 @@ import XCTest
     var statusGate: RoutingGate<HarnessAuthenticationStatus>?
     var statusCalls: [HarnessInstallation] = []
     var signIns: [(HarnessInstallation, (HarnessSignInChallenge) -> Void, RoutingGate<HarnessAuthenticationStatus>)] = []
+    var terminal: String?
+    func terminalSignIn(for installation: HarnessInstallation) -> String? { terminal }
     func status(for installation: HarnessInstallation) async throws -> HarnessAuthenticationStatus {
         statusCalls.append(installation)
         if let gate = statusGate { statusGate = nil; return try await gate.value() }
@@ -202,6 +204,29 @@ import XCTest
         f.provider.signIns[1].2.resolve(.success(.authenticated)); f.other.signIns[0].2.resolve(.success(.managedExternally))
         await retry.value; await claude.value
         XCTAssertNil(c.errors[.codex]); XCTAssertEqual(c.authentication[.claudeCode], .managedExternally)
+    }
+
+    func testTerminalSignInIsACommandNotAnErrorAndClearsOnceSignedIn() async {
+        let f = fixture(), c = f.controller
+        f.provider.terminal = "agy"; f.provider.statusResult = .unauthenticated
+        await c.refresh([f.installation])
+        c.signIn(f.installation)
+        XCTAssertEqual(c.terminalSignIns[.codex], "agy")
+        XCTAssertNil(c.operations[.codex]); XCTAssertNil(c.activity[.codex]); XCTAssertTrue(f.provider.signIns.isEmpty)
+        XCTAssertNil(c.errors[.codex], "A Terminal sign-in is a command to copy, not an error")
+        await c.refresh([f.installation])
+        XCTAssertEqual(c.terminalSignIns[.codex], "agy", "Still waiting for the person to finish in Terminal")
+        f.provider.statusResult = .authenticated
+        await c.refresh([f.installation])
+        XCTAssertNil(c.terminalSignIns[.codex])
+    }
+
+    func testShippedTerminalSignInsNameTheExecutable() {
+        let agy = HarnessInstallation(provider: .antigravity, executablePath: "/fixtures/agy")
+        let openCode = HarnessInstallation(provider: .openCode, executablePath: "/fixtures/opencode")
+        XCTAssertEqual(AntigravitySetupProvider().terminalSignIn(for: agy), "'/fixtures/agy'")
+        XCTAssertEqual(OpenCodeSetupProvider().terminalSignIn(for: openCode), "'/fixtures/opencode' auth login")
+        XCTAssertNil(ClaudeCodeSetupProvider().terminalSignIn(for: HarnessInstallation(provider: .claudeCode, executablePath: "/fixtures/claude")))
     }
 
     func testVersionResultCannotAttachToReplacementInstallation() async {
