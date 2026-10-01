@@ -755,6 +755,38 @@ extension LinkAttachment {
 
     var isLive: Bool { liveKind != nil }
 
+    /// What a live link points at, as on the Mac: a computer whichever view, a browser by its tab, a noodlet.
+    private var liveKey: String? {
+        guard let liveKind, let url, let id = url.host?.lowercased() else { return nil }
+        let tab = liveKind == .browser ? URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "tab" }?.value?.lowercased() : nil
+        return "\(liveKind):\(id):\(tab ?? "")"
+    }
+
+    /// One entry per computer, browser tab or noodlet, keeping its most recent share.
+    static func shared(newestFirst attachments: [LinkAttachment]) -> [LinkAttachment] {
+        var seen = Set<String>()
+        return attachments.filter { $0.liveKey.map { seen.insert($0).inserted } ?? false }
+    }
+
+    var liveTitle: String { card?.title ?? URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent }
+
+    var liveKindName: String {
+        switch liveKind {
+        case .browser: "Browser"
+        case .computer: "Computer"
+        case .noodlet, nil: "Noodlet"
+        }
+    }
+
+    var liveSymbol: String {
+        switch liveKind {
+        case .noodlet: "square.grid.2x2"
+        case .browser: card?.symbol ?? "globe"
+        case .computer, nil: card?.symbol ?? "desktopcomputer"
+        }
+    }
+
     /// Links and voice messages open on their own; other files swipe together.
     var joinsPreviewGallery: Bool { url == nil && voice == nil }
 

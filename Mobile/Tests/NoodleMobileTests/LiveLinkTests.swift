@@ -21,4 +21,15 @@ struct LiveLinkTests {
             #expect(!attachment(url).isLive, "\(url ?? "a file")")
         }
     }
+
+    @Test func sharedListsEachComputerBrowserTabAndNoodletOnceNewestFirst() {
+        let computer = UUID().uuidString, browser = UUID().uuidString, tab = UUID().uuidString, other = UUID().uuidString
+        let noodlet = UUID().uuidString
+        let newestFirst = [attachment("noodlecomputer://\(computer)?view=web"), attachment("https://example.com"),
+                           attachment("noodlebrowser://\(browser)?tab=\(tab)"), attachment(nil),
+                           attachment("noodlecomputer://\(computer)"), attachment("noodlebrowser://\(browser)?tab=\(other)"),
+                           attachment("noodlet://\(noodlet)"), attachment("noodlebrowser://\(browser)?tab=\(tab)"),
+                           attachment("noodlet-dev://\(noodlet)")]
+        #expect(LinkAttachment.shared(newestFirst: newestFirst).map(\.id) == [0, 2, 5, 6].map { newestFirst[$0].id })
+    }
 }

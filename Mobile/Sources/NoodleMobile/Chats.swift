@@ -1073,9 +1073,6 @@ struct ChatView: View {
     @State private var files: [OutgoingFile] = []
     @State private var problem: String?
     @State private var editing = false
-    /// What the Hub asked before a Kick, and whether New Session is being confirmed, as on the Mac.
-    @State private var kickConfirmation: LinkKickConfirmation?
-    @State private var confirmingNewSession = false
     @State private var pickingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var takingPhoto = false
@@ -1112,7 +1109,6 @@ struct ChatView: View {
 
     private func conversation(in thread: HubThread) -> some View {
         let messages = chats.messages(of: thread)
-        let bot = thread.bot
         // As in Messages, only your latest message says how far it got.
         let latestOwn = messages.last { $0.author == .you }?.id
         let authors = thread.group == nil ? [:] : HubChats.authorLabels(in: messages) { chats.agent($0)?.draft.name }
@@ -1174,37 +1170,24 @@ struct ChatView: View {
                 }
                 .accessibilityHint("Edit")
             }
-            // As in the Mac's sidebar: Kick only for a failed bot, New Session always. Groups have neither.
-            if let bot {
+            // As the Mac's Shared button: the computers, browser tabs and noodlets shared here, newest first.
+            let shared = LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))
+            if !shared.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if bot.phase == .failed {
-                            Button("Kick", systemImage: "arrow.clockwise") { kick(bot) }
+                        ForEach(shared) { attachment in
+                            Button { watchingAt = nil; watching = attachment } label: {
+                                Text(attachment.liveTitle)
+                                Text(attachment.liveKindName)
+                                Image(systemName: attachment.liveSymbol)
+                            }
                         }
-                        Button("New Session", systemImage: "sparkles") { confirmingNewSession = true }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
-                    .accessibilityLabel("More")
+                    .accessibilityLabel("Shared")
                 }
             }
-        }
-        .alert("Start a new session for \(thread.name)?", isPresented: $confirmingNewSession) {
-            Button("New Session") { run { if let bot { try await chats.startNewSession(bot) } } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(thread.name) will start with a fresh context. Its workspace, memory and messages are kept.")
-        }
-        .alert(kickConfirmation?.title ?? "Recover Bot", isPresented: Binding(
-            get: { kickConfirmation != nil }, set: { if !$0 { kickConfirmation = nil } }
-        ), presenting: kickConfirmation) { confirmation in
-            Button(confirmation.confirmTitle) { run { if let bot { try await chats.confirmKick(confirmation, for: bot) } } }
-            if confirmation.offersNewSession {
-                Button("New Session") { run { if let bot { try await chats.startNewSession(bot) } } }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { confirmation in
-            Text(confirmation.message)
         }
         .sheet(isPresented: $editing) { ThreadEditor(chats: chats, thread: thread) }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10,
@@ -1452,18 +1435,6 @@ struct ChatView: View {
         }
     }
 
-    private func kick(_ agent: LinkBot) {
-        run { kickConfirmation = try await chats.kick(agent) }
-    }
-
-    /// Asks the Hub for something, showing what went wrong under the conversation.
-    private func run(_ request: @escaping () async throws -> Void) {
-        problem = nil
-        Task {
-            do { try await request() } catch { problem = error.localizedDescription }
-        }
-    }
-
     /// A message that did not go through: tried again only while it is the newest, or taken back to edit.
     private func unsentActions(for message: LinkMessage, in thread: HubThread) -> UnsentActions? {
         guard chats.hasFailed(message) else { return nil }
@@ -1672,6 +1643,9 @@ struct AgentEditor: View {
     @State private var draft: LinkBotDraft
     @State private var saving = false
     @State private var confirmingDelete = false
+    /// What the Hub asked before a Kick, and whether New Session is being confirmed, as on the Mac.
+    @State private var kickConfirmation: LinkKickConfirmation?
+    @State private var confirmingNewSession = false
     @State private var problem: String?
 
     init(chats: HubChats, agent: LinkBot?, hubs: [HubChats] = []) {
@@ -1811,6 +1785,14 @@ struct AgentEditor: View {
                     Section {
                         NavigationLink("Background") { BackgroundEditor(chats: chats, thread: .bot(agent)) }
                     }
+                    // Kept out of the way, as people should rarely need them: Kick only for a failed bot.
+                    Section {
+                        if chats.agent(agent.id)?.phase == .failed {
+                            Button("Kick") { run { kickConfirmation = try await chats.kick(agent) } }
+                        }
+                        Button("New Session") { confirmingNewSession = true }
+                    }
+                    .disabled(saving)
                     Section {
                         Button("Delete Bot", role: .destructive) { confirmingDelete = true }
                             .disabled(saving)
@@ -1821,6 +1803,23 @@ struct AgentEditor: View {
                 Button("Delete", role: .destructive, action: delete)
             } message: {
                 Text("The bot and its conversation are deleted from the Hub for all your devices.")
+            }
+            .alert("Start a new session for \(agent?.draft.name ?? "")?", isPresented: $confirmingNewSession) {
+                Button("New Session") { run(thenClose: true) { if let agent { try await chats.startNewSession(agent) } } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("\(agent?.draft.name ?? "") will start with a fresh context. Its workspace, memory and messages are kept.")
+            }
+            .alert(kickConfirmation?.title ?? "Recover Bot", isPresented: Binding(
+                get: { kickConfirmation != nil }, set: { if !$0 { kickConfirmation = nil } }
+            ), presenting: kickConfirmation) { confirmation in
+                Button(confirmation.confirmTitle) { run(thenClose: true) { if let agent { try await chats.confirmKick(confirmation, for: agent) } } }
+                if confirmation.offersNewSession {
+                    Button("New Session") { run(thenClose: true) { if let agent { try await chats.startNewSession(agent) } } }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { confirmation in
+                Text(confirmation.message)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -1836,6 +1835,21 @@ struct AgentEditor: View {
             }
             .task(id: CurrentHub.name(of: chats.pairing)) {
                 if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) }
+            }
+        }
+    }
+
+    /// Asks the Hub for something, showing what went wrong in the editor.
+    private func run(thenClose: Bool = false, _ request: @escaping () async throws -> Void) {
+        saving = true
+        problem = nil
+        Task {
+            defer { saving = false }
+            do {
+                try await request()
+                if thenClose { dismiss() }
+            } catch {
+                problem = error.localizedDescription
             }
         }
     }

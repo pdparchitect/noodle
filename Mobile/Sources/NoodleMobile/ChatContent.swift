@@ -86,7 +86,7 @@ struct AttachmentView: View {
                 }
                 .frame(width: 240, height: 150)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text(attachment.card?.title ?? URL(fileURLWithPath: attachment.filename).deletingPathExtension().lastPathComponent)
+                Text(attachment.liveTitle)
                     .font(.subheadline.weight(.medium)).lineLimit(1)
             }
             .padding(8)

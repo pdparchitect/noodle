@@ -6,9 +6,16 @@
 
 - Open a conversation: the message field sits at the same height as Search in the list of bots.
 - Tap More in the list of bots: New Bot shows a person with a plus, like New Group shows people.
+- In a conversation where a bot shared a computer, browser or noodlet, tap … at the top: each one shows once, newest first, and opens live from there.
+- Tap a bot's name at the top of its conversation: New Session is near the bottom of its settings, and Kick too when the bot has failed.
+
+### Added
+
+- … in a conversation lists the computers, browsers and noodlets shared there, for opening again without scrolling back, as Shared does on the Mac.
 
 ### Changed
 
+- New Session and Kick moved from … to the bot's settings, opened by tapping its name.
 - New Bot in More shows a person with a plus instead of a bare plus.
 
 ### Fixed
