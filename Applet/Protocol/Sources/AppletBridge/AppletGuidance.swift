@@ -144,7 +144,12 @@ public enum AppletGuidance {
         API keys and tokens in Applet's Keychain, separately for each noodlet; never put
         them in storage, data files or source. Missing secrets return null.
         `noodle.files.openText()` returns {name,text} or null; `saveText(name,text)` returns
-        a boolean. File dialogs require a visible window. The public web is always open:
+        a boolean. Standard web file handling works too: `<a download>` to a package file, a
+        blob or a data URL asks where to save it, `<input type=file>` opens the file picker,
+        and http(s) links, including target=_blank, open in the person's browser. The page
+        itself never leaves its package. File dialogs, downloads and opened links need a
+        visible window and a click; showSaveFilePicker and the rest of the File System
+        Access API are not available in WebKit. The public web is always open:
         remote resources and HTTP(S) `fetch()` / `noodle.fetch()`. This device, localhost and
         the network it is on (a TV, a router, a home server) need the local-network permission
         below. Requests use the native

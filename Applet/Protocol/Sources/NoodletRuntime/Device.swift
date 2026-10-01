@@ -26,6 +26,76 @@ import WebKit
         return try await save(text, as: URL(fileURLWithPath: name).lastPathComponent, over: web)
     }
 
+    /// A download's suggested name as a plain file name, never a path.
+    nonisolated static func safeName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty path would name the current directory.
+        guard !trimmed.isEmpty else { return "download" }
+        let last = URL(fileURLWithPath: trimmed).lastPathComponent
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return last.isEmpty || last == "/" || last.hasPrefix(".") ? "download" : last
+    }
+
+    /// A private file WebKit writes a download to before it reaches the person's folders.
+    nonisolated static func stagingURL(named name: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NoodletDownloads", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent(safeName(name))
+    }
+
+    /// Opens a web link in the person's browser, only while they can see the noodlet.
+    static func openExternally(_ url: URL, over web: WKWebView) -> Bool {
+        #if os(macOS)
+        guard web.window?.isVisible == true else { return false }
+        return NSWorkspace.shared.open(url)
+        #else
+        guard let scene = web.window?.windowScene else { return false }
+        scene.open(url, options: nil)
+        return true
+        #endif
+    }
+
+    #if os(macOS)
+    /// Asks where a download goes, before WebKit starts writing it.
+    static func chooseDestination(named name: String, over web: WKWebView) async throws -> URL? {
+        guard let window = web.window, window.isVisible else {
+            throw AppletError("Downloads need the noodlet in the foreground.")
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = safeName(name)
+        guard await panel.beginSheetModal(for: window) == .OK else { return nil }
+        return panel.url
+    }
+
+    /// Puts a finished download where the person chose; the save panel already agreed to replace it.
+    static func export(_ staged: URL, to destination: URL) throws {
+        let access = destination.startAccessingSecurityScopedResource()
+        defer { if access { destination.stopAccessingSecurityScopedResource() } }
+        if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+        try FileManager.default.copyItem(at: staged, to: destination)
+    }
+
+    /// The files a page's `<input type=file>` gets: what the person picks, as the input allows.
+    static func chooseUploads(_ parameters: WKOpenPanelParameters, over web: WKWebView) async -> [URL]? {
+        guard let window = web.window, window.isVisible else { return nil }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        guard await panel.beginSheetModal(for: window) == .OK else { return nil }
+        return panel.urls
+    }
+    #else
+    /// Hands a finished download to the document picker, where the person chooses where it goes.
+    static func export(_ staged: URL, over web: WKWebView) async throws -> Bool {
+        let picker = UIDocumentPickerViewController(forExporting: [staged], asCopy: true)
+        return try await !Picker.present(picker, over: web).isEmpty
+    }
+    #endif
+
     #if os(macOS)
     private static func choose(over web: WKWebView) async throws -> URL? {
         guard let window = web.window, window.isVisible else {

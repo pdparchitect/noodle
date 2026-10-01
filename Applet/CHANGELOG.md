@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Noodlets can save and open files the standard web way: a download link, including one to a file the page makes itself, asks where to save it, and a file field opens the file picker. On iPhone, a download goes to the Files picker.
+- Web links in a noodlet, including ones that open a new window, open in the browser instead of doing nothing.
+
 ## [0.21.0] - 2026-10-01
 
 ### Changed

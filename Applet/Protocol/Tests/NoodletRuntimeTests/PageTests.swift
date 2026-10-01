@@ -48,6 +48,45 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         return (page, store, root)
     }
 
+    nonisolated func testThePageStaysOnItsPackageAndLeavesFilesAndLinksToThePerson() {
+        let root = URL(fileURLWithPath: "/tmp/Some.noodlet")
+        let decide = { (url: String, download: Bool, link: Bool, main: Bool) in
+            NoodletNavigation.decide(URL(string: url)!, root: root, shouldPerformDownload: download,
+                                     linkActivated: link, mainFrame: main)
+        }
+
+        // Its own files and a blank page load as before.
+        XCTAssertEqual(decide("file:///tmp/Some.noodlet/index.html", false, false, true), .allow)
+        XCTAssertEqual(decide("about:blank", false, false, true), .allow)
+
+        // <a download> saves a package file, a blob or a data URL where the person chooses.
+        XCTAssertEqual(decide("file:///tmp/Some.noodlet/notes.txt", true, true, true), .download)
+        XCTAssertEqual(decide("blob:file:///4a1c2e0b-0000-4000-8000-000000000000", true, true, true), .download)
+        XCTAssertEqual(decide("data:text/plain;base64,aGk=", true, true, true), .download)
+        // ... but never a file outside the package, nor a blob the page merely navigates to.
+        XCTAssertEqual(decide("file:///tmp/Other/secret.txt", true, true, true), .cancel)
+        XCTAssertEqual(decide("blob:file:///4a1c2e0b-0000-4000-8000-000000000000", false, true, true), .cancel)
+
+        // A web link the person follows from the main page opens in their browser.
+        XCTAssertEqual(decide("https://example.com/", false, true, true), .openExternally)
+        XCTAssertEqual(decide("http://example.com/", false, true, true), .openExternally)
+        // Scripted navigation, subframes and other schemes still go nowhere.
+        XCTAssertEqual(decide("https://example.com/", false, false, true), .cancel)
+        XCTAssertEqual(decide("https://example.com/", false, true, false), .cancel)
+        XCTAssertEqual(decide("file:///etc/hosts", false, true, true), .cancel)
+        XCTAssertEqual(decide("mailto:someone@example.com", false, true, true), .cancel)
+        // A sibling folder that only shares the package's name prefix is not inside it.
+        XCTAssertEqual(decide("file:///tmp/Some.noodlet-other/index.html", false, false, true), .cancel)
+    }
+
+    nonisolated func testDownloadNamesStayPlainFileNames() {
+        XCTAssertEqual(NoodletFiles.safeName("kitten.mp4"), "kitten.mp4")
+        XCTAssertEqual(NoodletFiles.safeName("../../etc/passwd"), "passwd")
+        XCTAssertEqual(NoodletFiles.safeName("a:b.png"), "a-b.png")
+        XCTAssertEqual(NoodletFiles.safeName(""), "download")
+        XCTAssertEqual(NoodletFiles.safeName(".hidden"), "download")
+    }
+
     nonisolated func testOnlyTheNoodletsOwnMainPageIsTrusted() {
         let package = "/tmp/Some.noodlet"
         let inside = URL(fileURLWithPath: package + "/index.html")

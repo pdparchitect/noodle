@@ -49,6 +49,8 @@ public typealias NoodletColor = UIColor
     private var loadContinuation: CheckedContinuation<Void, Error>?
     private var loadTimer: Task<Void, Never>?
     private var cancellations: [UUID: () -> Void] = [:]
+    /// What the page downloads, on its way to where the person chooses.
+    private lazy var downloads = NoodletDownloads(web: web, log: log)
     public private(set) var stopped = false
 
     /// `configure` adds the app's own scripts ahead of the bridge. `localNetwork` is whether the
@@ -181,6 +183,7 @@ public typealias NoodletColor = UIColor
         cancellations.removeAll()
         for cancel in pending { cancel() }
         finishLoad(AppletError("Noodlet stopped."))
+        downloads.cancelAll()
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)
         web.configuration.userContentController.removeScriptMessageHandler(forName: "noodle", contentWorld: .page)
@@ -218,10 +221,71 @@ public typealias NoodletColor = UIColor
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
-        let local = url.isFileURL && url.standardizedFileURL.path.hasPrefix(root.path + "/")
         // Keep the privileged page on its package origin. Remote content belongs in a browser.
-        decisionHandler(local || url.absoluteString == "about:blank" ? .allow : .cancel)
+        switch NoodletNavigation.decide(url, root: root, shouldPerformDownload: navigationAction.shouldPerformDownload,
+                                        linkActivated: navigationAction.navigationType == .linkActivated,
+                                        mainFrame: Self.fromMainFrame(navigationAction)) {
+        case .allow: decisionHandler(.allow)
+        case .download: decisionHandler(.download)
+        case .openExternally:
+            openExternally(url)
+            decisionHandler(.cancel)
+        case .cancel: decisionHandler(.cancel)
+        }
     }
+
+    /// What WebKit cannot show, or is sent as an attachment, is saved rather than shown.
+    public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition") ?? ""
+        let attachment = disposition.lowercased().hasPrefix("attachment")
+        decisionHandler(!navigationResponse.canShowMIMEType || attachment ? .download : .allow)
+    }
+
+    public func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        downloads.receive(download)
+    }
+
+    public func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        downloads.receive(download)
+    }
+
+    /// The page never opens windows of its own: a new window is a web link for the person's browser.
+    public func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                        for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // WebKit only asks for a window after a click, unless the page may open them itself, which it may not.
+        if let url = navigationAction.request.url,
+           NoodletNavigation.decide(url, root: root, shouldPerformDownload: false, linkActivated: true,
+                                    mainFrame: Self.fromMainFrame(navigationAction)) == .openExternally {
+            openExternally(url)
+        }
+        return nil
+    }
+
+    private func openExternally(_ url: URL) {
+        if !NoodletFiles.openExternally(url, over: web) {
+            log("navigation", "Web links open in the browser only while the noodlet is in the foreground.")
+        }
+    }
+
+    /// WebKit declares the source frame non-optional but can leave it out; read it as optional.
+    private static func fromMainFrame(_ action: WKNavigationAction) -> Bool {
+        let source: WKFrameInfo? = action.sourceFrame
+        return source?.isMainFrame ?? false
+    }
+
+    #if os(macOS)
+    /// A page's `<input type=file>` opens the Mac's file picker. iOS shows its own.
+    public func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                        initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        guard webView.window?.isVisible == true else {
+            log("files", "File inputs need the noodlet in the foreground.")
+            return completionHandler(nil)
+        }
+        Task { completionHandler(await NoodletFiles.chooseUploads(parameters, over: webView)) }
+    }
+    #endif
 
     public func webView(_ webView: WKWebView, decideMediaCapturePermissionsFor origin: WKSecurityOrigin,
                         initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType) async -> WKPermissionDecision {
