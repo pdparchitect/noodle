@@ -8,6 +8,7 @@
 - Tap More in the list of bots: New Bot shows a person with a plus, like New Group shows people.
 - In a conversation where a bot shared a computer, browser or noodlet, tap … at the top: each one shows once, newest first, and opens live from there.
 - Tap a bot's name at the top of its conversation: New Session is near the bottom of its settings, and Kick too when the bot has failed.
+- Touch and hold each pinned bot or group in turn: each shows its own menu, Edit Bot for a bot and Edit Group for a group.
 
 ### Added
 
@@ -20,6 +21,7 @@
 
 ### Fixed
 
+- Touching and holding any pinned bot showed the first pinned one's menu, so Unpin and Edit acted on the wrong one.
 - The message field sat higher than Search in the list of bots.
 
 ## [0.12.0] - 2026-10-01

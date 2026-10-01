@@ -761,11 +761,13 @@ struct AgentsView: View {
                 if !pinned.isEmpty {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
                         ForEach(pinned) { row in
-                            Button { path = [row.id] } label: {
+                            // A menu held on each circle: context menus in one list row all lift the row
+                            // and show the first circle's menu, whichever was pressed.
+                            Menu { menu(for: row) } label: {
                                 PinnedAgent(chats: row.chats, thread: row.thread, unread: row.chats.isUnread(row.thread))
-                            }
+                            } primaryAction: { path = [row.id] }
                             .buttonStyle(.plain)
-                            .contextMenu { menu(for: row) }
+                            .menuIndicator(.hidden)
                         }
                     }
                     .padding(.vertical, 8)
