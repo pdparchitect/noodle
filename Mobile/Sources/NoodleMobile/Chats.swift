@@ -362,6 +362,15 @@ enum HubThread: HubConversation {
         return labels
     }
 
+    /// In a group, the bot whose picture sits beside the last of each run of its messages, by message.
+    static func authorAvatars(in messages: [LinkMessage]) -> [UUID: UUID] {
+        var avatars: [UUID: UUID] = [:]
+        for (message, next) in zip(messages, messages.dropFirst().map(Optional.some) + [nil]) {
+            if case .bot(let id) = message.author, next?.author != message.author { avatars[message.id] = id }
+        }
+        return avatars
+    }
+
     /// Loads everything, then follows the Hub's changes until cancelled, reconnecting after a pause.
     func follow() async {
         while !Task.isCancelled {
@@ -1101,6 +1110,7 @@ struct ChatView: View {
         // As in Messages, only your latest message says how far it got.
         let latestOwn = messages.last { $0.author == .you }?.id
         let authors = thread.group == nil ? [:] : HubChats.authorLabels(in: messages) { chats.agent($0)?.draft.name }
+        let avatars = thread.group == nil ? [:] : HubChats.authorAvatars(in: messages)
         return ScrollView {
             LazyVStack(spacing: Bubble.rowSpacing) {
                 // Reaching the top loads the page before.
@@ -1110,6 +1120,7 @@ struct ChatView: View {
                 }
                 ForEach(messages) { message in
                     Bubble(chats: chats, thread: thread, message: message, author: authors[message.id],
+                           avatar: avatars[message.id].flatMap { chats.agent($0)?.draft }, besideAvatars: thread.group != nil,
                            delivery: message.id == latestOwn || chats.isUnsent(message) ? chats.delivery(of: message) : nil)
                         .id(message.id)
                 }
@@ -1495,6 +1506,10 @@ private struct Bubble: View {
     let message: LinkMessage
     /// In a group, the bot's name above the first of its messages in a row.
     let author: String?
+    /// In a group, the bot's picture beside the last of its messages in a row.
+    let avatar: LinkBotDraft?
+    /// Whether bot messages keep room for a picture beside them, so a run of them lines up.
+    let besideAvatars: Bool
     /// Shown under your latest message, and under any that did not go through.
     let delivery: String?
     @State private var expanded = false
@@ -1506,6 +1521,8 @@ private struct Bubble: View {
 
     /// The gap between messages in the conversation.
     static let rowSpacing: CGFloat = 6
+    /// A bot's picture beside its messages in a group.
+    private static let avatarSize: CGFloat = 28
     /// How far a reaction badge hangs above the top of what it marks.
     private static let reactionOverhang: CGFloat = 16
 
@@ -1536,7 +1553,12 @@ private struct Bubble: View {
             // reacting never moves the conversation. The row gap covers the rest of it.
             .padding(.top, Self.reactionOverhang - Self.rowSpacing)
         case .bot:
-            HStack {
+            HStack(alignment: .bottom, spacing: 6) {
+                if let avatar {
+                    AgentAvatar(draft: avatar, size: Self.avatarSize)
+                } else if besideAvatars {
+                    Color.clear.frame(width: Self.avatarSize, height: 0)
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     if let author {
                         Text(author).font(.caption).foregroundStyle(.secondary).padding(.leading, 12).padding(.top, 4)

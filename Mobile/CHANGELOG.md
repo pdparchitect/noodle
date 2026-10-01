@@ -12,10 +12,12 @@
 - In a noodlet running on this iPhone, tap the keyboard button and type: a game gets the keys, and a field the noodlet selected gets the text.
 - Open a game made to fill the screen: it takes the whole screen without the status bar, cannot be scrolled or zoomed by accident, and one made for landscape turns the phone sideways until you close it.
 - Open a noodlet a second time: it comes up without downloading again. After the bot changes it, it downloads once more.
+- Open a group: each bot's picture sits beside the last of its messages in a row, with its name above the first.
 
 ### Added
 
 - Noodlets run on this iPhone instead of streaming from the Hub, which is faster and smoother. Run on Hub switches to watching one live from the Hub, and Noodle remembers the choice for each noodlet. Touch and hold a noodlet's card to choose before it opens. A noodlet that uses the camera, microphone or screen always runs on this iPhone. The Hub needs its latest version.
+- In a group, each bot's picture shows beside its messages, as in Messages.
 
 ### Fixed
 

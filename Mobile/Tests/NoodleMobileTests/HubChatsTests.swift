@@ -855,6 +855,20 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(labels[messages[1].id] == nil)
     }
 
+    /// In a group, a bot's picture sits beside the last of each run of its messages, as in Messages.
+    @Test func groupMessagesShowTheirBotAtTheEndOfEachRun() {
+        let (scout, atlas, conversation) = (UUID(), UUID(), UUID())
+        let messages = [(LinkMessage.Author.bot(scout), 1), (.bot(scout), 2), (.you, 3), (.bot(scout), 4), (.bot(atlas), 5), (.system, 6)]
+            .map { LinkMessage(id: UUID(), conversationID: conversation, author: $0.0, body: "\($0.1)",
+                               createdAt: Date(timeIntervalSince1970: TimeInterval($0.1)), delivered: true) }
+
+        let avatars = HubChats.authorAvatars(in: messages)
+
+        #expect(messages.compactMap { avatars[$0.id] } == [scout, scout, atlas])
+        #expect(avatars[messages[0].id] == nil)
+        #expect(avatars[messages[1].id] == scout)
+    }
+
     @Test func botPicturesAreShrunkAndStoredAsTheMacStoresThem() throws {
         let big = UIGraphicsImageRenderer(size: CGSize(width: 1600, height: 1200), format: {
             let format = UIGraphicsImageRendererFormat()
