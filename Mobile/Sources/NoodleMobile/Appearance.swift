@@ -237,6 +237,7 @@ struct BotPictureEditor: View {
         .imagePlaygroundSheet(isPresented: $creating, concepts: avatar.concepts, sourceImage: draft.avatarImageData.flatMap(UIImage.init(data:)).map(Image.init(uiImage:))) { url in
             Task { await load { try Data(contentsOf: url) } }
         }
+        .withoutPhotosPeople()
     }
 
     private func load(_ source: () async throws -> Data?) async {
@@ -248,6 +249,18 @@ struct BotPictureEditor: View {
             draft.avatarImageData = try BotPicture.prepare(data)
         } catch {
             problem = error.localizedDescription
+        }
+    }
+}
+
+private extension View {
+    /// Keeps people from Photos out of Image Playground, as the Mac's Bot Icon does,
+    /// so a bot's picture is never made to look like someone real.
+    @ViewBuilder func withoutPhotosPeople() -> some View {
+        if #available(iOS 26.4, *) {
+            imagePlaygroundOptions({ var options = ImagePlaygroundOptions(); options.personalization = .disabled; return options }())
+        } else {
+            imagePlaygroundPersonalizationPolicy(.disabled)
         }
     }
 }

@@ -5,6 +5,7 @@
 ### Changed
 
 - Create Image in a bot's picture starts from an avatar portrait with the bot's name and description, instead of an empty Image Playground.
+- Create Image in a bot's picture no longer suggests people from Photos, as on the Mac.
 
 ### What to Test
 
