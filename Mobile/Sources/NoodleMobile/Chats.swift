@@ -1056,9 +1056,10 @@ struct ConversationScrolling: ViewModifier {
                                               viewportHeight: geometry.containerSize.height, bottomInset: geometry.contentInsets.bottom)
             } action: { _, bottom in if scrolling || bottom { atBottom = bottom } }
             // The bars and the composer's room settle as the conversation is pushed, which moves its end
-            // without changing its size.
+            // without changing its size. On iOS 26 scrolling to the bottom edge lands short and to the side,
+            // and the initial-offset anchor already opens at the end there.
             .onScrollGeometryChange(for: [CGFloat].self) { [$0.containerSize.height, $0.contentInsets.bottom] } action: { _, _ in
-                if atBottom { position.scrollTo(edge: .bottom) }
+                if #available(iOS 27, *), atBottom { position.scrollTo(edge: .bottom) }
             }
             // Read before the new row is laid out, so atBottom still says where the person was.
             .onChange(of: latest?.id) { _, _ in

@@ -36,7 +36,7 @@ final class BridgeDispatchTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let wrote = await runner.handleBridge(
-            operation: "write", body: ["operation": "write", "path": "notes/today.txt", "text": "hello"])
+            operation: "write", body: ["operation": "write", "path": "notes/today.txt", "data": Data("hello".utf8).base64EncodedString()])
         XCTAssertEqual(wrote.0 as? Bool, true)
         XCTAssertNil(wrote.1)
         XCTAssertEqual(
@@ -44,7 +44,7 @@ final class BridgeDispatchTests: XCTestCase {
 
         let read = await runner.handleBridge(
             operation: "read", body: ["operation": "read", "path": "notes/today.txt"])
-        XCTAssertEqual(read.0 as? String, "hello")
+        XCTAssertEqual(read.0 as? String, Data("hello".utf8).base64EncodedString())
         XCTAssertNil(read.1)
     }
 
@@ -81,11 +81,11 @@ final class BridgeDispatchTests: XCTestCase {
     @MainActor func testOversizedWritesAreRejected() async throws {
         let (runner, root, _) = try makeRunner()
         defer { try? FileManager.default.removeItem(at: root) }
-        let tooBig = String(repeating: "a", count: 4 * 1_048_576 + 1)
+        let tooBig = Data(count: 16 * 1_048_576 + 1).base64EncodedString()
         let (value, error) = await runner.handleBridge(
-            operation: "write", body: ["operation": "write", "path": "big.txt", "text": tooBig])
+            operation: "write", body: ["operation": "write", "path": "big.bin", "data": tooBig])
         XCTAssertNil(value)
-        XCTAssertEqual(error, "Text must fit in 4 MiB.")
+        XCTAssertEqual(error, "Data must fit in 16 MiB.")
     }
 
     @MainActor func testLoggingAndCancelFetchAcknowledge() async throws {
