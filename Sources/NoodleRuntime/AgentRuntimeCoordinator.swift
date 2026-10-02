@@ -647,7 +647,7 @@ public final class AgentRuntimeCoordinator {
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
            !accessConfiguration.isExtended(for: agent) {
             snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
-                detail: "This harness requires unrestricted access. Allow it in Settings → Sandbox before starting this bot.")
+                detail: "This harness requires unrestricted access. Allow it in Settings → Bots before starting this bot.")
             return
         }
         do { try repository.synchronizeAgentWorkspace(agent) }

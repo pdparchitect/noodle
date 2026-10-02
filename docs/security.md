@@ -5,7 +5,7 @@
 Every bot starts with restricted access. Unrestricted access is optional and set
 for each bot.
 
-Change a bot's access in **Settings → Sandbox**. Click the **Unrestricted**
+Change a bot's access in **Settings → Bots**. Click the **Unrestricted**
 heading or a bot's **restricted** or **unrestricted** label to see what that mode
 allows. Turning on **Unrestricted** or **Apps** asks for confirmation first;
 turning either off does not. Changing access restarts the bot and keeps its
@@ -118,7 +118,7 @@ typed answer are declined; Noodle never makes up an answer or consent.
 
 ## Account apps
 
-The **Apps** switch in **Settings → Sandbox** lets a Codex bot use apps connected
+The **Apps** switch in **Settings → Bots** lets a Codex bot use apps connected
 to its ChatGPT account, or a Claude Code bot use connectors from Claude.ai. Click
 the **Apps** heading or a bot's **apps** status to see the explanation.
 

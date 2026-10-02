@@ -337,8 +337,8 @@ extension Scenario {
     static let focusRegions: Set<String> = ["composer", "transcript", "none"]
 
     static let settingsTabs: [String: NoodleSettingsTab] = [
-        "general": .general, "chat": .chat, "harnesses": .harnesses, "mcps": .mcps, "heartbeats": .heartbeats,
-        "sandbox": .sandbox, "keybindings": .keybindings, "permissions": .permissions, "companions": .companions, "updates": .updates
+        "general": .general, "chat": .chat, "harnesses": .harnesses, "bots": .bots, "mcps": .mcps,
+        "keybindings": .keybindings, "permissions": .permissions, "companions": .companions, "updates": .updates
     ]
 
     /// Preferences a scenario may set. Message delivery is absent: the loader always queues, so the

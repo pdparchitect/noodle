@@ -123,7 +123,7 @@ System Settings.
 
 Heartbeats let idle bots check for useful follow-ups on existing work. They are on
 by default after 30 minutes. Change the interval or disable them for individual
-bots in **Settings → Heartbeat**. Click the **Heartbeat** heading above the bot
+bots in **Settings → Bots**. Click the **Heartbeat** heading above the bot
 switches for an explanation.
 
 They run only while Noodle is open and the Mac is awake. A heartbeat can use model

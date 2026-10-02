@@ -29,8 +29,10 @@ import NoodleCore
                 if let label = self.elements(root).first(where: { self.matches(name, node: $0) }),
                    label.responds(to: NSSelectorFromString("accessibilityFrame")),
                    let frame = (label.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue {
+                    // A bot's row holds several switches; keep the one in this label's column.
                     let matches = self.elements(root).compactMap { $0 as? NSSwitch }.filter {
                         abs($0.accessibilityFrame().midY - frame.midY) < 2
+                            && (frame.width < 1 || (frame.minX...frame.maxX).contains($0.accessibilityFrame().midX))
                     }
                     if matches.count == 1 { result = matches[0]; return true }
                 }
@@ -159,7 +161,7 @@ import NoodleCore
     func testHeartbeatControlsPersistGlobalAndPerBotSettingsAcrossRuntimeRecreation() async throws {
         let f = try fixture()
         f.runtime.runtime.configureHeartbeats(intervalMinutes: 7)
-        let settings = host(HeartbeatsSettingsView(store: f.store).environment(f.store))
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
         _ = try await control("7 minutes", in: settings)
         flip(try await toggle("Heartbeat for Ada", in: settings))
         try await wait { f.runtime.runtime.heartbeatConfiguration.disabledAgentIDs == [f.a.id] }

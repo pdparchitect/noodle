@@ -6,10 +6,29 @@ import NoodleCore
 @testable import NoodleRuntime
 @testable import NoodleRuntimeSettings
 
-@MainActor final class AgentAccessSettingsInteractionTests: HiddenViewTests {
+@MainActor final class BotsSettingsInteractionTests: HiddenViewTests {
+    func testEachBotRowHasItsHeartbeatAndAccessSwitches() async throws {
+        let f = try fixture()
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
+        _ = try await control("Wake idle agents", in: settings)
+        for name in ["Ada", "Grace"] {
+            _ = try await control("Show profile for \(name)", in: settings)
+            _ = try await control("Heartbeat for \(name)", in: settings)
+            _ = try await control("\(name), unrestricted access", in: settings)
+            _ = try await control("\(name), account apps", in: settings)
+        }
+
+        f.runtime.runtime.configureHeartbeats(enabled: false)
+        let heartbeat = try await control("Heartbeat for Ada", in: settings)
+        try await wait { !self.enabled(heartbeat) }
+        let access = try await control("Ada, unrestricted access", in: settings)
+        let apps = try await control("Ada, account apps", in: settings)
+        XCTAssertTrue(enabled(access)); XCTAssertTrue(enabled(apps))
+    }
+
     func testAppsDefaultsOffAndTogglesIndependentlyWithClickableExplanation() async throws {
         let f = try fixture()
-        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
         let window = try XCTUnwrap(settings.window)
         window.setContentSize(.init(width: 680, height: 420))
         window.orderFront(nil)
@@ -63,7 +82,7 @@ import NoodleCore
 
     func testTurningAccessOnAsksFirstAndTurningItOffDoesNot() async throws {
         let f = try fixture()
-        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store))
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
         let window = try XCTUnwrap(settings.window)
         let configuration = { f.runtime.runtime.accessConfiguration }
         let settled = { !f.runtime.runtime.changingAccess.contains(f.a.id) }
@@ -93,7 +112,7 @@ import NoodleCore
         _ = try f.repository.updateAgent(f.a, displayName: f.a.displayName,
             harnessIdentifier: HarnessProvider.apple.rawValue, modelIdentifier: nil, reasoningEffort: nil)
         f.store.reload()
-        let settings = host(AgentAccessSettingsView(store: f.store).environment(f.store))
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
         _ = try await control("Ada, account apps unavailable", in: settings)
         XCTAssertFalse(hasControl("Ada, account apps", in: settings))
         XCTAssertTrue(hasControl("Grace, account apps", in: settings))

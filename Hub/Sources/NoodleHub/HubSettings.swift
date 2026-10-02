@@ -8,11 +8,11 @@ import Observation
 import SwiftUI
 
 enum HubSettingsTab: Hashable {
-    case harnesses, users, plans, bots, conversation, network, heartbeats, sandbox, tools, companions, updates
+    case harnesses, users, plans, bots, conversation, network, tools, companions, updates
 }
 
-/// Gives the shared Harness, Heartbeat and Sandbox settings what they need from the Hub.
-/// The Hub has no bot profiles or bot editor yet, so those show the bot's avatar and nothing.
+/// Gives the shared Harness and Bots settings what they need from the Hub.
+/// The Hub has no bot editor yet; a bot's profile holds its folder, activity and New Session.
 @MainActor @Observable final class HubSettingsHost: BotSettingsHost {
     let hub: Hub
     let setup: HarnessSetupController
@@ -41,7 +41,7 @@ enum HubSettingsTab: Hashable {
     }
 
     func showHarnessSettings() { selectedTab = .harnesses }
-    func botProfileButton(_ agent: AgentRecord) -> AnyView { AnyView(BotAvatar(agent: agent, size: 32)) }
+    func botProfileButton(_ agent: AgentRecord) -> AnyView { AnyView(HubBotProfileButton(host: self, agent: agent)) }
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView { AnyView(EmptyView()) }
 
     /// Gives the Hub's bots Noodle Applet's skill as soon as it is installed.
@@ -101,7 +101,8 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
                 .tag(HubSettingsTab.plans)
-            HubBotsSettingsView(host: host)
+            // Bots come and go from paired devices, so the list is reread while it is open.
+            TimelineView(.periodic(from: .now, by: 2)) { _ in BotsSettingsView(store: host, agents: host.agents) }
                 .hubSettingsSize()
                 .tabItem { Label("Bots", systemImage: "sparkles") }
                 .tag(HubSettingsTab.bots)
@@ -109,14 +110,6 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }
                 .tag(HubSettingsTab.conversation)
-            HeartbeatsSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Heartbeat", systemImage: "waveform.path.ecg") }
-                .tag(HubSettingsTab.heartbeats)
-            AgentAccessSettingsView(store: host)
-                .hubSettingsSize()
-                .tabItem { Label("Sandbox", systemImage: "lock.shield") }
-                .tag(HubSettingsTab.sandbox)
             if Self.showsAgentSettings {
                 MCPSettingsView(store: host)
                     .hubSettingsSize()

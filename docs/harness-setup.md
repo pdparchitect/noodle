@@ -49,11 +49,11 @@ To install a harness yourself:
 
 Once a harness is found, create a bot and choose its model and, where available,
 reasoning effort. Every bot starts with restricted access; you can give a bot
-[unrestricted access](security.md) in **Settings → Sandbox**. A restricted Claude
+[unrestricted access](security.md) in **Settings → Bots**. A restricted Claude
 bot uses the Claude.ai sign-in from Claude Code's standard installation.
 
 Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Turn
-on **Apps** beside a bot in **Settings → Sandbox** to allow them. This setting is
+on **Apps** beside a bot in **Settings → Bots** to allow them. This setting is
 separate for each bot and harness; [account apps](security.md#account-apps)
 explains what it covers.
 

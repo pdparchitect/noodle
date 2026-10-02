@@ -6,7 +6,7 @@ import NoodleRuntime
 import NoodleRuntimeSettings
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, mcps, heartbeats, sandbox, keybindings, permissions, companions, hub, updates
+    case general, chat, harnesses, bots, mcps, keybindings, permissions, companions, hub, updates
 }
 
 struct NoodleSettingsView: View {
@@ -56,16 +56,10 @@ struct NoodleSettingsView: View {
                     Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
-            HeartbeatsSettingsView(store: store)
+            BotsSettingsView(store: store)
                 .settingsContentSize(width: Self.width)
-                .tabItem {
-                    Label("Heartbeat", systemImage: "waveform.path.ecg")
-                }
-                .tag(NoodleSettingsTab.heartbeats)
-            AgentAccessSettingsView(store: store)
-                .settingsContentSize(width: Self.width)
-                .tabItem { Label("Sandbox", systemImage: "lock.shield") }
-                .tag(NoodleSettingsTab.sandbox)
+                .tabItem { Label("Bots", systemImage: "sparkles") }
+                .tag(NoodleSettingsTab.bots)
             MCPSettingsView(store: store)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }

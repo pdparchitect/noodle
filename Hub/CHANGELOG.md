@@ -8,6 +8,7 @@
 
 ### Changed
 
+- Settings > Bots now holds the Heartbeat and Sandbox settings: each bot's row has its Heartbeat, Unrestricted and Apps switches. Click a bot's picture for its owner, harness and status, Show Folder, Activity and New Session.
 - Bots use Noodle Applet through an applet tool, like computers and browsers, instead of their own `noodlet` command. The Hub no longer ships the command, and updating removes it, its skill and its mailbox from every bot's workspace. Update to Noodle Hub 0.14.0 before any later version, so the old command is cleaned up.
 
 ### Fixed

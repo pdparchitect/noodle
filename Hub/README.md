@@ -28,5 +28,6 @@ People who joined can keep bots on the Hub from Noodle, on the harnesses their p
 lends. Those bots run here and keep their conversations here, and use the tool connections
 their owner adds and signs in to from Noodle, which stay on this Mac, and the computers and
 browsers their owner makes in Noodle Computer and Noodle Browser here. Settings > Bots lists
-them with their folder and activity, and New Session starts one with a fresh context. Settings >
+them with their heartbeat and access switches; click a bot's picture for its folder, its activity
+and New Session, which starts it with a fresh context. Settings >
 Conversation chooses how messages reach busy bots and when idle bots start a new session.

@@ -89,7 +89,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
 
     public func start() {
         guard connection == nil, !paused, !shutdown.isPending else { return }
-        guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires unrestricted access in Settings → Sandbox"); return }
+        guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires unrestricted access in Settings → Bots"); return }
         stopped = false
         if state.needsHistoryRecovery {
             guard !state.recoveryBlocked else {
