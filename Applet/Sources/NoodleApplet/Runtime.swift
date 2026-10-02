@@ -155,15 +155,9 @@ import NoodletRuntime
       if let path = request.path, AppletBuildIdentity.document(URL(fileURLWithPath: path)) != .current {
         throw AppletError("Use a .\(AppletBuildIdentity.current.fileExtension) package in this environment.", code: "environment-mismatch")
       }
-      if request.operation.isAppOnly, identity == AppletBuildIdentity.current.cliID {
-        throw AppletError("Unknown command. Use --help.")
-      }
-      if identity == AppletBuildIdentity.current.cliID { try request.keepOutOfSight() }
       // Noodle and Noodle Hub each pass a bot's request on for that bot; asking for nobody,
-      // they act for their own person. The command on its own is always that person's.
-      let owner =
-        [AppletBuildIdentity.current.noodleID, AppletBuildIdentity.current.hubID].contains(identity)
-        ? (request.owner ?? "local") : "local"
+      // they act for their own person.
+      let owner = request.owner ?? "local"
       request.owner = owner
       var named: NoodletPackage?
       if let id = request.noodletID {

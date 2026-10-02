@@ -10,7 +10,6 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "NoodleApplet", targets: ["NoodleApplet"]),
-        .executable(name: "noodlet", targets: ["NoodletCLI"]),
         .executable(name: "NoodletPreview", targets: ["NoodletPreview"]),
         .library(name: "AppletCore", targets: ["AppletCore"]),
     ],
@@ -36,9 +35,6 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             resources: [.copy("Resources")], swiftSettings: appSettings),
-        .executableTarget(
-            name: "NoodletCLI",
-            dependencies: ["AppletCore", .product(name: "AppletBridge", package: "Protocol")]),
         .executableTarget(name: "NoodletPreview", dependencies: ["AppletCore", .product(name: "AppletBridge", package: "Protocol")], swiftSettings: [.unsafeFlags(["-application-extension"])], linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]),
         .testTarget(
             name: "AppletCoreTests",

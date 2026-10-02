@@ -82,6 +82,7 @@ public enum ToolBroker {
         let (authorized, used) = try authorize(descriptor, provider: provider.manifest, arguments: request.arguments ?? Data("{}".utf8),
                                                assignments: assignments)
         let (arguments, conversation) = try conversation(descriptor, arguments: authorized, agent: context.agentID, host: host)
+        let links = try linked(descriptor, arguments: arguments, conversation: conversation, agent: context.agentID, host: host)
         let directory = request.currentDirectory.isEmpty ? context.workspace
             : context.workspace.appendingPathComponent(try ComputerWorkspaceFiles.relativePath(
                 request.currentDirectory, currentDirectory: context.workspace, workspace: context.workspace))
@@ -99,9 +100,13 @@ public enum ToolBroker {
             let latest = current()
             return used.allSatisfy { latest.assigned($0.id, kind: $0.kind) != nil } && registry.manifests(assignments: latest).contains { $0.id == id }
         }
+        // A call made for a conversation stays allowed only while the bot is in it and any link it named is still posted there.
+        let stillInConversation: @Sendable () -> Bool = { [conversation] in
+            conversation.map { id in host.isMember(context.agentID, id) && links.allSatisfy { host.isPosted($0, context.agentID, id) } } != false
+        }
         let checked = ToolCallContext(agentID: context.agentID, workspace: context.workspace, assignments: assignments,
-                                      authorize: { [conversation] in
-            guard stillAllowed(), conversation.map({ host.isMember(context.agentID, $0) }) != false else { throw revoked }
+                                      authorize: {
+            guard stillAllowed(), stillInConversation() else { throw revoked }
         })
         let outcome: Result<Data, Error>
         do {
@@ -115,6 +120,9 @@ public enum ToolBroker {
         guard stillAllowed() else {
             for resource in used where latest.assigned(resource.id, kind: resource.kind) == nil { host.revoked(resource.kind, resource.id, context.agentID) }
             throw revoked
+        }
+        guard stillInConversation() else {
+            throw ToolProviderError("You are no longer a participant in that conversation, or what it shared was withdrawn. The action may already have happened.")
         }
         let result = try outcome.get()
         let filtered = try post(filter(result, descriptor: descriptor, assignments: latest), descriptor: descriptor,
@@ -162,6 +170,20 @@ public enum ToolBroker {
         }
         object[name] = id.uuidString
         return (try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), id)
+    }
+
+    /// Verifies every declared conversation link against the verified conversation: someone
+    /// sent it there, and the bot is a participant. Returns the links the call depends on.
+    static func linked(_ descriptor: ToolDescriptor, arguments: Data, conversation: UUID?, agent: UUID, host: ToolHostServices) throws -> [URL] {
+        guard !descriptor.linkParameters.isEmpty, let object = try JSONSerialization.jsonObject(with: arguments) as? [String: Any] else { return [] }
+        return try descriptor.linkParameters.compactMap { name in
+            guard let value = object[name] else { return nil }
+            guard let conversation else { throw ToolProviderError("Name the conversation the link was shared in.") }
+            guard let link = (value as? String).flatMap(URL.init(string:)), link.scheme != nil, host.isPosted(link, agent, conversation) else {
+                throw ToolProviderError("That link has not been shared in this conversation.")
+            }
+            return link
+        }
     }
 
     /// Consumes `_meta["noodle/post"]`. Only a verified conversation can receive it, and

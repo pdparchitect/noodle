@@ -24,7 +24,7 @@ final class BuildIdentityTests: XCTestCase {
     func testNamespacesAndPeerAllowListsAreDisjoint() throws {
         let prod = AppletBuildIdentity.production, local = AppletBuildIdentity.development
         for build in AppletBuildIdentity.allCases {
-            for id in [build.providerID, build.noodleID, build.cliID, build.previewID] {
+            for id in [build.providerID, build.noodleID, build.previewID, build.hubID] {
                 XCTAssertEqual(AppletBuildIdentity.identify(id), build)
             }
             try build.validateGroup("TEAM123456." + build.groupSuffix, team: "TEAM123456")

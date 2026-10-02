@@ -207,27 +207,3 @@ public struct AppletItem: Codable, Sendable, Identifiable {
         self.state = state
     }
 }
-
-public struct AppletAgentEnvelope: Codable, Sendable {
-    public var id: UUID
-    public var token: String
-    public var expiresAt: Date
-    public var request: AppletRequest
-    public var conversationID: UUID?
-    public init(token: String, request: AppletRequest, conversationID: UUID? = nil) {
-        self.id = request.id
-        self.token = token
-        self.request = request
-        self.conversationID = conversationID
-        expiresAt = Date().addingTimeInterval(Double(request.operation.timeout + 5))
-    }
-}
-
-public struct AppletAgentSession: Codable {
-    public var token: String
-    public var processID: Int32
-    public init(token: String, processID: Int32) {
-        self.token = token
-        self.processID = processID
-    }
-}

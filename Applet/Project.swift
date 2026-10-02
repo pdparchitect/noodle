@@ -13,22 +13,15 @@ let signing: SettingsDictionary = [
     "ENABLE_HARDENED_RUNTIME": "YES",
 ]
 
-/// Xcode embeds extensions and XPC services itself but not command-line tools, so the app copies the
-/// noodlet CLI into Contents/Helpers and signs it there with its own identifier and no entitlements.
 /// A development build's bundled examples use the development document extension.
-let embedHelpers: TargetScript = .post(script: """
+let renameExamples: TargetScript = .post(script: """
     set -euo pipefail
-    helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
-    mkdir -p "$helpers"
-    ditto "$BUILT_PRODUCTS_DIR/noodlet" "$helpers/noodlet"
-    codesign --force --options runtime "$APPLET_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" \\
-        --identifier "$PRODUCT_BUNDLE_IDENTIFIER.cli" "$helpers/noodlet"
     if [ "$APPLET_DOCUMENT_EXTENSION" != noodlet ]; then
         for example in "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Resources/Examples"/*.noodlet; do
             if [ -e "$example" ]; then mv "$example" "${example%.noodlet}.$APPLET_DOCUMENT_EXTENSION"; fi
         done
     fi
-    """, name: "Embed Helpers", basedOnDependencyAnalysis: false)
+    """, name: "Rename Examples", basedOnDependencyAnalysis: false)
 
 /// The app already has outbound network access, so Sparkle's separate downloader goes. Removing it
 /// changes the framework, so it is signed again, inside out.
@@ -114,7 +107,7 @@ let project = Project(
                 "Support/AppSymbol.svg",
             ],
             entitlements: .file(path: "Support/Applet.entitlements"),
-            scripts: [embedHelpers, trimSparkle],
+            scripts: [renameExamples, trimSparkle],
             dependencies: [
                 .package(product: "AppletCore"),
                 .package(product: "AppletBridge"),
@@ -124,7 +117,6 @@ let project = Project(
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .target(name: "NoodletPreview"),
-                .target(name: "noodlet"),
             ],
             settings: .settings(
                 base: signing.merging([
@@ -162,19 +154,6 @@ let project = Project(
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(APPLET_APP_BUNDLE_ID).preview",
                 "PRODUCT_NAME": "NoodletPreview",
             ]) { $1 })
-        ),
-        // The noodlet command. The app signs it when it embeds it; see embedHelpers.
-        .target(
-            name: "noodlet",
-            destinations: .macOS,
-            product: .commandLineTool,
-            bundleId: "noodlet",
-            deploymentTargets: .macOS("15.0"),
-            sources: ["Sources/NoodletCLI/**"],
-            dependencies: [.package(product: "AppletCore"), .package(product: "AppletBridge")],
-            // main.swift declares @main, which SwiftPM compiles as a library file; Xcode must be told.
-            settings: .settings(base: ["PRODUCT_BUNDLE_IDENTIFIER": "noodlet", "CODE_SIGNING_ALLOWED": "NO",
-                                       "OTHER_SWIFT_FLAGS": "$(inherited) -parse-as-library"])
         ),
     ]
 )

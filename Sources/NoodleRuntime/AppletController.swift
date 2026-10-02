@@ -4,78 +4,49 @@ import Foundation
 import NoodleCore
 import Observation
 
-/// Bot-bound filesystem mailbox. The signed Noodle process owns caller identity;
-/// CLI arguments never choose another bot's sessions or artifacts.
+/// Noodle's side of Noodle Applet: opening noodlets for the person, and the requests the applet
+/// tool sends for bots. Noodle Applet trusts this signed process to name the bot a request is for.
 @MainActor @Observable public final class AppletController {
-    public private(set) var failure: String?
-    @ObservationIgnored private let repository: WorkspaceRepository
-    @ObservationIgnored private var agents: [AgentRecord] = []
-    @ObservationIgnored private var tokens: [UUID: String] = [:]
-    @ObservationIgnored private var claimed: [UUID: Date] = [:]
-    @ObservationIgnored private var inFlight: [UUID: Int] = [:]
+    @ObservationIgnored private var agents: [UUID] = []
+    @ObservationIgnored private var installed = false
     @ObservationIgnored private var monitor: Task<Void, Never>?
-    @ObservationIgnored private let mailboxMonitor = WorkspaceMailboxMonitor()
     @ObservationIgnored private var launching: Task<Void, Error>?
-    @ObservationIgnored private var sharedArtifacts: [UUID: (agent: UUID, conversation: UUID, owner: String, created: Date)] = [:]
-    @ObservationIgnored private var skillExecutableURL: URL?
-    @ObservationIgnored private var synchronizedSkills: Set<UUID> = []
-    @ObservationIgnored private var lastSkillRefresh = Date.distantPast
+    @ObservationIgnored private let isInstalled: @Sendable () -> Bool
     @ObservationIgnored private let connection:
         (@Sendable (AppletRequest) async throws -> AppletResponse)?
     @ObservationIgnored private let surface: (@Sendable (AppletRequest) async throws -> SurfaceSocket)?
+    /// The bots granted the applet tool: every one of them while Noodle Applet is installed.
+    @ObservationIgnored public var onGrantsChange: (([UUID: Set<String>]) -> Void)?
     /// `connection` and `surface` reach Noodle Applet on this Mac unless given.
     public init(
-        repository: WorkspaceRepository,
         connection: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil,
-        surface: (@Sendable (AppletRequest) async throws -> SurfaceSocket)? = nil
+        surface: (@Sendable (AppletRequest) async throws -> SurfaceSocket)? = nil,
+        isInstalled: @escaping @Sendable () -> Bool = { AppletApplication.isInstalled(at: AppletApplication.locate()) }
     ) {
-        self.repository = repository
         self.connection = connection
         self.surface = surface
+        self.isInstalled = isInstalled
     }
     public func start(agents: [AgentRecord]) {
-        mailboxMonitor.reset()
-        self.agents = agents
-        tokens = tokens.filter { id, _ in agents.contains { $0.id == id } }
-        do {
-            for agent in agents where tokens[agent.id] == nil {
-                let directory = try AppletAgentSkill.bridge(
-                    workspace: repository.directory(for: agent))
-                let token = UUID().uuidString + UUID().uuidString
-                try MCPBridgeFiles.write(
-                    AppletAgentSession(token: token, processID: getpid()),
-                    to: directory.appendingPathComponent("session.json"), workspace: repository.directory(for: agent))
-                tokens[agent.id] = token
-            }
-        } catch { failure = error.localizedDescription }
-        refreshSkills()
-        if monitor == nil {
+        self.agents = agents.map(\.id)
+        refreshSkills(force: true)
+        if monitor == nil, !agents.isEmpty {
             monitor = Task { [weak self] in
                 while !Task.isCancelled {
-                    self?.scan()
-                    try? await Task.sleep(for: .milliseconds(150))
+                    try? await Task.sleep(for: .seconds(5))
+                    self?.refreshSkills()
                 }
             }
         }
     }
-    /// Every bot gets the managed integration while the companion is installed.
-    /// Refresh without restarting harnesses or interrupting their current work.
-    public func refreshSkills() {
-        lastSkillRefresh = Date()
-        let executable = repository.appletExecutableURL
-        if executable != skillExecutableURL {
-            skillExecutableURL = executable
-            synchronizedSkills.removeAll()
-        }
-        synchronizedSkills.formIntersection(agents.map(\.id))
-        for agent in agents where !synchronizedSkills.contains(agent.id) {
-            do {
-                try repository.synchronizeAgentWorkspace(agent)
-                synchronizedSkills.insert(agent.id)
-            } catch {
-                failure = error.localizedDescription
-            }
-        }
+    /// Installing or removing the companion grants or withdraws the tool without restarting
+    /// harnesses or interrupting their current work.
+    public func refreshSkills() { refreshSkills(force: false) }
+    private func refreshSkills(force: Bool) {
+        let now = isInstalled()
+        guard force || now != installed else { return }
+        installed = now
+        onGrantsChange?(now ? Dictionary(uniqueKeysWithValues: agents.map { ($0, [AppletToolGrant.id]) }) : [:])
     }
     public func openLibrary() async throws {
         guard
@@ -105,6 +76,13 @@ import Observation
     public func companion(_ request: AppletRequest) async throws -> AppletResponse {
         try await call(request).checked()
     }
+    /// A bot's request from the applet tool, which names the bot as its owner. Errors come back
+    /// in the response, with whatever session they concern.
+    public func tool(_ request: AppletRequest) async throws -> AppletResponse {
+        guard !request.operation.isAppOnly, request.owner != nil else { throw AppletError("Unknown command.") }
+        try request.keepOutOfSight()
+        return try await call(request)
+    }
     /// A live view of a noodlet session for a person, never for a bot: video down the socket,
     /// what the person does up it.
     public func companionSurface(_ request: AppletRequest) async throws -> SurfaceSocket {
@@ -119,8 +97,7 @@ import Observation
             throw error
         }
     }
-    private func call(_ request: AppletRequest, authorize: () throws -> Void = {}) async throws -> AppletResponse {
-        try authorize()
+    private func call(_ request: AppletRequest) async throws -> AppletResponse {
         if let connection { return try await connection(request) }
         let socket = try AppletConnection.socketURL()
         let team = try AppletConnection.signingTeam()
@@ -150,9 +127,6 @@ import Observation
                 }
             }
             for _ in 0..<40 {
-                // Companion startup and retries suspend this actor. Access may
-                // have changed since the request was read from the mailbox.
-                try authorize()
                 do {
                     return try await AppletConnection.call(request, socket: socket, team: team)
                 } catch let error as AppletError where error.unavailable {
@@ -161,137 +135,6 @@ import Observation
             }
             throw AppletError("Noodle Applet did not become ready.")
         }
-    }
-    private func scan() {
-        if Date().timeIntervalSince(lastSkillRefresh) >= 5 { refreshSkills() }
-        guard mailboxMonitor.hasChanges() else { return }
-        sharedArtifacts = sharedArtifacts.filter { Date().timeIntervalSince($0.value.created) < 3600 }
-        claimed = claimed.filter { Date().timeIntervalSince($0.value) < 300 }
-        for agent in agents {
-            guard (inFlight[agent.id] ?? 0) < 3, let token = tokens[agent.id],
-                mailboxMonitor.needsScan(workspace: repository.directory(for: agent), path: ".noodle/applet-bridge"),
-                let directory = try? AppletAgentSkill.bridge(
-                    workspace: repository.directory(for: agent)),
-                let files = try? FileManager.default.contentsOfDirectory(
-                    at: directory, includingPropertiesForKeys: nil)
-            else { continue }
-            for file in files.prefix(512) where file.pathExtension == "request" {
-                guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
-                    claimed[id] == nil
-                else { continue }
-                claimed[id] = Date()
-                let output = directory.appendingPathComponent(
-                    id.uuidString.lowercased() + ".response")
-                do {
-                    let envelope = try JSONDecoder().decode(
-                        AppletAgentEnvelope.self,
-                        from: MCPBridgeFiles.read(file, limit: AppletConnection.maxFrame, workspace: repository.directory(for: agent)))
-                    guard envelope.id == id, envelope.request.id == id, envelope.token == token,
-                        envelope.expiresAt > Date(),
-                        envelope.expiresAt.timeIntervalSinceNow
-                            <= Double(envelope.request.operation.timeout + 5)
-                    else { throw AppletError("Invalid or expired Applet session.") }
-                    try envelope.request.validate()
-                    inFlight[agent.id, default: 0] += 1
-                    Task { [weak self] in
-                        guard let self else { return }
-                        defer { self.inFlight[agent.id, default: 1] -= 1 }
-                        let response: AppletResponse
-                        do { response = try await self.perform(envelope, agent: agent) } catch {
-                            response = AppletResponse(error: error.localizedDescription,
-                                errorCode: (error as? AppletError)?.code)
-                        }
-                        try? MCPBridgeFiles.write(response, to: output, workspace: self.repository.directory(for: agent))
-                    }
-                    break
-                } catch {
-                    try? MCPBridgeFiles.write(
-                        AppletResponse(error: error.localizedDescription), to: output, workspace: repository.directory(for: agent))
-                }
-            }
-        }
-    }
-    public func perform(_ envelope: AppletAgentEnvelope, agent: AgentRecord) async throws -> AppletResponse
-    {
-        func checkAccess() throws {
-            guard agents.contains(where: { $0.id == agent.id }), tokens[agent.id] == envelope.token else {
-                throw AppletError("This Applet session is no longer active.")
-            }
-            if let conversation = envelope.conversationID {
-                do { _ = try repository.participantRoster(for: agent.id, conversationID: conversation) }
-                catch { throw AppletError(error.localizedDescription, code: "session-unavailable") }
-            }
-        }
-        try checkAccess()
-        var request = envelope.request
-        // Showing a noodlet to people is the app's, never a bot's.
-        guard !request.operation.isAppOnly else { throw AppletError("Unknown command. Use --help.") }
-        try request.keepOutOfSight()
-        request.includePreview = nil
-        request.owner = agent.id.uuidString.lowercased()
-        try request.validate()
-        // A bot's noodlets come from its own folder: that is what makes them its own wherever they are linked.
-        if let path = request.path {
-            let workspace = repository.directory(for: agent).resolvingSymlinksInPath().standardizedFileURL.pathComponents
-            let package = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.pathComponents
-            guard package.count > workspace.count, Array(package.prefix(workspace.count)) == workspace else {
-                throw AppletError("Build and open noodlets inside your own workspace.")
-            }
-        }
-        if let conversation = envelope.conversationID {
-            if request.operation == .artifact {
-                guard let id = request.artifactID, let grant = sharedArtifacts[id],
-                      grant.agent == agent.id, grant.conversation == conversation,
-                      Date().timeIntervalSince(grant.created) < 3600 else {
-                    throw AppletError("This capture is unavailable to the conversation.")
-                }
-                request.owner = grant.owner
-            } else if request.operation != .present {
-                guard let id = request.noodletID, request.files == nil,
-                      ![.build, .validate, .list, .artifact].contains(request.operation) else {
-                    throw AppletError("Use --id with a shared noodlet link and --conversation; add --session to target its exact session.", code: "session-unavailable")
-                }
-                let messages = try repository.loadMessages(conversationID: conversation)
-                let sent = Set(messages.flatMap(\.attachments))
-                guard try repository.loadAttachments(conversationID: conversation).contains(where: {
-                    sent.contains($0.id) && $0.url.flatMap(NoodletLink.build) == .current && $0.url.flatMap(NoodletLink.id) == id
-                }) else { throw AppletError("This noodlet has not been shared with the conversation.", code: "session-unavailable") }
-                // The signed broker authorizes the specific shared package, with any explicit session constrained to that package by Applet.
-                request.owner = "local"
-            }
-        }
-        if request.operation == .present, envelope.conversationID == nil {
-            throw AppletError("Specify --conversation to share a preview.")
-        }
-        var response: AppletResponse
-        do { response = try await call(request, authorize: checkAccess) }
-        catch {
-            try checkAccess()
-            throw error
-        }
-        // Even error responses can carry logs or artifacts. Recheck before
-        // returning any payload or granting access to a shared capture.
-        try checkAccess()
-        response.previewBookmark = nil
-        if response.error != nil { return response }
-        if let conversation = envelope.conversationID, let artifact = response.artifactID {
-            sharedArtifacts[artifact] = (agent.id, conversation, request.owner!, Date())
-        }
-        if request.operation == .present, let conversation = envelope.conversationID {
-            guard let url = response.url, (try? NoodletLink.requireID(in: url)) != nil else {
-                throw AppletError("Update Noodle Applet to share noodlet links.")
-            }
-            _ = try repository.participantRoster(for: agent.id, conversationID: conversation)
-            let attachment = try repository.importLinkAttachment(url, into: conversation)
-            do {
-                _ = try repository.sendAgentMessage(agentID: agent.id, conversationID: conversation,
-                    body: response.title ?? response.text ?? "Noodlet", attachmentIDs: [attachment.id])
-            } catch {
-                try? repository.removeAttachment(attachment)
-                throw error
-            }
-        }
-        return response
     }
     deinit { monitor?.cancel() }
 }

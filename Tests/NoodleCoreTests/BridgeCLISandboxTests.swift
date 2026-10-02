@@ -243,9 +243,6 @@ final class BridgeCLISandboxTests: XCTestCase {
                       XCTAssertEqual(request.action, .providers)
                   })
     }
-    func testAppletCanUseWorkspaceBrokerWithoutNetworkOrSignalPermission() throws {
-        try check(helper: "noodlet", bridge: "applet", arguments: ["list"], response: Data("{\"version\":1,\"items\":[]}".utf8), expected: "{\"version\":1,\"items\":[]}")
-    }
     private func check(helper: String, bridge: String, arguments: [String], response: Data, expected: String? = nil,
                        exitCode: Int32 = 0, input: Data? = nil, expectsRequest: Bool = true, expectedError: String? = nil,
                        requestCount: Int = 1,

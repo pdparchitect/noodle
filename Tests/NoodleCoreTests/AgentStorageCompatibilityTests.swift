@@ -9,7 +9,7 @@ final class AgentStorageCompatibilityTests: XCTestCase {
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
-        repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: URL(fileURLWithPath: "/bin/echo"), discoverAppletApplication: { nil })
+        repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: URL(fileURLWithPath: "/bin/echo"))
         try repository.prepare()
     }
     override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }

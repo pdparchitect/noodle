@@ -13,6 +13,8 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Local and remote models show where they run as a tag beside their name, such as MLX or the account's name, instead of in the name.
+- Bots use Noodle Applet through an applet tool, like computers and browsers, instead of their own `noodlet` command. Noodle no longer ships the command, and updating removes it, its skill and its mailbox from every bot's workspace. A bot reaches a noodlet someone shared with `--link` and the conversation. Update Noodle 0.41.0 before any later version, so the old command is cleaned up.
+- A tool call made for a conversation, such as sharing a computer, keeps its result from a bot that left the conversation while it ran.
 
 ### Fixed
 

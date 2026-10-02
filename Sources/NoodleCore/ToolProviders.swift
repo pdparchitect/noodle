@@ -102,9 +102,12 @@ public struct ToolHostServices: Sendable {
     /// A resource was unassigned while a call used it. The result was withheld; the app can
     /// now undo what the call may have started, such as closing the bot's terminals.
     public let revoked: @Sendable (_ kind: String, _ id: String, _ agent: UUID) -> Void
+    /// Whether `link` is attached to a message sent in a conversation the bot is in.
+    public let isPosted: @Sendable (_ link: URL, _ agent: UUID, _ conversation: UUID) -> Bool
     public init(isMember: @escaping @Sendable (UUID, UUID) -> Bool, post: @escaping @Sendable (ToolPost, UUID, UUID) throws -> UUID,
-                revoked: @escaping @Sendable (String, String, UUID) -> Void = { _, _, _ in }) {
-        self.isMember = isMember; self.post = post; self.revoked = revoked
+                revoked: @escaping @Sendable (String, String, UUID) -> Void = { _, _, _ in },
+                isPosted: @escaping @Sendable (URL, UUID, UUID) -> Bool = { _, _, _ in false }) {
+        self.isMember = isMember; self.post = post; self.revoked = revoked; self.isPosted = isPosted
     }
     public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This Noodle cannot post for tools.") })
 }
@@ -137,8 +140,9 @@ public struct ToolProviderManifest: Codable, Equatable, Sendable, Identifiable {
 
 /// A schema property with `"format": "noodle-file"` is a workspace path. The broker
 /// opens it and hands the provider a descriptor; providers never see the workspace.
+/// `folder` opens an existing folder for reading, for a provider whose app reads it in place.
 public struct ToolFileParameter: Equatable, Sendable {
-    public enum Access: String, Sendable { case read, write }
+    public enum Access: String, Sendable { case read, write, folder }
     public let name: String
     public let access: Access
     public init(name: String, access: Access) { self.name = name; self.access = access }
@@ -170,6 +174,9 @@ public struct ToolDescriptor: Equatable, Sendable {
     /// A property with `"format": "noodle-conversation"`. The broker refuses conversations the
     /// bot is not in, and only such a tool may return something for Noodle to post there.
     public let conversationParameter: String?
+    /// Properties with `"format": "noodle-conversation-link"`: a link someone posted in the
+    /// conversation the call names. The broker refuses any other link.
+    public let linkParameters: [String]
     /// The schema's `required` names. The broker refuses a call that omits one.
     public let required: [String]
     /// `_meta["noodle/timeout"]`, clamped to 1–3600 seconds.
@@ -202,6 +209,11 @@ public struct ToolDescriptor: Equatable, Sendable {
         required = schema["required"] as? [String] ?? []
         conversationParameter = ((schema["properties"] as? [String: Any]) ?? [:]).sorted { $0.key < $1.key }
             .first { ($0.value as? [String: Any])?["format"] as? String == "noodle-conversation" }?.key
+        linkParameters = ((schema["properties"] as? [String: Any]) ?? [:]).sorted { $0.key < $1.key }
+            .filter { ($0.value as? [String: Any])?["format"] as? String == "noodle-conversation-link" }.map(\.key)
+        if !linkParameters.isEmpty, conversationParameter == nil {
+            throw ToolProviderError("The \(name) tool takes a conversation link without a conversation.")
+        }
         let listed = (object["_meta"] as? [String: Any])?["noodle/resource-list"] as? [String: Any]
         resourceList = try listed.map {
             guard let kind = $0["kind"] as? String, let path = $0["path"] as? String, !kind.isEmpty, !path.isEmpty else {
@@ -325,14 +337,21 @@ public enum ToolFileArguments {
                 let relative = try ComputerWorkspaceFiles.relativePath(path, currentDirectory: currentDirectory, workspace: workspace)
                 let (parent, name) = try ComputerWorkspaceFiles.parent(workspace: workspace, path: relative)
                 defer { Darwin.close(parent) }
-                let flags = parameter.access == .read ? O_RDONLY | O_NONBLOCK : O_WRONLY | O_CREAT | O_EXCL
+                let flags = switch parameter.access {
+                case .read: O_RDONLY | O_NONBLOCK
+                case .write: O_WRONLY | O_CREAT | O_EXCL
+                case .folder: O_RDONLY | O_DIRECTORY
+                }
                 let fd = openat(parent, name, flags | O_NOFOLLOW | O_CLOEXEC, 0o600)
                 var info = stat()
-                guard fd >= 0, fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else {
+                guard fd >= 0, fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == (parameter.access == .folder ? S_IFDIR : S_IFREG) else {
                     if fd >= 0 { Darwin.close(fd) }
-                    throw ToolProviderError(parameter.access == .read
-                        ? "Cannot read \(relative); expected a regular workspace file."
-                        : "Cannot create \(relative); existing files are never replaced.")
+                    let message = switch parameter.access {
+                    case .read: "Cannot read \(relative); expected a regular workspace file."
+                    case .write: "Cannot create \(relative); existing files are never replaced."
+                    case .folder: "Cannot open \(relative); expected a folder in your workspace, not a link."
+                    }
+                    throw ToolProviderError(message)
                 }
                 files.append(ToolFile(parameter: parameter.name, access: parameter.access,
                                       handle: FileHandle(fileDescriptor: fd, closeOnDealloc: true), path: relative))

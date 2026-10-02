@@ -11,23 +11,10 @@ for product in NoodleMessenger; do
     swift build --disable-sandbox --package-path "$project_root" --product "$product" >&2
 done
 bin_path="$(swift build --disable-sandbox --package-path "$project_root" --show-bin-path)"
-swift build --disable-sandbox --package-path "$project_root/Applet" \
-    --scratch-path "$project_root/.build/applet" --product noodlet >&2
-applet_bin="$(swift build --disable-sandbox --package-path "$project_root/Applet" \
-    --scratch-path "$project_root/.build/applet" --show-bin-path)"
 # Start empty: a helper this script no longer builds must not linger from an earlier run.
 rm -rf "$helpers"
 mkdir -p "$helpers"
 cp "$bin_path/NoodleMessenger" "$helpers/messenger"
-cp "$applet_bin/noodlet" "$helpers/noodlet"
-for helper in messenger noodlet; do
-    signing_options=()
-    # Applet derives its environment from the executable's signing identifier,
-    # including when the managed CLI runs outside its app bundle.
-    if [[ "$helper" == noodlet ]]; then
-        signing_options=(--identifier com.pdparchitect.noodle.applet.local.cli)
-    fi
-    /usr/bin/codesign --force --sign - --options runtime --timestamp=none "${signing_options[@]}" "$helpers/$helper" >&2
-    /usr/bin/codesign --verify --strict "$helpers/$helper" >&2
-done
+/usr/bin/codesign --force --sign - --options runtime --timestamp=none "$helpers/messenger" >&2
+/usr/bin/codesign --verify --strict "$helpers/messenger" >&2
 print "$application"

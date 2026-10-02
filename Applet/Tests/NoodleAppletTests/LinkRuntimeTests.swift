@@ -17,9 +17,9 @@ import XCTest
         }
         var validate = AppletRequest(.validate)
         validate.path = try botNoodlet(htmlNoodlet("A"), named: "A", owner: "ada", root: root, hub: true)
-        let made = try key(await runtime.handle(validate, identity: identity.cliID).checked())
+        let made = try key(await runtime.handle(validate, identity: identity.noodleID).checked())
         validate.path = try botNoodlet(htmlNoodlet("Own"), named: "Own", owner: "kai", root: root)
-        let own = try await runtime.handle(validate, identity: identity.cliID).checked()
+        let own = try await runtime.handle(validate, identity: identity.noodleID).checked()
         XCTAssertEqual(library.hub, [made])
         // Made before the library recorded it, and opened by the Hub since.
         var info = AppletRequest(.info); info.noodletID = own.noodletID
@@ -175,7 +175,7 @@ import XCTest
         defer { runtime.shutdown(); try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
         var validate = AppletRequest(.validate)
         validate.path = try botNoodlet(htmlNoodlet("Game"), named: "Game", owner: "author", root: root)
-        let registered = try await runtime.handle(validate, identity: AppletBuildIdentity.current.cliID).checked()
+        let registered = try await runtime.handle(validate, identity: AppletBuildIdentity.current.noodleID).checked()
         let package = try NoodletPackage(url: URL(fileURLWithPath: XCTUnwrap(registered.path)))
         let session = try AppletSession(package: package, owner: try XCTUnwrap(library.owner(of: package.url)), mode: "background",
                                         size: CGSize(width: 320, height: 240), root: root)

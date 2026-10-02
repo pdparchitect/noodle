@@ -1,3 +1,4 @@
+import AppletBridge
 import BrowserBridge
 import ComputerBridge
 import Foundation
@@ -27,6 +28,12 @@ extension ToolHostServices {
                 attachment = try repository.importLinkAttachment(
                     ComputerLink.url(computer: reference.computer.id, terminal: reference.terminalID, view: reference.view),
                     into: conversation, card: LinkCard(reference))
+            } else if post.mediaType == NoodletLink.mediaType {
+                // Anyone in the conversation could attach the same link themselves; Noodle Applet decides what it opens.
+                guard let url = URL(string: String(decoding: post.data, as: UTF8.self)), let link = NoodletLink.canonical(url) else {
+                    throw ToolProviderError("The tool returned an invalid noodlet link.")
+                }
+                attachment = try repository.importLinkAttachment(link, into: conversation)
             } else if post.mediaType.lowercased().hasPrefix("application/vnd.noodle.") {
                 // Noodle's own card types carry authority in chat; a tool cannot mint them.
                 throw ToolProviderError("Tools cannot post this kind of attachment.")
@@ -39,7 +46,14 @@ extension ToolHostServices {
                                                     body: post.message ?? post.filename, attachmentIDs: [attachment.id])
             } catch { try? repository.removeAttachment(attachment); throw error }
             return attachment.id
-        }, revoked: revoked)
+        }, revoked: revoked, isPosted: { link, agent, conversation in
+            guard (try? repository.participantRoster(for: agent, conversationID: conversation)) != nil,
+                  let messages = try? repository.loadMessages(conversationID: conversation),
+                  let attachments = try? repository.loadAttachments(conversationID: conversation) else { return false }
+            // Sent, not a draft someone has yet to send.
+            let sent = Set(messages.flatMap(\.attachments)), wanted = link.absoluteString.lowercased()
+            return attachments.contains { sent.contains($0.id) && $0.url?.absoluteString.lowercased() == wanted }
+        })
     }
 }
 

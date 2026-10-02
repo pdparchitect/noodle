@@ -56,6 +56,7 @@ let package = Package(
         .library(name: "NoodleSharing", targets: ["NoodleSharing"]),
         .library(name: "NoodleAudioCapture", targets: ["NoodleAudioCapture"]),
         .library(name: "NoodleBrowserTools", targets: ["NoodleBrowserTools"]),
+        .library(name: "NoodleAppletTools", targets: ["NoodleAppletTools"]),
         .library(name: "NoodleCalendarTools", targets: ["NoodleCalendarTools"]),
         .library(name: "NoodleComputerTools", targets: ["NoodleComputerTools"]),
         .library(name: "NoodleRemindersTools", targets: ["NoodleRemindersTools"]),
@@ -103,7 +104,7 @@ let package = Package(
         /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
         .target(name: "NoodleHubClient", dependencies: ["NoodleCore", .product(name: "HubLink", package: "HubLink")]),
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
-        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP", "NoodleComputerTools", "NoodleBrowserTools",
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools",
                                                 .product(name: "ComputerBridge", package: "Bridge"),
                                                 .product(name: "BrowserBridge", package: "BrowserProtocol"),
                                                 .product(name: "AppletBridge", package: "Protocol"),
@@ -122,7 +123,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -176,6 +177,7 @@ let package = Package(
 package.targets += tool("Vision")
     + tool("Maps")
     + builtInTool("Calendar")
+    + builtInTool("Applet", dependencies: [.product(name: "AppletBridge", package: "Protocol")])
     + builtInTool("Reminders")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
     + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import HubLink
 import Observation
+import NoodleAppletTools
 import NoodleCalendarTools
 import NoodleCore
 import NoodleHubClient
@@ -241,7 +242,12 @@ final class NoodleStore {
         }
         try? toolProviders.register(CalendarToolProvider(store: calendarStore))
         try? toolProviders.register(ReminderToolProvider(store: reminderStore))
-        applets = AppletController(repository: self.repository)
+        applets = AppletController()
+        applets.onGrantsChange = { [toolAssignments, tools] granted in
+            toolAssignments.replace(AppletToolGrant.kind, with: granted)
+            tools.synchronizeSkills()
+        }
+        try? toolProviders.register(AppletToolProvider { [applets] in try await applets.tool($0) })
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         thisMac = ThisMacHub(repository: self.repository, runtime: self.runtime, applets: applets, profiles: harnessProfiles,
                              service: mcp.service)

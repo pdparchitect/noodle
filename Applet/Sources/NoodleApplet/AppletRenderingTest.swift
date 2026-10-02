@@ -3,7 +3,7 @@ import AppletBridge
 import AppletCore
 import WebKit
 
-/// Explicit signed-app regression fixture with its own runtime, data and socket.
+/// Explicit signed-app regression fixture with its own runtime and data.
 /// Never connects to, closes or replaces the user's existing sessions.
 @MainActor enum AppletRenderingTest {
   static func run() async throws {
@@ -14,11 +14,6 @@ import WebKit
     let defaults = UserDefaults(suiteName: suite)!
     let library = AppletLibrary(root: root, defaults: defaults, installExamples: false, watchChanges: false)
     let runtime = AppletRuntime(library: library, defaults: defaults)
-    let socket = try AppletConnection.socketURL().deletingLastPathComponent()
-      .appendingPathComponent("t\(UUID().uuidString.prefix(6)).sock")
-    let server = try AppletConnectionServer(socket: socket, team: AppletConnection.signingTeam()) { request, identity in
-      await runtime.handle(request, identity: identity)
-    }
     func clearWebsiteData() async {
       runtime.shutdown()
       for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix("store.") {
@@ -28,7 +23,6 @@ import WebKit
       }
     }
     defer {
-      withExtendedLifetime(server) {}
       runtime.shutdown()
       try? FileManager.default.removeItem(at: root)
       defaults.removePersistentDomain(forName: suite)
@@ -36,28 +30,12 @@ import WebKit
     func require(_ condition: Bool, _ message: String) throws {
       if !condition { throw AppletError(message) }
     }
-    let cli = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/noodlet")
+    let commands = AppletCheckCommands(runtime: runtime)
     func call(_ args: [String], succeeds: Bool = true) async throws -> AppletResponse {
-      let response = try await Task.detached {
-        let process = Process(), pipe = Pipe()
-        process.executableURL = cli
-        process.arguments = args + ["--socket", socket.path]
-        process.currentDirectoryURL = root
-        process.standardOutput = pipe
-        process.standardError = FileHandle.standardError
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let response = try JSONDecoder().decode(AppletResponse.self, from: data)
-        if succeeds { return try response.checked() }
-        guard process.terminationStatus == 1, response.error != nil else { throw AppletError("Expected CLI rejection: \(args)") }
-        return response
-      }.value
-      return response
+      try await commands.call(args, succeeds: succeeds)
     }
     func value(_ args: [String]) async throws -> [String: Any] {
-      let response = try await call(args)
-      return try JSONSerialization.jsonObject(with: Data((response.value ?? "{}").utf8)) as? [String: Any] ?? [:]
+      try await commands.value(args) as? [String: Any] ?? [:]
     }
     /// Watches a session as a paired device does, once its first picture has arrived.
     func watch(_ session: UUID) async throws -> SurfaceSocket {
@@ -268,8 +246,8 @@ import WebKit
       && archived.viewAvailable == false && archived.rendering == nil, "Archived inspection lost saved session metadata")
     let archivedStatus = try await call(["status"] + exact)
     try require(archivedStatus.sessionID == open.sessionID && archivedStatus.state == "stopped", "Archived status stopped working")
-    print("PASS signed CLI: archived inspection error retains identity/state/mode without claiming a live view")
-    print("PASS signed CLI: historical/headless targeting, native visibility, synthetic RAF/clock, cancellation/errors, Canvas/WebGL pixels, restart, exact close and test-data isolation")
+    print("PASS archived inspection error retains identity/state/mode without claiming a live view")
+    print("PASS historical/headless targeting, native visibility, synthetic RAF/clock, cancellation/errors, Canvas/WebGL pixels, restart, exact close and test-data isolation")
     print("APPLET RENDERING TEST PASSED")
     } catch {
       await clearWebsiteData()

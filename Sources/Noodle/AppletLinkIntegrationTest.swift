@@ -1,6 +1,7 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
 import AppletBridge
+import NoodleAppletTools
 import NoodleRuntime
 import NoodleCore
 import NoodleLaunchChecks
@@ -21,7 +22,7 @@ import QuickLookUI
         let author = try repository.createAgent(named: "Fixture Author").agent
         let participant = try repository.createAgent(named: "Fixture Participant").agent
         let group = try repository.createGroup(named: "Fixture", participantIDs: [author.id, participant.id], existingAgents: [author, participant])
-        let controller = AppletController(repository: repository)
+        let controller = AppletController()
         controller.start(agents: [author, participant])
         defer { controller.start(agents: []) }
         let source = repository.directory(for: author).appendingPathComponent("Hello.\(AppletBuildIdentity.current.fileExtension)")
@@ -33,35 +34,45 @@ import QuickLookUI
             <h1>Noodlet link preview</h1><p>This package was resolved directly from its ID.</p>
             <button id="play" onclick="this.textContent='Interactive preview works'">Try the preview</button></html>
             """.utf8).write(to: source.appendingPathComponent("index.html"))
+        // Bots' requests go as Noodle sends them: through the tool broker and the applet tool.
+        let registry = ToolProviderRegistry()
+        try registry.register(AppletToolProvider { try await controller.tool($0) })
+        let granted: ToolAssignments = [AppletToolGrant.kind: [AppletToolGrant.id]]
+        let host = ToolHostServices.repository(repository) { _ in granted }
         func cli(_ args: [String], agent: AgentRecord) async throws -> AppletResponse {
-            let cwd = repository.directory(for: agent)
-            return try await Task.detached {
-                let process = Process(), output = Pipe()
-                process.executableURL = helpers.appendingPathComponent("noodlet")
-                process.currentDirectoryURL = cwd; process.arguments = args
-                process.standardOutput = output; process.standardError = FileHandle.standardError
-                try process.run()
-                let bytes = output.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                let response = try JSONDecoder().decode(AppletResponse.self, from: bytes).checked()
-                guard process.terminationStatus == 0 else { throw AppletError("CLI failed.") }
-                return response
-            }.value
+            var arguments: [String: Any] = [:]
+            var rest = args.dropFirst()
+            while let flag = rest.popFirst() {
+                arguments[String(flag.dropFirst(2))] = rest.popFirst()
+            }
+            let request = ToolBridgeRequest(session: "", action: .call, provider: "applet", tool: args[0],
+                                            arguments: try JSONSerialization.data(withJSONObject: arguments))
+            let result = try await ToolBroker.perform(request, registry: registry, assignments: { granted },
+                context: ToolCallContext(agentID: agent.id, workspace: repository.directory(for: agent)), host: host)
+            let object = try JSONSerialization.jsonObject(with: result) as? [String: Any] ?? [:]
+            let response = try JSONDecoder().decode(AppletResponse.self, from: JSONSerialization.data(withJSONObject: object["structuredContent"] ?? [:]))
+            if object["isError"] as? Bool == true { throw AppletError(response.error ?? "The applet tool failed.") }
+            return response
         }
-        let registered = try await cli(["validate", source.path], agent: author)
+        let package = source.lastPathComponent
+        let registered = try await cli(["validate", "--path", package], agent: author)
         guard let id = registered.noodletID, let url = registered.url, registered.sessionID == nil else {
             throw AppletError("Validation failed to register without running.")
         }
-        let info = try await cli(["info", "--path", source.path], agent: author)
+        let info = try await cli(["info", "--path", package], agent: author)
         guard info.noodletID == id else { throw AppletError("Info lost the source identity.") }
         do {
             _ = try await cli(["info", "--id", url.absoluteString], agent: participant)
             throw AppletError("Unauthorized ID resolved.")
         } catch let error as AppletError where error.message.contains("unavailable to this caller") {}
+        do {
+            _ = try await cli(["info"] + ["--link", url.absoluteString, "--conversation", group.id.uuidString], agent: participant)
+            throw AppletError("An unsent link resolved.")
+        } catch where error.localizedDescription.contains("has not been shared") {}
         let send = MessengerCLI.run(arguments: ["messenger", "--agent-directory", repository.directory(for: author).path,
             "--send", "--conversation", group.id.uuidString, "--attach", url.absoluteString], environment: [:])
         guard send.exitCode == 0 else { throw AppletError(send.standardError) }
-        let shared = ["--id", url.absoluteString, "--conversation", group.id.uuidString]
+        let shared = ["--link", url.absoluteString, "--conversation", group.id.uuidString]
         let resolved = try await cli(["info"] + shared, agent: participant)
         guard resolved.noodletID == id, resolved.previewBookmark == nil else { throw AppletError("Shared access failed.") }
         let access = try await controller.resolvePreview(url)
@@ -70,11 +81,11 @@ import QuickLookUI
               try String(contentsOf: access.url.appendingPathComponent("index.html"), encoding: .utf8).contains("Try the preview") else {
             throw AppletError("Signed cross-sandbox package access failed.")
         }
-        print("PASS: real CLI registration, stable info, ownership, Messenger webloc, shared participant access, signed preview bookmark")
+        print("PASS: applet tool registration, stable info, ownership, Messenger webloc, shared participant access, signed preview bookmark")
         let opened = try await cli(["open", "--mode", "headless"] + shared, agent: participant)
         guard opened.sessionID != nil else { throw AppletError("Shared run failed.") }
         let capture = repository.directory(for: participant).appendingPathComponent("capture.png")
-        _ = try await cli(["screenshot", "--output", capture.path] + shared, agent: participant)
+        _ = try await cli(["screenshot", "--output", "capture.png"] + shared, agent: participant)
         guard NSImage(contentsOf: capture) != nil else { throw AppletError("Shared capture transfer failed.") }
         _ = try await cli(["close"] + shared, agent: participant)
         print("PASS: shared headless run, screenshot transfer, close")
@@ -115,7 +126,7 @@ import QuickLookUI
         try Data("<html><button id=\"play\">Try the preview</button></html>".utf8).write(to: source.appendingPathComponent("index.html"))
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         try repository.prepare()
-        let controller = AppletController(repository: repository)
+        let controller = AppletController()
         // Applet uses a noodlet no bot made only once a person opens it there.
         guard let applet = AppletApplication.locate() else { throw AppletError("Noodle Applet is not installed.") }
         let opening = NSWorkspace.OpenConfiguration()

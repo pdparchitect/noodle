@@ -95,18 +95,6 @@ import XCTest
         XCTAssertNotNil(escaped.error)
     }
 
-    /// Only Noodle and Noodle Hub ask for these, never the command bots run.
-    func testTheCommandCannotAskForFilesOrData() async throws {
-        let (id, _) = try await noodlet(try htmlNoodlet("Pocket"))
-        for operation: AppletOperation in [.archive, .store] {
-            var request = AppletRequest(operation)
-            request.noodletID = id
-            request.store = operation == .store ? NoodletStoreCall(operation: "read", path: "a.txt") : nil
-            let response = await runtime.handle(request, identity: AppletBuildIdentity.current.cliID)
-            XCTAssertEqual(response.error, "Unknown command. Use --help.", operation.rawValue)
-        }
-    }
-
     func testRequestsNameTheNoodletAndTheirCall() throws {
         XCTAssertThrowsError(try AppletRequest(.archive).validate())
         var store = AppletRequest(.store)

@@ -6,8 +6,8 @@ import Foundation
     func manifest(reply: @escaping (Data) -> Void)
     /// `caller` is JSON: `agent` (UUID) and `assignments` (resource kind to identifiers).
     func listTools(caller: Data, reply: @escaping (Data?, String?) -> Void)
-    /// `files[i]` belongs to `parameters[i]`; `writable[i]` tells how it was opened.
-    func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
+    /// `files[i]` belongs to `parameters[i]`; `access[i]` tells how it was opened.
+    func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], access: [String],
                   caller: Data, reply: @escaping (Data?, String?) -> Void)
 }
 
@@ -21,10 +21,10 @@ public enum ToolExtensionInterface {
     /// Collections of handles must be allow-listed for NSXPC secure coding on both ends.
     public static func make() -> NSXPCInterface {
         let interface = NSXPCInterface(with: ToolExtensionXPC.self)
-        let selector = #selector(ToolExtensionXPC.callTool(_:arguments:files:parameters:writable:caller:reply:))
+        let selector = #selector(ToolExtensionXPC.callTool(_:arguments:files:parameters:access:caller:reply:))
         interface.setClasses(NSSet(array: [NSArray.self, FileHandle.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 2, ofReply: false)
         interface.setClasses(NSSet(array: [NSArray.self, NSString.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 3, ofReply: false)
-        interface.setClasses(NSSet(array: [NSArray.self, NSNumber.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 4, ofReply: false)
+        interface.setClasses(NSSet(array: [NSArray.self, NSString.self]) as! Set<AnyHashable>, for: selector, argumentIndex: 4, ofReply: false)
         return interface
     }
 }
@@ -61,11 +61,12 @@ public final class ToolExtensionService: NSObject, ToolExtensionXPC, @unchecked 
         respond(reply) { try await self.provider.tools(context: self.context(caller)) }
     }
 
-    public func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
+    public func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], access: [String],
                          caller: Data, reply: @escaping (Data?, String?) -> Void) {
         respond(reply) {
-            guard files.count == parameters.count, files.count == writable.count else { throw ToolProviderError("Mismatched tool files.") }
-            let opened = files.indices.map { ToolFile(parameter: parameters[$0], access: writable[$0] ? .write : .read, handle: files[$0]) }
+            let modes = access.compactMap(ToolFileParameter.Access.init(rawValue:))
+            guard files.count == parameters.count, files.count == modes.count else { throw ToolProviderError("Mismatched tool files.") }
+            let opened = files.indices.map { ToolFile(parameter: parameters[$0], access: modes[$0], handle: files[$0]) }
             return try await self.provider.call(name, arguments: arguments, files: opened, context: self.context(caller))
         }
     }
@@ -160,7 +161,7 @@ public final class ToolExtensionConnection: ToolProvider, @unchecked Sendable {
         defer { checkpoints.remove(call) }
         return try await perform { proxy, finish in
             proxy.callTool(tool, arguments: arguments, files: files.map(\.handle), parameters: files.map(\.parameter),
-                           writable: files.map { $0.access == .write }, caller: caller, reply: finish)
+                           access: files.map(\.access.rawValue), caller: caller, reply: finish)
         }
     }
 

@@ -6,6 +6,10 @@
 
 - Apple Intelligence bots can use remote models with the Hub's own API keys, added in Settings > Harness > Apple Intelligence > Remote Models.
 
+### Changed
+
+- Bots use Noodle Applet through an applet tool, like computers and browsers, instead of their own `noodlet` command. The Hub no longer ships the command, and updating removes it, its skill and its mailbox from every bot's workspace. Update to Noodle Hub 0.14.0 before any later version, so the old command is cleaned up.
+
 ## [0.13.1] - 2026-10-02
 
 ### Fixed

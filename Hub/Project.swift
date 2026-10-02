@@ -20,14 +20,13 @@ let signing: SettingsDictionary = [
 let embedHelpers: TargetScript = .post(script: """
     set -euo pipefail
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+    # Start empty: a helper the app no longer builds must not linger from an earlier build.
+    rm -rf "$helpers"
     mkdir -p "$helpers"
-    for tool in messenger noodlet NoodleAppleAgent; do
+    for tool in messenger NoodleAppleAgent; do
         ditto "$BUILT_PRODUCTS_DIR/$tool" "$helpers/$tool"
     done
     codesign --force --options runtime "$HUB_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$helpers/messenger"
-    # Applet's CLI, as Noodle ships it: signed as Applet's, so Applet trusts the Hub's bots' requests.
-    codesign --force --options runtime "$HUB_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
-        --identifier "$HUB_APPLET_CLI_ID" "$helpers/noodlet"
     codesign --force --options runtime "$HUB_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" \
         --identifier "$HUB_APP_BUNDLE_ID.apple-agent" "$helpers/NoodleAppleAgent"
     for bundle in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
@@ -86,7 +85,6 @@ let project = Project(
         .local(path: "../Shared/Brand"),
         .local(path: "../Shared/HubLink"),
         .local(path: "../Shared/LaunchChecks"),
-        .local(path: "../Applet"),
         .local(path: "../Applet/Protocol"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
@@ -106,14 +104,12 @@ let project = Project(
                 "HUB_APP_NAME": "Noodle Hub Dev",
                 // Pairs with Noodle Computer Dev, as Noodle Dev does.
                 "HUB_COMPANION_SUFFIX": ".local",
-                "HUB_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.local.cli",
                 "HUB_LINK_PORT": "38416",
             ]),
             .release(name: "Release", settings: [
                 "HUB_APP_BUNDLE_ID": "com.pdparchitect.noodle.hub",
                 "HUB_APP_NAME": "Noodle Hub",
                 "HUB_COMPANION_SUFFIX": "",
-                "HUB_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.cli",
                 "HUB_LINK_PORT": "38415",
                 // Signing adds get-task-allow for the debugger; a release carries only its own entitlements.
                 "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
@@ -150,7 +146,6 @@ let project = Project(
                 .package(product: "Sparkle"),
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
-                .target(name: "noodlet"),
                 .target(name: "NoodleAppleAgent"),
             ],
             settings: .settings(base: signing.merging([
@@ -200,10 +195,6 @@ let project = Project(
         ),
         helper("messenger", sources: ["../Sources/NoodleMessenger/**"], bundleID: "messenger",
                dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleToolScripting")]),
-        // main.swift declares @main, which SwiftPM compiles as a library file; Xcode must be told.
-        helper("noodlet", sources: ["../Applet/Sources/NoodletCLI/**"], bundleID: "noodlet",
-               dependencies: [.package(product: "AppletCore"), .package(product: "AppletBridge")],
-               settings: ["OTHER_SWIFT_FLAGS": "$(inherited) -parse-as-library"]),
         // The Agent Host applies this helper's own Seatbelt policy before exec.
         // Its Info.plist is linked in as the root package does: an Info.plist Xcode builds itself would
         // make it add an application identifier entitlement, which the harness must not carry.

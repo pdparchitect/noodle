@@ -79,6 +79,42 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(created.conversation.participantIDs, [created.agent.id])
     }
 
+    // TODO(0.42.0, Hub 0.15.0): remove with WorkspaceRepository.removeAppletCommand. Milestone: 0.41.0, Hub 0.14.0.
+    /// Bots reach Noodle Applet through the applet tool. The `noodlet` command, its managed
+    /// skill and its mailbox leave the workspace; the tool's skill and a person's own stay.
+    func testTheNoodletCommandAndItsMailboxLeaveEveryWorkspace() throws {
+        let old = try repository.createAgent(named: "Old").agent, taken = try repository.createAgent(named: "Taken").agent
+        let mine = try repository.createAgent(named: "Mine").agent
+        let manager = FileManager.default
+        for agent in [old, taken, mine] {
+            let workspace = repository.directory(for: agent)
+            let skill = workspace.appendingPathComponent(".agents/skills/applet")
+            try manager.createDirectory(at: skill, withIntermediateDirectories: true)
+            try Data("old".utf8).write(to: skill.appendingPathComponent("SKILL.md"))
+            try manager.createSymbolicLink(atPath: skill.appendingPathComponent("noodlet").path, withDestinationPath: "/Applications/Noodle.app/Contents/Helpers/noodlet")
+            let bridge = workspace.appendingPathComponent(".noodle/applet-bridge")
+            try manager.createDirectory(at: bridge, withIntermediateDirectories: true)
+            for name in ["session.json", "\(UUID().uuidString.lowercased()).request", "\(UUID().uuidString.lowercased()).response"] {
+                try Data("{}".utf8).write(to: bridge.appendingPathComponent(name))
+            }
+        }
+        // Noodle managed the old skill; the tool's skill has since taken the name in one workspace.
+        for agent in [old, taken] {
+            try Data().write(to: repository.directory(for: agent).appendingPathComponent(".agents/skills/applet/.noodle-managed"))
+        }
+        try Data().write(to: repository.directory(for: taken).appendingPathComponent(".agents/skills/applet/.noodle-tool-provider"))
+        try repository.synchronizeAgentWorkspaces([old, taken, mine])
+        let skill = { (agent: AgentRecord) in self.repository.directory(for: agent).appendingPathComponent(".agents/skills/applet") }
+        XCTAssertFalse(manager.fileExists(atPath: skill(old).path))
+        XCTAssertTrue(manager.fileExists(atPath: skill(taken).appendingPathComponent("SKILL.md").path))
+        XCTAssertNil(try? manager.destinationOfSymbolicLink(atPath: skill(taken).appendingPathComponent("noodlet").path))
+        // Not Noodle's: a person's own skill of that name is left exactly as it is.
+        XCTAssertNotNil(try? manager.destinationOfSymbolicLink(atPath: skill(mine).appendingPathComponent("noodlet").path))
+        for agent in [old, taken, mine] {
+            XCTAssertFalse(manager.fileExists(atPath: repository.directory(for: agent).appendingPathComponent(".noodle/applet-bridge").path))
+        }
+    }
+
     func testClaudeSkillDiscoveryLinkIsCreatedAndRepairedOnBootstrap() throws {
         let bot = try repository.createAgent(named: "Claude Bot")
         let directory = repository.directory(for: bot.agent)

@@ -128,6 +128,7 @@ import XCTest
     func testLaunchCheckDigestsMatchTheirArguments() {
         XCTAssertEqual(AppletLaunchCheck.updaterUI, LaunchChecks.digest("--updater-ui-test"))
         XCTAssertEqual(AppletLaunchCheck.rendering, LaunchChecks.digest("--rendering-test"))
+        XCTAssertEqual(AppletLaunchCheck.smoke, LaunchChecks.digest("--smoke-test"))
         XCTAssertEqual(AppletLaunchCheck.backgroundLaunchUI, LaunchChecks.digest("--background-launch-ui-test"))
         #if NOODLE_DEV_HOOKS
         XCTAssertEqual(AppletLaunchCheck.launchCapture, LaunchChecks.digest("--launch-check"))

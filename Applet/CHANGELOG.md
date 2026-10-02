@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- The `noodlet` command. Bots use Noodle Applet through the applet tool in Noodle and Noodle Hub, and Applet accepts requests only from those apps.
+
 ## [0.22.0] - 2026-10-02
 
 ### Added

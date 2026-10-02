@@ -47,7 +47,7 @@ import XCTest
         let profiles = HarnessProfilesController(store: repository.harnessProfiles)
         for (provider, name) in named { _ = try profiles.create(provider: provider, named: name) }
         let personal = PersonalHub(name: "Studio", directory: root.appendingPathComponent("Remote"), repository: repository,
-                                   runtime: runtime, applets: AppletController(repository: repository),
+                                   runtime: runtime, applets: AppletController(),
                                    profiles: profiles, service: Self.service(),
                                    computer: { try computer.call($0) }, browser: { try browser.call($0) }, port: 0,
                                    localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
@@ -481,7 +481,7 @@ import XCTest
         let bot = try repository.createAgent(named: "Kai").agent
         let runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(managedHarnesses: repository.managedHarnesses))
         let personal = PersonalHub(name: "Studio", directory: root.appendingPathComponent("Remote"), repository: repository,
-                                   runtime: runtime, applets: AppletController(repository: repository),
+                                   runtime: runtime, applets: AppletController(),
                                    profiles: HarnessProfilesController(store: repository.harnessProfiles), service: Self.service(), port: 0)
         personal.bots.synchronizeOwners()
         try personal.access.rename(personal.owner, to: "Someone Else")
@@ -498,6 +498,26 @@ import XCTest
         await browsers.refresh()
         XCTAssertNil(computer.owner(of: madeComputer.id))
         XCTAssertNil(browser.owner(of: madeBrowser.id))
+    }
+
+    /// Noodle passes its own Applet controller to This Mac as a Hub. Noodle's broker serves
+    /// Noodle's bots the applet tool; the Hub it serves devices with must not take that over.
+    func testThisMacAsAHubLeavesNoodlesAppletToolAlone() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        try repository.prepare()
+        let bot = try repository.createAgent(named: "Kai").agent
+        let applets = AppletController(isInstalled: { true })
+        var published: [[UUID: Set<String>]] = []
+        applets.onGrantsChange = { published.append($0) }
+        let runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(managedHarnesses: repository.managedHarnesses))
+        _ = PersonalHub(name: "Studio", directory: root.appendingPathComponent("Remote"), repository: repository,
+                        runtime: runtime, applets: applets,
+                        profiles: HarnessProfilesController(store: repository.harnessProfiles), service: Self.service(), port: 0)
+        applets.start(agents: [bot])
+        defer { applets.start(agents: []) }
+        XCTAssertEqual(published, [[bot.id: [AppletToolGrant.id]]])
     }
 }
 

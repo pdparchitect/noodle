@@ -101,7 +101,7 @@ final class ToolExtensionTests: XCTestCase, NSXPCListenerDelegate {
             }
             func manifest(reply: @escaping (Data) -> Void) {}
             func listTools(caller: Data, reply: @escaping (Data?, String?) -> Void) {}
-            func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], writable: [Bool],
+            func callTool(_ name: String, arguments: Data, files: [FileHandle], parameters: [String], access: [String],
                           caller: Data, reply: @escaping (Data?, String?) -> Void) {}
         }
         let delegate = Silent()

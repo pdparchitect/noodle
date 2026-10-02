@@ -49,21 +49,10 @@ public enum WorkspaceError: LocalizedError, Equatable {
 public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
-    private let discoverAppletApplication: @Sendable () -> URL?
 
-
-    public init(rootURL: URL, launcherExecutableURL: URL? = nil,
-                discoverAppletApplication: @escaping @Sendable () -> URL? = { AppletAgentSkill.installedApplicationURL() }) {
+    public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = AgentStorageLayout.canonicalURL(rootURL)
         self.launcherExecutableURL = launcherExecutableURL?.standardizedFileURL
-        self.discoverAppletApplication = discoverAppletApplication
-    }
-
-    public var appletExecutableURL: URL? {
-        guard let executable = launcherExecutableURL?.deletingLastPathComponent().appendingPathComponent("noodlet"),
-              FileManager.default.isExecutableFile(atPath: executable.path),
-              AppletAgentSkill.isCompanionInstalled(at: discoverAppletApplication()) else { return nil }
-        return executable
     }
 
     public var agentsURL: URL {
@@ -291,13 +280,10 @@ public struct WorkspaceRepository: Sendable {
         if !workspaceFiles.contains("preferences.md") {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
-        let appletExecutable = appletExecutableURL
-        let appletEnabled = appletExecutable != nil
-        let appletInstructions = appletEnabled ? "\n" + AppletGuidance.bootstrap + "\n" : ""
-        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory) + folderInstructions + ToolProviderSkills.instructions(workspace: directory) + appletInstructions).utf8), named: "AGENTS.md")
+        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory) + folderInstructions + ToolProviderSkills.instructions(workspace: directory)).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
-        try AppletAgentSkill.synchronize(workspace: directory, enabled: appletEnabled, executable: appletEnabled ? appletExecutable : nil)
+        Self.removeAppletCommand(workspace: directory)
         try AgentTips.synchronize(workspace: directory)
         _ = try synchronizeClaudeSkillLinks(in: directory)
 
@@ -305,6 +291,25 @@ public struct WorkspaceRepository: Sendable {
         if let launcherExecutableURL {
             try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
+    }
+
+    // TODO(0.42.0, Hub 0.15.0): remove with its call in synchronizeAgentWorkspace and
+    // RepositoryTests.testTheNoodletCommandAndItsMailboxLeaveEveryWorkspace. Milestone: 0.41.0, Hub 0.14.0.
+    /// Bots reach Noodle Applet through the applet tool now. Removes the `noodlet` command, its
+    /// skill unless the tool has taken the name over, and its mailbox.
+    static func removeAppletCommand(workspace: URL) {
+        if let skill = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/applet") {
+            if skill.contains(ToolProviderSkills.marker) {
+                if skill.linkDestination("noodlet") != nil { skill.remove("noodlet") }
+            } else {
+                try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "applet", enabled: false, instructions: "", command: "noodlet", executable: nil)
+            }
+        }
+        guard let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/applet-bridge") else { return }
+        for name in (try? bridge.names()) ?? [] where name == "session.json" || name.hasSuffix(".request") || name.hasSuffix(".response") || name.hasPrefix(".request-") {
+            bridge.remove(name)
+        }
+        (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("applet-bridge")
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {

@@ -19,7 +19,7 @@ import NoodleRuntime
     private let connections: HubConnections
     private let computers: HubComputers
     private let browsers: HubBrowsers
-    /// Passes the Hub's bots' `noodlet` commands to Noodle Applet on this Mac, as Noodle does.
+    /// Noodle Applet on this Mac, for the Hub's bots' applet tool and for people's devices.
     public let applets: AppletController
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
     private var toolBroker: ToolBridgeBroker?
@@ -159,6 +159,9 @@ import NoodleRuntime
             ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0))
         })
     }
+
+    /// Writes the bots' tool skills again, after a grant changed outside the assignments this watches.
+    public func synchronizeToolSkills() { toolBroker?.synchronizeSkills() }
 
     public func stop() {
         applets.start(agents: [])

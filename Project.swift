@@ -16,19 +16,20 @@ let signing: SettingsDictionary = [
 /// Xcode embeds extensions and XPC services itself but not command-line tools, so the app copies its
 /// helpers and the Apple harness's resource bundles into Contents/Helpers and signs them there. Xcode
 /// would give a signed tool an application identifier entitlement; helpers carry none, and the Agent
-/// Host applies the Apple harness's own Seatbelt policy. noodlet is Applet's CLI, signed as Applet's.
+/// Host applies the Apple harness's own Seatbelt policy.
 let embedHelpers: TargetScript = .post(script: """
     set -euo pipefail
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+    # Start empty: a helper the app no longer builds must not linger from an earlier build.
+    rm -rf "$helpers"
     mkdir -p "$helpers"
     sign() { codesign --force --options runtime "$NOODLE_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$@"; }
     # A debug link also searches the package frameworks in derived data; the app ships its own.
     install_name_tool -delete_rpath "$BUILT_PRODUCTS_DIR/PackageFrameworks" "$TARGET_BUILD_DIR/$EXECUTABLE_PATH" 2>/dev/null || true
-    for tool in messenger noodlet NoodleAppleAgent; do
+    for tool in messenger NoodleAppleAgent; do
         ditto "$BUILT_PRODUCTS_DIR/$tool" "$helpers/$tool"
     done
     sign "$helpers/messenger"
-    sign --identifier "$NOODLE_APPLET_CLI_ID" "$helpers/noodlet"
     sign --identifier "$PRODUCT_BUNDLE_IDENTIFIER.apple-agent" "$helpers/NoodleAppleAgent"
     for bundle in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
         if [ -d "$BUILT_PRODUCTS_DIR/$bundle.bundle" ]; then
@@ -121,7 +122,6 @@ let project = Project(
     name: "Noodle",
     packages: [
         .local(path: "."),
-        .local(path: "Applet"),
         .local(path: "Applet/Protocol"),
         .local(path: "Shared/SettingsUI"),
         .local(path: "Shared/HubLink"),
@@ -155,7 +155,6 @@ let project = Project(
                 "NOODLE_GOOGLE_SCHEME": "com.googleusercontent.apps.183234845746-9homesnd85b490uj2ak37rpk0svtveap",
                 // Noodle Dev talks to the Dev companions only.
                 "NOODLE_COMPANION_SUFFIX": ".local",
-                "NOODLE_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.local.cli",
                 // Beside Noodle's own and both Noodle Hubs', so all four can serve from one Mac.
                 "NOODLE_PERSONAL_HUB_PORT": "38418",
             ]),
@@ -165,7 +164,6 @@ let project = Project(
                 "NOODLE_URL_SCHEME": "noodle",
                 "NOODLE_GOOGLE_SCHEME": "com.googleusercontent.apps.183234845746-flond96hao8g0cll1boruegemodo9fe5",
                 "NOODLE_COMPANION_SUFFIX": "",
-                "NOODLE_APPLET_CLI_ID": "com.pdparchitect.noodle.applet.cli",
                 "NOODLE_PERSONAL_HUB_PORT": "38417",
             ]),
         ]
@@ -189,6 +187,7 @@ let project = Project(
             dependencies: [
                 .package(product: "BrowserBridge"),
                 .package(product: "NoodleCore"),
+                .package(product: "NoodleAppletTools"),
                 .package(product: "NoodleBrowserTools"),
                 .package(product: "NoodleCalendarTools"),
                 .package(product: "NoodleComputerTools"),
@@ -216,7 +215,6 @@ let project = Project(
                 .target(name: "NoodleBrowserToolsExtension"),
                 .target(name: "NoodleComputerToolsExtension"),
                 .target(name: "messenger"),
-                .target(name: "noodlet"),
                 .target(name: "NoodleAppleAgent"),
             ],
             settings: .settings(
@@ -288,10 +286,6 @@ let project = Project(
         toolExtension("Computer"),
         helper("messenger", sources: ["Sources/NoodleMessenger/**"],
                dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleToolScripting")]),
-        // main.swift declares @main, which SwiftPM compiles as a library file; Xcode must be told.
-        helper("noodlet", sources: ["Applet/Sources/NoodletCLI/**"],
-               dependencies: [.package(product: "AppletCore"), .package(product: "AppletBridge")],
-               settings: ["OTHER_SWIFT_FLAGS": "$(inherited) -parse-as-library"]),
         // Its Info.plist is linked in as the root package does: an Info.plist Xcode builds itself would
         // make it add an application identifier entitlement, which the harness must not carry.
         helper("NoodleAppleAgent", sources: ["Sources/NoodleAppleAgent/**"],

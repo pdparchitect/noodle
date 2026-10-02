@@ -11,6 +11,11 @@ permission makes an extension impossible; the extension is the default, and the
 provider contract is the same. Both share `EventKitAssignments` in `NoodleCore` and one
 `EventKitController` in `Sources/Noodle`, so a third EventKit tool adds a kind, not a copy.
 
+`Tools/Applet` is built in too: Noodle Applet trusts only Noodle's and Noodle Hub's
+signed identities to name the bot a request is for, so its provider runs inside them
+and reaches Applet through `AppletController`. Noodle grants it to every bot while
+Applet is installed.
+
 `Tools/Browser` and `Tools/Computer` are the bot-facing tools. The apps they
 drive live in `/Browser` and `/Computer` and are separate products with their
 own versions and changelogs. A change here ships with Noodle and goes in the
@@ -49,13 +54,14 @@ Bots reach every tool through `messenger tool PROVIDER TOOL`. There is no per-to
 - A provider returns MCP-shaped JSON: a `tools/list` result and `tools/call` results.
 - The provider never authorizes. It declares, the broker enforces:
   - `"format": "noodle-resource"` with `"noodle/kind"` on a parameter that names a browser, computer or other assigned thing. The broker refuses values the bot was not assigned.
-  - `"format": "noodle-file"` with `"noodle/access"` `read` or `write` for a workspace path. The provider gets an open handle, never a path.
-  - `"format": "noodle-conversation"` for a conversation the bot must belong to.
+  - `"format": "noodle-file"` with `"noodle/access"` `read` or `write` for a workspace path. The provider gets an open handle, never a path. `folder` opens an existing folder, for an app that reads it where it is.
+  - `"format": "noodle-conversation"` for a conversation the bot must belong to. A call that names one is withheld if the bot leaves it before the result.
+  - `"format": "noodle-conversation-link"` for a link someone sent in that conversation. The broker refuses any other.
   - `_meta["noodle/resource-list"]` on a tool whose result lists resources, so the broker can remove unassigned ones.
   - `_meta["noodle/post"]` in a result to post into the verified conversation.
   - List every parameter a check depends on in the schema's `required`.
 - Before an action that cannot be undone, call `context.authorize`. It fails if the assignment was removed while the call was running.
-- Activation is `.always`, or `.whenAssigned(KIND)` when the tool only makes sense with an assigned resource.
+- Activation is `.always`, `.whenAssigned(KIND)` when the tool only makes sense with an assigned resource, or `.whenGranted(KIND, id:)` when the provider itself is what Noodle grants.
 - Everything a bot reads about a tool comes from the extension: `manifest.summary`, `manifest.instructions` and the tool descriptions. Do not add tool text to `MessengerDocumentation`, `WorkspaceRepository.swift` or `docs/`.
 - An extension gets the App Sandbox only. Browser and Computer also hold their companion's app group, and only that. `scripts/verify-tool-extensions.sh` pins this; a new entitlement needs a change there and a reason.
 - Bundled extensions only. Do not add loading of third-party extensions.

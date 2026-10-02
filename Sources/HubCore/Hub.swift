@@ -4,6 +4,7 @@ import BrowserBridge
 import ComputerBridge
 import Foundation
 import HubLink
+import NoodleAppletTools
 import NoodleBrowserTools
 import NoodleComputerTools
 import NoodleCore
@@ -52,8 +53,16 @@ import NoodleRuntime
         browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
                                call: browser ?? BrowserToolProvider.liveTransport(), surface: surfaces.browser)
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers, browsers: browsers,
-                       applets: AppletController(repository: repository, connection: applet, surface: surfaces.applet),
+                       applets: AppletController(connection: applet, surface: surfaces.applet),
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true), readMarks: root.appendingPathComponent("read.json"))
+        // The Hub's bots get the applet tool from its own controller. This Mac as a Hub shares
+        // Noodle's, whose broker serves Noodle's bots, so the wiring is here and not in HubBots.
+        let applets = bots.applets
+        applets.onGrantsChange = { [weak bots] granted in
+            assignments.replace(AppletToolGrant.kind, with: granted)
+            bots?.synchronizeToolSkills()
+        }
+        try? tools.register(AppletToolProvider { [applets] in try await applets.tool($0) })
         access.onOwnersChange = { [weak bots, weak computers, weak browsers] in
             bots?.synchronizeOwners()
             Task { await computers?.synchronizeOwners() }

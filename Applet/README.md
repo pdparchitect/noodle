@@ -53,7 +53,7 @@ live noodlet in Applet, with full interaction and saved data, or brings its wind
 forward if it is already open. Links point to the noodlet on this Mac; they are not
 copies you can send elsewhere.
 
-Bots and terminal users can run `noodlet --help` to list the commands.
+Bots use Applet through their applet tool in Noodle or Noodle Hub.
 
 ## Permissions and privacy
 

@@ -77,12 +77,14 @@ enum AppletLinks {
 enum AppletLaunchCheck {
   static let updaterUI = "33f8b12621881e80aeaf87bc1d61ef880882e6b5cf0d3a2a1fc3e7ee99b42609"  // --updater-ui-test
   static let rendering = "52ea2badcdd8b0ad5e3cb36f6052f7b70ed61e6923b77abfe07ccde40e3cb2b0"  // --rendering-test
+  /// Followed by the address of the local HTTP server the run started.
+  static let smoke = "e993ae0c24c07a8fbbfc7133af3285da8860a38ff54f34cfa450a0a70447da36"  // --smoke-test
   static let backgroundLaunchUI = "cf13d7cc0216ca2633f6bec3a325fd72f51397f0bfbd6639a35dcf4af8750c02"  // --background-launch-ui-test
   #if NOODLE_DEV_HOOKS
   static let launchCapture = "7de812b196feeb9c1ee78b09d6d8006ad9eea78abeef8e10377234f723754799"  // --launch-check
   #endif
   static var isVerificationRun: Bool {
-    [updaterUI, rendering, backgroundLaunchUI].contains(where: LaunchChecks.current.contains)
+    [updaterUI, rendering, smoke, backgroundLaunchUI].contains(where: LaunchChecks.current.contains)
   }
 }
 
@@ -140,7 +142,17 @@ private struct AppletMenu: View {
     // scripts/verify-launch-hooks.sh refuses a release that carries this marker.
     launchLog.notice("noodle.development-hooks.enabled")
     #endif
-    if LaunchChecks.current.contains(AppletLaunchCheck.rendering) {
+    if let server = LaunchChecks.current.value(after: AppletLaunchCheck.smoke) {
+      Task { @MainActor in
+        do {
+          try await AppletSmokeTest.run(server: server)
+          NSApp.terminate(nil)
+        } catch {
+          fputs("APPLET SMOKE TEST FAILED: \(error.localizedDescription)\n", stderr)
+          exit(1)
+        }
+      }
+    } else if LaunchChecks.current.contains(AppletLaunchCheck.rendering) {
       Task { @MainActor in
         do {
           try await AppletRenderingTest.run()

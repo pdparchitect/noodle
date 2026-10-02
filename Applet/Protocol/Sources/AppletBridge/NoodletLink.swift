@@ -1,6 +1,8 @@
 import Foundation
 
 public enum NoodletLink {
+    /// A tool's request that Noodle post this link, as UTF-8, into a conversation.
+    public static let mediaType = "application/vnd.noodle.noodlet-link"
     public static func url(for id: UUID) -> URL { url(for: id, build: .current) }
     public static func url(for id: UUID, build: AppletBuildIdentity) -> URL {
         URL(string: build.urlScheme + "://" + id.uuidString.lowercased())!
