@@ -39,6 +39,19 @@ import NoodleCore
         XCTAssertFalse(hasControl("Checking for updates…", in: view))
     }
 
+    func testAppleRowNeverOffersAnInstall() async throws {
+        let f = try fixture()
+        let missing = HarnessInstallation(provider: .apple, executablePath: nil)
+        HarnessPresentationCache.save([.apple: .init(installation: missing, authentication: nil)], to: f.runtime.defaults)
+        let setup = HarnessSetupController(providers: [.apple: AppleSetupProvider()], defaults: f.runtime.defaults)
+        let view = host(HarnessInstallationRow(store: f.store, installation: missing, liveInstallation: missing,
+            isRefreshing: false, setup: setup, install: {}).environment(f.store))
+        _ = try await control("Local Models", in: view)
+        _ = try await control("Missing from this copy of Noodle. Reinstall Noodle.", in: view)
+        XCTAssertFalse(hasControl("Install…", in: view))
+        XCTAssertFalse(hasControl("Install the native harness to use it with Noodle.", in: view))
+    }
+
     func testSignInSharesTheRowOfTheOtherHarnessButtons() async throws {
         let f = try fixture()
         let installation = HarnessInstallation(provider: .codex, executablePath: "/fixtures/codex")

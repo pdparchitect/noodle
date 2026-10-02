@@ -202,7 +202,8 @@ public struct HarnessDiscovery: Sendable {
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
         #if NOODLE_DEV_HOOKS
         // Keep the override at discovery so startup, Settings, and refresh agree.
-        if simulateNoHarnesses {
+        // Apple's harness ships inside the app, so even a Mac without harnesses has it.
+        if simulateNoHarnesses, provider != .apple {
             // Noodle's own copy stays visible: simulation is how its install flow is exercised.
             let executable = (externalInstallChecks.contains(provider)
                 ? standaloneCandidates(for: provider).first(where: isExecutable) : nil) ?? managedHarnesses?.executable(provider)

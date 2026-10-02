@@ -20,6 +20,17 @@ final class HarnessDiscoveryTests: XCTestCase {
         XCTAssertTrue(HarnessProvider.apple.supportsRestrictedAccess)
     }
 
+    func testNoHarnessOverrideKeepsTheBundledAppleHarness() throws {
+        let app = root.appendingPathComponent("Noodle.app")
+        let binary = app.appendingPathComponent("Contents/Helpers/NoodleAppleAgent")
+        try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: binary)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        let discovery = HarnessDiscovery(homeDirectory: root, applicationsDirectory: root, executableSearchDirectories: [],
+            applicationBundleURL: app, environment: ["NOODLE_SIMULATE_NO_HARNESSES": "1"])
+        XCTAssertEqual(discovery.discover(.apple).executablePath, binary.path)
+    }
+
     private var root: URL!
 
     override func setUpWithError() throws {

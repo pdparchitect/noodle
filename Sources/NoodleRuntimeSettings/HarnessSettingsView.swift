@@ -154,7 +154,10 @@ public struct HarnessInstallationRow: View {
                 if installation.executablePath != nil {
                     if !installation.isAvailable { locationText }
                 } else {
-                    Text(setup.snapshots[id] == nil ? "Checking the installation…" : "Install the native harness to use it with Noodle.")
+                    Text(setup.snapshots[id] == nil ? "Checking the installation…"
+                         // Apple's harness ships inside Noodle, so there is nothing to install.
+                         : id == .apple ? "Missing from this copy of Noodle. Reinstall Noodle."
+                         : "Install the native harness to use it with Noodle.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -195,7 +198,7 @@ public struct HarnessInstallationRow: View {
                 if let challenge = setup.challenges[id] {
                     HarnessSignInChallengeView(challenge: challenge)
                 } else if setup.activity[id] == nil {
-                    if !installation.isAvailable && setup.snapshots[id] != nil {
+                    if !installation.isAvailable && setup.snapshots[id] != nil && id != .apple {
                         if showsInstallationGuide, let guide = setup.installationGuide(for: id) {
                             Text(guide.instructions).font(.caption).foregroundStyle(.secondary)
                             if let command = guide.command {
