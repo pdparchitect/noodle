@@ -76,12 +76,13 @@ import XCTest
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
         processes.append(p); return p
     }
-    func acp(_ wire: HarnessWire, provider: HarnessProvider = .fx, extended: Bool = true) -> ACPAgentProcess {
-        let p = ACPAgentProcess(provider: provider, agent: agent(provider), executableURL: root, workspaceURL: workspace,
+    func acp(_ wire: HarnessWire, provider: HarnessProvider = .fx, extended: Bool = true, model: String? = nil,
+             remoteKey: @escaping @MainActor (RemoteModelID) throws -> String = { _ in throw HarnessSetupError("No fixture key") }) -> ACPAgentProcess {
+        let p = ACPAgentProcess(provider: provider, agent: agent(provider, model: model), executableURL: root, workspaceURL: workspace,
             extendedAccess: extended, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
-            makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
+            makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) }, remoteKey: remoteKey)
         processes.append(p); return p
     }
     func antigravity(_ wire: HarnessWire, extended: Bool = true) -> AntigravityAgentProcess {
@@ -92,8 +93,9 @@ import XCTest
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
         processes.append(p); return p
     }
-    private func agent(_ provider: HarnessProvider) -> AgentRecord {
-        .init(displayName: "Fixture bot", harnessIdentifier: provider.rawValue, modelIdentifier: provider == .openCode ? "test/fixture-model" : "fixture-model", reasoningEffort: "high")
+    private func agent(_ provider: HarnessProvider, model: String? = nil) -> AgentRecord {
+        .init(displayName: "Fixture bot", harnessIdentifier: provider.rawValue,
+              modelIdentifier: model ?? (provider == .openCode ? "test/fixture-model" : "fixture-model"), reasoningEffort: "high")
     }
     func wait(_ predicate: () -> Bool) async throws { try await clock.waitUntil(predicate) }
     func drain() async { for _ in 0..<20 { await Task.yield() } }

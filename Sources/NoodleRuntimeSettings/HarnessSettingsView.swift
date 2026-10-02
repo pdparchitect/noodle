@@ -93,6 +93,7 @@ public struct HarnessInstallationRow: View {
     @State private var showsUpdateGuide = false
     @State private var showsExperimentalInfo = false
     @State private var showsLocalModels = false
+    @State private var showsRemoteModels = false
     @State private var showsProfiles = false
     @State private var confirmsRemoval = false
     @State private var kickRequest: AgentKickRequest?
@@ -397,6 +398,9 @@ public struct HarnessInstallationRow: View {
                     Button("Local Models") { showsLocalModels = true }
                         .buttonStyle(.link)
                         .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView(store: store).noodleSheetSizing(animated: true) }
+                    Button("Remote Models") { showsRemoteModels = true }
+                        .buttonStyle(.link)
+                        .sheet(isPresented: $showsRemoteModels) { AppleRemoteModelsView(store: store).noodleSheetSizing(animated: true) }
                 }
                 if needsSignIn {
                     Button("Sign In") {

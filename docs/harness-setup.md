@@ -202,6 +202,29 @@ Downloaded models move to **Installed**.
   folder you imported from is left in place.
 - A damaged model is listed as **Unreadable Model** so you can remove it.
 
+### Use a remote model
+
+Remote models run on a provider's servers with your own API key. They get the
+same tools and memory as local models, need macOS 27, and do not need Apple
+Intelligence to be turned on. Noodle offers:
+
+- **OpenAI:** GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and GPT-5.6 Terra.
+- **OpenRouter** and **Vercel AI Gateway:** GLM-5.3, GLM-5.3 Flash, DeepSeek V4
+  Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash.
+
+1. Open **Settings → Harness → Apple Intelligence → Remote Models**.
+2. Choose **Add Account**, then the provider. Give the account a name and paste
+   its API key. Noodle checks the key before saving it in your login keychain.
+   You can add several accounts with the same provider.
+3. Turn on the models you want under the account.
+4. Edit a bot, choose Apple Intelligence, and select the model. Each model shows
+   its account as a tag, and its reasoning effort can be chosen.
+
+- The key is passed only to the bots that use the account. Only the bot's
+  harness reaches the provider; the commands the bot runs stay offline.
+- Usage is billed to the account by the provider.
+- Move bots off an account, or off one of its models, before removing it.
+
 ### Long conversations
 
 When a conversation grows too long for the model, Noodle leaves out or

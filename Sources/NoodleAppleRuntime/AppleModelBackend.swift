@@ -21,8 +21,17 @@ struct AppleModelBackend {
     private let local: Any?
     #endif
 
-    static func prepare(identifier: String?, workspace: URL) async throws -> Self {
+    static func prepare(identifier: String?, workspace: URL, remote: AppleRemoteAccess? = nil) async throws -> Self {
         let id = identifier ?? "default"
+        if let remoteID = RemoteModelID(id) {
+            #if canImport(FoundationModels, _version: 2)
+            if #available(macOS 27, *) {
+                await AppleMLXCache.shared.evict()
+                return try .remote(remoteID, access: remote)
+            }
+            #endif
+            throw HarnessSetupError("Remote models require macOS 27 and a Noodle build made with the macOS 27 SDK.")
+        }
         if id == "default" {
             if let reason = AppleModel.systemUnavailableReason { throw HarnessSetupError(reason) }
             #if canImport(FoundationModels, _version: 2)
@@ -184,6 +193,22 @@ extension AppleModelBackend {
                        count: @escaping @Sendable (LanguageModelExecutorGenerationRequest) async throws -> Int) -> Self {
         .init(identifier: "custom", contextSize: contextSize, supportsImages: model.capabilities.contains(.vision),
               responseTokens: responseTokens, local: AppleCustomModel(model: model, count: count))
+    }
+
+    static func remote(_ id: RemoteModelID, access: AppleRemoteAccess?,
+                       transport: any RemoteTransport = URLSessionRemoteTransport()) throws -> Self {
+        guard let provider = RemoteProviders.provider(id: id.providerID), let info = provider.model(id: id.modelID) else {
+            throw HarnessSetupError("Noodle no longer offers this remote model. Choose another model in the bot’s settings.")
+        }
+        guard let access else {
+            throw HarnessSetupError("Noodle did not pass this bot the API key for \(info.displayName). Restart the bot.")
+        }
+        let model = AppleRemoteModel(client: RemoteClient(provider: provider, model: info, apiKey: access.apiKey, transport: transport),
+                                     effort: access.effort, calibration: AppleRemoteCalibration())
+        // Reasoning counts against the response allowance.
+        return .init(identifier: id.rawValue, contextSize: info.contextSize, supportsImages: info.supportsImages,
+                     responseTokens: min(info.maximumOutputTokens, 32_768),
+                     local: AppleCustomModel(model: model, count: { try await model.count($0) }))
     }
 }
 

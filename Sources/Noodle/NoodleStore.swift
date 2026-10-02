@@ -189,6 +189,7 @@ final class NoodleStore {
             discovery.removeSupersededManagedHarnesses()
             self.runtime = AgentRuntimeCoordinator(discovery: discovery)
         }
+        self.runtime.remoteModels = RemoteModelAccountStore(repository: self.repository.rootURL)
         usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))
         self.runtime.onUsage = { [usage] in usage.record($0) }
         self.runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }

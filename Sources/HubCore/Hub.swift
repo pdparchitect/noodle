@@ -36,6 +36,7 @@ import NoodleRuntime
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
         discovery.removeSupersededManagedHarnesses()
         runtime = AgentRuntimeCoordinator(discovery: discovery)
+        runtime.remoteModels = RemoteModelAccountStore(repository: root)
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         runtime.onUsage = { [usage] in usage.record($0) }

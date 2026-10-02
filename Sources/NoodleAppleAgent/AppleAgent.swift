@@ -59,6 +59,7 @@ import NoodleAppleRuntime
     private var initialized = false
     private var sessionID: String?
     private var modelIdentifier: String?
+    private var remoteAccess: AppleRemoteAccess?
     private var turn: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
     private var turnDeadline: AppleTurnDeadline?
@@ -117,7 +118,19 @@ import NoodleAppleRuntime
                 guard let model = params["modelId"] as? String else {
                     throw HarnessSetupError("The Apple harness does not support the selected model.")
                 }
-                if model != "default" { _ = try AppleLocalModelStore(repository: repository).model(id: model) }
+                if let remote = RemoteModelID(model) {
+                    guard remote.model != nil else {
+                        throw HarnessSetupError("Noodle no longer offers this remote model. Choose another model in the bot’s settings.")
+                    }
+                    let access = (params["_meta"] as? [String: Any])?["noodle/remote"] as? [String: Any]
+                    guard let key = access?["apiKey"] as? String, !key.isEmpty else {
+                        throw HarnessSetupError("Noodle did not pass this bot the account’s API key.")
+                    }
+                    remoteAccess = AppleRemoteAccess(apiKey: key, effort: access?["effort"] as? String)
+                } else {
+                    if model != "default" { _ = try AppleLocalModelStore(repository: repository).model(id: model) }
+                    remoteAccess = nil
+                }
                 modelIdentifier = model
                 result([:])
             case "session/prompt":
@@ -128,7 +141,7 @@ import NoodleAppleRuntime
                       !wake.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw HarnessSetupError("Expected a text prompt.")
                 }
-                let session = sessionID!, writer = output, workspace = workspace, model = modelIdentifier
+                let session = sessionID!, writer = output, workspace = workspace, model = modelIdentifier, remote = remoteAccess
                 let token = UUID()
                 turnID = token
                 timeout = nil
@@ -136,7 +149,7 @@ import NoodleAppleRuntime
                 turn = Task { [weak self] in
                     guard let agent = self else { return }
                     do {
-                        try await AppleModel.respond(workspace: workspace, modelIdentifier: model, wake: wake,
+                        try await AppleModel.respond(workspace: workspace, modelIdentifier: model, remote: remote, wake: wake,
                             onEvent: { [weak agent] event in
                                 // Await delivery so the last tool result cannot
                                 // arrive after the prompt response closes the turn.

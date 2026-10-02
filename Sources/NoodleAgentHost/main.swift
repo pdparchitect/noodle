@@ -138,7 +138,9 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         switch provider {
         case .apple:
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Apple model configuration.") }
-            if let model, model != "default" { _ = try AppleLocalModelStore(directory: HostPaths.appleModels).model(id: model) }
+            if let model, let remote = RemoteModelID(model) {
+                guard remote.model != nil else { throw HostError("Noodle no longer offers this remote model.") }
+            } else if let model, model != "default" { _ = try AppleLocalModelStore(directory: HostPaths.appleModels).model(id: model) }
             strings = [executable.path, "--serve"]
         case .muse:
             guard model.map(FxProtocol.validIdentifier) ?? true,
@@ -208,7 +210,8 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
                 let localModel = model.map(AppleLocalModelStore.validIdentifier) ?? false
                 let modelDirectory = try localModel ? AppleLocalModelStore(directory: HostPaths.appleModels).folder(id: model!) : nil
                 profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository,
-                    modelsDirectory: modelDirectory, localModel: localModel, folders: folders)
+                    modelsDirectory: modelDirectory, localModel: localModel,
+                    remoteClient: model.flatMap(RemoteModelID.init) == nil ? nil : executable, folders: folders)
             case .codex:
                 let certificates = try RestrictedCodexCertificates.prepare(workspace: workspace)
                 setenv("CODEX_CA_CERTIFICATE", certificates.path, 1)

@@ -80,6 +80,8 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
     public let supportedEfforts: [HarnessEffort]
     public let defaultEffort: String
     public let isDefault: Bool
+    /// Where the model runs or whose account it uses, shown as a badge beside its name.
+    public let tag: String?
 
     public init(
         id: String,
@@ -87,7 +89,8 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
         description: String,
         supportedEfforts: [HarnessEffort],
         defaultEffort: String,
-        isDefault: Bool
+        isDefault: Bool,
+        tag: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -95,6 +98,7 @@ public struct HarnessModel: Identifiable, Codable, Hashable, Sendable {
         self.supportedEfforts = supportedEfforts
         self.defaultEffort = defaultEffort
         self.isDefault = isDefault
+        self.tag = tag
     }
 }
 

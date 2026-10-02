@@ -59,13 +59,13 @@ public enum AppleModel {
         return reason
     }
 
-    public static func respond(workspace: URL, modelIdentifier: String?, wake: String,
+    public static func respond(workspace: URL, modelIdentifier: String?, remote: AppleRemoteAccess? = nil, wake: String,
                                onEvent: @escaping @Sendable (AppleActivityEvent) async -> Void = { _ in },
                                onActivity: @escaping @Sendable () -> Void) async throws {
         guard #available(macOS 26, *) else { throw HarnessSetupError("The Apple harness requires macOS 26 or later.") }
         onActivity()
         await onEvent(.status("Preparing turn"))
-        let backend = try await AppleModelBackend.prepare(identifier: modelIdentifier, workspace: workspace)
+        let backend = try await AppleModelBackend.prepare(identifier: modelIdentifier, workspace: workspace, remote: remote)
         try await run(workspace: workspace, backend: backend, wake: wake, onEvent: onEvent, onActivity: onActivity)
     }
 

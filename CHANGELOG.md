@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Apple Intelligence bots can use remote models with your own API key: add accounts in Settings > Harness > Apple Intelligence > Remote Models, several per provider if you like, and turn on the models you want. OpenAI offers GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and GPT-5.6 Terra; OpenRouter and Vercel AI Gateway offer GLM-5.3, GLM-5.3 Flash, DeepSeek V4 Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash, each with its reasoning effort. They need macOS 27 but not Apple Intelligence.
+
+### Changed
+
+- Local and remote models show where they run as a tag beside their name, such as MLX or the account's name, instead of in the name.
+
 ## [0.40.0] - 2026-10-02
 
 ### Changed

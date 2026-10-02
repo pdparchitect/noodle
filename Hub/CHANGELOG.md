@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Apple Intelligence bots can use remote models with the Hub's own API keys, added in Settings > Harness > Apple Intelligence > Remote Models.
+
 ## [0.13.1] - 2026-10-02
 
 ### Fixed

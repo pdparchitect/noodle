@@ -172,6 +172,8 @@ public final class AgentRuntimeCoordinator {
     /// What the Agent Host last reported, which outranks the app's own discovery.
     private var hostInstallations: [HarnessProvider: HarnessInstallation] = [:]
     private var appleCapabilityTask: Task<Void, Never>?
+    /// The person's remote-model accounts, offered as Apple harness models.
+    public var remoteModels: RemoteModelAccountStore?
     #if NOODLE_DEV_HOOKS
     /// A scenario lists its own models, so its stub harnesses are never run to ask; see Scenario.swift.
     public var scriptedModels: [HarnessProvider: [HarnessModel]]?
@@ -183,8 +185,9 @@ public final class AgentRuntimeCoordinator {
             return
         }
         do {
-            let result = try await AppleHostProbe.load()
+            let probed = try await AppleHostProbe.load()
             guard !Task.isCancelled else { return }
+            let result = probed.adding(remote: (try? remoteModels?.harnessModels()) ?? [])
             modelsByProvider[.apple] = result.models
             capabilityErrors[.apple] = result.unavailableReason
             appleLocalModelsSupported = result.localModelsSupported == true

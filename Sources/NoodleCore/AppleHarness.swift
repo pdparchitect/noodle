@@ -41,7 +41,7 @@ public enum AppleExecutableTrust {
 /// Inspection uses the same system-service grants, without bot storage access.
 public enum AppleAgentSandbox {
     public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil,
-                               modelsDirectory: URL? = nil, localModel: Bool = false,
+                               modelsDirectory: URL? = nil, localModel: Bool = false, remoteClient: URL? = nil,
                                folders: [AgentFolder] = []) -> String {
         var reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone", application.path]
@@ -92,6 +92,16 @@ public enum AppleAgentSandbox {
           (global-name "com.apple.modelmanager"))
         \(imagePreparation)
         \(metalDelegation)
+        \(remoteClient.map { client in
+            // A remote model's harness reaches its provider. The commands it
+            // runs share this sandbox but not the network.
+            """
+            (allow network-outbound (process-path \(quote(canonical(client.path)))))
+            (allow mach-lookup
+              (global-name "com.apple.trustd")
+              (global-name "com.apple.trustd.agent"))
+            """
+        } ?? "")
         \(usesGPU ? """
         (allow mach-lookup (global-name "com.apple.MTLCompilerService"))
         (allow iokit-open (iokit-user-client-class "AGXDeviceUserClient"))

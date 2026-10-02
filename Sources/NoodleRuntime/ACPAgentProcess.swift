@@ -25,6 +25,8 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
     private let makeConnection: @MainActor () throws -> any HarnessRuntimeConnection
+    /// The API key of a remote model's account, read when the session selects the model.
+    private let remoteKey: @MainActor (RemoteModelID) throws -> String
     private var connection: (any HarnessRuntimeConnection)?
     private let shutdown = RuntimeShutdown()
     private var running = false
@@ -55,11 +57,14 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
          onUnexpectedTermination: @escaping @MainActor (ACPAgentProcess, String, Bool) -> Void,
          onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in },
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
-        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        remoteKey: (@MainActor (RemoteModelID) throws -> String)? = nil) {
         precondition(provider == .apple || provider == .fx || provider == .grokBuild || provider == .openCode)
         self.provider = provider
         self.makeConnection = makeConnection
         self.sleep = sleep
+        let repository = AgentStorageLayout(workspace: workspaceURL).package.deletingLastPathComponent().deletingLastPathComponent()
+        self.remoteKey = remoteKey ?? { try RemoteModelAccountStore(repository: repository).apiKey(for: $0.accountID) }
         configuration = agent
         self.executableURL = executableURL
         self.workspaceURL = workspaceURL
@@ -335,6 +340,14 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             } catch { terminated("Could not save the \(name) session"); return }
             if provider == .openCode, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_config_option", params: ["sessionId": sessionID, "configId": "model", "value": model])
+            } else if provider == .apple, let model = configuration.modelIdentifier, let remote = RemoteModelID(model) {
+                // The key travels only in this request, to this bot's own harness process.
+                let key: String
+                do { key = try remoteKey(remote) } catch { terminated(error.localizedDescription); return }
+                var access = ["apiKey": key]
+                if let effort = configuration.reasoningEffort { access["effort"] = effort }
+                request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model,
+                                                                     "_meta": ["noodle/remote": access]])
             } else if provider == .grokBuild || provider == .apple, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_model", params: ["sessionId": sessionID, "modelId": model])
             } else { configureEffort() }

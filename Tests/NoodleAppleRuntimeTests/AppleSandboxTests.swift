@@ -21,24 +21,28 @@ final class AppleSandboxTests: XCTestCase {
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(server, $0, &length) }
         }, 0)
         let url = "http://127.0.0.1:\(UInt16(bigEndian: address.sin_port))/"
-        let served = expectation(description: "unrestricted request reached fixture")
+        let served = expectation(description: "unrestricted and remote-model requests reached fixture")
+        served.expectedFulfillmentCount = 2
         DispatchQueue.global().async {
-            let connection = accept(server, nil, nil)
-            if connection >= 0 {
-                var buffer = [UInt8](repeating: 0, count: 4_096)
-                _ = read(connection, &buffer, buffer.count)
-                let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
-                response.withCString { _ = Darwin.write(connection, $0, response.utf8.count) }
-                close(connection)
+            for _ in 0..<2 {
+                let connection = accept(server, nil, nil)
+                if connection >= 0 {
+                    var buffer = [UInt8](repeating: 0, count: 4_096)
+                    _ = read(connection, &buffer, buffer.count)
+                    let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                    response.withCString { _ = Darwin.write(connection, $0, response.utf8.count) }
+                    close(connection)
+                }
+                served.fulfill()
             }
-            served.fulfill()
         }
-        func fetch(restricted: Bool, localModel: Bool = false) throws -> Int32 {
+        func fetch(restricted: Bool, localModel: Bool = false, remoteClient: URL? = nil) throws -> Int32 {
             let child = Process()
             let args = ["--silent", "--fail", "--noproxy", "*", "--max-time", "2", url]
             if restricted {
                 child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-                child.arguments = ["-p", AppleAgentSandbox.profile(application: project, localModel: localModel), "/usr/bin/curl"] + args
+                child.arguments = ["-p", AppleAgentSandbox.profile(application: project, localModel: localModel, remoteClient: remoteClient),
+                                   "/usr/bin/curl"] + args
             } else { child.executableURL = URL(fileURLWithPath: "/usr/bin/curl"); child.arguments = args }
             child.standardOutput = FileHandle.nullDevice; child.standardError = FileHandle.nullDevice
             try child.run(); child.waitUntilExit()
@@ -46,7 +50,11 @@ final class AppleSandboxTests: XCTestCase {
         }
         XCTAssertNotEqual(try fetch(restricted: true), 0)
         XCTAssertNotEqual(try fetch(restricted: true, localModel: true), 0)
+        XCTAssertNotEqual(try fetch(restricted: true, remoteClient: helper),
+                          0, "Only the harness reaches a remote model's provider; the commands it runs stay offline")
         XCTAssertEqual(try fetch(restricted: false), 0)
+        XCTAssertEqual(try fetch(restricted: true, remoteClient: URL(fileURLWithPath: "/usr/bin/curl")), 0,
+                       "The executable given network access reaches the network")
         wait(for: [served], timeout: 3)
     }
 

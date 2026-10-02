@@ -125,6 +125,7 @@ struct AgentConfigurationFields: View {
                         title: "Model",
                         value: modelName,
                         icon: AnyView(Image(systemName: "cube.transparent")),
+                        tag: selectedModel?.tag,
                         isLoading: hubChoice == nil && store.runtime.isLoadingCapabilities
                     )
                 }
@@ -197,6 +198,7 @@ private struct RuntimeSelectionRow: View {
     let title: String
     let value: String
     let icon: AnyView
+    var tag: String?
     var isLoading = false
 
     var body: some View {
@@ -209,9 +211,12 @@ private struct RuntimeSelectionRow: View {
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    if let tag { ModelTag(text: tag) }
+                }
             }
 
             Spacer(minLength: 12)
@@ -391,7 +396,8 @@ struct ModelChooser: View {
         return models.filter {
             $0.displayName.localizedStandardContains(query) ||
                 $0.id.localizedStandardContains(query) ||
-                $0.description.localizedStandardContains(query)
+                $0.description.localizedStandardContains(query) ||
+                $0.tag?.localizedStandardContains(query) == true
         }
     }
 
@@ -425,7 +431,7 @@ struct ModelChooser: View {
                 }
 
                 ForEach(filteredModels) { model in
-                    modelButton(id: model.id, name: model.displayName, description: model.description)
+                    modelButton(id: model.id, name: model.displayName, description: model.description, tag: model.tag)
                 }
 
                 if filteredModels.isEmpty && !query.isEmpty {
@@ -446,7 +452,7 @@ struct ModelChooser: View {
         .frame(width: 390, height: 420)
     }
 
-    private func modelButton(id: String, name: String, description: String) -> some View {
+    private func modelButton(id: String, name: String, description: String, tag: String? = nil) -> some View {
         Button {
             selection = id
             dismiss()
@@ -456,8 +462,11 @@ struct ModelChooser: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .fontWeight(.medium)
+                    HStack(spacing: 6) {
+                        Text(name)
+                            .fontWeight(.medium)
+                        if let tag { ModelTag(text: tag) }
+                    }
                     if !description.isEmpty {
                         Text(description)
                             .font(.caption)
@@ -475,6 +484,20 @@ struct ModelChooser: View {
             .padding(.vertical, 3)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Where a model runs, or whose account it uses.
+private struct ModelTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Color.secondary.opacity(0.14), in: Capsule())
     }
 }
 

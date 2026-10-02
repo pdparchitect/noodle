@@ -34,7 +34,21 @@ struct AppleContextModel<Base: LanguageModel>: LanguageModel {
             let controlled = try await model.control?.prepare(request, canDisableReasoning: model.canDisableReasoning) ?? request
             let fitted = try await model.budget.fit(controlled, count: model.count)
             try Task.checkCancellation()
-            try await underlying.respond(to: fitted, model: model.base, streamingInto: channel)
+            do {
+                try await underlying.respond(to: fitted, model: model.base, streamingInto: channel)
+            } catch {
+                // A remote model's count is an estimate. When the provider
+                // rejects a request as too long, it rejects it before any
+                // output: assume it was just over the limit and fit once more.
+                guard AppleContextOverflow.matches(error), !(error is AppleContextLimit) else { throw error }
+                try Task.checkCancellation()
+                let estimated = max(1, try await model.count(fitted))
+                let reported = AppleContextOverflow.tokenCount(in: error) ?? 0
+                let scale = Double(max(reported, model.budget.contextSize)) / Double(estimated) * 1.1
+                let refitted = try await model.budget.fit(controlled) { Int((Double(try await model.count($0)) * scale).rounded(.up)) }
+                try Task.checkCancellation()
+                try await underlying.respond(to: refitted, model: model.base, streamingInto: channel)
+            }
         }
     }
 }

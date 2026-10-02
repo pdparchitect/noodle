@@ -280,15 +280,35 @@ final class AppleLiveTests: XCTestCase {
         }
     }
 
+    /// Explicit opt-in with a real provider key: the sandboxed helper reaches the
+    /// provider, runs a tool and replies through Messenger. NOODLE_TEST_REMOTE_PROVIDER
+    /// and NOODLE_TEST_REMOTE_MODEL pick another provider's model; OpenAI's Luna by default.
+    func testSandboxedRemoteModelRunsToolAndReplies() throws {
+        guard #available(macOS 27, *) else { throw XCTSkip("Remote models require macOS 27.") }
+        let environment = ProcessInfo.processInfo.environment
+        guard let key = environment["NOODLE_TEST_REMOTE_KEY"], !key.isEmpty else {
+            throw XCTSkip("Set NOODLE_TEST_REMOTE_KEY for the remote-model test.")
+        }
+        let model = RemoteModelID(providerID: environment["NOODLE_TEST_REMOTE_PROVIDER"] ?? "openai", accountID: UUID(),
+                                  modelID: environment["NOODLE_TEST_REMOTE_MODEL"] ?? "gpt-6-luna")
+        let effort = try XCTUnwrap(model.model, "\(model.rawValue) is not offered").efforts.first?.id
+        try exercise(tasks: [["Use bash to run exactly once: printf remote-evidence-$((6*7)). Reply with exactly what it printed."],
+                             ["What did the command print last time? Answer without running anything."]],
+                     remote: (model.rawValue, ["apiKey": key].merging(effort.map { ["effort": $0] } ?? [:]) { $1 })) { _, replies in
+            XCTAssertTrue(replies[0].body.contains("remote-evidence-42"), replies[0].body)
+            XCTAssertTrue(replies[1].body.contains("remote-evidence-42"), "The next wake resumes the session: \(replies[1].body)")
+        }
+    }
+
     private func exercise(named name: String = "Apple test", history: [(Bool, String)] = [], tasks: [[String]], modelDirectory: URL? = nil, image: URL? = nil, nativeHistory: Bool = false,
-                          promptTimeout: TimeInterval = 180, assignedComputer: UUID? = nil,
+                          promptTimeout: TimeInterval = 180, assignedComputer: UUID? = nil, remote: (id: String, access: [String: String])? = nil,
                           configure: (URL) throws -> Void = { _ in },
                           verifyActivity: (Int, [[String: Any]]) throws -> Void = { _, _ in },
                           verify: (URL, [ChatMessage]) throws -> Void) throws {
-        guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" || modelDirectory != nil else {
+        guard ProcessInfo.processInfo.environment["NOODLE_TEST_APPLE_MODEL"] == "1" || modelDirectory != nil || remote != nil else {
             throw XCTSkip("Set NOODLE_TEST_APPLE_MODEL=1 for the real on-device model test.")
         }
-        if modelDirectory == nil, let reason = AppleModel.inspection(version: "test").unavailableReason { throw XCTSkip(reason) }
+        if modelDirectory == nil, remote == nil, let reason = AppleModel.inspection(version: "test").unavailableReason { throw XCTSkip(reason) }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-live-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
         let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -333,7 +353,8 @@ final class AppleLiveTests: XCTestCase {
         let child = Process(), input = Pipe(), output = Pipe(), errors = Pipe(), responses = Responses()
         child.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
         child.arguments = ["-p", AppleAgentSandbox.profile(application: application, workspace: workspace, repository: root,
-            modelsDirectory: try local.map { try modelStore.folder(id: $0.id) }, localModel: local != nil), helper.path, "--serve"]
+            modelsDirectory: try local.map { try modelStore.folder(id: $0.id) }, localModel: local != nil, remoteClient: remote == nil ? nil : helper),
+            helper.path, "--serve"]
         child.currentDirectoryURL = workspace
         child.environment = ["HOME": workspace.path, "PATH": "/usr/bin:/bin", "TMPDIR": workspace.appendingPathComponent(".noodle/tmp").path]
         child.standardInput = input; child.standardOutput = output; child.standardError = errors
@@ -370,7 +391,9 @@ final class AppleLiveTests: XCTestCase {
         }
         _ = try request(1, "initialize", FxProtocol.initializeParameters)
         let session = try XCTUnwrap(request(2, "session/new", ["cwd": workspace.path, "mcpServers": []])["sessionId"] as? String)
-        _ = try request(3, "session/set_model", ["sessionId": session, "modelId": local?.id ?? "default"])
+        var model: [String: Any] = ["sessionId": session, "modelId": remote?.id ?? local?.id ?? "default"]
+        if let remote { model["_meta"] = ["noodle/remote": remote.access] }
+        _ = try request(3, "session/set_model", model)
         for (index, messages) in tasks.enumerated() {
             for body in messages {
                 let attachmentIDs = try image.map { [try repository.importAttachment(from: $0, into: bot.conversation.id, mediaType: "image/png").id] } ?? []

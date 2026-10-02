@@ -149,7 +149,7 @@ public struct AppleLocalModelsView: View {
                                 get: { modelUsageID == model.id },
                                 set: { if !$0, modelUsageID == model.id { modelUsageID = nil } }
                             ), arrowEdge: .trailing) {
-                                AppleModelUsagePopover(model: model, agents: botsUsing(model), edit: { agent in
+                                ModelUsagePopover(subject: "Model", name: model.name, agents: botsUsing(model), edit: { agent in
                                     returnToModelID = model.id
                                     modelUsageID = nil
                                     editingAgent = agent
@@ -334,8 +334,10 @@ public struct AppleLocalModelsView: View {
     }
 }
 
-private struct AppleModelUsagePopover: View {
-    let model: AppleLocalModel
+/// Which bots still use a model or account that is about to be removed.
+struct ModelUsagePopover: View {
+    let subject: String
+    let name: String
     let agents: [AgentRecord]
     let edit: (AgentRecord) -> Void
     let remove: () -> Void
@@ -344,17 +346,17 @@ private struct AppleModelUsagePopover: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(agents.isEmpty ? "Model Unassigned" : "Model in Use").font(.headline)
+                Text(agents.isEmpty ? "\(subject) Unassigned" : "\(subject) in Use").font(.headline)
                 Spacer()
                 Button(action: close) { Image(systemName: "xmark") }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                     .accessibilityLabel("Close").help("Close")
             }
-            Text(model.name).font(.subheadline).foregroundStyle(.secondary)
+            Text(name).font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if agents.isEmpty {
-                Text("No bots use this model.").font(.callout)
-                Button("Remove Model", role: .destructive, action: remove)
+                Text("No bots use this \(subject.lowercased()).").font(.callout)
+                Button("Remove \(subject)", role: .destructive, action: remove)
             } else {
                 Text("Choose another model for these bots before removing it.")
                     .font(.callout).fixedSize(horizontal: false, vertical: true)

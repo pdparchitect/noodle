@@ -10,9 +10,9 @@ public struct AppleLocalModel: Codable, Identifiable, Equatable, Sendable {
     public let sourceRepository: String?
 
     public var harnessModel: HarnessModel {
-        .init(id: id, displayName: name + " (MLX)",
+        .init(id: id, displayName: name,
               description: "Local text model · \(min(contextSize, 32_768).formatted()) token context · \(ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)). Loads when used.",
-              supportedEfforts: [], defaultEffort: "", isDefault: false)
+              supportedEfforts: [], defaultEffort: "", isDefault: false, tag: "MLX")
     }
 }
 
