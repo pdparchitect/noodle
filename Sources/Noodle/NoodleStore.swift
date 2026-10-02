@@ -146,6 +146,9 @@ final class NoodleStore {
     private(set) var hubMirrors: [HubMirror] = []
     /// Live views of what Hub bots' links point at.
     @ObservationIgnored let surfacePanels = HubSurfacePanels()
+    /// Noodlets opened from conversations, annotated in place from Noodle Applet.
+    @ObservationIgnored let noodletAnnotations: NoodletAnnotations
+    @ObservationIgnored private let noodletOverlay = NoodletAnnotationOverlay()
     @ObservationIgnored private var hubMirrorTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     let harnessSetup: HarnessSetupController
     private let connectsServices: Bool
@@ -248,6 +251,7 @@ final class NoodleStore {
             tools.synchronizeSkills()
         }
         try? toolProviders.register(AppletToolProvider { [applets] in try await applets.tool($0) })
+        noodletAnnotations = NoodletAnnotations(applets: applets)
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         thisMac = ThisMacHub(repository: self.repository, runtime: self.runtime, applets: applets, profiles: harnessProfiles,
                              service: mcp.service)
@@ -257,6 +261,11 @@ final class NoodleStore {
         // A device made, changed or deleted one of this Mac's bots.
         messenger.onAgentChanged = { [weak self] id in Task { @MainActor in self?.reloadStatus(of: id) } }
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
+        noodletAnnotations.present = { [weak self] capture in
+            self?.noodletOverlay.present(capture) { note, content, source, raw in
+                try self?.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+            }
+        }
         thisMac.onRead = { [weak self] in self?.readElsewhere($0, upTo: $1) }
         // A device changed this Mac's tools, computers or browsers, in the files these controllers keep.
         thisMac.onToolsEdited = { [weak self] in self?.reloadToolsEditedElsewhere() }
@@ -1706,6 +1715,7 @@ final class NoodleStore {
 
     func startMonitoring() {
         guard transcriptRefreshTask == nil else { return }
+        noodletAnnotations.listen()
         startAgents()
         transcriptRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {

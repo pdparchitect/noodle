@@ -21,6 +21,8 @@ import NoodletRuntime
   /// The live view, and where its viewers click and type in an HTML noodlet. While
   /// one is watched, bots cannot drive this session.
   var streamer: SurfaceStreamer?, injector: (view: NSView, injector: SurfaceEventInjector)?
+  /// Set when Noodle opened it from a conversation, which its annotations go to.
+  var annotation: AppletAnnotation?
   init(package: NoodletPackage, owner: String, mode: String, size: CGSize, root: URL,
        testClock: Bool = false) throws {
     self.package = package
@@ -302,6 +304,7 @@ import NoodletRuntime
             throw AppletError("The live session uses different test data or clock settings. Close it before opening another mode.", code: "session-mode-conflict")
           }
           if request.mode == "foreground" { try await show(existing) }
+          if let annotation = request.annotation { existing.annotation = annotation }
           var response = status(existing)
           if existing.revision != package.revision {
             response.text =
@@ -393,8 +396,10 @@ import NoodletRuntime
         defer { if place != nil { retire(); objectWillChange.send() } }
         start.width = request.width ?? Int(session.size.width)
         start.height = request.height ?? Int(session.size.height)
-        return try await launch(
+        let restarted = try await launch(
           NoodletPackage(url: session.package.url), request: start, owner: session.owner, in: place)
+        restarted.sessionID.flatMap { sessions[$0] }?.annotation = session.annotation
+        return restarted
       case .show:
         try await show(session)
         return status(session)
@@ -411,6 +416,7 @@ import NoodletRuntime
         response.width = Int(image.size.width)
         response.height = Int(image.size.height)
         response.text = session.package.manifest.title
+        response.screenFrame = session.web?.screenFrame
         return response
       case .recordStart:
         guard session.recording == nil else {
@@ -542,6 +548,7 @@ import NoodletRuntime
         width: request.width, height: request.height),
       root: library.root, testClock: request.testClock ?? false)
     sessions[session.id] = session
+    session.annotation = request.annotation
     session.log.append(
       "lifecycle",
       "Opening \(package.manifest.title) (\(package.manifest.runtime), \(session.mode)).")
@@ -581,6 +588,12 @@ import NoodletRuntime
         self?.objectWillChange.send()
       }
       runner.castChanged = { [weak self] in self?.objectWillChange.send() }
+      runner.annotate = { [weak session] event in
+        guard let session, let annotation = session.annotation, annotation.matches(event) else { return false }
+        DistributedNotificationCenter.default().postNotificationName(
+          .init(annotation.notification), object: session.id.uuidString, userInfo: nil, deliverImmediately: true)
+        return true
+      }
       session.web = runner
       try await runner.start(foreground: session.mode == "foreground", in: place)
       session.state = "running"

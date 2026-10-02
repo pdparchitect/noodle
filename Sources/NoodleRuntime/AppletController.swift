@@ -64,11 +64,12 @@ import Observation
         return try NoodletPreviewAccess(response: response, expectedID: id)
     }
     @discardableResult
-    public func openNoodlet(_ url: URL) async throws -> AppletResponse {
+    public func openNoodlet(_ url: URL, annotation: AppletAnnotation? = nil) async throws -> AppletResponse {
         let id = try NoodletLink.requireID(in: url)
         var request = AppletRequest(.open)
         request.noodletID = id
         request.mode = "foreground"
+        request.annotation = annotation
         try Task.checkCancellation()
         return try await call(request).checked()
     }

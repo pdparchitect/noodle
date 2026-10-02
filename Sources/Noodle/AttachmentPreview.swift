@@ -93,7 +93,9 @@ extension NoodleStore {
         switch link {
         case .browser: try await browsers.open(url)
         case .computer: try await computers.open(url)
-        case .noodlet: try await applets.openNoodlet(url)
+        case .noodlet:
+            try await noodletAnnotations.open(url, from: attachment.conversationID,
+                                              shortcut: KeyboardBindings.shared.binding(for: .annotateRegion))
         }
     }
 }

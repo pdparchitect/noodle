@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A noodlet opened from a Noodle conversation can be annotated where it is: press Noodle's Annotate Region shortcut in its window, mark a region and add a comment, and it goes into that conversation's message. Needs the matching Noodle.
+
 ### Removed
 
 - The `noodlet` command. Bots use Noodle Applet through the applet tool in Noodle and Noodle Hub, and Applet accepts requests only from those apps.

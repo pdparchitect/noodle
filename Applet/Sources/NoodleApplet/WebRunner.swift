@@ -23,6 +23,9 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   var closed: (() -> Void)?
   private var stopped = false
   private var dragMonitor: Any?
+  private var keyMonitor: Any?
+  /// Takes a key press in the window that asks Noodle to annotate it, if it is one.
+  var annotate: ((NSEvent) -> Bool)?
   private var dragEvent: NSEvent?
   private(set) var rendering: AppletRenderingState?
   /// A noodlet the user cannot see must not be heard either.
@@ -80,6 +83,10 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       if event.window === self?.window { self?.dragEvent = event }
       return event
     }
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self, event.window === self.window, !event.isARepeat, self.annotate?(event) == true else { return event }
+      return nil
+    }
     if package.manifest.permissions?.contains("screen-capture") == true, !NoodletPage.supportsDisplayCapture {
       log.append("permissions", "This WebKit build does not support screen capture from HTML.")
     }
@@ -102,6 +109,11 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   func stopListening() async throws {
     defer { soundSink = nil }
     _ = try await evaluate("return await window.__noodletSound?.stop() ?? false")
+  }
+  /// Where the page is on screen, while it is shown.
+  var screenFrame: CGRect? {
+    guard window.isVisible, window.alphaValue > 0 else { return nil }
+    return window.convertToScreen(web.convert(web.bounds, to: nil))
   }
   var place: WindowPlace? {
     guard window.isVisible, window.alphaValue > 0 else { return nil }
@@ -226,6 +238,8 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     stirring = nil
     if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
     dragMonitor = nil
+    if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+    keyMonitor = nil
     dragEvent = nil
     // Whatever still holds the view, the page's sound and scripts end with the noodlet.
     setMuted(true)
@@ -283,4 +297,23 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     return try await evaluate("return await window.__noodletControl(\(json));")
   }
   func snapshot() async throws -> NSImage { try await page.snapshot() }
+}
+
+extension AppletAnnotation {
+  /// Read as Noodle reads its own shortcuts, so the same press matches in both apps.
+  func matches(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags
+    let pressed = [(NSEvent.ModifierFlags.command, 1), (.shift, 2), (.option, 4), (.control, 8)]
+      .reduce(0) { flags.contains($1.0) ? $0 | $1.1 : $0 }
+    guard pressed == modifiers else { return false }
+    let typed: String?
+    switch event.keyCode {
+    case 36, 76: typed = "\r"
+    case 48: typed = "\t"
+    case 49: typed = " "
+    case 51: typed = "\u{8}"
+    default: typed = event.characters(byApplyingModifiers: flags.intersection(.command)) ?? event.charactersIgnoringModifiers
+    }
+    return typed?.lowercased() == key
+  }
 }

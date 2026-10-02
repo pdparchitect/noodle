@@ -28,6 +28,23 @@ public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     public var isFileTransfer: Bool { self == .artifact }
 }
 
+/// How a noodlet Noodle opened from a conversation asks to be annotated there: the person's
+/// shortcut, with `modifiers` as Noodle stores them (command 1, shift 2, option 4, control 8), and
+/// the distributed notification Noodle listens for, posted with the session's id.
+public struct AppletAnnotation: Codable, Sendable, Equatable {
+    public var notification: String
+    public var key: String
+    public var modifiers: Int
+    public init(notification: String, key: String, modifiers: Int) {
+        self.notification = notification
+        self.key = key
+        self.modifiers = modifiers
+    }
+    var isValid: Bool {
+        !notification.isEmpty && notification.utf8.count <= 200 && key.count == 1 && (1...15).contains(modifiers)
+    }
+}
+
 public struct AppletRequest: Codable, Sendable {
     public var id = UUID()
     public var version = 1
@@ -55,6 +72,8 @@ public struct AppletRequest: Codable, Sendable {
     public var artifactID: UUID?
     /// What a `store` request asks of the noodlet's data or secrets.
     public var store: NoodletStoreCall?
+    /// Given by Noodle when a person opens a noodlet from a conversation.
+    public var annotation: AppletAnnotation?
     public init(_ operation: AppletOperation, sessionID: UUID? = nil) {
         self.operation = operation
         self.sessionID = sessionID
@@ -94,6 +113,9 @@ public struct AppletRequest: Codable, Sendable {
         }
         if includePreview == true, operation != .info {
             throw AppletError("Preview access is only valid with info.")
+        }
+        if let annotation, operation != .open || mode != "foreground" || !annotation.isValid {
+            throw AppletError("Only opening a noodlet in the foreground takes a valid annotation shortcut.")
         }
         if let mode, !["background", "foreground", "headless"].contains(mode) {
             throw AppletError("Use background, foreground, or headless mode.")
@@ -168,6 +190,8 @@ public struct AppletResponse: Codable, Sendable {
     public var byteCount: Int?
     /// What a `store` call answered.
     public var stored: NoodletValue?
+    /// Where a `screenshot` of a noodlet on screen is shown, in screen coordinates.
+    public var screenFrame: CGRect?
     public init(error: String? = nil, errorCode: String? = nil) {
         self.error = error
         self.errorCode = errorCode

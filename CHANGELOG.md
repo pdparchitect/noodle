@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Apple Intelligence bots can use remote models with your own API key: add accounts in Settings > Harness > Apple Intelligence > Remote Models, several per provider if you like, and pick the models you want from each account's Models menu; the account shows only the models you picked. OpenAI offers GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and GPT-5.6 Terra; OpenRouter and Vercel AI Gateway offer GLM-5.3, GLM-5.3 Flash, DeepSeek V4 Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash, each with its reasoning effort. They need macOS 27 but not Apple Intelligence.
 - Live views and noodlets from a Noodle Hub can be annotated: choose Annotate… in the panel's header or press the Annotate Region shortcut, mark a region and add a comment, and it goes into that conversation's message.
+- A noodlet opened from a conversation can be annotated in place: press the Annotate Region shortcut in its Noodle Applet window, mark a region over the noodlet and add a comment, and it goes into that conversation's message, with Applet still in front. Needs the matching Noodle Applet.
 
 ### Changed
 
