@@ -137,10 +137,12 @@ import XCTest
         // Usage for the last model call can arrive after the turn has completed.
         wire.emit(usage("fixture-thread", "current"))
         wire.emit(usage("fixture-thread", "older"))
-        await f.drain()
-        let forwarded = received.filter { $0["method"] as? String == "thread/tokenUsage/updated" }
-        XCTAssertEqual(forwarded.count, 2)
-        XCTAssertEqual((forwarded.first?["params"] as? [String: Any])?["model"] as? String, "gpt-5.5")
+        // Messages are handled in order, so once this marker is forwarded every one before it was handled.
+        wire.emit(usage("fixture-thread", "current"))
+        func forwarded() -> [[String: Any]] { received.filter { $0["method"] as? String == "thread/tokenUsage/updated" } }
+        try await f.wait { forwarded().count >= 3 }
+        XCTAssertEqual(forwarded().map { ($0["params"] as? [String: Any])?["turnId"] as? String }, ["current", "current", "current"])
+        XCTAssertEqual((forwarded().first?["params"] as? [String: Any])?["model"] as? String, "gpt-5.5")
     }
 }
 
