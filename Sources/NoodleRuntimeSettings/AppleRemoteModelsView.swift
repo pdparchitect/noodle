@@ -140,6 +140,14 @@ public struct AppleRemoteModelsView: View {
                 }
                 Spacer(minLength: 4)
                 Menu {
+                    Menu("Models") {
+                        ForEach(account.provider?.models ?? [], id: \.id) { model in
+                            let enabled = account.enabledModels.contains(model.id)
+                            Toggle(model.displayName, isOn: Binding(get: { enabled }, set: { setModel(model.id, enabled: $0, account: account) }))
+                                .disabled(enabled && !botsUsing(account, model: model.id).isEmpty)
+                        }
+                    }
+                    Divider()
                     Button("Rename…") { form = .rename(account) }
                     Button("Change API Key…") { form = .key(account) }
                     Divider()
@@ -162,22 +170,19 @@ public struct AppleRemoteModelsView: View {
                     }, remove: { requestRemoval(account) }, close: { usageAccountID = nil })
                 }
             }
+            let models = (account.provider?.models ?? []).filter { account.enabledModels.contains($0.id) }
             Divider()
-            ForEach(account.provider?.models ?? [], id: \.id) { model in
-                let enabled = account.enabledModels.contains(model.id)
+            if models.isEmpty {
+                Text("No models").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(models, id: \.id) { model in
                 let users = botsUsing(account, model: model.id)
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.displayName)
-                        Text(model.summary).font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 4)
-                    Toggle(model.displayName, isOn: Binding(get: { enabled }, set: { setModel(model.id, enabled: $0, account: account) }))
-                        .toggleStyle(.switch).labelsHidden().controlSize(.small)
-                        .disabled(enabled && !users.isEmpty)
-                        .help(enabled && !users.isEmpty ? "Used by \(users.map(\.displayName).joined(separator: ", "))." : "")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.displayName)
+                    Text(model.summary).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .help(users.isEmpty ? "" : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
             }
         }
     }
