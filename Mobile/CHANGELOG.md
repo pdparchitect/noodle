@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-02
+
 ### Changed
 
 - … in a conversation opens a Shared sheet with titles and previews for choosing a computer, browser tab or noodlet.

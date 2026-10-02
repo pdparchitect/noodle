@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-10-02
+
 ### Changed
 
 - Setting up a first bot offers only Codex by OpenAI, Claude by Anthropic, Muse by Meta and Grok by xAI, centred on a plain background; the other harnesses are set up in Settings. The welcome moves on to them by itself once the wordmark is written. Choosing one downloads what it needs and opens sign-in by itself, with no Continue, Install or Sign In click in between, and Back returns to the accounts. Once you are signed in, Noodle makes a team on that account, a personal assistant, a full-stack developer and a researcher, and introduces them; Continue opens their Team group and sends them a welcome to answer, instead of asking for a bot's name.
