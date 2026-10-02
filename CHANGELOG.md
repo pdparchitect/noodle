@@ -14,6 +14,10 @@ All notable changes to Noodle are documented here, following
 
 - Local and remote models show where they run as a tag beside their name, such as MLX or the account's name, instead of in the name.
 
+### Fixed
+
+- The welcome's wordmark moves up smoothly, without a jump partway through.
+
 ## [0.40.0] - 2026-10-02
 
 ### Changed

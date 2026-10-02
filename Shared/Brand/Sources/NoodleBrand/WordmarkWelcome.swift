@@ -51,7 +51,12 @@ public struct WordmarkWelcome<Next: View>: View {
                     if continued {
                         Spacer().frame(height: liftedCentre + liftedHeight / 2 + gap)
                         next
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if nextHeight == nil { nextHeight = $0 } }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                // Measured a pass after the lift starts: retarget the lift's spring
+                                // rather than jumping where it heads.
+                                guard nextHeight == nil else { return }
+                                withAnimation(reduceMotion ? nil : liftAnimation) { nextHeight = height }
+                            }
                             .transition(.opacity.combined(with: .offset(y: 24)))
                         Spacer(minLength: 24)
                     } else {
@@ -93,7 +98,9 @@ public struct WordmarkWelcome<Next: View>: View {
         }
     }
 
+    private let liftAnimation = Animation.spring(duration: 0.7, bounce: 0.1)
+
     private func lift() {
-        withAnimation(.spring(duration: 0.7, bounce: 0.1)) { continued = true }
+        withAnimation(liftAnimation) { continued = true }
     }
 }
