@@ -41,30 +41,35 @@ import XCTest
         return (try library.package(for: id), id)
     }
 
-    /// ⇧⌘R, as Noodle sends it.
-    private var annotation: AppletAnnotation { AppletAnnotation(notification: notification, key: "r", modifiers: 3) }
-
-    private func press(in window: NSWindow) throws {
-        NSApp.sendEvent(try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift],
-            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "R",
-            charactersIgnoringModifiers: "r", isARepeat: false, keyCode: 15)))
+    /// ⇧⌘R and ⇧⌘A, as Noodle sends them.
+    private var annotation: AppletAnnotation {
+        AppletAnnotation(application: "com.example.noodle", notification: notification,
+                         region: .init(key: "r", modifiers: 3), selection: .init(key: "a", modifiers: 3))
     }
 
-    /// The sessions Noodle was asked to annotate within a second of `action`.
+    private func press(_ key: String, keyCode: UInt16, in window: NSWindow) throws {
+        NSApp.sendEvent(try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: key.uppercased(),
+            charactersIgnoringModifiers: key, isARepeat: false, keyCode: keyCode)))
+    }
+
+    /// What Noodle was asked to annotate within a second of `action`, as `kind session`.
     private func posted(during action: () throws -> Void) async throws -> [String] {
         var received: [String] = []
-        let observer = DistributedNotificationCenter.default().addObserver(
-            forName: .init(notification), object: nil, queue: .main) { note in
-                MainActor.assumeIsolated { received.append(note.object as? String ?? "") }
-            }
-        defer { DistributedNotificationCenter.default().removeObserver(observer) }
+        let observers = ["region", "selection"].map { kind in
+            DistributedNotificationCenter.default().addObserver(
+                forName: .init("\(notification).\(kind)"), object: nil, queue: .main) { note in
+                    MainActor.assumeIsolated { received.append("\(kind) \(note.object as? String ?? "")") }
+                }
+        }
+        defer { observers.forEach(DistributedNotificationCenter.default().removeObserver) }
         try action()
         let end = ContinuousClock.now.advanced(by: .seconds(1))
         while received.isEmpty, ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(20)) }
         return received
     }
 
-    func testTheShortcutInANoodletOpenedFromNoodleAsksNoodleToAnnotateIt() async throws {
+    func testTheShortcutsInANoodletOpenedFromNoodleAskNoodleToAnnotateIt() async throws {
         let (_, id) = try await install()
         var open = AppletRequest(.open)
         open.noodletID = id
@@ -74,20 +79,24 @@ import XCTest
         let session = try XCTUnwrap(runtime.sessions[try XCTUnwrap(opened.sessionID)])
         let web = try XCTUnwrap(session.web)
 
-        let sessions = try await posted { try press(in: web.window) }
-        XCTAssertEqual(sessions, [session.id.uuidString])
+        let region = try await posted { try press("r", keyCode: 15, in: web.window) }
+        XCTAssertEqual(region, ["region \(session.id.uuidString)"])
+        let selection = try await posted { try press("a", keyCode: 0, in: web.window) }
+        XCTAssertEqual(selection, ["selection \(session.id.uuidString)"])
 
-        let shot = try await runtime.handle(AppletRequest(.screenshot, sessionID: session.id),
-                                            identity: AppletBuildIdentity.current.noodleID).checked()
-        XCTAssertEqual(shot.screenFrame, web.window.convertToScreen(web.web.convert(web.web.bounds, to: nil)),
+        // Any answer about the session says where it is, so Noodle can cover all of it.
+        let status = try await runtime.handle(AppletRequest(.status, sessionID: session.id),
+                                              identity: AppletBuildIdentity.current.noodleID).checked()
+        XCTAssertEqual(status.screenFrame, web.window.convertToScreen(web.web.convert(web.web.bounds, to: nil)),
                        "Noodle lays the annotation exactly over the page")
+        XCTAssertEqual(status.windowFrame, web.window.frame, "and shields the rest of the window")
     }
 
     func testANoodletOpenedInAppletHasNoConversationToAnnotateInto() async throws {
         let (package, _) = try await install()
         let opened = try await runtime.openInForeground(package).checked()
         let session = try XCTUnwrap(runtime.sessions[try XCTUnwrap(opened.sessionID)])
-        let sessions = try await posted { try press(in: try XCTUnwrap(session.web).window) }
+        let sessions = try await posted { try press("r", keyCode: 15, in: try XCTUnwrap(session.web).window) }
         XCTAssertEqual(sessions, [])
     }
 
@@ -98,7 +107,11 @@ import XCTest
         XCTAssertThrowsError(try background.validate())
         var unset = AppletRequest(.open)
         unset.mode = "foreground"
-        unset.annotation = AppletAnnotation(notification: notification, key: "r", modifiers: 0)
+        unset.annotation = AppletAnnotation(application: "com.example.noodle", notification: notification,
+                                            region: .init(key: "r", modifiers: 0), selection: nil)
+        XCTAssertThrowsError(try unset.validate())
+        unset.annotation = AppletAnnotation(application: "com.example.noodle", notification: notification,
+                                            region: nil, selection: nil)
         XCTAssertThrowsError(try unset.validate())
     }
 }

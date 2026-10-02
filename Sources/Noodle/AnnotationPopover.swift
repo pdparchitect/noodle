@@ -244,6 +244,8 @@ private struct AnnotationShortcutHint: View {
     var start: NSPoint?
     var selected: NSRect?
     var onRegion: ((NSRect, NSPoint) -> Void)?
+    /// A still laid over another app's window is marked from the first click.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     init(image: NSImage, embedded: Bool = false) {
         self.image = image; self.embedded = embedded
         super.init(frame: .zero)

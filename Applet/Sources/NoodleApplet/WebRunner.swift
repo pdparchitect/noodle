@@ -299,7 +299,7 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   func snapshot() async throws -> NSImage { try await page.snapshot() }
 }
 
-extension AppletAnnotation {
+extension AppletAnnotation.Shortcut {
   /// Read as Noodle reads its own shortcuts, so the same press matches in both apps.
   func matches(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags

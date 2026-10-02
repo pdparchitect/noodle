@@ -4,7 +4,7 @@
 
 ### Added
 
-- A noodlet opened from a Noodle conversation can be annotated where it is: press Noodle's Annotate Region shortcut in its window, mark a region and add a comment, and it goes into that conversation's message. Needs the matching Noodle.
+- A noodlet opened from a Noodle conversation can be annotated where it is: press Noodle's Annotate Region shortcut in its window to mark a region, or its Add Annotation shortcut to quote the selected text, then add a comment, and it goes into that conversation's message. Needs the matching Noodle.
 
 ### Removed
 

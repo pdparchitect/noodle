@@ -29,19 +29,34 @@ public enum AppletOperation: String, Codable, CaseIterable, Sendable {
 }
 
 /// How a noodlet Noodle opened from a conversation asks to be annotated there: the person's
-/// shortcut, with `modifiers` as Noodle stores them (command 1, shift 2, option 4, control 8), and
-/// the distributed notification Noodle listens for, posted with the session's id.
+/// shortcuts, and the distributed notification Noodle listens for, posted with the session's id
+/// after `.region` or `.selection` is added to its name. `application` is Noodle's bundle
+/// identifier, which the keyboard is handed to.
 public struct AppletAnnotation: Codable, Sendable, Equatable {
+    /// A key with `modifiers` as Noodle stores them: command 1, shift 2, option 4, control 8.
+    public struct Shortcut: Codable, Sendable, Equatable {
+        public var key: String
+        public var modifiers: Int
+        public init(key: String, modifiers: Int) {
+            self.key = key
+            self.modifiers = modifiers
+        }
+        var isValid: Bool { key.count == 1 && (1...15).contains(modifiers) }
+    }
+    public var application: String
     public var notification: String
-    public var key: String
-    public var modifiers: Int
-    public init(notification: String, key: String, modifiers: Int) {
+    public var region: Shortcut?
+    public var selection: Shortcut?
+    public init(application: String, notification: String, region: Shortcut?, selection: Shortcut?) {
+        self.application = application
         self.notification = notification
-        self.key = key
-        self.modifiers = modifiers
+        self.region = region
+        self.selection = selection
     }
     var isValid: Bool {
-        !notification.isEmpty && notification.utf8.count <= 200 && key.count == 1 && (1...15).contains(modifiers)
+        let shortcuts = [region, selection].compactMap { $0 }
+        return !application.isEmpty && application.utf8.count <= 200 && !notification.isEmpty
+            && notification.utf8.count <= 200 && !shortcuts.isEmpty && shortcuts.allSatisfy(\.isValid)
     }
 }
 
@@ -190,8 +205,9 @@ public struct AppletResponse: Codable, Sendable {
     public var byteCount: Int?
     /// What a `store` call answered.
     public var stored: NoodletValue?
-    /// Where a `screenshot` of a noodlet on screen is shown, in screen coordinates.
+    /// Where a session's page and its window are while on screen, in screen coordinates.
     public var screenFrame: CGRect?
+    public var windowFrame: CGRect?
     public init(error: String? = nil, errorCode: String? = nil) {
         self.error = error
         self.errorCode = errorCode

@@ -95,7 +95,8 @@ extension NoodleStore {
         case .computer: try await computers.open(url)
         case .noodlet:
             try await noodletAnnotations.open(url, from: attachment.conversationID,
-                                              shortcut: KeyboardBindings.shared.binding(for: .annotateRegion))
+                                              region: KeyboardBindings.shared.binding(for: .annotateRegion),
+                                              selection: KeyboardBindings.shared.binding(for: .annotateSelection))
         }
     }
 }

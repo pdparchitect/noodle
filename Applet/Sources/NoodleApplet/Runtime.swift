@@ -416,7 +416,6 @@ import NoodletRuntime
         response.width = Int(image.size.width)
         response.height = Int(image.size.height)
         response.text = session.package.manifest.title
-        response.screenFrame = session.web?.screenFrame
         return response
       case .recordStart:
         guard session.recording == nil else {
@@ -589,9 +588,15 @@ import NoodletRuntime
       }
       runner.castChanged = { [weak self] in self?.objectWillChange.send() }
       runner.annotate = { [weak session] event in
-        guard let session, let annotation = session.annotation, annotation.matches(event) else { return false }
+        guard let session, let annotation = session.annotation,
+          let kind = annotation.region?.matches(event) == true ? "region"
+            : annotation.selection?.matches(event) == true ? "selection" : nil
+        else { return false }
+        // Noodle comes in front only with the keyboard handed over, or its first click would only bring it there.
+        NSApp.yieldActivation(toApplicationWithBundleIdentifier: annotation.application)
         DistributedNotificationCenter.default().postNotificationName(
-          .init(annotation.notification), object: session.id.uuidString, userInfo: nil, deliverImmediately: true)
+          .init("\(annotation.notification).\(kind)"), object: session.id.uuidString, userInfo: nil,
+          deliverImmediately: true)
         return true
       }
       session.web = runner
@@ -671,6 +676,8 @@ import NoodletRuntime
     response.dataScope = session.dataRoot.lastPathComponent == "Testing" ? "test" : "user"
     response.testClock = session.testClock
     response.viewAvailable = session.state == "running" && session.web != nil
+    response.screenFrame = session.web?.screenFrame
+    response.windowFrame = session.web?.screenFrame == nil ? nil : session.web?.window.frame
     response.rendering = session.web?.rendering
     response.path = session.package.url.path
     response.capabilities = [
