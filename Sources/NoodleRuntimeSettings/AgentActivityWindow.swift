@@ -331,7 +331,9 @@ private final class ActivityEmptyLabel: NSTextField {
         let inset = NSView(); inset.wantsLayer = true
         inset.layer?.cornerRadius = 13; inset.layer?.masksToBounds = true
         for child in [header, inset] { addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false }
-        for child in [close, title, kind] { header.addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false }
+        for child in [close, title, kind] + [accessory].compactMap({ $0 }) {
+            header.addSubview(child); child.translatesAutoresizingMaskIntoConstraints = false
+        }
         inset.addSubview(content); content.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             header.leadingAnchor.constraint(equalTo: leadingAnchor), header.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -351,8 +353,6 @@ private final class ActivityEmptyLabel: NSTextField {
             content.topAnchor.constraint(equalTo: inset.topAnchor), content.bottomAnchor.constraint(equalTo: inset.bottomAnchor)
         ])
         if let accessory {
-            header.addSubview(accessory)
-            accessory.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
                 accessory.trailingAnchor.constraint(equalTo: kind.leadingAnchor, constant: -10),
                 accessory.centerYAnchor.constraint(equalTo: header.centerYAnchor),

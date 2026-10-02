@@ -221,4 +221,28 @@ private final class KeyedWindow: NSWindow {
         window.orderFront(nil)
         try await assertAvailable("after the window is reopened")
     }
+
+    func testHubLiveViewsCanBeAnnotatedIntoTheirConversation() throws {
+        let f = try fixture()
+        let panels = HubSurfacePanels()
+        try assertAnnotatable(HubSurfaceTarget(conversationID: f.directA.id, attachmentID: UUID(), title: "Board"),
+                              in: panels, store: f.store)
+        try assertAnnotatable(HubSurfaceTarget(conversationID: f.directA.id, attachmentID: UUID(), title: "Board",
+                                               noodlet: true), in: panels, store: f.store)
+    }
+
+    private func assertAnnotatable(_ target: HubSurfaceTarget, in panels: HubSurfacePanels, store: NoodleStore) throws {
+        func allViews(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(allViews) }
+        panels.open(target, store: store)
+        let panel = try XCTUnwrap(panels.panel(for: target))
+        let controller = try XCTUnwrap(panels.annotations(for: target))
+        XCTAssertTrue(controller.window === panel)
+        XCTAssertEqual(controller.conversationID, target.conversationID)
+        let button = try XCTUnwrap(allViews(try XCTUnwrap(panel.contentView))
+            .compactMap { $0 as? NSButton }.first { $0.title == "Annotate…" }, "The header offers Annotate…")
+        XCTAssertTrue(button.target === controller)
+        XCTAssertEqual(button.action, #selector(ConversationAnnotationController.startRegion))
+        panel.close()
+        XCTAssertNil(panels.annotations(for: target), "Closing the panel ends its annotations")
+    }
 }

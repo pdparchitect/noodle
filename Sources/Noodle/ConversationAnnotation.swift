@@ -108,8 +108,10 @@ struct ConversationAnnotationText: NSViewRepresentable {
     let markers = NSHashTable<ConversationAnnotationText.Marker>.weakObjects()
     private(set) weak var window: NSWindow?
     private weak var selectedText: ConversationAnnotationText.Marker?
-    private var conversationID: UUID?
+    private(set) var conversationID: UUID?
     private var title = "Conversation"
+    /// What a region capture is named after, before the title.
+    private var kind = "Conversation"
     private var save: ((AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void)?
     private var monitor: Any?
     private var operation: Task<Void, Never>?
@@ -121,11 +123,11 @@ struct ConversationAnnotationText: NSViewRepresentable {
         editor.onAnnotationStateChange = { [weak self] in self?.updateCommands() }
     }
 
-    func configure(conversationID: UUID, title: String,
+    func configure(conversationID: UUID, title: String, kind: String = "Conversation",
                    save: @escaping (AttachmentAnnotation, Data, ConversationAttachment, Data) throws -> Void,
                    focusComposer: (() -> Void)? = nil) {
         if self.conversationID != conversationID { cancel(); selectedText = nil }
-        self.conversationID = conversationID; self.title = title; self.save = save
+        self.conversationID = conversationID; self.title = title; self.kind = kind; self.save = save
         editor.focusConversationComposer = focusComposer
         updateCommands()
     }
@@ -265,12 +267,12 @@ struct ConversationAnnotationText: NSViewRepresentable {
         }
     }
 
-    func startRegion() {
+    @objc func startRegion() {
         guard canAnnotate, let window, let conversationID, let save else { return }
         busy = true; updateCommands()
         let token = generation
         let frame = window.frame
-        let title = self.title
+        let title = self.title, kind = self.kind
         operation = Task { @MainActor [weak self] in
             do {
                 let content = try await SCShareableContent.currentProcess
@@ -290,7 +292,7 @@ struct ConversationAnnotationText: NSViewRepresentable {
                 guard !Task.isCancelled, self.canAnnotate, window.frame == frame else { return }
                 let raw = try CaptureAttachment.png(image)
                 let safeTitle = String(title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-").prefix(100))
-                let filename = "Conversation — \(safeTitle).png"
+                let filename = "\(kind) — \(safeTitle).png"
                 let source = ConversationAttachment(conversationID: conversationID, originalFilename: filename,
                     storedFilename: filename, mediaType: "image/png", byteCount: Int64(raw.count))
                 self.editor.annotateConversation(in: window, source: source, quote: nil,

@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Apple Intelligence bots can use remote models with your own API key: add accounts in Settings > Harness > Apple Intelligence > Remote Models, several per provider if you like, and pick the models you want from each account's Models menu; the account shows only the models you picked. OpenAI offers GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and GPT-5.6 Terra; OpenRouter and Vercel AI Gateway offer GLM-5.3, GLM-5.3 Flash, DeepSeek V4 Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash, each with its reasoning effort. They need macOS 27 but not Apple Intelligence.
+- Live views and noodlets from a Noodle Hub can be annotated: choose Annotate… in the panel's header or press the Annotate Region shortcut, mark a region and add a comment, and it goes into that conversation's message.
 
 ### Changed
 
@@ -21,6 +22,7 @@ All notable changes to Noodle are documented here, following
 - The welcome's wordmark moves up smoothly, without a jump partway through.
 - Muse Code bots in the macOS sandbox start conversations again. Muse Code 1.4.2-R4684.1 stopped with "deletion registry authority is unavailable".
 - Settings > Harness no longer offers to install Apple Intelligence, which comes with Noodle.
+- Noodlets from a Noodle Hub open again.
 
 ## [0.40.0] - 2026-10-02
 

@@ -20,6 +20,10 @@ struct HubSurfaceTarget: Hashable {
 @MainActor final class HubSurfacePanels: NSObject, NSWindowDelegate {
     private var panels: [HubSurfaceTarget: NSPanel] = [:]
     private var runs: [HubSurfaceTarget: HubNoodletRun] = [:]
+    private var annotations: [HubSurfaceTarget: ConversationAnnotationController] = [:]
+
+    func panel(for target: HubSurfaceTarget) -> NSPanel? { panels[target] }
+    func annotations(for target: HubSurfaceTarget) -> ConversationAnnotationController? { annotations[target] }
 
     /// Opens a live view, or a noodlet `at` the place the person asked for, if they did.
     func open(_ target: HubSurfaceTarget, store: NoodleStore, at place: NoodletManifest.Placement? = nil) {
@@ -40,19 +44,27 @@ struct HubSurfaceTarget: Hashable {
         panel.collectionBehavior = [.fullScreenAuxiliary, .fullScreenDisallowsTiling]
         panel.minSize = NSSize(width: 480, height: 340)
         panel.title = target.title
+        let annotations = ConversationAnnotationController()
+        annotations.configure(conversationID: target.conversationID, title: target.title,
+            kind: target.noodlet ? "Noodlet" : "Live View", save: { [weak store] note, content, source, raw in
+                try store?.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+            })
+        let annotate = Self.annotateButton(annotations)
         if target.noodlet {
             let run = HubNoodletRun(target: target, requested: place)
             runs[target] = run
             let content = NSHostingView(rootView: HubNoodletView(run: run).environment(store).preferredColorScheme(.dark))
             content.sizingOptions = []
-            let accessory = NSHostingView(rootView: HubNoodletSwitch(run: run).preferredColorScheme(.dark))
+            let place = NSHostingView(rootView: HubNoodletSwitch(run: run).preferredColorScheme(.dark))
+            let accessory = NSStackView(views: [place, annotate])
+            accessory.spacing = 12
             panel.contentView = AnnotationPreviewFrame(content: content, filename: target.title, kindLabel: "Noodlet",
                 closeHint: "Close Noodlet (⌘W)", closeLabel: "Close Noodlet", accessory: accessory)
         } else {
             let content = NSHostingView(rootView: HubSurfaceWindow(target: target).environment(store).preferredColorScheme(.dark))
             content.sizingOptions = []
             panel.contentView = AnnotationPreviewFrame(content: content, filename: target.title, kindLabel: "Live",
-                closeHint: "Close Live View (⌘W)", closeLabel: "Close Live View")
+                closeHint: "Close Live View (⌘W)", closeLabel: "Close Live View", accessory: annotate)
         }
         let screen = NSApp.keyWindow?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
         var frame = panel.frame
@@ -62,7 +74,21 @@ struct HubSurfaceTarget: Hashable {
         panel.setFrame(frame, display: false)
         panel.delegate = self
         panels[target] = panel
+        self.annotations[target] = annotations
+        annotations.attach(to: panel)
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    /// Freezes the view and lets the person mark a region of it, as in a conversation.
+    private static func annotateButton(_ annotations: ConversationAnnotationController) -> NSButton {
+        let button = NSButton(title: "Annotate…", target: annotations,
+                              action: #selector(ConversationAnnotationController.startRegion))
+        button.isBordered = false
+        button.attributedTitle = NSAttributedString(string: "Annotate…", attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.linkColor,
+        ])
+        button.toolTip = KeyboardBindings.shared.help("Annotate Region", for: .annotateRegion)
+        return button
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -70,6 +96,8 @@ struct HubSurfaceTarget: Hashable {
               let target = panels.first(where: { $0.value === closing })?.key else { return }
         panels[target] = nil
         runs[target] = nil
+        annotations[target]?.attach(to: nil)
+        annotations[target] = nil
         // Dropping the content ends the view, so the bot may go on.
         closing.contentView = nil
     }
