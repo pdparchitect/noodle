@@ -25,9 +25,11 @@ extension View {
     private static func imagePlaygroundOptions(shapedLike size: CGSize?) -> ImagePlaygroundOptions {
         var options = ImagePlaygroundOptions()
         options.personalization = .disabled
+        #if canImport(ImagePlayground, _version: 198)
         if #available(macOS 27, iOS 27, *), let size, size.width > 0, size.height > 0 {
             options.sizeSpecification = .closest(to: size)
         }
+        #endif
         return options
     }
 }
