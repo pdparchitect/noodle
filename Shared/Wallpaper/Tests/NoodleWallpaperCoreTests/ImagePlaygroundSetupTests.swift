@@ -30,13 +30,17 @@ final class ImagePlaygroundSetupTests: XCTestCase {
         let (options, style) = try XCTUnwrap(setup(shapedLike: nil))
         XCTAssertEqual(style, .illustration)
         XCTAssertEqual(options.personalization, .disabled)
+        #if canImport(ImagePlayground, _version: 198)
         XCTAssertEqual(options.sizeSpecification, ImagePlaygroundOptions().sizeSpecification)
+        #endif
     }
 
+    #if canImport(ImagePlayground, _version: 198)
     func testShapesTheImageLikeTheScreen() throws {
         guard #available(macOS 27, *) else { throw XCTSkip("Image sizes need macOS 27.") }
         let (options, _) = try XCTUnwrap(setup(shapedLike: CGSize(width: 1600, height: 900)))
         XCTAssertEqual(options.sizeSpecification, .closest(to: CGSize(width: 1600, height: 900)))
         XCTAssertEqual(options.personalization, .disabled)
     }
+    #endif
 }
