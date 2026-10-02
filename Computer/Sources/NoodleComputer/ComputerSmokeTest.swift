@@ -311,11 +311,11 @@ import SwiftUI
                 let host = NSHostingView(rootView: ComputerToolbarSymbol(systemName: symbol, busy: busy))
                 let actual = host.fittingSize
                 guard abs(actual.width - expected.width) < 0.5, abs(actual.height - expected.height) < 0.5 else {
-                    throw ComputerError("Toolbar symbol differs from Noodle's native label: \(actual), \(expected)")
+                    throw ComputerError("Toolbar symbol differs from the reference label: \(actual), \(expected)")
                 }
             }
         }
-        print("TOOLBAR SIZING TEST PASSED: all icons and busy states match Noodle's intrinsic edit-label dimensions")
+        print("TOOLBAR SIZING TEST PASSED: all icons and busy states match the reference label's intrinsic dimensions")
     }
 
     private static func checkAppearanceSheetSizing() async throws {

@@ -719,7 +719,7 @@ struct ComputerDetailView: View {
         Button {
           editing = true
         } label: {
-          Label("Edit Computer", systemImage: "slider.horizontal.3")
+          Label("Edit Computer", systemImage: "ellipsis")
         }.help("Edit Computer")
       }
       ToolbarItem(id: "computer-power", placement: .primaryAction) {
@@ -783,7 +783,7 @@ struct ComputerDetailView: View {
   }
 }
 
-/// Use the same intrinsic label size as Noodle's edit toolbar item. The hidden
+/// Use the intrinsic label size of the sliders symbol, a full-height glyph. The hidden
 /// reference keeps Start/Stop/progress stable without inflating the native bar.
 struct ComputerToolbarSymbol: View {
   let systemName: String

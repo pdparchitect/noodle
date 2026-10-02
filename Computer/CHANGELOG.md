@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The toolbar's Edit Computer button shows a More icon (…) instead of a settings-like sliders icon.
+
 ## [0.21.1] - 2026-10-01
 
 ### Fixed

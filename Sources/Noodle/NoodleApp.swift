@@ -457,14 +457,14 @@ struct RootView: View {
                         Button {
                             store.agentBeingEdited = agent
                         } label: {
-                            Label("Edit Bot", systemImage: "slider.horizontal.3")
+                            Label("Edit Bot", systemImage: "ellipsis")
                         }
                         .help("Edit Bot")
                     } else if conversation.kind == .group {
                         Button {
                             store.groupBeingEdited = conversation
                         } label: {
-                            Label("Group Info", systemImage: "slider.horizontal.3")
+                            Label("Group Info", systemImage: "ellipsis")
                         }
                         .help("Group Info")
                     }

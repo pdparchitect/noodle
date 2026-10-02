@@ -228,7 +228,7 @@ private struct BrowserDetailView: View {
                 }.pickerStyle(.segmented).labelsHidden().fixedSize().accessibilityValue(presentation.mode.rawValue)
             }
             ToolbarItem(id: "browser-edit", placement: .primaryAction) {
-                Button { presentation.editing = profile } label: { Label("Edit Browser", systemImage: "slider.horizontal.3") }.help("Edit Browser")
+                Button { presentation.editing = profile } label: { Label("Edit Browser", systemImage: "ellipsis") }.help("Edit Browser")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {

@@ -91,7 +91,7 @@ struct ConversationWindowView: View {
                         Divider()
                         Button("Float on Top") { store.floatConversation(conversation.id) }
                     } label: {
-                        Label("Conversation Info", systemImage: "slider.horizontal.3")
+                        Label("Conversation Info", systemImage: "ellipsis")
                     }
                     .help("Conversation Info")
                 }

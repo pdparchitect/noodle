@@ -21,6 +21,7 @@ All notable changes to Noodle are documented here, following
 - Long conversations open on their latest 100 messages and show earlier ones as you scroll up, so new replies no longer slow down as a conversation grows.
 - Create Image… in a bot's Bot Icon starts from an avatar portrait with the bot's name and description, instead of an empty Image Playground.
 - Create Image… for a conversation background makes an image the shape of the screen instead of a square.
+- Edit Bot, Group Info and a floating conversation's menu show a More icon (…) instead of a settings-like sliders icon.
 
 ### Fixed
 
