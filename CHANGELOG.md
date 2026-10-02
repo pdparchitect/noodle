@@ -19,6 +19,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - The welcome's wordmark moves up smoothly, without a jump partway through.
+- Muse Code bots in the macOS sandbox start conversations again. Muse Code 1.4.2-R4684.1 stopped with "deletion registry authority is unavailable".
 
 ## [0.40.0] - 2026-10-02
 

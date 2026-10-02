@@ -31,7 +31,8 @@ public enum RestrictedAgentSandbox {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
         var readFiles = [String]()
-        if provider == .fx || provider == .openCode {
+        // These walk to their folders from / one directory at a time; Muse Code has since 1.4.2-R4684.1.
+        if provider == .fx || provider == .openCode || provider == .muse {
             readFiles += ancestorDirectories(of: workspace) + ancestorDirectories(of: account)
             readFiles += folders.flatMap { ancestorDirectories(of: URL(fileURLWithPath: $0.path)) }
         }

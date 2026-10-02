@@ -10,6 +10,10 @@
 
 - Bots use Noodle Applet through an applet tool, like computers and browsers, instead of their own `noodlet` command. The Hub no longer ships the command, and updating removes it, its skill and its mailbox from every bot's workspace. Update to Noodle Hub 0.14.0 before any later version, so the old command is cleaned up.
 
+### Fixed
+
+- Muse Code bots in the macOS sandbox start conversations again. Muse Code 1.4.2-R4684.1 stopped with "deletion registry authority is unavailable".
+
 ## [0.13.1] - 2026-10-02
 
 ### Fixed
