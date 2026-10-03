@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- New Group shows where to keep the group as a tile for This Mac and each joined Hub, instead of a menu.
 - Settings has one Bots tab in place of Heartbeat and Sandbox: each bot's row has its Heartbeat, Unrestricted and Apps switches.
 - Local and remote models show where they run as a tag beside their name, such as MLX or the account's name, instead of in the name.
 - Bots use Noodle Applet through an applet tool, like computers and browsers, instead of their own `noodlet` command. Noodle no longer ships the command, and updating removes it, its skill and its mailbox from every bot's workspace. A bot reaches a noodlet someone shared with `--link` and the conversation. Update Noodle 0.41.0 before any later version, so the old command is cleaned up.

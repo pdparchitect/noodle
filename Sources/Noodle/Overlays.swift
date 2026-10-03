@@ -798,12 +798,21 @@ struct NewGroupSheet: View {
 
             // Only someone who joined a Hub chooses: a group is all this Mac's bots, or all one Hub's.
             if !store.hubMirrors.isEmpty {
-                Picker("Location", selection: $hubID) {
-                    Text("This Mac").tag(ObjectIdentifier?.none)
-                    ForEach(store.hubMirrors, id: \.pairing.directory) { mirror in
-                        Text(mirror.pairing.hub?.name ?? "Noodle Hub").tag(Optional(ObjectIdentifier(mirror)))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Location").font(.caption.weight(.semibold))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
+                        GroupLocationTile(title: "This Mac", systemImage: "laptopcomputer", isSelected: hubID == nil) {
+                            hubID = nil
+                        }
+                        ForEach(store.hubMirrors, id: \.pairing.directory) { mirror in
+                            GroupLocationTile(title: mirror.pairing.hub?.name ?? "Noodle Hub", systemImage: "server.rack",
+                                              isSelected: hubID == ObjectIdentifier(mirror)) {
+                                hubID = ObjectIdentifier(mirror)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .onChange(of: hubID) { selectedIDs.formIntersection(candidates.map(\.id)) }
@@ -811,6 +820,7 @@ struct NewGroupSheet: View {
 
             GroupMemberPicker(agents: candidates, selectedIDs: $selectedIDs)
                 .padding(.horizontal, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 16)
 
             Text("Add at least one bot. You can change the members later.")
@@ -828,6 +838,38 @@ struct NewGroupSheet: View {
 
     private var canCreate: Bool {
         ConversationName.error(for: name) == nil && !selectedIDs.isEmpty
+    }
+}
+
+/// Where a new group is kept: this Mac or one joined Hub, chosen as one tile among them.
+private struct GroupLocationTile: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .frame(width: 18)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                Text(title).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
