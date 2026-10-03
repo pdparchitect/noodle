@@ -79,6 +79,10 @@ struct NoodletDeviceScreen: View {
     @State private var failure: String?
     @State private var showsControls = true
     @State private var hardware = HardwareGamepad()
+    /// A game brought back from the TV to the phone.
+    @State private var onPhone = false
+    @State private var tvGame = UUID()
+    @State private var connectingTV = false
     /// What the noodlet declares, while the person is asked about it.
     @State private var asking: (manifest: NoodletManifest, answer: CheckedContinuation<Bool, Never>)?
 
@@ -86,7 +90,10 @@ struct NoodletDeviceScreen: View {
 
     /// Sideways, or for a noodlet that asks for the whole screen, the page gets it and the
     /// buttons float over its corners.
-    private var fullScreen: Bool { verticalSize == .compact || manifest.display == .fullscreen }
+    private var fullScreen: Bool { verticalSize == .compact || manifest.display == .fullscreen || onTV }
+
+    /// A game plays on a connected TV, and the phone is its controller.
+    private var onTV: Bool { page != nil && ExternalScreen.shared.plays(manifest.controls, onPhone: onPhone) }
 
     /// A page laid out for a desktop window gets the desktop site, as in Safari, unless it presents
     /// itself as an app, which fits the phone's view.
@@ -95,23 +102,33 @@ struct NoodletDeviceScreen: View {
     }
 
     private var screenControls: Gamepad? {
-        guard let controls = manifest.controls, showsControls else { return nil }
+        guard let controls = manifest.controls, showsControls || onTV else { return nil }
         guard let controller = hardware.controller else { return controls }
         return controls.onScreen(with: controller)
     }
 
     @ViewBuilder private var buttons: some View {
         if manifest.controls != nil {
-            Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
+            TVButton(onTV: onTV, onPhone: $onPhone, connecting: $connectingTV)
         }
-        Button("Keyboard", systemImage: "keyboard") { host?.toggleKeyboard() }
+        if !onTV {
+            if manifest.controls != nil {
+                Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
+            }
+            Button("Keyboard", systemImage: "keyboard") { host?.toggleKeyboard() }
+        }
         if let runOnHub { Button("Run on Hub", systemImage: "play.display", action: runOnHub) }
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if let page { NoodletPageView(page).ignoresSafeArea(edges: fullScreen ? .all : .bottom) }
+                if onTV {
+                    Color.black.ignoresSafeArea()
+                    if screenControls == nil { Text("Playing on TV").foregroundStyle(.secondary) }
+                } else if let page {
+                    MovableView(view: page.web).ignoresSafeArea(edges: fullScreen ? .all : .bottom)
+                }
                 if let screenControls, page != nil { GamepadOverlay(gamepad: screenControls, onKey: press) }
                 if page == nil {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
@@ -141,9 +158,21 @@ struct NoodletDeviceScreen: View {
             Button("Allow") { answer(true) }
             Button("Don’t Allow", role: .cancel) { answer(false) }
         }
+        .tvConnectionAlert(isPresented: $connectingTV)
         .task { await start() }
-        .onAppear { ScreenOrientation.hold(manifest.orientation) }
-        .onDisappear { answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
+        .onChange(of: onTV, initial: true) {
+            // The phone turns sideways as a controller does.
+            ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
+            if onTV, let page {
+                ExternalScreen.shared.show(tvGame) { MovableView(view: page.web) }
+            } else {
+                ExternalScreen.shared.clear(tvGame)
+            }
+        }
+        .onDisappear {
+            answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil)
+            ExternalScreen.shared.clear(tvGame)
+        }
     }
 
     private func answer(_ allowed: Bool) {

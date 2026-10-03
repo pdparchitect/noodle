@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Play games on a TV: with Screen Mirroring on, or a TV connected by cable, a noodlet with game controls plays full screen on the TV and your phone becomes its controller. Show on TV and Show on iPhone move it between the two.
+
+### What to Test
+
+- Turn on Screen Mirroring to an Apple TV or AirPlay TV: the TV shows the Noodle wordmark instead of a copy of the phone.
+- Open a game noodlet: it plays on the TV, and the phone turns sideways and shows only the controls. Play a little: the TV answers the phone's buttons.
+- Tap Show on iPhone: the game comes back to the phone without starting over. Tap Show on TV: it goes back to the TV.
+- Close the game: the TV shows the wordmark again. Stop Screen Mirroring with a game open: the game carries on on the phone.
+- Open a game the Hub streams: it plays on the TV the same way, sharp at the TV's size.
+- With no TV connected, tap Show on TV: it says how to connect one.
+- With a game controller paired to the phone and a game on the TV: press a button on it and the phone hides the controls the controller has.
+
 ## [0.16.0] - 2026-10-03
 
 ### Changed

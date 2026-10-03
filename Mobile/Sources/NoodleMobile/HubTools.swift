@@ -569,14 +569,21 @@ struct LiveSurfaceScreen: View {
     @State private var controls: Gamepad?
     @State private var showsControls = true
     @State private var hardware = HardwareGamepad()
+    /// A game brought back from the TV to the phone.
+    @State private var onPhone = false
+    @State private var tvGame = UUID()
+    @State private var connectingTV = false
     @Environment(\.verticalSizeClass) private var verticalSize
 
     /// Sideways, the picture gets the whole screen and the buttons float over its corners.
-    private var fullScreen: Bool { verticalSize == .compact }
+    private var fullScreen: Bool { verticalSize == .compact || onTV }
+
+    /// A game plays on a connected TV, and the phone is its controller.
+    private var onTV: Bool { ExternalScreen.shared.plays(controls, onPhone: onPhone) }
 
     /// What goes on the screen: everything, or with a controller in hand only what it has no room for.
     private var screenControls: Gamepad? {
-        guard let controls, showsControls else { return nil }
+        guard let controls, showsControls || onTV else { return nil }
         guard let controller = hardware.controller else { return controls }
         return controls.onScreen(with: controller)
     }
@@ -588,17 +595,27 @@ struct LiveSurfaceScreen: View {
     /// A game shows its controller from the start; the keyboard stays beside it for typing a name or a word.
     @ViewBuilder private var inputButtons: some View {
         if controls != nil {
-            Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
+            TVButton(onTV: onTV, onPhone: $onPhone, connecting: $connectingTV)
         }
-        Button("Keyboard", systemImage: "keyboard") { feed.toggleKeyboard() }
+        if !onTV {
+            if controls != nil {
+                Button("Controls", systemImage: showsControls ? "gamecontroller.fill" : "gamecontroller") { showsControls.toggle() }
+            }
+            Button("Keyboard", systemImage: "keyboard") { feed.toggleKeyboard() }
+        }
         if let runHere { Button("Run on \(UIDevice.current.model)", systemImage: "iphone", action: runHere) }
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
-                    .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
+                if onTV {
+                    Color.black.ignoresSafeArea()
+                    if screenControls == nil, showing { Text("Playing on TV").foregroundStyle(.secondary) }
+                } else {
+                    SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
+                        .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
+                }
                 if let screenControls, showing { GamepadOverlay(gamepad: screenControls, onKey: hold) }
                 if !showing {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() }
@@ -625,8 +642,23 @@ struct LiveSurfaceScreen: View {
                 ToolbarItemGroup(placement: .primaryAction) { inputButtons }
             }
         }
+        .tvConnectionAlert(isPresented: $connectingTV)
         .task { await follow() }
-        .onDisappear { hardware.detach(); channel?.cancel() }
+        .onChange(of: onTV, initial: true) {
+            // The phone turns sideways as a controller does.
+            ScreenOrientation.hold(onTV ? .landscape : nil)
+            if onTV {
+                // The TV's view tells the Hub its size, so the game is drawn for the TV.
+                ExternalScreen.shared.show(tvGame) { SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) } }
+            } else {
+                ExternalScreen.shared.clear(tvGame)
+            }
+        }
+        .onDisappear {
+            hardware.detach(); channel?.cancel()
+            ExternalScreen.shared.clear(tvGame)
+            ScreenOrientation.hold(nil)
+        }
     }
 
     private func follow() async {

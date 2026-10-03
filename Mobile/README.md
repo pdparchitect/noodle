@@ -12,6 +12,9 @@ there, with their titles and previews. A noodlet runs on the phone itself; Run o
 shows it live from the Hub instead, and Noodle remembers which you chose. In a bot's settings, Tools, Computers and Browsers choose what it
 may use on the Hub.
 
+A game noodlet plays on a TV while Screen Mirroring is on, or while a TV is connected by
+cable, and the phone becomes its controller. Show on iPhone brings it back to the phone.
+
 Touch and hold a bot or group in the list to archive it. It keeps everything but stops
 running and leaves the list on all your devices; bring it back from Archived in
 that Hub's profile, under Profiles.
