@@ -2,7 +2,7 @@
 
 Noodle for iPhone and iPad. This early version joins your Noodle Hub and lets you chat
 with the agents you keep there. [Join the beta on TestFlight](https://testflight.apple.com/join/wYKkNSP9) from your phone. Scan the invitation's QR code, paste its link, choose a photo of the QR
-code, or open the link on the phone. Join more Hubs, such as a friend's, from Profiles, then switch between them there or show them all together.
+code, or open the link on the phone. Join more Hubs, such as a friend's, under ••• > Hubs, then switch between them there or show them all together.
 Pair Another Device in your profile shows an invitation for another of your devices, when
 the Hub allows it.
 
@@ -17,4 +17,4 @@ cable, and the phone becomes its controller. Show on iPhone brings it back to th
 
 Touch and hold a bot or group in the list to archive it. It keeps everything but stops
 running and leaves the list on all your devices; bring it back from Archived in
-that Hub's profile, under Profiles.
+that Hub's details, under Hubs.

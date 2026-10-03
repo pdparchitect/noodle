@@ -581,7 +581,7 @@ struct HubsView: View {
                     }
                 }
             }
-            .navigationTitle("Profiles")
+            .navigationTitle("Hubs")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }

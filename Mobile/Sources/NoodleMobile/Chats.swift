@@ -1008,7 +1008,7 @@ struct MoreSheet: View {
         VStack(spacing: 12) {
             option("New Bot", systemImage: "person.badge.plus", .createBot)
             option("New Group", systemImage: "person.2", .createGroup)
-            option("Profiles", systemImage: "person.crop.circle", .profiles)
+            option("Hubs", systemImage: "server.rack", .profiles)
             option("Settings", systemImage: "gear", .settings)
         }
         .buttonStyle(.bordered)

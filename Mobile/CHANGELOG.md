@@ -9,6 +9,10 @@
 - While a game plays on the TV and a game controller covers all its buttons, the phone shows the connected controllers and their batteries instead of a blank screen.
 - In a noodlet, the controller's View button (Create on PlayStation, − on Switch) shows the conversation's other noodlets, on the TV while it plays there: move with the d-pad or stick, press A to switch to one, or choose Close Game. B or View again goes back to the game.
 
+### Changed
+
+- Profiles under ••• in the chat list is now Hubs, as it lists the Hubs you joined.
+
 ### Fixed
 
 - The phone no longer dims and locks while a game controller is connected to an open noodlet, or a game plays on the TV: controller presses do not count as touches, so it used to go to sleep mid-game.
@@ -28,6 +32,7 @@
 - Play a game with only a controller for a few minutes without touching the phone: the screen stays on. Close the game: the phone dims and locks as usual again.
 - Turn Silent Mode on and play a game with sound: you hear it on the phone, and on the TV while casting.
 - With the ring switch set to silent, open a noodlet with sound on the phone and play it with the on-screen controls only: you hear it. Play music in another app first: both play together, and the music carries on after you close the noodlet.
+- In the chat list, tap ••• and choose Hubs: it lists the Hubs you joined, each with your name on it.
 
 ## [0.17.0] - 2026-10-03
 
