@@ -114,6 +114,10 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     @ObservationIgnored private let url: URL
     /// Runs when a bot's, computer's or browser's owner, or an owner's name, changed.
     @ObservationIgnored public var onOwnersChange: (() -> Void)?
+    /// Where changes to users and devices are kept, for the Hub's Activity window.
+    @ObservationIgnored public var log: HubActivityLog?
+    /// Who the changes being made now are made by.
+    @ObservationIgnored public private(set) var actor = HubActor.thisMac
 
     private struct Stored: Codable {
         var users: [HubUser]
@@ -181,37 +185,59 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     /// The owner of everything on a personal Mac.
     private var personalOwner: UUID? { isPersonal ? users.first?.id : nil }
 
+    /// Makes the changes in `body` as `actor` rather than as this Mac, for the log.
+    public func acting<T>(as actor: HubActor, _ body: () throws -> T) rethrows -> T {
+        let previous = self.actor
+        self.actor = actor
+        defer { self.actor = previous }
+        return try body()
+    }
+
+    /// Keeps a change, or a refused attempt, in the log, as made by whoever acts now.
+    public func note(_ what: String, refusal: String? = nil, about users: [UUID]) {
+        log?.record(who: actor.who, what: what, refusal: refusal, users: Set(users + [actor.user].compactMap { $0 }))
+    }
+
     @discardableResult public func addUser(named name: String) throws -> HubUser {
         guard !isPersonal else { throw LinkError("This Mac is only yours; nobody else can be added.") }
         let user = HubUser(name: try ConversationName.validated(name))
         users.append(user)
         save()
+        note("Added \(user.name)", about: [user.id])
         return user
     }
 
     public func rename(_ user: HubUser, to name: String) throws {
         let name = try ConversationName.validated(name)
+        guard let old = current(user), old.name != name else { return }
         update(user) { $0.name = name }
+        note("Renamed \(old.name) to \(name)", about: [user.id])
         onOwnersChange?()
     }
 
     public func move(_ user: HubUser, to plan: HubPlan) {
-        guard plans.contains(where: { $0.id == plan.id }) else { return }
+        guard let plan = plans.first(where: { $0.id == plan.id }), let old = current(user), old.plan != plan.id else { return }
         update(user) { $0.plan = plan.id }
+        note("Moved \(old.name) to the \(plan.name) plan", about: [user.id])
     }
 
     public func setCanPairDevices(_ canPairDevices: Bool, for user: HubUser) {
+        guard let old = current(user), old.canPairDevices != canPairDevices else { return }
         update(user) { $0.canPairDevices = canPairDevices }
+        note(canPairDevices ? "Let \(old.name) pair devices" : "Stopped \(old.name) pairing devices", about: [user.id])
     }
 
     /// Nobody is an admin on the owner's own Mac: there is nobody else to manage.
     public func setAdmin(_ isAdmin: Bool, for user: HubUser) {
-        guard !isPersonal else { return }
+        guard !isPersonal, let old = current(user), old.isAdmin != isAdmin else { return }
         update(user) { $0.isAdmin = isAdmin }
+        note(isAdmin ? "Made \(old.name) an admin" : "Made \(old.name) no longer an admin", about: [user.id])
     }
 
     /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots and connections first.
     public func remove(_ user: HubUser) {
+        guard let old = current(user) else { return }
+        note("Removed \(old.name)", about: [user.id])
         users.removeAll { $0.id == user.id }
         devices.removeAll { $0.user == user.id }
         botOwners = botOwners.filter { $0.value != user.id }
@@ -274,12 +300,16 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         let device = HubDevice(user: user.id, name: name, key: key, paired: date, lastSeen: date)
         devices.append(device)
         save()
+        note("Paired “\(name)” for \(current(user)?.name ?? user.name)", about: [user.id])
         return device
     }
 
     public func remove(_ device: HubDevice) {
+        guard devices.contains(where: { $0.id == device.id }) else { return }
         devices.removeAll { $0.id == device.id }
         save()
+        note("Unpaired “\(device.name)” from \(users.first { $0.id == device.user }?.name ?? "someone no longer on the Hub")",
+             about: [device.user])
     }
 
     public func markSeen(_ device: HubDevice, at date: Date) {
@@ -332,6 +362,11 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             plans[index].models = plans[index].models.filter { $0.key.profile != profile }
         }
         save()
+    }
+
+    /// The Hub's own record of the user, which a passed-in copy may be behind.
+    private func current(_ user: HubUser) -> HubUser? {
+        users.first { $0.id == user.id }
     }
 
     private func update(_ user: HubUser, _ change: (inout HubUser) -> Void) {

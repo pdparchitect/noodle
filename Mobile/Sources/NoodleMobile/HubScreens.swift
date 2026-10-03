@@ -773,6 +773,7 @@ struct UsersView: View {
                 let name = name
                 Task { _ = await users.add(named: name) }
             }
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         // Loads when opened, and again whenever the Hub says its users changed.
         .task(id: chats?.usersChanges) { await users.load() }
@@ -872,6 +873,7 @@ struct UserView: View {
                 let name = name
                 Task { await users.rename(user, to: name) }
             }
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .confirmationDialog("Remove \(user.name)?", isPresented: $removing, titleVisibility: .visible) {
             Button("Remove", role: .destructive) {

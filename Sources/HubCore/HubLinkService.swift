@@ -73,7 +73,7 @@ import os
     /// Keeps the router's port open until cancelled.
     @ObservationIgnored private var routerRenewal: Task<Void, Never>?
     /// Unused invitations by their key. Kept in memory: an invitation outlives no relaunch.
-    @ObservationIgnored private var invitations: [LinkPublicKey: (user: UUID, expires: Date)] = [:]
+    @ObservationIgnored private var invitations: [LinkPublicKey: (user: UUID, expires: Date, issuer: String)] = [:]
     @ObservationIgnored private let gate = LinkGate()
     /// Tells devices that are away about unread replies.
     @ObservationIgnored private let pushes: (any HubPushPublisher)?
@@ -197,7 +197,8 @@ import os
         // Only the invitation carries the private half; the Hub keeps the public one to let it in.
         let join = LinkIdentity()
         let expires = now().addingTimeInterval(LinkInvitation.lifetime)
-        invitations[join.publicKey] = (user.id, expires)
+        invitations[join.publicKey] = (user.id, expires, access.actor.who)
+        access.note("Invited a device for \(user.name)", about: [user.id])
         updateGate()
         return LinkInvitation(hubName: hubName, hubKey: key, endpoints: endpoints, userName: user.name,
                               joinKey: join.privateKey.rawRepresentation, expires: expires)
@@ -450,36 +451,51 @@ import os
         case .enroll(let deviceKey, let proof, let deviceName):
             // The invitation's key arrives only from whoever holds the invitation, and works once.
             defer { updateGate() }
-            guard let invitation = invitations.removeValue(forKey: key), invitation.expires > now(),
-                  let user = access.users.first(where: { $0.id == invitation.user }) else {
-                throw LinkError("This invitation is no longer valid. Ask for a new one.")
+            let invitation = invitations.removeValue(forKey: key)
+            let trimmed = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = trimmed.isEmpty ? "Device" : String(trimmed.prefix(80))
+            let actor = HubActor(who: invitation.map { "Invitation from \($0.issuer)" } ?? "An invitation no longer valid", user: nil)
+            return try access.acting(as: actor) {
+                do {
+                    guard let invitation, invitation.expires > now(),
+                          let user = access.users.first(where: { $0.id == invitation.user }) else {
+                        throw LinkError("This invitation is no longer valid. Ask for a new one.")
+                    }
+                    guard deviceKey.isJoinProof(proof, for: key) else { throw LinkError("This device could not prove its key.") }
+                    return .status(status(for: access.addDevice(named: name, key: deviceKey, for: user, at: now())))
+                } catch {
+                    access.note("Tried to pair “\(name)”", refusal: error.localizedDescription, about: invitation.map { [$0.user] } ?? [])
+                    throw error
+                }
             }
-            guard deviceKey.isJoinProof(proof, for: key) else { throw LinkError("This device could not prove its key.") }
-            let name = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let device = access.addDevice(named: name.isEmpty ? "Device" : String(name.prefix(80)), key: deviceKey, for: user, at: now())
-            return .status(status(for: device))
         case .status:
             let device = try paired(key)
             access.markSeen(device, at: now())
             return .status(status(for: device))
         case .invite:
-            let user = try user(key)
-            guard user.canPairDevices else { throw LinkError("You cannot pair devices with \(hubName). Ask whoever keeps it.") }
-            return .invitation(invite(user))
+            return try logged(request, from: key) {
+                let user = try user(key)
+                guard user.canPairDevices else { throw LinkError("You cannot pair devices with \(hubName). Ask whoever keeps it.") }
+                return .invitation(invite(user))
+            }
         case .users:
-            return .users(try admin(key).users())
+            return try logged(request, from: key) { .users(try admin(key).users()) }
         case .addUser(let draft):
-            return .user(try admin(key).addUser(draft))
+            return try logged(request, from: key) { .user(try admin(key).addUser(draft)) }
         case .updateUser(let id, let draft):
-            return .user(try admin(key).updateUser(id, with: draft))
+            return try logged(request, from: key) { .user(try admin(key).updateUser(id, with: draft)) }
         case .removeUser(let id):
-            remove(try admin(key).managedUser(id))
-            return .done
+            return try logged(request, from: key) {
+                remove(try admin(key).managedUser(id))
+                return .done
+            }
         case .removeDevice(let id):
-            access.remove(try admin(key).managedDevice(id))
-            return .done
+            return try logged(request, from: key) {
+                access.remove(try admin(key).managedDevice(id))
+                return .done
+            }
         case .inviteUser(let id):
-            return .invitation(invite(try admin(key).managedUser(id)))
+            return try logged(request, from: key) { .invitation(invite(try admin(key).managedUser(id))) }
         case .subscribe:
             throw LinkError("Subscriptions open a stream.")
         case .bots:
@@ -702,6 +718,44 @@ import os
         let device = try paired(key)
         guard let user = access.user(for: device) else { throw LinkError("This device is not paired with \(hubName).") }
         return user
+    }
+
+    /// Makes the request's changes as the device's user, and keeps it in the log if the Hub refuses it.
+    private func logged(_ request: LinkRequest, from key: LinkPublicKey, _ body: () throws -> LinkResponse) throws -> LinkResponse {
+        let device = access.device(for: key), user = device.flatMap(access.user(for:))
+        let actor = HubActor(who: device.map { "\(user?.name ?? "Someone") on \($0.name)" } ?? "A device not paired", user: user?.id)
+        return try access.acting(as: actor) {
+            do {
+                return try body()
+            } catch {
+                let (what, users) = attempt(request, by: user)
+                access.note(what, refusal: error.localizedDescription, about: users)
+                throw error
+            }
+        }
+    }
+
+    /// What a refused request tried, and whom it was about.
+    private func attempt(_ request: LinkRequest, by actor: HubUser?) -> (String, [UUID]) {
+        func name(_ id: UUID) -> String { access.users.first { $0.id == id }?.name ?? "someone no longer on the Hub" }
+        switch request {
+        case .users:
+            return ("Tried to list the users", [])
+        case .addUser(let draft):
+            let name = draft.name?.trimmingCharacters(in: .whitespacesAndNewlines).prefix(ConversationName.maximumLength) ?? ""
+            return (name.isEmpty ? "Tried to add someone" : "Tried to add \(name)", [])
+        case .updateUser(let id, _):
+            return ("Tried to change \(name(id))", [id])
+        case .removeUser(let id):
+            return ("Tried to remove \(name(id))", [id])
+        case .removeDevice(let id):
+            guard let device = access.devices.first(where: { $0.id == id }) else { return ("Tried to unpair a device no longer paired", []) }
+            return ("Tried to unpair “\(device.name)”", [device.user])
+        case .inviteUser(let id):
+            return ("Tried to invite a device for \(name(id))", [id])
+        default:
+            return ("Tried to invite a device for \(actor?.name ?? "themselves")", [])
+        }
     }
 
     private func admin(_ key: LinkPublicKey) throws -> HubAdmin {

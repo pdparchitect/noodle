@@ -46,6 +46,13 @@ struct NoodleHubApp: App {
         }
         .defaultSize(width: 860, height: 680)
         .windowResizability(.contentMinSize)
+        Window("Activity", id: HubActivityView.windowID) {
+            if let log = delegate.settings.hub.access.log {
+                HubActivityView(log: log, access: delegate.settings.hub.access)
+            }
+        }
+        .defaultSize(width: 760, height: 520)
+        .windowResizability(.contentMinSize)
         Settings {
             HubSettingsView(host: delegate.settings)
         }
@@ -223,6 +230,11 @@ struct HubMenu: View {
             openWindow(id: UsageView.windowID)
         }
         .keyboardShortcut("u", modifiers: [.command, .shift])
+        Button("Activity") {
+            NSApp.unhide(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: HubActivityView.windowID)
+        }
         Divider()
         Button("Settings…") {
             // A menu bar app is never frontmost on its own, and cooperative activation leaves it behind.

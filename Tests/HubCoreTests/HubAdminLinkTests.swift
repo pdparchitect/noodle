@@ -106,6 +106,10 @@ import XCTest
             XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device is not paired with Mac mini."))
         }
         XCTAssertEqual(f.hub.access.users.map(\.name), ["Grace", "Ada"])
+        let refused = try XCTUnwrap(f.hub.access.log?.entries.suffix(3))
+        XCTAssertEqual(refused.map(\.what), ["Tried to list the users", "Tried to add Mallory", "Tried to remove Ada"])
+        XCTAssertEqual(Set(refused.map(\.who)), ["A device not paired"])
+        XCTAssertEqual(Set(refused.compactMap(\.refusal)), ["This device is not paired with Mac mini."])
     }
 
     func testAnAdminAddsSomeoneAndPairsTheirDevice() async throws {
@@ -263,6 +267,114 @@ import XCTest
         var phoneIterator = phoneEvents.makeAsyncIterator()
         let heard = try await phoneIterator.next()
         XCTAssertEqual(heard, .botsChanged)
+    }
+
+    // MARK: The activity log
+
+    private func entries(_ f: Fixture, after count: Int) -> [HubActivityEntry] {
+        Array((f.hub.access.log?.entries ?? []).dropFirst(count))
+    }
+
+    /// Pairing is kept with whoever made the invitation, on the Hub or on a device.
+    func testPairingIsLoggedWithWhoMadeTheInvitation() async throws {
+        let f = try await fixture()
+        let log = try XCTUnwrap(f.hub.access.log)
+        XCTAssertEqual(log.entries.map(\.what), [
+            "Added Grace", "Made Grace an admin", "Added Ada", "Moved Ada to the Family plan",
+            "Invited a device for Grace", "Paired “Grace’s iPhone” for Grace",
+            "Invited a device for Ada", "Paired “Ada’s iPhone” for Ada",
+        ])
+        XCTAssertEqual(log.entries.suffix(4).map(\.who), ["This Mac", "Invitation from This Mac", "This Mac", "Invitation from This Mac"])
+
+        let before = log.entries.count
+        let invitation = try await f.phone.invite()
+        let tablet = HubPairing(directory: f.root.appendingPathComponent("Tablet"), deviceName: "Ada’s iPad")
+        await tablet.join(invitation.url().absoluteString)
+        let added = entries(f, after: before)
+        XCTAssertEqual(added.map(\.what), ["Invited a device for Ada", "Paired “Ada’s iPad” for Ada"])
+        XCTAssertEqual(added.map(\.who), ["Ada on Ada’s iPhone", "Invitation from Ada on Ada’s iPhone"])
+        XCTAssertEqual(added.map(\.users), [[f.ada.id], [f.ada.id]])
+    }
+
+    func testAnAdminsChangesAreLoggedWithTheirDevice() async throws {
+        let f = try await fixture()
+        let before = try XCTUnwrap(f.hub.access.log).entries.count
+        guard case .user(let bea) = try await f.admin.request(.addUser(LinkUserDraft(name: "Bea", plan: f.family.id, canPairDevices: false))) else {
+            return XCTFail("not added")
+        }
+        _ = try await f.admin.request(.updateUser(id: bea.id, LinkUserDraft(name: "Bea L.")))
+        _ = try await f.admin.request(.inviteUser(id: bea.id))
+        let phone = try XCTUnwrap(f.hub.access.devices(of: f.ada).first)
+        _ = try await f.admin.request(.removeDevice(id: phone.id))
+        _ = try await f.admin.request(.removeUser(id: f.ada.id))
+        let added = entries(f, after: before)
+        XCTAssertEqual(added.map(\.what), [
+            "Added Bea", "Moved Bea to the Family plan", "Stopped Bea pairing devices", "Renamed Bea to Bea L.",
+            "Invited a device for Bea L.", "Unpaired “Ada’s iPhone” from Ada", "Removed Ada",
+        ])
+        XCTAssertEqual(Set(added.map(\.who)), ["Grace on Grace’s iPhone"])
+        XCTAssertEqual(added.last?.users, [f.grace.id, f.ada.id])
+        XCTAssertTrue(added.allSatisfy { $0.refusal == nil })
+    }
+
+    /// What the Hub refused is kept with its reason: someone trying what they may not is what an owner wants to see.
+    func testRefusedAttemptsAreLogged() async throws {
+        let f = try await fixture()
+        let before = try XCTUnwrap(f.hub.access.log).entries.count
+        let graceDevice = try XCTUnwrap(f.hub.access.devices(of: f.grace).first)
+        for request: LinkRequest in [.users, .addUser(LinkUserDraft(name: "Mallory")), .updateUser(id: f.grace.id, LinkUserDraft(name: "M")),
+                                     .removeUser(id: f.grace.id), .removeDevice(id: graceDevice.id), .inviteUser(id: f.grace.id)] {
+            _ = await refusal(request, from: f.phone)
+        }
+        _ = await refusal(.removeUser(id: UUID()), from: f.admin)
+        _ = await refusal(.removeDevice(id: UUID()), from: f.admin)
+        _ = await refusal(.removeUser(id: f.grace.id), from: f.admin)
+        f.hub.access.setCanPairDevices(false, for: f.ada)
+        _ = await refusal(.invite, from: f.phone)
+
+        let added = entries(f, after: before)
+        let refused = added.filter { $0.refusal != nil }
+        let notAdmin = "Only an admin of this Hub can do that."
+        XCTAssertEqual(refused.map(\.what), [
+            "Tried to list the users", "Tried to add Mallory", "Tried to change Grace", "Tried to remove Grace",
+            "Tried to unpair “Grace’s iPhone”", "Tried to invite a device for Grace",
+            "Tried to remove someone no longer on the Hub", "Tried to unpair a device no longer paired", "Tried to remove Grace",
+            "Tried to invite a device for Ada",
+        ])
+        XCTAssertEqual(refused.map(\.refusal), [notAdmin, notAdmin, notAdmin, notAdmin, notAdmin, notAdmin,
+                                                "That user is no longer on this Hub.", "That device is no longer paired with this Hub.",
+                                                "“Grace” is an admin. Admins are managed on the Hub itself.",
+                                                "You cannot pair devices with Mac mini. Ask whoever keeps it."])
+        XCTAssertEqual(refused.map(\.who), Array(repeating: "Ada on Ada’s iPhone", count: 6) + Array(repeating: "Grace on Grace’s iPhone", count: 3)
+                       + ["Ada on Ada’s iPhone"])
+        XCTAssertEqual(refused.first?.users, [f.ada.id])
+        XCTAssertEqual(refused[3].users, [f.ada.id, f.grace.id])
+        // Nothing was changed, so the only other entry is the Hub's own.
+        XCTAssertEqual(added.filter { $0.refusal == nil }.map(\.what), ["Stopped Ada pairing devices"])
+    }
+
+    /// A list that works is not news; only changes and refusals are kept.
+    func testListingIsNotLogged() async throws {
+        let f = try await fixture()
+        let before = try XCTUnwrap(f.hub.access.log).entries.count
+        _ = try await f.admin.request(.users)
+        await f.phone.refresh()
+        XCTAssertEqual(entries(f, after: before), [])
+    }
+
+    func testAFailedPairingIsLogged() async throws {
+        let f = try await fixture()
+        let before = try XCTUnwrap(f.hub.access.log).entries.count
+        let victim = try XCTUnwrap(f.hub.access.devices(of: f.ada).first)
+        let join = try f.link.invite(f.grace).joinIdentity()
+        let forged = LinkRequest.enroll(deviceKey: victim.key, proof: try LinkIdentity().joinProof(for: join.publicKey), deviceName: "Mallory’s Mac")
+        _ = try await LinkClient.exchange(try LinkProtocol.encode(forged), identity: join, hubKey: f.link.key,
+                                          endpoints: f.link.endpoints, timeout: .seconds(5))
+        let added = entries(f, after: before)
+        XCTAssertEqual(added.map(\.what), ["Invited a device for Grace", "Tried to pair “Mallory’s Mac”"])
+        XCTAssertEqual(added.last?.who, "Invitation from This Mac")
+        XCTAssertEqual(added.last?.refusal, "This device could not prove its key.")
+        XCTAssertEqual(added.last?.users, [f.grace.id])
     }
 }
 

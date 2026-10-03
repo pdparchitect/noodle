@@ -43,6 +43,7 @@ import NoodleRuntime
         runtime.onUsage = { [usage] in usage.record($0) }
         runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
+        access.log = HubActivityLog(url: root.appendingPathComponent("activity.jsonl"))
         // One broker serves every tool a bot is given here, whichever kind it is.
         let tools = ToolProviderRegistry(), assignments = ToolAssignmentStore()
         connections = HubConnections(root: root, access: access,

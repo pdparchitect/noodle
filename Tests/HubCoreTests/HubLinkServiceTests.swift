@@ -79,6 +79,10 @@ import XCTest
         // The device's own clock may be wrong, so the Hub checks too.
         await HubPairing(directory: device, deviceName: "Mac").join(invitation.url().absoluteString, now: invitation.expires.addingTimeInterval(-1))
         XCTAssertTrue(hub.access.devices.isEmpty)
+        let refused = try XCTUnwrap(hub.access.log?.entries.last)
+        XCTAssertEqual(refused.what, "Tried to pair “Mac”")
+        XCTAssertEqual(refused.who, "Invitation from This Mac")
+        XCTAssertEqual(refused.refusal, "This invitation is no longer valid. Ask for a new one.")
     }
 
     func testRemovedDevicesAndUsersAreRefused() async throws {
