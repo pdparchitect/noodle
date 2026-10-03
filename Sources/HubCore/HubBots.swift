@@ -453,8 +453,10 @@ import NoodleRuntime
     /// A conversation's background, as devices see it.
     public func background(of conversationID: UUID) -> LinkBackground {
         let background = (try? repository.loadBackground(conversationID: conversationID)) ?? ConversationBackground()
-        return LinkBackground(preset: background.preset?.rawValue, media: background.imageFilename,
-                              mediaKind: background.imageFilename == nil ? nil : (background.mediaKind ?? .image).rawValue)
+        // A name that is not the Hub's own kind is no file to show.
+        let media = repository.backgroundImageURL(background, conversationID: conversationID) == nil ? nil : background.imageFilename
+        return LinkBackground(preset: background.preset?.rawValue, media: media,
+                              mediaKind: media == nil ? nil : (background.mediaKind ?? .image).rawValue)
     }
 
     /// Sets one of the user's conversations to a gradient, or to none.
@@ -494,9 +496,11 @@ import NoodleRuntime
               let url = fetch.compact ? repository.compactBackgroundURL(background, conversationID: fetch.conversationID) : original else {
             throw LinkError("This background has changed.")
         }
+        guard repository.isOwnBackgroundFile(original, conversationID: fetch.conversationID) else { throw LinkError("This background has changed.") }
         if !FileManager.default.fileExists(atPath: url.path) {
             try await BackgroundMedia.writeCompactCopy(of: original, kind: background.mediaKind ?? .image, to: url)
         }
+        guard repository.isOwnBackgroundFile(url, conversationID: fetch.conversationID) else { throw LinkError("This background has changed.") }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         let total = Int(try handle.seekToEnd())

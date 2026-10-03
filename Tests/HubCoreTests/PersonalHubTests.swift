@@ -187,6 +187,50 @@ import XCTest
         XCTAssertNotNil(try f.repository.backgroundImageURL(kept, conversationID: conversation.id).flatMap { NSImage(contentsOf: $0) })
     }
 
+    /// Whatever a conversation's folder holds, such as a name that leaves it or a link out of it, a
+    /// device never reads a file elsewhere on the Mac through its background.
+    func testABackgroundNeverLeadsToAFileElsewhere() async throws {
+        let (f, made) = try await fixture(bots: ["Eli"])
+        let conversation = try XCTUnwrap(f.repository.loadConversations().first { $0.participantIDs == [made[0].id] })
+        let folder = f.repository.conversationDirectory(id: conversation.id)
+        let secret = f.hubDirectory.appendingPathComponent("secret.jpg")
+        try Self.picture(at: secret)
+        func name(_ background: ConversationBackground) throws {
+            try JSONEncoder().encode(background).write(to: folder.appendingPathComponent("background.json"))
+        }
+        func fetch(_ media: String, compact: Bool) async -> Bool {
+            let copy = f.hubDirectory.appendingPathComponent(UUID().uuidString)
+            return (try? await f.device.downloadBackground(media, of: conversation.id, compact: compact, to: copy)) != nil
+        }
+
+        let outside = "../../../\(secret.lastPathComponent)"
+        try name(ConversationBackground(imageFilename: outside, mediaKind: .image))
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertNil(bots.first?.background?.media)
+        let fetchedOutside = await fetch(outside, compact: false)
+        XCTAssertFalse(fetchedOutside)
+
+        for kind in [BackgroundMediaKind.image, .video, .dynamicImage] {
+            let link = "\(UUID().uuidString.lowercased()).\(kind == .video ? "mov" : "jpg")"
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("Backgrounds"), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("Backgrounds/\(link)"), withDestinationURL: secret)
+            try name(ConversationBackground(imageFilename: link, mediaKind: kind))
+            let original = await fetch(link, compact: false), compact = await fetch(link, compact: true)
+            XCTAssertFalse(original, "\(kind)")
+            XCTAssertFalse(compact, "\(kind)")
+        }
+        // A folder that is itself a link out.
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("Backgrounds"))
+        let elsewhere = f.hubDirectory.appendingPathComponent("Elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        let planted = "\(UUID().uuidString.lowercased()).jpg"
+        try FileManager.default.copyItem(at: secret, to: elsewhere.appendingPathComponent(planted))
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("Backgrounds"), withDestinationURL: elsewhere)
+        try name(ConversationBackground(imageFilename: planted, mediaKind: .image))
+        let throughFolder = await fetch(planted, compact: false)
+        XCTAssertFalse(throughFolder)
+    }
+
     /// A short silent movie, as a person might pick for a background.
     static func video(at url: URL) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)

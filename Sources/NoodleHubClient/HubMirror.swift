@@ -503,10 +503,12 @@ import Observation
     private func copyBackground(_ background: LinkBackground, of remote: UUID) async throws {
         guard let thread = thread(remote: remote), thread.background != background, !sharingBackgrounds.contains(remote) else { return }
         if let media = background.media {
+            // Only a name a Hub gives becomes a file here.
+            guard let filename = background.mediaFilename else { throw LinkError("The Hub sent a background this Noodle cannot use.") }
             let staging = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-background-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: staging) }
-            let file = staging.appendingPathComponent(URL(fileURLWithPath: media).lastPathComponent)
+            let file = staging.appendingPathComponent(filename)
             try await pairing.downloadBackground(media, of: remote, compact: false, to: file)
             try repository.setBackground(conversationID: thread.local, file: try await PreparedBackgroundFile.prepare(file))
         } else {

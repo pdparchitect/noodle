@@ -218,11 +218,19 @@ public struct LinkBackground: Codable, Equatable, Sendable {
         self.mediaKind = mediaKind
     }
 
+    /// `media` when it is a name a Hub gives, a UUID with a known extension, so a device can keep
+    /// the file under it: never a path, nor anything else a Hub could send.
+    public var mediaFilename: String? {
+        guard let media else { return nil }
+        let parts = media.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2, UUID(uuidString: String(parts[0])) != nil,
+              ["jpg", "heic", "heif", "mov", "mp4", "m4v"].contains(parts[1]) else { return nil }
+        return media
+    }
+
     /// The name a device keeps the small copy under: a video plays as MP4, anything else is a JPEG.
     public var compactFilename: String? {
-        guard let media, let stem = media.split(separator: ".").first, !stem.isEmpty,
-              stem.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }) else { return nil }
-        return "\(stem).\(mediaKind == "video" ? "mp4" : "jpg")"
+        mediaFilename.map { "\($0.prefix { $0 != "." }).\(mediaKind == "video" ? "mp4" : "jpg")" }
     }
 }
 

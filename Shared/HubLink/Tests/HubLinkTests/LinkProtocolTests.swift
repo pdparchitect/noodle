@@ -16,6 +16,21 @@ final class LinkProtocolTests: XCTestCase {
         XCTAssertEqual(try LinkInvitation(text: code), invitation)
     }
 
+    /// A background's name comes from the Hub, so a device uses only the Hub's own kind of name for a
+    /// file: never a path, nor anything that leaves the folder it is kept in.
+    func testBackgroundNamesNeverLeaveTheirFolder() {
+        let id = UUID().uuidString.lowercased()
+        XCTAssertEqual(LinkBackground(media: "\(id).mov", mediaKind: "video").mediaFilename, "\(id).mov")
+        XCTAssertEqual(LinkBackground(media: "\(id).mov", mediaKind: "video").compactFilename, "\(id).mp4")
+        XCTAssertEqual(LinkBackground(media: "\(id).heic", mediaKind: "dynamicImage").compactFilename, "\(id).jpg")
+        for hostile in ["..", ".", "", "../\(id).jpg", "\(id).jpg/..", "/etc/passwd", "\(id)/../\(id).jpg", "~/\(id).jpg",
+                        "secret.jpg", "\(id).sh", "\(id)", "\(id).jpg.mov", ".\(id).jpg", "\(id).jpg/", "\(id).jpg\u{0}"] {
+            let background = LinkBackground(media: hostile, mediaKind: "image")
+            XCTAssertNil(background.mediaFilename, hostile)
+            XCTAssertNil(background.compactFilename, hostile)
+        }
+    }
+
     /// Devices that fetch pictures on their own say so with every request; older ones get them in lists.
     func testListsLeavePicturesOutOnlyForDevicesThatFetchThem() throws {
         XCTAssertTrue(LinkProtocol.fetchesPictures(try LinkProtocol.encode(.bots)))

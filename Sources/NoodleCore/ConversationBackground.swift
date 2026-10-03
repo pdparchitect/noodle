@@ -19,6 +19,17 @@ extension WorkspaceRepository {
             .appendingPathComponent(name)
     }
 
+    /// Whether `url` is a plain file in the conversation's own folder, so nothing put there, such as
+    /// a link, leads whoever reads it to a file elsewhere.
+    public func isOwnBackgroundFile(_ url: URL, conversationID: UUID) -> Bool {
+        let root = rootURL.standardizedFileURL.path, path = url.standardizedFileURL.path
+        let folder = conversationDirectory(id: conversationID).appendingPathComponent("Backgrounds", isDirectory: true)
+        guard url.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path, path.hasPrefix(root + "/"),
+              (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { return false }
+        // Only where the repository itself is may go through links; nothing inside it may.
+        return url.resolvingSymlinksInPath().path == rootURL.resolvingSymlinksInPath().path + path.dropFirst(root.count)
+    }
+
     /// Where the small copy a phone shows is kept, beside the background and deleted with it.
     /// A still picture is its own small copy.
     public func compactBackgroundURL(_ background: ConversationBackground, conversationID: UUID) -> URL? {
