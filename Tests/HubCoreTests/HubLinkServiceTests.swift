@@ -318,6 +318,42 @@ import XCTest
         XCTAssertFalse(relaunched.hasUnsentLeaves)
     }
 
+    private func answer(_ reply: LinkReply) throws -> LinkResponse {
+        guard case .response(let data) = reply else { throw LinkError("A stream, not an answer") }
+        return try LinkProtocol.decodeResponse(data)
+    }
+
+    /// Two devices racing with one invitation: the second finds it gone, which the log keeps.
+    func testAnInvitationGoneMidRequestIsLogged() async throws {
+        let (hub, link, _) = try await fixture()
+        let enroll = LinkRequest.enroll(deviceKey: LinkIdentity().publicKey, proof: Data(), deviceName: "Mac")
+        let reply = await link.reply(to: try LinkProtocol.encode(enroll), from: LinkIdentity().publicKey)
+        XCTAssertEqual(try answer(reply), .failure("This invitation is no longer valid. Ask for a new one."))
+        let entry = try XCTUnwrap(hub.access.log?.entries.last)
+        XCTAssertEqual(entry.who, "An invitation no longer valid")
+        XCTAssertEqual(entry.what, "Tried to pair “Mac”")
+        XCTAssertEqual(entry.users, [])
+        XCTAssertTrue(hub.access.devices.isEmpty)
+    }
+
+    /// A device left behind by a user no longer on the Hub, as a damaged access file could hold, is refused
+    /// and named as well as the log can.
+    func testADeviceWhoseUserIsGoneIsRefusedAndLogged() async throws {
+        let (hub, link, _) = try await fixture()
+        let identity = LinkIdentity()
+        let device = hub.access.addDevice(named: "Old Mac", key: identity.publicKey, for: HubUser(name: "Ghost"), at: clock)
+        XCTAssertEqual(hub.access.log?.entries.last?.what, "Paired “Old Mac” for Ghost")
+        for request: LinkRequest in [.users, .invite] {
+            let reply = await link.reply(to: try LinkProtocol.encode(request), from: identity.publicKey)
+            XCTAssertEqual(try answer(reply), .failure("This device is not paired with Mac mini."))
+        }
+        let refused = try XCTUnwrap(hub.access.log?.entries.suffix(2))
+        XCTAssertEqual(refused.map(\.who), ["Someone on Old Mac", "Someone on Old Mac"])
+        XCTAssertEqual(refused.map(\.what), ["Tried to list the users", "Tried to invite a device"])
+        hub.access.remove(device)
+        XCTAssertEqual(hub.access.log?.entries.last?.what, "Unpaired “Old Mac” from someone no longer on the Hub")
+    }
+
     /// Only a paired device can leave, and only as itself.
     func testOnlyAPairedDeviceLeaves() async throws {
         let (hub, link, _) = try await fixture()

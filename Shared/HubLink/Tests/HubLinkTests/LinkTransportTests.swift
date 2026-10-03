@@ -408,3 +408,56 @@ final class FrameBox: @unchecked Sendable {
     var frames: [Data] { lock.withLock { stored } }
     func append(_ frame: Data) { lock.withLock { stored.append(frame) } }
 }
+
+/// An admin's list of users against a Hub that answers what this Noodle does not expect.
+@MainActor final class HubUsersTests: XCTestCase {
+    /// A Hub that pairs the device, then answers every other request with `done`.
+    private func paired() async throws -> HubPairing {
+        let hub = LinkIdentity()
+        let port = LockedPort()
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }) { _, request in
+            if case .success(.enroll) = LinkProtocol.decode(request) {
+                return .response(LinkProtocol.encode(.status(LinkStatus(hubName: "Studio", userName: "Grace", planName: "Default",
+                    harnesses: [], endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)], isAdmin: true))))
+            }
+            return .response(LinkProtocol.encode(.done))
+        }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        port.value = try XCTUnwrap(server.port)
+        let invitation = LinkInvitation(hubName: "Studio", hubKey: hub.publicKey,
+                                        endpoints: [LinkEndpoint(host: "127.0.0.1", port: port.value)],
+                                        userName: "Grace", joinKey: LinkIdentity().privateKey.rawRepresentation,
+                                        expires: Date().addingTimeInterval(600))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let pairing = HubPairing(directory: directory, deviceName: "iPhone")
+        await pairing.join(invitation.url().absoluteString)
+        XCTAssertNil(pairing.error)
+        return pairing
+    }
+
+    private let unknown = "This Noodle Hub sent an answer this Noodle does not know. Update Noodle."
+
+    func testAnInvitationTheHubDidNotSendSaysSo() async throws {
+        let users = HubUsers(pairing: try await paired())
+        let invitation = await users.invite(LinkUser(id: UUID(), name: "Ada", plan: UUID(), canPairDevices: true, isAdmin: false, devices: []))
+        XCTAssertNil(invitation)
+        XCTAssertEqual(users.error, unknown)
+    }
+
+    func testAListTheHubDidNotSendSaysSo() async throws {
+        let users = HubUsers(pairing: try await paired())
+        await users.load()
+        XCTAssertTrue(users.isLoaded)
+        XCTAssertEqual(users.users, [])
+        XCTAssertEqual(users.error, unknown)
+    }
+
+    func testAUserTheHubDidNotSendBackIsNotAdded() async throws {
+        let users = HubUsers(pairing: try await paired())
+        let added = await users.add(named: "Bea")
+        XCTAssertNil(added)
+        XCTAssertEqual(users.error, unknown)
+    }
+}

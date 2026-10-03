@@ -18,9 +18,7 @@ import Observation
 
     public func load() async {
         do {
-            guard case .users(let listed) = try await pairing.request(.users) else {
-                throw LinkError("This Noodle Hub sent an answer this Noodle does not know. Update Noodle.")
-            }
+            guard case .users(let listed) = try await pairing.request(.users) else { throw Self.unknownAnswer }
             users = listed.users
             plans = listed.plans
             error = nil
@@ -62,7 +60,7 @@ import Observation
 
     public func invite(_ user: LinkUser) async -> LinkInvitation? {
         do {
-            guard case .invitation(let invitation) = try await pairing.request(.inviteUser(id: user.id)) else { return nil }
+            guard case .invitation(let invitation) = try await pairing.request(.inviteUser(id: user.id)) else { throw Self.unknownAnswer }
             error = nil
             return invitation
         } catch {
@@ -70,6 +68,8 @@ import Observation
             return nil
         }
     }
+
+    private static let unknownAnswer = LinkError("This Noodle Hub sent an answer this Noodle does not know. Update Noodle.")
 
     /// Sends the change, then reads the users back, so the list is the Hub's whatever it decided.
     @discardableResult private func change(_ request: LinkRequest) async -> LinkResponse? {

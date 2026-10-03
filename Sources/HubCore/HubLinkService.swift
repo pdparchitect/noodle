@@ -204,7 +204,7 @@ import os
                               joinKey: join.privateKey.rawRepresentation, expires: expires)
     }
 
-    private func reply(to data: Data, from key: LinkPublicKey) async -> LinkReply {
+    func reply(to data: Data, from key: LinkPublicKey) async -> LinkReply {
         let request: LinkRequest
         switch LinkProtocol.decode(data) {
         case .success(let decoded): request = decoded
@@ -761,7 +761,7 @@ import os
         case .leave:
             return ("Tried to leave", [])
         default:
-            return ("Tried to invite a device for \(actor?.name ?? "themselves")", [])
+            return (actor.map { "Tried to invite a device for \($0.name)" } ?? "Tried to invite a device", [])
         }
     }
 
