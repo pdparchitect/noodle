@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-03
+
 ### Added
 
 - Game controllers play noodlets: a connected controller presses the keys a noodlet declares for its controls while its window is in front.

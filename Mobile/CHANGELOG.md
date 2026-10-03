@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-03
+
 ### Added
 
 - Play games on a TV: with Screen Mirroring on, or a TV connected by cable, a noodlet with game controls plays full screen on the TV and your phone becomes its controller. Show on TV and Show on iPhone move it between the two.
