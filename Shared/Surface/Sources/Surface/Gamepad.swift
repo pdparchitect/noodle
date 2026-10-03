@@ -6,13 +6,36 @@ import SwiftUI
 public struct Gamepad: Codable, Equatable, Sendable {
     public struct Pad: Codable, Equatable, Sendable {
         public var left, right, up, down: String?
-        public init(left: String? = nil, right: String? = nil, up: String? = nil, down: String? = nil) {
+        /// Shown on a touch screen as a thumbstick rather than a d-pad; it presses the same keys.
+        public var stick: Bool
+        public init(left: String? = nil, right: String? = nil, up: String? = nil, down: String? = nil, stick: Bool = false) {
             self.left = left
             self.right = right
             self.up = up
             self.down = down
+            self.stick = stick
         }
         public var keys: [String] { [left, right, up, down].compactMap { $0 } }
+
+        enum CodingKeys: String, CodingKey { case left, right, up, down, stick }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            left = try c.decodeIfPresent(String.self, forKey: .left)
+            right = try c.decodeIfPresent(String.self, forKey: .right)
+            up = try c.decodeIfPresent(String.self, forKey: .up)
+            down = try c.decodeIfPresent(String.self, forKey: .down)
+            stick = try c.decodeIfPresent(Bool.self, forKey: .stick) ?? false
+        }
+
+        /// Only a stick says so, so a d-pad reads the same to viewers that know no sticks.
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(left, forKey: .left)
+            try c.encodeIfPresent(right, forKey: .right)
+            try c.encodeIfPresent(up, forKey: .up)
+            try c.encodeIfPresent(down, forKey: .down)
+            if stick { try c.encode(stick, forKey: .stick) }
+        }
 
         /// The keys a stick or d-pad at `x`, `y` holds, each -1...1 with up positive.
         public func held(x: Float, y: Float) -> Set<String> {
@@ -224,6 +247,19 @@ public struct GamepadLayout: Equatable {
         }
         return Set(held.compactMap { $0 })
     }
+
+    /// How far a stick's knob travels from the middle, as a share of the stick's radius.
+    public static let stickReach: CGFloat = 0.5
+
+    /// Where a stick's knob sits, from the middle of `frame`, for a thumb at `point`: under the
+    /// thumb as far as it reaches, and only along the axes the pad has.
+    public static func knob(at point: CGPoint, in frame: CGRect, pad: Gamepad.Pad) -> CGPoint {
+        let dx = pad.left != nil || pad.right != nil ? point.x - frame.midX : 0
+        let dy = pad.up != nil || pad.down != nil ? point.y - frame.midY : 0
+        let reach = frame.width / 2 * stickReach, distance = hypot(dx, dy)
+        guard distance > reach else { return CGPoint(x: dx, y: dy) }
+        return CGPoint(x: dx / distance * reach, y: dy / distance * reach)
+    }
 }
 
 /// On-screen controls over a live view, kept to its safe area.
@@ -252,6 +288,8 @@ public struct GamepadControls: View {
     let layout: GamepadLayout
     let onKey: (GamepadKeyChange) -> Void
     @State private var held: [GamepadLayout.Control: Set<String>] = [:]
+    /// Where the thumb is on each stick, for its knob.
+    @State private var thumbs: [GamepadLayout.Control: CGPoint] = [:]
 
     public init(gamepad: Gamepad, layout: GamepadLayout, onKey: @escaping (GamepadKeyChange) -> Void = { _ in }) {
         self.gamepad = gamepad
@@ -276,12 +314,22 @@ public struct GamepadControls: View {
         let pressed = !(held[control] ?? []).isEmpty
         switch control {
         case .pad(let index):
-            let pad = gamepad.pads[index]
-            PadShape(pad: pad, held: held[control] ?? [])
-                .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                    let bounds = CGRect(origin: .zero, size: frame.size)
-                    hold(control, GamepadLayout.directions(at: drag.location, in: bounds, pad: pad))
-                }.onEnded { _ in hold(control, []) })
+            let pad = gamepad.pads[index], bounds = CGRect(origin: .zero, size: frame.size)
+            Group {
+                if pad.stick {
+                    StickShape(pad: pad, held: held[control] ?? [],
+                               knob: thumbs[control].map { GamepadLayout.knob(at: $0, in: bounds, pad: pad) } ?? .zero)
+                } else {
+                    PadShape(pad: pad, held: held[control] ?? [])
+                }
+            }
+            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                if pad.stick { thumbs[control] = drag.location }
+                hold(control, GamepadLayout.directions(at: drag.location, in: bounds, pad: pad))
+            }.onEnded { _ in
+                thumbs[control] = nil
+                hold(control, [])
+            })
         case .button(let index):
             let button = gamepad.buttons[index]
             Circle().fill(GamepadControls.backing).overlay(Circle().fill(.white.opacity(pressed ? 0.45 : 0.2)))
@@ -321,22 +369,58 @@ private struct PadShape: View {
     var body: some View {
         GeometryReader { proxy in
             let radius = proxy.size.width / 2
-            let arrows: [(String?, String, CGFloat, CGFloat)] = [(pad.up, "chevron.up", 0, -1), (pad.down, "chevron.down", 0, 1),
-                                                                 (pad.left, "chevron.left", -1, 0), (pad.right, "chevron.right", 1, 0)]
             let cross = PadCross(pad: pad)
             ZStack {
                 cross.fill(GamepadControls.backing)
                 cross.fill(.white.opacity(held.isEmpty ? 0.18 : 0.28))
                 cross.stroke(.white.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round)).padding(0.75)
-                ForEach(arrows, id: \.1) { key, symbol, x, y in
-                    if let key {
-                        Image(systemName: symbol).font(.system(size: radius * 0.28, weight: .bold))
-                            .foregroundStyle(.white.opacity(held.contains(key) ? 1 : 0.6))
-                            .offset(x: x * radius * 0.68, y: y * radius * 0.68)
-                    }
-                }
+                PadArrows(pad: pad, held: held, radius: radius, size: 0.28, distance: 0.68)
             }
             .contentShape(Rectangle())
+        }
+    }
+}
+
+/// A thumbstick: a round well with an arrow for each direction it has, and a knob that follows
+/// the thumb. The whole square takes the thumb, as on a d-pad.
+private struct StickShape: View {
+    let pad: Gamepad.Pad
+    let held: Set<String>
+    let knob: CGPoint
+
+    var body: some View {
+        GeometryReader { proxy in
+            let radius = proxy.size.width / 2
+            ZStack {
+                Circle().fill(GamepadControls.backing)
+                Circle().fill(.white.opacity(0.12))
+                Circle().strokeBorder(.white.opacity(0.4), lineWidth: 1.5)
+                PadArrows(pad: pad, held: held, radius: radius, size: 0.2, distance: 0.8)
+                Circle().fill(GamepadControls.backing).overlay(Circle().fill(.white.opacity(held.isEmpty ? 0.3 : 0.45)))
+                    .overlay(Circle().strokeBorder(.white.opacity(0.5), lineWidth: 1.5))
+                    .frame(width: radius, height: radius)
+                    .offset(x: knob.x, y: knob.y)
+            }
+            .contentShape(Rectangle())
+        }
+    }
+}
+
+/// An arrow for each direction a pad has, `distance` out from the middle, lit while held.
+private struct PadArrows: View {
+    let pad: Gamepad.Pad
+    let held: Set<String>
+    let radius, size, distance: CGFloat
+
+    var body: some View {
+        let arrows: [(String?, String, CGFloat, CGFloat)] = [(pad.up, "chevron.up", 0, -1), (pad.down, "chevron.down", 0, 1),
+                                                             (pad.left, "chevron.left", -1, 0), (pad.right, "chevron.right", 1, 0)]
+        ForEach(arrows, id: \.1) { key, symbol, x, y in
+            if let key {
+                Image(systemName: symbol).font(.system(size: radius * size, weight: .bold))
+                    .foregroundStyle(.white.opacity(held.contains(key) ? 1 : 0.6))
+                    .offset(x: x * radius * distance, y: y * radius * distance)
+            }
         }
     }
 }

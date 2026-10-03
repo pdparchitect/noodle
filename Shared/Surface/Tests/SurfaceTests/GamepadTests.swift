@@ -40,11 +40,13 @@ private extension Gamepad {
     static let quiz = Self(buttons: buttons(3))
     static let elevator = Self(pads: [Pad(up: "up", down: "down")], buttons: buttons(1))
     static let pausable = Self(menu: "escape")
+    static let shooter = Self(pads: [Pad(left: "a", right: "d", up: "w", down: "s", stick: true), Pad(left: "left", right: "right", up: "up", down: "down", stick: true)],
+                              buttons: buttons(4), menu: "escape")
 
     static let all: [(String, Gamepad)] = [
         ("snake", snake), ("classic", classic), ("breakout", breakout), ("platformer", platformer), ("fighter", fighter),
         ("everything", everything), ("twin stick", twinStick), ("twin stick full", twinStickFull),
-        ("quiz", quiz), ("elevator", elevator), ("pausable", pausable),
+        ("quiz", quiz), ("elevator", elevator), ("pausable", pausable), ("shooter", shooter),
     ]
 }
 
@@ -69,6 +71,16 @@ final class GamepadDeclarationTests: XCTestCase {
                                         buttons: [.init(key: "space", label: "Jump"), .init(key: "z")], menu: "escape"))
         XCTAssertNoThrow(try gamepad.validate())
         XCTAssertEqual(try JSONDecoder().decode(Gamepad.self, from: Data(#"{"menu": "escape"}"#.utf8)), .pausable)
+    }
+
+    /// A pad is a d-pad unless it asks for a stick, and only a stick says so when sent on.
+    func testReadsAStick() throws {
+        let stick = try JSONDecoder().decode(Gamepad.Pad.self, from: Data(#"{"left": "left", "right": "right", "stick": true}"#.utf8))
+        XCTAssertEqual(stick, Gamepad.Pad(left: "left", right: "right", stick: true))
+        XCTAssertEqual(try JSONDecoder().decode(Gamepad.Pad.self, from: Data(#"{"left": "left", "stick": false}"#.utf8)),
+                       Gamepad.Pad(left: "left"))
+        XCTAssertEqual(try JSONDecoder().decode(Gamepad.Pad.self, from: JSONEncoder().encode(stick)), stick)
+        XCTAssertFalse(try XCTUnwrap(String(data: JSONEncoder().encode(Gamepad.arrows), encoding: .utf8)).contains("stick"))
     }
 
     func testAcceptsEveryExampleGame() {
@@ -279,6 +291,26 @@ final class GamepadPadTests: XCTestCase {
         XCTAssertEqual(pressed(90, 90, sideways), ["right"])
     }
 
+    func testAStickKnobFollowsTheThumbWithinItsReach() {
+        let stick = Gamepad.Pad(left: "left", right: "right", up: "up", down: "down", stick: true)
+        func knob(_ x: CGFloat, _ y: CGFloat, _ pad: Gamepad.Pad = stick) -> CGPoint {
+            GamepadLayout.knob(at: CGPoint(x: x, y: y), in: frame, pad: pad)
+        }
+        XCTAssertEqual(knob(50, 50), .zero)
+        XCTAssertEqual(knob(60, 40), CGPoint(x: 10, y: -10))
+        XCTAssertEqual(knob(180, 50), CGPoint(x: GamepadLayout.stickReach * 50, y: 0))
+        let corner = knob(-40, -40)
+        XCTAssertEqual(hypot(corner.x, corner.y), GamepadLayout.stickReach * 50, accuracy: 0.001)
+        XCTAssertLessThan(corner.x, 0)
+        XCTAssertEqual(corner.x, corner.y, accuracy: 0.001)
+    }
+
+    func testAStickWithTwoDirectionsMovesOnlyAlongThem() {
+        let sideways = Gamepad.Pad(left: "left", right: "right", stick: true), lift = Gamepad.Pad(up: "up", down: "down", stick: true)
+        XCTAssertEqual(GamepadLayout.knob(at: CGPoint(x: 70, y: 10), in: frame, pad: sideways), CGPoint(x: 20, y: 0))
+        XCTAssertEqual(GamepadLayout.knob(at: CGPoint(x: 70, y: 10), in: frame, pad: lift), CGPoint(x: 0, y: -GamepadLayout.stickReach * 50))
+    }
+
     func testSlidingReleasesBeforePressing() {
         XCTAssertEqual(GamepadKeyChange.changes(from: ["right", "up"], to: ["left", "up"]),
                        [.init(key: "right", pressed: false), .init(key: "left", pressed: true)])
@@ -343,6 +375,22 @@ final class GamepadPadTests: XCTestCase {
                 let alpha = pixels.alpha(at: tip)
                 if arms.contains(direction) { XCTAssertGreaterThan(alpha, 0, "\(direction) of \(arms)") }
                 else { XCTAssertEqual(alpha, 0, "\(direction) of \(arms)") }
+            }
+        }
+    }
+
+    /// A stick is a disc whatever its directions: drawn to the middle of every edge, not in the corners.
+    func testSticksAreADisc() throws {
+        let size = CGSize(width: 874, height: 402)
+        for pad in [Gamepad.Pad(left: "left", right: "right", up: "up", down: "down", stick: true), Gamepad.Pad(left: "left", right: "right", stick: true)] {
+            let gamepad = Gamepad(pads: [pad])
+            let layout = GamepadLayout(gamepad, in: size, safeArea: EdgeInsets())
+            let frame = try XCTUnwrap(layout.frames[.pad(0)])
+            let pixels = try render(gamepad, layout, size).1
+            XCTAssertEqual(pixels.alpha(at: CGPoint(x: frame.minX + 6, y: frame.minY + 6)), 0, "corner of \(pad.keys)")
+            for edge in [CGPoint(x: frame.minX + 4, y: frame.midY), CGPoint(x: frame.maxX - 4, y: frame.midY),
+                         CGPoint(x: frame.midX, y: frame.minY + 4), CGPoint(x: frame.midX, y: frame.maxY - 4)] {
+                XCTAssertGreaterThan(pixels.alpha(at: edge), 0, "\(edge) of \(pad.keys)")
             }
         }
     }

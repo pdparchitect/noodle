@@ -179,8 +179,10 @@ public enum AppletGuidance {
         Games played with keys declare them in an optional manifest controls object, so
         people watching on a phone get a controller instead of a keyboard:
         {"pads":[{"left":"left","right":"right","up":"up","down":"down"}],"buttons":[{"key":"space","label":"Jump"},{"key":"z","label":"Fire"}],"menu":"escape"}
-        pads (at most two) list only the directions the game uses; buttons (at most eight)
-        go from most to least important, labels up to 12 characters; menu is the pause key.
+        pads (at most two) list only the directions the game uses, and show as a d-pad; add
+        "stick":true for a thumbstick instead, for steering or aiming in any direction. buttons
+        (at most eight) go from most to least important, labels up to 12 characters; menu is
+        the pause key.
         Controls are for one player: two pads mean one player moving and aiming, never a
         second player's keys, so a two-player game declares only the first player's.
         Keys are left, right, up, down, space, enter, tab, escape, backspace, a lowercase
