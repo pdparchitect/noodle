@@ -15,10 +15,14 @@ final class ServiceProbeTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(75))
     }
     func testLateReplyAfterTimeoutIsIgnored() async {
-        let result = await LocalMacServiceProbe.waitForReply(timeout: 0.01) { finish in
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.03) { finish(true) }
-        }
+        // The reply is sent only once the timeout has answered, however slow the machine.
+        let late = LateReply()
+        let result = await LocalMacServiceProbe.waitForReply(timeout: 0.01) { late.finish = $0 }
         XCTAssertFalse(result)
-        try? await Task.sleep(for: .milliseconds(50))
+        late.finish?(true)
     }
+}
+
+private final class LateReply: @unchecked Sendable {
+    var finish: (@Sendable (Bool) -> Void)?
 }
