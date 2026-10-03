@@ -4,7 +4,9 @@ Noodle for iPhone and iPad. This early version joins your Noodle Hub and lets yo
 with the agents you keep there. [Join the beta on TestFlight](https://testflight.apple.com/join/wYKkNSP9) from your phone. Scan the invitation's QR code, paste its link, choose a photo of the QR
 code, or open the link on the phone. Join more Hubs, such as a friend's, under ••• > Hubs, then switch between them there or show them all together.
 Pair Another Device in your profile shows an invitation for another of your devices, when
-the Hub allows it.
+the Hub allows it. If the Hub made you an admin, Users in its details lists everyone on it:
+add people with +, and tap someone to change their plan and whether they can pair devices,
+rename them, invite or remove their devices, or remove them. Only the Hub changes admins.
 
 A browser tab or computer a bot shares opens live when you tap it, and you can use it
 from the phone. Tap … at the top of a conversation to choose from the things shared

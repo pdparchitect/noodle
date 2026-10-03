@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Admins of a Hub can manage its users from the phone: Users in that Hub's details, under Hubs, lists everyone. Add someone with +, and tap a person to change their plan and whether they can pair devices, rename them, invite or remove their devices, or remove them. Admins are listed but changed only on the Hub.
+
+### What to Test
+
+- On the Hub, turn on Admin for yourself in Settings > Users. On the phone, open ••• > Hubs, tap ⓘ beside the Hub, then Users: add someone, invite a device for them, change their plan, then remove them.
+- Without Admin, Users does not appear.
+
 ## [0.18.0] - 2026-10-03
 
 ### Added

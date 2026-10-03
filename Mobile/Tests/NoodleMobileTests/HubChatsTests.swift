@@ -791,6 +791,17 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(chats.agent(scout.id)?.phase == .working)
     }
 
+    /// An admin's Users screen follows the Hub's users, as the Hub pushes that they changed.
+    @Test func theHubSayingUsersChangedIsCounted() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        #expect(chats.usersChanges == 0)
+        try await chats.apply(.usersChanged)
+        try await chats.apply(.usersChanged)
+        #expect(chats.usersChanges == 2)
+    }
+
     @Test func aVoiceMessageTravelsWithItsTranscript() async throws {
         let hub = FakeHub()
         let (chats, server) = try await paired(to: hub)

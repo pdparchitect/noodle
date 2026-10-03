@@ -656,12 +656,17 @@ struct ProfileView: View {
                     Button("Pair Another Device") { pairingDevice = true }
                 }
             }
+            if pairing.status?.isAdmin == true {
+                Section {
+                    NavigationLink("Users") { UsersView(pairing: pairing, chats: chats) }
+                }
+            }
             Section {
                 Button("Leave Hub", role: .destructive) { leaving = true }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $pairingDevice) { PairDeviceView(pairing: pairing) }
+        .sheet(isPresented: $pairingDevice) { PairDeviceView(title: "Pair a Device") { try await pairing.invite() } }
         .sheet(isPresented: $showingArchived) { if let chats { ArchivedView(chats: chats) } }
         .wordmarkRefreshable { await pairing.refresh() }
         .confirmationDialog("Leave \(pairing.hubName)?", isPresented: $leaving, titleVisibility: .visible) {
@@ -720,6 +725,180 @@ struct ArchivedView: View {
     }
 }
 
+/// A Hub's users, for an admin there.
+struct UsersView: View {
+    var chats: HubChats?
+    @State private var users: HubUsers
+    @State private var adding = false
+    @State private var name = ""
+
+    init(pairing: HubPairing, chats: HubChats?) {
+        self.chats = chats
+        _users = State(initialValue: HubUsers(pairing: pairing))
+    }
+
+    var body: some View {
+        List {
+            if let error = users.error {
+                Section { Text(error).foregroundStyle(.orange) }
+            }
+            Section {
+                ForEach(users.users) { user in
+                    NavigationLink { UserView(users: users, id: user.id) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(user.name)
+                            let plan = users.planName(of: user) ?? ""
+                            Text(user.isAdmin ? "\(plan) · Admin" : plan).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .overlay { if !users.isLoaded { ProgressView() } }
+        .navigationTitle("Users")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add User", systemImage: "plus") {
+                    name = ""
+                    adding = true
+                }
+                .disabled(!users.isLoaded)
+            }
+        }
+        .alert("New User", isPresented: $adding) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) {}
+            Button("Add") {
+                let name = name
+                Task { _ = await users.add(named: name) }
+            }
+        }
+        // Loads when opened, and again whenever the Hub says its users changed.
+        .task(id: chats?.usersChanges) { await users.load() }
+        .wordmarkRefreshable { await users.load() }
+    }
+}
+
+/// One of a Hub's users, for an admin there. Admins are shown without anything to change.
+struct UserView: View {
+    @Environment(\.dismiss) private var dismiss
+    let users: HubUsers
+    let id: UUID
+    @State private var renaming = false
+    @State private var name = ""
+    @State private var removing = false
+    @State private var removingDevice: LinkUserDevice?
+    @State private var inviting = false
+
+    var body: some View {
+        if let user = users.users.first(where: { $0.id == id }) {
+            content(user)
+        } else {
+            ContentUnavailableView("User Removed", systemImage: "person.slash")
+        }
+    }
+
+    private func content(_ user: LinkUser) -> some View {
+        List {
+            if let error = users.error {
+                Section { Text(error).foregroundStyle(.orange) }
+            }
+            Section {
+                Picker("Plan", selection: Binding(
+                    get: { user.plan },
+                    set: { plan in Task { await users.move(user, to: plan) } }
+                )) {
+                    ForEach(users.plans) { Text($0.name).tag($0.id) }
+                }
+                Toggle("Can Pair Devices", isOn: Binding(
+                    get: { user.canPairDevices },
+                    set: { on in Task { await users.setCanPairDevices(on, for: user) } }
+                ))
+            } footer: {
+                if user.isAdmin { Text("Admins are changed only in the Hub’s own Settings.") }
+            }
+            .disabled(user.isAdmin)
+            Section("Devices") {
+                ForEach(user.devices) { device in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name)
+                        Group {
+                            if device.isConnected {
+                                Text("Connected")
+                            } else if let lastSeen = device.lastSeen {
+                                Text("Last seen \(lastSeen, format: .relative(presentation: .named))")
+                            } else {
+                                Text("Paired \(device.paired, format: .relative(presentation: .named))")
+                            }
+                        }
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .swipeActions {
+                        if !user.isAdmin {
+                            Button("Remove", role: .destructive) { removingDevice = device }
+                        }
+                    }
+                }
+                if user.devices.isEmpty {
+                    Text("No devices").foregroundStyle(.secondary)
+                }
+                if !user.isAdmin {
+                    Button("Invite") { inviting = true }
+                }
+            }
+            if !user.isAdmin {
+                Section {
+                    Button("Remove User", role: .destructive) { removing = true }
+                }
+            }
+        }
+        .navigationTitle(user.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !user.isAdmin {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Rename") {
+                        name = user.name
+                        renaming = true
+                    }
+                }
+            }
+        }
+        .alert("Rename User", isPresented: $renaming) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") {
+                let name = name
+                Task { await users.rename(user, to: name) }
+            }
+        }
+        .confirmationDialog("Remove \(user.name)?", isPresented: $removing, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                Task {
+                    await users.remove(user)
+                    if users.error == nil { dismiss() }
+                }
+            }
+        } message: {
+            Text("Their devices and their bots are removed from the Hub.")
+        }
+        .confirmationDialog("Remove \(removingDevice?.name ?? "Device")?",
+                            isPresented: Binding(get: { removingDevice != nil }, set: { if !$0 { removingDevice = nil } }),
+                            titleVisibility: .visible, presenting: removingDevice) { device in
+            Button("Remove", role: .destructive) { Task { await users.remove(device) } }
+        } message: { _ in
+            Text("It can no longer reach the Hub until it joins again.")
+        }
+        .sheet(isPresented: $inviting) {
+            PairDeviceView(title: "Invite \(user.name)") {
+                if let invitation = await users.invite(user) { return invitation }
+                throw LinkError(users.error ?? "The Hub made no invitation.")
+            }
+        }
+    }
+}
+
 /// Whether a Hub answers this launch.
 enum HubConnection: Equatable {
     case connecting, connected, notConnected
@@ -753,10 +932,11 @@ enum HubConnection: Equatable {
     func phase(of phase: LinkBotPhase?) -> LinkBotPhase? { self == .notConnected ? .offline : phase }
 }
 
-/// A one-time invitation from the Hub for another device of this person.
+/// A one-time invitation from the Hub: for another device of this person, or, for an admin, of someone else.
 struct PairDeviceView: View {
     @Environment(\.dismiss) private var dismiss
-    let pairing: HubPairing
+    let title: String
+    let invite: () async throws -> LinkInvitation
     @State private var invitation: LinkInvitation?
     @State private var problem: String?
 
@@ -800,7 +980,7 @@ struct PairDeviceView: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle("Pair a Device")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -811,7 +991,7 @@ struct PairDeviceView: View {
 
     private func load() async {
         do {
-            invitation = try await pairing.invite()
+            invitation = try await invite()
             problem = nil
         } catch {
             invitation = nil

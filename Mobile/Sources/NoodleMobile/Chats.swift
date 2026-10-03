@@ -77,6 +77,8 @@ enum HubThread: HubConversation {
     var connections: [LinkConnection] = []
     var computers: [LinkComputer] = []
     var browsers: [LinkBrowser] = []
+    /// Counts the Hub saying its users changed, which it tells admins only, so their Users screen can follow.
+    private(set) var usersChanges = 0
     /// Computers being made, waiting for the Hub to say they are ready.
     @ObservationIgnored var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
@@ -504,8 +506,11 @@ enum HubThread: HubConversation {
         case .computerCreated(let id, let computer, let error):
             if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
             else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
-        // Live views have their own channels, and this app does not manage users yet.
-        case .surfaceOpened, .surfaceFailed, .surfaceControls, .usersChanged:
+        // Live views have their own channels.
+        case .surfaceOpened, .surfaceFailed, .surfaceControls:
+            return
+        case .usersChanged:
+            usersChanges += 1
             return
         case .readChanged(let id, let upTo):
             noteRead(id, upTo: upTo)
