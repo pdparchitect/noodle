@@ -16,7 +16,11 @@ the link in Noodle on that Mac, or choose Join under Noodle Hubs in Noodle's Set
 and paste the link
 or scan the QR code. The invitation works once and expires
 after 15 minutes. People can also pair more of their own devices from Noodle on their
-phone, unless you turn off Can Pair Devices in their actions menu in Users. Users marks the devices connected now. Network shows how many people
+phone, unless you turn off Can Pair Devices in their actions menu in Users. Users marks the devices connected now.
+Turn on Admin in the same menu to let someone manage the other users from Users next to
+the Hub in Noodle's Settings > Hub: add, rename and remove people, change their plan and
+whether they can pair devices, and invite or remove their devices. Admins cannot change
+themselves or other admins; only the Hub's Settings can. Network shows how many people
 are connected and the addresses invitations carry. To reach the Hub away from home,
 Open Port on Router asks your router, through UPnP or NAT-PMP, to forward the Hub's UDP
 port, and paired devices learn the router's public address the next time they connect at

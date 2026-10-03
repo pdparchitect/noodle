@@ -53,6 +53,8 @@ import Observation
     public private(set) var computers: [LinkComputer] = []
     /// This Mac's user's browsers on the Hub, as last listed.
     public private(set) var browsers: [LinkBrowser] = []
+    /// Counts the Hub saying its users changed, which it tells admins only, so their list can follow.
+    public private(set) var usersChanges = 0
     /// What each bot is doing on the Hub, by its stand-in here.
     private var phases: [UUID: AgentRuntimePhase] = [:]
     /// Computers being made, waiting for the Hub to say they are done.
@@ -420,9 +422,11 @@ import Observation
                         Task { await openSignInPage(id, url: url) }
                     case .botPhase(let bot, let phase):
                         record(phase, ofBot: bot)
-                    // Reactions made on the Hub are not shown on the Mac yet, nor its users.
-                    case .messageChanged, .usersChanged:
+                    // Reactions made on the Hub are not shown on the Mac yet.
+                    case .messageChanged:
                         break
+                    case .usersChanged:
+                        usersChanges += 1
                     case .readChanged(let id, let upTo):
                         if let thread = thread(remote: id) { onRead?(thread.local, upTo) }
                     case .backgroundChanged(let id, let background):

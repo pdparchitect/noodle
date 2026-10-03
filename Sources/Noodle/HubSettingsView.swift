@@ -131,6 +131,7 @@ private struct HubRow: View {
     let pairing: HubPairing
     @State private var confirmingLeave = false
     @State private var showingArchived = false
+    @State private var showingUsers = false
 
     private var mirror: HubMirror? { store.hubMirrors.first { $0.pairing === pairing } }
 
@@ -156,6 +157,10 @@ private struct HubRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
+                    if pairing.status?.isAdmin == true {
+                        Button("Users") { showingUsers = true }
+                            .buttonStyle(.link)
+                    }
                     if let mirror, case let archived = store.archivedConversations(on: mirror), !archived.isEmpty {
                         Button("Archived (\(archived.count))") { showingArchived = true }
                             .buttonStyle(.link)
@@ -168,6 +173,9 @@ private struct HubRow: View {
         .padding(.vertical, 4)
         .sheet(isPresented: $showingArchived) {
             if let mirror { HubArchivedSheet(hubName: pairing.hub?.name ?? "Noodle Hub", mirror: mirror).environment(store) }
+        }
+        .sheet(isPresented: $showingUsers) {
+            HubUsersSheet(hubName: pairing.hub?.name ?? "Noodle Hub", pairing: pairing, mirror: mirror)
         }
         .task(id: pairing.hub?.key) { await pairing.refresh() }
         .alert("Leave \(pairing.hub?.name ?? "Hub")?", isPresented: $confirmingLeave) {
@@ -239,6 +247,179 @@ private struct HubArchivedSheet: View {
             .formStyle(.grouped)
         }
         .frame(width: 420, height: 360)
+    }
+}
+
+/// A Hub's users, for an admin there: those who are not admins can be changed as on the Hub itself.
+private struct HubUsersSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let hubName: String
+    let mirror: HubMirror?
+    @State private var users: HubUsers
+    @State private var naming: Naming?
+    @State private var name = ""
+    @State private var removing: LinkUser?
+    @State private var removingDevice: LinkUserDevice?
+    @State private var inviting: LinkInvitation?
+
+    /// Adding someone, or renaming them.
+    private enum Naming {
+        case add
+        case rename(LinkUser)
+    }
+
+    init(hubName: String, pairing: HubPairing, mirror: HubMirror?) {
+        self.hubName = hubName
+        self.mirror = mirror
+        _users = State(initialValue: HubUsers(pairing: pairing))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Users on \(hubName)").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            Form {
+                if !users.isLoaded {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+                ForEach(users.users) { user in
+                    userRow(user)
+                    ForEach(user.devices) { device in deviceRow(device, of: user) }
+                }
+                if let error = users.error {
+                    Text(error).foregroundStyle(.orange).textSelection(.enabled)
+                }
+            }
+            .formStyle(.grouped)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Add User…") {
+                    name = ""
+                    naming = .add
+                }
+                .disabled(!users.isLoaded)
+            }
+            .padding(16)
+        }
+        .frame(width: 460, height: 420)
+        // Loads when opened, and again whenever the Hub says its users changed.
+        .task(id: mirror?.usersChanges) { await users.load() }
+        .alert(namingTitle, isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) {}
+            Button(namingButton) { save(naming) }
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .alert("Remove \(removing?.name ?? "User")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+               presenting: removing) { user in
+            Button("Remove", role: .destructive) { Task { await users.remove(user) } }
+            Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+        } message: { user in
+            Text("“\(user.name)”, their devices and their bots are removed from \(hubName).")
+        }
+        .alert("Remove \(removingDevice?.name ?? "Device")?", isPresented: Binding(get: { removingDevice != nil }, set: { if !$0 { removingDevice = nil } }),
+               presenting: removingDevice) { device in
+            Button("Remove", role: .destructive) { Task { await users.remove(device) } }
+            Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+        } message: { device in
+            Text("“\(device.name)” can no longer reach \(hubName) until it joins again.")
+        }
+        .sheet(isPresented: Binding(get: { inviting != nil }, set: { if !$0 { inviting = nil } })) {
+            if let inviting { HubInvitationSheet(access: nil, user: nil, invitation: inviting) }
+        }
+    }
+
+    private var namingTitle: String {
+        if case .rename = naming { "Rename User" } else { "New User" }
+    }
+
+    private var namingButton: String {
+        if case .rename = naming { "Rename" } else { "Add" }
+    }
+
+    private func save(_ naming: Naming?) {
+        let name = name
+        Task {
+            switch naming {
+            case .add: _ = await users.add(named: name)
+            case .rename(let user): await users.rename(user, to: name)
+            case nil: break
+            }
+        }
+    }
+
+    private func userRow(_ user: LinkUser) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.crop.circle").font(.title3).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.name).lineLimit(1)
+                let plan = users.planName(of: user) ?? ""
+                Text(user.isAdmin ? "\(plan) · Admin" : plan).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            // Admins are managed on the Hub itself, so their rows only show them.
+            if !user.isAdmin {
+                Button("Invite") { Task { inviting = await users.invite(user) } }
+                    .buttonStyle(.link)
+                Menu {
+                    Picker("Plan", selection: Binding(
+                        get: { user.plan },
+                        set: { plan in Task { await users.move(user, to: plan) } }
+                    )) {
+                        ForEach(users.plans) { Text($0.name).tag($0.id) }
+                    }
+                    .pickerStyle(.menu)
+                    Divider()
+                    Toggle("Can Pair Devices", isOn: Binding(
+                        get: { user.canPairDevices },
+                        set: { on in Task { await users.setCanPairDevices(on, for: user) } }
+                    ))
+                    Divider()
+                    Button("Rename…") {
+                        name = user.name
+                        naming = .rename(user)
+                    }
+                    Button("Remove", role: .destructive) { removing = user }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("User Actions")
+            }
+        }
+    }
+
+    private func deviceRow(_ device: LinkUserDevice, of user: LinkUser) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "laptopcomputer").foregroundStyle(.secondary).frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.name).lineLimit(1)
+                Group {
+                    if device.isConnected {
+                        Text("Connected")
+                    } else if let lastSeen = device.lastSeen {
+                        Text("Last seen \(lastSeen, format: .relative(presentation: .named))")
+                    } else {
+                        Text("Paired \(device.paired, format: .relative(presentation: .named))")
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if !user.isAdmin {
+                Button("Remove") { removingDevice = device }
+                    .buttonStyle(.link)
+            }
+        }
+        .padding(.leading, 32)
     }
 }
 

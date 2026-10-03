@@ -2,6 +2,7 @@ import Foundation
 import HubCore
 import HubLink
 import NoodleCore
+import NoodleHubClient
 import NoodleRuntime
 import XCTest
 
@@ -262,5 +263,144 @@ import XCTest
         var phoneIterator = phoneEvents.makeAsyncIterator()
         let heard = try await phoneIterator.next()
         XCTAssertEqual(heard, .botsChanged)
+    }
+}
+
+/// What Noodle and Noodle Mobile show an admin: the Hub's users, kept in step as they change them.
+@MainActor final class HubUsersTests: XCTestCase {
+    private struct Fixture {
+        let hub: Hub
+        let root: URL
+        let grace: HubUser
+        let ada: HubUser
+        let family: HubPlan
+        let admin: HubPairing
+        let phone: HubPairing
+    }
+
+    private func fixture() async throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-users-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
+        try hub.repository.prepare()
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let family = try hub.access.addPlan(named: "Family")
+        let grace = try hub.access.addUser(named: "Grace")
+        hub.access.setAdmin(true, for: grace)
+        let ada = try hub.access.addUser(named: "Ada")
+        let admin = HubPairing(directory: root.appendingPathComponent("Admin"), deviceName: "Grace’s Mac")
+        await admin.join(link.invite(grace).url().absoluteString)
+        let phone = HubPairing(directory: root.appendingPathComponent("Phone"), deviceName: "Ada’s iPhone")
+        await phone.join(link.invite(ada).url().absoluteString)
+        return Fixture(hub: hub, root: root, grace: grace, ada: ada, family: family, admin: admin, phone: phone)
+    }
+
+    private func user(_ users: HubUsers, _ name: String) throws -> LinkUser {
+        try XCTUnwrap(users.users.first { $0.name == name })
+    }
+
+    func testAnAdminSeesTheUsersTheirDevicesAndThePlans() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.admin)
+        XCTAssertFalse(users.isLoaded)
+        await users.load()
+        XCTAssertTrue(users.isLoaded)
+        XCTAssertNil(users.error)
+        XCTAssertEqual(users.users.map(\.name), ["Grace", "Ada"])
+        XCTAssertEqual(users.users.map(\.isAdmin), [true, false])
+        XCTAssertEqual(try user(users, "Ada").devices.map(\.name), ["Ada’s iPhone"])
+        XCTAssertEqual(users.plans.map(\.name), ["Default", "Family"])
+        XCTAssertEqual(users.planName(of: try user(users, "Ada")), "Default")
+        XCTAssertNil(users.planName(of: LinkUser(id: UUID(), name: "X", plan: UUID(), canPairDevices: true, isAdmin: false, devices: [])))
+    }
+
+    func testAnAdminChangesSomeoneAndSeesIt() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.admin)
+        await users.load()
+        let ada = try user(users, "Ada")
+        await users.rename(ada, to: "Ada L.")
+        await users.move(try user(users, "Ada L."), to: f.family.id)
+        await users.setCanPairDevices(false, for: try user(users, "Ada L."))
+        XCTAssertNil(users.error)
+        XCTAssertEqual(try user(users, "Ada L.").plan, f.family.id)
+        XCTAssertEqual(try user(users, "Ada L.").canPairDevices, false)
+        XCTAssertEqual(f.hub.access.users.last, HubUser(id: f.ada.id, name: "Ada L.", plan: f.family.id, canPairDevices: false))
+    }
+
+    func testAnAdminAddsSomeoneAndInvitesThem() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.admin)
+        await users.load()
+        let added = await users.add(named: "Bea")
+        let bea = try XCTUnwrap(added)
+        XCTAssertEqual(bea.name, "Bea")
+        XCTAssertEqual(users.users.map(\.name), ["Grace", "Ada", "Bea"])
+        let invited = await users.invite(bea)
+        let invitation = try XCTUnwrap(invited)
+        XCTAssertEqual(invitation.userName, "Bea")
+        XCTAssertNil(users.error)
+    }
+
+    func testAnAdminRemovesADeviceAndThenTheUser() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.admin)
+        await users.load()
+        await users.remove(try XCTUnwrap(try user(users, "Ada").devices.first))
+        XCTAssertEqual(try user(users, "Ada").devices, [])
+        await users.remove(try user(users, "Ada"))
+        XCTAssertNil(users.error)
+        XCTAssertEqual(users.users.map(\.name), ["Grace"])
+        XCTAssertEqual(f.hub.access.users.map(\.name), ["Grace"])
+    }
+
+    /// What the Hub refuses is shown, and the list stays as the Hub has it.
+    func testRefusalsAreShown() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.admin)
+        await users.load()
+        let blank = await users.add(named: " ")
+        XCTAssertNil(blank)
+        XCTAssertNotNil(users.error)
+        await users.remove(try user(users, "Grace"))
+        XCTAssertEqual(users.error, "“Grace” is an admin. Admins are managed on the Hub itself.")
+        XCTAssertEqual(users.users.map(\.name), ["Grace", "Ada"])
+        let invitedAdmin = await users.invite(try user(users, "Grace"))
+        XCTAssertNil(invitedAdmin)
+
+        // The next thing that works clears it.
+        await users.load()
+        XCTAssertNil(users.error)
+    }
+
+    func testSomeoneWhoIsNotAnAdminIsTold() async throws {
+        let f = try await fixture()
+        let users = HubUsers(pairing: f.phone)
+        await users.load()
+        XCTAssertEqual(users.error, "Only an admin of this Hub can do that.")
+        XCTAssertEqual(users.users, [])
+        XCTAssertTrue(users.isLoaded)
+    }
+
+    /// Changes made on the Hub or by another admin reach the Mac while it is connected.
+    func testTheMirrorHearsWhenUsersChange() async throws {
+        let f = try await fixture()
+        let local = WorkspaceRepository(rootURL: f.root.appendingPathComponent("Noodle"))
+        try local.prepare()
+        let mirror = HubMirror(pairing: f.admin, repository: local, directory: f.root.appendingPathComponent("Admin"))
+        let running = Task { await mirror.run() }
+        addTeardownBlock { running.cancel() }
+        for _ in 0..<50 where !mirror.isConnected { try await Task.sleep(for: .milliseconds(100)) }
+        // A round trip, so the Hub has the subscription before anything changes.
+        _ = try await f.admin.request(.users)
+        XCTAssertEqual(mirror.usersChanges, 0)
+        _ = try f.hub.access.addUser(named: "Bea")
+        for _ in 0..<50 where mirror.usersChanges == 0 { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertEqual(mirror.usersChanges, 1)
     }
 }

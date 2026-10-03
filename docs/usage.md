@@ -158,6 +158,15 @@ Bots and groups on a Noodle Hub are archived there, for all your devices. Archiv
 from the sidebar as any other; bring them back with **Archived** beside that Hub in
 **Settings → Hub**, where clicking **Unarchive** restores one.
 
+## Manage a Noodle Hub's users
+
+If the Hub made you an admin, **Users** appears beside it in **Settings → Hub**. It lists
+everyone on the Hub with their devices. **Add User…** adds someone and **Invite** makes a
+one-time invitation for their device. Each user's actions menu changes their plan,
+whether they can pair their own devices, renames or removes them; **Remove** beside a
+device unpairs it. Admins are listed without these: only the Hub's own Settings changes
+them.
+
 ## Shortcuts and settings
 
 After launching Noodle once, search Spotlight for **Send to Agent**, choose an

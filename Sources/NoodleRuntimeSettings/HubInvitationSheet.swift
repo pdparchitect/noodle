@@ -5,18 +5,19 @@ import SwiftUI
 
 /// One invitation for one user: a QR code and the same link to copy or share.
 public struct HubInvitationSheet: View {
-    let access: HubAccess
-    let user: HubUser
+    let access: HubAccess?
+    let user: HubUser?
     let invitation: LinkInvitation
     let title: String
     @Environment(\.dismiss) private var dismiss
 
-    /// `title` heads the sheet, "Invite" and the user's name unless given.
-    public init(access: HubAccess, user: HubUser, invitation: LinkInvitation, title: String? = nil) {
+    /// `title` heads the sheet, "Invite" and the user's name unless given. Without `access`, as
+    /// on a device managing a Hub, the sheet cannot tell when the device joined.
+    public init(access: HubAccess?, user: HubUser?, invitation: LinkInvitation, title: String? = nil) {
         self.access = access
         self.user = user
         self.invitation = invitation
-        self.title = title ?? "Invite \(user.name)"
+        self.title = title ?? "Invite \(invitation.userName)"
     }
 
     public var body: some View {
