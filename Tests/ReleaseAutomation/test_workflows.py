@@ -152,7 +152,9 @@ class WorkflowTests(unittest.TestCase):
             job = self.jobs['test-' + product]
             self.assertNotIn('if', job)
             self.assertEqual(job['needs'], ['versions'])
-            self.assertEqual(job['runs-on'], 'macos-26')
+            # The phone app uses iOS 27 APIs, which only the Xcode 27 image's SDK has.
+            self.assertEqual(job['runs-on'], 'xcode-27' if product == 'mobile' else 'macos-26')
+        self.assertEqual(workflow('mobile-release.yml')['jobs']['release']['runs-on'], 'xcode-27')
         self.assertNotIn('test-computer', self.jobs['prepare-noodle']['needs'])
         self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
         self.assertNotIn('swift test', json.dumps(self.jobs['checks']))
