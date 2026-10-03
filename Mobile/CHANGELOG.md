@@ -5,6 +5,7 @@
 ### Fixed
 
 - Games play on the TV on iOS 27: with Screen Mirroring on, Show on TV said no TV was connected and the TV kept mirroring the phone. Until a game is open, the TV now mirrors the phone as usual. Needs iOS 27.
+- Noodlets run on the phone have sound: a game played with the on-screen controls was silent, as was any noodlet with the ring switch set to silent. Music playing in another app carries on alongside.
 
 ### What to Test
 
@@ -12,6 +13,7 @@
 - Tap Show on iPhone: the TV mirrors the phone again and the game carries on there without starting over. Tap Show on TV: it goes back to the TV.
 - Close the game: the TV mirrors the phone again.
 - Open a game the Hub streams: it plays on the TV the same way.
+- With the ring switch set to silent, open a noodlet with sound on the phone and play it with the on-screen controls only: you hear it. Play music in another app first: both play together, and the music carries on after you close the noodlet.
 
 ## [0.17.0] - 2026-10-03
 

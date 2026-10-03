@@ -1,3 +1,4 @@
+import AVFAudio
 import HubLink
 import NoodletRuntime
 import os
@@ -101,6 +102,13 @@ struct NoodletDeviceScreen: View {
         (manifest.layout ?? .desktop) == .desktop && manifest.display?.fitsView != true ? .desktop : .mobile
     }
 
+    static func configure(_ configuration: WKWebViewConfiguration, for manifest: NoodletManifest) {
+        configuration.defaultWebpagePreferences.preferredContentMode = contentMode(for: manifest)
+        // A game played from the on-screen controls never has its page tapped, which iOS otherwise
+        // waits for before letting it make a sound.
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+    }
+
     private var screenControls: Gamepad? {
         guard let controls = manifest.controls, showsControls || onTV else { return nil }
         guard let controller = hardware.controller else { return controls }
@@ -166,7 +174,7 @@ struct NoodletDeviceScreen: View {
         .task { await start() }
         // The phone turns sideways as a controller does.
         .onChange(of: onTV, initial: true) { ScreenOrientation.hold(onTV ? .landscape : manifest.orientation) }
-        .onDisappear { answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
+        .onDisappear { answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil) }
     }
 
     private func answer(_ allowed: Bool) {
@@ -195,12 +203,13 @@ struct NoodletDeviceScreen: View {
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features,
                                    localNetwork: manifest.permissions?.contains("local-network") == true, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
-                $0.defaultWebpagePreferences.preferredContentMode = Self.contentMode(for: manifest)
+                Self.configure($0, for: manifest)
             }
             page.declaredCapture = .grant
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
             self.page = page
+            NoodletSound.start()
             if let controls = manifest.controls { hardware.attach(controls, onKey: press) }
             try await page.load()
         } catch {
@@ -214,6 +223,20 @@ struct NoodletDeviceScreen: View {
     private func press(_ change: GamepadKeyChange) {
         guard let page, let script = PageKeys.script(for: .hold(key: change.key, pressed: change.pressed)) else { return }
         Task { _ = try? await page.evaluate(script) }
+    }
+}
+
+/// A noodlet's sound, heard while it is open even with the ring switch set to silent, as a game
+/// is, and alongside whatever else is playing.
+@MainActor enum NoodletSound {
+    static func start() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    static func stop() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        try? AVAudioSession.sharedInstance().setCategory(.soloAmbient)
     }
 }
 

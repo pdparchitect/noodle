@@ -1,5 +1,7 @@
+import AVFAudio
 import NoodletRuntime
 import UIKit
+import WebKit
 import XCTest
 
 @testable import NoodleMobile
@@ -23,5 +25,24 @@ import XCTest
         manifest.display = .browser
         manifest.layout = .adaptive
         XCTAssertEqual(NoodletDeviceScreen.contentMode(for: manifest), .mobile)
+    }
+
+    /// A game played from the on-screen controls never gets a tap on its page, so its sound must
+    /// start without one.
+    func testANoodletPlaysSoundWithoutATapOnItsPage() {
+        let configuration = WKWebViewConfiguration()
+        NoodletDeviceScreen.configure(configuration, for: NoodletManifest(title: "Game"))
+        XCTAssertEqual(configuration.mediaTypesRequiringUserActionForPlayback, [])
+    }
+
+    /// While a noodlet is open its sound plays with the ring switch set to silent, alongside what
+    /// else is playing; afterwards the app goes back to the switch.
+    func testANoodletIsHeardWithTheRingSwitchSilent() {
+        let session = AVAudioSession.sharedInstance()
+        NoodletSound.start()
+        XCTAssertEqual(session.category, .playback)
+        XCTAssertTrue(session.categoryOptions.contains(.mixWithOthers))
+        NoodletSound.stop()
+        XCTAssertEqual(session.category, .soloAmbient)
     }
 }
