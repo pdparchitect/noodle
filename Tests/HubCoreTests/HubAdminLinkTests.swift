@@ -1,0 +1,266 @@
+import Foundation
+import HubCore
+import HubLink
+import NoodleCore
+import NoodleRuntime
+import XCTest
+
+/// An admin managing the Hub's users from their own device, over real QUIC on this Mac.
+@MainActor final class HubAdminLinkTests: XCTestCase {
+    private struct Fixture {
+        let hub: Hub
+        let link: HubLinkService
+        let root: URL
+        let grace: HubUser
+        let ada: HubUser
+        let family: HubPlan
+        /// Grace's, an admin's.
+        let admin: HubPairing
+        /// Ada's, who is not an admin.
+        let phone: HubPairing
+    }
+
+    private func fixture() async throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-admin-link-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
+        try hub.repository.prepare()
+        let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots,
+                                  connections: hub.connections, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let family = try hub.access.addPlan(named: "Family")
+        hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
+        let grace = try hub.access.addUser(named: "Grace")
+        hub.access.setAdmin(true, for: grace)
+        let ada = try hub.access.addUser(named: "Ada")
+        hub.access.move(ada, to: family)
+        let admin = HubPairing(directory: root.appendingPathComponent("Admin"), deviceName: "Grace’s iPhone")
+        await admin.join(link.invite(grace).url().absoluteString)
+        let phone = HubPairing(directory: root.appendingPathComponent("Phone"), deviceName: "Ada’s iPhone")
+        await phone.join(link.invite(ada).url().absoluteString)
+        XCTAssertNil(admin.error)
+        XCTAssertNil(phone.error)
+        return Fixture(hub: hub, link: link, root: root, grace: try XCTUnwrap(hub.access.users.first), ada: ada, family: family,
+                       admin: admin, phone: phone)
+    }
+
+    /// Why the Hub refused the request, or nil when it did not.
+    private func refusal(_ request: LinkRequest, from device: HubPairing) async -> String? {
+        do {
+            _ = try await device.request(request)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private func users(_ device: HubPairing) async throws -> LinkUsers {
+        guard case .users(let users) = try await device.request(.users) else { throw LinkError("Not listed") }
+        return users
+    }
+
+    func testDevicesKnowWhetherTheirUserIsAnAdmin() async throws {
+        let f = try await fixture()
+        XCTAssertEqual(f.admin.status?.isAdmin, true)
+        XCTAssertEqual(f.phone.status?.isAdmin, false)
+        f.hub.access.setAdmin(false, for: f.grace)
+        await f.admin.refresh()
+        XCTAssertEqual(f.admin.status?.isAdmin, false)
+    }
+
+    /// Every admin request, from a device whose user is not an admin, changes nothing.
+    func testOnlyAnAdminsDevicesReachTheAdminRequests() async throws {
+        let f = try await fixture()
+        let graceDevice = try XCTUnwrap(f.hub.access.devices(of: f.grace).first)
+        let before = (f.hub.access.users, f.hub.access.devices)
+        let requests: [LinkRequest] = [
+            .users,
+            .addUser(LinkUserDraft(name: "Mallory")),
+            .updateUser(id: f.ada.id, LinkUserDraft(plan: HubPlan.defaultID)),
+            .updateUser(id: f.grace.id, LinkUserDraft(name: "Mallory")),
+            .removeUser(id: f.grace.id),
+            .removeDevice(id: graceDevice.id),
+            .inviteUser(id: f.grace.id),
+            .inviteUser(id: f.ada.id),
+        ]
+        for request in requests {
+            let answer = await refusal(request, from: f.phone)
+            XCTAssertEqual(answer, "Only an admin of this Hub can do that.", "\(request)")
+        }
+        XCTAssertEqual(f.hub.access.users, before.0)
+        XCTAssertEqual(f.hub.access.devices.map(\.id), before.1.map(\.id))
+    }
+
+    /// The key an invitation carries only joins: it cannot act as the admin who made it.
+    func testAnInvitationsKeyReachesNoAdminRequest() async throws {
+        let f = try await fixture()
+        let join = try f.link.invite(f.grace).joinIdentity()
+        for request in [LinkRequest.users, .addUser(LinkUserDraft(name: "Mallory")), .removeUser(id: f.ada.id)] {
+            let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(request), identity: join, hubKey: f.link.key,
+                                                            endpoints: f.link.endpoints, timeout: .seconds(5))
+            XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device is not paired with Mac mini."))
+        }
+        XCTAssertEqual(f.hub.access.users.map(\.name), ["Grace", "Ada"])
+    }
+
+    func testAnAdminAddsSomeoneAndPairsTheirDevice() async throws {
+        let f = try await fixture()
+        guard case .user(let bea) = try await f.admin.request(.addUser(LinkUserDraft(name: "Bea", plan: f.family.id))) else {
+            return XCTFail("not added")
+        }
+        guard case .invitation(let invitation) = try await f.admin.request(.inviteUser(id: bea.id)) else {
+            return XCTFail("no invitation")
+        }
+        XCTAssertEqual(invitation.userName, "Bea")
+        let tablet = HubPairing(directory: f.root.appendingPathComponent("Bea"), deviceName: "Bea’s iPad")
+        await tablet.join(invitation.url().absoluteString)
+        XCTAssertNil(tablet.error)
+        XCTAssertEqual(tablet.status?.userName, "Bea")
+        XCTAssertEqual(tablet.status?.planName, "Family")
+        XCTAssertEqual(tablet.status?.isAdmin, false)
+
+        let listed = try await users(f.admin)
+        XCTAssertEqual(listed.users.map(\.name), ["Grace", "Ada", "Bea"])
+        XCTAssertEqual(listed.users.last?.devices.map(\.name), ["Bea’s iPad"])
+        XCTAssertEqual(listed.users.last?.devices.first?.isConnected, true)
+        XCTAssertEqual(listed.plans.map(\.name), ["Default", "Family"])
+    }
+
+    func testAnAdminChangesSomeonesPlanAndPairing() async throws {
+        let f = try await fixture()
+        guard case .user(let changed) = try await f.admin.request(.updateUser(id: f.ada.id, LinkUserDraft(plan: HubPlan.defaultID, canPairDevices: false))) else {
+            return XCTFail("not changed")
+        }
+        XCTAssertEqual(changed.plan, HubPlan.defaultID)
+        await f.phone.refresh()
+        XCTAssertEqual(f.phone.status?.planName, "Default")
+        XCTAssertEqual(f.phone.status?.canPairDevices, false)
+        do {
+            _ = try await f.phone.invite()
+            XCTFail("Ada still made an invitation")
+        } catch {}
+    }
+
+    func testAnAdminUnpairsSomeonesDevice() async throws {
+        let f = try await fixture()
+        let device = try XCTUnwrap(f.hub.access.devices(of: f.ada).first)
+        let answer = try await f.admin.request(.removeDevice(id: device.id))
+        XCTAssertEqual(answer, .done)
+        XCTAssertEqual(f.hub.access.devices(of: f.ada), [])
+        await f.phone.refresh()
+        XCTAssertNotNil(f.phone.error)
+        let again = await refusal(.removeDevice(id: device.id), from: f.admin)
+        XCTAssertEqual(again, "That device is no longer paired with this Hub.")
+    }
+
+    /// Removing someone from a device removes as much as removing them on the Hub: their bots go too.
+    func testAnAdminRemovesSomeoneWithTheirDevicesAndBots() async throws {
+        let f = try await fixture()
+        guard case .bot = try await f.phone.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))) else {
+            return XCTFail("no bot")
+        }
+        XCTAssertEqual(try f.hub.repository.loadAgents().count, 1)
+        let answer = try await f.admin.request(.removeUser(id: f.ada.id))
+        XCTAssertEqual(answer, .done)
+        XCTAssertEqual(f.hub.access.users.map(\.name), ["Grace"])
+        XCTAssertEqual(f.hub.access.devices.map(\.name), ["Grace’s iPhone"])
+        XCTAssertEqual(try f.hub.repository.loadAgents(), [])
+        await f.phone.refresh()
+        XCTAssertNotNil(f.phone.error)
+        let again = await refusal(.removeUser(id: f.ada.id), from: f.admin)
+        XCTAssertEqual(again, "That user is no longer on this Hub.")
+    }
+
+    /// An invitation made for someone who is then removed lets nobody in.
+    func testAnInvitationForSomeoneRemovedIsRefused() async throws {
+        let f = try await fixture()
+        guard case .invitation(let invitation) = try await f.admin.request(.inviteUser(id: f.ada.id)) else {
+            return XCTFail("no invitation")
+        }
+        _ = try await f.admin.request(.removeUser(id: f.ada.id))
+        let late = HubPairing(directory: f.root.appendingPathComponent("Late"), deviceName: "Ada’s iPad")
+        await late.join(invitation.url().absoluteString)
+        XCTAssertNotNil(late.error)
+        XCTAssertEqual(f.hub.access.devices.map(\.name), ["Grace’s iPhone"])
+    }
+
+    /// An admin cannot remove, unpair or invite for themselves, nor another admin, from a device.
+    func testAdminsAreManagedOnlyOnTheHub() async throws {
+        let f = try await fixture()
+        let linus = try f.hub.access.addUser(named: "Linus")
+        f.hub.access.setAdmin(true, for: linus)
+        let linusDevice = f.hub.access.addDevice(named: "Linus’s Mac", key: LinkIdentity().publicKey, for: linus, at: Date())
+        let ownDevice = try XCTUnwrap(f.hub.access.devices(of: f.grace).first)
+        let grace = "“Grace” is an admin. Admins are managed on the Hub itself."
+        let other = "“Linus” is an admin. Admins are managed on the Hub itself."
+        let attempts: [(LinkRequest, String)] = [
+            (.removeUser(id: f.grace.id), grace), (.removeUser(id: linus.id), other),
+            (.removeDevice(id: ownDevice.id), grace), (.removeDevice(id: linusDevice.id), other),
+            (.inviteUser(id: f.grace.id), grace), (.inviteUser(id: linus.id), other),
+            (.updateUser(id: f.grace.id, LinkUserDraft(plan: f.family.id)), grace),
+            (.updateUser(id: linus.id, LinkUserDraft(canPairDevices: false)), other),
+        ]
+        for (request, message) in attempts {
+            let answer = await refusal(request, from: f.admin)
+            XCTAssertEqual(answer, message, "\(request)")
+        }
+        XCTAssertEqual(f.hub.access.users.map(\.name), ["Grace", "Ada", "Linus"])
+        XCTAssertEqual(f.hub.access.users.map(\.plan), [HubPlan.defaultID, f.family.id, HubPlan.defaultID])
+        XCTAssertEqual(f.hub.access.devices.count, 3)
+    }
+
+    /// This Mac as a Hub serves only its owner, even with an admin flag left in its file.
+    func testThisMacAsAHubHasNoAdmins() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-admin-link-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("access.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let owner = UUID()
+        try Data(#"{"users":[{"id":"\#(owner)","name":"Me","plan":"\#(HubPlan.defaultID)","isAdmin":true}],"plans":[]}"#.utf8).write(to: url)
+        let access = HubAccess(url: url, personal: true)
+        let profiles = HarnessProfilesController(store: WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle")).harnessProfiles)
+        let link = HubLinkService(hubName: "Mac", directory: root.appendingPathComponent("Link"), access: access, profiles: profiles,
+                                  port: 0, localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let phone = HubPairing(directory: root.appendingPathComponent("Phone"), deviceName: "iPhone")
+        await phone.join(link.invite(try XCTUnwrap(access.users.first)).url().absoluteString)
+        XCTAssertNil(phone.error)
+        XCTAssertEqual(phone.status?.isAdmin, false)
+        let refused = await refusal(.users, from: phone)
+        XCTAssertEqual(refused, "Only an admin of this Hub can do that.")
+    }
+
+    /// Admins hear that users changed so their screens keep up; checking in is not a change, and others hear nothing.
+    func testAdminsHearWhenUsersChange() async throws {
+        let f = try await fixture()
+        f.hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: f.hub.access.plans[0])
+        let adminEvents = try await f.admin.subscribe()
+        let phoneEvents = try await f.phone.subscribe()
+        // Round trips, so the Hub has both subscriptions before anything changes; each also checks the device in.
+        _ = try await f.admin.request(.users)
+        await f.phone.refresh()
+
+        _ = try await f.admin.request(.addUser(LinkUserDraft(name: "Bea")))
+        var adminIterator = adminEvents.makeAsyncIterator()
+        let answer = try await adminIterator.next()
+        XCTAssertEqual(answer, .usersChanged)
+
+        // A check-in alone pushes nothing: the next event is the bot Grace makes.
+        await f.phone.refresh()
+        _ = try await f.admin.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code")))
+        let next = try await adminIterator.next()
+        XCTAssertEqual(next, .botsChanged)
+
+        // Ada heard nothing of the new user: the first thing she hears is her own bot.
+        _ = try await f.phone.request(.createBot(LinkBotDraft(name: "Jeeves", provider: "claude-code")))
+        var phoneIterator = phoneEvents.makeAsyncIterator()
+        let heard = try await phoneIterator.next()
+        XCTAssertEqual(heard, .botsChanged)
+    }
+}

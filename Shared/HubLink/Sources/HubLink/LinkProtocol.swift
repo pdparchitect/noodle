@@ -186,6 +186,18 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// A one-time invitation for another device of this user, when the Hub lets them pair
     /// their own devices. Answered with `invitation`.
     case invite
+    /// For admins: the Hub's users with their devices, and the plans to put them on. Answered with `users`.
+    case users
+    /// For admins: adds a user who is not an admin. Answered with `user`.
+    case addUser(LinkUserDraft)
+    /// For admins: renames, moves or stops pairing a user who is not an admin. Answered with `user`.
+    case updateUser(id: UUID, LinkUserDraft)
+    /// For admins: removes a user who is not an admin, with their devices and everything they keep on the Hub.
+    case removeUser(id: UUID)
+    /// For admins: unpairs a device of a user who is not an admin.
+    case removeDevice(id: UUID)
+    /// For admins: a one-time invitation for a device of a user who is not an admin. Answered with `invitation`.
+    case inviteUser(id: UUID)
     /// Readies a noodlet a bot shared in one of this user's conversations to run on this device.
     /// Answered with `noodlet`.
     case noodlet(conversationID: UUID, attachmentID: UUID)
@@ -431,6 +443,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case picture(Data?)
     case linkCard(LinkCardInfo?)
     case invitation(LinkInvitation)
+    case users(LinkUsers)
+    case user(LinkUser)
     case kickConfirmation(LinkKickConfirmation)
     case noodlet(LinkNoodlet)
     /// What a noodlet's call answered, as its app encodes it.
@@ -471,6 +485,79 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case surfaceControls(controls: Gamepad)
     /// A conversation's background changed, on any device or on the Hub.
     case backgroundChanged(conversationID: UUID, background: LinkBackground)
+    /// Pushed to admins: the Hub's users, their devices or its plans changed.
+    case usersChanged
+}
+
+/// The Hub's users as its admins see them, and the plans they can be put on.
+public struct LinkUsers: Codable, Equatable, Sendable {
+    public var users: [LinkUser]
+    public var plans: [LinkPlanChoice]
+
+    public init(users: [LinkUser], plans: [LinkPlanChoice]) {
+        self.users = users
+        self.plans = plans
+    }
+}
+
+public struct LinkUser: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var plan: UUID
+    public var canPairDevices: Bool
+    /// Admins are managed only on the Hub itself, so a device shows them without changing them.
+    public var isAdmin: Bool
+    public var devices: [LinkUserDevice]
+
+    public init(id: UUID, name: String, plan: UUID, canPairDevices: Bool, isAdmin: Bool, devices: [LinkUserDevice]) {
+        self.id = id
+        self.name = name
+        self.plan = plan
+        self.canPairDevices = canPairDevices
+        self.isAdmin = isAdmin
+        self.devices = devices
+    }
+}
+
+public struct LinkUserDevice: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+    public var paired: Date
+    public var lastSeen: Date?
+    public var isConnected: Bool
+
+    public init(id: UUID, name: String, paired: Date, lastSeen: Date?, isConnected: Bool) {
+        self.id = id
+        self.name = name
+        self.paired = paired
+        self.lastSeen = lastSeen
+        self.isConnected = isConnected
+    }
+}
+
+/// A plan a user can be put on. What it lends is set on the Hub.
+public struct LinkPlanChoice: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// What an admin sets on a user they add or change. Nil fields stay as they are, or take the
+/// Hub's defaults for a new user. There is no admin field: only the Hub itself makes admins.
+public struct LinkUserDraft: Codable, Equatable, Sendable {
+    public var name: String?
+    public var plan: UUID?
+    public var canPairDevices: Bool?
+
+    public init(name: String? = nil, plan: UUID? = nil, canPairDevices: Bool? = nil) {
+        self.name = name
+        self.plan = plan
+        self.canPairDevices = canPairDevices
+    }
 }
 
 /// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.
@@ -651,9 +738,11 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var protocolVersion: Int
     /// Whether the user may ask for an invitation for another of their devices with `invite`.
     public var canPairDevices: Bool
+    /// Whether the user may manage the Hub's other users with `users` and the requests after it.
+    public var isAdmin: Bool
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
-                protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false) {
+                protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -661,10 +750,11 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.endpoints = endpoints
         self.protocolVersion = protocolVersion
         self.canPairDevices = canPairDevices
+        self.isAdmin = isAdmin
     }
 
     private enum CodingKeys: String, CodingKey {
-        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices
+        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin
     }
 
     public init(from decoder: Decoder) throws {
@@ -676,6 +766,7 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         endpoints = try c.decode(.endpoints, or: [])
         protocolVersion = try c.decode(.protocolVersion, or: 1)
         canPairDevices = try c.decode(.canPairDevices, or: false)
+        isAdmin = try c.decode(.isAdmin, or: false)
     }
 }
 

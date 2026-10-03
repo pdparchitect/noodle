@@ -420,8 +420,8 @@ import Observation
                         Task { await openSignInPage(id, url: url) }
                     case .botPhase(let bot, let phase):
                         record(phase, ofBot: bot)
-                    // Reactions made on the Hub are not shown on the Mac yet.
-                    case .messageChanged:
+                    // Reactions made on the Hub are not shown on the Mac yet, nor its users.
+                    case .messageChanged, .usersChanged:
                         break
                     case .readChanged(let id, let upTo):
                         if let thread = thread(remote: id) { onRead?(thread.local, upTo) }

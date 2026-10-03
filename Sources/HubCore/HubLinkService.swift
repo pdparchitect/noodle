@@ -125,6 +125,8 @@ import os
         connections?.onSignInEnded = { [weak self] user in self?.push(.connectionsChanged, to: user) }
         updateGate()
         watchDevices()
+        usersSeen = UsersSeen(access)
+        watchUsers()
         NotificationCenter.default.addObserver(forName: LinkEndpoint.localNamesChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.networkChanged() }
         }
@@ -310,6 +312,35 @@ import os
         networkChanges += 1
     }
 
+    /// What admins see of the users, without the check-ins that change it every minute.
+    private struct UsersSeen: Equatable {
+        var users: [HubUser]
+        var devices: [UUID]
+        var plans: [LinkPlanChoice]
+
+        @MainActor init(_ access: HubAccess) {
+            users = access.users
+            devices = access.devices.map(\.id)
+            plans = access.plans.map { LinkPlanChoice(id: $0.id, name: $0.name) }
+        }
+    }
+    @ObservationIgnored private var usersSeen: UsersSeen?
+
+    /// Tells admins' devices when the users change, however they change, including on the Hub.
+    private func watchUsers() {
+        withObservationTracking { _ = (access.users, access.devices, access.plans) } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                let seen = UsersSeen(self.access)
+                if seen != self.usersSeen {
+                    self.usersSeen = seen
+                    for admin in self.access.users where admin.isAdmin { self.push(.usersChanged, to: admin.id) }
+                }
+                self.watchUsers()
+            }
+        }
+    }
+
     private func watchDevices() {
         withObservationTracking { _ = access.devices } onChange: { [weak self] in
             Task { @MainActor in
@@ -435,6 +466,20 @@ import os
             let user = try user(key)
             guard user.canPairDevices else { throw LinkError("You cannot pair devices with \(hubName). Ask whoever keeps it.") }
             return .invitation(invite(user))
+        case .users:
+            return .users(try admin(key).users())
+        case .addUser(let draft):
+            return .user(try admin(key).addUser(draft))
+        case .updateUser(let id, let draft):
+            return .user(try admin(key).updateUser(id, with: draft))
+        case .removeUser(let id):
+            remove(try admin(key).managedUser(id))
+            return .done
+        case .removeDevice(let id):
+            access.remove(try admin(key).managedDevice(id))
+            return .done
+        case .inviteUser(let id):
+            return .invitation(invite(try admin(key).managedUser(id)))
         case .subscribe:
             throw LinkError("Subscriptions open a stream.")
         case .bots:
@@ -659,6 +704,19 @@ import os
         return user
     }
 
+    private func admin(_ key: LinkPublicKey) throws -> HubAdmin {
+        try HubAdmin(try user(key), access: access, isConnected: isConnected)
+    }
+
+    /// Removes a user with their devices and everything they keep on the Hub.
+    public func remove(_ user: HubUser) {
+        bots?.removeBots(of: user)
+        connections?.removeConnections(of: user)
+        computers?.removeComputers(of: user)
+        browsers?.removeBrowsers(of: user)
+        access.remove(user)
+    }
+
     private func hubBots() throws -> HubBots {
         guard let bots else { throw LinkError("This Noodle Hub does not keep bots.") }
         return bots
@@ -702,7 +760,8 @@ import os
         }
         .sorted { ($0.providerName, $0.profileName ?? "") < ($1.providerName, $1.profileName ?? "") }
         return LinkStatus(hubName: hubName, userName: user?.name ?? "", planName: plan?.name ?? "",
-                          harnesses: harnesses, endpoints: endpoints, canPairDevices: user?.canPairDevices ?? false)
+                          harnesses: harnesses, endpoints: endpoints, canPairDevices: user?.canPairDevices ?? false,
+                          isAdmin: !access.isPersonal && user?.isAdmin == true)
     }
 
     /// Opens the port on the router, then renews it halfway through each lease, or every

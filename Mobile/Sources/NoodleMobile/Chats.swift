@@ -504,8 +504,8 @@ enum HubThread: HubConversation {
         case .computerCreated(let id, let computer, let error):
             if let computer { making.removeValue(forKey: id)?.resume(returning: computer) }
             else { making.removeValue(forKey: id)?.resume(throwing: LinkError(error ?? "The Hub could not make the computer.")) }
-        // Live views have their own channels.
-        case .surfaceOpened, .surfaceFailed, .surfaceControls:
+        // Live views have their own channels, and this app does not manage users yet.
+        case .surfaceOpened, .surfaceFailed, .surfaceControls, .usersChanged:
             return
         case .readChanged(let id, let upTo):
             noteRead(id, upTo: upTo)

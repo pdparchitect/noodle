@@ -98,7 +98,7 @@ struct HubUsersSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.name).lineLimit(1)
                 if let plan = access.plans.first(where: { $0.id == user.plan }) {
-                    Text(plan.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(user.isAdmin ? "\(plan.name) · Admin" : plan.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
@@ -116,6 +116,10 @@ struct HubUsersSettingsView: View {
                 Toggle("Can Pair Devices", isOn: Binding(
                     get: { user.canPairDevices },
                     set: { access.setCanPairDevices($0, for: user) }
+                ))
+                Toggle("Admin", isOn: Binding(
+                    get: { user.isAdmin },
+                    set: { access.setAdmin($0, for: user) }
                 ))
                 Divider()
                 Button("Rename…") { naming = NamingRequest(.rename(user), name: user.name) }

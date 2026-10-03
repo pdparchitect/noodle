@@ -21,6 +21,35 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(try LinkProtocol.decoder.decode(LinkResponse.self, from: encoded), response)
     }
 
+    /// Admin requests as Noodle and Noodle Mobile send them; a draft never carries an admin flag.
+    func testAdminRequestsReadAsSent() throws {
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let expected: [(String, LinkRequest)] = [
+            (#"{"users":{}}"#, .users),
+            (#"{"addUser":{"_0":{"name":"Bea"}}}"#, .addUser(LinkUserDraft(name: "Bea"))),
+            (#"{"addUser":{"_0":{"name":"Bea","isAdmin":true}}}"#, .addUser(LinkUserDraft(name: "Bea"))),
+            (#"{"updateUser":{"id":"\#(a)","_1":{"plan":"\#(b)","canPairDevices":false}}}"#,
+             .updateUser(id: a, LinkUserDraft(plan: b, canPairDevices: false))),
+            (#"{"removeUser":{"id":"\#(a)"}}"#, .removeUser(id: a)),
+            (#"{"removeDevice":{"id":"\#(a)"}}"#, .removeDevice(id: a)),
+            (#"{"inviteUser":{"id":"\#(a)"}}"#, .inviteUser(id: a)),
+        ]
+        for (json, request) in expected {
+            XCTAssertEqual(try decode(LinkRequest.self, json), request, json)
+            XCTAssertEqual(try LinkProtocol.decode(try LinkProtocol.encode(request)).get(), request, json)
+        }
+
+        let users = LinkUsers(users: [LinkUser(id: a, name: "Ada", plan: b, canPairDevices: true, isAdmin: false, devices: [
+            LinkUserDevice(id: b, name: "iPhone", paired: Date(timeIntervalSince1970: 100), lastSeen: nil, isConnected: false),
+        ])], plans: [LinkPlanChoice(id: b, name: "Family")])
+        for response in [LinkResponse.users(users), .user(users.users[0])] {
+            XCTAssertEqual(try LinkProtocol.decodeResponse(LinkProtocol.encode(response)), response)
+        }
+        XCTAssertEqual(LinkProtocol.decodeEvent(LinkProtocol.encode(LinkEvent.usersChanged)), .usersChanged)
+        XCTAssertEqual(LinkProtocol.decodeEvent(Data(#"{"usersChanged":{}}"#.utf8)), .usersChanged)
+    }
+
     func testArchivingReadsAcrossAppVersions() throws {
         let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
         let bot = try decode(LinkBot.self,
@@ -64,6 +93,8 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(status.protocolVersion, 1)
         // A Hub that cannot make invitations for devices never offers it.
         XCTAssertFalse(status.canPairDevices)
+        // Nor does one without admins offer to manage its users.
+        XCTAssertFalse(status.isAdmin)
 
         let harness = try decode(LinkHarness.self, #"{"provider":"codex","providerName":"Codex"}"#)
         XCTAssertEqual(harness.models, [])

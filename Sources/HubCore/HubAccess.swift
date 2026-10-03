@@ -52,15 +52,18 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
     public var plan: UUID
     /// Whether their devices may ask for invitations for more of their own devices.
     public var canPairDevices: Bool
+    /// Whether they may manage the users who are not admins from their devices. Only the Hub itself makes admins.
+    public var isAdmin: Bool
 
-    public init(id: UUID = UUID(), name: String, plan: UUID = HubPlan.defaultID, canPairDevices: Bool = true) {
+    public init(id: UUID = UUID(), name: String, plan: UUID = HubPlan.defaultID, canPairDevices: Bool = true, isAdmin: Bool = false) {
         self.id = id
         self.name = name
         self.plan = plan
         self.canPairDevices = canPairDevices
+        self.isAdmin = isAdmin
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, plan, canPairDevices }
+    private enum CodingKeys: String, CodingKey { case id, name, plan, canPairDevices, isAdmin }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -68,6 +71,7 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
         name = try c.decode(String.self, forKey: .name)
         plan = try c.decode(UUID.self, forKey: .plan)
         canPairDevices = try c.decodeIfPresent(Bool.self, forKey: .canPairDevices) ?? true
+        isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? false
     }
 }
 
@@ -198,6 +202,12 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
 
     public func setCanPairDevices(_ canPairDevices: Bool, for user: HubUser) {
         update(user) { $0.canPairDevices = canPairDevices }
+    }
+
+    /// Nobody is an admin on the owner's own Mac: there is nobody else to manage.
+    public func setAdmin(_ isAdmin: Bool, for user: HubUser) {
+        guard !isPersonal else { return }
+        update(user) { $0.isAdmin = isAdmin }
     }
 
     /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots and connections first.

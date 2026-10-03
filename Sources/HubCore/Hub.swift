@@ -77,11 +77,7 @@ import NoodleRuntime
 
     /// Removes a user with their devices and the bots they keep here.
     public func remove(_ user: HubUser) {
-        bots.removeBots(of: user)
-        connections.removeConnections(of: user)
-        computers.removeComputers(of: user)
-        browsers.removeBrowsers(of: user)
-        access.remove(user)
+        link.remove(user)
     }
 
     public static func root(applicationSupport: URL) -> URL {
