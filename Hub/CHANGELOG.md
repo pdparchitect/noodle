@@ -4,6 +4,7 @@
 
 ### Added
 
+- Devices can archive their bots and groups, and bring them back. An archived bot keeps everything but stops running and takes no messages; an archived group keeps its messages, takes no new ones, and its bots keep running.
 - Apple Intelligence bots can use remote models with the Hub's own API keys, added in Settings > Harness > Apple Intelligence > Remote Models.
 
 ### Changed

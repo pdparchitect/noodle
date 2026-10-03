@@ -596,16 +596,22 @@ import Observation
         entries.append(Entry(remote: bot.id, remoteConversation: bot.conversationID, agent: created.agent.id,
                              conversation: created.conversation.id, synced: 0, profile: draft.profile))
         save()
+        var agent = created.agent
+        if let archivedAt = bot.archivedAt { agent = try repository.setAgentArchived(true, agentID: agent.id, now: archivedAt) }
         // The Hub checked it when the bot set it.
-        guard let status = bot.status, let agent = try? repository.setAgentStatus(status, agentID: created.agent.id) else {
-            return created.agent
+        guard let status = bot.status, let withStatus = try? repository.setAgentStatus(status, agentID: agent.id) else {
+            return agent
         }
-        return agent
+        return withStatus
     }
 
     private func apply(_ bot: LinkBot, to entry: Entry) throws {
         guard let agent = try repository.loadAgents().first(where: { $0.id == entry.agent }) else { return }
         if agent.status != bot.status, (try? repository.setAgentStatus(bot.status, agentID: agent.id)) != nil { onChange?() }
+        if (agent.archivedAt != nil) != (bot.archivedAt != nil) {
+            try repository.setAgentArchived(bot.archivedAt != nil, agentID: agent.id, now: bot.archivedAt ?? Date())
+            onChange?()
+        }
         var draft = bot.draft
         // A picture that could not be fetched yet keeps the one here.
         if draft.avatarImageData == nil, draft.avatarImageDigest != nil { draft.avatarImageData = agent.avatarImageData }
@@ -642,19 +648,22 @@ import Observation
                                                       existingAgents: try repository.loadAgents())
         groups.append(GroupEntry(remote: group.id, conversation: conversation.id, synced: 0))
         saveGroups()
-        return conversation
+        guard let archivedAt = group.archivedAt else { return conversation }
+        return try repository.setConversationArchived(true, conversationID: conversation.id, now: archivedAt)
     }
 
-    /// Copies a group's name, description and bots. The notice Group Info leaves comes from the Hub with its messages.
+    /// Copies a group's name, description, bots and whether it is archived. The notice Group Info leaves comes from the Hub with its messages.
     @discardableResult private func apply(_ group: LinkGroup, to entry: GroupEntry) throws -> Bool {
         guard var conversation = try repository.loadConversations().first(where: { $0.id == entry.conversation }) else { return false }
         let bots = localAgents(group.draft.botIDs).sorted { $0.uuidString < $1.uuidString }
         let description = group.draft.publicDescription.isEmpty ? nil : group.draft.publicDescription
+        let archivedChanged = (conversation.archivedAt != nil) != (group.archivedAt != nil)
         guard conversation.displayName != group.draft.name || conversation.publicDescription != description
-                || conversation.participantIDs != bots else { return false }
+                || conversation.participantIDs != bots || archivedChanged else { return false }
         conversation.displayName = group.draft.name
         conversation.publicDescription = description
         conversation.participantIDs = bots
+        if archivedChanged { conversation.archivedAt = group.archivedAt }
         try repository.updateConversation(conversation)
         return true
     }

@@ -631,6 +631,7 @@ struct ComposerField: UIViewRepresentable {
     @Binding var caret: Int
     let placeholder: String
     let pasted: (UIImage) -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeUIView(context: Context) -> PastingTextView {
         let view = PastingTextView()
@@ -651,7 +652,9 @@ struct ComposerField: UIViewRepresentable {
             view.text = text
             view.selectedRange = NSRange(location: min(caret, text.utf16.count), length: 0)
         }
+        view.placeholder.text = placeholder
         view.placeholder.isHidden = !text.isEmpty
+        view.isEditable = isEnabled
         view.pasted = pasted
         context.coordinator.text = $text
         context.coordinator.caret = $caret

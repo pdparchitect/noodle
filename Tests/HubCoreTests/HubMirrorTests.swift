@@ -196,6 +196,24 @@ import XCTest
         XCTAssertFalse(try f.local.loadConversations().contains { $0.kind == .group })
     }
 
+    func testBotsAndGroupsArchivedElsewhereAreArchivedHere() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let alfred = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let group = try f.hub.bots.createGroup(LinkGroupDraft(name: "House", publicDescription: "", botIDs: [alfred.id]), for: f.ada)
+        try f.hub.bots.setArchived(true, id: alfred.id, for: f.ada)
+        try f.hub.bots.setArchived(true, id: group.id, for: f.ada)
+        await mirror.sync()
+        XCTAssertNotNil(try f.local.loadAgents().first?.archivedAt)
+        XCTAssertNotNil(try f.local.loadConversations().first { $0.kind == .group }?.archivedAt)
+
+        try f.hub.bots.setArchived(false, id: alfred.id, for: f.ada)
+        try f.hub.bots.setArchived(false, id: group.id, for: f.ada)
+        await mirror.sync()
+        XCTAssertNil(try f.local.loadAgents().first?.archivedAt)
+        XCTAssertNil(try f.local.loadConversations().first { $0.kind == .group }?.archivedAt)
+    }
+
     func testDeletingABotHereDeletesItOnTheHub() async throws {
         let f = try await fixture()
         let mirror = f.mirror()

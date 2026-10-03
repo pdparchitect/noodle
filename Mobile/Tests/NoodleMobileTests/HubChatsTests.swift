@@ -104,6 +104,12 @@ private actor FakeHub {
         case .success(.deleteGroup(let id)):
             groups.removeAll { $0.id == id }
             return .done
+        case .success(.archive(let change)):
+            let date: Date? = change.archived ? Date() : nil
+            if change.id == bot.id { bot.archivedAt = date }
+            else if let index = groups.firstIndex(where: { $0.id == change.id }) { groups[index].archivedAt = date }
+            else { return .failure("There is no such bot.") }
+            return .done
         case .success(.createBot(let draft)):
             let new = LinkBot(id: UUID(), conversationID: UUID(), draft: draft, createdAt: Date())
             created.append(new)
@@ -433,6 +439,40 @@ private actor RecordedSubscriptions: PushSubscriptions {
         let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
         #expect(!relaunched.agents.contains { $0.id == atlas.id })
         #expect(!relaunched.isPinned(atlas))
+    }
+
+    @Test func anArchivedBotOrGroupLeavesTheListUntilUnarchived() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        let house = await hub.addGroup(named: "House", saying: "Dinner at eight.")
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+
+        try await chats.setArchived(true, .bot(scout))
+        #expect(await hub.bot.archivedAt != nil)
+        #expect(chats.isArchived(.bot(try #require(chats.agent(scout.id)))))
+        #expect(chats.listedThreads.map(\.id) == [house.id])
+        #expect(chats.archivedThreads.map(\.id) == [scout.id])
+        #expect(chats.composerUnavailableReason(for: .bot(try #require(chats.agent(scout.id)))) == "Scout is archived")
+        #expect(chats.composerUnavailableReason(for: .group(house)) == "Every bot in this group is archived")
+        #expect(chats.activeMembers(of: house).isEmpty)
+        // Kept across a relaunch, before the Hub answers.
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+        #expect(relaunched.archivedThreads.map(\.id) == [scout.id])
+
+        try await chats.setArchived(false, .bot(try #require(chats.agent(scout.id))))
+        #expect(await hub.bot.archivedAt == nil)
+        #expect(Set(chats.listedThreads.map(\.id)) == [scout.id, house.id])
+
+        try await chats.setArchived(true, .group(house))
+        #expect(chats.listedThreads.map(\.id) == [scout.id])
+        #expect(chats.composerUnavailableReason(for: .group(try #require(chats.groups.first))) == "This group is archived")
+        try await chats.reload()
+        #expect(chats.archivedThreads.map(\.id) == [house.id])
+        try await chats.setArchived(false, .group(try #require(chats.groups.first)))
+        #expect(chats.archivedThreads.isEmpty)
     }
 
     @Test func sentFilesReachTheHubWithTheMessage() async throws {

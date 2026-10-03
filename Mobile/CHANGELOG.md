@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Archive a bot or group by touching and holding it in the list: it keeps everything but stops running and leaves the list, for all your devices. Bring it back from Archived in the Hub's profile, under Profiles. Needs the matching Noodle Hub, or Noodle on a Mac serving as a Hub.
+
+### What to Test
+
+- Touch and hold a bot, choose Archive Bot: it leaves the list. In a group with it, its picture leaves the group's and it is no longer offered after @.
+- Open Profiles and the Hub's details, then tap Archived: the bot is in the list. Tap Unarchive: it is back among your chats and answers again.
+- Archive every bot in a group, then open the group: the message field says every bot in it is archived and cannot be typed in.
+- Archive a group, then unarchive it from the Hub's profile: its messages are all still there.
+
 ## [0.14.0] - 2026-10-02
 
 ### Changed

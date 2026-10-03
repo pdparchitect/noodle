@@ -85,6 +85,7 @@ import NoodleRuntime
         let agents = try repository.loadAgents()
         try repository.synchronizeAgentWorkspaces(agents)
         try messenger.start(agents: agents)
+        runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
         let now = Date()
         agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
         runtime.startAll(agents: agents, repository: repository)
@@ -287,6 +288,22 @@ import NoodleRuntime
         try repository.deleteConversation(id: id)
         if readMarks.removeValue(forKey: id) != nil { try? saveReadMarks() }
         onChange?(user.id, .groupsChanged)
+        onBotsEdited?()
+    }
+
+    /// Archives or brings back one of the user's bots or groups. Everything is kept; an archived bot
+    /// stops, whichever runtime runs it, and neither takes messages until brought back.
+    public func setArchived(_ archived: Bool, id: UUID, for user: HubUser) throws {
+        if access.owner(ofBot: id) == user.id {
+            _ = try owned(id, by: user)
+            try repository.setAgentArchived(archived, agentID: id)
+            runtime.archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
+            onChange?(user.id, .botsChanged)
+        } else {
+            _ = try ownedGroup(id, by: user)
+            try repository.setConversationArchived(archived, conversationID: id)
+            onChange?(user.id, .groupsChanged)
+        }
         onBotsEdited?()
     }
 
@@ -665,7 +682,7 @@ import NoodleRuntime
         LinkGroup(id: conversation.id,
                   draft: LinkGroupDraft(name: conversation.displayName, publicDescription: conversation.publicDescription ?? "",
                                         botIDs: conversation.participantIDs),
-                  createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id])
+                  createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id], archivedAt: conversation.archivedAt)
     }
 
     private func bot(_ agent: AgentRecord, conversations: [BotConversation]) throws -> LinkBot? {
@@ -680,7 +697,7 @@ import NoodleRuntime
         draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue), readUpTo: readMarks[conversation.id],
-                       status: agent.status)
+                       status: agent.status, archivedAt: agent.archivedAt)
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.

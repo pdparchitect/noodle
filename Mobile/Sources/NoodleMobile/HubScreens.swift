@@ -517,6 +517,8 @@ struct PasteLinkButton: UIViewRepresentable {
 /// together, tapping a Hub opens its details.
 struct HubsView: View {
     @Environment(HubMemberships.self) private var hubs
+    /// Each Hub's bots and groups, for its profile's archived ones.
+    var chats: [HubChats] = []
     @Environment(\.dismiss) private var dismiss
     @AppStorage(CurrentHub.key) private var current = ""
     @AppStorage(CurrentHub.togetherKey) private var together = false
@@ -586,7 +588,7 @@ struct HubsView: View {
             }
             .navigationDestination(item: $details) { folder in
                 if let pairing = hubs.hubs.first(where: { $0.directory == folder }) {
-                    ProfileView(pairing: pairing)
+                    ProfileView(pairing: pairing, chats: chats.first { $0.pairing === pairing })
                 }
             }
             .wordmarkRefreshable { await hubs.refreshAll() }
@@ -600,8 +602,10 @@ struct ProfileView: View {
     @Environment(HubMemberships.self) private var hubs
     @Environment(\.dismiss) private var dismiss
     let pairing: HubPairing
+    var chats: HubChats? = nil
     @State private var leaving = false
     @State private var pairingDevice = false
+    @State private var showingArchived = false
 
     var body: some View {
         List {
@@ -639,6 +643,14 @@ struct ProfileView: View {
             if let error = pairing.error {
                 Section { Text(error).foregroundStyle(.orange) }
             }
+            if let chats, !chats.archivedThreads.isEmpty {
+                Section {
+                    Button { showingArchived = true } label: {
+                        LabeledContent("Archived", value: "\(chats.archivedThreads.count)")
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
             if pairing.status?.canPairDevices == true {
                 Section {
                     Button("Pair Another Device") { pairingDevice = true }
@@ -650,6 +662,7 @@ struct ProfileView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $pairingDevice) { PairDeviceView(pairing: pairing) }
+        .sheet(isPresented: $showingArchived) { if let chats { ArchivedView(chats: chats) } }
         .wordmarkRefreshable { await pairing.refresh() }
         .confirmationDialog("Leave \(pairing.hubName)?", isPresented: $leaving, titleVisibility: .visible) {
             Button("Leave", role: .destructive) {
@@ -664,6 +677,42 @@ struct ProfileView: View {
     private var status: some View {
         let connection = HubConnection(pairing)
         return Text(connection.title).foregroundStyle(connection.color)
+    }
+}
+
+/// One Hub's archived bots and groups, each with Unarchive.
+struct ArchivedView: View {
+    @Environment(\.dismiss) private var dismiss
+    let chats: HubChats
+
+    var body: some View {
+        NavigationStack {
+            List(chats.archivedThreads) { thread in
+                HStack(spacing: 12) {
+                    ThreadAvatar(chats: chats, thread: thread, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(thread.name)
+                        Text(thread.group == nil ? "Bot" : "Group").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Unarchive") {
+                        Task {
+                            do { try await chats.setArchived(false, thread) }
+                            catch { chats.error = error.localizedDescription }
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .overlay {
+                if chats.archivedThreads.isEmpty { ContentUnavailableView("Nothing Archived", systemImage: "archivebox") }
+            }
+            .navigationTitle("Archived")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
     }
 }
 

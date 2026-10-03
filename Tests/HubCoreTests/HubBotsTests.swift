@@ -373,6 +373,76 @@ import XCTest
         XCTAssertNil(f.hub.access.owner(ofBot: second.id))
     }
 
+    func testAnArchivedBotIsKeptButTakesNoMessagesUntilUnarchived() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f)
+        guard case .bot(let jeeves) = try await f.device.request(.createBot(LinkBotDraft(name: "Jeeves", provider: "claude-code"))) else {
+            return XCTFail("no bot")
+        }
+        let group = try await createGroup(f, of: [alfred, jeeves])
+        let answer = try await f.device.request(.archive(LinkArchiveChange(id: alfred.id, archived: true)))
+        XCTAssertEqual(answer, .done)
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertNotNil(bots.first { $0.id == alfred.id }?.archivedAt)
+        XCTAssertNil(bots.first { $0.id == jeeves.id }?.archivedAt)
+        XCTAssertEqual(f.hub.runtime.archivedAgentIDs, [alfred.id])
+        do {
+            _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: alfred.conversationID, id: UUID(), body: "Hello")))
+            XCTFail("Reached an archived bot")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "Alfred is archived.")
+        }
+        // The group still has Jeeves.
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: group.id, id: UUID(), body: "Dinner at eight.")))
+
+        _ = try await f.device.request(.archive(LinkArchiveChange(id: alfred.id, archived: false)))
+        XCTAssertTrue(f.hub.runtime.archivedAgentIDs.isEmpty)
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: alfred.conversationID, id: UUID(), body: "Hello")))
+    }
+
+    func testAnArchivedGroupKeepsItsMessagesAndBots() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f)
+        let group = try await createGroup(f, of: [alfred])
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: group.id, id: UUID(), body: "Dinner at eight.")))
+        _ = try await f.device.request(.archive(LinkArchiveChange(id: group.id, archived: true)))
+        guard case .groups(let groups) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertNotNil(groups.first?.archivedAt)
+        XCTAssertTrue(f.hub.runtime.archivedAgentIDs.isEmpty, "Its bots keep running")
+        do {
+            _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: group.id, id: UUID(), body: "Anyone?")))
+            XCTFail("Reached an archived group")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "This group is archived.")
+        }
+        guard case .messages(let page) = try await f.device.request(.messages(conversationID: group.id, after: 0)) else {
+            return XCTFail("no messages")
+        }
+        XCTAssertEqual(page.messages.map(\.body), ["Dinner at eight."])
+
+        _ = try await f.device.request(.archive(LinkArchiveChange(id: group.id, archived: false)))
+        guard case .groups(let restored) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertNil(restored.first?.archivedAt)
+    }
+
+    func testOnlyTheOwnerArchives() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f)
+        let group = try await createGroup(f, of: [alfred])
+        let grace = try f.hub.access.addUser(named: "Grace")
+        let other = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-other-\(UUID())"),
+                               deviceName: "Other")
+        await other.join(f.link.invite(grace).url().absoluteString)
+        for id in [alfred.id, group.id] {
+            do {
+                _ = try await other.request(.archive(LinkArchiveChange(id: id, archived: true)))
+                XCTFail("Archived another user's bot or group")
+            } catch {}
+        }
+        XCTAssertNil(try f.hub.repository.loadAgents().first?.archivedAt)
+        XCTAssertNil(try f.hub.repository.loadConversations().first { $0.id == group.id }?.archivedAt)
+    }
+
     private func createGroup(_ f: Fixture, of bots: [LinkBot]) async throws -> LinkGroup {
         guard case .group(let group) = try await f.device.request(.createGroup(LinkGroupDraft(
             name: "House", publicDescription: "Runs the house", botIDs: bots.map(\.id)))) else {

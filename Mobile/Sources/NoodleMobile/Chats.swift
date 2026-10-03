@@ -208,6 +208,41 @@ enum HubThread: HubConversation {
 
     var threads: [HubThread] { agents.map(HubThread.bot) + groups.map(HubThread.group) }
 
+    /// What the list shows: archived bots and groups are only in Settings, until brought back.
+    var listedThreads: [HubThread] { threads.filter { !isArchived($0) } }
+
+    var archivedThreads: [HubThread] { threads.filter(isArchived) }
+
+    func isArchived(_ thread: HubThread) -> Bool {
+        switch thread {
+        case .bot(let bot): bot.archivedAt != nil
+        case .group(let group): group.archivedAt != nil
+        }
+    }
+
+    /// Why nothing can be sent here, shown in place of the composer's prompt, as on the Mac.
+    func composerUnavailableReason(for thread: HubThread) -> String? {
+        switch thread {
+        case .bot(let bot):
+            return bot.archivedAt == nil ? nil : "\(bot.draft.name) is archived"
+        case .group(let group):
+            if group.archivedAt != nil { return "This group is archived" }
+            let members = members(of: group)
+            return !members.isEmpty && members.allSatisfy({ $0.archivedAt != nil }) ? "Every bot in this group is archived" : nil
+        }
+    }
+
+    /// Archives or brings back a bot or group on the Hub, for every device. It keeps everything.
+    func setArchived(_ archived: Bool, _ thread: HubThread) async throws {
+        guard case .done = try await pairing.request(.archive(LinkArchiveChange(id: thread.id, archived: archived))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        let date: Date? = archived ? Date() : nil
+        if let index = agents.firstIndex(where: { $0.id == thread.id }) { agents[index].archivedAt = date }
+        if let index = groups.firstIndex(where: { $0.id == thread.id }) { groups[index].archivedAt = date }
+        saveCache()
+    }
+
     var sortedThreads: [HubThread] { Self.sorted(threads.map { (self, $0) }).map(\.1) }
 
     /// Pinned first, then newest conversation first, as in Messages, across however many Hubs.
@@ -338,6 +373,9 @@ enum HubThread: HubConversation {
 
     /// The group's bots this phone knows, in the group's order.
     func members(of group: LinkGroup) -> [LinkBot] { group.draft.botIDs.compactMap(agent) }
+
+    /// The members a group's picture shows: archived bots leave it.
+    func activeMembers(of group: LinkGroup) -> [LinkBot] { members(of: group).filter { $0.archivedAt == nil } }
 
     func messages(of conversation: some HubConversation) -> [LinkMessage] { conversations[conversation.conversationID] ?? [] }
 
@@ -745,7 +783,7 @@ struct AgentsView: View {
     }
 
     private var rows: [Row] {
-        HubChats.sorted(chats.flatMap { hub in hub.threads.map { (hub, $0) } }).map { hub, thread in
+        HubChats.sorted(chats.flatMap { hub in hub.listedThreads.map { (hub, $0) } }).map { hub, thread in
             Row(chats: hub, thread: thread, id: ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id))
         }
     }
@@ -831,7 +869,7 @@ struct AgentsView: View {
                     showingMore = false
                 }
             }
-            .sheet(isPresented: $showingProfile) { HubsView() }
+            .sheet(isPresented: $showingProfile) { HubsView(chats: chats) }
             .sheet(isPresented: $showingSettings) { SettingsView() }
             .sheet(isPresented: $creating) {
                 if let first = chats.first { AgentEditor(chats: first, agent: nil, hubs: chats) }
@@ -862,6 +900,14 @@ struct AgentsView: View {
             Button { row.chats.togglePin(row.thread) } label: { Label("Pin", systemImage: "pin.fill") }
         }
         Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
+        Button { archive(row) } label: { Label(row.thread.group == nil ? "Archive Bot" : "Archive Group", systemImage: "archivebox") }
+    }
+
+    private func archive(_ row: Row) {
+        Task {
+            do { try await row.chats.setArchived(true, row.thread) }
+            catch { row.chats.error = error.localizedDescription }
+        }
     }
 
     /// Opens a tapped notification's conversation once its Hub's bots have loaded.
@@ -1319,8 +1365,11 @@ struct ChatView: View {
                     messageField
                 }
             }
+            .disabled(unavailableReason != nil)
         }
     }
+
+    private var unavailableReason: String? { chats.thread(threadID).flatMap(chats.composerUnavailableReason) }
 
     /// The plus, which grows into the panel of things to attach, as in Messages.
     private var attachButton: some View {
@@ -1388,7 +1437,7 @@ struct ChatView: View {
     /// The field, with the microphone or send button inside it, as in Messages.
     private var messageField: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            ComposerField(text: $draft, caret: $caret, placeholder: "Message") { image in
+            ComposerField(text: $draft, caret: $caret, placeholder: unavailableReason ?? "Message") { image in
                 attach { try PickedFiles.store(image.pngData() ?? Data(), named: "Image.png", type: .png) }
             }
             .padding(.vertical, 13)
@@ -1425,7 +1474,7 @@ struct ChatView: View {
     @ViewBuilder private var mentions: some View {
         if let request = MentionCompletion.request(in: draft, caret: caret) {
             let group = chats.thread(threadID)?.group
-            let bots = request.matches(group.map(chats.members) ?? chats.agents, preferred: threadID)
+            let bots = request.matches((group.map(chats.members) ?? chats.agents).filter { $0.archivedAt == nil }, preferred: threadID)
             if !bots.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -1966,8 +2015,10 @@ struct GroupEditor: View {
         }
     }
 
+    /// Archived bots stay members until removed, but are never added.
     private var bots: [LinkBot] {
-        chats.agents.sorted { $0.draft.name.localizedStandardCompare($1.draft.name) == .orderedAscending }
+        chats.agents.filter { $0.archivedAt == nil || draft.botIDs.contains($0.id) }
+            .sorted { $0.draft.name.localizedStandardCompare($1.draft.name) == .orderedAscending }
     }
 
     var body: some View {
@@ -2106,7 +2157,8 @@ struct ThreadAvatar: View {
         case .bot(let bot):
             AgentAvatar(draft: bot.draft, size: size, phase: chats.phase(of: bot))
         case .group(let group):
-            let members = chats.members(of: group)
+            let active = chats.activeMembers(of: group)
+            let members = active.isEmpty ? chats.members(of: group) : active
             if members.count == 1, let bot = members.first {
                 // One bot in front of a disc, so it still reads as a group.
                 ZStack {

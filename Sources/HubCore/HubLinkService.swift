@@ -449,6 +449,9 @@ import os
         case .deleteGroup(let id):
             try hubBots().deleteGroup(id, for: try user(key))
             return .done
+        case .archive(let change):
+            try hubBots().setArchived(change.archived, id: change.id, for: try user(key))
+            return .done
         case .kick(let botID):
             return try hubBots().kick(botID, for: try user(key)).map(LinkResponse.kickConfirmation) ?? .done
         case .confirmKick(let botID, let confirmationID):

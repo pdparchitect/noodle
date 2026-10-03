@@ -11,3 +11,7 @@ from the phone. Tap … at the top of a conversation to choose from the things s
 there, with their titles and previews. A noodlet runs on the phone itself; Run on Hub
 shows it live from the Hub instead, and Noodle remembers which you chose. In a bot's settings, Tools, Computers and Browsers choose what it
 may use on the Hub.
+
+Touch and hold a bot or group in the list to archive it. It keeps everything but stops
+running and leaves the list on all your devices; bring it back from Archived in
+that Hub's profile, under Profiles.

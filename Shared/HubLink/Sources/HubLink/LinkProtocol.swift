@@ -107,6 +107,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case updateGroup(id: UUID, LinkGroupDraft)
     /// Deletes a group and its messages. Its bots stay.
     case deleteGroup(id: UUID)
+    /// Archives or brings back one of this user's bots or groups. Answers `done`.
+    case archive(LinkArchiveChange)
     /// Starts a failed bot again, as Kick does in Noodle. Answers `done`, or `kickConfirmation`
     /// when the failure needs the person to agree first.
     case kick(botID: UUID)
@@ -757,9 +759,11 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var readUpTo: Date?
     /// The one line the bot set itself, such as what it is busy with. Not part of the draft: devices never set it.
     public var status: String?
+    /// When it was archived: it keeps everything but does not run or take messages. Set with `archive`.
+    public var archivedAt: Date?
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
-                readUpTo: Date? = nil, status: String? = nil) {
+                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -767,9 +771,10 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.phase = phase
         self.readUpTo = readUpTo
         self.status = status
+        self.archivedAt = archivedAt
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase, readUpTo, status }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -780,6 +785,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         phase = try c.decodeIfPresent(String.self, forKey: .phase).flatMap(LinkBotPhase.init(rawValue:))
         readUpTo = try c.decodeIfPresent(Date.self, forKey: .readUpTo)
         status = try c.decodeIfPresent(String.self, forKey: .status)
+        archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 }
 
@@ -805,12 +811,26 @@ public struct LinkGroup: Codable, Equatable, Identifiable, Sendable {
     public var createdAt: Date
     /// When the latest message its user has read was sent. Nil when they have read none.
     public var readUpTo: Date?
+    /// When it was archived: it keeps its messages but takes no new ones. Its bots keep running.
+    public var archivedAt: Date?
 
-    public init(id: UUID, draft: LinkGroupDraft, createdAt: Date, readUpTo: Date? = nil) {
+    public init(id: UUID, draft: LinkGroupDraft, createdAt: Date, readUpTo: Date? = nil, archivedAt: Date? = nil) {
         self.id = id
         self.draft = draft
         self.createdAt = createdAt
         self.readUpTo = readUpTo
+        self.archivedAt = archivedAt
+    }
+}
+
+/// A bot or group, by its ID, to archive or bring back.
+public struct LinkArchiveChange: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var archived: Bool
+
+    public init(id: UUID, archived: Bool) {
+        self.id = id
+        self.archived = archived
     }
 }
 

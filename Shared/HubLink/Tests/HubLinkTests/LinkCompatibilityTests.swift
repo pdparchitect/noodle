@@ -21,6 +21,23 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(try LinkProtocol.decoder.decode(LinkResponse.self, from: encoded), response)
     }
 
+    func testArchivingReadsAcrossAppVersions() throws {
+        let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
+        let bot = try decode(LinkBot.self,
+            #"{"id":"\#(id)","conversationID":"\#(conversation)","draft":{"name":"Alfred","provider":"codex"},"createdAt":0}"#)
+        XCTAssertNil(bot.archivedAt)
+        let group = try decode(LinkGroup.self, #"{"id":"\#(id)","draft":{"name":"House","publicDescription":"","botIDs":[]},"createdAt":0}"#)
+        XCTAssertNil(group.archivedAt)
+
+        var archived = bot
+        archived.archivedAt = Date(timeIntervalSinceReferenceDate: 100)
+        XCTAssertEqual(try decode(LinkBot.self, String(decoding: try LinkProtocol.encoder.encode(archived), as: UTF8.self)), archived)
+
+        let request = try decode(LinkRequest.self,
+            #"{"archive":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","archived":true}}}"#)
+        XCTAssertEqual(request, .archive(LinkArchiveChange(id: id, archived: true)))
+    }
+
     func testFieldsAddedLaterMayBeMissing() throws {
         let id = UUID(), conversation = UUID()
         let message = try decode(LinkMessage.self,
