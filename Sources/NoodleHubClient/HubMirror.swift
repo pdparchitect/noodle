@@ -157,6 +157,21 @@ import Observation
         onChange?()
     }
 
+    /// Archives or brings back a bot on the Hub, for every device, and its copy here.
+    public func setArchived(_ archived: Bool, localAgentID: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        _ = try await pairing.request(.archive(LinkArchiveChange(id: entry.remote, archived: archived)))
+        try repository.setAgentArchived(archived, agentID: localAgentID)
+        onChange?()
+    }
+
+    public func setArchived(_ archived: Bool, conversation: UUID) async throws {
+        guard let entry = groups.first(where: { $0.conversation == conversation }) else { throw LinkError("This group is not on the Hub.") }
+        _ = try await pairing.request(.archive(LinkArchiveChange(id: entry.remote, archived: archived)))
+        try repository.setConversationArchived(archived, conversationID: conversation)
+        onChange?()
+    }
+
     /// Makes a group on the Hub of bots kept there, by their local stand-ins, and its local copy.
     public func createGroup(named name: String, publicDescription: String, agentIDs: [UUID]) async throws -> BotConversation {
         let draft = LinkGroupDraft(name: name, publicDescription: publicDescription, botIDs: try remoteBots(agentIDs))

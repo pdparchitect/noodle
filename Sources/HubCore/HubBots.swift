@@ -307,6 +307,23 @@ import NoodleRuntime
         onBotsEdited?()
     }
 
+    /// The same, as whoever keeps the Hub does it in Settings, for the bot's or group's owner.
+    public func setArchived(_ archived: Bool, id: UUID) throws {
+        let owner = try access.owner(ofBot: id) ?? everyGroup().first { $0.conversation.id == id }?.owner
+        guard let owner, let user = access.users.first(where: { $0.id == owner }) else {
+            throw LinkError("There is no such bot or group.")
+        }
+        try setArchived(archived, id: id, for: user)
+    }
+
+    /// Every group on the Hub that devices see, and whose it is, for Settings.
+    public func everyGroup() throws -> [(conversation: BotConversation, owner: UUID?)] {
+        let agents = try repository.loadAgents()
+        return try repository.loadConversations()
+            .filter { $0.kind == .group && $0.participantIDs.allSatisfy { !isHidden($0) } }
+            .map { ($0, owner(of: $0, among: agents)) }
+    }
+
     /// Kick, as in Noodle, through whichever runtime runs the bot: on the owner's own Mac, Noodle's.
     /// A failure Noodle would ask about first is kept until the device agrees with `confirmKick`.
     public func kick(_ id: UUID, for user: HubUser) throws -> LinkKickConfirmation? {

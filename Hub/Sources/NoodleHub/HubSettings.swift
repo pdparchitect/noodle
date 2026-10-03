@@ -8,7 +8,7 @@ import Observation
 import SwiftUI
 
 enum HubSettingsTab: Hashable {
-    case harnesses, users, plans, bots, conversation, network, tools, companions, updates
+    case harnesses, users, plans, bots, groups, conversation, network, tools, companions, updates
 }
 
 /// Gives the shared Harness and Bots settings what they need from the Hub.
@@ -18,6 +18,8 @@ enum HubSettingsTab: Hashable {
     let setup: HarnessSetupController
     let mcp: MCPController
     var selectedTab: HubSettingsTab = .network
+    /// Why archiving a bot or group failed, shown until dismissed.
+    var problem: String?
     let activityWindows = AgentActivityWindows()
 
     init(hub: Hub) {
@@ -43,8 +45,13 @@ enum HubSettingsTab: Hashable {
     func showHarnessSettings() { selectedTab = .harnesses }
     func botProfileButton(_ agent: AgentRecord) -> AnyView { AnyView(HubBotProfileButton(host: self, agent: agent)) }
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView { AnyView(EmptyView()) }
-    func canArchive(_ agent: AgentRecord) -> Bool { false }
-    func setArchived(_ archived: Bool, agent: AgentRecord) {}
+    func canArchive(_ agent: AgentRecord) -> Bool { true }
+    func setArchived(_ archived: Bool, agent: AgentRecord) { setArchived(archived, id: agent.id) }
+
+    /// For the bot's or group's owner, on all their devices.
+    func setArchived(_ archived: Bool, id: UUID) {
+        do { try hub.bots.setArchived(archived, id: id) } catch { problem = error.localizedDescription }
+    }
 
     /// Gives the Hub's bots Noodle Applet's skill as soon as it is installed.
     func refreshCompanionSkills() { hub.bots.applets.refreshSkills() }
@@ -108,6 +115,10 @@ struct HubSettingsView: View {
                 .hubSettingsSize()
                 .tabItem { Label("Bots", systemImage: "sparkles") }
                 .tag(HubSettingsTab.bots)
+            HubGroupsSettingsView(host: host)
+                .hubSettingsSize()
+                .tabItem { Label("Groups", systemImage: "person.3") }
+                .tag(HubSettingsTab.groups)
             HubConversationSettingsView()
                 .hubSettingsSize()
                 .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }
@@ -129,6 +140,11 @@ struct HubSettingsView: View {
         }
         .modifier(SettingsWindowResizeAnchor())
         .settingsScrollIndicators(selection: host.selectedTab)
+        .alert("Could Not Archive", isPresented: Binding(get: { host.problem != nil }, set: { if !$0 { host.problem = nil } })) {
+            Button("OK") { host.problem = nil }
+        } message: {
+            Text(host.problem ?? "")
+        }
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
                                               "Tools": Self.showsAgentSettings ? toolsNeedingAttention : 0,
                                               "Network": networkNeedsAttention ? 1 : 0,

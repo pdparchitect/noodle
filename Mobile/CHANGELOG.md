@@ -12,6 +12,7 @@
 - Open Profiles and the Hub's details, then tap Archived: the bot is in the list. Tap Unarchive: it is back among your chats and answers again.
 - Archive every bot in a group, then open the group: the message field says every bot in it is archived and cannot be typed in.
 - Archive a group, then unarchive it from the Hub's profile: its messages are all still there.
+- In Archived, tap a bot or group: its conversation opens to read, and the message field says it is archived.
 
 ## [0.14.0] - 2026-10-02
 

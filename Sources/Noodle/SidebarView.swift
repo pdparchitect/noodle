@@ -108,18 +108,15 @@ struct SidebarView: View {
                 }
             }
         }
-        // Hub bots and groups are archived on their Hub, which cannot do it yet.
         switch conversation.kind {
-        case .group where store.hubMirror(forConversation: conversation.id) == nil:
+        case .group:
             Divider()
             Button("Archive Group") { store.setArchived(true, conversationID: conversation.id) }
         case .direct:
-            if let agent = store.participants(for: conversation).first, store.hubMirror(forAgent: agent.id) == nil {
+            if let agent = store.participants(for: conversation).first {
                 Divider()
                 Button("Archive Bot") { store.setArchived(true, agentID: agent.id) }
             }
-        default:
-            EmptyView()
         }
     }
 }

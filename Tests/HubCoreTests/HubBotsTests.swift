@@ -443,6 +443,27 @@ import XCTest
         XCTAssertNil(try f.hub.repository.loadConversations().first { $0.id == group.id }?.archivedAt)
     }
 
+    /// Settings on the Hub lists every group with its owner and archives for whoever owns it.
+    func testTheHubsKeeperArchivesForTheOwner() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f)
+        let group = try await createGroup(f, of: [alfred])
+        XCTAssertEqual(try f.hub.bots.everyGroup().map(\.conversation.id), [group.id])
+        XCTAssertEqual(try f.hub.bots.everyGroup().first?.owner, f.ada.id)
+
+        try f.hub.bots.setArchived(true, id: alfred.id)
+        try f.hub.bots.setArchived(true, id: group.id)
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertNotNil(bots.first?.archivedAt)
+        guard case .groups(let groups) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertNotNil(groups.first?.archivedAt)
+
+        try f.hub.bots.setArchived(false, id: alfred.id)
+        try f.hub.bots.setArchived(false, id: group.id)
+        XCTAssertNil(try f.hub.repository.loadAgents().first?.archivedAt)
+        XCTAssertThrowsError(try f.hub.bots.setArchived(true, id: UUID()))
+    }
+
     private func createGroup(_ f: Fixture, of bots: [LinkBot]) async throws -> LinkGroup {
         guard case .group(let group) = try await f.device.request(.createGroup(LinkGroupDraft(
             name: "House", publicDescription: "Runs the house", botIDs: bots.map(\.id)))) else {

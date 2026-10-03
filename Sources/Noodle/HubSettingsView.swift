@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import HubCore
 import HubLink
+import NoodleHubClient
 import NoodleRuntimeSettings
 import SwiftUI
 import UniformTypeIdentifiers
@@ -129,6 +130,9 @@ private struct HubRow: View {
     @Environment(NoodleStore.self) private var store
     let pairing: HubPairing
     @State private var confirmingLeave = false
+    @State private var showingArchived = false
+
+    private var mirror: HubMirror? { store.hubMirrors.first { $0.pairing === pairing } }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -152,12 +156,19 @@ private struct HubRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
+                    if let mirror, case let archived = store.archivedConversations(on: mirror), !archived.isEmpty {
+                        Button("Archived (\(archived.count))") { showingArchived = true }
+                            .buttonStyle(.link)
+                    }
                     Button("Leave") { confirmingLeave = true }
                         .buttonStyle(.link)
                 }
             }
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showingArchived) {
+            if let mirror { HubArchivedSheet(hubName: pairing.hub?.name ?? "Noodle Hub", mirror: mirror).environment(store) }
+        }
         .task(id: pairing.hub?.key) { await pairing.refresh() }
         .alert("Leave \(pairing.hub?.name ?? "Hub")?", isPresented: $confirmingLeave) {
             Button("Leave", role: .destructive) { store.leaveHub(pairing) }
@@ -187,6 +198,47 @@ private struct HubRow: View {
                      harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName
                  }.joined(separator: ", "))
         }
+    }
+}
+
+/// One joined Hub's archived bots and groups, each with Unarchive, as in Noodle Mobile.
+private struct HubArchivedSheet: View {
+    @Environment(NoodleStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let hubName: String
+    let mirror: HubMirror
+
+    var body: some View {
+        let archived = store.archivedConversations(on: mirror)
+        VStack(spacing: 0) {
+            HStack {
+                Text("Archived on \(hubName)").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            Form {
+                if archived.isEmpty {
+                    Text("Nothing archived").foregroundStyle(.secondary)
+                }
+                ForEach(archived) { conversation in
+                    HStack(spacing: 12) {
+                        ConversationAvatar(participants: store.shownParticipants(for: conversation),
+                                           isGroup: conversation.kind == .group, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(store.title(for: conversation))
+                            Text(conversation.kind == .group ? "Group" : "Bot").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Unarchive") { store.unarchive(conversation) }
+                            .buttonStyle(.link)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        }
+        .frame(width: 420, height: 360)
     }
 }
 

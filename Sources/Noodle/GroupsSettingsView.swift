@@ -57,7 +57,7 @@ struct GroupsSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Hub groups are archived on their Hub, which cannot do it yet.
+            // A Hub's groups are unarchived from that Hub in Settings > Hub, as on Mobile.
             if hub == nil {
                 Toggle(isOn: Binding(get: { group.archivedAt != nil },
                                      set: { store.setArchived($0, conversationID: group.id) })) {
@@ -71,7 +71,7 @@ struct GroupsSettingsView: View {
                 Text("—")
                     .foregroundStyle(.tertiary)
                     .frame(width: archivedColumnWidth)
-                    .accessibilityLabel("\(group.displayName), archiving unavailable")
+                    .accessibilityLabel("\(group.displayName), archived on its Hub")
             }
         }
     }

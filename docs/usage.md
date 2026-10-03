@@ -152,8 +152,11 @@ working in their other conversations.
 
 Bring them back with the **Archived** switch in **Settings → Bots** or
 **Settings → Groups**. Click a group's picture there, or at the top of its
-conversation, for its profile, with **Message** and **Edit**. Bots and groups on a
-Noodle Hub cannot be archived yet.
+conversation, for its profile, with **Message** and **Edit**.
+
+Bots and groups on a Noodle Hub are archived there, for all your devices. Archive them
+from the sidebar as any other; bring them back with **Archived** beside that Hub in
+**Settings → Hub**, where clicking **Unarchive** restores one.
 
 ## Shortcuts and settings
 

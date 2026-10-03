@@ -689,12 +689,16 @@ struct ArchivedView: View {
         NavigationStack {
             List(chats.archivedThreads) { thread in
                 HStack(spacing: 12) {
-                    ThreadAvatar(chats: chats, thread: thread, size: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(thread.name)
-                        Text(thread.group == nil ? "Bot" : "Group").font(.caption).foregroundStyle(.secondary)
+                    // Opens it to read; nothing can be sent until it is unarchived.
+                    NavigationLink { ChatView(chats: chats, threadID: thread.id) } label: {
+                        HStack(spacing: 12) {
+                            ThreadAvatar(chats: chats, thread: thread, size: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(thread.name)
+                                Text(thread.group == nil ? "Bot" : "Group").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                     }
-                    Spacer()
                     Button("Unarchive") {
                         Task {
                             do { try await chats.setArchived(false, thread) }

@@ -462,6 +462,19 @@ final class NoodleStore {
         return "\(agent.displayName) is archived"
     }
 
+    /// A joined Hub's archived bots, by their conversations, and its archived groups.
+    func archivedConversations(on mirror: HubMirror) -> [BotConversation] {
+        conversations.filter { mirror.owns(conversation: $0.id) && isArchived($0) }
+    }
+
+    func unarchive(_ conversation: BotConversation) {
+        if conversation.kind == .group {
+            setArchived(false, conversationID: conversation.id)
+        } else if let agent = participants(for: conversation).first {
+            setArchived(false, agentID: agent.id)
+        }
+    }
+
     private func current(_ conversation: BotConversation) -> BotConversation {
         conversations.first { $0.id == conversation.id } ?? conversation
     }
@@ -469,9 +482,13 @@ final class NoodleStore {
     /// Archiving keeps the bot's workspace, memory and conversations; it only stops it running.
     @discardableResult
     func setArchived(_ archived: Bool, agentID: UUID) -> Bool {
-        guard hubMirror(forAgent: agentID) == nil else {
-            errorMessage = "Bots on a Noodle Hub cannot be archived yet."
-            return false
+        // A Hub's bot is archived there, for all its owner's devices; the copy here follows.
+        if let mirror = hubMirror(forAgent: agentID) {
+            Task {
+                do { try await mirror.setArchived(archived, localAgentID: agentID) }
+                catch { errorMessage = error.localizedDescription }
+            }
+            return true
         }
         do {
             let updated = try repository.setAgentArchived(archived, agentID: agentID)
@@ -492,9 +509,12 @@ final class NoodleStore {
 
     @discardableResult
     func setArchived(_ archived: Bool, conversationID: UUID) -> Bool {
-        guard hubMirror(forConversation: conversationID) == nil else {
-            errorMessage = "Groups on a Noodle Hub cannot be archived yet."
-            return false
+        if let mirror = hubMirror(forConversation: conversationID) {
+            Task {
+                do { try await mirror.setArchived(archived, conversation: conversationID) }
+                catch { errorMessage = error.localizedDescription }
+            }
+            return true
         }
         do {
             let updated = try repository.setConversationArchived(archived, conversationID: conversationID)

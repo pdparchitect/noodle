@@ -225,6 +225,7 @@ extension NoodleStore: BotSettingsHost {
         AnyView(AgentProfileButton(agent: agent).environment(self))
     }
 
+    /// A Hub's bots are unarchived from that Hub in Settings > Hub, as on Mobile.
     func canArchive(_ agent: AgentRecord) -> Bool { hubMirror(forAgent: agent.id) == nil }
     func setArchived(_ archived: Bool, agent: AgentRecord) { setArchived(archived, agentID: agent.id) }
 
