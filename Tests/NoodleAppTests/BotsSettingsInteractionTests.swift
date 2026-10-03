@@ -57,6 +57,14 @@ import NoodleCore
         XCTAssertEqual(f.store.groupConversations.map(\.id), [group.id])
     }
 
+    func testManyGroupsScrollInsteadOfGrowingTheTab() async throws {
+        let f = try fixture()
+        for index in 1...20 { _ = try f.group(name: "Group \(index)") }
+        let settings = host(GroupsSettingsView().environment(f.store).frame(width: 680))
+        _ = try await control("Group 20, archived", in: settings)
+        XCTAssertLessThan(settings.fittingSize.height, 500)
+    }
+
     func testAnArchivedChatShowsWhyInADisabledComposer() async throws {
         let f = try fixture()
         XCTAssertTrue(f.store.setArchived(true, agentID: f.a.id))

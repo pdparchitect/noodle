@@ -118,9 +118,11 @@ struct HubGroupsSettingsView: View {
                 Section {
                     if groups.isEmpty {
                         Text("No groups").foregroundStyle(.secondary)
-                    }
-                    ForEach(groups, id: \.conversation.id) { entry in
-                        row(entry.conversation, owner: entry.owner, agents: agents)
+                    } else {
+                        let owners = Dictionary(uniqueKeysWithValues: groups.map { ($0.conversation.id, $0.owner) })
+                        SettingsRowList(groups.map(\.conversation)) { group in
+                            row(group, owner: owners[group.id] ?? nil, agents: agents)
+                        }
                     }
                 } header: {
                     if !groups.isEmpty {
@@ -152,7 +154,6 @@ struct HubGroupsSettingsView: View {
                 Text("Archived")
             }
             .labelsHidden()
-            .toggleStyle(.switch)
             .controlSize(.mini)
             .accessibilityLabel("\(group.displayName), archived")
             .frame(width: archivedColumnWidth)

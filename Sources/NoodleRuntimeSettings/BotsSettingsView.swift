@@ -50,7 +50,7 @@ public struct BotsSettingsView: View {
                     Text("No bots")
                         .foregroundStyle(.secondary)
                 } else {
-                    SettingsBotList(agents: agents) { agent in row(agent) }
+                    SettingsRowList(agents) { agent in row(agent) }
                 }
             } header: {
                 if !agents.isEmpty {

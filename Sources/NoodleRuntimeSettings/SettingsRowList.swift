@@ -3,9 +3,9 @@ import NoodleCore
 
 /// Keeps a settings group compact while allowing rows with wrapped status or
 /// error text to use their full height inside the scrollable area.
-public struct SettingsBotList<Row: View>: View {
-    let agents: [AgentRecord]
-    @ViewBuilder var row: (AgentRecord) -> Row
+public struct SettingsRowList<Item: Identifiable, Row: View>: View {
+    let items: [Item]
+    @ViewBuilder var row: (Item) -> Row
 
     private let scrollIndicatorGutter: CGFloat = 20
 
@@ -26,12 +26,17 @@ public struct SettingsBotList<Row: View>: View {
         .toggleStyle(.switch)
     }
 
+    public init(_ items: [Item], @ViewBuilder row: @escaping (Item) -> Row) {
+        self.items = items
+        self.row = row
+    }
+
     private var rows: some View {
         VStack(spacing: 10) {
-            ForEach(agents) { agent in
-                row(agent)
+            ForEach(items) { item in
+                row(item)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if agent.id != agents.last?.id {
+                if item.id != items.last?.id {
                     Divider()
                 }
             }

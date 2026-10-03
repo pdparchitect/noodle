@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings > Groups scrolls a long list of groups, as Settings > Bots does, instead of growing past the screen.
+
 ## [0.14.0] - 2026-10-03
 
 ### Added

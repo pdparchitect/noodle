@@ -16,13 +16,7 @@ struct GroupsSettingsView: View {
                 if groups.isEmpty {
                     Text("No groups").foregroundStyle(.secondary)
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(groups) { group in
-                            row(group)
-                            if group.id != groups.last?.id { Divider() }
-                        }
-                    }
-                    .toggleStyle(.switch)
+                    SettingsRowList(groups) { group in row(group) }
                 }
             } header: {
                 if !groups.isEmpty {
