@@ -181,6 +181,8 @@ public enum AppletGuidance {
         {"pads":[{"left":"left","right":"right","up":"up","down":"down"}],"buttons":[{"key":"space","label":"Jump"},{"key":"z","label":"Fire"}],"menu":"escape"}
         pads (at most two) list only the directions the game uses; buttons (at most eight)
         go from most to least important, labels up to 12 characters; menu is the pause key.
+        Controls are for one player: two pads mean one player moving and aiming, never a
+        second player's keys, so a two-player game declares only the first player's.
         Keys are left, right, up, down, space, enter, tab, escape, backspace, a lowercase
         letter or a digit, each used once. Held buttons send a key down and, on release, a key
         up: the page gets keydown and keyup events with key, code and keyCode (do not check
