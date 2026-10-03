@@ -303,6 +303,7 @@ final class NoodleStore {
 
     var filteredConversations: [BotConversation] {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let conversations = conversations.filter { !isArchived($0) }
         guard !term.isEmpty else { return conversations }
 
         return conversations.filter { conversation in
@@ -352,6 +353,7 @@ final class NoodleStore {
         do {
             try repository.prepare()
             agents = try repository.loadAgents()
+            runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
             activityWindows.synchronize(agents: agents)
             runtime.reloadAccess()
             try repository.synchronizeAgentWorkspaces(agents)
@@ -414,9 +416,98 @@ final class NoodleStore {
                conversations.contains(where: { $0.id == selectedConversationID }) {
                 return
             }
-            selectedConversationID = conversations.first?.id
+            selectedConversationID = conversations.first { !isArchived($0) }?.id
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Bots that are not archived, the ones a message or a new group can reach.
+    var activeAgents: [AgentRecord] { agents.filter { $0.archivedAt == nil } }
+
+    var archivedGroups: [BotConversation] {
+        conversations.filter { $0.kind == .group && $0.archivedAt != nil }
+    }
+
+    /// A group is archived itself; a bot's direct conversation follows its bot.
+    /// Views may hold an older copy, so the current one decides.
+    func isArchived(_ conversation: BotConversation) -> Bool {
+        let conversation = current(conversation)
+        if conversation.kind == .group { return conversation.archivedAt != nil }
+        return participants(for: conversation).first?.archivedAt != nil
+    }
+
+    func activeParticipants(for conversation: BotConversation) -> [AgentRecord] {
+        participants(for: conversation).filter { $0.archivedAt == nil }
+    }
+
+    /// The bots a conversation's picture and member line show: archived bots leave a group's
+    /// unless every one is archived; a direct conversation always shows its bot.
+    func shownParticipants(for conversation: BotConversation) -> [AgentRecord] {
+        let all = participants(for: conversation)
+        guard conversation.kind == .group else { return all }
+        let active = all.filter { $0.archivedAt == nil }
+        return active.isEmpty ? all : active
+    }
+
+    /// Why nothing can be sent here, shown in place of the composer's prompt.
+    func composerUnavailableReason(for conversation: BotConversation) -> String? {
+        let conversation = current(conversation)
+        if conversation.kind == .group {
+            if conversation.archivedAt != nil { return "This group is archived" }
+            let members = participants(for: conversation)
+            return !members.isEmpty && members.allSatisfy({ $0.archivedAt != nil }) ? "Every bot in this group is archived" : nil
+        }
+        guard let agent = participants(for: conversation).first, agent.archivedAt != nil else { return nil }
+        return "\(agent.displayName) is archived"
+    }
+
+    private func current(_ conversation: BotConversation) -> BotConversation {
+        conversations.first { $0.id == conversation.id } ?? conversation
+    }
+
+    /// Archiving keeps the bot's workspace, memory and conversations; it only stops it running.
+    @discardableResult
+    func setArchived(_ archived: Bool, agentID: UUID) -> Bool {
+        guard hubMirror(forAgent: agentID) == nil else {
+            errorMessage = "Bots on a Noodle Hub cannot be archived yet."
+            return false
+        }
+        do {
+            let updated = try repository.setAgentArchived(archived, agentID: agentID)
+            if let index = agents.firstIndex(where: { $0.id == agentID }) { agents[index] = updated }
+            runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
+            // Out of the sidebar, an unread chat could never be read.
+            if archived, let direct = conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agentID] }) {
+                markConversationRead(direct.id)
+                if selectedConversationID == direct.id { selectedConversationID = nil }
+            }
+            refreshAppShortcuts()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func setArchived(_ archived: Bool, conversationID: UUID) -> Bool {
+        guard hubMirror(forConversation: conversationID) == nil else {
+            errorMessage = "Groups on a Noodle Hub cannot be archived yet."
+            return false
+        }
+        do {
+            let updated = try repository.setConversationArchived(archived, conversationID: conversationID)
+            if let index = conversations.firstIndex(where: { $0.id == conversationID }) { conversations[index] = updated }
+            if archived {
+                markConversationRead(conversationID)
+                if selectedConversationID == conversationID { selectedConversationID = nil }
+            }
+            refreshAppShortcuts()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -1580,7 +1671,7 @@ final class NoodleStore {
 
     func publishShareDestinations() {
         guard let inbox = try? SharedInbox.configured() else { return }
-        try? inbox.saveDestinations(conversations.map {
+        try? inbox.saveDestinations(conversations.filter { composerUnavailableReason(for: $0) == nil }.map {
             ShareDestination(id: $0.id, name: title(for: $0), isGroup: $0.kind == .group)
         }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
     }

@@ -64,6 +64,41 @@ import NoodleCore
         window.close()
     }
 
+    func testGroupProfilesOpenFromSettingsAndFromTheConversation() async throws {
+        let f = try fixture(), group = try f.group()
+        let settings = host(GroupsSettingsView().environment(f.store).preferredColorScheme(.dark))
+        let window = try XCTUnwrap(settings.window)
+        window.orderFront(nil)
+        press(try await control("Show profile for Project", in: settings))
+        var popover: NSView?
+        try await wait {
+            popover = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
+                .compactMap(\.contentView).first { self.hasControl("Close group profile", in: $0) }
+            return popover != nil
+        }
+        let profile = try XCTUnwrap(popover)
+        _ = try await control("Open Conversation", in: profile)
+        press(try await control("Edit Group", in: profile))
+        try await wait { !window.sheets.isEmpty }
+        let editor = try XCTUnwrap(window.sheets.first?.contentView)
+        _ = try await control("Group Info", in: editor)
+        press(try await control("Cancel", in: editor))
+        try await wait { window.sheets.isEmpty }
+        window.close()
+
+        let chat = host(ChatView(conversation: group, attachmentPreview: AttachmentPreviewController()).environment(f.store))
+        let chatWindow = try XCTUnwrap(chat.window)
+        chatWindow.orderFront(nil)
+        press(try await control("Show Project's profile", in: chat))
+        try await wait { !chatWindow.sheets.isEmpty }
+        let sheet = try XCTUnwrap(chatWindow.sheets.first?.contentView)
+        _ = try await control("Close group profile", in: sheet)
+        XCTAssertFalse(hasControl("Open Conversation", in: sheet), "Already in the conversation")
+        press(try await control("Edit Group", in: sheet))
+        try await wait { chatWindow.sheets.isEmpty && f.store.groupBeingEdited?.id == group.id }
+        chatWindow.close()
+    }
+
     func testMessageFocusesTheMatchingConversationEvenWithHeartbeatsDisabled() async throws {
         let f = try fixture()
         f.runtime.runtime.configureHeartbeats(enabled: false)

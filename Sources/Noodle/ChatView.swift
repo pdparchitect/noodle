@@ -14,6 +14,7 @@ struct ChatView: View {
     var focusSidebar: (() -> Void)? = nil
     var openDirectMessage: ((UUID) -> Void)? = nil
     var editAgent: ((AgentRecord) -> Void)? = nil
+    var editGroup: ((BotConversation) -> Void)? = nil
     @State private var composerFocused = false
     @State private var choosingAttachments = false
     @State private var showingAttachmentMenu = false
@@ -27,12 +28,14 @@ struct ChatView: View {
     @State private var bottomOverlayHeight: CGFloat = 0
     @StateObject private var nameCompletion = ComposerNameCompletion()
     @State private var profileAgent: AgentRecord?
+    @State private var profileGroup: BotConversation?
     @State private var profileAction: ProfileAction?
 
     private enum ProfileAction {
         case reply(name: String, conversationID: UUID)
         case directMessage(UUID)
         case edit(UUID)
+        case editGroup(UUID)
     }
 
     var body: some View {
@@ -124,6 +127,13 @@ struct ChatView: View {
                     .noodleSheetSizing()
                 }
             }
+            .sheet(item: $profileGroup, onDismiss: finishProfileAction) { group in
+                GroupProfileSheet(group: group, edit: {
+                    profileAction = .editGroup(group.id)
+                    profileGroup = nil
+                })
+                .noodleSheetSizing()
+            }
             .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
                 store.importAttachments(from: providers, into: conversation.id, context: .paste)
             }
@@ -192,6 +202,7 @@ struct ChatView: View {
             previewAttachment: showPreview,
             bottomOverlayHeight: bottomOverlayHeight,
             showAgentProfile: { profileAgent = $0 },
+            showGroupProfile: { profileGroup = conversation },
             saveViewport: { store.saveTranscriptViewport($0, for: id) }
         )
         .id(id)
@@ -260,6 +271,7 @@ struct ChatView: View {
                 composerInput(microphoneAction: start)
             }
         }
+        .disabled(store.composerUnavailableReason(for: conversation) != nil)
     }
 
     @ViewBuilder private var attachmentButton: some View {
@@ -345,13 +357,18 @@ struct ChatView: View {
             if let editAgent { editAgent(agent) }
             else { store.agentBeingEdited = agent }
             return
+        case .editGroup(let id):
+            guard let group = store.conversations.first(where: { $0.id == id }) else { return }
+            if let editGroup { editGroup(group) }
+            else { store.groupBeingEdited = group }
+            return
         }
         // Restore keyboard focus after AppKit finishes dismissing the sheet.
         DispatchQueue.main.async { composerFocused = true }
     }
 
     private var composerPrompt: String {
-        "Message \(store.title(for: conversation))"
+        store.composerUnavailableReason(for: conversation) ?? "Message \(store.title(for: conversation))"
     }
 
     private var composerControlHeight: CGFloat { 36 }
@@ -414,7 +431,7 @@ private struct ComposerDraftInput: View {
                 isFocused: $isFocused,
                 conversationID: conversation.id,
                 placeholder: placeholder,
-                agents: store.agents,
+                agents: store.activeAgents,
                 preferredIDs: Set(conversation.participantIDs),
                 separatesPreferredAgents: conversation.kind == .group,
                 completion: completion,
@@ -473,6 +490,7 @@ private struct ConversationTranscript: View {
     let previewAttachment: (ConversationAttachment, [ConversationAttachment]) -> Void
     let bottomOverlayHeight: CGFloat
     let showAgentProfile: (AgentRecord) -> Void
+    let showGroupProfile: () -> Void
     let saveViewport: (TranscriptViewport) -> Void
     /// The oldest message shown. Until set, the newest page and the opening reading position show.
     @State private var firstShownID: UUID?
@@ -502,7 +520,8 @@ private struct ConversationTranscript: View {
             containsMessage: { id in all.contains { $0.id == id } }
         ) {
             if first == 0 {
-                ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile)
+                ConversationStartView(conversation: conversation, showAgentProfile: showAgentProfile,
+                                      showGroupProfile: showGroupProfile)
                     .padding(.bottom, 14)
                     .id(TranscriptScrollTarget.start)
             } else {
@@ -542,6 +561,7 @@ private struct ConversationStartView: View {
     @Environment(NoodleStore.self) private var store
     let conversation: BotConversation
     let showAgentProfile: (AgentRecord) -> Void
+    let showGroupProfile: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -556,7 +576,12 @@ private struct ConversationStartView: View {
                     Button("Show Activity") { store.showActivity(for: agent) }
                 }
             } else {
-                avatar
+                Button(action: showGroupProfile) {
+                    avatar.contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(store.title(for: conversation))
+                .accessibilityLabel("Show \(store.title(for: conversation))'s profile")
             }
 
             Text(store.title(for: conversation))
@@ -573,7 +598,7 @@ private struct ConversationStartView: View {
                         .frame(maxWidth: 460)
                 }
 
-                Text(store.participants(for: conversation).map(\.displayName).joined(separator: ", "))
+                Text(store.shownParticipants(for: conversation).map(\.displayName).joined(separator: ", "))
                     .font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -585,7 +610,7 @@ private struct ConversationStartView: View {
 
     private var avatar: some View {
         ConversationAvatar(
-            participants: store.participants(for: conversation),
+            participants: store.shownParticipants(for: conversation),
             isGroup: conversation.kind == .group,
             size: 82
         )

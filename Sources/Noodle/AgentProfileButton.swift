@@ -69,3 +69,57 @@ struct AgentProfileButton: View {
         }
     }
 }
+
+/// A group's picture, opening its profile as a bot's does.
+struct GroupProfileButton: View {
+    @Environment(NoodleStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+    let group: BotConversation
+    var size: CGFloat = 32
+    @State private var showsProfile = false
+    @State private var pendingAction: ProfileAction?
+    @State private var editingGroup: BotConversation?
+
+    private enum ProfileAction {
+        case message, edit
+    }
+
+    var body: some View {
+        Button { showsProfile = true } label: {
+            ConversationAvatar(participants: store.shownParticipants(for: group), isGroup: true, size: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Show \(group.displayName)’s profile")
+        .accessibilityLabel("Show profile for \(group.displayName)")
+        .popover(isPresented: $showsProfile, arrowEdge: .leading) {
+            GroupProfileSheet(group: group, edit: { dismissProfile(for: .edit) }, message: { dismissProfile(for: .message) })
+                .onDisappear(perform: finishProfileAction)
+        }
+        .sheet(item: $editingGroup) { group in
+            GroupInfoSheet(conversation: group)
+                .environment(store)
+                .noodleSheetSizing(animated: true)
+                .modifier(ConversationErrorAlert())
+        }
+    }
+
+    private func dismissProfile(for action: ProfileAction) {
+        pendingAction = action
+        showsProfile = false
+    }
+
+    private func finishProfileAction() {
+        guard let action = pendingAction else { return }
+        pendingAction = nil
+        // Allow the popover to detach before presenting an editor or opening a window.
+        DispatchQueue.main.async {
+            switch action {
+            case .message:
+                if !store.conversationWindows.focus(group.id) { openWindow(id: "conversation", value: group.id) }
+            case .edit:
+                editingGroup = store.conversations.first { $0.id == group.id }
+            }
+        }
+    }
+}

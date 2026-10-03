@@ -21,6 +21,9 @@ public enum WorkspaceError: LocalizedError, Equatable {
     case missingMessage(UUID)
     case invalidReaction
     case invalidStatus
+    case archivedBot(String)
+    case archivedGroup
+    case everyBotArchived
 
     public var errorDescription: String? {
         switch self {
@@ -42,6 +45,12 @@ public enum WorkspaceError: LocalizedError, Equatable {
             return "Choose a single emoji for the reaction."
         case .invalidStatus:
             return "A status is one line of at most \(AgentRecord.statusLimit) characters. Use --clear-status to remove it."
+        case .archivedBot(let name):
+            return "\(name) is archived."
+        case .archivedGroup:
+            return "This group is archived."
+        case .everyBotArchived:
+            return "Every bot in this group is archived."
         }
     }
 }
@@ -450,10 +459,48 @@ public struct WorkspaceRepository: Sendable {
         let layout = storage(for: agent.id)
         var configuration = try AgentConfiguration.load(from: layout)
         // Only the bot sets its status, so an edit from an older copy keeps the one it has now.
-        let status = configuration.agent.status
+        // Archiving has its own call for the same reason.
+        let status = configuration.agent.status, archivedAt = configuration.agent.archivedAt
         configuration.agent = agent
         configuration.agent.status = status
+        configuration.agent.archivedAt = archivedAt
         try configuration.save(to: layout)
+    }
+
+    @discardableResult
+    public func setAgentArchived(_ archived: Bool, agentID: UUID, now: Date = Date()) throws -> AgentRecord {
+        let layout = storage(for: agentID)
+        guard AgentStorageLayout.exists(layout.configuration) else { throw WorkspaceError.missingAgent(agentID) }
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard (configuration.agent.archivedAt != nil) != archived else { return configuration.agent }
+        configuration.agent.archivedAt = archived ? now : nil
+        try configuration.save(to: layout)
+        return configuration.agent
+    }
+
+    @discardableResult
+    public func setConversationArchived(_ archived: Bool, conversationID: UUID, now: Date = Date()) throws -> BotConversation {
+        guard FileManager.default.fileExists(atPath: conversationDirectory(id: conversationID).path) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        return try withConversationLock(conversationID) {
+            guard var conversation = try loadConversations().first(where: { $0.id == conversationID && $0.kind == .group }) else {
+                throw WorkspaceError.missingConversation(conversationID)
+            }
+            guard (conversation.archivedAt != nil) != archived else { return conversation }
+            conversation.archivedAt = archived ? now : nil
+            try updateConversation(conversation)
+            return conversation
+        }
+    }
+
+    /// Messages never reach an archived group, a bot that is archived, or a group whose bots all are.
+    private func requireActive(_ conversation: BotConversation) throws {
+        if conversation.archivedAt != nil { throw WorkspaceError.archivedGroup }
+        let members = try loadAgents().filter { conversation.participantIDs.contains($0.id) }
+        guard !members.isEmpty, members.allSatisfy({ $0.archivedAt != nil }) else { return }
+        if conversation.kind == .direct, let agent = members.first { throw WorkspaceError.archivedBot(agent.displayName) }
+        throw WorkspaceError.everyBotArchived
     }
 
     private func synchronizeClaudeSkillLinks(in directory: URL) throws -> [String] {
@@ -1251,13 +1298,15 @@ public struct WorkspaceRepository: Sendable {
         now: Date = Date()
     ) throws -> ChatMessage {
         let name = try validatedName(body)
-        guard try loadAgents().contains(where: { $0.id == agentID }) else {
+        guard let agent = try loadAgents().first(where: { $0.id == agentID }) else {
             throw WorkspaceError.missingAgent(agentID)
         }
         guard let conversation = try loadConversations().first(where: { $0.id == conversationID }),
               conversation.participantIDs.contains(agentID) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
+        if agent.archivedAt != nil { throw WorkspaceError.archivedBot(agent.displayName) }
+        try requireActive(conversation)
         let availableAttachmentIDs = Set(try loadAttachments(conversationID: conversationID).map(\.id))
         guard Set(attachmentIDs).count == attachmentIDs.count,
               Set(attachmentIDs).isSubset(of: availableAttachmentIDs) else {
@@ -1309,6 +1358,7 @@ public struct WorkspaceRepository: Sendable {
         guard var conversation = try loadConversations().first(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
+        try requireActive(conversation)
         let message = ChatMessage(
             id: id,
             conversationID: conversationID,
@@ -1328,6 +1378,7 @@ public struct WorkspaceRepository: Sendable {
     public func sendSharedMessage(_ request: SharedRequest, files: [URL]) throws -> ChatMessage {
         guard var conversation = try loadConversations().first(where: { $0.id == request.conversationID }),
               request.filenames.count == files.count else { throw SharedInboxError.invalidRequest }
+        try requireActive(conversation)
         return try withConversationLock(conversation.id) {
             var messages = try loadMessages(conversationID: conversation.id)
             if let existing = messages.first(where: { $0.id == request.id }) { return existing }

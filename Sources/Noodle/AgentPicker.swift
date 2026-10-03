@@ -18,7 +18,7 @@ struct AgentPickerItem: Identifiable, Equatable {
     }
 
     @MainActor static func items(in store: NoodleStore, floating: Set<UUID>) -> [Self] {
-        store.conversations.map {
+        store.conversations.filter { !store.isArchived($0) }.map {
             Self(id: $0.id, title: store.title(for: $0), lastActivity: $0.updatedAt, isFloating: floating.contains($0.id),
                 hasUnread: store.hasUnreadMessages(in: $0))
         }
@@ -338,7 +338,7 @@ private struct AgentPickerView: View {
     @ViewBuilder private func tile(_ item: AgentPickerItem, selected: Bool) -> some View {
         let conversation = store.conversations.first { $0.id == item.id }
         VStack(spacing: 8) {
-            ConversationAvatar(participants: conversation.map { store.participants(for: $0) } ?? [],
+            ConversationAvatar(participants: conversation.map { store.shownParticipants(for: $0) } ?? [],
                 isGroup: conversation?.kind == .group, size: 56)
                 .overlay(alignment: .topTrailing) {
                     if item.isFloating {

@@ -15,6 +15,9 @@ import SwiftUI
     func showHarnessSettings()
     /// The control a bot's row opens its profile with.
     func botProfileButton(_ agent: AgentRecord) -> AnyView
+    /// Whether the bot can be archived from here; the Archived column shows only when one can.
+    func canArchive(_ agent: AgentRecord) -> Bool
+    func setArchived(_ archived: Bool, agent: AgentRecord)
     /// The editor for a bot's harness and model.
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView
     /// Rereads the skills companions publish to bots.

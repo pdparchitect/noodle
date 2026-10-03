@@ -26,6 +26,54 @@ import NoodleCore
         XCTAssertTrue(enabled(access)); XCTAssertTrue(enabled(apps))
     }
 
+    func testArchivedSwitchArchivesABotAndLocksItsOtherSwitches() async throws {
+        let f = try fixture()
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
+        try await flip("Ada, archived", in: settings)
+        try await wait { f.store.agents.first { $0.id == f.a.id }?.archivedAt != nil }
+        XCTAssertEqual(f.runtime.runtime.archivedAgentIDs, [f.a.id])
+        for name in ["Heartbeat for Ada", "Ada, unrestricted access", "Ada, account apps"] {
+            let control = try await control(name, in: settings)
+            try await wait { !self.enabled(control) }
+        }
+        let grace = try await control("Grace, unrestricted access", in: settings)
+        XCTAssertTrue(enabled(grace))
+
+        try await flip("Ada, archived", in: settings)
+        try await wait { f.store.agents.first { $0.id == f.a.id }?.archivedAt == nil }
+        let heartbeat = try await control("Heartbeat for Ada", in: settings)
+        try await wait { self.enabled(heartbeat) }
+    }
+
+    func testGroupsTabArchivesAndRestoresAGroup() async throws {
+        let f = try fixture(), group = try f.group()
+        let settings = host(GroupsSettingsView().environment(f.store))
+        _ = try await control("Show profile for Project", in: settings)
+        try await flip("Project, archived", in: settings)
+        try await wait { f.store.isArchived(group) }
+        XCTAssertTrue(f.store.groupConversations.isEmpty)
+        try await flip("Project, archived", in: settings)
+        try await wait { !f.store.isArchived(group) }
+        XCTAssertEqual(f.store.groupConversations.map(\.id), [group.id])
+    }
+
+    func testAnArchivedChatShowsWhyInADisabledComposer() async throws {
+        let f = try fixture()
+        XCTAssertTrue(f.store.setArchived(true, agentID: f.a.id))
+        let chat = host(ChatView(conversation: f.directA, attachmentPreview: AttachmentPreviewController()).environment(f.store))
+        var editor: ComposerTextView?
+        try await wait {
+            editor = self.elements(chat).compactMap { $0 as? ComposerTextView }.first
+            return editor != nil
+        }
+        let composer = try XCTUnwrap(editor)
+        XCTAssertFalse(composer.isEditable)
+        XCTAssertEqual(composer.placeholder, "Ada is archived")
+
+        XCTAssertTrue(f.store.setArchived(false, agentID: f.a.id))
+        try await wait { composer.isEditable && composer.placeholder == "Message Ada" }
+    }
+
     func testAppsDefaultsOffAndTogglesIndependentlyWithClickableExplanation() async throws {
         let f = try fixture()
         let settings = host(BotsSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))

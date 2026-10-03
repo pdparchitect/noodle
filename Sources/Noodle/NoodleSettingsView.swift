@@ -6,7 +6,7 @@ import NoodleRuntime
 import NoodleRuntimeSettings
 
 enum NoodleSettingsTab: Hashable {
-    case general, chat, harnesses, bots, mcps, keybindings, permissions, companions, hub, updates
+    case general, chat, harnesses, bots, groups, mcps, keybindings, permissions, companions, hub, updates
 }
 
 struct NoodleSettingsView: View {
@@ -60,6 +60,10 @@ struct NoodleSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Bots", systemImage: "sparkles") }
                 .tag(NoodleSettingsTab.bots)
+            GroupsSettingsView()
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Groups", systemImage: "person.3") }
+                .tag(NoodleSettingsTab.groups)
             MCPSettingsView(store: store)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
@@ -220,6 +224,9 @@ extension NoodleStore: BotSettingsHost {
     func botProfileButton(_ agent: AgentRecord) -> AnyView {
         AnyView(AgentProfileButton(agent: agent).environment(self))
     }
+
+    func canArchive(_ agent: AgentRecord) -> Bool { hubMirror(forAgent: agent.id) == nil }
+    func setArchived(_ archived: Bool, agent: AgentRecord) { setArchived(archived, agentID: agent.id) }
 
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView {
         AnyView(EditBotSheet(agent: agent, initialTab: .runtime).environment(self))

@@ -141,6 +141,20 @@ Idle bots start a new session on their own once their current one is a day old. 
 the age, or **Never**, and how long a bot must be idle first under **New session** in
 **Settings → Conversation**. Heartbeats do not count as activity.
 
+## Archive bots and groups
+
+Choose **Archive Bot** or **Archive Group** in a conversation's sidebar menu to put it
+away without deleting it. An archived bot keeps its workspace, memory and messages, but
+does not run, wake for heartbeats or receive messages, and its chat leaves the sidebar,
+search and the @ menu. It stays a member of its groups, greyed out under **Group Info**,
+and is left out of their messages. An archived group keeps its messages; its bots keep
+working in their other conversations.
+
+Bring them back with the **Archived** switch in **Settings → Bots** or
+**Settings → Groups**. Click a group's picture there, or at the top of its
+conversation, for its profile, with **Message** and **Edit**. Bots and groups on a
+Noodle Hub cannot be archived yet.
+
 ## Shortcuts and settings
 
 After launching Noodle once, search Spotlight for **Send to Agent**, choose an

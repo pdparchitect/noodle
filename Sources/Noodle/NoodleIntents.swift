@@ -52,7 +52,10 @@ struct NoodleConversationQuery: EntityStringQuery {
     private static func loadConversations() throws -> [BotConversation] {
         let repository = NoodleIntentEnvironment.repository()
         try repository.prepare()
-        return try repository.loadConversations().sorted { $0.updatedAt > $1.updatedAt }
+        let archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
+        return try repository.loadConversations()
+            .filter { $0.archivedAt == nil && !($0.kind == .direct && $0.participantIDs.allSatisfy(archivedAgentIDs.contains)) }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 }
 

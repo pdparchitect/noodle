@@ -82,7 +82,7 @@ enum ConversationRuntimeStatus: Equatable {
 
 extension NoodleStore {
     func runtimeStatus(for conversation: BotConversation) -> ConversationRuntimeStatus {
-        ConversationRuntimeStatus(phases: participants(for: conversation).map { agent in
+        ConversationRuntimeStatus(phases: shownParticipants(for: conversation).map { agent in
             // A bot on a Noodle Hub runs there; here it shows what the Hub last said, while it is reachable.
             if let mirror = hubMirror(forAgent: agent.id) { return mirror.isConnected ? mirror.phase(ofAgent: agent.id) ?? .ready : .offline }
             return runtime.snapshot(for: agent.id).phase
@@ -90,7 +90,7 @@ extension NoodleStore {
     }
 
     func runtimeHelp(for conversation: BotConversation) -> String {
-        participants(for: conversation).map { agent in
+        shownParticipants(for: conversation).map { agent in
             if let mirror = hubMirror(forAgent: agent.id) {
                 let hub = mirror.pairing.hub?.name ?? "Noodle Hub"
                 let working = mirror.isConnected && mirror.phase(ofAgent: agent.id) == .working
@@ -112,7 +112,7 @@ struct ConversationStatusAvatar: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            ConversationAvatar(participants: store.participants(for: conversation),
+            ConversationAvatar(participants: store.shownParticipants(for: conversation),
                 isGroup: conversation.kind == .group, size: size)
             // Opaque, or the cut leaves a ghost of the picture behind.
             Circle().fill(.black)

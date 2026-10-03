@@ -31,7 +31,7 @@ struct ConversationWindowView: View {
             if let conversation {
                 ChatView(conversation: conversation, attachmentPreview: preview,
                     composerFocusRequest: composerFocusRequest, openDirectMessage: open,
-                    editAgent: { agentBeingEdited = $0 })
+                    editAgent: { agentBeingEdited = $0 }, editGroup: { groupBeingEdited = $0 })
             } else {
                 ContentUnavailableView("Conversation Unavailable", systemImage: "bubble.left",
                     description: Text("This conversation has been deleted."))

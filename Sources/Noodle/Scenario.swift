@@ -337,7 +337,7 @@ extension Scenario {
     static let focusRegions: Set<String> = ["composer", "transcript", "none"]
 
     static let settingsTabs: [String: NoodleSettingsTab] = [
-        "general": .general, "chat": .chat, "harnesses": .harnesses, "bots": .bots, "mcps": .mcps,
+        "general": .general, "chat": .chat, "harnesses": .harnesses, "bots": .bots, "groups": .groups, "mcps": .mcps,
         "keybindings": .keybindings, "permissions": .permissions, "companions": .companions, "updates": .updates
     ]
 

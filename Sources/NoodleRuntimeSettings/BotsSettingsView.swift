@@ -2,21 +2,25 @@ import SwiftUI
 import NoodleCore
 import NoodleRuntime
 
-/// Each bot's heartbeat and access, one row per bot.
+/// Each bot's heartbeat, access and archiving, one row per bot.
 public struct BotsSettingsView: View {
     let store: any BotSettingsHost
     private let listedAgents: [AgentRecord]?
     @State private var showsHeartbeatInfo = false
     @State private var showsAccessInfo = false
     @State private var showsAppsInfo = false
+    @State private var showsArchiveInfo = false
     @State private var confirming: AccessConfirmation?
     private let heartbeatColumnWidth: CGFloat = 64
     private let accessColumnWidth: CGFloat = 100
     private let appsColumnWidth: CGFloat = 64
+    private let archivedColumnWidth: CGFloat = 64
 
     private static let suggestedIntervals = [5, 10, 15, 30, 45, 60, 120, 240, 480, 720, 1_440]
 
     private var agents: [AgentRecord] { listedAgents ?? store.agents }
+
+    private var showsArchived: Bool { agents.contains(where: store.canArchive) }
 
     private var intervalOptions: [Int] {
         let current = store.runtime.heartbeatConfiguration.intervalMinutes
@@ -70,6 +74,14 @@ public struct BotsSettingsView: View {
                             .help("About account apps")
                             .frame(width: appsColumnWidth)
                             .popover(isPresented: $showsAppsInfo) { AgentAppsInfo(provider: nil) }
+                        if showsArchived {
+                            Button("Archived") { showsArchiveInfo.toggle() }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("About archiving")
+                                .help("About archiving")
+                                .frame(width: archivedColumnWidth)
+                                .popover(isPresented: $showsArchiveInfo) { ArchiveInfo() }
+                        }
                     }
                     .font(.caption)
                     .textCase(nil)
@@ -96,6 +108,7 @@ public struct BotsSettingsView: View {
         let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")
         let requiresUnrestrictedAccess = provider?.supportsRestrictedAccess == false
         let changingAccess = store.runtime.changingAccess.contains(agent.id)
+        let archived = agent.archivedAt != nil
         return HStack(spacing: 12) {
             store.botProfileButton(agent)
             VStack(alignment: .leading, spacing: 3) {
@@ -133,7 +146,7 @@ public struct BotsSettingsView: View {
             ))
             .labelsHidden()
             .controlSize(.mini)
-            .disabled(!store.runtime.heartbeatConfiguration.isEnabled)
+            .disabled(!store.runtime.heartbeatConfiguration.isEnabled || archived)
             .frame(width: heartbeatColumnWidth)
 
             Toggle(isOn: Binding(
@@ -151,7 +164,7 @@ public struct BotsSettingsView: View {
             .labelsHidden()
             .controlSize(.mini)
             .accessibilityLabel("\(agent.displayName), unrestricted access")
-            .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess)
+            .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived)
             .frame(width: accessColumnWidth)
 
             if provider?.supportsAccountApps == true {
@@ -169,13 +182,30 @@ public struct BotsSettingsView: View {
                 .controlSize(.mini)
                 .accessibilityLabel("\(agent.displayName), account apps")
                 .help(provider == .codex ? "Allow apps connected to ChatGPT" : "Allow connectors from Claude.ai")
-                .disabled(changingAccess)
+                .disabled(changingAccess || archived)
                 .frame(width: appsColumnWidth)
             } else {
                 Text("—")
                     .foregroundStyle(.tertiary)
                     .frame(width: appsColumnWidth)
                     .accessibilityLabel("\(agent.displayName), account apps unavailable")
+            }
+
+            if showsArchived {
+                if store.canArchive(agent) {
+                    Toggle(isOn: Binding(get: { archived }, set: { store.setArchived($0, agent: agent) })) {
+                        Text("Archived")
+                    }
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .accessibilityLabel("\(agent.displayName), archived")
+                    .frame(width: archivedColumnWidth)
+                } else {
+                    Text("—")
+                        .foregroundStyle(.tertiary)
+                        .frame(width: archivedColumnWidth)
+                        .accessibilityLabel("\(agent.displayName), archiving unavailable")
+                }
             }
         }
     }
@@ -200,6 +230,19 @@ public struct BotsSettingsView: View {
     public init(store: any BotSettingsHost, agents: [AgentRecord]? = nil) {
         self.store = store
         self.listedAgents = agents
+    }
+}
+
+private struct ArchiveInfo: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Archived").font(.headline)
+            Text("An archived bot keeps its workspace, memory and conversations, but does not run, wake or receive messages, and its chat leaves the sidebar. It stays a member of its groups but is left out of their messages.")
+            Text("Turning this off brings the bot back as it was.")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(20)
+        .frame(width: 360, alignment: .leading)
     }
 }
 

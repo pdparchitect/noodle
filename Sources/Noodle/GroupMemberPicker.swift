@@ -11,6 +11,8 @@ struct GroupMemberPicker: View {
     @State private var memberPendingRemoval: AgentRecord?
 
     private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
+    /// Archived bots stay members until removed, but are never added.
+    private var addable: [AgentRecord] { agents.filter { $0.archivedAt == nil } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -20,9 +22,9 @@ struct GroupMemberPicker: View {
                 Button { search = ""; showingAdd = true } label: {
                     Label("Add Bots", systemImage: "plus")
                 }
-                .disabled(selected.count == agents.count)
+                .disabled(addable.allSatisfy { selectedIDs.contains($0.id) })
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
-                    GroupMemberChooser(agents: agents, selectedIDs: $selectedIDs, search: $search)
+                    GroupMemberChooser(agents: addable, selectedIDs: $selectedIDs, search: $search)
                 }
             }
             ScrollView {
@@ -38,7 +40,7 @@ struct GroupMemberPicker: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(agents.isEmpty)
+                    .disabled(addable.isEmpty)
                     .help("Add Bots")
                     .accessibilityLabel("Add bots to this group")
                 } else {
@@ -47,6 +49,8 @@ struct GroupMemberPicker: View {
                             VStack(spacing: 8) {
                                 AgentProfileButton(agent: agent, size: 48, showsShadow: true,
                                     opensMessageInSeparateWindow: true)
+                                    .grayscale(agent.archivedAt == nil ? 0 : 1)
+                                    .accessibilityValue(agent.archivedAt == nil ? "" : "Archived")
                                     .overlay(alignment: .topTrailing) {
                                         Button { memberPendingRemoval = agent } label: {
                                             Image(systemName: "xmark.circle.fill")

@@ -108,6 +108,19 @@ struct SidebarView: View {
                 }
             }
         }
+        // Hub bots and groups are archived on their Hub, which cannot do it yet.
+        switch conversation.kind {
+        case .group where store.hubMirror(forConversation: conversation.id) == nil:
+            Divider()
+            Button("Archive Group") { store.setArchived(true, conversationID: conversation.id) }
+        case .direct:
+            if let agent = store.participants(for: conversation).first, store.hubMirror(forAgent: agent.id) == nil {
+                Divider()
+                Button("Archive Bot") { store.setArchived(true, agentID: agent.id) }
+            }
+        default:
+            EmptyView()
+        }
     }
 }
 
@@ -119,7 +132,7 @@ private struct ConversationRow: View {
         HStack(spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
                 ConversationAvatar(
-                    participants: store.participants(for: conversation),
+                    participants: store.shownParticipants(for: conversation),
                     isGroup: conversation.kind == .group,
                     size: 42
                 )

@@ -19,6 +19,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public var status: String?
     /// Short enough for the bubble over a pinned bot.
     public static let statusLimit = 60
+    /// An archived bot keeps everything but never runs and is left out of lists until unarchived.
+    public var archivedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -33,7 +35,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         avatarSymbolName: String? = nil,
         avatarColorIndex: Int? = nil,
         avatarImageData: Data? = nil,
-        status: String? = nil
+        status: String? = nil,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -48,6 +51,7 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.avatarColorIndex = avatarColorIndex
         self.avatarImageData = avatarImageData
         self.status = status
+        self.archivedAt = archivedAt
     }
 }
 
@@ -64,6 +68,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
     public var participantIDs: [UUID]
     public let createdAt: Date
     public var updatedAt: Date
+    /// Only groups are archived; a bot's direct conversation follows its bot.
+    public var archivedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -72,7 +78,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         kind: ConversationKind,
         participantIDs: [UUID],
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -81,6 +88,7 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         self.participantIDs = participantIDs
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.archivedAt = archivedAt
     }
 }
 

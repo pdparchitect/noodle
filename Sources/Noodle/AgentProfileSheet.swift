@@ -31,7 +31,14 @@ struct AgentProfileSheet: View {
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
-            if let status = agent.status {
+            if store.agents.first(where: { $0.id == agent.id })?.archivedAt != nil {
+                Text("Archived")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.quaternary, in: Capsule())
+            } else if let status = agent.status {
                 Text(status)
                     .font(.callout)
                     .multilineTextAlignment(.center)
@@ -117,16 +124,7 @@ struct AgentProfileSheet: View {
     }
 
     private func actionLabel(_ title: String, systemImage: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18))
-                .frame(height: 20)
-            Text(title)
-                .font(.caption)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        ProfileActionLabel(title: title, systemImage: systemImage)
     }
 
     private var description: String {
@@ -183,9 +181,97 @@ private struct CompanionOpenButton<Label: View>: View {
     }
 }
 
+/// A group's profile: what it is for and who is in it. `message` opens it from outside the conversation.
+struct GroupProfileSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(NoodleStore.self) private var store
+    let group: BotConversation
+    let edit: () -> Void
+    var message: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close group profile")
+            }
+            ConversationAvatar(participants: store.shownParticipants(for: group), isGroup: true, size: 88)
+            Text(store.title(for: group))
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+            if store.isArchived(group) {
+                Text("Archived")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.quaternary, in: Capsule())
+            }
+            ScrollView {
+                VStack(spacing: 8) {
+                    Text(description)
+                        .foregroundStyle(.secondary)
+                    Text(store.participants(for: group).map(\.displayName).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity)
+            }
+            .frame(maxHeight: 120)
+            HStack(spacing: 8) {
+                if let message {
+                    Button(action: message) { ProfileActionLabel(title: "Message", systemImage: "bubble.left.and.bubble.right") }
+                        .help("Open Conversation")
+                        .accessibilityLabel("Open Conversation")
+                    Divider().frame(height: 32).accessibilityHidden(true)
+                }
+                Button(action: edit) { ProfileActionLabel(title: "Edit", systemImage: "pencil") }
+                    .help("Edit Group")
+                    .accessibilityLabel("Edit Group")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .frame(width: 320)
+        .background(ProfileOutsideClickDismissal { dismiss() })
+    }
+
+    private var description: String {
+        let value = store.conversations.first { $0.id == group.id }?.publicDescription?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "No description yet." : value
+    }
+}
+
+/// One of the actions along the bottom of a bot's or group's profile.
+struct ProfileActionLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18))
+                .frame(height: 20)
+            Text(title)
+                .font(.caption)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+}
+
 /// Informational profiles can be dismissed without a decision. Keep this local
 /// to the profile: clicking outside an editor must not discard unsaved changes.
-private struct ProfileOutsideClickDismissal: NSViewRepresentable {
+struct ProfileOutsideClickDismissal: NSViewRepresentable {
     let dismiss: () -> Void
 
     func makeNSView(context: Context) -> DismissalView { DismissalView() }

@@ -135,6 +135,18 @@ public final class AgentRuntimeCoordinator {
             }
         }
     }
+    /// Archived bots keep everything but never run until they are unarchived.
+    public var archivedAgentIDs: Set<UUID> = [] {
+        didSet {
+            for id in archivedAgentIDs.subtracting(oldValue) {
+                if processes[id] != nil { stop(agentID: id, revokeAccess: false) }
+                cancelSupervision(for: id)
+                snapshots[id] = nil
+            }
+        }
+    }
+    /// Remote and archived bots never start here.
+    private func neverStarts(_ id: UUID) -> Bool { remoteAgentIDs.contains(id) || archivedAgentIDs.contains(id) }
     /// Receives what each model call cost. Nothing is kept here.
     @ObservationIgnored public var onUsage: (@MainActor (UsageSample) -> Void)?
     /// What the usage ledger holds for a session, so resumed totals are not counted twice.
@@ -642,7 +654,7 @@ public final class AgentRuntimeCoordinator {
     }
 
     public func start(agent: AgentRecord, repository: WorkspaceRepository) {
-        guard !remoteAgentIDs.contains(agent.id), processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
+        guard !neverStarts(agent.id), processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
               !blockedRecoveries.contains(agent.id) else { return }
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
            !accessConfiguration.isExtended(for: agent) {
@@ -745,7 +757,7 @@ public final class AgentRuntimeCoordinator {
 
     /// Replaces the bot's harness session with a fresh one, keeping its workspace, memory and messages.
     public func startNewSession(agent: AgentRecord, repository: WorkspaceRepository) {
-        guard !remoteAgentIDs.contains(agent.id) else { return }
+        guard !neverStarts(agent.id) else { return }
         connectionRecoveryAttempts[agent.id] = nil
         restart(agent: agent, repository: repository, resetThread: true, sessionRecovery: nil, retryFailedStop: true)
     }
@@ -766,7 +778,7 @@ public final class AgentRuntimeCoordinator {
                 seeded = true
             }
             guard policy.isEnabled, process.canReceiveHeartbeat, !changingAccess.contains(agent.id),
-                  !remoteAgentIDs.contains(agent.id),
+                  !neverStarts(agent.id),
                   policy.isDue(sessionStarted: started, lastInteraction: lastInteractionDates[agent.id] ?? started, at: date)
             else { continue }
             startNewSession(agent: agent, repository: repository)
@@ -930,7 +942,7 @@ public final class AgentRuntimeCoordinator {
 
     public func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
         guard !isStoppingAll else { return }
-        for agent in agents where installation(for: agent) != nil && !remoteAgentIDs.contains(agent.id) {
+        for agent in agents where installation(for: agent) != nil && !neverStarts(agent.id) {
             if let process = processes[agent.id], process.isAlive {
                 if agent.harnessIdentifier == HarnessProvider.codex.rawValue,
                    process.snapshot.phase == .working,
@@ -985,7 +997,7 @@ public final class AgentRuntimeCoordinator {
         detail: String,
         immediately: Bool = false
     ) {
-        guard !isStoppingAll, restartTasks[agent.id] == nil, !remoteAgentIDs.contains(agent.id) else { return }
+        guard !isStoppingAll, restartTasks[agent.id] == nil, !neverStarts(agent.id) else { return }
         let attempt = min((restartAttempts[agent.id] ?? 0) + 1, 7)
         restartAttempts[agent.id] = attempt
         let delay = immediately ? 0 : min(pow(2.0, Double(attempt - 1)), 30)

@@ -18,6 +18,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     var pasteAttachments: ((NSPasteboard) -> Bool)? = nil
     var dropFiles: (([URL]) -> Void)? = nil
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showDescriptions = true
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> ComposerScrollView {
@@ -32,8 +33,9 @@ struct ScrollableChatComposer: NSViewRepresentable {
 
     func updateNSView(_ view: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
-        view.editor.pasteAttachments = pasteAttachments
-        view.editor.dropFiles = dropFiles
+        view.editor.isEditable = isEnabled
+        view.editor.pasteAttachments = isEnabled ? pasteAttachments : nil
+        view.editor.dropFiles = isEnabled ? dropFiles : nil
         let requestFocus = isFocused && !context.coordinator.lastRequestedFocus
         context.coordinator.lastRequestedFocus = isFocused
         let focusRevision = context.coordinator.focusRevision

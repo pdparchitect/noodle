@@ -43,6 +43,8 @@ enum HubSettingsTab: Hashable {
     func showHarnessSettings() { selectedTab = .harnesses }
     func botProfileButton(_ agent: AgentRecord) -> AnyView { AnyView(HubBotProfileButton(host: self, agent: agent)) }
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView { AnyView(EmptyView()) }
+    func canArchive(_ agent: AgentRecord) -> Bool { false }
+    func setArchived(_ archived: Bool, agent: AgentRecord) {}
 
     /// Gives the Hub's bots Noodle Applet's skill as soon as it is installed.
     func refreshCompanionSkills() { hub.bots.applets.refreshSkills() }
