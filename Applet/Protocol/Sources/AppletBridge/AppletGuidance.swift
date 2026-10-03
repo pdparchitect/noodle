@@ -184,7 +184,13 @@ public enum AppletGuidance {
         Keys are left, right, up, down, space, enter, tab, escape, backspace, a lowercase
         letter or a digit, each used once. Held buttons send a key down and, on release, a key
         up: the page gets keydown and keyup events with key, code and keyCode (do not check
-        isTrusted).
+        isTrusted). A game controller connected to the device presses the same keys, so a game
+        played with keys needs nothing more.
+
+        For analog sticks or more than one player, a game can also read controllers itself
+        with the standard Gamepad API (navigator.getGamepads(), gamepadconnected). Keep the
+        keys working alongside it for people without a controller. Several players need the
+        Gamepad API: declared keys reach one player only.
 
         Optional manifest window object:
         {"type":"floating","background":"translucent","titlebar":false,"width":320,"height":350,"minWidth":260,"minHeight":300,"maxWidth":480,"maxHeight":520,"resizable":true,"rememberFrame":true}

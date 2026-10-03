@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Bots are told that a game controller already plays a game's declared keys, and to use the standard Gamepad API for analog sticks or several players.
+
 ## [0.24.0] - 2026-10-03
 
 ### Added
