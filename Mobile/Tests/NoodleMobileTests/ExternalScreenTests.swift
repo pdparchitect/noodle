@@ -59,3 +59,30 @@ import XCTest
         XCTAssertTrue(ConnectedController.list([GCController.withMicroGamepad()]).isEmpty)
     }
 }
+
+/// The controller's home button shows the conversation's noodlets over a game on the TV.
+@MainActor final class NoodletMenuTests: XCTestCase {
+    private func noodlet(_ name: String) -> LinkAttachment {
+        LinkAttachment(id: UUID(), filename: "\(name).noodlet", mediaType: "application/x-noodlet", byteCount: 0,
+                       url: URL(string: "noodlet://\(UUID().uuidString)"))
+    }
+
+    func testTheMenuMovesAlongTheNoodletsThenCloseGame() {
+        let first = noodlet("Racer"), second = noodlet("Tetris")
+        let menu = NoodletMenu(choices: [first, second], current: first.id)
+        XCTAssertEqual(menu.items.count, 3)
+        XCTAssertEqual(menu.start, 0)
+        XCTAssertEqual(menu.respond(to: .right, at: 0), .move(1))
+        XCTAssertEqual(menu.respond(to: .right, at: 2), .move(2))
+        XCTAssertEqual(menu.respond(to: .left, at: 0), .move(0))
+    }
+
+    func testChoosingSwitchesGamesResumesOrCloses() {
+        let first = noodlet("Racer"), second = noodlet("Tetris")
+        let menu = NoodletMenu(choices: [first, second], current: first.id)
+        XCTAssertEqual(menu.respond(to: .choose, at: 0), .resume)
+        XCTAssertEqual(menu.respond(to: .choose, at: 1), .open(second))
+        XCTAssertEqual(menu.respond(to: .choose, at: 2), .closeGame)
+        XCTAssertEqual(menu.respond(to: .back, at: 1), .resume)
+    }
+}

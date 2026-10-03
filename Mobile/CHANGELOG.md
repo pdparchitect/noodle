@@ -5,6 +5,7 @@
 ### Added
 
 - While a game plays on the TV and a game controller covers all its buttons, the phone shows the connected controllers and their batteries instead of a blank screen.
+- While a game plays on the TV, the controller's home button (Xbox, PS or Home) shows the conversation's other noodlets on the TV: move with the d-pad or stick, press A to switch to one, or choose Close Game. B or home again goes back to the game.
 
 ### Fixed
 
@@ -18,6 +19,7 @@
 - Close the game: the TV mirrors the phone again.
 - Open a game the Hub streams: it plays on the TV the same way.
 - With a game on the TV, press a button on a paired controller: the phone shows the controller, its logo and its battery. Disconnect it: the on-screen controls come back.
+- In a conversation with several noodlets, play one on the TV with a controller and press its home button: the noodlets show on the TV. Pick another with A: it opens on the TV without touching the phone. Open the menu again and choose Close Game: the game closes and the TV mirrors the phone. Press B in the menu: the game carries on.
 - With the ring switch set to silent, open a noodlet with sound on the phone and play it with the on-screen controls only: you hear it. Play music in another app first: both play together, and the music carries on after you close the noodlet.
 
 ## [0.17.0] - 2026-10-03

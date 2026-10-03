@@ -20,8 +20,27 @@ import Observation
     @ObservationIgnored private var windowObservers: [NSObjectProtocol] = []
     /// Where the controller in hand comes from; tests hand over a virtual one.
     @ObservationIgnored var available: () -> GCController? = { GCController.current ?? GCController.controllers().first }
-    /// The one game a controller plays: it has a single set of handlers, and a Mac may have several games open.
-    private static weak var playing: HardwareGamepad?
+    /// The one game each controller plays: it has a single set of handlers, and a Mac may have several games open.
+    private static var players: [ObjectIdentifier: Player] = [:]
+    private struct Player { weak var gamepad: HardwareGamepad? }
+
+    public enum MenuInput: Equatable, Sendable { case up, down, left, right, choose, back }
+
+    /// What the home button does; nil leaves the button to the system.
+    @ObservationIgnored public var onHome: (() -> Void)? {
+        didSet { claimHome() }
+    }
+    /// While set, the controller steers this menu instead of the game, whose keys are let go.
+    @ObservationIgnored public var menu: ((MenuInput) -> Void)? {
+        didSet {
+            if menu != nil { set([:]) }
+            pointing = [:]
+        }
+    }
+    /// What the system did with the home button before it opened a menu.
+    @ObservationIgnored private var systemHome: GCControllerElement.SystemGestureState?
+    /// Where each stick and d-pad points in the menu, so holding one moves once.
+    @ObservationIgnored private var pointing: [String: MenuInput] = [:]
 
     public init() {}
 
@@ -92,16 +111,35 @@ import Observation
         if let connected, connected !== next { release(connected) }
         connected = next
         guard let next, let gamepad else { offer(nil); return }
-        if Self.playing !== self { Self.playing?.yield() }
-        Self.playing = self
+        if let other = Self.players[ObjectIdentifier(next)]?.gamepad, other !== self {
+            systemHome = systemHome ?? other.systemHome
+            other.yield()
+        }
+        Self.players[ObjectIdentifier(next)] = Player(gamepad: self)
         let pads = gamepad.pads
         func steer(_ source: String, pad index: Int) -> GCControllerDirectionPadValueChangedHandler? {
-            guard index < pads.count else { return nil }
-            return { [weak self] _, x, y in MainActor.assumeIsolated { self?.set(source, pads[index].held(x: x, y: y)) } }
+            { [weak self] _, x, y in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if self.menu != nil {
+                        if index == 0 { self.point(source, x: x, y: y) }
+                    } else if index < pads.count {
+                        self.set(source, pads[index].held(x: x, y: y))
+                    }
+                }
+            }
         }
-        func press(_ source: String, _ key: String?) -> GCControllerButtonValueChangedHandler? {
-            guard let key else { return nil }
-            return { [weak self] _, _, pressed in MainActor.assumeIsolated { self?.set(source, pressed ? [key] : []) } }
+        func press(_ source: String, _ key: String?, menu input: MenuInput? = nil) -> GCControllerButtonValueChangedHandler? {
+            { [weak self] _, _, pressed in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if let menu = self.menu {
+                        if pressed, let input { menu(input) }
+                    } else if let key {
+                        self.set(source, pressed ? [key] : [])
+                    }
+                }
+            }
         }
         var buttons: [GCControllerButtonInput]
         if let full = next.extendedGamepad {
@@ -110,36 +148,66 @@ import Observation
             full.rightThumbstick.valueChangedHandler = steer("right stick", pad: 1)
             buttons = [full.buttonA, full.buttonB, full.buttonX, full.buttonY, full.leftShoulder, full.rightShoulder,
                        full.leftTrigger, full.rightTrigger]
-            full.buttonMenu.valueChangedHandler = press("menu", gamepad.menu)
+            full.buttonMenu.valueChangedHandler = press("menu", gamepad.menu, menu: .back)
+            full.buttonHome?.pressedChangedHandler = { [weak self] _, _, pressed in
+                MainActor.assumeIsolated { if pressed { self?.onHome?() } }
+            }
             offer(GamepadController(pads: 2, buttons: buttons.indices.map(String.init), menu: true))
         } else if let remote = next.microGamepad {
             remote.dpad.valueChangedHandler = steer("dpad", pad: 0)
             buttons = [remote.buttonA, remote.buttonX]
-            remote.buttonMenu.valueChangedHandler = press("menu", gamepad.menu)
+            remote.buttonMenu.valueChangedHandler = press("menu", gamepad.menu, menu: .back)
             offer(GamepadController(pads: 1, buttons: buttons.indices.map(String.init), menu: true))
         } else {
             offer(nil)
             return
         }
         for (index, button) in buttons.enumerated() {
-            button.pressedChangedHandler = press("button \(index)", index < gamepad.buttons.count ? gamepad.buttons[index].key : nil)
+            let input: MenuInput? = index == 0 ? .choose : index == 1 ? .back : nil
+            button.pressedChangedHandler = press("button \(index)", index < gamepad.buttons.count ? gamepad.buttons[index].key : nil,
+                                                 menu: input)
         }
+        claimHome()
+    }
+
+    /// Takes the home button from the system while it opens a menu, and gives it back after.
+    private func claimHome() {
+        guard let home = connected?.extendedGamepad?.buttonHome else { return }
+        if onHome != nil {
+            if systemHome == nil { systemHome = home.preferredSystemGestureState }
+            home.preferredSystemGestureState = .disabled
+        } else if let systemHome {
+            home.preferredSystemGestureState = systemHome
+            self.systemHome = nil
+        }
+    }
+
+    /// Moves the menu once each time a stick or d-pad turns to a new way.
+    private func point(_ source: String, x: Float, y: Float) {
+        let way: MenuInput? = max(abs(x), abs(y)) < 0.5 ? nil : abs(x) > abs(y) ? (x < 0 ? .left : .right) : (y > 0 ? .up : .down)
+        guard pointing[source] != way else { return }
+        pointing[source] = way
+        if let way { menu?(way) }
     }
 
     /// Another game took the controller: lets go of what this one held, leaving the handlers to it.
     private func yield() {
         connected = nil
+        systemHome = nil
         offer(nil)
     }
 
     private func release(_ old: GCController) {
-        guard Self.playing === self else { return }
-        Self.playing = nil
+        guard Self.players[ObjectIdentifier(old)]?.gamepad === self else { return }
+        Self.players[ObjectIdentifier(old)] = nil
         if let full = old.extendedGamepad {
             [full.dpad, full.leftThumbstick, full.rightThumbstick].forEach { $0.valueChangedHandler = nil }
             [full.buttonA, full.buttonB, full.buttonX, full.buttonY, full.leftShoulder, full.rightShoulder, full.leftTrigger,
              full.rightTrigger].forEach { $0.pressedChangedHandler = nil }
             full.buttonMenu.valueChangedHandler = nil
+            full.buttonHome?.pressedChangedHandler = nil
+            if let systemHome { full.buttonHome?.preferredSystemGestureState = systemHome }
+            systemHome = nil
         } else if let remote = old.microGamepad {
             remote.dpad.valueChangedHandler = nil
             [remote.buttonA, remote.buttonX].forEach { $0.pressedChangedHandler = nil }

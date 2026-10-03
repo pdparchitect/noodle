@@ -1364,7 +1364,10 @@ struct ChatView: View {
         }
         .fullScreenCover(item: $watching) { attachment in
             if attachment.liveKind == .noodlet {
-                NoodletScreen(chats: chats, thread: thread, attachment: attachment, requested: watchingAt)
+                NoodletPlayer(chats: chats, thread: thread,
+                              choices: LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))
+                                  .filter { $0.liveKind == .noodlet },
+                              playing: attachment, requested: watchingAt)
             } else {
                 LiveSurfaceScreen(chats: chats, thread: thread, attachment: attachment)
             }

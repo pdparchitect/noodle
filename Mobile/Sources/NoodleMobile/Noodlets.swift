@@ -5,6 +5,27 @@ import os
 import SwiftUI
 import WebKit
 
+/// A noodlet opened from a conversation, which the controller's home button can swap for another
+/// of the conversation's noodlets while it plays on the TV, without closing.
+struct NoodletPlayer: View {
+    let chats: HubChats
+    let thread: HubThread
+    /// The conversation's noodlets, newest first.
+    let choices: [LinkAttachment]
+    @State var playing: LinkAttachment
+    /// Where the person asked to open the first one, if they did.
+    @State var requested: NoodletManifest.Placement?
+
+    var body: some View {
+        NoodletScreen(chats: chats, thread: thread, attachment: playing, requested: requested)
+            .id(playing.id)
+            .environment(\.noodletMenu, NoodletMenu(choices: choices, current: playing.id) { next in
+                requested = nil
+                playing = next
+            })
+    }
+}
+
 /// A noodlet a bot shared: run on this phone, or watched live from the Hub, where the person last
 /// chose or its bot suggested. A Hub from before phones ran noodlets always shows it live.
 struct NoodletScreen: View {
@@ -84,6 +105,8 @@ struct NoodletDeviceScreen: View {
     @State private var onPhone = false
     @State private var tvAvailable = false
     @State private var connectingTV = false
+    @State private var gameMenu = GameMenu()
+    @Environment(\.noodletMenu) private var noodletMenu
     /// What the noodlet declares, while the person is asked about it.
     @State private var asking: (manifest: NoodletManifest, answer: CheckedContinuation<Bool, Never>)?
 
@@ -169,11 +192,15 @@ struct NoodletDeviceScreen: View {
         .externalScreen(enabled: Binding(get: { manifest.controls != nil && !onPhone }, set: { onPhone = !$0 }),
                         available: $tvAvailable) {
             if let page { MovableView(view: page.web) }
+            if let selected = gameMenu.selected { NoodletMenuView(menu: noodletMenu, selected: selected) }
         }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await start() }
         // The phone turns sideways as a controller does.
-        .onChange(of: onTV, initial: true) { ScreenOrientation.hold(onTV ? .landscape : manifest.orientation) }
+        .onChange(of: onTV, initial: true) {
+            ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
+            gameMenu.follow(onTV: onTV, hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
+        }
         .onDisappear { answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil) }
     }
 

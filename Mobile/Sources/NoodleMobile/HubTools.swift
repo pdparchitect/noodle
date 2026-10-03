@@ -573,6 +573,8 @@ struct LiveSurfaceScreen: View {
     @State private var onPhone = false
     @State private var tvAvailable = false
     @State private var connectingTV = false
+    @State private var gameMenu = GameMenu()
+    @Environment(\.noodletMenu) private var noodletMenu
     @Environment(\.verticalSizeClass) private var verticalSize
 
     /// Sideways, the picture gets the whole screen and the buttons float over its corners.
@@ -645,11 +647,15 @@ struct LiveSurfaceScreen: View {
         // The TV's view tells the Hub its size, so the game is drawn for the TV.
         .externalScreen(enabled: Binding(get: { controls != nil && !onPhone }, set: { onPhone = !$0 }), available: $tvAvailable) {
             SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
+            if let selected = gameMenu.selected { NoodletMenuView(menu: noodletMenu, selected: selected) }
         }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await follow() }
         // The phone turns sideways as a controller does.
-        .onChange(of: onTV) { ScreenOrientation.hold(onTV ? .landscape : nil) }
+        .onChange(of: onTV) {
+            ScreenOrientation.hold(onTV ? .landscape : nil)
+            gameMenu.follow(onTV: onTV, hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
+        }
         .onDisappear { hardware.detach(); channel?.cancel(); ScreenOrientation.hold(nil) }
     }
 
