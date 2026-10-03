@@ -656,7 +656,7 @@ struct LiveSurfaceScreen: View {
         .onChange(of: onTV) {
             ScreenOrientation.hold(onTV ? .landscape : nil)
         }
-        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerInUse: hardware.controller != nil), initial: true) { _, awake in
+        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
         }
         .onDisappear {

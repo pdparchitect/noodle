@@ -187,10 +187,10 @@ public enum AppletGuidance {
         isTrusted). A game controller connected to the device presses the same keys, so a game
         played with keys needs nothing more.
 
-        For analog sticks or more than one player, a game can also read controllers itself
-        with the standard Gamepad API (navigator.getGamepads(), gamepadconnected). Keep the
-        keys working alongside it for people without a controller. Several players need the
-        Gamepad API: declared keys reach one player only.
+        Declare keys for any game played with a controller: Noodle on iPhone does not pass
+        controllers to the standard Gamepad API, so navigator.getGamepads() finds none there.
+        A game may still read the Gamepad API where it has one, for analog sticks or several
+        players, but keep the keys working alongside it.
 
         Optional manifest window object:
         {"type":"floating","background":"translucent","titlebar":false,"width":320,"height":350,"minWidth":260,"minHeight":300,"maxWidth":480,"maxHeight":520,"resizable":true,"rememberFrame":true}

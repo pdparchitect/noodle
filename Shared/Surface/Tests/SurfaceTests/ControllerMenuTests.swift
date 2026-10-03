@@ -73,6 +73,19 @@ import Testing
         hardware.detach()
     }
 
+    /// A connected controller counts before it is pressed, so the phone can stay awake for a game
+    /// that reads no keys from it.
+    @Test func aConnectedControllerIsKnownBeforeItIsPressed() {
+        let controller = GCController.withExtendedGamepad()
+        let hardware = HardwareGamepad()
+        hardware.available = { controller }
+        #expect(!hardware.hasController)
+        hardware.attach(Gamepad()) { _ in }
+        #expect(hardware.hasController)
+        hardware.detach()
+        #expect(!hardware.hasController)
+    }
+
     /// Controller handlers arrive on the main queue: waits for `done`, or a moment for nothing to arrive.
     private static func settle(until done: () -> Bool = { false }) async {
         for _ in 0..<40 where !done() { try? await Task.sleep(for: .milliseconds(10)) }

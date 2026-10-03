@@ -9,7 +9,8 @@
 
 ### Fixed
 
-- The phone no longer dims and locks during a game played with a controller or on the TV: controller presses do not count as touches, so it used to go to sleep mid-game.
+- The phone no longer dims and locks while a game controller is connected to an open noodlet, or a game plays on the TV: controller presses do not count as touches, so it used to go to sleep mid-game.
+- Games make sound in Silent Mode, as videos do. They were silent with Silent Mode on, on the phone and on the TV.
 - Games play on the TV on iOS 27: with Screen Mirroring on, Show on TV said no TV was connected and the TV kept mirroring the phone. Until a game is open, the TV now mirrors the phone as usual. Needs iOS 27.
 - Noodlets run on the phone have sound: a game played with the on-screen controls was silent, as was any noodlet with the ring switch set to silent. Music playing in another app carries on alongside.
 
@@ -23,6 +24,7 @@
 - In a conversation with several noodlets, open one and press a paired controller's View button: the noodlets show over it, on the TV while it plays there. Pick another with A: it opens on the TV without touching the phone. Open the menu again and choose Close Game: the game closes and the TV mirrors the phone. Press B in the menu: the game carries on.
 - In that menu, each noodlet shows its picture and name, as in the conversation.
 - Play a game with only a controller for a few minutes without touching the phone: the screen stays on. Close the game: the phone dims and locks as usual again.
+- Turn Silent Mode on and play a game with sound: you hear it on the phone, and on the TV while casting.
 - With the ring switch set to silent, open a noodlet with sound on the phone and play it with the on-screen controls only: you hear it. Play music in another app first: both play together, and the music carries on after you close the noodlet.
 
 ## [0.17.0] - 2026-10-03

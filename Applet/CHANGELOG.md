@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Bots are told that a game controller already plays a game's declared keys, and to use the standard Gamepad API for analog sticks or several players.
+- Bots are told that a game controller already plays a game's declared keys, and to declare keys for any game played with one, since Noodle on iPhone does not pass controllers to the Gamepad API.
 
 ## [0.24.0] - 2026-10-03
 

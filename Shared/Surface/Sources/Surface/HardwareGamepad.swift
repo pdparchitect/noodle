@@ -10,6 +10,8 @@ import Observation
     /// What the controller in hand has, or nil with none. A connected controller counts once it
     /// is used: the simulator always lists a virtual one, and a paired one may be in a drawer.
     public private(set) var controller: GamepadController?
+    /// Whether a controller is connected, used yet or not.
+    public private(set) var hasController = false
     @ObservationIgnored private var connectedController: GamepadController?
     @ObservationIgnored private var gamepad: Gamepad?
     @ObservationIgnored private var onKey: (GamepadKeyChange) -> Void = { _ in }
@@ -100,6 +102,7 @@ import Observation
         set([:])
         connectedController = next
         controller = nil
+        hasController = next != nil
     }
 
     private func connect() { use(available()) }

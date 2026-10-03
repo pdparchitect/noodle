@@ -120,8 +120,8 @@ import XCTest
 
     /// Controller presses are not touches, so iOS would dim and lock the phone mid-game.
     func testAGameWithAControllerOrOnTheTVKeepsThePhoneAwake() {
-        XCTAssertFalse(NoodletPlayer.keepsAwake(onTV: false, controllerInUse: false))
-        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: true, controllerInUse: false))
-        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: false, controllerInUse: true))
+        XCTAssertFalse(NoodletPlayer.keepsAwake(onTV: false, controllerConnected: false))
+        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: true, controllerConnected: false))
+        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: false, controllerConnected: true))
     }
 }

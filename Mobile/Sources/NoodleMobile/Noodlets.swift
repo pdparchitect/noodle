@@ -38,7 +38,7 @@ struct NoodletPlayer: View {
     }
 
     /// Controller presses are not touches, so iOS would dim and lock the phone mid-game.
-    static func keepsAwake(onTV: Bool, controllerInUse: Bool) -> Bool { onTV || controllerInUse }
+    static func keepsAwake(onTV: Bool, controllerConnected: Bool) -> Bool { onTV || controllerConnected }
 }
 
 /// A noodlet a bot shared: run on this phone, or watched live from the Hub, where the person last
@@ -145,6 +145,11 @@ struct NoodletDeviceScreen: View {
         // A game played from the on-screen controls never has its page tapped, which iOS otherwise
         // waits for before letting it make a sound.
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        // WebKit gives Web Audio a category that Silent Mode mutes; playback is heard either way,
+        // as a video app is.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: "if (navigator.audioSession) navigator.audioSession.type = 'playback';",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
 
     private var screenControls: Gamepad? {
@@ -217,7 +222,7 @@ struct NoodletDeviceScreen: View {
         .onChange(of: onTV, initial: true) {
             ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
         }
-        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerInUse: hardware.controller != nil), initial: true) { _, awake in
+        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
         }
         .onDisappear {

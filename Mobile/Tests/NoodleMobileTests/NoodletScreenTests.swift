@@ -35,6 +35,16 @@ import XCTest
         XCTAssertEqual(configuration.mediaTypesRequiringUserActionForPlayback, [])
     }
 
+    /// WebKit gives a page's Web Audio a category that Silent Mode mutes; a noodlet asks for
+    /// playback, as a video app does, so a game is heard either way.
+    func testANoodletIsHeardInSilentMode() {
+        let configuration = WKWebViewConfiguration()
+        NoodletDeviceScreen.configure(configuration, for: NoodletManifest(title: "Game"))
+        XCTAssertTrue(configuration.userContentController.userScripts.contains {
+            $0.source.contains("navigator.audioSession.type = 'playback'") && $0.injectionTime == .atDocumentStart
+        })
+    }
+
     /// While a noodlet is open its sound plays with the ring switch set to silent, alongside what
     /// else is playing; afterwards the app goes back to the switch.
     func testANoodletIsHeardWithTheRingSwitchSilent() {
