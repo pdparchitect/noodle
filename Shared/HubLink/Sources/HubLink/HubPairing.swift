@@ -69,8 +69,9 @@ import Observation
         }
     }
 
-    /// Forgets the Hub. The Hub still lists this device until its owner removes it.
+    /// Forgets the Hub at once, keeping only what telling it takes until `sendLeave` has.
     public func leave() {
+        if let hub { try? JSONEncoder().encode(hub).write(to: leavingURL, options: .atomic) }
         try? FileManager.default.removeItem(at: hubURL)
         try? FileManager.default.removeItem(at: statusURL)
         hub = nil
@@ -78,6 +79,27 @@ import Observation
         endpoint = nil
         error = nil
         isUnreachable = false
+    }
+
+    /// Whether a device that left the Hub from this folder has yet to tell it.
+    public static func isLeaving(_ folder: URL) -> Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(leavingName).path)
+    }
+
+    /// Tells the Hub this device left, from the folder it kept; true once the Hub answered, whatever
+    /// it said: a Hub that already forgot the device, or one too old to know the request, will not
+    /// answer differently later.
+    public static func sendLeave(from folder: URL) async -> Bool {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(leavingName)),
+              let hub = try? JSONDecoder().decode(Hub.self, from: data),
+              let identity = try? LinkIdentity.loadOrCreate(at: folder.appendingPathComponent(keyName)),
+              let request = try? LinkProtocol.encode(.leave) else { return true }
+        do {
+            _ = try await LinkClient.exchange(request, identity: identity, hubKey: hub.key, endpoints: hub.endpoints)
+            return true
+        } catch {
+            return false
+        }
     }
 
     private func perform(quietly: Bool = false, _ body: () async throws -> Void) async {
@@ -285,7 +307,7 @@ import Observation
     }
 
     private func identity() throws -> LinkIdentity {
-        try LinkIdentity.loadOrCreate(at: directory.appendingPathComponent("device.key"))
+        try LinkIdentity.loadOrCreate(at: directory.appendingPathComponent(Self.keyName))
     }
 
     private func save(_ hub: Hub) throws {
@@ -301,6 +323,9 @@ import Observation
 
     private var hubURL: URL { directory.appendingPathComponent("hub.json") }
     private var statusURL: URL { directory.appendingPathComponent("status.json") }
+    private var leavingURL: URL { directory.appendingPathComponent(Self.leavingName) }
+    private static let keyName = "device.key"
+    private static let leavingName = "leaving.json"
 }
 
 /// A noodlet a bot shared, opened to run on this device. The Hub forgets what it opened when it

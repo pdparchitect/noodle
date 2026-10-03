@@ -272,6 +272,62 @@ import XCTest
         XCTAssertNil(relaunched.hubs[0].error)
     }
 
+    /// Leaving is immediate on the device, and the Hub hears of it and unpairs the device.
+    func testLeavingTellsTheHub() async throws {
+        let (hub, link, device) = try await fixture()
+        let hubs = HubMemberships(directory: device, deviceName: "Mac")
+        await hubs.join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+        XCTAssertEqual(hub.access.devices.count, 1)
+        hubs.leave(hubs.hubs[0])
+        XCTAssertTrue(hubs.hubs.isEmpty)
+        await hubs.sendLeaves()
+        XCTAssertTrue(hub.access.devices.isEmpty)
+        XCTAssertFalse(hubs.hasUnsentLeaves)
+        // Its key goes once the Hub has heard.
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: device.path), [])
+        let entry = try XCTUnwrap(hub.access.log?.entries.last)
+        XCTAssertEqual(entry.what, "Unpaired “Mac” from Ada")
+        XCTAssertEqual(entry.who, "Ada on Mac")
+    }
+
+    /// A Hub that cannot be reached is told later, even after a relaunch; the device is gone from the list at once.
+    func testALeaveWaitsUntilTheHubCanBeReached() async throws {
+        let (hub, link, device) = try await fixture()
+        guard case .listening(let port) = link.state else { return XCTFail("not listening") }
+        let hubs = HubMemberships(directory: device, deviceName: "Mac")
+        await hubs.join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+        link.stop()
+        hubs.leave(hubs.hubs[0])
+        XCTAssertTrue(hubs.hubs.isEmpty)
+        await hubs.sendLeaves()
+        XCTAssertTrue(hubs.hasUnsentLeaves)
+        XCTAssertEqual(hub.access.devices.count, 1)
+
+        let relaunched = HubMemberships(directory: device, deviceName: "Mac")
+        XCTAssertTrue(relaunched.hubs.isEmpty)
+        XCTAssertTrue(relaunched.hasUnsentLeaves)
+        // The same Hub back on its port.
+        let back = HubLinkService(hubName: "Mac mini", directory: device.deletingLastPathComponent().appendingPathComponent("Hub/Link"),
+                                  access: hub.access, profiles: hub.harnessProfiles, port: port,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await back.start()
+        addTeardownBlock { await MainActor.run { back.stop() } }
+        guard case .listening = back.state else { throw XCTSkip("Could not listen again on \(port)") }
+        await relaunched.refreshAll()
+        XCTAssertTrue(hub.access.devices.isEmpty)
+        XCTAssertFalse(relaunched.hasUnsentLeaves)
+    }
+
+    /// Only a paired device can leave, and only as itself.
+    func testOnlyAPairedDeviceLeaves() async throws {
+        let (hub, link, _) = try await fixture()
+        let join = try link.invite(try hub.access.addUser(named: "Ada")).joinIdentity()
+        let (answer, _) = try await LinkClient.exchange(try LinkProtocol.encode(.leave), identity: join, hubKey: link.key,
+                                                        endpoints: link.endpoints, timeout: .seconds(5))
+        XCTAssertEqual(try LinkProtocol.decodeResponse(answer), .failure("This device is not paired with Mac mini."))
+        XCTAssertEqual(hub.access.log?.entries.last?.what, "Tried to leave")
+    }
+
     func testJoiningAHubAgainReplacesItsEntry() async throws {
         let (hub, link, device) = try await fixture()
         let ada = try hub.access.addUser(named: "Ada")

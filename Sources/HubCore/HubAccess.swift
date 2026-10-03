@@ -349,9 +349,13 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
 
     /// Users on a deleted plan go back to Default.
     public func delete(_ plan: HubPlan) {
-        guard !plan.isDefault else { return }
+        guard !plan.isDefault, let plan = plans.first(where: { $0.id == plan.id }) else { return }
         plans.removeAll { $0.id == plan.id }
-        for index in users.indices where users[index].plan == plan.id { users[index].plan = HubPlan.defaultID }
+        let defaultName = plans.first(where: \.isDefault)?.name ?? "Default"
+        for index in users.indices where users[index].plan == plan.id {
+            users[index].plan = HubPlan.defaultID
+            note("Moved \(users[index].name) to the \(defaultName) plan, as the \(plan.name) plan was deleted", about: [users[index].id])
+        }
         save()
     }
 

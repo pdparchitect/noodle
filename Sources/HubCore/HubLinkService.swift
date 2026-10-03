@@ -494,6 +494,11 @@ import os
                 access.remove(try admin(key).managedDevice(id))
                 return .done
             }
+        case .leave:
+            return try logged(request, from: key) {
+                access.remove(try paired(key))
+                return .done
+            }
         case .inviteUser(let id):
             return try logged(request, from: key) { .invitation(invite(try admin(key).managedUser(id))) }
         case .subscribe:
@@ -753,6 +758,8 @@ import os
             return ("Tried to unpair “\(device.name)”", [device.user])
         case .inviteUser(let id):
             return ("Tried to invite a device for \(name(id))", [id])
+        case .leave:
+            return ("Tried to leave", [])
         default:
             return ("Tried to invite a device for \(actor?.name ?? "themselves")", [])
         }

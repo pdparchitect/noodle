@@ -18,12 +18,19 @@ import Observation
     @ObservationIgnored private var folders: [ObjectIdentifier: URL] = [:]
     @ObservationIgnored private var joinTask: Task<Void, Never>?
     @ObservationIgnored private var joinCancelled = false
+    /// Folders of Hubs this device left without telling them yet.
+    @ObservationIgnored private var leaving: [URL] = []
+    @ObservationIgnored private var sending: Task<Void, Never>?
 
     public init(directory: URL, deviceName: String) {
         self.directory = directory
         self.deviceName = deviceName
         let folders = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.creationDateKey])) ?? []
         for folder in folders.sorted(by: Self.created) {
+            if HubPairing.isLeaving(folder) {
+                leaving.append(folder)
+                continue
+            }
             let pairing = HubPairing(directory: folder, deviceName: deviceName)
             guard pairing.hub != nil else { continue }
             hubs.append(pairing)
@@ -90,22 +97,40 @@ import Observation
 
     public func declineOffered() { offered = nil }
 
-    /// Forgets the Hub and this device's key for it.
+    /// Leaves the Hub at once and tells it, now or, while it cannot be reached, at a later check-in.
+    /// This device's key for it goes once the Hub has heard.
     public func leave(_ pairing: HubPairing) {
         pairing.leave()
-        if let folder = folders.removeValue(forKey: ObjectIdentifier(pairing)) {
-            try? FileManager.default.removeItem(at: folder)
-        }
+        if let folder = folders.removeValue(forKey: ObjectIdentifier(pairing)) { leaving.append(folder) }
         hubs.removeAll { $0 === pairing }
+        Task { await sendLeaves() }
+    }
+
+    public var hasUnsentLeaves: Bool { !leaving.isEmpty }
+
+    /// Tells the Hubs this device left; those that cannot be reached are told next time.
+    public func sendLeaves() async {
+        if let sending { return await sending.value }
+        let task = Task {
+            for folder in leaving where await HubPairing.sendLeave(from: folder) {
+                try? FileManager.default.removeItem(at: folder)
+                leaving.removeAll { $0 == folder }
+            }
+        }
+        sending = task
+        await task.value
+        sending = nil
     }
 
     public func refreshAll() async {
+        await sendLeaves()
         for pairing in hubs { await pairing.refresh() }
     }
 
     /// Checks in with every Hub until cancelled, which is how each knows this device is connected.
     public func stayConnected() async {
         while !Task.isCancelled {
+            await sendLeaves()
             for pairing in hubs { await pairing.refresh(quietly: true) }
             try? await Task.sleep(for: HubPairing.checkInInterval)
         }

@@ -58,15 +58,31 @@ import XCTest
     }
 
     /// A device sending refused requests cannot grow the log without end.
-    func testTheLogKeepsOnlyTheNewestEntries() {
+    func testTheLogKeepsOnlyTheNewestRefusals() {
         let url = folder()
         XCTAssertEqual(HubActivityLog(url: url.appendingPathComponent("other.jsonl")).limit, 10_000)
         let first = log(at: url, limit: 20)
-        for index in 0..<25 { first.record(who: "x", what: "\(index)", users: []) }
+        for index in 0..<25 { first.record(who: "x", what: "\(index)", refusal: "No.", users: []) }
         XCTAssertEqual(first.entries.map(\.what), (5..<25).map(String.init))
         XCTAssertEqual(log(at: url, limit: 20).entries.map(\.what), (5..<25).map(String.init))
         // Opening with a smaller limit drops the oldest too.
         XCTAssertEqual(log(at: url, limit: 10).entries.map(\.what), (15..<25).map(String.init))
+    }
+
+    /// Flooding the Hub with refused requests cannot push out the record of a real change.
+    func testRefusalsNeverPushOutChanges() {
+        let url = folder()
+        let log = log(at: url, limit: 3)
+        log.record(who: "Grace on iPhone", what: "Paired “Mallory’s Mac” for Ada", users: [])
+        for index in 0..<10 { log.record(who: "x", what: "Try \(index)", refusal: "No.", users: []) }
+        log.record(who: "This Mac", what: "Added Bea", users: [])
+        for index in 10..<12 { log.record(who: "x", what: "Try \(index)", refusal: "No.", users: []) }
+        let expected = ["Paired “Mallory’s Mac” for Ada", "Try 9", "Added Bea", "Try 10", "Try 11"]
+        XCTAssertEqual(log.entries.map(\.what), expected)
+        XCTAssertEqual(self.log(at: url, limit: 3).entries.map(\.what), expected)
+        // Changes alone are kept however many, until they are 90 days old.
+        for index in 0..<5 { log.record(who: "This Mac", what: "Change \(index)", users: []) }
+        XCTAssertEqual(log.entries.filter { $0.refusal == nil }.count, 7)
     }
 
     func testALineThatCannotBeReadIsSkipped() throws {
@@ -116,6 +132,19 @@ import XCTest
         XCTAssertEqual(Set(access.log?.entries.map(\.who) ?? []), ["This Mac"])
         XCTAssertEqual(Set(access.log?.entries.flatMap(\.users) ?? []), [ada.id])
         XCTAssertEqual(access.log?.entries.allSatisfy { $0.refusal == nil }, true)
+    }
+
+    /// Deleting a plan moves its users to Default, which is kept for each of them.
+    func testUsersMovedByDeletingAPlanAreLogged() throws {
+        let access = access(at: folder())
+        let family = try access.addPlan(named: "Family")
+        let ada = try access.addUser(named: "Ada"), bea = try access.addUser(named: "Bea")
+        access.move(ada, to: family)
+        access.move(bea, to: family)
+        access.delete(family)
+        XCTAssertEqual(whats(access).suffix(2), ["Moved Ada to the Default plan, as the Family plan was deleted",
+                                                 "Moved Bea to the Default plan, as the Family plan was deleted"])
+        XCTAssertEqual(access.log?.entries.last?.users, [bea.id])
     }
 
     /// Settings sets values it already has, as a switch redrawn does; only changes are kept.

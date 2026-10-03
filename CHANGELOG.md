@@ -11,6 +11,10 @@ All notable changes to Noodle are documented here, following
 - Apple Intelligence bots can use any server with an OpenAI-compatible API: choose Add Account > Custom in Settings > Harness > Apple Intelligence > Remote Models and enter its address and, if it needs one, an API key. Add Model describes each model: its ID, which can be picked from the ones the server lists, its context and output limits, whether it accepts images and which reasoning levels it supports. Only the models added are offered to bots.
 - Admins of a Noodle Hub can manage its users from Settings > Hub: Users next to the Hub lists everyone with their devices, adds people, renames them, changes their plan and whether they can pair devices, invites and removes their devices, and removes them. Admins are listed but changed only on the Hub.
 
+### Changed
+
+- Leave beside a Noodle Hub in Settings > Hub also removes this Mac from the Hub's devices. The Hub is gone from Noodle at once; if it cannot be reached, Noodle tells it the next time it can.
+
 ## [0.44.0] - 2026-10-03
 
 ### Added

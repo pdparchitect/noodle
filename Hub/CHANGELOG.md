@@ -5,7 +5,11 @@
 ### Added
 
 - Users can be made admins in Settings > Users. The Hub lets an admin's devices add, rename and remove the users who are not admins, move them to another plan, and invite or unpair their devices, ready for Noodle and Noodle Mobile to offer it. Only the Hub's own Settings makes or changes admins.
-- Activity in the menu bar menu lists who added, changed or removed users, made invitations and paired or removed devices, on the Hub or from a device, and every attempt the Hub refused, with its reason. Entries are kept for 90 days, and a person can be chosen to see only what concerns them.
+- Activity in the menu bar menu lists who added, changed or removed users, made invitations and paired or removed devices, on the Hub or from a device, and every attempt the Hub refused, with its reason. Entries are kept for 90 days, and a person can be chosen to see only what concerns them. However many refused requests a device sends, they never push out the record of a change.
+
+### Changed
+
+- A device that leaves the Hub in Noodle or Noodle Mobile is removed from Users, and Activity records it.
 
 ## [0.16.0] - 2026-10-03
 

@@ -198,6 +198,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case removeDevice(id: UUID)
     /// For admins: a one-time invitation for a device of a user who is not an admin. Answered with `invitation`.
     case inviteUser(id: UUID)
+    /// Unpairs this device from the Hub. Answered with `done`.
+    case leave
     /// Readies a noodlet a bot shared in one of this user's conversations to run on this device.
     /// Answered with `noodlet`.
     case noodlet(conversationID: UUID, attachmentID: UUID)

@@ -6,8 +6,13 @@
 
 - Admins of a Hub can manage its users from the phone: Users in that Hub's details, under Hubs, lists everyone. Add someone with +, and tap a person to change their plan and whether they can pair devices, rename them, invite or remove their devices, or remove them. Admins are listed but changed only on the Hub.
 
+### Changed
+
+- Leave Hub also removes the phone from the Hub's devices. The Hub is gone from the phone at once; if it cannot be reached, the phone tells it the next time it can.
+
 ### What to Test
 
+- Leave a Hub: it disappears from Hubs at once, and the phone disappears from Users on the Hub, also when the Hub was off while you left and is turned on later.
 - On the Hub, turn on Admin for yourself in Settings > Users. On the phone, open ••• > Hubs, tap ⓘ beside the Hub, then Users: add someone, invite a device for them, change their plan, then remove them.
 - Without Admin, Users does not appear.
 

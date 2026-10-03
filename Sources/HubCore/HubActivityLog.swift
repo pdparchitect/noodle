@@ -29,10 +29,11 @@ public struct HubActor: Sendable {
 }
 
 /// The Activity window's record, kept for 90 days. Appended a line at a time, so a busy Hub
-/// rewrites the file only when old entries go.
+/// rewrites the file only when old entries go. Refusals are capped, and push out only older
+/// refusals: a device flooding the Hub cannot push out the record of a change.
 @MainActor @Observable public final class HubActivityLog {
     public static let retention: TimeInterval = 90 * 24 * 60 * 60
-    /// However many refused requests a device sends, the log stays this short.
+    /// The most refusals kept, however many refused requests a device sends.
     public let limit: Int
 
     /// Oldest first.
@@ -70,7 +71,14 @@ public struct HubActor: Sendable {
         let cutoff = now().addingTimeInterval(-Self.retention)
         let count = entries.count
         entries.removeAll { $0.date < cutoff }
-        if entries.count > limit { entries.removeFirst(entries.count - limit) }
+        var excess = entries.count { $0.refusal != nil } - limit
+        if excess > 0 {
+            entries.removeAll { entry in
+                guard excess > 0, entry.refusal != nil else { return false }
+                excess -= 1
+                return true
+            }
+        }
         return entries.count != count
     }
 

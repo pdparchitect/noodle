@@ -34,6 +34,7 @@ final class LinkCompatibilityTests: XCTestCase {
             (#"{"removeUser":{"id":"\#(a)"}}"#, .removeUser(id: a)),
             (#"{"removeDevice":{"id":"\#(a)"}}"#, .removeDevice(id: a)),
             (#"{"inviteUser":{"id":"\#(a)"}}"#, .inviteUser(id: a)),
+            (#"{"leave":{}}"#, .leave),
         ]
         for (json, request) in expected {
             XCTAssertEqual(try decode(LinkRequest.self, json), request, json)
