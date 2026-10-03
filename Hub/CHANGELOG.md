@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-03
+
 ### Added
 
 - Keeps each conversation's background for all its user's devices, and makes a small copy of a background video for phones.

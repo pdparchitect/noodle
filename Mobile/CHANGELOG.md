@@ -2,15 +2,22 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-03
+
+### Changed
+
+- A conversation's background is kept on the Hub, so it is the same on your phone and your Macs, and a background video chosen on a Mac plays here too. Backgrounds chosen on this phone before are gone. Needs the matching Noodle Hub, or Noodle on a Mac serving as a Hub.
+
+### What to Test
+
+- Choose a photo as a conversation's background: the same conversation on the Mac shows it within a few seconds. Change it on the Mac to a gradient: the phone follows.
+- On the Mac, choose a video as a conversation's background: it plays, silently, behind that conversation on the phone. With Reduce Motion on, the phone shows a still picture.
+
 ## [0.15.0] - 2026-10-03
 
 ### Added
 
 - Archive a bot or group by touching and holding it in the list: it keeps everything but stops running and leaves the list, for all your devices. Bring it back from Archived in the Hub's profile, under Profiles. Needs the matching Noodle Hub, or Noodle on a Mac serving as a Hub.
-
-### Changed
-
-- A conversation's background is kept on the Hub, so it is the same on your phone and your Macs, and a background video chosen on a Mac plays here too. Backgrounds chosen on this phone before are gone. Needs the matching Noodle Hub, or Noodle on a Mac serving as a Hub.
 
 ### What to Test
 
@@ -19,8 +26,6 @@
 - Archive every bot in a group, then open the group: the message field says every bot in it is archived and cannot be typed in.
 - Archive a group, then unarchive it from the Hub's profile: its messages are all still there.
 - In Archived, tap a bot or group: its conversation opens to read, and the message field says it is archived.
-- Choose a photo as a conversation's background: the same conversation on the Mac shows it within a few seconds. Change it on the Mac to a gradient: the phone follows.
-- On the Mac, choose a video as a conversation's background: it plays, silently, behind that conversation on the phone. With Reduce Motion on, the phone shows a still picture.
 
 ## [0.14.0] - 2026-10-02
 
