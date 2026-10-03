@@ -1,3 +1,4 @@
+import GameController
 import HubLink
 import UIKit
 import XCTest
@@ -31,5 +32,30 @@ import XCTest
         tv.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         tv.layoutIfNeeded()
         XCTAssertEqual(page.frame, tv.bounds)
+    }
+}
+
+/// While the TV shows the game and a controller covers every button, the phone lists the controllers.
+@MainActor final class ConnectedControllerTests: XCTestCase {
+    func testAControllerIsShownByItsMakersLogo() {
+        XCTAssertEqual(ConnectedController.symbol(for: GCProductCategoryXboxOne), "logo.xbox")
+        XCTAssertEqual(ConnectedController.symbol(for: GCProductCategoryDualSense), "logo.playstation")
+        XCTAssertEqual(ConnectedController.symbol(for: GCProductCategoryDualShock4), "logo.playstation")
+        XCTAssertEqual(ConnectedController.symbol(for: "Switch Pro Controller"), "gamecontroller.fill")
+    }
+
+    func testABatteryShowsAsTheNearestQuarter() {
+        XCTAssertEqual(ConnectedController.batterySymbol(level: 0.9, charging: false), "battery.100percent")
+        XCTAssertEqual(ConnectedController.batterySymbol(level: 0.6, charging: false), "battery.50percent")
+        XCTAssertEqual(ConnectedController.batterySymbol(level: 0.05, charging: false), "battery.0percent")
+        XCTAssertEqual(ConnectedController.batterySymbol(level: 0.4, charging: true), "battery.100percent.bolt")
+    }
+
+    func testOnlyGameControllersAreListed() {
+        let pad = GCController.withExtendedGamepad()
+        let listed = ConnectedController.list([pad])
+        XCTAssertEqual(listed.count, 1)
+        XCTAssertFalse(listed[0].name.isEmpty)
+        XCTAssertTrue(ConnectedController.list([GCController.withMicroGamepad()]).isEmpty)
     }
 }

@@ -1,3 +1,4 @@
+import GameController
 import HubLink
 import SwiftUI
 import UIKit
@@ -94,5 +95,61 @@ extension View {
         } message: {
             Text("Turn on Screen Mirroring in Control Center, or connect a TV with a cable.")
         }
+    }
+}
+
+/// A game controller connected to the phone, as the phone lists it while a game plays on the TV.
+struct ConnectedController: Identifiable {
+    let id: ObjectIdentifier
+    let name: String
+    let symbol: String
+    let battery: String?
+
+    /// The game controllers among `controllers`, leaving out remotes and the like.
+    static func list(_ controllers: [GCController]) -> [Self] {
+        controllers.filter { $0.extendedGamepad != nil }.map { controller in
+            let battery = controller.battery.flatMap {
+                $0.batteryState == .unknown ? nil : batterySymbol(level: $0.batteryLevel, charging: $0.batteryState == .charging)
+            }
+            return Self(id: ObjectIdentifier(controller), name: controller.vendorName ?? controller.productCategory,
+                        symbol: symbol(for: controller.productCategory), battery: battery)
+        }
+    }
+
+    static func symbol(for category: String) -> String {
+        switch category {
+        case GCProductCategoryXboxOne: "logo.xbox"
+        case GCProductCategoryDualSense, GCProductCategoryDualShock4: "logo.playstation"
+        default: "gamecontroller.fill"
+        }
+    }
+
+    static func batterySymbol(level: Float, charging: Bool) -> String {
+        charging ? "battery.100percent.bolt" : "battery.\(Int((level * 4).rounded()) * 25)percent"
+    }
+}
+
+/// The controllers playing, in place of on-screen controls the phone no longer needs.
+struct ConnectedControllersView: View {
+    /// Bumped as controllers come and go.
+    @State private var changes = 0
+
+    var body: some View {
+        // Batteries report no changes, so they are read again now and then.
+        TimelineView(.periodic(from: .now, by: 30)) { _ in
+            let _ = changes
+            VStack(alignment: .leading, spacing: 20) {
+                ForEach(ConnectedController.list(GCController.controllers())) { controller in
+                    HStack(spacing: 14) {
+                        Image(systemName: controller.symbol).font(.title).frame(width: 44)
+                        Text(controller.name).font(.title3)
+                        if let battery = controller.battery { Image(systemName: battery).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in changes += 1 }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in changes += 1 }
     }
 }

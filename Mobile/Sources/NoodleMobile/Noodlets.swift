@@ -133,7 +133,7 @@ struct NoodletDeviceScreen: View {
             ZStack {
                 if onTV {
                     Color.black.ignoresSafeArea()
-                    if screenControls == nil { Text("Playing on TV").foregroundStyle(.secondary) }
+                    if screenControls == nil { ConnectedControllersView() }
                 } else if let page {
                     MovableView(view: page.web).ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 }

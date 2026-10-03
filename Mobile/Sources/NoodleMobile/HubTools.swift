@@ -611,7 +611,7 @@ struct LiveSurfaceScreen: View {
             ZStack {
                 if onTV {
                     Color.black.ignoresSafeArea()
-                    if screenControls == nil, showing { Text("Playing on TV").foregroundStyle(.secondary) }
+                    if screenControls == nil, showing { ConnectedControllersView() }
                 } else {
                     SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
                         .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
