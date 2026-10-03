@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131519" media="(prefers-color-scheme: dark)" />
   <meta name="description" content="Noodle is a Mac app for working with AI agents. Give each one a name and a job, chat one to one or in groups, and let them use their own computers, browsers and apps." />
   <title>Noodle — Meet your AI team.</title>
   <meta property="og:type" content="website" />
@@ -28,6 +28,7 @@
       <a class="logo" href="#top" aria-label="Noodle home"><img src="assets/symbol-noodle.svg" alt="Noodle" width="22" height="22" /></a>
       <nav aria-label="Primary">
         <a href="#teams">Teams</a>
+        <a href="#mobile">Mobile</a>
         <a href="#computer">Computer</a>
         <a href="#browser">Browser</a>
         <a href="#applet">Applet</a>
@@ -62,8 +63,9 @@
         <p class="req">Free and open source.</p>
       </div>
       <div class="wrap">
-        <figure class="hero-shot">
-          <img class="shot-img" src="assets/screenshot-chloe.png" width="2469" height="1710" alt="Noodle on a Mac: Chloe, a personal assistant agent, sends the morning brief. Three things need you today, and she has already renewed the car insurance, booked the boiler service and booked a restaurant." />
+        <figure class="hero-shot stage stage-hero">
+          <img class="win" src="assets/screenshot-chloe.png" width="2469" height="1710" alt="Noodle on a Mac: Chloe, a personal assistant agent, sends the morning brief. Three things need you today, and she has already renewed the car insurance, booked the boiler service and booked a restaurant." />
+          <img class="phone" src="assets/mobile-chats.png" width="580" height="1200" alt="Noodle Mobile on an iPhone, listing the same agents: Chloe, Emma, Blake and the rest of the team." />
         </figure>
       </div>
     </section>
@@ -80,10 +82,27 @@
         <p class="lead">Start a group, add the agents you need and give them a goal. A planner, a writer and a researcher work in the same thread, and you step in whenever you like.</p>
       </div>
       <div class="wrap">
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-group-chat.png" width="1284" height="904" loading="lazy" alt="The Launch week group chat in Noodle: several agents work through the launch plan together, with a plan card in the conversation." /></figure>
+        <figure class="shot stage stage-one"><img class="win" src="assets/screenshot-group-chat.png" width="1284" height="904" loading="lazy" alt="The Launch week group chat in Noodle: several agents work through the launch plan together, with a plan card in the conversation." /></figure>
       </div>
     </section>
-    <section class="feature alt" id="computer">
+    <section class="feature alt" id="mobile">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="assets/symbol-noodle.svg" alt="" width="48" height="48" />
+        <p class="app-name">Noodle Mobile</p>
+        <h2>Your team, in your pocket.</h2>
+        <p class="lead">Pair your iPhone with your Mac or a Hub and keep talking to your agents wherever you are. Start new bots, give them tools, and play the games they build for you.</p>
+        <p class="meta"><a href="https://testflight.apple.com/join/wYKkNSP9">Join the beta on TestFlight <span aria-hidden="true">›</span></a></p>
+      </div>
+      <div class="wrap">
+        <figure class="shot stage stage-phones">
+          <img class="phone" src="assets/mobile-chats.png" width="580" height="1200" loading="lazy" alt="Noodle Mobile listing your agents and their latest messages." />
+          <img class="phone" src="assets/mobile-new-bot.png" width="601" height="1200" loading="lazy" alt="Creating a new bot on iPhone: name, harness, model, tools, computers and browsers." />
+          <img class="phone" src="assets/mobile-new-tool.png" width="601" height="1200" loading="lazy" alt="Adding a tool on iPhone from a list that includes Apollo, Attio, Canva, ClickUp and Cloudflare." />
+          <img class="phone" src="assets/mobile-game.png" width="601" height="1200" loading="lazy" alt="Castle Road, a game an agent built, played on iPhone with on-screen controls." />
+        </figure>
+      </div>
+    </section>
+    <section class="feature" id="computer">
       <div class="wrap narrow">
         <img class="feat-icon" src="assets/symbol-computer.svg" alt="" width="48" height="48" />
         <p class="app-name">Noodle Computer</p>
@@ -92,10 +111,10 @@
         <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg">Download Noodle Computer <span aria-hidden="true">›</span></a></p>
       </div>
       <div class="wrap">
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-computer.png" width="1539" height="1038" loading="lazy" alt="Noodle Computer showing an agent's own macOS desktop." /></figure>
+        <figure class="shot stage stage-one"><img class="win" src="assets/screenshot-computer.png" width="1539" height="1038" loading="lazy" alt="Noodle Computer showing an agent's own macOS desktop." /></figure>
       </div>
     </section>
-    <section class="feature" id="browser">
+    <section class="feature alt" id="browser">
       <div class="wrap narrow">
         <img class="feat-icon" src="assets/symbol-browser.svg" alt="" width="48" height="48" />
         <p class="app-name">Noodle Browser</p>
@@ -104,22 +123,26 @@
         <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg">Download Noodle Browser <span aria-hidden="true">›</span></a></p>
       </div>
       <div class="wrap">
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-browser.png" width="1224" height="826" loading="lazy" alt="Noodle Browser signed in to X, with the agents that use it in the sidebar." /></figure>
+        <figure class="shot stage stage-one"><img class="win" src="assets/screenshot-browser.png" width="1224" height="826" loading="lazy" alt="Noodle Browser signed in to X, with the agents that use it in the sidebar." /></figure>
       </div>
     </section>
-    <section class="feature alt" id="applet">
+    <section class="feature" id="applet">
       <div class="wrap narrow">
         <img class="feat-icon" src="assets/symbol-applet.svg" alt="" width="48" height="48" />
         <p class="app-name">Noodle Applet</p>
-        <h2>Ask for a tool. Get a tool.</h2>
+        <h2>Describe it. Your team builds it.</h2>
         <p class="lead">When you need a tracker, a calculator or a small website, your agents build it. Applet opens it in its own window straight from the conversation, and it remembers its data between uses.</p>
         <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg">Download Noodle Applet <span aria-hidden="true">›</span></a></p>
       </div>
       <div class="wrap">
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-applet.png" width="1365" height="981" loading="lazy" alt="Noodle Applet running Common Ground, a chess app an agent built." /></figure>
+        <figure class="shot stage stage-applets">
+          <img class="win back" src="assets/applet-molecule-bench.png" width="1524" height="997" loading="lazy" alt="Molecule Bench, a protein viewer an agent built, open in Noodle Applet." />
+          <img class="win right" src="assets/applet-tiny-empires.png" width="1445" height="957" loading="lazy" alt="Tiny Empires, a strategy game an agent built, open in Noodle Applet." />
+          <img class="win front" src="assets/applet-castle-road.png" width="665" height="997" loading="lazy" alt="Castle Road, a first-person game an agent built, open in Noodle Applet." />
+        </figure>
       </div>
     </section>
-    <section class="feature" id="hub">
+    <section class="feature alt" id="hub">
       <div class="wrap narrow">
         <img class="feat-icon" src="assets/symbol-hub.svg" alt="" width="48" height="48" />
         <p class="app-name">Noodle Hub</p>
@@ -128,7 +151,7 @@
         <p class="meta"><a href="https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg">Download Noodle Hub <span aria-hidden="true">›</span></a></p>
       </div>
       <div class="wrap">
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-hub.png" width="725" height="739" loading="lazy" alt="Noodle Hub settings: the users invited to the Hub and the plans that decide which subscriptions their bots use." /></figure>
+        <figure class="shot stage stage-one"><img class="win" src="assets/screenshot-hub.png" width="725" height="739" loading="lazy" alt="Noodle Hub settings: the users invited to the Hub and the plans that decide which subscriptions their bots use." /></figure>
       </div>
     </section>
     <section class="feature split" id="ai">
@@ -140,7 +163,7 @@
             <li><img src="assets/harness-codex.svg" alt="" />OpenAI Codex</li><li><img src="assets/harness-claude.svg" alt="" />Claude Code</li><li><img src="assets/harness-grok.svg" alt="" />Grok Build</li><li><img src="assets/harness-muse.svg" alt="" />Muse Code</li><li><img src="assets/harness-fx.svg" alt="" />FX</li><li><img src="assets/harness-opencode.svg" alt="" />OpenCode</li><li><img src="assets/harness-antigravity.svg" alt="" />Antigravity</li><li>Apple Intelligence</li><li>Local models</li>
           </ul>
         </div>
-        <figure class="shot"><img class="shot-img" src="assets/screenshot-harness.png" width="724" height="919" loading="lazy" alt="Settings, Harness: Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode and Apple Intelligence, each with its sign-in status." /></figure>
+        <figure class="shot stage stage-one tall"><img class="win" src="assets/screenshot-harness.png" width="724" height="919" loading="lazy" alt="Settings, Harness: Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode and Apple Intelligence, each with its sign-in status." /></figure>
       </div>
     </section>
     <section class="privacy" id="privacy">
@@ -158,7 +181,7 @@
     <section class="download" id="download">
       <div class="wrap narrow">
         <h2>Download Noodle.</h2>
-        <p class="lead">Start with Noodle, or get all five apps at once with the Suite. Everything is free.</p>
+        <p class="lead">Start with Noodle, or get all five Mac apps at once with the Suite. Noodle Mobile is in beta on TestFlight. Everything is free.</p>
       </div>
       <div class="wrap dl-grid">
         <a class="dl" href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg"><img src="assets/symbol-noodle-card.svg" alt="" /><b>Noodle</b><span>Work with AI agents on your own or as a team.</span><em>Download</em></a>
@@ -166,6 +189,7 @@
         <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg"><img src="assets/symbol-browser.svg" alt="" /><b>Noodle Browser</b><span>Signed-in browsers you hand to your agents.</span><em>Download</em></a>
         <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg"><img src="assets/symbol-applet.svg" alt="" /><b>Noodle Applet</b><span>Runs the tools and apps your agents build.</span><em>Download</em></a>
         <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg"><img src="assets/symbol-hub.svg" alt="" /><b>Noodle Hub</b><span>Share your AI accounts with people you invite.</span><em>Download</em></a>
+        <a class="dl" href="https://testflight.apple.com/join/wYKkNSP9"><img src="assets/symbol-noodle-card.svg" alt="" /><b>Noodle Mobile</b><span>Your agents on iPhone and iPad.</span><em>Join the beta</em></a>
       </div>
       <div class="wrap suite-row">
         <a class="btn" href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg">Download the Suite</a>

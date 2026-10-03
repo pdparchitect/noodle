@@ -5,7 +5,7 @@ Plain HTML, CSS and a few lines of JavaScript. There's no build step. Copy the f
 - `index.html`: the page
 - `styles.css`: all styles, including dark mode and phone layouts
 - `app.js`: fades the nav logo and Download button in once you scroll past the hero buttons
-- `assets/`: the app symbols, AI harness logos, favicon, the hero screenshot and `social-card.png`, the link preview for X, Slack and others
+- `assets/`: the app symbols, AI harness logos, favicon, the screenshots, `stage-launch.jpg`, the photo every screenshot is staged on, and `social-card.png`, the link preview for X, Slack and others
 
 ## Screenshots still to add
 

@@ -6,10 +6,13 @@
 /* ---------- Tokens ---------- */
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --bg-alt: #f5f5f7;
-  --ink: #1d1d1f;
-  --gray: #6e6e73;
+  /* Soft slate, the light side of the dark palette below. */
+  --bg: #fcfcfd;
+  --bg-alt: #f2f4f7;
+  --raised: #e8ebf0;
+  --ink: #1c1e22;
+  --gray: #676c75;
+  --nav-bg: rgba(252,252,253,.8);
   --blue: #0088ff;
   --blue-hover: #0077e0;
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
@@ -18,10 +21,12 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --bg-alt: #161617;
-    --ink: #f5f5f7;
-    --gray: #a1a1a6;
+    --bg: #131519;
+    --bg-alt: #1b1e24;
+    --raised: #252930;
+    --ink: #f3f4f6;
+    --gray: #a3a8b2;
+    --nav-bg: rgba(27,30,36,.8);
   }
 }
 
@@ -47,19 +52,17 @@ figure { margin: 0; }
 }
 
 /* ---------- Nav ---------- */
-.nav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.8); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid rgba(0,0,0,.08); }
+.nav { position: sticky; top: 0; z-index: 50; background: var(--nav-bg); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid rgba(0,0,0,.08); }
 /* Equal outer columns keep the links centred on the page whatever the logo and button widths. */
 .nav-in { height: 48px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; font-size: 12px; line-height: 1.33337; letter-spacing: -0.01em; }
 .logo { display: flex; align-items: center; justify-self: start; }
 .logo img { width: 22px; height: 22px; }
-.nav nav { display: flex; gap: 30px; color: rgba(0,0,0,.72); }
-.nav nav a:hover { color: #000; }
+.nav nav { display: flex; gap: 30px; color: var(--gray); }
+.nav nav a:hover { color: var(--ink); }
 .nav-dl { grid-column: 3; justify-self: end; background: var(--blue); color: #fff; border-radius: 999px; padding: 4px 12px; font-weight: 500; }
 .nav-dl:hover { background: var(--blue-hover); }
 @media (prefers-color-scheme: dark) {
-  .nav { background: rgba(22,22,23,.8); border-bottom-color: rgba(255,255,255,.1); }
-  .nav nav { color: rgba(255,255,255,.8); }
-  .nav nav a:hover { color: #fff; }
+  .nav { border-bottom-color: rgba(255,255,255,.1); }
 }
 /* The logo and Download button fade in once the hero buttons scroll away (see app.js). */
 .nav .logo, .nav .nav-dl { opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity .35s ease, transform .35s ease; }
@@ -91,6 +94,28 @@ figure { margin: 0; }
 .shot .shot-img { display: block; width: auto; max-width: 100%; margin-inline: auto; }
 .split-grid .shot { margin-top: 0; }
 
+/* ---------- Stages ----------
+   Product shots sit on the launch-pad photo, the way the apps' own film frames them.
+   Every stage keeps one shape, so the page has an even rhythm whatever the window sizes. */
+.stage { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.jpg) center / cover; }
+.stage img { position: absolute; height: auto; filter: drop-shadow(0 24px 36px rgba(0,0,0,.45)) drop-shadow(0 4px 10px rgba(0,0,0,.25)); }
+.stage .win { border-radius: 12px; }
+/* A single window, centred and never taller than the stage allows. */
+.stage-one img { inset: 0; margin: auto; width: auto; max-width: 82%; max-height: 84%; }
+/* Beside text, a tall settings window gets a tall stage. */
+.stage-one.tall { aspect-ratio: 4 / 5; }
+/* The Mac with the phone in front of it. */
+.stage-hero .win { left: 19%; top: 8%; width: 75%; }
+.stage-hero .phone { left: 5%; bottom: 6%; width: 17%; }
+/* Three applets on top of each other. */
+.stage-applets .back { left: 5%; top: 9%; width: 54%; }
+.stage-applets .right { right: 5%; top: 24%; width: 50%; }
+.stage-applets .front { left: 42%; top: 30%; width: 21%; }
+/* A row of phones; the middle two stand a little higher. */
+.stage-phones { display: flex; justify-content: center; align-items: center; gap: 3.5%; }
+.stage-phones img { position: static; width: 18%; }
+.stage-phones img:nth-child(2), .stage-phones img:nth-child(3) { transform: translateY(-5%); }
+
 /* ---------- Three facts and the privacy row ---------- */
 .facts { padding: 96px 0 100px; }
 .facts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; }
@@ -117,7 +142,7 @@ figure { margin: 0; }
 .providers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .providers li { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; background: var(--bg-alt); font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; }
 .providers li img { width: 16px; height: 16px; object-fit: contain; }
-@media (prefers-color-scheme: dark) { .providers li { background: #1d1d1f; } }
+@media (prefers-color-scheme: dark) { .providers li { background: var(--raised); } }
 
 /* ---------- Privacy ---------- */
 .privacy { background: var(--bg-alt); padding: 110px 0; }
@@ -125,17 +150,13 @@ figure { margin: 0; }
 
 /* ---------- Download ---------- */
 .download { padding: 110px 0 120px; }
-.dl-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 52px; }
+.dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 52px; }
 .dl { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 30px 20px 26px; border-radius: 18px; background: var(--bg-alt); transition: background .2s; }
-.dl:hover { background: #ececf0; }
+.dl:hover { background: var(--raised); }
 .dl img { width: 44px; height: 44px; }
 .dl b { margin-top: 14px; font-family: var(--display); font-size: 17px; line-height: normal; font-weight: 600; letter-spacing: -0.022em; }
 .dl span { margin-top: 6px; max-width: 24ch; font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--gray); text-wrap: balance; }
 .dl em { margin-top: auto; padding-top: 14px; font-style: normal; font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--blue); }
-@media (prefers-color-scheme: dark) {
-  .dl { background: #161617; }
-  .dl:hover { background: #1f1f21; }
-}
 .suite-row { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 40px; }
 .suite-row p { font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--gray); }
 
@@ -164,6 +185,10 @@ figure { margin: 0; }
   .lead { font-size: 19px; line-height: 1.4211; letter-spacing: .012em; }
   .facts-grid, .priv-grid, .dl-grid { grid-template-columns: 1fr; gap: 28px; }
   .shot-img { border-radius: 10px; }
+  .stage { border-radius: 16px; }
+  .stage .win { border-radius: 6px; }
+  .stage-phones { gap: 2%; }
+  .stage-phones img { width: 23%; }
   .foot-in { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
