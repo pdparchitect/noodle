@@ -1,5 +1,6 @@
 import GameController
 import HubLink
+import os
 import SwiftUI
 import UIKit
 
@@ -154,7 +155,7 @@ struct ConnectedControllersView: View {
     }
 }
 
-/// The conversation's noodlets, which the controller's home button shows over a game on the TV
+/// The conversation's noodlets, which the controller's View button shows over a game on the TV
 /// to switch to another or close the game, without touching the phone.
 struct NoodletMenu {
     enum Item: Equatable { case noodlet(LinkAttachment), closeGame }
@@ -247,22 +248,19 @@ struct NoodletMenuView: View {
     }
 }
 
-/// The menu a game on the TV opens from the controller's home button; while it is open the
-/// controller steers it instead of the game.
+/// The menu a noodlet opens from the controller's View button, on the TV while the noodlet plays
+/// there and on the phone otherwise; while it is open the controller steers it instead of the noodlet.
 @MainActor @Observable final class GameMenu {
     /// The card chosen while the menu is open, or nil while closed.
     private(set) var selected: Int?
 
-    /// Takes the home button while the game is on the TV, and gives it back after.
-    func follow(onTV: Bool, hardware: HardwareGamepad, menu: @escaping () -> NoodletMenu, close: @escaping () -> Void) {
-        guard onTV else {
-            selected = nil
-            hardware.menu = nil
-            hardware.onHome = nil
-            return
-        }
-        hardware.onHome = { [weak self, weak hardware] in
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "GameMenu")
+
+    /// Answers the View button of the controller `hardware` follows.
+    func follow(hardware: HardwareGamepad, menu: @escaping () -> NoodletMenu, close: @escaping () -> Void) {
+        hardware.onView = { [weak self, weak hardware] in
             guard let self, let hardware else { return }
+            Self.log.notice("View pressed, menu open: \(self.selected != nil, privacy: .public)")
             if self.selected == nil {
                 self.selected = menu().start
                 hardware.menu = { [weak self] input in self?.respond(to: input, menu: menu(), hardware: hardware, close: close) }
@@ -285,5 +283,16 @@ struct NoodletMenuView: View {
     private func dismiss(_ hardware: HardwareGamepad) {
         selected = nil
         hardware.menu = nil
+    }
+}
+
+/// The menu over the game on the TV. It watches the menu itself, since the TV's content is not
+/// built again for every change on the phone.
+struct GameMenuOverlay: View {
+    let gameMenu: GameMenu
+    let menu: NoodletMenu
+
+    var body: some View {
+        if let selected = gameMenu.selected { NoodletMenuView(menu: menu, selected: selected) }
     }
 }

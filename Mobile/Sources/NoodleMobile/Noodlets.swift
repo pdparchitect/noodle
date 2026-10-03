@@ -5,7 +5,7 @@ import os
 import SwiftUI
 import WebKit
 
-/// A noodlet opened from a conversation, which the controller's home button can swap for another
+/// A noodlet opened from a conversation, which the controller's View button can swap for another
 /// of the conversation's noodlets while it plays on the TV, without closing.
 struct NoodletPlayer: View {
     let chats: HubChats
@@ -15,15 +15,30 @@ struct NoodletPlayer: View {
     @State var playing: LinkAttachment
     /// Where the person asked to open the first one, if they did.
     @State var requested: NoodletManifest.Placement?
+    /// The choices with their pictures and names, as the conversation's cards show them.
+    @State private var fetched: [UUID: LinkAttachment] = [:]
 
     var body: some View {
         NoodletScreen(chats: chats, thread: thread, attachment: playing, requested: requested)
             .id(playing.id)
-            .environment(\.noodletMenu, NoodletMenu(choices: choices, current: playing.id) { next in
+            .environment(\.noodletMenu, NoodletMenu(choices: Self.shown(choices, fetched: fetched), current: playing.id) { next in
                 requested = nil
                 playing = next
             })
+            .task {
+                for choice in choices where fetched[choice.id] == nil {
+                    fetched[choice.id] = await chats.sharedAttachment(choice, in: thread)
+                }
+            }
     }
+
+    /// Shared links carry no card, so each shows as fetched once it is.
+    static func shown(_ choices: [LinkAttachment], fetched: [UUID: LinkAttachment]) -> [LinkAttachment] {
+        choices.map { fetched[$0.id] ?? $0 }
+    }
+
+    /// Controller presses are not touches, so iOS would dim and lock the phone mid-game.
+    static func keepsAwake(onTV: Bool, controllerInUse: Bool) -> Bool { onTV || controllerInUse }
 }
 
 /// A noodlet a bot shared: run on this phone, or watched live from the Hub, where the person last
@@ -161,6 +176,7 @@ struct NoodletDeviceScreen: View {
                     MovableView(view: page.web).ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 }
                 if let screenControls, page != nil { GamepadOverlay(gamepad: screenControls, onKey: press) }
+                if !onTV { GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu).ignoresSafeArea() }
                 if page == nil {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
                 }
@@ -192,16 +208,22 @@ struct NoodletDeviceScreen: View {
         .externalScreen(enabled: Binding(get: { manifest.controls != nil && !onPhone }, set: { onPhone = !$0 }),
                         available: $tvAvailable) {
             if let page { MovableView(view: page.web) }
-            if let selected = gameMenu.selected { NoodletMenuView(menu: noodletMenu, selected: selected) }
+            GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu)
         }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await start() }
+        .onAppear { gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: { dismiss() }) }
         // The phone turns sideways as a controller does.
         .onChange(of: onTV, initial: true) {
             ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
-            gameMenu.follow(onTV: onTV, hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
         }
-        .onDisappear { answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil) }
+        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerInUse: hardware.controller != nil), initial: true) { _, awake in
+            UIApplication.shared.isIdleTimerDisabled = awake
+        }
+        .onDisappear {
+            answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil)
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
     }
 
     private func answer(_ allowed: Bool) {
@@ -237,7 +259,8 @@ struct NoodletDeviceScreen: View {
             page.failed = { failure = $0; self.page = nil }
             self.page = page
             NoodletSound.start()
-            if let controls = manifest.controls { hardware.attach(controls, onKey: press) }
+            // A noodlet with no keys still gets the View button's menu; its other buttons stay its own.
+            hardware.attach(manifest.controls ?? Gamepad(), onKey: press)
             try await page.load()
         } catch {
             page?.stop()

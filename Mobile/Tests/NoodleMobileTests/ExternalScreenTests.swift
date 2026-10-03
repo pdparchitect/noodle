@@ -60,7 +60,7 @@ import XCTest
     }
 }
 
-/// The controller's home button shows the conversation's noodlets over a game on the TV.
+/// The controller's View button shows the conversation's noodlets over a game on the TV.
 @MainActor final class NoodletMenuTests: XCTestCase {
     private func noodlet(_ name: String) -> LinkAttachment {
         LinkAttachment(id: UUID(), filename: "\(name).noodlet", mediaType: "application/x-noodlet", byteCount: 0,
@@ -84,5 +84,44 @@ import XCTest
         XCTAssertEqual(menu.respond(to: .choose, at: 1), .open(second))
         XCTAssertEqual(menu.respond(to: .choose, at: 2), .closeGame)
         XCTAssertEqual(menu.respond(to: .back, at: 1), .resume)
+    }
+}
+
+/// The View button opens the menu over any noodlet, on the TV or on the phone.
+@MainActor final class GameMenuTests: XCTestCase {
+    func testTheViewButtonOpensTheMenuWithoutATV() {
+        let first = LinkAttachment(id: UUID(), filename: "Racer.noodlet", mediaType: "application/x-noodlet", byteCount: 0)
+        let second = LinkAttachment(id: UUID(), filename: "Tetris.noodlet", mediaType: "application/x-noodlet", byteCount: 0)
+        let menu = NoodletMenu(choices: [first, second], current: first.id)
+        let hardware = HardwareGamepad(), gameMenu = GameMenu()
+        gameMenu.follow(hardware: hardware, menu: { menu }, close: {})
+
+        hardware.onView?()
+        XCTAssertEqual(gameMenu.selected, 0)
+        hardware.menu?(.right)
+        XCTAssertEqual(gameMenu.selected, 1)
+        hardware.menu?(.back)
+        XCTAssertNil(gameMenu.selected)
+        XCTAssertNil(hardware.menu)
+    }
+}
+
+/// What the menu shows, and the phone staying awake through a game.
+@MainActor final class NoodletPlayerTests: XCTestCase {
+    /// Shared links carry no card; the menu shows each one's picture and name once fetched.
+    func testTheMenuShowsTheFetchedCards() {
+        let bare = LinkAttachment(id: UUID(), filename: "Noodlet.noodlet", mediaType: "application/x-noodlet", byteCount: 0)
+        var fetched = bare
+        fetched.card = LinkCardInfo(title: "Liverpool Street", image: Data([1]))
+        let other = LinkAttachment(id: UUID(), filename: "Other.noodlet", mediaType: "application/x-noodlet", byteCount: 0)
+        let shown = NoodletPlayer.shown([bare, other], fetched: [bare.id: fetched])
+        XCTAssertEqual(shown.map(\.liveTitle), ["Liverpool Street", "Other"])
+    }
+
+    /// Controller presses are not touches, so iOS would dim and lock the phone mid-game.
+    func testAGameWithAControllerOrOnTheTVKeepsThePhoneAwake() {
+        XCTAssertFalse(NoodletPlayer.keepsAwake(onTV: false, controllerInUse: false))
+        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: true, controllerInUse: false))
+        XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: false, controllerInUse: true))
     }
 }

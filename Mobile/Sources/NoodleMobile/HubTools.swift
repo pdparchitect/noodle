@@ -619,6 +619,7 @@ struct LiveSurfaceScreen: View {
                         .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 }
                 if let screenControls, showing { GamepadOverlay(gamepad: screenControls, onKey: hold) }
+                if !onTV { GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu).ignoresSafeArea() }
                 if !showing {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() }
                     else { ProgressView().tint(.white) }
@@ -647,16 +648,21 @@ struct LiveSurfaceScreen: View {
         // The TV's view tells the Hub its size, so the game is drawn for the TV.
         .externalScreen(enabled: Binding(get: { controls != nil && !onPhone }, set: { onPhone = !$0 }), available: $tvAvailable) {
             SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
-            if let selected = gameMenu.selected { NoodletMenuView(menu: noodletMenu, selected: selected) }
+            GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu)
         }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await follow() }
         // The phone turns sideways as a controller does.
         .onChange(of: onTV) {
             ScreenOrientation.hold(onTV ? .landscape : nil)
-            gameMenu.follow(onTV: onTV, hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
         }
-        .onDisappear { hardware.detach(); channel?.cancel(); ScreenOrientation.hold(nil) }
+        .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerInUse: hardware.controller != nil), initial: true) { _, awake in
+            UIApplication.shared.isIdleTimerDisabled = awake
+        }
+        .onDisappear {
+            hardware.detach(); channel?.cancel(); ScreenOrientation.hold(nil)
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
     }
 
     private func follow() async {
@@ -665,6 +671,11 @@ struct LiveSurfaceScreen: View {
             let channel = try await chats.openSurface(attachment, in: thread)
             self.channel = channel
             defer { channel.cancel() }
+            // A noodlet with no keys still gets the View button's menu.
+            if attachment.liveKind == .noodlet {
+                hardware.attach(Gamepad(), onKey: hold)
+                gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
+            }
             for try await frame in channel.frames {
                 switch LinkSurface.message(frame) {
                 case .packets(let packets)?: feed.receive(packets)

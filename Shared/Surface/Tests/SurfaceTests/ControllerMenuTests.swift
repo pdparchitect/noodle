@@ -2,29 +2,41 @@ import GameController
 @testable import Surface
 import Testing
 
-/// While a game plays on a TV, the controller's home button opens Noodle's menu, and the
+/// While a game plays on a TV, the controller's View button opens Noodle's menu, and the
 /// controller steers the menu instead of the game until it closes.
 @MainActor struct ControllerMenuTests {
     private let game = Gamepad(pads: [Gamepad.Pad(left: "left", right: "right")], buttons: [Gamepad.Button(key: "space")])
 
-    @Test func theHomeButtonAsksForTheMenu() async throws {
+    @Test func theViewButtonAsksForTheMenu() async throws {
         let controller = GCController.withExtendedGamepad()
-        let home = try #require(controller.extendedGamepad?.buttonHome)
-        let system = home.preferredSystemGestureState
+        let view = try #require(controller.extendedGamepad?.buttonOptions)
         var asked = 0
         let hardware = HardwareGamepad()
         hardware.available = { controller }
         hardware.attach(game) { _ in }
-        hardware.onHome = { asked += 1 }
-        #expect(home.preferredSystemGestureState == .disabled)
+        hardware.onView = { asked += 1 }
 
-        home.setValue(1)
+        view.setValue(1)
         await Self.settle { asked == 1 }
         #expect(asked == 1)
+        hardware.detach()
+    }
 
-        // Without a menu to open, the button is the system's again.
-        hardware.onHome = nil
-        #expect(home.preferredSystemGestureState == system)
+    /// A game reading controllers itself declares no keys, and still gets the menu.
+    @Test func aGameWithoutKeysStillGetsTheViewButton() async throws {
+        let controller = GCController.withExtendedGamepad()
+        let view = try #require(controller.extendedGamepad?.buttonOptions)
+        var asked = 0, keys = 0
+        let hardware = HardwareGamepad()
+        hardware.available = { controller }
+        hardware.attach(Gamepad()) { _ in keys += 1 }
+        hardware.onView = { asked += 1 }
+
+        controller.extendedGamepad?.buttonA.setValue(1)
+        view.setValue(1)
+        await Self.settle { asked == 1 }
+        #expect(asked == 1)
+        #expect(keys == 0)
         hardware.detach()
     }
 

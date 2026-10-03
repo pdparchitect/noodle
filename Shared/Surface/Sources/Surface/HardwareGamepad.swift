@@ -26,10 +26,9 @@ import Observation
 
     public enum MenuInput: Equatable, Sendable { case up, down, left, right, choose, back }
 
-    /// What the home button does; nil leaves the button to the system.
-    @ObservationIgnored public var onHome: (() -> Void)? {
-        didSet { claimHome() }
-    }
+    /// What the View button does (Create on PlayStation, − on Switch), which games played with
+    /// keys leave free. The home button is no use: the system always takes it.
+    @ObservationIgnored public var onView: (() -> Void)?
     /// While set, the controller steers this menu instead of the game, whose keys are let go.
     @ObservationIgnored public var menu: ((MenuInput) -> Void)? {
         didSet {
@@ -37,8 +36,6 @@ import Observation
             pointing = [:]
         }
     }
-    /// What the system did with the home button before it opened a menu.
-    @ObservationIgnored private var systemHome: GCControllerElement.SystemGestureState?
     /// Where each stick and d-pad points in the menu, so holding one moves once.
     @ObservationIgnored private var pointing: [String: MenuInput] = [:]
 
@@ -111,10 +108,7 @@ import Observation
         if let connected, connected !== next { release(connected) }
         connected = next
         guard let next, let gamepad else { offer(nil); return }
-        if let other = Self.players[ObjectIdentifier(next)]?.gamepad, other !== self {
-            systemHome = systemHome ?? other.systemHome
-            other.yield()
-        }
+        if let other = Self.players[ObjectIdentifier(next)]?.gamepad, other !== self { other.yield() }
         Self.players[ObjectIdentifier(next)] = Player(gamepad: self)
         let pads = gamepad.pads
         func steer(_ source: String, pad index: Int) -> GCControllerDirectionPadValueChangedHandler? {
@@ -149,8 +143,8 @@ import Observation
             buttons = [full.buttonA, full.buttonB, full.buttonX, full.buttonY, full.leftShoulder, full.rightShoulder,
                        full.leftTrigger, full.rightTrigger]
             full.buttonMenu.valueChangedHandler = press("menu", gamepad.menu, menu: .back)
-            full.buttonHome?.pressedChangedHandler = { [weak self] _, _, pressed in
-                MainActor.assumeIsolated { if pressed { self?.onHome?() } }
+            full.buttonOptions?.pressedChangedHandler = { [weak self] _, _, pressed in
+                MainActor.assumeIsolated { if pressed { self?.onView?() } }
             }
             offer(GamepadController(pads: 2, buttons: buttons.indices.map(String.init), menu: true))
         } else if let remote = next.microGamepad {
@@ -167,19 +161,6 @@ import Observation
             button.pressedChangedHandler = press("button \(index)", index < gamepad.buttons.count ? gamepad.buttons[index].key : nil,
                                                  menu: input)
         }
-        claimHome()
-    }
-
-    /// Takes the home button from the system while it opens a menu, and gives it back after.
-    private func claimHome() {
-        guard let home = connected?.extendedGamepad?.buttonHome else { return }
-        if onHome != nil {
-            if systemHome == nil { systemHome = home.preferredSystemGestureState }
-            home.preferredSystemGestureState = .disabled
-        } else if let systemHome {
-            home.preferredSystemGestureState = systemHome
-            self.systemHome = nil
-        }
     }
 
     /// Moves the menu once each time a stick or d-pad turns to a new way.
@@ -193,7 +174,6 @@ import Observation
     /// Another game took the controller: lets go of what this one held, leaving the handlers to it.
     private func yield() {
         connected = nil
-        systemHome = nil
         offer(nil)
     }
 
@@ -205,9 +185,7 @@ import Observation
             [full.buttonA, full.buttonB, full.buttonX, full.buttonY, full.leftShoulder, full.rightShoulder, full.leftTrigger,
              full.rightTrigger].forEach { $0.pressedChangedHandler = nil }
             full.buttonMenu.valueChangedHandler = nil
-            full.buttonHome?.pressedChangedHandler = nil
-            if let systemHome { full.buttonHome?.preferredSystemGestureState = systemHome }
-            systemHome = nil
+            full.buttonOptions?.pressedChangedHandler = nil
         } else if let remote = old.microGamepad {
             remote.dpad.valueChangedHandler = nil
             [remote.buttonA, remote.buttonX].forEach { $0.pressedChangedHandler = nil }

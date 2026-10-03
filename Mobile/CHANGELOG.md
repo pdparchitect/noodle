@@ -5,10 +5,11 @@
 ### Added
 
 - While a game plays on the TV and a game controller covers all its buttons, the phone shows the connected controllers and their batteries instead of a blank screen.
-- While a game plays on the TV, the controller's home button (Xbox, PS or Home) shows the conversation's other noodlets on the TV: move with the d-pad or stick, press A to switch to one, or choose Close Game. B or home again goes back to the game.
+- In a noodlet, the controller's View button (Create on PlayStation, − on Switch) shows the conversation's other noodlets, on the TV while it plays there: move with the d-pad or stick, press A to switch to one, or choose Close Game. B or View again goes back to the game.
 
 ### Fixed
 
+- The phone no longer dims and locks during a game played with a controller or on the TV: controller presses do not count as touches, so it used to go to sleep mid-game.
 - Games play on the TV on iOS 27: with Screen Mirroring on, Show on TV said no TV was connected and the TV kept mirroring the phone. Until a game is open, the TV now mirrors the phone as usual. Needs iOS 27.
 - Noodlets run on the phone have sound: a game played with the on-screen controls was silent, as was any noodlet with the ring switch set to silent. Music playing in another app carries on alongside.
 
@@ -19,7 +20,9 @@
 - Close the game: the TV mirrors the phone again.
 - Open a game the Hub streams: it plays on the TV the same way.
 - With a game on the TV, press a button on a paired controller: the phone shows the controller, its logo and its battery. Disconnect it: the on-screen controls come back.
-- In a conversation with several noodlets, play one on the TV with a controller and press its home button: the noodlets show on the TV. Pick another with A: it opens on the TV without touching the phone. Open the menu again and choose Close Game: the game closes and the TV mirrors the phone. Press B in the menu: the game carries on.
+- In a conversation with several noodlets, open one and press a paired controller's View button: the noodlets show over it, on the TV while it plays there. Pick another with A: it opens on the TV without touching the phone. Open the menu again and choose Close Game: the game closes and the TV mirrors the phone. Press B in the menu: the game carries on.
+- In that menu, each noodlet shows its picture and name, as in the conversation.
+- Play a game with only a controller for a few minutes without touching the phone: the screen stays on. Close the game: the phone dims and locks as usual again.
 - With the ring switch set to silent, open a noodlet with sound on the phone and play it with the on-screen controls only: you hear it. Play music in another app first: both play together, and the music carries on after you close the noodlet.
 
 ## [0.17.0] - 2026-10-03
