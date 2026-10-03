@@ -1,5 +1,6 @@
 name: Feature or improvement
 description: Propose a feature, interface improvement, or documentation change.
+title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: markdown
