@@ -1,6 +1,5 @@
 import GameController
 import HubLink
-import os
 import SwiftUI
 import UIKit
 
@@ -254,13 +253,10 @@ struct NoodletMenuView: View {
     /// The card chosen while the menu is open, or nil while closed.
     private(set) var selected: Int?
 
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "GameMenu")
-
     /// Answers the View button of the controller `hardware` follows.
     func follow(hardware: HardwareGamepad, menu: @escaping () -> NoodletMenu, close: @escaping () -> Void) {
         hardware.onView = { [weak self, weak hardware] in
             guard let self, let hardware else { return }
-            Self.log.notice("View pressed, menu open: \(self.selected != nil, privacy: .public)")
             if self.selected == nil {
                 self.selected = menu().start
                 hardware.menu = { [weak self] input in self?.respond(to: input, menu: menu(), hardware: hardware, close: close) }
