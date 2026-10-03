@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-03
+
 ### Added
 
 - Apple Intelligence bots can use Ollama on the Hub's Mac, added in Settings > Harness > Apple Intelligence > Remote Models without an API key.

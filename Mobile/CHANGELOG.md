@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-03
+
 ### Added
 
 - While a game plays on the TV and a game controller covers all its buttons, the phone shows the connected controllers and their batteries instead of a blank screen.
