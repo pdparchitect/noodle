@@ -12,6 +12,8 @@ import NoodleRuntime
     public var onChange: ((_ user: UUID, LinkEvent) -> Void)?
     /// Runs when a conversation's owner read further, for whatever else shows it: on the owner's own Mac, Noodle.
     public var onRead: ((_ conversationID: UUID, _ upTo: Date) -> Void)?
+    /// Runs when a conversation's background changed, for whatever else shows it: on the owner's own Mac, Noodle.
+    public var onBackgroundChanged: ((_ conversationID: UUID) -> Void)?
 
     private let repository: WorkspaceRepository
     private let runtime: AgentRuntimeCoordinator
@@ -36,6 +38,8 @@ import NoodleRuntime
     public var isHidden: (UUID) -> Bool = { _ in false }
     /// The last seen size and date of each conversation's messages, their count, and the latest reaction change.
     private var transcripts: [UUID: (size: Int, modified: Date, count: Int, reactions: Int)] = [:]
+    /// Each conversation's background when last checked.
+    private var backgrounds: [UUID: ConversationBackground] = [:]
     /// What each bot was last reported doing.
     private var phases: [UUID: AgentRuntimePhase] = [:]
     /// Each bot's status when last checked; an absent bot has not been checked yet.
@@ -277,16 +281,12 @@ import NoodleRuntime
            Set(before.participantIDs) != Set(updated.participantIDs) || before.publicDescription != updated.publicDescription {
             runtime.notify(bots, repository: repository)
         }
+        try restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
         return group(updated)
     }
-        try restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
 
-    /// Deletes a group and its messages. Its bots stay.
-    public func deleteGroup(_ id: UUID, for user: HubUser) throws {
-        let group = try ownedGroup(id, by: user)
-        try repository.deleteConversation(id: id)
     /// As in Noodle: a group's folders reach its bots' sandbox only when they launch.
     private func restartBots(_ ids: Set<UUID>) throws {
         guard running || watching, !ids.isEmpty else { return }
@@ -295,11 +295,15 @@ import NoodleRuntime
         }
     }
 
+    /// Deletes a group and its messages. Its bots stay.
+    public func deleteGroup(_ id: UUID, for user: HubUser) throws {
+        let group = try ownedGroup(id, by: user)
+        try repository.deleteConversation(id: id)
+        try restartBots(BotConversation.botsWithChangedFolders(from: group, to: nil))
         if readMarks.removeValue(forKey: id) != nil { try? saveReadMarks() }
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
     }
-        try restartBots(BotConversation.botsWithChangedFolders(from: group, to: nil))
 
     /// Archives or brings back one of the user's bots or groups. Everything is kept; an archived bot
     /// stops, whichever runtime runs it, and neither takes messages until brought back.
@@ -417,21 +421,7 @@ import NoodleRuntime
                         for user: HubUser) throws {
         _ = try ownedConversation(conversationID, by: user)
         if try repository.loadAttachments(conversationID: conversationID).contains(where: { $0.id == attachment.id }) { return }
-        try FileManager.default.createDirectory(at: uploads, withIntermediateDirectories: true)
-        let part = uploads.appendingPathComponent("\(attachment.id.uuidString).part")
-        if offset == 0 {
-            clearAbandonedUploads()
-            FileManager.default.createFile(atPath: part.path, contents: nil)
-        }
-        let size = ((try? FileManager.default.attributesOfItem(atPath: part.path))?[.size] as? NSNumber)?.intValue ?? -1
-        guard size == offset, offset + data.count <= attachment.byteCount else {
-            throw LinkError("A piece of the file arrived out of order. Send the file again.")
-        }
-        let handle = try FileHandle(forWritingTo: part)
-        try handle.seekToEnd()
-        try handle.write(contentsOf: data)
-        try handle.close()
-        guard offset + data.count == attachment.byteCount else { return }
+        guard let part = try keep(data, at: offset, of: attachment.byteCount, as: attachment.id) else { return }
         defer { try? FileManager.default.removeItem(at: part) }
         let filename = URL(fileURLWithPath: attachment.filename).lastPathComponent
         let voice = attachment.voice.map {
@@ -439,6 +429,79 @@ import NoodleRuntime
         }
         _ = try repository.importAttachment(from: part, into: conversationID, mediaType: attachment.mediaType, voice: voice,
                                             id: attachment.id, originalFilename: filename.isEmpty ? "Attachment" : filename)
+    }
+
+    /// Adds a piece to the file arriving as `id`, and returns the file once its last piece landed.
+    private func keep(_ data: Data, at offset: Int, of byteCount: Int, as id: UUID) throws -> URL? {
+        try FileManager.default.createDirectory(at: uploads, withIntermediateDirectories: true)
+        let part = uploads.appendingPathComponent("\(id.uuidString).part")
+        if offset == 0 {
+            clearAbandonedUploads()
+            FileManager.default.createFile(atPath: part.path, contents: nil)
+        }
+        let size = ((try? FileManager.default.attributesOfItem(atPath: part.path))?[.size] as? NSNumber)?.intValue ?? -1
+        guard size == offset, offset + data.count <= byteCount else {
+            throw LinkError("A piece of the file arrived out of order. Send the file again.")
+        }
+        let handle = try FileHandle(forWritingTo: part)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: data)
+        try handle.close()
+        return offset + data.count == byteCount ? part : nil
+    }
+
+    /// A conversation's background, as devices see it.
+    public func background(of conversationID: UUID) -> LinkBackground {
+        let background = (try? repository.loadBackground(conversationID: conversationID)) ?? ConversationBackground()
+        return LinkBackground(preset: background.preset?.rawValue, media: background.imageFilename,
+                              mediaKind: background.imageFilename == nil ? nil : (background.mediaKind ?? .image).rawValue)
+    }
+
+    /// Sets one of the user's conversations to a gradient, or to none.
+    public func setBackground(_ choice: LinkBackgroundChoice, for user: HubUser) throws -> LinkBackground {
+        _ = try ownedConversation(choice.conversationID, by: user)
+        let preset = try choice.preset.map {
+            guard let preset = ConversationBackgroundPreset(rawValue: $0) else { throw LinkError("This Noodle Hub does not know that background.") }
+            return preset
+        }
+        try repository.setBackground(conversationID: choice.conversationID, preset: preset)
+        checkForChanges()
+        return background(of: choice.conversationID)
+    }
+
+    /// Keeps one piece of a picture or video; it becomes the conversation's background when its last
+    /// piece lands, checked and converted as Noodle does a file a person picks.
+    public func receiveBackground(_ piece: LinkBackgroundPiece, for user: HubUser) async throws -> LinkBackground? {
+        _ = try ownedConversation(piece.conversationID, by: user)
+        guard let part = try keep(piece.data, at: piece.offset, of: piece.byteCount, as: piece.upload) else { return nil }
+        let kind = URL(fileURLWithPath: piece.filename).pathExtension.lowercased().filter { $0.isLetter || $0.isNumber }
+        let file = uploads.appendingPathComponent("\(piece.upload.uuidString).\(kind)")
+        defer { try? FileManager.default.removeItem(at: part); try? FileManager.default.removeItem(at: file) }
+        try FileManager.default.moveItem(at: part, to: file)
+        let prepared = try await PreparedBackgroundFile.prepare(file)
+        _ = try ownedConversation(piece.conversationID, by: user)
+        try repository.setBackground(conversationID: piece.conversationID, file: prepared)
+        checkForChanges()
+        return background(of: piece.conversationID)
+    }
+
+    /// One piece of a conversation's background file, or of the small copy made for phones the first time one asks.
+    public func backgroundChunk(_ fetch: LinkBackgroundFetch, for user: HubUser) async throws -> (Data, Int) {
+        _ = try ownedConversation(fetch.conversationID, by: user)
+        let background = try repository.loadBackground(conversationID: fetch.conversationID)
+        guard background.imageFilename == fetch.media,
+              let original = repository.backgroundImageURL(background, conversationID: fetch.conversationID),
+              let url = fetch.compact ? repository.compactBackgroundURL(background, conversationID: fetch.conversationID) : original else {
+            throw LinkError("This background has changed.")
+        }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try await BackgroundMedia.writeCompactCopy(of: original, kind: background.mediaKind ?? .image, to: url)
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let total = Int(try handle.seekToEnd())
+        try handle.seek(toOffset: UInt64(min(max(0, fetch.offset), total)))
+        return (try handle.read(upToCount: LinkProtocol.chunkSize) ?? Data(), total)
     }
 
     /// One piece of a conversation's file.
@@ -494,6 +557,12 @@ import NoodleRuntime
         guard let agents = try? repository.loadAgents(), let conversations = try? repository.loadConversations() else { return }
         for conversation in conversations {
             guard let owner = owner(of: conversation, among: agents) else { continue }
+            let background = (try? repository.loadBackground(conversationID: conversation.id)) ?? ConversationBackground()
+            if let known = backgrounds[conversation.id], known != background {
+                onChange?(owner, .backgroundChanged(conversationID: conversation.id, background: self.background(of: conversation.id)))
+                onBackgroundChanged?(conversation.id)
+            }
+            backgrounds[conversation.id] = background
             let url = repository.conversationDirectory(id: conversation.id).appendingPathComponent("messages.json")
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
                   let size = (attributes[.size] as? NSNumber)?.intValue,
@@ -710,7 +779,8 @@ import NoodleRuntime
         LinkGroup(id: conversation.id,
                   draft: LinkGroupDraft(name: conversation.displayName, publicDescription: conversation.publicDescription ?? "",
                                         botIDs: conversation.participantIDs),
-                  createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id], archivedAt: conversation.archivedAt)
+                  createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id], archivedAt: conversation.archivedAt,
+                  background: background(of: conversation.id))
     }
 
     private func bot(_ agent: AgentRecord, conversations: [BotConversation]) throws -> LinkBot? {
@@ -725,7 +795,7 @@ import NoodleRuntime
         draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue), readUpTo: readMarks[conversation.id],
-                       status: agent.status, archivedAt: agent.archivedAt)
+                       status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id))
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.

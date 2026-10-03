@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - A bot's folders moved from the Harness tab to a Folders row above Conversation Background in New Bot and Edit Bot.
+- Backgrounds of conversations on a Noodle Hub are kept on the Hub, so one chosen on this Mac, another Mac or Noodle Mobile shows on all of them. This Mac shows the Hub's backgrounds in place of any it had for those conversations. When this Mac serves as a Hub, Noodle Mobile shows and changes its conversations' backgrounds.
 
 ### Fixed
 

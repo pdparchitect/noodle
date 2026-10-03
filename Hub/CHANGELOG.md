@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Keeps each conversation's background for all its user's devices, and makes a small copy of a background video for phones.
+
 ### Fixed
 
 - Settings > Groups scrolls a long list of groups, as Settings > Bots does, instead of growing past the screen.

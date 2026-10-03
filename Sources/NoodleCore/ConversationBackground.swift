@@ -19,6 +19,17 @@ extension WorkspaceRepository {
             .appendingPathComponent(name)
     }
 
+    /// Where the small copy a phone shows is kept, beside the background and deleted with it.
+    /// A still picture is its own small copy.
+    public func compactBackgroundURL(_ background: ConversationBackground, conversationID: UUID) -> URL? {
+        guard let url = backgroundImageURL(background, conversationID: conversationID) else { return nil }
+        switch background.mediaKind ?? .image {
+        case .image: return url
+        case .video: return url.deletingPathExtension().appendingPathExtension("compact.mp4")
+        case .dynamicImage: return url.deletingPathExtension().appendingPathExtension("compact.jpg")
+        }
+    }
+
     @discardableResult public func setBackground(conversationID: UUID, preset: ConversationBackgroundPreset?,
                                                  commit: () throws -> Void = {}) throws -> ConversationBackground {
         try persistBackground(ConversationBackground(preset: preset), conversationID: conversationID, commit: commit)
@@ -67,6 +78,7 @@ extension WorkspaceRepository {
         }
         if let old = backgroundImageURL(previous, conversationID: conversationID), previous.imageFilename != background.imageFilename {
             try? FileManager.default.removeItem(at: old)
+            if let compact = compactBackgroundURL(previous, conversationID: conversationID) { try? FileManager.default.removeItem(at: compact) }
         }
         return background
     }

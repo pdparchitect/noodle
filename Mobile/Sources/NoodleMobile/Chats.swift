@@ -11,6 +11,7 @@ protocol HubConversation: Identifiable where ID == UUID {
     var readUpTo: Date? { get }
     var name: String { get }
     var about: String { get }
+    var background: LinkBackground? { get }
 }
 
 extension LinkBot: HubConversation {
@@ -42,6 +43,7 @@ enum HubThread: HubConversation {
     var readUpTo: Date? { conversation.readUpTo }
     var name: String { conversation.name }
     var about: String { conversation.about }
+    var background: LinkBackground? { conversation.background }
 
     var bot: LinkBot? {
         if case .bot(let bot) = self { bot } else { nil }
@@ -68,8 +70,8 @@ enum HubThread: HubConversation {
     private var seen: [UUID: Date]?
     /// Unsent text, by conversation, kept on this phone.
     private var drafts: [UUID: String] = [:]
-    /// Each conversation's backdrop. Like on the Mac, only this device's look: the Hub never sees it.
-    private var backgrounds: [UUID: ConversationBackground] = [:]
+    /// The small copies of backgrounds this phone fetched, by name.
+    private var fetchedBackgrounds: Set<String> = []
     private var conversations: [UUID: [LinkMessage]] = [:]
     /// This user's tool connections, computers and browsers on the Hub, which bots use when assigned.
     var connections: [LinkConnection] = []
@@ -105,8 +107,7 @@ enum HubThread: HubConversation {
         seen = try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: seenURL))
         drafts = (try? JSONDecoder().decode([UUID: String].self, from: Data(contentsOf: draftsURL))) ?? [:]
         unsent = (try? JSONDecoder().decode([UUID: UnsentMessage].self, from: Data(contentsOf: unsentURL))) ?? [:]
-        backgrounds = (try? JSONDecoder().decode([UUID: ConversationBackground].self,
-                                                 from: Data(contentsOf: pairing.directory.appendingPathComponent("backgrounds.json")))) ?? [:]
+        fetchedBackgrounds = Set((try? FileManager.default.contentsOfDirectory(atPath: backgroundsFolder.path)) ?? [])
         if let cache = try? JSONDecoder().decode(Cache.self, from: Data(contentsOf: cacheURL)) {
             agents = cache.agents
             groups = cache.groups ?? []
@@ -122,31 +123,81 @@ enum HubThread: HubConversation {
     private var draftsURL: URL { pairing.directory.appendingPathComponent("drafts.json") }
     private var unsentURL: URL { pairing.directory.appendingPathComponent("unsent.json") }
 
+    /// A conversation's background, as its Hub keeps it for every device.
     func background(for conversation: some HubConversation) -> ConversationBackground {
-        backgrounds[conversation.conversationID] ?? ConversationBackground()
+        guard let kept = thread(of: conversation.conversationID)?.background else { return ConversationBackground() }
+        return ConversationBackground(preset: kept.preset.flatMap(ConversationBackgroundPreset.init(rawValue:)),
+                                      imageFilename: kept.compactFilename,
+                                      mediaKind: kept.compactFilename == nil ? nil : kept.mediaKind.flatMap(BackgroundMediaKind.init(rawValue:)) ?? .image)
     }
 
+    /// The small copy of its picture or video, once this phone has it.
     func backgroundImageURL(for conversation: some HubConversation) -> URL? {
-        background(for: conversation).imageFilename.map { backgroundsFolder.appendingPathComponent($0) }
+        guard let name = thread(of: conversation.conversationID)?.background?.compactFilename, fetchedBackgrounds.contains(name) else { return nil }
+        return backgroundsFolder.appendingPathComponent(name)
     }
 
-    /// A preset or the default. Any photo the conversation had is removed.
-    func setBackground(_ background: ConversationBackground, for conversation: some HubConversation) throws {
-        if let old = backgroundImageURL(for: conversation), old.lastPathComponent != background.imageFilename {
-            try? FileManager.default.removeItem(at: old)
+    /// A gradient or none, for every device.
+    func setBackground(_ background: ConversationBackground, for conversation: some HubConversation) async throws {
+        guard case .background(let kept) = try await pairing.request(.setBackground(LinkBackgroundChoice(
+            conversationID: conversation.conversationID, preset: background.preset?.rawValue))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
         }
-        backgrounds[conversation.conversationID] = background.isDefault ? nil : background
-        try JSONEncoder().encode(backgrounds).write(to: pairing.directory.appendingPathComponent("backgrounds.json"), options: .atomic)
+        keep(kept, for: conversation.conversationID)
     }
 
-    /// A photo, converted as Noodle converts every still background.
-    func setBackground(photo: Data, for conversation: some HubConversation) throws {
+    /// A photo, converted as Noodle converts every still background, for every device.
+    func setBackground(photo: Data, for conversation: some HubConversation) async throws {
         let jpeg = try BackgroundMedia.jpegData(from: photo)
-        try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
-        // A new name each time, so views showing the old picture reload.
-        let name = "\(conversation.conversationID.uuidString)-\(UUID().uuidString).jpg"
-        try jpeg.write(to: backgroundsFolder.appendingPathComponent(name), options: .atomic)
-        try setBackground(ConversationBackground(imageFilename: name, mediaKind: .image), for: conversation)
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).jpg")
+        try jpeg.write(to: staging, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        let kept = try await pairing.uploadBackground(staging, to: conversation.conversationID)
+        // The phone already has what it sent.
+        if kept.mediaKind == BackgroundMediaKind.image.rawValue, let name = kept.compactFilename {
+            try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
+            try FileManager.default.copyItem(at: staging, to: backgroundsFolder.appendingPathComponent(name))
+            fetchedBackgrounds.insert(name)
+        }
+        keep(kept, for: conversation.conversationID)
+    }
+
+    private func thread(of conversationID: UUID) -> HubThread? { threads.first { $0.conversationID == conversationID } }
+
+    private func keep(_ background: LinkBackground, for conversationID: UUID) {
+        if let index = agents.firstIndex(where: { $0.conversationID == conversationID }) { agents[index].background = background }
+        if let index = groups.firstIndex(where: { $0.id == conversationID }) { groups[index].background = background }
+        saveCache()
+        forgetOtherBackgrounds()
+        Task { await fetchBackgrounds() }
+    }
+
+    /// Fetches the small copy of each background this phone does not have yet. One that cannot be
+    /// fetched is tried again with the next list.
+    private func fetchBackgrounds() async {
+        for thread in threads {
+            guard let background = thread.background, let media = background.media, let name = background.compactFilename,
+                  !fetchedBackgrounds.contains(name) else { continue }
+            let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: staging) }
+            do {
+                try await pairing.downloadBackground(media, of: thread.conversationID, compact: true, to: staging)
+                try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
+                try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
+                try FileManager.default.moveItem(at: staging, to: backgroundsFolder.appendingPathComponent(name))
+                fetchedBackgrounds.insert(name)
+            } catch {}
+        }
+        forgetOtherBackgrounds()
+    }
+
+    private func forgetOtherBackgrounds() {
+        let wanted = Set(threads.compactMap(\.background?.compactFilename))
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: backgroundsFolder.path)) ?? [] where !wanted.contains(name) {
+            try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
+        }
+        fetchedBackgrounds.formIntersection(wanted)
     }
 
     private var backgroundsFolder: URL { pairing.directory.appendingPathComponent("Backgrounds", isDirectory: true) }
@@ -430,6 +481,7 @@ enum HubThread: HubConversation {
         case .groupsChanged:
             try await loadGroups()
             forgetGone()
+            Task { await fetchBackgrounds() }
         case .conversationChanged(let id, _):
             try await load(id)
         case .messageChanged(let message):
@@ -457,6 +509,9 @@ enum HubThread: HubConversation {
             return
         case .readChanged(let id, let upTo):
             noteRead(id, upTo: upTo)
+            return
+        case .backgroundChanged(let id, let background):
+            keep(background, for: id)
             return
         }
         saveCache()
@@ -493,6 +548,7 @@ enum HubThread: HubConversation {
         // The Hub answers again: a message that did not go through goes now, if nothing newer has come.
         for id in unsent.keys { await deliver(id, pauses: [.zero]) }
         // Pictures come after the chats show, each fetched once.
+        await fetchBackgrounds()
         await pairing.fetchPictures(bots)
         guard agents.map(\.id) == bots.map(\.id) else { return }
         agents = pairing.keptPictures(agents)

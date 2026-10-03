@@ -267,6 +267,7 @@ final class NoodleStore {
             }
         }
         thisMac.onRead = { [weak self] in self?.readElsewhere($0, upTo: $1) }
+        thisMac.onBackgroundChanged = { [weak self] in self?.reloadBackground(of: $0) }
         // A device changed this Mac's tools, computers or browsers, in the files these controllers keep.
         thisMac.onToolsEdited = { [weak self] in self?.reloadToolsEditedElsewhere() }
         Self.active = self
@@ -517,11 +518,11 @@ final class NoodleStore {
             return true
         }
         do {
-            let updated = try repository.setConversationArchived(archived, conversationID: conversationID)
             let before = conversations.first { $0.id == conversationID }
+            let updated = try repository.setConversationArchived(archived, conversationID: conversationID)
             if let index = conversations.firstIndex(where: { $0.id == conversationID }) { conversations[index] = updated }
-            if archived {
             restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
+            if archived {
                 markConversationRead(conversationID)
                 if selectedConversationID == conversationID { selectedConversationID = nil }
             }
@@ -542,6 +543,7 @@ final class NoodleStore {
                 let mirror = HubMirror(pairing: pairing, repository: repository, directory: pairing.directory)
                 mirror.onChange = { [weak self] in self?.hubBotsChanged() }
                 mirror.onRead = { [weak self] in self?.readElsewhere($0, upTo: $1) }
+                mirror.onBackgroundChanged = { [weak self] in self?.reloadBackground(of: $0) }
                 mirror.onSignInPage = { [weak self] connection, url in
                     guard let self else { throw ToolProviderError("Noodle is closing.") }
                     return try await self.mcp.authorizeInBrowser(url, callbackURL: MCPController.redirectURI(for: connection.draft.endpoint))
@@ -925,9 +927,9 @@ final class NoodleStore {
                 folders: folders
             )
             conversations.insert(conversation, at: 0)
+            restartBots(BotConversation.botsWithChangedFolders(from: nil, to: conversation))
             messagesByConversation[conversation.id] = []
             attachmentsByConversation[conversation.id] = []
-            restartBots(BotConversation.botsWithChangedFolders(from: nil, to: conversation))
             selectedConversationID = conversation.id
             creationSheet = nil
             refreshAppShortcuts()
@@ -970,14 +972,14 @@ final class NoodleStore {
                 existingAgents: agents,
                 folders: folders
             )
+            let before = conversations.first { $0.id == conversation.id } ?? conversation
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
                 conversations[index] = updated
-            let before = conversations.first { $0.id == conversation.id } ?? conversation
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
+            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
             if membershipChanged || descriptionChanged {
                 messagesByConversation[conversation.id] = try repository.loadMessages(
-            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
                     conversationID: conversation.id
                 )
                 runtime.notify(participants(for: updated), repository: repository)
@@ -1035,9 +1037,9 @@ final class NoodleStore {
                 runtime.stop(agentID: agent.id)
             } else {
                 try repository.deleteConversation(id: conversation.id)
+                restartBots(BotConversation.botsWithChangedFolders(from: conversation, to: nil))
             }
 
-                restartBots(BotConversation.botsWithChangedFolders(from: conversation, to: nil))
             drafts.clear(conversation.id)
             if selectedConversationID == conversation.id {
                 selectedConversationID = nil
@@ -1173,6 +1175,19 @@ final class NoodleStore {
     }
 
     /// Tells the person's other devices, through the Hub that shows them the conversation.
+    /// A background chosen here: a conversation on a Hub keeps it there, and this Mac's own devices hear of it at once.
+    private func shareBackground(_ conversationID: UUID) {
+        if let mirror = hubMirror(forConversation: conversationID) {
+            Task { await mirror.shareBackground(conversation: conversationID) }
+        } else {
+            thisMac.hub?.bots.checkForChanges()
+        }
+    }
+
+    private func reloadBackground(of conversationID: UUID) {
+        backgrounds[conversationID] = (try? repository.loadBackground(conversationID: conversationID)) ?? ConversationBackground()
+    }
+
     private func shareRead(_ conversationID: UUID) {
         if let mirror = hubMirror(forConversation: conversationID) {
             Task { await mirror.markRead(conversation: conversationID) }
@@ -1644,6 +1659,7 @@ final class NoodleStore {
                 saved = try repository.setBackground(conversationID: conversation.id, preset: draft.background.preset, commit: commit)
             }
             backgrounds[conversation.id] = saved
+            shareBackground(conversation.id)
             return true
         } catch is SettingsSaveFailed {
             return false // The settings operation already supplied its error.
@@ -1661,6 +1677,7 @@ final class NoodleStore {
             return try repository.setBackground(conversationID: conversation.id, preset: background.preset)
         }.value
         backgrounds[conversation.id] = saved
+        shareBackground(conversation.id)
     }
 
     func useAttachmentAsBackground(_ attachment: ConversationAttachment) async {
@@ -1671,6 +1688,7 @@ final class NoodleStore {
             }.value
             // Keep the action bound to its source chat even if selection changes during decoding.
             backgrounds[attachment.conversationID] = saved
+            shareBackground(attachment.conversationID)
         } catch { errorMessage = error.localizedDescription }
     }
 

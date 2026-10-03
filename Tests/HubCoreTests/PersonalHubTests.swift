@@ -1,3 +1,5 @@
+import AppKit
+import AVFoundation
 import BrowserBridge
 import ComputerBridge
 import Foundation
@@ -117,6 +119,108 @@ import XCTest
             return XCTFail("no messages")
         }
         XCTAssertEqual(page.messages.map(\.body), ["Hi there", "Hey, how are you?"])
+    }
+
+    /// A conversation's background is the Mac's, whichever device sets it. The phone fetches a
+    /// small copy of a video, and the Mac hears when the phone changes it.
+    func testThePhoneShowsAndSetsTheMacsBackgrounds() async throws {
+        let (f, made) = try await fixture(bots: ["Eli"])
+        let conversation = try XCTUnwrap(f.repository.loadConversations().first { $0.participantIDs == [made[0].id] })
+        let events = try await f.device.subscribe()
+        f.personal.bots.checkForChanges()
+        // Once the Hub answers, it has the subscription.
+        guard case .bots(let plain) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(plain.first?.background, LinkBackground())
+        try f.repository.setBackground(conversationID: conversation.id, preset: .ocean)
+        f.personal.bots.checkForChanges()
+        var heard: LinkBackground?
+        for try await event in events {
+            if case .backgroundChanged(conversation.id, let background) = event { heard = background; break }
+        }
+        XCTAssertEqual(heard, LinkBackground(preset: "ocean"))
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(bots.first?.background, LinkBackground(preset: "ocean"))
+
+        let movie = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-background-\(UUID()).mov")
+        addTeardownBlock { try? FileManager.default.removeItem(at: movie) }
+        try await Self.video(at: movie)
+        let set = try f.repository.setBackground(conversationID: conversation.id, file: try await PreparedBackgroundFile.prepare(movie))
+        guard case .bots(let listed) = try await f.device.request(.bots), let video = listed.first?.background else {
+            return XCTFail("no background")
+        }
+        XCTAssertEqual(video.media, set.imageFilename)
+        XCTAssertEqual(video.mediaKind, "video")
+        let original = f.hubDirectory.appendingPathComponent("original.mov"), compact = f.hubDirectory.appendingPathComponent("compact.mp4")
+        try await f.device.downloadBackground(try XCTUnwrap(video.media), of: conversation.id, compact: false, to: original)
+        XCTAssertEqual(try Data(contentsOf: original),
+                       try Data(contentsOf: XCTUnwrap(f.repository.backgroundImageURL(set, conversationID: conversation.id))))
+        try await f.device.downloadBackground(try XCTUnwrap(video.media), of: conversation.id, compact: true, to: compact)
+        let small = AVURLAsset(url: compact)
+        let playable = try await small.load(.isPlayable), sound = try await small.loadTracks(withMediaType: .audio)
+        XCTAssertTrue(playable)
+        XCTAssertEqual(sound, [])
+        let track = try await small.loadTracks(withMediaType: .video).first
+        let size = try await XCTUnwrap(track).load(.naturalSize)
+        XCTAssertLessThanOrEqual(max(size.width, size.height), 1280)
+        // A background since replaced is not there to fetch.
+        try f.repository.setBackground(conversationID: conversation.id, preset: nil)
+        do {
+            try await f.device.downloadBackground(try XCTUnwrap(video.media), of: conversation.id, compact: true, to: compact)
+            XCTFail("Fetched a background that is gone")
+        } catch {}
+
+        var changed: UUID?
+        f.personal.bots.onBackgroundChanged = { changed = $0 }
+        guard case .background(let dusk) = try await f.device.request(.setBackground(
+            LinkBackgroundChoice(conversationID: conversation.id, preset: "dusk"))) else { return XCTFail("no background") }
+        XCTAssertEqual(dusk, LinkBackground(preset: "dusk"))
+        XCTAssertEqual(try f.repository.loadBackground(conversationID: conversation.id).preset, .dusk)
+        XCTAssertEqual(changed, conversation.id)
+
+        let photo = f.hubDirectory.appendingPathComponent("photo.png")
+        try Self.picture(at: photo)
+        let uploaded = try await f.device.uploadBackground(photo, to: conversation.id)
+        let kept = try f.repository.loadBackground(conversationID: conversation.id)
+        XCTAssertEqual(uploaded.media, kept.imageFilename)
+        XCTAssertEqual(kept.mediaKind, .image)
+        XCTAssertNil(kept.preset)
+        XCTAssertNotNil(try f.repository.backgroundImageURL(kept, conversationID: conversation.id).flatMap { NSImage(contentsOf: $0) })
+    }
+
+    /// A short silent movie, as a person might pick for a background.
+    static func video(at url: URL) async throws {
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 64, AVVideoHeightKey: 64])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,
+            sourcePixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
+                kCVPixelBufferWidthKey as String: 64, kCVPixelBufferHeightKey as String: 64])
+        writer.add(input)
+        XCTAssertTrue(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        for index in 0..<12 {
+            let deadline = Date().addingTimeInterval(5)
+            while !input.isReadyForMoreMediaData, Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            var buffer: CVPixelBuffer?
+            XCTAssertEqual(CVPixelBufferPoolCreatePixelBuffer(nil, try XCTUnwrap(adaptor.pixelBufferPool), &buffer), kCVReturnSuccess)
+            let pixel = try XCTUnwrap(buffer)
+            CVPixelBufferLockBaseAddress(pixel, [])
+            memset(CVPixelBufferGetBaseAddress(pixel), Int32(index * 15), CVPixelBufferGetDataSize(pixel))
+            CVPixelBufferUnlockBaseAddress(pixel, [])
+            XCTAssertTrue(adaptor.append(pixel, withPresentationTime: CMTime(value: Int64(index), timescale: 12)))
+        }
+        input.markAsFinished()
+        await writer.finishWriting()
+        XCTAssertEqual(writer.status, .completed)
+    }
+
+    static func picture(at url: URL) throws {
+        let image = NSImage(size: NSSize(width: 40, height: 30), flipped: false) { rect in
+            NSColor.orange.setFill()
+            rect.fill()
+            return true
+        }
+        let bitmap = try XCTUnwrap(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
     }
 
     /// Reading on the Mac reads on the phone, and reading on the phone tells the Mac.

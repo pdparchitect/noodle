@@ -1,3 +1,4 @@
+import AppKit
 import BrowserBridge
 import Foundation
 import HubCore
@@ -367,6 +368,54 @@ import XCTest
         let local = try XCTUnwrap(f.local.loadAgents().first)
         XCTAssertEqual(local.displayName, "Jeeves")
         XCTAssertEqual(try f.local.loadAgentBackstory(local), "A valet.")
+    }
+
+    /// Backgrounds of conversations on the Hub are the Hub's: whatever is here gives way to it, a
+    /// file comes over once until it changes, and one chosen here goes to the Hub.
+    func testBackgroundsAreKeptOnTheHub() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let local = try conversation(of: agent.id, in: f.local)
+        let remote = try conversation(of: XCTUnwrap(f.hub.repository.loadAgents().first).id, in: f.hub.repository)
+        try f.local.setBackground(conversationID: local.id, preset: .sunset)
+        await mirror.sync()
+        XCTAssertNil(mirror.error)
+        XCTAssertTrue(try f.local.loadBackground(conversationID: local.id).isDefault)
+
+        let photo = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-background-\(UUID()).png")
+        addTeardownBlock { try? FileManager.default.removeItem(at: photo) }
+        try PersonalHubTests.picture(at: photo)
+        _ = try f.hub.repository.setBackground(conversationID: remote.id, file: try await PreparedBackgroundFile.prepare(photo))
+        await mirror.sync()
+        let fetched = try f.local.loadBackground(conversationID: local.id)
+        XCTAssertEqual(fetched.mediaKind, .image)
+        XCTAssertNotNil(try f.local.backgroundImageURL(fetched, conversationID: local.id).flatMap { NSImage(contentsOf: $0) })
+        await mirror.sync()
+        XCTAssertEqual(try f.local.loadBackground(conversationID: local.id), fetched, "fetched again although unchanged")
+
+        try f.local.setBackground(conversationID: local.id, preset: .forest)
+        await mirror.shareBackground(conversation: local.id)
+        XCTAssertNil(mirror.error)
+        XCTAssertEqual(try f.hub.repository.loadBackground(conversationID: remote.id), ConversationBackground(preset: .forest))
+
+        let movie = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-background-\(UUID()).mov")
+        addTeardownBlock { try? FileManager.default.removeItem(at: movie) }
+        try await PersonalHubTests.video(at: movie)
+        let chosen = try f.local.setBackground(conversationID: local.id, file: try await PreparedBackgroundFile.prepare(movie))
+        await mirror.shareBackground(conversation: local.id)
+        XCTAssertNil(mirror.error)
+        let onHub = try f.hub.repository.loadBackground(conversationID: remote.id)
+        XCTAssertEqual(onHub.mediaKind, .video)
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(f.hub.repository.backgroundImageURL(onHub, conversationID: remote.id))),
+                       try Data(contentsOf: XCTUnwrap(f.local.backgroundImageURL(chosen, conversationID: local.id))))
+        await mirror.sync()
+        XCTAssertEqual(try f.local.loadBackground(conversationID: local.id), chosen, "fetched what it sent")
+
+        // Another device takes it away.
+        try f.hub.repository.setBackground(conversationID: remote.id, preset: nil)
+        await mirror.sync()
+        XCTAssertTrue(try f.local.loadBackground(conversationID: local.id).isDefault)
     }
 
     func testABotGetsTheHubConnectionsChosenForItHere() async throws {

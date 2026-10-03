@@ -398,6 +398,12 @@ import os
     /// What happens to notifications for devices away, without topics, names or messages.
     private static let pushLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HubCore", category: "Notifications")
 
+    private func checkUploadSize(_ byteCount: Int) throws {
+        guard byteCount <= uploadLimit else {
+            throw LinkError("\(hubName) takes files up to \(ByteCountFormatter.string(fromByteCount: Int64(uploadLimit), countStyle: .file)).")
+        }
+    }
+
     private func handle(_ request: LinkRequest, from key: LinkPublicKey) async throws -> LinkResponse {
         // On the owner's own Mac these are Noodle's, which changes them too: read them as it left them.
         if access.isPersonal {
@@ -469,11 +475,17 @@ import os
                                                in: message.conversationID, for: try user(key)))
         case .upload(let conversationID, let attachment, let offset, let data):
             // Refused at the first piece, before any of the file is kept.
-            guard attachment.byteCount <= uploadLimit else {
-                throw LinkError("\(hubName) takes files up to \(ByteCountFormatter.string(fromByteCount: Int64(uploadLimit), countStyle: .file)).")
-            }
+            try checkUploadSize(attachment.byteCount)
             try hubBots().receive(data, at: offset, of: attachment, in: conversationID, for: try user(key))
             return .done
+        case .setBackground(let choice):
+            return .background(try hubBots().setBackground(choice, for: try user(key)))
+        case .uploadBackground(let piece):
+            try checkUploadSize(piece.byteCount)
+            return try await hubBots().receiveBackground(piece, for: try user(key)).map(LinkResponse.background) ?? .done
+        case .backgroundMedia(let fetch):
+            let (data, total) = try await hubBots().backgroundChunk(fetch, for: try user(key))
+            return .chunk(data: data, total: total)
         case .linkCard(let conversationID, let attachmentID):
             return .linkCard(try await hubBots().card(of: attachmentID, in: conversationID, for: try user(key)))
         case .linkPreview(let conversationID, let attachmentID):

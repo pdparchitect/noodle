@@ -152,6 +152,36 @@ public enum BackgroundMedia {
         return min(120, CGImageSourceGetCount(source))
     }
 
+    /// A small copy of a background for a phone: a video as 720p MP4 without sound, a dynamic
+    /// picture as its first picture in JPEG. Written whole or not at all.
+    public static func writeCompactCopy(of source: URL, kind: BackgroundMediaKind, to target: URL) async throws {
+        let staging = target.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).\(target.pathExtension)")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        if kind == .video {
+            let asset = videoAsset(at: source)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ConversationBackgroundError.invalidMedia }
+            let silent = AVMutableComposition()
+            guard let video = silent.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                throw ConversationBackgroundError.invalidMedia
+            }
+            try video.insertTimeRange(CMTimeRange(start: .zero, duration: try await asset.load(.duration)), of: track, at: .zero)
+            video.preferredTransform = try await track.load(.preferredTransform)
+            guard let export = AVAssetExportSession(asset: silent, presetName: AVAssetExportPreset1280x720) else {
+                throw ConversationBackgroundError.invalidMedia
+            }
+            try await export.export(to: staging, as: .mp4)
+        } else {
+            guard let image = image(at: source, index: 0),
+                  let destination = CGImageDestinationCreateWithURL(staging as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
+                throw ConversationBackgroundError.invalidMedia
+            }
+            CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+            guard CGImageDestinationFinalize(destination) else { throw ConversationBackgroundError.invalidMedia }
+        }
+        if FileManager.default.fileExists(atPath: target.path) { return }
+        try FileManager.default.moveItem(at: staging, to: target)
+    }
+
     public static func poster(at url: URL, kind: BackgroundMediaKind?) async -> CGImage? {
         if kind != .video { return image(at: url, index: 0) }
         let generator = AVAssetImageGenerator(asset: videoAsset(at: url))

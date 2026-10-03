@@ -49,6 +49,10 @@ final class LinkCompatibilityTests: XCTestCase {
         let draftJSON = #""draft":{"name":"Alfred","provider":"codex"}"#
         let bot = try decode(LinkBot.self, #"{"id":"\#(id)","conversationID":"\#(conversation)",\#(draftJSON),"createdAt":0}"#)
         XCTAssertNil(bot.phase)
+        // From a Hub that does not keep backgrounds.
+        XCTAssertNil(bot.background)
+        let group = try decode(LinkGroup.self, #"{"id":"\#(id)","draft":{"name":"Crew","publicDescription":"","botIDs":[]},"createdAt":0}"#)
+        XCTAssertNil(group.background)
         // A phase added after this app was built reads as unknown rather than failing the whole bot.
         let napping = try decode(LinkBot.self,
             #"{"id":"\#(id)","conversationID":"\#(conversation)",\#(draftJSON),"createdAt":0,"phase":"napping"}"#)

@@ -42,6 +42,17 @@ private actor FakeHub {
 
     func setStatus(_ status: String?) { bot.status = status }
 
+    /// The small copies of background files the phone asks for, by media name.
+    var backgroundFiles: [String: Data] = [:]
+    var backgroundFetches = 0
+    /// A background's pieces as they arrive.
+    var backgroundUpload = Data()
+
+    func setBackground(_ background: LinkBackground, compact: Data? = nil) {
+        bot.background = background
+        if let media = background.media { backgroundFiles[media] = compact }
+    }
+
     /// A group of Scout, made on another device, with something already said in it.
     func addGroup(named name: String, saying body: String) -> LinkGroup {
         let group = LinkGroup(id: UUID(), draft: LinkGroupDraft(name: name, botIDs: [bot.id]), createdAt: Date(timeIntervalSince1970: 5))
@@ -167,6 +178,21 @@ private actor FakeHub {
                 return .failure("The Hub did not answer in time.")
             }
             return .message(sent)
+        case .success(.setBackground(let choice)) where choice.conversationID == bot.conversationID:
+            bot.background = LinkBackground(preset: choice.preset)
+            return .background(bot.background!)
+        case .success(.uploadBackground(let piece)) where piece.conversationID == bot.conversationID:
+            if piece.offset == 0 { backgroundUpload = Data() }
+            guard piece.offset == backgroundUpload.count else { return .failure("Pieces out of order.") }
+            backgroundUpload.append(piece.data)
+            guard backgroundUpload.count == piece.byteCount else { return .done }
+            setBackground(LinkBackground(media: "\(UUID()).jpg", mediaKind: "image"), compact: backgroundUpload)
+            return .background(bot.background!)
+        case .success(.backgroundMedia(let fetch)) where fetch.conversationID == bot.conversationID && fetch.compact:
+            guard fetch.media == bot.background?.media, let data = backgroundFiles[fetch.media] else { return .failure("No such background.") }
+            if fetch.offset == 0 { backgroundFetches += 1 }
+            let end = min(fetch.offset + LinkProtocol.chunkSize, data.count)
+            return .chunk(data: data.subdata(in: fetch.offset..<end), total: data.count)
         case .success(.kick(let id)) where id == bot.id:
             restarts.append("kick")
             return kickConfirmation.map(LinkResponse.kickConfirmation) ?? .done
@@ -799,29 +825,46 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(MentionCompletion.request(in: "Hi", caret: 2) == nil)
     }
 
-    @Test func eachConversationKeepsItsOwnBackground() async throws {
+    /// Backgrounds are the Hub's: the phone shows what is there, fetching a small copy once, and
+    /// what it sets goes to the Hub for every device.
+    @Test func backgroundsAreKeptOnTheHub() async throws {
         let hub = FakeHub()
+        let movie = Data("a small movie".utf8)
+        await hub.setBackground(LinkBackground(media: "\(UUID()).mov", mediaKind: "video"), compact: movie)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let (chats, server) = try await paired(to: hub, directory: directory)
         defer { server.stop() }
         try await chats.reload()
         let scout = try #require(chats.agents.first)
-        #expect(chats.background(for: scout).isDefault)
+        #expect(chats.background(for: scout).mediaKind == .video)
+        let video = try #require(chats.backgroundImageURL(for: scout))
+        #expect(video.pathExtension == "mp4")
+        #expect(try Data(contentsOf: video) == movie)
+        try await chats.reload()
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+        #expect(relaunched.backgroundImageURL(for: scout) == video)
+        #expect(await hub.backgroundFetches == 1)
 
-        try chats.setBackground(ConversationBackground(preset: .ocean), for: scout)
-        #expect(HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone")).background(for: scout).preset == .ocean)
+        try await chats.setBackground(ConversationBackground(preset: .ocean), for: scout)
+        #expect(await hub.bot.background == LinkBackground(preset: "ocean"))
+        #expect(chats.background(for: scout).preset == .ocean)
+        #expect(chats.backgroundImageURL(for: scout) == nil)
+        #expect(!FileManager.default.fileExists(atPath: video.path))
 
         let photo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30)).image { context in
             UIColor.orange.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
-        }.jpegData(compressionQuality: 0.9)!
-        try chats.setBackground(photo: photo, for: scout)
-        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
-        let image = try #require(relaunched.backgroundImageURL(for: scout))
-        #expect(relaunched.background(for: scout).imageFilename != nil)
-        #expect(FileManager.default.fileExists(atPath: image.path))
+        }.pngData()!
+        try await chats.setBackground(photo: photo, for: scout)
+        let image = try #require(chats.backgroundImageURL(for: scout))
+        #expect(chats.background(for: scout).mediaKind == .image)
+        #expect(UIImage(contentsOfFile: image.path) != nil)
+        #expect(await hub.backgroundUpload == (try Data(contentsOf: image)))
+        #expect(await hub.backgroundFetches == 1)
 
-        try chats.setBackground(ConversationBackground(), for: scout)
+        // Another device takes it away.
+        await hub.setBackground(LinkBackground())
+        try await chats.apply(.backgroundChanged(conversationID: scout.conversationID, background: LinkBackground()))
         #expect(chats.background(for: scout).isDefault)
         #expect(!FileManager.default.fileExists(atPath: image.path))
     }

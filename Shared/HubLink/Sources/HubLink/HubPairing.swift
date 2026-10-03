@@ -151,13 +151,42 @@ import Observation
 
     /// Saves one of a conversation's files from the Hub to `destination`.
     public func download(_ attachment: LinkAttachment, from conversationID: UUID, to destination: URL) async throws {
+        try await download(to: destination) { .download(conversationID: conversationID, attachmentID: attachment.id, offset: $0) }
+    }
+
+    /// Sends a picture or video to be a conversation's background on the Hub, piece by piece.
+    public func uploadBackground(_ file: URL, to conversationID: UUID) async throws -> LinkBackground {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        let byteCount = Int(try handle.seekToEnd())
+        try handle.seek(toOffset: 0)
+        let upload = UUID()
+        var offset = 0
+        while true {
+            let data = try handle.read(upToCount: LinkProtocol.chunkSize) ?? Data()
+            let answer = try await request(.uploadBackground(LinkBackgroundPiece(
+                conversationID: conversationID, upload: upload, filename: file.lastPathComponent, byteCount: byteCount,
+                offset: offset, data: data)))
+            offset += data.count
+            if case .background(let background) = answer { return background }
+            guard case .done = answer, offset < byteCount, !data.isEmpty else { throw LinkError("The Hub sent an unexpected answer.") }
+        }
+    }
+
+    /// Saves a conversation's background file from the Hub to `destination`: as the Hub keeps it, or its small copy.
+    public func downloadBackground(_ media: String, of conversationID: UUID, compact: Bool, to destination: URL) async throws {
+        try await download(to: destination) {
+            .backgroundMedia(LinkBackgroundFetch(conversationID: conversationID, media: media, compact: compact, offset: $0))
+        }
+    }
+
+    private func download(to destination: URL, piece: (Int) -> LinkRequest) async throws {
         FileManager.default.createFile(atPath: destination.path, contents: nil)
         let handle = try FileHandle(forWritingTo: destination)
         defer { try? handle.close() }
         var offset = 0
         while true {
-            guard case .chunk(let data, let total) = try await request(.download(conversationID: conversationID,
-                                                                                 attachmentID: attachment.id, offset: offset)) else {
+            guard case .chunk(let data, let total) = try await request(piece(offset)) else {
                 throw LinkError("The Hub sent an unexpected answer.")
             }
             try handle.write(contentsOf: data)

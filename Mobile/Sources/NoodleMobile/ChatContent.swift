@@ -62,7 +62,7 @@ struct AttachmentView: View {
             // As on the Mac: a picture in the conversation can become its backdrop.
             if isImage, let url {
                 Button("Use as Background", systemImage: "photo.on.rectangle") {
-                    try? chats.setBackground(photo: Data(contentsOf: url), for: thread)
+                    Task { try? await chats.setBackground(photo: Data(contentsOf: url), for: thread) }
                 }
             }
         }

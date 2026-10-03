@@ -17,6 +17,8 @@ import Observation
         var synced: Int
         /// The Hub's profile for the harness, which means nothing on this Mac.
         var profile: UUID?
+        /// The Hub's background for the conversation, as last copied here.
+        var background: LinkBackground?
     }
 
     /// A group of bots on the Hub and its local copy.
@@ -24,6 +26,7 @@ import Observation
         var remote: UUID
         var conversation: UUID
         var synced: Int
+        var background: LinkBackground?
     }
 
     /// A conversation on the Hub, a bot's own or a group's, and its local copy.
@@ -31,6 +34,7 @@ import Observation
         var remote: UUID
         var local: UUID
         var synced: Int
+        var background: LinkBackground?
     }
 
     public private(set) var isConnected = false
@@ -41,6 +45,8 @@ import Observation
     /// Runs with how far this Mac's user has read a conversation here, as the Hub keeps it: read on
     /// another device, or as the Hub had it when this Mac connected.
     @ObservationIgnored public var onRead: ((_ conversation: UUID, _ upTo: Date) -> Void)?
+    /// Runs with a conversation here whose background changed to the Hub's.
+    @ObservationIgnored public var onBackgroundChanged: ((_ conversation: UUID) -> Void)?
     /// This Mac's user's tool connections on the Hub, as last listed.
     public private(set) var connections: [LinkConnection] = []
     /// This Mac's user's computers on the Hub, as last listed.
@@ -63,6 +69,8 @@ import Observation
     private var groups: [GroupEntry] = []
     /// Local messages the Hub already has, so they are not sent again.
     @ObservationIgnored private var acknowledged: Set<UUID> = []
+    /// Conversations on the Hub whose background is being sent from here, which the Hub's answer settles.
+    @ObservationIgnored private var sharingBackgrounds: Set<UUID> = []
 
     public init(pairing: HubPairing, repository: WorkspaceRepository, directory: URL) {
         self.pairing = pairing
@@ -78,8 +86,8 @@ import Observation
     public func owns(conversation id: UUID) -> Bool { thread(local: id) != nil }
 
     private var threads: [Thread] {
-        entries.map { Thread(remote: $0.remoteConversation, local: $0.conversation, synced: $0.synced) }
-            + groups.map { Thread(remote: $0.remote, local: $0.conversation, synced: $0.synced) }
+        entries.map { Thread(remote: $0.remoteConversation, local: $0.conversation, synced: $0.synced, background: $0.background) }
+            + groups.map { Thread(remote: $0.remote, local: $0.conversation, synced: $0.synced, background: $0.background) }
     }
 
     private func thread(remote id: UUID) -> Thread? { threads.first { $0.remote == id } }
@@ -417,6 +425,9 @@ import Observation
                         break
                     case .readChanged(let id, let upTo):
                         if let thread = thread(remote: id) { onRead?(thread.local, upTo) }
+                    case .backgroundChanged(let id, let background):
+                        // One that cannot be fetched now is tried again at the next sync.
+                        try? await copyBackground(background, of: id)
                     }
                 }
             } catch {
@@ -448,6 +459,7 @@ import Observation
         }
         for bot in bots { record(bot.phase, ofBot: bot.id) }
         if changed { onChange?() }
+        for bot in bots { if let background = bot.background { try? await copyBackground(background, of: bot.conversationID) } }
         for bot in bots {
             if let upTo = bot.readUpTo, let entry = entries.first(where: { $0.remote == bot.id }) { onRead?(entry.conversation, upTo) }
         }
@@ -469,6 +481,7 @@ import Observation
             changed = true
         }
         if changed { onChange?() }
+        for group in listed { if let background = group.background { try? await copyBackground(background, of: group.id) } }
         for group in listed {
             if let upTo = group.readUpTo, let entry = groups.first(where: { $0.remote == group.id }) { onRead?(entry.conversation, upTo) }
         }
@@ -483,6 +496,58 @@ import Observation
             _ = try await pairing.request(.markRead(LinkReadMark(conversationID: thread.remote, messageID: latest.id)))
         } catch {
             // A Hub from before read state was shared says it does not know the request; the Mac keeps its own.
+        }
+    }
+
+    /// Makes a conversation's background here the Hub's, fetching its file once until it changes.
+    private func copyBackground(_ background: LinkBackground, of remote: UUID) async throws {
+        guard let thread = thread(remote: remote), thread.background != background, !sharingBackgrounds.contains(remote) else { return }
+        if let media = background.media {
+            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-background-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: staging) }
+            let file = staging.appendingPathComponent(URL(fileURLWithPath: media).lastPathComponent)
+            try await pairing.downloadBackground(media, of: remote, compact: false, to: file)
+            try repository.setBackground(conversationID: thread.local, file: try await PreparedBackgroundFile.prepare(file))
+        } else {
+            try repository.setBackground(conversationID: thread.local, preset: background.preset.flatMap(ConversationBackgroundPreset.init(rawValue:)))
+        }
+        setBackground(background, in: remote)
+        onBackgroundChanged?(thread.local)
+    }
+
+    /// Sends the background a conversation here has to the Hub, for every device. A Hub that does
+    /// not keep backgrounds leaves this Mac's own.
+    public func shareBackground(conversation id: UUID) async {
+        guard let thread = thread(local: id), let background = try? repository.loadBackground(conversationID: id) else { return }
+        sharingBackgrounds.insert(thread.remote)
+        defer { sharingBackgrounds.remove(thread.remote) }
+        do {
+            let kept: LinkBackground
+            if let file = repository.backgroundImageURL(background, conversationID: id) {
+                kept = try await pairing.uploadBackground(file, to: thread.remote)
+            } else {
+                guard case .background(let answer) = try await pairing.request(.setBackground(
+                    LinkBackgroundChoice(conversationID: thread.remote, preset: background.preset?.rawValue))) else {
+                    throw LinkError("The Hub sent an unexpected answer.")
+                }
+                kept = answer
+            }
+            setBackground(kept, in: thread.remote)
+            error = nil
+        } catch let failure as LinkError where failure.message == LinkProtocol.unknownRequest {
+            // An older Hub.
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func setBackground(_ background: LinkBackground, in remote: UUID) {
+        if let entry = entries.first(where: { $0.remoteConversation == remote }) {
+            update(entry.remote) { $0.background = background }
+        } else if let index = groups.firstIndex(where: { $0.remote == remote }), groups[index].background != background {
+            groups[index].background = background
+            saveGroups()
         }
     }
 

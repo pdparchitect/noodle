@@ -194,6 +194,82 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// A piece of one call a noodlet running on this device makes on its data and secrets, which
     /// stay on the Hub. Answered with `done` until the last piece, then with `noodletAnswer`.
     case noodletCall(LinkNoodletCall)
+    /// Sets a conversation's background to a gradient, or to none. Answers `background`.
+    case setBackground(LinkBackgroundChoice)
+    /// One piece of a picture or video for a conversation's background, starting at `offset`. Pieces
+    /// go in order; the last one sets it and answers `background`, the others `done`.
+    case uploadBackground(LinkBackgroundPiece)
+    /// One piece of a conversation's background file. Answered with `chunk`.
+    case backgroundMedia(LinkBackgroundFetch)
+}
+
+/// A conversation's background, kept on the Hub so every device shows the same one.
+public struct LinkBackground: Codable, Equatable, Sendable {
+    /// One of Noodle's gradients, by name.
+    public var preset: String?
+    /// The picture or video, by a name that changes whenever it does, so a device fetches each once.
+    public var media: String?
+    /// `image`, `video` or `dynamicImage`, as Noodle names them.
+    public var mediaKind: String?
+
+    public init(preset: String? = nil, media: String? = nil, mediaKind: String? = nil) {
+        self.preset = preset
+        self.media = media
+        self.mediaKind = mediaKind
+    }
+
+    /// The name a device keeps the small copy under: a video plays as MP4, anything else is a JPEG.
+    public var compactFilename: String? {
+        guard let media, let stem = media.split(separator: ".").first, !stem.isEmpty,
+              stem.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }) else { return nil }
+        return "\(stem).\(mediaKind == "video" ? "mp4" : "jpg")"
+    }
+}
+
+/// A gradient for a conversation's background, or nil for none.
+public struct LinkBackgroundChoice: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var preset: String?
+
+    public init(conversationID: UUID, preset: String?) {
+        self.conversationID = conversationID
+        self.preset = preset
+    }
+}
+
+/// A piece of a picture or video for a conversation's background. Every piece of one file has its `upload`.
+public struct LinkBackgroundPiece: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var upload: UUID
+    /// Its extension says what it is.
+    public var filename: String
+    public var byteCount: Int
+    public var offset: Int
+    public var data: Data
+
+    public init(conversationID: UUID, upload: UUID, filename: String, byteCount: Int, offset: Int, data: Data) {
+        self.conversationID = conversationID
+        self.upload = upload
+        self.filename = filename
+        self.byteCount = byteCount
+        self.offset = offset
+        self.data = data
+    }
+}
+
+/// A piece of a conversation's background file, as the Hub keeps it, or `compact`: a small copy for a phone.
+public struct LinkBackgroundFetch: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var media: String
+    public var compact: Bool
+    public var offset: Int
+
+    public init(conversationID: UUID, media: String, compact: Bool, offset: Int) {
+        self.conversationID = conversationID
+        self.media = media
+        self.compact = compact
+        self.offset = offset
+    }
 }
 
 /// A noodlet readied to run on a device.
@@ -351,6 +427,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case noodlet(LinkNoodlet)
     /// What a noodlet's call answered, as its app encodes it.
     case noodletAnswer(Data)
+    case background(LinkBackground)
     case done
     case failure(String)
 }
@@ -384,6 +461,8 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     /// The keys a game on a surface channel declared, sent before its video, for a viewer
     /// without a keyboard to show as a controller.
     case surfaceControls(controls: Gamepad)
+    /// A conversation's background changed, on any device or on the Hub.
+    case backgroundChanged(conversationID: UUID, background: LinkBackground)
 }
 
 /// What a device sets on a browser it makes or edits on the Hub. Nil fields stay as they are.
@@ -761,9 +840,11 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var status: String?
     /// When it was archived: it keeps everything but does not run or take messages. Set with `archive`.
     public var archivedAt: Date?
+    /// Its conversation's background. Nil from a Hub that does not keep backgrounds.
+    public var background: LinkBackground?
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
-                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil) {
+                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -772,9 +853,10 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.readUpTo = readUpTo
         self.status = status
         self.archivedAt = archivedAt
+        self.background = background
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -786,6 +868,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         readUpTo = try c.decodeIfPresent(Date.self, forKey: .readUpTo)
         status = try c.decodeIfPresent(String.self, forKey: .status)
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+        background = try c.decodeIfPresent(LinkBackground.self, forKey: .background)
     }
 }
 
@@ -813,13 +896,17 @@ public struct LinkGroup: Codable, Equatable, Identifiable, Sendable {
     public var readUpTo: Date?
     /// When it was archived: it keeps its messages but takes no new ones. Its bots keep running.
     public var archivedAt: Date?
+    /// Its background. Nil from a Hub that does not keep backgrounds.
+    public var background: LinkBackground?
 
-    public init(id: UUID, draft: LinkGroupDraft, createdAt: Date, readUpTo: Date? = nil, archivedAt: Date? = nil) {
+    public init(id: UUID, draft: LinkGroupDraft, createdAt: Date, readUpTo: Date? = nil, archivedAt: Date? = nil,
+                background: LinkBackground? = nil) {
         self.id = id
         self.draft = draft
         self.createdAt = createdAt
         self.readUpTo = readUpTo
         self.archivedAt = archivedAt
+        self.background = background
     }
 }
 

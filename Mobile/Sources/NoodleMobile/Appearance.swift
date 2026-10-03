@@ -1,15 +1,17 @@
+import AVFoundation
 import HubLink
 import ImagePlayground
 import NoodleWallpaperCore
 import PhotosUI
 import SwiftUI
 
-/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient or a photo,
-/// dimmed so the bubbles stay readable.
+/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient, a photo or
+/// a silent video, dimmed so the bubbles stay readable.
 struct ConversationBackdrop: View {
     let background: ConversationBackground
     var imageURL: URL?
     @State private var image: UIImage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,6 +20,9 @@ struct ConversationBackdrop: View {
                 if let image, background.imageFilename != nil {
                     Image(uiImage: image).resizable().scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                    if background.mediaKind == .video, let imageURL, !reduceMotion {
+                        LoopingVideo(url: imageURL).frame(width: geometry.size.width, height: geometry.size.height)
+                    }
                 } else if let preset = background.preset {
                     let colors = Self.colors(preset)
                     LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -36,7 +41,8 @@ struct ConversationBackdrop: View {
         .task(id: imageURL) {
             image = nil
             guard let imageURL else { return }
-            let poster = await Task.detached { await BackgroundMedia.poster(at: imageURL, kind: .image) }.value
+            let kind = background.mediaKind
+            let poster = await Task.detached { await BackgroundMedia.poster(at: imageURL, kind: kind) }.value
             image = poster.map { UIImage(cgImage: $0) }
         }
     }
@@ -52,8 +58,42 @@ struct ConversationBackdrop: View {
     }
 }
 
+/// A background video, playing round and round without sound, as the Mac plays it.
+private struct LoopingVideo: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PlayerView { PlayerView() }
+
+    func updateUIView(_ view: PlayerView, context: Context) { view.show(url) }
+
+    final class PlayerView: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+        private let player = AVQueuePlayer()
+        private var looper: AVPlayerLooper?
+        private var url: URL?
+
+        init() {
+            super.init(frame: .zero)
+            player.isMuted = true
+            player.preventsDisplaySleepDuringVideoPlayback = false
+            let layer = layer as! AVPlayerLayer
+            layer.player = player
+            layer.videoGravity = .resizeAspectFill
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        func show(_ url: URL) {
+            guard url != self.url else { return }
+            self.url = url
+            looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: url))
+            player.play()
+        }
+    }
+}
+
 /// Picks a conversation's backdrop: the presets, a photo, or an image made with Image Playground.
-/// It applies as it is chosen; it is this phone's look alone.
+/// It applies as it is chosen, on the Hub, for every device.
 struct BackgroundEditor: View {
     let chats: HubChats
     let thread: HubThread
@@ -127,7 +167,7 @@ struct BackgroundEditor: View {
         defer { busy = false }
         do {
             guard let data = try await load() else { throw ConversationBackgroundError.invalidImage }
-            try chats.setBackground(photo: data, for: thread)
+            try await chats.setBackground(photo: data, for: thread)
         } catch {
             problem = error.localizedDescription
         }
@@ -136,7 +176,11 @@ struct BackgroundEditor: View {
     private func swatch(_ title: String, _ background: ConversationBackground, selected: Bool) -> some View {
         Button {
             problem = nil
-            do { try chats.setBackground(background, for: thread) } catch { problem = error.localizedDescription }
+            Task {
+                busy = true
+                defer { busy = false }
+                do { try await chats.setBackground(background, for: thread) } catch { problem = error.localizedDescription }
+            }
         } label: {
             VStack(spacing: 6) {
                 ConversationBackdrop(background: background)

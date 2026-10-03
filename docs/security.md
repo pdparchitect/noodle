@@ -203,7 +203,8 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
 
 Noodle stores chats and bot workspaces on your Mac. Your harness sends work to
 its model provider under that provider's account and policies. Imported
-attachments and backgrounds are copied into Noodle.
+attachments and backgrounds are copied into Noodle. A conversation on a Noodle
+Hub keeps its background on the Hub.
 
 Microphone access is requested when you start a [voice recording](voice-messages.md).
 Transcription happens on your Mac; sending shares the audio and transcript with
