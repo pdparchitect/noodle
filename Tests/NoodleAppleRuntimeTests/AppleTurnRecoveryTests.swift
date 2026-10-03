@@ -430,9 +430,10 @@ private struct RecoveryModel: LanguageModel {
                 try await Task.sleep(for: .seconds(60))
                 throw HarnessSetupError("Cancellation did not reach the model")
             case .silentPause(let activity):
-                try await Task.sleep(for: .milliseconds(1_100))
+                // The first poll may still pick up the prompt entry; measure only after it.
+                try await activity.waitForChange(from: activity.value())
                 await model.state.observe(activity.value())
-                try await Task.sleep(for: .milliseconds(1_100))
+                try await Task.sleep(for: .milliseconds(2_100))
                 await model.state.observe(activity.value())
                 await channel.send(.response(action: .appendText("Finished.", tokenCount: 1)))
             case .slowChunks(let activity):
