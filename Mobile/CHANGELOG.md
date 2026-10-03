@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-03
+
 ### Added
 
 - Archive a bot or group by touching and holding it in the list: it keeps everything but stops running and leaves the list, for all your devices. Bring it back from Archived in the Hub's profile, under Profiles. Needs the matching Noodle Hub, or Noodle on a Mac serving as a Hub.

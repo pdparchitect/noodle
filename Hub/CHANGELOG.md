@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-03
+
 ### Added
 
 - Devices can archive their bots and groups, and bring them back. An archived bot keeps everything but stops running and takes no messages; an archived group keeps its messages, takes no new ones, and its bots keep running.

@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-10-03
+
 ### Added
 
 - Archive a bot or group from its sidebar menu: it keeps everything but stops running and leaves the sidebar, and an archived bot leaves its groups' pictures and messages. Bring it back with the Archived switch in Settings > Bots or the new Settings > Groups tab.

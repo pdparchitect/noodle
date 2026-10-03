@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-03
+
 ### Changed
 
 - The toolbar's Edit Browser button shows a More icon (…) instead of a settings-like sliders icon.
