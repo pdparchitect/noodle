@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Games play on the TV on iOS 27: with Screen Mirroring on, Show on TV said no TV was connected and the TV kept mirroring the phone. Until a game is open, the TV now mirrors the phone as usual. Needs iOS 27.
+
+### What to Test
+
+- Turn on Screen Mirroring and open a game noodlet: it plays on the TV, and the phone turns sideways and shows only the controls.
+- Tap Show on iPhone: the TV mirrors the phone again and the game carries on there without starting over. Tap Show on TV: it goes back to the TV.
+- Close the game: the TV mirrors the phone again.
+- Open a game the Hub streams: it plays on the TV the same way.
+
 ## [0.17.0] - 2026-10-03
 
 ### Added

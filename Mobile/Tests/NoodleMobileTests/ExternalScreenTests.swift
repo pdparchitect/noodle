@@ -1,5 +1,4 @@
 import HubLink
-import SwiftUI
 import UIKit
 import XCTest
 
@@ -7,33 +6,13 @@ import XCTest
 
 /// A TV reached by Screen Mirroring or a cable shows the game while the phone becomes its controller.
 @MainActor final class ExternalScreenTests: XCTestCase {
-    /// iOS mirrors the phone to a TV unless the app takes the TV's scene, so Noodle takes it.
-    func testATVGetsItsOwnScene() {
-        XCTAssertTrue(AppDelegate.configuration(for: .windowExternalDisplayNonInteractive).delegateClass == ExternalSceneDelegate.self)
-        XCTAssertNil(AppDelegate.configuration(for: .windowApplication).delegateClass)
-    }
-
-    /// Only a game goes to the TV: one with controls, while a TV is there, unless brought back to the phone.
-    func testAGameGoesToTheTVWhileOneIsConnected() {
-        let screen = ExternalScreen()
+    /// Only a game goes to the TV: one with controls, while iOS has a TV for it, unless brought back to the phone.
+    func testAGameGoesToTheTVWhileOneIsAvailable() {
         let game = Gamepad(buttons: [Gamepad.Button(key: "space")])
-        XCTAssertFalse(screen.plays(game, onPhone: false))
-        screen.connected = true
-        XCTAssertTrue(screen.plays(game, onPhone: false))
-        XCTAssertFalse(screen.plays(game, onPhone: true))
-        XCTAssertFalse(screen.plays(nil, onPhone: false))
-    }
-
-    /// A game closing as the next one opens must not take the next one off the TV.
-    func testAClosingGameLeavesTheTVToTheNextOne() {
-        let screen = ExternalScreen()
-        let first = UUID(), second = UUID()
-        screen.show(first) { Color.red }
-        screen.show(second) { Color.blue }
-        screen.clear(first)
-        XCTAssertEqual(screen.shown?.id, second)
-        screen.clear(second)
-        XCTAssertNil(screen.shown)
+        XCTAssertFalse(ExternalScreen.plays(game, available: false, onPhone: false))
+        XCTAssertTrue(ExternalScreen.plays(game, available: true, onPhone: false))
+        XCTAssertFalse(ExternalScreen.plays(game, available: true, onPhone: true))
+        XCTAssertFalse(ExternalScreen.plays(nil, available: true, onPhone: false))
     }
 
     /// A page is one view, so the screen that shows it last holds it, and the one it left

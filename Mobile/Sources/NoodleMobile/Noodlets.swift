@@ -81,7 +81,7 @@ struct NoodletDeviceScreen: View {
     @State private var hardware = HardwareGamepad()
     /// A game brought back from the TV to the phone.
     @State private var onPhone = false
-    @State private var tvGame = UUID()
+    @State private var tvAvailable = false
     @State private var connectingTV = false
     /// What the noodlet declares, while the person is asked about it.
     @State private var asking: (manifest: NoodletManifest, answer: CheckedContinuation<Bool, Never>)?
@@ -93,7 +93,7 @@ struct NoodletDeviceScreen: View {
     private var fullScreen: Bool { verticalSize == .compact || manifest.display == .fullscreen || onTV }
 
     /// A game plays on a connected TV, and the phone is its controller.
-    private var onTV: Bool { page != nil && ExternalScreen.shared.plays(manifest.controls, onPhone: onPhone) }
+    private var onTV: Bool { page != nil && ExternalScreen.plays(manifest.controls, available: tvAvailable, onPhone: onPhone) }
 
     /// A page laid out for a desktop window gets the desktop site, as in Safari, unless it presents
     /// itself as an app, which fits the phone's view.
@@ -109,7 +109,7 @@ struct NoodletDeviceScreen: View {
 
     @ViewBuilder private var buttons: some View {
         if manifest.controls != nil {
-            TVButton(onTV: onTV, onPhone: $onPhone, connecting: $connectingTV)
+            TVButton(onTV: onTV, available: tvAvailable, onPhone: $onPhone, connecting: $connectingTV)
         }
         if !onTV {
             if manifest.controls != nil {
@@ -158,21 +158,15 @@ struct NoodletDeviceScreen: View {
             Button("Allow") { answer(true) }
             Button("Don’t Allow", role: .cancel) { answer(false) }
         }
+        .externalScreen(enabled: Binding(get: { manifest.controls != nil && !onPhone }, set: { onPhone = !$0 }),
+                        available: $tvAvailable) {
+            if let page { MovableView(view: page.web) }
+        }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await start() }
-        .onChange(of: onTV, initial: true) {
-            // The phone turns sideways as a controller does.
-            ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
-            if onTV, let page {
-                ExternalScreen.shared.show(tvGame) { MovableView(view: page.web) }
-            } else {
-                ExternalScreen.shared.clear(tvGame)
-            }
-        }
-        .onDisappear {
-            answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil)
-            ExternalScreen.shared.clear(tvGame)
-        }
+        // The phone turns sideways as a controller does.
+        .onChange(of: onTV, initial: true) { ScreenOrientation.hold(onTV ? .landscape : manifest.orientation) }
+        .onDisappear { answer(false); hardware.detach(); page?.stop(); ScreenOrientation.hold(nil) }
     }
 
     private func answer(_ allowed: Bool) {

@@ -155,18 +155,6 @@ struct CloudKitSubscriptions: PushSubscriptions {
         return true
     }
 
-    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        Self.configuration(for: session.role)
-    }
-
-    /// A TV gets Noodle's own scene; the app's window stays SwiftUI's.
-    static func configuration(for role: UISceneSession.Role) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: nil, sessionRole: role)
-        if role == .windowExternalDisplayNonInteractive { configuration.delegateClass = ExternalSceneDelegate.self }
-        return configuration
-    }
-
     /// The app on screen shows replies as they come.
     // Both on the main actor: iOS requires their answers there, and aborts the app otherwise.
     func userNotificationCenter(_ center: UNUserNotificationCenter,

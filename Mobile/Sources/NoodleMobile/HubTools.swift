@@ -571,7 +571,7 @@ struct LiveSurfaceScreen: View {
     @State private var hardware = HardwareGamepad()
     /// A game brought back from the TV to the phone.
     @State private var onPhone = false
-    @State private var tvGame = UUID()
+    @State private var tvAvailable = false
     @State private var connectingTV = false
     @Environment(\.verticalSizeClass) private var verticalSize
 
@@ -579,7 +579,7 @@ struct LiveSurfaceScreen: View {
     private var fullScreen: Bool { verticalSize == .compact || onTV }
 
     /// A game plays on a connected TV, and the phone is its controller.
-    private var onTV: Bool { ExternalScreen.shared.plays(controls, onPhone: onPhone) }
+    private var onTV: Bool { ExternalScreen.plays(controls, available: tvAvailable, onPhone: onPhone) }
 
     /// What goes on the screen: everything, or with a controller in hand only what it has no room for.
     private var screenControls: Gamepad? {
@@ -595,7 +595,7 @@ struct LiveSurfaceScreen: View {
     /// A game shows its controller from the start; the keyboard stays beside it for typing a name or a word.
     @ViewBuilder private var inputButtons: some View {
         if controls != nil {
-            TVButton(onTV: onTV, onPhone: $onPhone, connecting: $connectingTV)
+            TVButton(onTV: onTV, available: tvAvailable, onPhone: $onPhone, connecting: $connectingTV)
         }
         if !onTV {
             if controls != nil {
@@ -642,23 +642,15 @@ struct LiveSurfaceScreen: View {
                 ToolbarItemGroup(placement: .primaryAction) { inputButtons }
             }
         }
+        // The TV's view tells the Hub its size, so the game is drawn for the TV.
+        .externalScreen(enabled: Binding(get: { controls != nil && !onPhone }, set: { onPhone = !$0 }), available: $tvAvailable) {
+            SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
+        }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await follow() }
-        .onChange(of: onTV, initial: true) {
-            // The phone turns sideways as a controller does.
-            ScreenOrientation.hold(onTV ? .landscape : nil)
-            if onTV {
-                // The TV's view tells the Hub its size, so the game is drawn for the TV.
-                ExternalScreen.shared.show(tvGame) { SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) } }
-            } else {
-                ExternalScreen.shared.clear(tvGame)
-            }
-        }
-        .onDisappear {
-            hardware.detach(); channel?.cancel()
-            ExternalScreen.shared.clear(tvGame)
-            ScreenOrientation.hold(nil)
-        }
+        // The phone turns sideways as a controller does.
+        .onChange(of: onTV) { ScreenOrientation.hold(onTV ? .landscape : nil) }
+        .onDisappear { hardware.detach(); channel?.cancel(); ScreenOrientation.hold(nil) }
     }
 
     private func follow() async {
