@@ -43,7 +43,7 @@ final class RemoteModelsTests: XCTestCase {
     }
 
     func testGatewaysOfferTheLatestGLMDeepSeekAndQwenOverChatCompletions() throws {
-        XCTAssertEqual(RemoteProviders.all.map(\.id), ["openai", "openrouter", "vercel", "ollama"])
+        XCTAssertEqual(RemoteProviders.all.map(\.id), ["openai", "openrouter", "vercel", "ollama", "custom"])
         let openRouter = try XCTUnwrap(RemoteProviders.provider(id: "openrouter"))
         XCTAssertEqual(openRouter.displayName, "OpenRouter")
         XCTAssertEqual(openRouter.baseURL.absoluteString, "https://openrouter.ai/api/v1")
@@ -200,6 +200,83 @@ final class RemoteModelsTests: XCTestCase {
         let luna = RemoteModelID(providerID: "openai", accountID: work.id, modelID: "gpt-6-luna")
         XCTAssertEqual(try store.access(for: luna).apiKey, "sk-work")
         XCTAssertNil(try store.access(for: luna).model, "Bots use Noodle's own list for listed providers")
+    }
+
+    func testCustomServersAreCheckedAndSuggestModelsAtTheirOwnAddress() async throws {
+        XCTAssertEqual(RemoteProviders.provider(id: "custom")?.displayName, "Custom")
+        let lab = try XCTUnwrap(RemoteProviders.provider(id: "custom", baseURL: URL(string: "http://lab.local:8000/v1")))
+        XCTAssertFalse(lab.requiresKey)
+        XCTAssertTrue(lab.describesModels)
+        XCTAssertTrue(lab.api(for: RemoteModelInfo.custom(id: "m")) is ChatCompletionsAPI)
+
+        let listed = StubTransport(responses: [(200, #"{"data":[{"id":"llama-3.3-70b"},{"id":"qwen3:8b"},{"id":"not valid"}]}"#)])
+        let suggested = try await lab.findModels(transport: listed)
+        XCTAssertEqual(listed.requests.first?.url?.absoluteString, "http://lab.local:8000/v1/models")
+        XCTAssertEqual(suggested.map(\.id), ["llama-3.3-70b", "qwen3:8b"])
+        XCTAssertEqual(suggested.first, .custom(id: "llama-3.3-70b"), "Details start from defaults the person adjusts")
+
+        let keyed = StubTransport(responses: [(200, "{}")])
+        try await lab.checkKey("sk-lab", transport: keyed)
+        XCTAssertEqual(keyed.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer sk-lab")
+        let open = StubTransport(responses: [(404, "Not Found")])
+        try await lab.checkKey("", transport: open)
+        XCTAssertNil(open.requests.first?.value(forHTTPHeaderField: "Authorization"))
+        let rejected = StubTransport(responses: [(401, #"{"error":{"message":"Invalid key"}}"#)])
+        do {
+            try await lab.checkKey("sk-bad", transport: rejected)
+            XCTFail("A rejected key is reported")
+        } catch { XCTAssertEqual(error.localizedDescription, "lab.local rejected this API key: Invalid key") }
+        XCTAssertNil(RemoteProviders.provider(id: "custom", baseURL: nil), "A custom account cannot be reached without its address")
+    }
+
+    func testCustomAccountsKeepTheirAddressKeyAndDescribedModels() throws {
+        let url = try XCTUnwrap(URL(string: "https://llm.example.com/v1"))
+        for invalid in ["", "llm.example.com", "ftp://llm.example.com", "https://"] {
+            XCTAssertThrowsError(try store.add(providerID: "custom", name: "Lab", apiKey: "", baseURL: URL(string: invalid)), invalid)
+        }
+        let lab = try store.add(providerID: "custom", name: "Lab", apiKey: "", baseURL: url)
+        XCTAssertNil(try secrets.read(lab.id))
+        XCTAssertTrue(lab.models.isEmpty, "Nothing is offered until the person adds a model")
+        XCTAssertTrue(try store.harnessModels().isEmpty)
+
+        let llama = RemoteModelInfo(id: "llama-3.3-70b", displayName: "Llama 3.3 70B", contextSize: 131_072, maximumOutputTokens: 8_192,
+                                    supportsImages: false, efforts: RemoteModelInfo.efforts("low", "high"), defaultEffort: "high")
+        try store.saveModel(llama, account: lab.id)
+        let id = RemoteModelID(providerID: "custom", accountID: lab.id, modelID: "llama-3.3-70b")
+        XCTAssertEqual(try store.harnessModels().map(\.id), [id.rawValue], "An added model is offered")
+        XCTAssertEqual(try store.harnessModels().first?.tag, "Custom · Lab")
+        XCTAssertTrue(id.isOffered)
+        var access = try store.access(for: id)
+        XCTAssertEqual(access.model, llama)
+        XCTAssertEqual(access.baseURL, url)
+        XCTAssertEqual(access.apiKey, "")
+        XCTAssertEqual(try RemoteModelAccess(access.wire), access, "The address travels to the bot with the key")
+
+        for invalid in [RemoteModelInfo.custom(id: "has space"), RemoteModelInfo.custom(id: "m", contextSize: 0),
+                        RemoteModelInfo.custom(id: "m", maximumOutputTokens: 0),
+                        RemoteModelInfo(id: "m", displayName: "M", contextSize: 8_192, maximumOutputTokens: 1_024, supportsImages: false,
+                                        efforts: RemoteModelInfo.efforts("low"), defaultEffort: "high")] {
+            XCTAssertThrowsError(try store.saveModel(invalid, account: lab.id), invalid.id)
+        }
+        XCTAssertThrowsError(try store.saveModel(.custom(id: "llama-3.3-70b"), account: lab.id), "Adding the same model twice")
+        let edited = RemoteModelInfo.custom(id: "llama-3.3-70b", contextSize: 65_536)
+        try store.saveModel(edited, replacing: "llama-3.3-70b", account: lab.id)
+        XCTAssertEqual(try store.access(for: id).model, edited)
+        XCTAssertThrowsError(try store.saveModel(llama, account: try store.add(providerID: "openai", name: "Work", apiKey: "sk").id),
+                             "Listed providers describe their own models")
+
+        try store.replaceKey(lab.id, with: "sk-lab")
+        XCTAssertEqual(try store.access(for: id).apiKey, "sk-lab")
+        try store.replaceKey(lab.id, with: "")
+        XCTAssertNil(try secrets.read(lab.id), "A custom server's key can be taken away")
+
+        let reloaded = RemoteModelAccountStore(repository: root, secrets: secrets)
+        XCTAssertEqual(try reloaded.account(lab.id).baseURL, url)
+        try reloaded.removeModel("llama-3.3-70b", account: lab.id)
+        XCTAssertTrue(try reloaded.harnessModels().isEmpty)
+        access = try reloaded.access(for: RemoteModelID(providerID: "openai", accountID: try reloaded.accounts().first { $0.name == "Work" }!.id,
+                                                        modelID: "gpt-6-luna"))
+        XCTAssertNil(access.baseURL, "Listed providers keep their own address")
     }
 
     func testHarnessModelsSavedBeforeTagsStillDecode() throws {

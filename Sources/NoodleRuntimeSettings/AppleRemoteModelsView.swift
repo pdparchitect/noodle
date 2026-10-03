@@ -10,6 +10,7 @@ public struct AppleRemoteModelsView: View {
     @State private var checked = false
     @State private var error: String?
     @State private var form: AccountForm?
+    @State private var modelForm: ModelForm?
     @State private var accountPendingRemoval: RemoteModelAccount?
     @State private var usageAccountID: UUID?
     @State private var editingAgent: AgentRecord?
@@ -18,12 +19,12 @@ public struct AppleRemoteModelsView: View {
     private let accountStore: RemoteModelAccountStore?
     private let checkSupport: @MainActor () async throws -> Bool
     private let checkKey: @Sendable (RemoteProvider, String) async throws -> Void
-    private let findModels: @Sendable (RemoteProvider) async throws -> [RemoteModelInfo]
+    private let findModels: @Sendable (RemoteProvider, String) async throws -> [RemoteModelInfo]
 
     init(store: any BotSettingsHost, accountStore: RemoteModelAccountStore? = nil,
          checkSupport: @escaping @MainActor () async throws -> Bool = { try await AppleHostProbe.load().localModelsSupported == true },
          checkKey: @escaping @Sendable (RemoteProvider, String) async throws -> Void = { try await $0.checkKey($1) },
-         findModels: @escaping @Sendable (RemoteProvider) async throws -> [RemoteModelInfo] = { try await $0.findModels() }) {
+         findModels: @escaping @Sendable (RemoteProvider, String) async throws -> [RemoteModelInfo] = { try await $0.findModels(apiKey: $1) }) {
         self.store = store
         self.accountStore = accountStore
         self.checkSupport = checkSupport
@@ -79,8 +80,15 @@ public struct AppleRemoteModelsView: View {
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .sheet(item: $form) { form in
-            AccountFormView(form: form, checkKey: checkKey, findModels: findModels) { name, key, models in
-                try save(form, name: name, key: key, models: models)
+            AccountFormView(form: form, checkKey: checkKey, findModels: findModels) { name, key, models, baseURL in
+                try save(form, name: name, key: key, models: models, baseURL: baseURL)
+            }
+        }
+        .sheet(item: $modelForm) { form in
+            ModelFormView(form: form, suggestions: { await suggestions(for: form.account) }) { model in
+                try storage.saveModel(model, replacing: form.model?.id, account: form.account.id)
+                try changed()
+                error = nil
             }
         }
         .sheet(item: $editingAgent, onDismiss: {
@@ -143,15 +151,20 @@ public struct AppleRemoteModelsView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.name).fontWeight(.medium).lineLimit(1)
-                    Text(account.provider?.displayName ?? account.providerID).font(.caption).foregroundStyle(.secondary)
+                    Text(account.baseURL?.absoluteString ?? account.provider?.displayName ?? account.providerID)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 4)
                 Menu {
-                    Menu("Models") {
-                        ForEach(account.models, id: \.id) { model in
-                            let enabled = account.enabledModels.contains(model.id)
-                            Toggle(model.displayName, isOn: Binding(get: { enabled }, set: { setModel(model.id, enabled: $0, account: account) }))
-                                .disabled(enabled && !botsUsing(account, model: model.id).isEmpty)
+                    if account.provider?.describesModels == true {
+                        Button("Add Model…") { modelForm = .add(account) }
+                    } else {
+                        Menu("Models") {
+                            ForEach(account.models, id: \.id) { model in
+                                let enabled = account.enabledModels.contains(model.id)
+                                Toggle(model.displayName, isOn: Binding(get: { enabled }, set: { setModel(model.id, enabled: $0, account: account) }))
+                                    .disabled(enabled && !botsUsing(account, model: model.id).isEmpty)
+                            }
                         }
                     }
                     Divider()
@@ -159,7 +172,7 @@ public struct AppleRemoteModelsView: View {
                         Button("Refresh Models") { Task { await refreshModels(account) } }
                     }
                     Button("Rename…") { form = .rename(account) }
-                    if account.provider?.requiresKey ?? true {
+                    if account.provider.map(AccountForm.takesKey) ?? true {
                         Button("Change API Key…") { form = .key(account) }
                     }
                     Divider()
@@ -189,12 +202,29 @@ public struct AppleRemoteModelsView: View {
             }
             ForEach(models, id: \.id) { model in
                 let users = botsUsing(account, model: model.id)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                    Text(model.summary).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.displayName)
+                        Text(model.summary).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .help(users.isEmpty ? "" : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
+                    if account.provider?.describesModels == true {
+                        Spacer(minLength: 4)
+                        Menu {
+                            Button("Edit…") { modelForm = .edit(account, model) }
+                            Divider()
+                            Button("Remove", role: .destructive) { removeModel(model.id, account: account) }
+                                .disabled(!users.isEmpty)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel("Actions for \(model.displayName)")
+                    }
                 }
-                .help(users.isEmpty ? "" : "Used by \(users.map(\.displayName).joined(separator: ", ")).")
             }
         }
     }
@@ -223,19 +253,34 @@ public struct AppleRemoteModelsView: View {
         } catch { self.error = error.localizedDescription }
     }
 
+    private func removeModel(_ model: String, account: RemoteModelAccount) {
+        do {
+            try storage.removeModel(model, account: account.id)
+            try changed()
+            error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// What the server lists that the account does not have yet; nothing when it cannot be asked.
+    private func suggestions(for account: RemoteModelAccount) async -> [String] {
+        guard let provider = account.provider, let key = try? storage.apiKey(for: account.id),
+              let found = try? await findModels(provider, key) else { return [] }
+        return found.map(\.id).filter { id in !account.models.contains { $0.id == id } }
+    }
+
     private func refreshModels(_ account: RemoteModelAccount, quietly: Bool = false) async {
         guard let provider = account.provider else { return }
         do {
-            let models = try await findModels(provider)
+            let models = try await findModels(provider, (try? storage.apiKey(for: account.id)) ?? "")
             try storage.setFoundModels(models, account: account.id)
             try changed()
             if !quietly { error = nil }
         } catch where !quietly { self.error = error.localizedDescription } catch {}
     }
 
-    private func save(_ form: AccountForm, name: String, key: String, models: [RemoteModelInfo]?) throws {
+    private func save(_ form: AccountForm, name: String, key: String, models: [RemoteModelInfo]?, baseURL: URL?) throws {
         switch form {
-        case .add(let provider): try storage.add(providerID: provider.id, name: name, apiKey: key, models: models)
+        case .add(let provider): try storage.add(providerID: provider.id, name: name, apiKey: key, models: models, baseURL: baseURL)
         case .rename(let account): try storage.rename(account.id, to: name)
         case .key(let account): try storage.replaceKey(account.id, with: key)
         }
@@ -284,15 +329,19 @@ private enum AccountForm: Identifiable {
         case .rename(let account), .key(let account): account.provider
         }
     }
+
+    /// A custom server may or may not want a key.
+    static func takesKey(_ provider: RemoteProvider) -> Bool { provider.requiresKey || provider.describesModels }
 }
 
 private struct AccountFormView: View {
     let form: AccountForm
     let checkKey: @Sendable (RemoteProvider, String) async throws -> Void
-    let findModels: @Sendable (RemoteProvider) async throws -> [RemoteModelInfo]
-    let save: (String, String, [RemoteModelInfo]?) throws -> Void
+    let findModels: @Sendable (RemoteProvider, String) async throws -> [RemoteModelInfo]
+    let save: (String, String, [RemoteModelInfo]?, URL?) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var address = ""
     @State private var key = ""
     @State private var checking = false
     @State private var error: String?
@@ -300,8 +349,10 @@ private struct AccountFormView: View {
     private var asksName: Bool { if case .key = form { false } else { true } }
     private var asksKey: Bool {
         if case .rename = form { return false }
-        return form.provider?.requiresKey ?? true
+        return form.provider.map(AccountForm.takesKey) ?? true
     }
+    private var needsKey: Bool { asksKey && form.provider?.requiresKey ?? true }
+    private var asksAddress: Bool { form.isAdd && form.provider?.id == CustomProvider.id }
     private var title: String {
         switch form {
         case .add(let provider): "Add \(provider.displayName) Account"
@@ -311,7 +362,8 @@ private struct AccountFormView: View {
     }
     private var ready: Bool {
         (!asksName || !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            && (!asksKey || !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            && (!needsKey || !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            && (!asksAddress || !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     var body: some View {
@@ -319,7 +371,11 @@ private struct AccountFormView: View {
             Text(title).font(.headline)
             Form {
                 if asksName { TextField("Name", text: $name, prompt: Text("Personal")) }
-                if asksKey { SecureField("API Key", text: $key) }
+                if asksAddress {
+                    TextField("Address", text: $address, prompt: Text(form.provider?.baseURL.absoluteString ?? ""))
+                        .textContentType(.URL)
+                }
+                if asksKey { SecureField("API Key", text: $key, prompt: needsKey ? nil : Text("Optional")) }
             }
             .formStyle(.columns)
             if let error {
@@ -342,23 +398,30 @@ private struct AccountFormView: View {
     }
 
     private func submit() {
-        guard let provider = form.provider else { return }
+        guard var provider = form.provider else { return }
         let name = name, key = key
-        checking = true
+        var baseURL: URL?
         error = nil
+        if asksAddress {
+            do {
+                baseURL = try CustomProvider.address(URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)))
+                provider = CustomProvider(baseURL: baseURL!)
+            } catch { self.error = error.localizedDescription; return }
+        }
+        checking = true
         Task {
             defer { checking = false }
             do {
                 if asksKey { try await checkKey(provider, key.trimmingCharacters(in: .whitespacesAndNewlines)) }
                 var models: [RemoteModelInfo]?
                 if form.isAdd, provider.findsModels {
-                    let found = try await findModels(provider)
+                    let found = try await findModels(provider, key)
                     guard !found.isEmpty else {
                         throw HarnessSetupError("\(provider.displayName) has no models that can use tools. Download one, then try again.")
                     }
                     models = found
                 }
-                try save(name, key, models)
+                try save(name, key, models, baseURL)
                 dismiss()
             } catch { self.error = error.localizedDescription }
         }
@@ -367,4 +430,148 @@ private struct AccountFormView: View {
 
 private extension AccountForm {
     var isAdd: Bool { if case .add = self { true } else { false } }
+}
+
+private enum ModelForm: Identifiable {
+    case add(RemoteModelAccount)
+    case edit(RemoteModelAccount, RemoteModelInfo)
+
+    var id: String {
+        switch self {
+        case .add(let account): "add-\(account.id)"
+        case .edit(let account, let model): "edit-\(account.id)-\(model.id)"
+        }
+    }
+
+    var account: RemoteModelAccount {
+        switch self {
+        case .add(let account), .edit(let account, _): account
+        }
+    }
+
+    var model: RemoteModelInfo? { if case .edit(_, let model) = self { model } else { nil } }
+}
+
+/// A custom server's model, described by the person because the server cannot.
+private struct ModelFormView: View {
+    let form: ModelForm
+    let suggestions: () async -> [String]
+    let save: (RemoteModelInfo) throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var id = ""
+    @State private var name = ""
+    @State private var contextSize = RemoteModelInfo.custom(id: "").contextSize
+    @State private var maximumOutputTokens = RemoteModelInfo.custom(id: "").maximumOutputTokens
+    @State private var supportsImages = false
+    @State private var efforts: Set<String> = []
+    @State private var defaultEffort = ""
+    @State private var found: [String] = []
+    @State private var error: String?
+
+    private static let levelNames = ["none": "None", "low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra High", "max": "Max"]
+    private var chosenEfforts: [String] { RemoteModelInfo.effortLevels.filter(efforts.contains) }
+    private var ready: Bool { !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && contextSize > 0 && maximumOutputTokens > 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(form.model == nil ? "Add Model" : "Edit Model").font(.headline)
+            Form {
+                if let model = form.model {
+                    LabeledContent("Model ID") { Text(model.id).textSelection(.enabled) }
+                } else {
+                    LabeledContent("Model ID") {
+                        HStack(spacing: 4) {
+                            TextField("Model ID", text: $id, prompt: Text("llama-3.3-70b")).labelsHidden()
+                            if !found.isEmpty {
+                                Menu {
+                                    ForEach(found, id: \.self) { model in Button(model) { id = model } }
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                                .fixedSize()
+                                .accessibilityLabel("Models on the server")
+                            }
+                        }
+                    }
+                }
+                TextField("Name", text: $name, prompt: Text(id.isEmpty ? "Llama 3.3 70B" : id))
+                LabeledContent("Context") {
+                    HStack(spacing: 6) {
+                        TextField("Context", value: $contextSize, format: .number).labelsHidden().frame(width: 110)
+                        Text("tokens").foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Maximum Output") {
+                    HStack(spacing: 6) {
+                        TextField("Maximum Output", value: $maximumOutputTokens, format: .number).labelsHidden().frame(width: 110)
+                        Text("tokens").foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Input") { Toggle("Images", isOn: $supportsImages) }
+                LabeledContent("Reasoning") {
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+                        ForEach([Array(RemoteModelInfo.effortLevels.prefix(3)), Array(RemoteModelInfo.effortLevels.suffix(3))], id: \.self) { row in
+                            GridRow {
+                                ForEach(row, id: \.self) { level in
+                                    Toggle(Self.levelNames[level] ?? level, isOn: Binding(
+                                        get: { efforts.contains(level) },
+                                        set: { on in
+                                            if on { efforts.insert(level) } else { efforts.remove(level) }
+                                            if !efforts.contains(defaultEffort) {
+                                                defaultEffort = efforts.contains("medium") ? "medium" : chosenEfforts.first ?? ""
+                                            }
+                                        }))
+                                }
+                            }
+                        }
+                    }
+                }
+                if !chosenEfforts.isEmpty {
+                    Picker("Default Reasoning", selection: $defaultEffort) {
+                        ForEach(chosenEfforts, id: \.self) { Text(Self.levelNames[$0] ?? $0).tag($0) }
+                    }
+                    .fixedSize()
+                }
+            }
+            .formStyle(.columns)
+            .toggleStyle(.switch)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(form.model == nil ? "Add" : "Save", action: submit)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!ready)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+        .onAppear {
+            guard let model = form.model else { return }
+            id = model.id
+            name = model.displayName == model.id ? "" : model.displayName
+            contextSize = model.contextSize
+            maximumOutputTokens = model.maximumOutputTokens
+            supportsImages = model.supportsImages
+            efforts = Set(model.efforts.map(\.id))
+            defaultEffort = model.defaultEffort
+        }
+        .task { if form.model == nil { found = await suggestions() } }
+    }
+
+    private func submit() {
+        let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try save(RemoteModelInfo(id: id, displayName: name, contextSize: contextSize, maximumOutputTokens: maximumOutputTokens,
+                                     supportsImages: supportsImages, efforts: RemoteModelInfo.efforts(chosenEfforts),
+                                     defaultEffort: chosenEfforts.isEmpty ? "" : defaultEffort))
+            dismiss()
+        } catch { self.error = error.localizedDescription }
+    }
 }

@@ -197,9 +197,9 @@ extension AppleModelBackend {
 
     static func remote(_ id: RemoteModelID, access: AppleRemoteAccess?,
                        transport: any RemoteTransport = URLSessionRemoteTransport()) throws -> Self {
-        // Only a server's own models are described by the app.
-        let provider = RemoteProviders.provider(id: id.providerID)
-        let found = provider?.findsModels == true ? access?.model.flatMap { $0.id == id.modelID ? $0 : nil } : nil
+        // Only the models an account keeps are described by the app.
+        let provider = RemoteProviders.provider(id: id.providerID, baseURL: access?.baseURL)
+        let found = provider?.keepsModelsOnAccount == true ? access?.model.flatMap { $0.id == id.modelID ? $0 : nil } : nil
         guard let provider, let info = provider.model(id: id.modelID) ?? found else {
             throw HarnessSetupError("Noodle no longer offers this remote model. Choose another model in the bot’s settings.")
         }

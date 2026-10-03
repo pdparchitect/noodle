@@ -213,12 +213,19 @@ Intelligence to be turned on. Noodle offers:
   Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash.
 - **Ollama:** the models you have downloaded in Ollama on this Mac that can use
   tools. It needs no API key.
+- **Custom:** any server with an OpenAI-compatible Chat Completions API, such as
+  vLLM, LM Studio, LiteLLM or llama.cpp, at the address you enter. The API key
+  is optional.
 
 1. Open **Settings → Harness → Apple Intelligence → Remote Models**.
 2. Choose **Add Account**, then the provider. Give the account a name and paste
    its API key. Noodle checks the key before saving it in your login keychain.
    You can add several accounts with the same provider.
-3. Turn on the models you want under the account.
+3. Turn on the models you want under the account. For a custom account, choose
+   **Add Model** in its menu instead and describe the model: its ID as the
+   server names it, its context and output limits, whether it accepts images and
+   which reasoning levels it supports. The ID can be picked from the models the
+   server lists. The model must be able to call tools.
 4. Edit a bot, choose Apple Intelligence, and select the model. Each model shows
    its account as a tag, and its reasoning effort can be chosen.
 

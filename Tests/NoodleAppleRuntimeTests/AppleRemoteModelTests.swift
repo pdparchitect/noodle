@@ -176,6 +176,23 @@ final class AppleRemoteModelTests: XCTestCase {
         XCTAssertTrue(provider.requests.isEmpty)
     }
 
+    func testCustomModelsGoToTheAccountsServerWithTheDescribedLimits() async throws {
+        guard #available(macOS 27, *) else { return }
+        let model = RemoteModelInfo.custom(id: "llama-3.3-70b", contextSize: 65_536, maximumOutputTokens: 4_096)
+        let id = RemoteModelID(providerID: "custom", accountID: UUID(), modelID: "llama-3.3-70b")
+        let url = try XCTUnwrap(URL(string: "http://lab.local:8000/v1"))
+        let provider = ScriptedProvider([.ok(#"data: {"choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":"stop"}]}"# + "\n\ndata: [DONE]\n")])
+        let backend = try AppleModelBackend.remote(id, access: AppleRemoteAccess(apiKey: "", effort: nil, model: model, baseURL: url),
+                                                   transport: provider)
+        XCTAssertEqual(backend.contextSize, 65_536)
+        let response = try await backend.session(tools: [], instructions: "Be brief.").respond(to: "Hello")
+        XCTAssertEqual(response.content, "Hi")
+        XCTAssertEqual(provider.requests.first?.url?.absoluteString, "http://lab.local:8000/v1/chat/completions")
+        XCTAssertNil(provider.requests.first?.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertThrowsError(try AppleModelBackend.remote(id, access: AppleRemoteAccess(apiKey: "", effort: nil, model: model), transport: provider),
+                             "Without the account's address there is nowhere to send it")
+    }
+
     // MARK: Responses streams
 
     static let completed: [String: Any] = ["type": "response.completed", "response": ["usage": [
