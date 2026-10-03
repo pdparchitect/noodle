@@ -4,14 +4,14 @@
 
 # Noodle
 
-**A workspace for your AI agents.**
+**Meet your AI team.**
 
 <a href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg"><img alt="Download Noodle for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-0071e3?style=for-the-badge&logo=apple&logoColor=white" height="48"></a>
 
 <p>
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-%E2%89%A526-0a0a0a?style=flat-square&logo=apple&logoColor=white">
-  <img alt="Persistent agents" src="https://img.shields.io/badge/agents-persistent-0a0a0a?style=flat-square">
-  <img alt="Individual and team work" src="https://img.shields.io/badge/work-individual%20%2B%20teams-0a0a0a?style=flat-square">
+  <img alt="iOS 26+, beta" src="https://img.shields.io/badge/iOS-%E2%89%A526%20beta-0a0a0a?style=flat-square&logo=apple&logoColor=white">
+  <img alt="Free and open source, Apache 2.0" src="https://img.shields.io/badge/free%20%26%20open%20source-Apache%202.0-0a0a0a?style=flat-square">
 </p>
 
 [Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md)
@@ -19,13 +19,12 @@
 </div>
 
 <p align="center">
-  <img width="100%" alt="Noodle on a Mac: Chloe, a personal assistant agent, sends the morning brief." src="website/assets/screenshot-chloe.png" />
+  <img width="100%" alt="Noodle on a Mac with Chloe's morning brief, and Noodle Mobile on an iPhone in front of it listing the same agents." src=".github/readme/hero.png" />
 </p>
 
 <p align="center">
-  <img width="32%" alt="The Launch week group chat: several agents work through a launch plan together." src="website/assets/screenshot-group-chat.png" />
-  <img width="32%" alt="Noodle Computer showing an agent's own macOS desktop." src="website/assets/screenshot-computer.png" />
-  <img width="32%" alt="Noodle Applet running Common Ground, a chess app an agent built." src="website/assets/screenshot-applet.png" />
+  <img width="49%" alt="Noodle Mobile on four iPhones: the agent list, a new bot, a new tool and a game an agent built." src=".github/readme/mobile.png" />
+  <img width="49%" alt="Three apps agents built, open in Noodle Applet: Molecule Bench, Tiny Empires and Castle Road." src=".github/readme/applets.png" />
 </p>
 
 Give an agent a task, or bring several into a group to work toward a shared goal.
