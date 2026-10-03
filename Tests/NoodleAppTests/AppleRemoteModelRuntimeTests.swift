@@ -13,7 +13,7 @@ import XCTest
         var asked: [RemoteModelID] = []
         f.acp(wire, provider: .apple, extended: false, model: id.rawValue) { requested in
             asked.append(requested)
-            return "sk-fixture"
+            return RemoteModelAccess(apiKey: "sk-fixture", model: nil)
         }.start()
         try await f.openACP(wire, provider: .apple)
         let params = try XCTUnwrap(wire.last("session/set_model")["params"] as? [String: Any])
@@ -21,7 +21,22 @@ import XCTest
         let access = try XCTUnwrap((params["_meta"] as? [String: Any])?["noodle/remote"] as? [String: Any])
         XCTAssertEqual(access["apiKey"] as? String, "sk-fixture")
         XCTAssertEqual(access["effort"] as? String, "high")
+        XCTAssertNil(access["model"])
         XCTAssertEqual(asked, [id])
+    }
+
+    func testOllamaSelectionCarriesTheModelFoundOnTheServer() async throws {
+        let f = try HarnessRuntimeFixture(); defer { f.cleanUp() }
+        let wire = HarnessWire()
+        let id = RemoteModelID(providerID: "ollama", accountID: UUID(), modelID: "qwen3:8b")
+        let qwen = RemoteModelInfo(id: "qwen3:8b", displayName: "qwen3:8b", contextSize: 16_384, maximumOutputTokens: 4_096,
+                                   supportsImages: false, efforts: [], defaultEffort: "")
+        f.acp(wire, provider: .apple, extended: false, model: id.rawValue) { _ in RemoteModelAccess(apiKey: "", model: qwen) }.start()
+        try await f.openACP(wire, provider: .apple)
+        let params = try XCTUnwrap(wire.last("session/set_model")["params"] as? [String: Any])
+        let access = try XCTUnwrap((params["_meta"] as? [String: Any])?["noodle/remote"] as? [String: Any])
+        XCTAssertEqual(access["apiKey"] as? String, "")
+        XCTAssertEqual(try RemoteModelAccess(access).model, qwen)
     }
 
     func testOtherModelsAreSelectedWithoutAKey() async throws {
@@ -29,7 +44,7 @@ import XCTest
         let wire = HarnessWire()
         f.acp(wire, provider: .apple, extended: false, model: "default") { _ in
             XCTFail("Only remote models need a key")
-            return ""
+            return RemoteModelAccess(apiKey: "", model: nil)
         }.start()
         try await f.openACP(wire, provider: .apple)
         XCTAssertNil((try wire.last("session/set_model")["params"] as? [String: Any])?["_meta"])

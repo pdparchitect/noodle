@@ -10,6 +10,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Apple Intelligence bots can use Ollama on this Mac: choose Add Account > Ollama in Settings > Harness > Apple Intelligence > Remote Models. No API key is needed; the account offers the downloaded models that can use tools, and Refresh Models picks up new ones.
+
 - Game controllers play noodlets on this Mac, as on Noodle Mobile: a connected controller presses the keys a noodlet declares for its controls, whether it runs on this Mac or is watched live from a Noodle Hub. It plays the panel in front, and nothing is drawn on the screen.
 
 ## [0.42.0] - 2026-10-03

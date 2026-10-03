@@ -208,6 +208,19 @@ final class RemoteModelAPITests: XCTestCase {
         } catch { XCTAssertEqual(error as? RemoteModelError, .authentication("Incorrect API key provided")) }
     }
 
+    func testOllamaGetsSystemInstructionsAndNoKey() throws {
+        let ollama = try XCTUnwrap(RemoteProviders.provider(id: "ollama"))
+        let model = RemoteModelInfo(id: "qwen3:8b", displayName: "qwen3:8b", contextSize: 16_384, maximumOutputTokens: 4_096,
+                                    supportsImages: false, efforts: [], defaultEffort: "")
+        let request = try ollama.api(for: model).urlRequest(for: conversation(), baseURL: ollama.baseURL, apiKey: "")
+        XCTAssertEqual(request.url?.absoluteString, "http://localhost:11434/v1/chat/completions")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["role"] as? String, "system", "Ollama's chat templates know no developer role")
+        XCTAssertEqual(messages.first?["content"] as? String, "You are terse.")
+    }
+
     func testServerSentEventsSplitOnBlankLines() {
         var parser = ServerSentEvents()
         XCTAssertEqual(parser.feed("event: a"), [])

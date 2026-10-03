@@ -6,10 +6,13 @@ import NoodleCore
 public struct AppleRemoteAccess: Sendable {
     public let apiKey: String
     public let effort: String?
+    /// A model found on a server; Noodle's own list describes the rest.
+    public let model: RemoteModelInfo?
 
-    public init(apiKey: String, effort: String?) {
+    public init(apiKey: String, effort: String?, model: RemoteModelInfo? = nil) {
         self.apiKey = apiKey
         self.effort = effort
+        self.model = model
     }
 }
 

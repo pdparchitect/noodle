@@ -43,7 +43,7 @@ final class RemoteModelsTests: XCTestCase {
     }
 
     func testGatewaysOfferTheLatestGLMDeepSeekAndQwenOverChatCompletions() throws {
-        XCTAssertEqual(RemoteProviders.all.map(\.id), ["openai", "openrouter", "vercel"])
+        XCTAssertEqual(RemoteProviders.all.map(\.id), ["openai", "openrouter", "vercel", "ollama"])
         let openRouter = try XCTUnwrap(RemoteProviders.provider(id: "openrouter"))
         XCTAssertEqual(openRouter.displayName, "OpenRouter")
         XCTAssertEqual(openRouter.baseURL.absoluteString, "https://openrouter.ai/api/v1")
@@ -142,6 +142,64 @@ final class RemoteModelsTests: XCTestCase {
             try await XCTUnwrap(RemoteProviders.provider(id: provider)).checkKey("k", transport: transport)
             XCTAssertEqual(transport.requests.first?.url?.absoluteString, url)
         }
+    }
+
+    func testOllamaFindsToolModelsOnTheLocalServer() async throws {
+        let ollama = try XCTUnwrap(RemoteProviders.provider(id: "ollama"))
+        XCTAssertEqual(ollama.displayName, "Ollama")
+        XCTAssertEqual(ollama.baseURL.absoluteString, "http://localhost:11434/v1")
+        XCTAssertFalse(ollama.requiresKey)
+        let transport = StubTransport(responses: [
+            (200, #"{"models":[{"name":"qwen3:8b"},{"name":"gemma3:12b"},{"name":"llava:7b"}]}"#),
+            (200, #"{"capabilities":["completion","tools","thinking"],"model_info":{"general.architecture":"qwen3","qwen3.context_length":40960},"parameters":"temperature 0.6\nnum_ctx 16384"}"#),
+            (200, #"{"capabilities":["completion","tools","vision"],"model_info":{"general.architecture":"gemma3","gemma3.context_length":131072}}"#),
+            (200, #"{"capabilities":["completion","vision"],"model_info":{"general.architecture":"llama","llama.context_length":4096}}"#)
+        ])
+        let models = try await ollama.findModels(transport: transport)
+        XCTAssertEqual(transport.requests.map { $0.url?.absoluteString }, ["http://localhost:11434/api/tags"]
+                       + Array(repeating: "http://localhost:11434/api/show", count: 3))
+        let shown = try XCTUnwrap(transport.requests[1].httpBody.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] })
+        XCTAssertEqual(shown["model"] as? String, "qwen3:8b")
+        XCTAssertEqual(models.map(\.id), ["qwen3:8b", "gemma3:12b"], "A bot works through tools")
+        XCTAssertEqual(models.map(\.displayName), ["qwen3:8b", "gemma3:12b"])
+        XCTAssertEqual(models[0].contextSize, 16_384, "A context set on the model is the one Ollama runs it with")
+        XCTAssertEqual(models[1].contextSize, 32_768, "Otherwise no more than Ollama's default on a Mac with enough memory")
+        XCTAssertEqual(models.map(\.supportsImages), [false, true])
+        XCTAssertEqual(models[0].efforts.map(\.id), ["none", "low", "medium", "high"])
+        XCTAssertTrue(models[1].efforts.isEmpty)
+        for model in models { XCTAssertTrue(ollama.api(for: model) is OllamaChatAPI, model.id) }
+    }
+
+    func testOllamaAccountsNeedNoKeyAndOfferTheModelsFound() throws {
+        let qwen = RemoteModelInfo(id: "qwen3:8b", displayName: "qwen3:8b", contextSize: 16_384, maximumOutputTokens: 4_096,
+                                   supportsImages: false, efforts: [], defaultEffort: "")
+        let local = try store.add(providerID: "ollama", name: "This Mac", apiKey: "", models: [qwen])
+        XCTAssertNil(try secrets.read(local.id), "Nothing goes in the Keychain")
+        XCTAssertEqual(try store.apiKey(for: local.id), "")
+        XCTAssertThrowsError(try store.setModel("llama3.3:70b", enabled: true, account: local.id))
+        try store.setModel("qwen3:8b", enabled: true, account: local.id)
+        let id = RemoteModelID(providerID: "ollama", accountID: local.id, modelID: "qwen3:8b")
+        XCTAssertEqual(try store.harnessModels().map(\.id), [id.rawValue])
+        XCTAssertEqual(try store.harnessModels().first?.tag, "Ollama · This Mac")
+        XCTAssertNil(id.model, "Only the app knows which models an Ollama server has")
+        XCTAssertTrue(id.isOffered)
+        XCTAssertFalse(RemoteModelID(providerID: "openai", accountID: local.id, modelID: "gpt-3.5-turbo").isOffered)
+        let access = try store.access(for: id)
+        XCTAssertEqual(access.apiKey, "")
+        XCTAssertEqual(access.model, qwen, "The bot learns the model's limits from the app")
+
+        let gemma = RemoteModelInfo(id: "gemma3:12b", displayName: "gemma3:12b", contextSize: 32_768, maximumOutputTokens: 8_192,
+                                    supportsImages: true, efforts: [], defaultEffort: "")
+        try store.setFoundModels([gemma], account: local.id)
+        let reloaded = RemoteModelAccountStore(repository: root, secrets: secrets)
+        XCTAssertEqual(try reloaded.accounts().first?.models, [gemma])
+        XCTAssertTrue(try reloaded.harnessModels().isEmpty, "A model gone from the server is not offered")
+        XCTAssertThrowsError(try reloaded.access(for: id))
+
+        let work = try store.add(providerID: "openai", name: "Work", apiKey: "sk-work")
+        let luna = RemoteModelID(providerID: "openai", accountID: work.id, modelID: "gpt-6-luna")
+        XCTAssertEqual(try store.access(for: luna).apiKey, "sk-work")
+        XCTAssertNil(try store.access(for: luna).model, "Bots use Noodle's own list for listed providers")
     }
 
     func testHarnessModelsSavedBeforeTagsStillDecode() throws {

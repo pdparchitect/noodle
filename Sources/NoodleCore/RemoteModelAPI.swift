@@ -173,7 +173,9 @@ open class RemoteAPI {
     open var path: String { "chat/completions" }
 
     open func headers(apiKey: String) -> [String: String] {
-        ["Authorization": "Bearer \(apiKey)", "Content-Type": "application/json", "Accept": "text/event-stream"]
+        var headers = ["Content-Type": "application/json", "Accept": "text/event-stream"]
+        if !apiKey.isEmpty { headers["Authorization"] = "Bearer \(apiKey)" }
+        return headers
     }
 
     open func body(for request: RemoteRequest) throws -> [String: Any] { [:] }
@@ -475,6 +477,15 @@ open class GatewayChatAPI: ChatCompletionsAPI {
 open class OpenRouterChatAPI: GatewayChatAPI {
     open override func headers(apiKey: String) -> [String: String] {
         super.headers(apiKey: apiKey).merging(["X-Title": "Noodle"]) { $1 }
+    }
+}
+
+/// Ollama's chat templates know the system role, not the developer role.
+open class OllamaChatAPI: ChatCompletionsAPI {
+    open override func messages(_ request: RemoteRequest) throws -> [[String: Any]] {
+        try super.messages(request).map { message in
+            message["role"] as? String == "developer" ? message.merging(["role": "system"]) { $1 } : message
+        }
     }
 }
 

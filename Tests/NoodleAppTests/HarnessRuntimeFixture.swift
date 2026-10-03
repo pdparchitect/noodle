@@ -77,12 +77,12 @@ import XCTest
         processes.append(p); return p
     }
     func acp(_ wire: HarnessWire, provider: HarnessProvider = .fx, extended: Bool = true, model: String? = nil,
-             remoteKey: @escaping @MainActor (RemoteModelID) throws -> String = { _ in throw HarnessSetupError("No fixture key") }) -> ACPAgentProcess {
+             remoteAccess: @escaping @MainActor (RemoteModelID) throws -> RemoteModelAccess = { _ in throw HarnessSetupError("No fixture key") }) -> ACPAgentProcess {
         let p = ACPAgentProcess(provider: provider, agent: agent(provider, model: model), executableURL: root, workspaceURL: workspace,
             extendedAccess: extended, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
-            makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) }, remoteKey: remoteKey)
+            makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) }, remoteAccess: remoteAccess)
         processes.append(p); return p
     }
     func antigravity(_ wire: HarnessWire, extended: Bool = true) -> AntigravityAgentProcess {

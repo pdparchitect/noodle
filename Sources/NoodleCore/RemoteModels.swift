@@ -28,6 +28,12 @@ public struct RemoteModelID: Hashable, Sendable {
     /// The model, when Noodle still offers it.
     public var model: RemoteModelInfo? { RemoteProviders.provider(id: providerID)?.model(id: modelID) }
 
+    /// Whether a bot may select it. A server's own models are known only to the app.
+    public var isOffered: Bool {
+        guard let provider = RemoteProviders.provider(id: providerID) else { return false }
+        return provider.findsModels || provider.model(id: modelID) != nil
+    }
+
     /// Gateways name models `vendor/model`, so only the model part may contain a slash.
     private static func validPart(_ value: String, separators: String) -> Bool {
         !value.isEmpty && value.utf8.count <= 128 && !value.hasPrefix("/") && !value.hasSuffix("/")
@@ -37,7 +43,7 @@ public struct RemoteModelID: Hashable, Sendable {
 
 /// What Noodle knows about a model it offers. Only models with tool calling
 /// are listed: a bot does all of its work through tools.
-public struct RemoteModelInfo: Hashable, Sendable {
+public struct RemoteModelInfo: Codable, Hashable, Sendable {
     public let id: String
     public let displayName: String
     /// The most input the provider accepts, in its tokens.
@@ -97,13 +103,20 @@ open class RemoteProvider: @unchecked Sendable {
 
     open func api(for model: RemoteModelInfo) -> RemoteAPI { ChatCompletionsAPI() }
 
+    open var requiresKey: Bool { true }
+
+    /// Whether the models come from the server rather than from `models`.
+    open var findsModels: Bool { false }
+
+    open func findModels(transport: any RemoteTransport = URLSessionRemoteTransport()) async throws -> [RemoteModelInfo] { models }
+
     /// A request that fails without a valid key.
     open var keyCheckPath: String { "models" }
 
     /// One cheap authenticated request, so a wrong key fails when it is added.
     open func checkKey(_ apiKey: String, transport: any RemoteTransport = URLSessionRemoteTransport()) async throws {
         var request = URLRequest(url: baseURL.appendingPathComponent(keyCheckPath))
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if !apiKey.isEmpty { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
         request.timeoutInterval = 30
         let response = try await transport.send(request)
         guard response.status != 200 else { return }
@@ -193,8 +206,66 @@ public final class VercelAIGatewayProvider: RemoteProvider, @unchecked Sendable 
     public override var keyCheckPath: String { "credits" }
 }
 
+/// Ollama on this Mac, with whichever models it has pulled that can call tools.
+public final class OllamaProvider: RemoteProvider, @unchecked Sendable {
+    public init() {
+        super.init(id: "ollama", displayName: "Ollama", baseURL: URL(string: "http://localhost:11434/v1")!, models: [])
+    }
+
+    public override func api(for model: RemoteModelInfo) -> RemoteAPI { OllamaChatAPI() }
+    public override var requiresKey: Bool { false }
+    public override var findsModels: Bool { true }
+
+    public override func findModels(transport: any RemoteTransport = URLSessionRemoteTransport()) async throws -> [RemoteModelInfo] {
+        let root = baseURL.deletingLastPathComponent()
+        let tags = try await object(URLRequest(url: root.appendingPathComponent("api/tags")), transport: transport)
+        var found: [RemoteModelInfo] = []
+        for case let name as String in (tags["models"] as? [[String: Any]] ?? []).map({ $0["name"] }) {
+            // Names a model identifier cannot carry are left out.
+            guard RemoteModelID("remote/\(id)/\(UUID().uuidString.lowercased())/\(name)") != nil else { continue }
+            var request = URLRequest(url: root.appendingPathComponent("api/show"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["model": name])
+            let shown = try await object(request, transport: transport)
+            let capabilities = shown["capabilities"] as? [String] ?? []
+            guard capabilities.contains("tools") else { continue }
+            let trained = (shown["model_info"] as? [String: Any])?.first { $0.key.hasSuffix(".context_length") }?.value as? Int
+            // The OpenAI-compatible API cannot set the context, and past it Ollama
+            // silently drops the start of the prompt. Its default depends on the
+            // Mac's memory; 32K is the default from 24 GB.
+            let configured = (shown["parameters"] as? String)?.split(separator: "\n")
+                .first { $0.hasPrefix("num_ctx ") }.flatMap { Int($0.dropFirst(8).trimmingCharacters(in: .whitespaces)) }
+            let context = configured ?? min(trained ?? 32_768, 32_768)
+            let thinks = capabilities.contains("thinking")
+            found.append(RemoteModelInfo(id: name, displayName: name, contextSize: context, maximumOutputTokens: min(context / 4, 8_192),
+                                         supportsImages: capabilities.contains("vision"),
+                                         efforts: thinks ? RemoteModelInfo.efforts("none", "low", "medium", "high") : [],
+                                         defaultEffort: thinks ? "medium" : ""))
+        }
+        return found
+    }
+
+    private func object(_ request: URLRequest, transport: any RemoteTransport) async throws -> [String: Any] {
+        var request = request
+        request.timeoutInterval = 30
+        let response: RemoteHTTPResponse
+        do { response = try await transport.send(request) } catch let error as URLError where error.code == .cannotConnectToHost {
+            throw HarnessSetupError("Ollama is not running on this Mac. Open Ollama, then try again.")
+        }
+        var body = [String]()
+        for try await line in response.lines { body.append(line) }
+        let data = Data(body.joined(separator: "\n").utf8)
+        guard response.status == 200 else { throw ChatCompletionsAPI().error(status: response.status, body: data, headers: response.headers) }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw RemoteModelError.invalidStream("Ollama sent something other than a JSON object")
+        }
+        return object
+    }
+}
+
 public enum RemoteProviders {
-    public static let all: [RemoteProvider] = [OpenAIProvider(), OpenRouterProvider(), VercelAIGatewayProvider()]
+    public static let all: [RemoteProvider] = [OpenAIProvider(), OpenRouterProvider(), VercelAIGatewayProvider(), OllamaProvider()]
     public static func provider(id: String) -> RemoteProvider? { all.first { $0.id == id } }
 }
 
@@ -204,10 +275,38 @@ public struct RemoteModelAccount: Codable, Identifiable, Hashable, Sendable {
     public let providerID: String
     public var name: String
     public var enabledModels: [String]
+    /// What the server had when last asked, for providers that find their models.
+    public var foundModels: [RemoteModelInfo]?
 
     public var provider: RemoteProvider? { RemoteProviders.provider(id: providerID) }
+    public var models: [RemoteModelInfo] { foundModels ?? provider?.models ?? [] }
     /// Shown beside each of the account's models, so two accounts with one provider stay apart.
     public var tag: String { "\(provider?.displayName ?? providerID) · \(name)" }
+}
+
+/// What the app hands a bot's harness with a remote model: the account's key
+/// and, for a model found on a server, what that model can do.
+public struct RemoteModelAccess: Equatable, Sendable {
+    public let apiKey: String
+    public let model: RemoteModelInfo?
+
+    public init(apiKey: String, model: RemoteModelInfo?) {
+        self.apiKey = apiKey
+        self.model = model
+    }
+
+    /// As it travels in `session/set_model`.
+    public var wire: [String: Any] {
+        var wire: [String: Any] = ["apiKey": apiKey]
+        if let model, let data = try? JSONEncoder().encode(model) { wire["model"] = try? JSONSerialization.jsonObject(with: data) }
+        return wire
+    }
+
+    public init(_ wire: [String: Any]) throws {
+        guard let key = wire["apiKey"] as? String else { throw HarnessSetupError("Noodle did not pass this bot the account’s API key.") }
+        apiKey = key
+        model = try wire["model"].map { try JSONDecoder().decode(RemoteModelInfo.self, from: JSONSerialization.data(withJSONObject: $0)) }
+    }
 }
 
 public protocol RemoteModelSecrets: Sendable {
@@ -284,14 +383,15 @@ public struct RemoteModelAccountStore: Sendable {
     }
 
     @discardableResult
-    public func add(providerID: String, name: String, apiKey: String) throws -> RemoteModelAccount {
-        guard RemoteProviders.provider(id: providerID) != nil else { throw HarnessSetupError("Noodle does not support this provider.") }
+    public func add(providerID: String, name: String, apiKey: String, models: [RemoteModelInfo]? = nil) throws -> RemoteModelAccount {
+        guard let provider = RemoteProviders.provider(id: providerID) else { throw HarnessSetupError("Noodle does not support this provider.") }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw HarnessSetupError("Enter a name for the account.") }
-        guard !key.isEmpty else { throw HarnessSetupError("Enter the account’s API key.") }
-        let account = RemoteModelAccount(id: UUID(), providerID: providerID, name: name, enabledModels: [])
-        try secrets.write(key, account: account.id)
+        guard !key.isEmpty || !provider.requiresKey else { throw HarnessSetupError("Enter the account’s API key.") }
+        let account = RemoteModelAccount(id: UUID(), providerID: providerID, name: name, enabledModels: [],
+                                         foundModels: provider.findsModels ? models ?? [] : nil)
+        if provider.requiresKey { try secrets.write(key, account: account.id) }
         try save(accounts() + [account])
         return account
     }
@@ -311,11 +411,15 @@ public struct RemoteModelAccountStore: Sendable {
 
     public func setModel(_ modelID: String, enabled: Bool, account id: UUID) throws {
         let account = try account(id)
-        guard account.provider?.model(id: modelID) != nil else { throw HarnessSetupError("Noodle does not offer this model.") }
+        guard account.models.contains(where: { $0.id == modelID }) else { throw HarnessSetupError("Noodle does not offer this model.") }
         try update(id) { account in
             account.enabledModels.removeAll { $0 == modelID }
             if enabled { account.enabledModels.append(modelID) }
         }
+    }
+
+    public func setFoundModels(_ models: [RemoteModelInfo], account id: UUID) throws {
+        try update(id) { $0.foundModels = models }
     }
 
     public func remove(_ id: UUID) throws {
@@ -324,17 +428,27 @@ public struct RemoteModelAccountStore: Sendable {
     }
 
     public func apiKey(for id: UUID) throws -> String {
+        guard try account(id).provider?.requiresKey ?? true else { return "" }
         guard let key = try secrets.read(id), !key.isEmpty else {
             throw HarnessSetupError("The API key for this account is missing. Add it again in Settings › Harnesses › Apple Intelligence › Remote Models.")
         }
         return key
     }
 
+    public func access(for id: RemoteModelID) throws -> RemoteModelAccess {
+        let account = try account(id.accountID)
+        guard let provider = account.provider, provider.findsModels else { return RemoteModelAccess(apiKey: try apiKey(for: account.id), model: nil) }
+        guard let model = account.models.first(where: { $0.id == id.modelID }) else {
+            throw HarnessSetupError("\(id.modelID) is no longer on \(account.tag). Choose another model in the bot’s settings.")
+        }
+        return RemoteModelAccess(apiKey: try apiKey(for: account.id), model: model)
+    }
+
     /// The enabled models of every account, as a bot's model picker lists them.
     public func harnessModels() throws -> [HarnessModel] {
         try accounts().flatMap { account -> [HarnessModel] in
             guard let provider = account.provider else { return [] }
-            return provider.models.filter { account.enabledModels.contains($0.id) }.map { model in
+            return account.models.filter { account.enabledModels.contains($0.id) }.map { model in
                 HarnessModel(id: RemoteModelID(providerID: provider.id, accountID: account.id, modelID: model.id).rawValue,
                              displayName: model.displayName, description: model.summary, supportedEfforts: model.efforts,
                              defaultEffort: model.defaultEffort, isDefault: false, tag: account.tag)

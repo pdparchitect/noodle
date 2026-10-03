@@ -139,7 +139,7 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         case .apple:
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Apple model configuration.") }
             if let model, let remote = RemoteModelID(model) {
-                guard remote.model != nil else { throw HostError("Noodle no longer offers this remote model.") }
+                guard remote.isOffered else { throw HostError("Noodle no longer offers this remote model.") }
             } else if let model, model != "default" { _ = try AppleLocalModelStore(directory: HostPaths.appleModels).model(id: model) }
             strings = [executable.path, "--serve"]
         case .muse:

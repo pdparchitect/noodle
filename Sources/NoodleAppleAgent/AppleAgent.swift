@@ -119,14 +119,15 @@ import NoodleAppleRuntime
                     throw HarnessSetupError("The Apple harness does not support the selected model.")
                 }
                 if let remote = RemoteModelID(model) {
-                    guard remote.model != nil else {
+                    guard remote.isOffered, let provider = RemoteProviders.provider(id: remote.providerID) else {
                         throw HarnessSetupError("Noodle no longer offers this remote model. Choose another model in the bot’s settings.")
                     }
-                    let access = (params["_meta"] as? [String: Any])?["noodle/remote"] as? [String: Any]
-                    guard let key = access?["apiKey"] as? String, !key.isEmpty else {
+                    let wire = (params["_meta"] as? [String: Any])?["noodle/remote"] as? [String: Any] ?? [:]
+                    let access = try RemoteModelAccess(wire)
+                    guard !access.apiKey.isEmpty || !provider.requiresKey else {
                         throw HarnessSetupError("Noodle did not pass this bot the account’s API key.")
                     }
-                    remoteAccess = AppleRemoteAccess(apiKey: key, effort: access?["effort"] as? String)
+                    remoteAccess = AppleRemoteAccess(apiKey: access.apiKey, effort: wire["effort"] as? String, model: access.model)
                 } else {
                     if model != "default" { _ = try AppleLocalModelStore(repository: repository).model(id: model) }
                     remoteAccess = nil

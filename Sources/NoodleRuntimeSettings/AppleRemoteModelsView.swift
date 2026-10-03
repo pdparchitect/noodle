@@ -18,14 +18,17 @@ public struct AppleRemoteModelsView: View {
     private let accountStore: RemoteModelAccountStore?
     private let checkSupport: @MainActor () async throws -> Bool
     private let checkKey: @Sendable (RemoteProvider, String) async throws -> Void
+    private let findModels: @Sendable (RemoteProvider) async throws -> [RemoteModelInfo]
 
     init(store: any BotSettingsHost, accountStore: RemoteModelAccountStore? = nil,
          checkSupport: @escaping @MainActor () async throws -> Bool = { try await AppleHostProbe.load().localModelsSupported == true },
-         checkKey: @escaping @Sendable (RemoteProvider, String) async throws -> Void = { try await $0.checkKey($1) }) {
+         checkKey: @escaping @Sendable (RemoteProvider, String) async throws -> Void = { try await $0.checkKey($1) },
+         findModels: @escaping @Sendable (RemoteProvider) async throws -> [RemoteModelInfo] = { try await $0.findModels() }) {
         self.store = store
         self.accountStore = accountStore
         self.checkSupport = checkSupport
         self.checkKey = checkKey
+        self.findModels = findModels
     }
 
     private var storage: RemoteModelAccountStore { accountStore ?? .init(repository: store.repository.rootURL) }
@@ -76,8 +79,8 @@ public struct AppleRemoteModelsView: View {
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .sheet(item: $form) { form in
-            AccountFormView(form: form, checkKey: checkKey) { name, key in
-                try save(form, name: name, key: key)
+            AccountFormView(form: form, checkKey: checkKey, findModels: findModels) { name, key, models in
+                try save(form, name: name, key: key, models: models)
             }
         }
         .sheet(item: $editingAgent, onDismiss: {
@@ -98,6 +101,10 @@ public struct AppleRemoteModelsView: View {
         }
         .onAppear {
             do { try reload() } catch { self.error = error.localizedDescription }
+        }
+        .task {
+            // Quietly: the server may simply not be running now.
+            for account in accounts where account.provider?.findsModels == true { await refreshModels(account, quietly: true) }
         }
         .task {
             do {
@@ -141,15 +148,20 @@ public struct AppleRemoteModelsView: View {
                 Spacer(minLength: 4)
                 Menu {
                     Menu("Models") {
-                        ForEach(account.provider?.models ?? [], id: \.id) { model in
+                        ForEach(account.models, id: \.id) { model in
                             let enabled = account.enabledModels.contains(model.id)
                             Toggle(model.displayName, isOn: Binding(get: { enabled }, set: { setModel(model.id, enabled: $0, account: account) }))
                                 .disabled(enabled && !botsUsing(account, model: model.id).isEmpty)
                         }
                     }
                     Divider()
+                    if account.provider?.findsModels == true {
+                        Button("Refresh Models") { Task { await refreshModels(account) } }
+                    }
                     Button("Rename…") { form = .rename(account) }
-                    Button("Change API Key…") { form = .key(account) }
+                    if account.provider?.requiresKey ?? true {
+                        Button("Change API Key…") { form = .key(account) }
+                    }
                     Divider()
                     Button("Remove", role: .destructive) { requestRemoval(account) }
                 } label: {
@@ -170,7 +182,7 @@ public struct AppleRemoteModelsView: View {
                     }, remove: { requestRemoval(account) }, close: { usageAccountID = nil })
                 }
             }
-            let models = (account.provider?.models ?? []).filter { account.enabledModels.contains($0.id) }
+            let models = account.models.filter { account.enabledModels.contains($0.id) }
             Divider()
             if models.isEmpty {
                 Text("No models").font(.callout).foregroundStyle(.secondary)
@@ -211,9 +223,19 @@ public struct AppleRemoteModelsView: View {
         } catch { self.error = error.localizedDescription }
     }
 
-    private func save(_ form: AccountForm, name: String, key: String) throws {
+    private func refreshModels(_ account: RemoteModelAccount, quietly: Bool = false) async {
+        guard let provider = account.provider else { return }
+        do {
+            let models = try await findModels(provider)
+            try storage.setFoundModels(models, account: account.id)
+            try changed()
+            if !quietly { error = nil }
+        } catch where !quietly { self.error = error.localizedDescription } catch {}
+    }
+
+    private func save(_ form: AccountForm, name: String, key: String, models: [RemoteModelInfo]?) throws {
         switch form {
-        case .add(let provider): try storage.add(providerID: provider.id, name: name, apiKey: key)
+        case .add(let provider): try storage.add(providerID: provider.id, name: name, apiKey: key, models: models)
         case .rename(let account): try storage.rename(account.id, to: name)
         case .key(let account): try storage.replaceKey(account.id, with: key)
         }
@@ -267,7 +289,8 @@ private enum AccountForm: Identifiable {
 private struct AccountFormView: View {
     let form: AccountForm
     let checkKey: @Sendable (RemoteProvider, String) async throws -> Void
-    let save: (String, String) throws -> Void
+    let findModels: @Sendable (RemoteProvider) async throws -> [RemoteModelInfo]
+    let save: (String, String, [RemoteModelInfo]?) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var key = ""
@@ -275,7 +298,10 @@ private struct AccountFormView: View {
     @State private var error: String?
 
     private var asksName: Bool { if case .key = form { false } else { true } }
-    private var asksKey: Bool { if case .rename = form { false } else { true } }
+    private var asksKey: Bool {
+        if case .rename = form { return false }
+        return form.provider?.requiresKey ?? true
+    }
     private var title: String {
         switch form {
         case .add(let provider): "Add \(provider.displayName) Account"
@@ -324,7 +350,15 @@ private struct AccountFormView: View {
             defer { checking = false }
             do {
                 if asksKey { try await checkKey(provider, key.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                try save(name, key)
+                var models: [RemoteModelInfo]?
+                if form.isAdd, provider.findsModels {
+                    let found = try await findModels(provider)
+                    guard !found.isEmpty else {
+                        throw HarnessSetupError("\(provider.displayName) has no models that can use tools. Download one, then try again.")
+                    }
+                    models = found
+                }
+                try save(name, key, models)
                 dismiss()
             } catch { self.error = error.localizedDescription }
         }

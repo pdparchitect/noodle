@@ -159,6 +159,23 @@ final class AppleRemoteModelTests: XCTestCase {
         XCTAssertTrue(provider.requests.isEmpty)
     }
 
+    func testOllamaModelsTakeTheirLimitsFromTheAppButListedModelsDoNot() throws {
+        guard #available(macOS 27, *) else { return }
+        let qwen = RemoteModelInfo(id: "qwen3:8b", displayName: "qwen3:8b", contextSize: 16_384, maximumOutputTokens: 4_096,
+                                   supportsImages: false, efforts: [], defaultEffort: "")
+        let ollama = RemoteModelID(providerID: "ollama", accountID: UUID(), modelID: "qwen3:8b")
+        let provider = ScriptedProvider([])
+        let backend = try AppleModelBackend.remote(ollama, access: AppleRemoteAccess(apiKey: "", effort: nil, model: qwen), transport: provider)
+        XCTAssertEqual(backend.contextSize, 16_384)
+        XCTAssertEqual(backend.responseTokens, 4_096)
+        XCTAssertThrowsError(try AppleModelBackend.remote(ollama, access: AppleRemoteAccess(apiKey: "", effort: nil), transport: provider))
+        let renamed = RemoteModelInfo(id: "gpt-6-luna", displayName: "x", contextSize: 1, maximumOutputTokens: 1,
+                                      supportsImages: false, efforts: [], defaultEffort: "")
+        let listed = try AppleModelBackend.remote(luna, access: AppleRemoteAccess(apiKey: "k", effort: nil, model: renamed), transport: provider)
+        XCTAssertEqual(listed.contextSize, 922_000)
+        XCTAssertTrue(provider.requests.isEmpty)
+    }
+
     // MARK: Responses streams
 
     static let completed: [String: Any] = ["type": "response.completed", "response": ["usage": [

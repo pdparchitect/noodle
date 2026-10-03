@@ -211,6 +211,8 @@ Intelligence to be turned on. Noodle offers:
 - **OpenAI:** GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna and GPT-5.6 Terra.
 - **OpenRouter** and **Vercel AI Gateway:** GLM-5.3, GLM-5.3 Flash, DeepSeek V4
   Pro, DeepSeek V4.1 Flash, Qwen3.8 Max Prime and Qwen3.8 Flash.
+- **Ollama:** the models you have downloaded in Ollama on this Mac that can use
+  tools. It needs no API key.
 
 1. Open **Settings → Harness → Apple Intelligence → Remote Models**.
 2. Choose **Add Account**, then the provider. Give the account a name and paste
@@ -220,6 +222,10 @@ Intelligence to be turned on. Noodle offers:
 4. Edit a bot, choose Apple Intelligence, and select the model. Each model shows
    its account as a tag, and its reasoning effort can be chosen.
 
+- For an Ollama account, choose **Refresh Models** in its menu after downloading
+  another model. Noodle uses the context length set on the model, or at most
+  32,768 tokens; set Ollama's context length at least that high, because Ollama
+  drops the start of a longer conversation without saying so.
 - The key is passed only to the bots that use the account. Only the bot's
   harness reaches the provider; the commands the bot runs stay offline.
 - Usage is billed to the account by the provider.
