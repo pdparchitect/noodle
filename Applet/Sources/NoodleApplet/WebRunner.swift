@@ -16,6 +16,8 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   var web: WKWebView { page.web }
   let window: NSWindow
   private let cast: NoodletCast
+  /// A game controller in hand plays the keys the noodlet declares while its window is in front.
+  private let gamepad = HardwareGamepad()
   var failed: ((String) -> Void)? {
     get { page.failed }
     set { page.failed = newValue }
@@ -64,6 +66,9 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     cast = NoodletCast(window)
     super.init()
     page.host = self
+    if let controls = package.manifest.controls {
+      gamepad.attach(controls, in: window) { [weak self] in self?.press($0) }
+    }
     window.title = package.manifest.title
     window.isReleasedWhenClosed = false
     window.delegate = self
@@ -241,6 +246,7 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
     keyMonitor = nil
     dragEvent = nil
+    gamepad.detach()
     // Whatever still holds the view, the page's sound and scripts end with the noodlet.
     setMuted(true)
     page.stop()
@@ -290,6 +296,11 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     }
   }
   func evaluate(_ source: String) async throws -> String { try await page.evaluate(source) }
+  /// A key the controller holds or lets go, as the key events a keyboard gives the page.
+  private func press(_ change: GamepadKeyChange) {
+    guard let script = PageKeys.script(for: .hold(key: change.key, pressed: change.pressed)) else { return }
+    Task { _ = try? await page.evaluate(script) }
+  }
   func perform(_ request: AppletRequest) async throws -> String {
     if request.operation == .eval { return try await evaluate(request.text ?? "") }
     let bytes = try JSONEncoder().encode(request)

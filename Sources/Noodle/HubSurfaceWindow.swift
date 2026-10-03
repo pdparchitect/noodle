@@ -121,6 +121,8 @@ struct HubSurfaceWindow: View {
     @State private var channel: LinkChannel?
     @State private var showing = false
     @State private var failure: String?
+    /// The keys a game declared, for a controller in hand to play.
+    @State private var controls: Gamepad?
 
     var body: some View {
         ZStack {
@@ -131,6 +133,9 @@ struct HubSurfaceWindow: View {
             }
         }
         .background(.black)
+        .background(ControllerInput(controls: controls) { change in
+            channel?.send(LinkSurface.control(.input(.hold(key: change.key, pressed: change.pressed))))
+        })
         .task { await follow() }
         .onDisappear { channel?.cancel() }
     }
@@ -149,6 +154,7 @@ struct HubSurfaceWindow: View {
                 switch LinkSurface.message(frame) {
                 case .packets(let packets)?: feed.receive(packets)
                 case .failed(let reason)?: failure = reason; showing = false
+                case .controls(let gamepad)?: controls = gamepad
                 default: break
                 }
             }
@@ -249,6 +255,7 @@ struct HubNoodletPage: View {
     @State private var page: NoodletPage?
     @State private var host: NoodletDeviceHost?
     @State private var failure: String?
+    @State private var controls: Gamepad?
 
     /// The colour the noodlet asks for until its page paints, from what the Hub sent.
     private var manifestBackground: Color? {
@@ -267,6 +274,7 @@ struct HubNoodletPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(manifestBackground ?? .black)
+        .background(ControllerInput(controls: controls, onKey: press))
         .task { await start() }
         .onDisappear { page?.stop() }
     }
@@ -301,11 +309,52 @@ struct HubNoodletPage: View {
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
             self.page = page
+            controls = manifest.controls
             try await page.load()
         } catch {
             page?.stop()
             page = nil
             failure = error.localizedDescription
+        }
+    }
+
+    /// A key the controller holds or lets go, as the key events a keyboard gives the page.
+    private func press(_ change: GamepadKeyChange) {
+        guard let page, let script = PageKeys.script(for: .hold(key: change.key, pressed: change.pressed)) else { return }
+        Task { _ = try? await page.evaluate(script) }
+    }
+}
+
+/// Plays the keys a game declared from a controller in hand while its panel is in front. The
+/// Mac's keyboard has the same keys, so nothing goes on the screen.
+private struct ControllerInput: NSViewRepresentable {
+    let controls: Gamepad?
+    let onKey: (GamepadKeyChange) -> Void
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ probe: Probe, context: Context) {
+        probe.onKey = onKey
+        probe.controls = controls
+    }
+
+    static func dismantleNSView(_ probe: Probe, coordinator: ()) { probe.gamepad.detach() }
+
+    final class Probe: NSView {
+        let gamepad = HardwareGamepad()
+        var onKey: (GamepadKeyChange) -> Void = { _ in }
+        var controls: Gamepad? {
+            didSet { if controls != oldValue { follow() } }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            follow()
+        }
+
+        private func follow() {
+            guard let controls, let window else { return gamepad.detach() }
+            gamepad.attach(controls, in: window) { [weak self] in self?.onKey($0) }
         }
     }
 }
