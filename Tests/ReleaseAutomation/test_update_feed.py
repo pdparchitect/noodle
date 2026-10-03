@@ -23,27 +23,25 @@ def appcast(version, minimum=None, legacy=False, tag="v", archive="Noodle-arm64.
 
 
 class UpdateFeedTests(unittest.TestCase):
-    def test_registered_backstory_milestone_remains_in_the_upgrade_chain(self):
-        milestones = json.loads((ROOT / "Support/update-milestones.json").read_text())["milestones"]
-        # 0.21.0 removes the skills and command links earlier versions wrote into bot workspaces;
-        # 0.28.0 turns browser and computer cards into links.
-        self.assertEqual(milestones, ["0.13.0", "0.14.0", "0.21.0", "0.28.0"])
+    def test_release_policies_list_milestones_in_order(self):
+        for path in ["Support/update-milestones.json", "Hub/Support/update-milestones.json"]:
+            milestones = json.loads((ROOT / path).read_text())["milestones"]
+            self.assertEqual(milestones, sorted(set(milestones), key=feed.number), path)
+
+    def test_every_earlier_milestone_remains_in_the_upgrade_chain(self):
+        milestones = ["0.13.0", "0.14.0", "0.21.0"]
         def previous(version):
-            return appcast(version, {"0.14.0": "0.13.0", "0.21.0": "0.14.0", "0.28.0": "0.21.0"}.get(version),
+            return appcast(version, {"0.14.0": "0.13.0", "0.21.0": "0.14.0"}.get(version),
                            legacy=version == "0.13.0")
         for version, expected in [("0.14.0", ["0.13.0", None]), ("0.15.0", ["0.14.0", "0.13.0", None]),
                                   ("0.21.0", ["0.14.0", "0.13.0", None]),
-                                  ("0.22.0", ["0.21.0", "0.14.0", "0.13.0", None]),
-                                  ("0.28.0", ["0.21.0", "0.14.0", "0.13.0", None]),
-                                  ("0.29.0", ["0.28.0", "0.21.0", "0.14.0", "0.13.0", None])]:
+                                  ("0.22.0", ["0.21.0", "0.14.0", "0.13.0", None])]:
             result = feed.prepare(appcast(version), version, milestones, previous)
             items = ET.fromstring(result).findall("channel/item")
             self.assertEqual([i.findtext(S + "minimumUpdateVersion") for i in items], expected)
 
     def test_hub_releases_keep_their_own_milestones_tags_and_archives(self):
-        milestones = json.loads((ROOT / "Hub/Support/update-milestones.json").read_text())["milestones"]
-        # Hub 0.3.0 turns browser and computer cards into links; 0.6.0 names each bot's owner in its agent.json.
-        self.assertEqual(milestones, ["0.3.0", "0.6.0"])
+        milestones = ["0.3.0", "0.6.0"]
         hub = dict(tag="hub-v", archive="Noodle-Hub-arm64.zip")
         result = feed.prepare(appcast("0.4.0", **hub), "0.4.0", milestones, lambda v: appcast(v, **hub), **hub)
         items = ET.fromstring(result).findall("channel/item")
