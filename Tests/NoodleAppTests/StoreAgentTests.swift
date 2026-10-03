@@ -90,6 +90,35 @@ import XCTest
         XCTAssertEqual(f.store.folders(for: f.a), [folder])
     }
 
+    func testGroupFolderChangesRestartTheirBots() throws {
+        let f = try fixture()
+        let shared = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-group-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: shared) }
+        let folder = AgentFolder(path: shared.standardizedFileURL.path, writable: false)
+        let group = try f.group()
+        func launches(_ agent: AgentRecord) -> Int { f.runtime.factory.processes.filter { $0.configuration.id == agent.id }.count }
+        let before = (launches(f.a), launches(f.b))
+
+        XCTAssertTrue(f.store.updateGroup(group, named: "Renamed", publicDescription: "Shared research", participantIDs: [f.a.id, f.b.id]))
+        XCTAssertEqual(launches(f.a), before.0, "A group without folders never restarts its bots")
+        let saved = { try XCTUnwrap(f.store.conversations.first { $0.id == group.id }) }
+        XCTAssertTrue(f.store.updateGroup(try saved(), named: "Renamed", publicDescription: "Shared research", participantIDs: [f.a.id, f.b.id],
+                                          folders: [folder]), f.store.errorMessage ?? "")
+        XCTAssertEqual(try saved().folders, [folder])
+        XCTAssertEqual(launches(f.a), before.0 + 1)
+        XCTAssertEqual(launches(f.b), before.1 + 1)
+        let instructions = f.repository.directory(for: f.b).appendingPathComponent("AGENTS.md")
+        XCTAssertTrue(try String(contentsOf: instructions, encoding: .utf8).contains("shared by group “Renamed”"))
+
+        XCTAssertTrue(f.store.updateGroup(try saved(), named: "Renamed", publicDescription: "Shared research", participantIDs: [f.a.id]))
+        XCTAssertEqual(launches(f.a), before.0 + 1, "Ada keeps the same folders")
+        XCTAssertEqual(launches(f.b), before.1 + 2)
+        XCTAssertFalse(try String(contentsOf: instructions, encoding: .utf8).contains("shared by group"))
+        XCTAssertTrue(f.store.setArchived(true, conversationID: group.id))
+        XCTAssertEqual(launches(f.a), before.0 + 2)
+    }
+
     func testCreationValidationDoesNotCreateOrAuthorizeAnything() throws {
         let f = try fixture(), before = try f.repository.loadAgents()
         for (name, harness, mcp, computers) in [

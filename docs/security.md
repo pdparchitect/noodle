@@ -36,10 +36,16 @@ It cannot:
 
 ### Shared folders
 
-**Edit Bot → Harness → Folders** shares folders outside the workspace with one
-bot, each as **Read & Write** or **Read Only**, with an optional description of
-what it is for. You cannot share the whole disk or Noodle's own storage. Saving
-restarts the bot.
+**Edit Bot → Folders** shares folders outside the workspace with one bot, each
+as **Read & Write** or **Read Only**, with an optional description of what it is
+for. You cannot share the whole disk or Noodle's own storage. Saving restarts
+the bot.
+
+**Group Info → Folders** shares folders with every bot in a group on this Mac.
+A bot can use them in all its conversations, not only in the group. A folder
+shared as Read & Write anywhere is Read & Write for the bot. Bots restart when
+the folders they get change: when the group's folders change, when they join or
+leave the group, or when the group is archived, brought back or deleted.
 
 Sharing a folder exposes everything in it to the bot's model provider and tools.
 FX and OpenCode can also see the names of items in that folder's parent folders.

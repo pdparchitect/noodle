@@ -281,7 +281,16 @@ public struct WorkspaceRepository: Sendable {
         }
 
         let backstory = try loadAgentBackstory(agent)
-        let folderInstructions = AgentFolder.instructions(try loadAgentFolders(agent))
+        let groups = try loadConversations().filter { $0.participantIDs.contains(agent.id) && !$0.sharedFolders.isEmpty }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        let groupFolders = AgentFolder.merged(groups.flatMap(\.sharedFolders))
+        if configuration.groupFolders != groupFolders {
+            configuration.groupFolders = groupFolders
+            try configuration.save(to: layout)
+        }
+        let folderInstructions = AgentFolder.instructions(configuration.folders, groups: groups)
         let workspaceFiles = try WorkspaceMailbox(workspace: directory, path: "")
         let agentsFiles = try WorkspaceMailbox(workspace: directory, path: ".agents", create: true)
         let messengerFiles = try WorkspaceMailbox(workspace: directory, path: ".agents/skills/messenger", create: true)
@@ -584,6 +593,7 @@ public struct WorkspaceRepository: Sendable {
         publicDescription: String? = nil,
         participantIDs: [UUID],
         existingAgents: [AgentRecord],
+        folders: [AgentFolder] = [],
         now: Date = Date()
     ) throws -> BotConversation {
         let name = try ConversationName.validated(rawName)
@@ -601,7 +611,8 @@ public struct WorkspaceRepository: Sendable {
             kind: .group,
             participantIDs: uniqueIDs.sorted { $0.uuidString < $1.uuidString },
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            folders: try validatedGroupFolders(folders)
         )
         try createConversationFiles(conversation)
         return conversation
@@ -635,8 +646,10 @@ public struct WorkspaceRepository: Sendable {
         publicDescription: String?,
         participantIDs: [UUID],
         existingAgents: [AgentRecord],
+        folders: [AgentFolder]? = nil,
         now: Date = Date()
     ) throws -> BotConversation {
+        let folders = try folders.map(validatedGroupFolders)
         guard FileManager.default.fileExists(atPath: conversationDirectory(id: conversationID).path) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
@@ -685,6 +698,7 @@ public struct WorkspaceRepository: Sendable {
             conversation.displayName = name
             conversation.publicDescription = normalizedDescription
             conversation.participantIDs = uniqueIDs.sorted { $0.uuidString < $1.uuidString }
+            if let folders { conversation.folders = folders }
             conversation.updatedAt = now
             if needsNotice {
                 let namesByID = Dictionary(uniqueKeysWithValues: existingAgents.map { ($0.id, $0.displayName) })
@@ -741,6 +755,12 @@ public struct WorkspaceRepository: Sendable {
             }
             return conversation
         }
+    }
+
+    /// Nil when there are none, so a group without folders saves as before.
+    private func validatedGroupFolders(_ folders: [AgentFolder]) throws -> [AgentFolder]? {
+        let folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: rootURL))
+        return folders.isEmpty ? nil : folders
     }
 
     public func updateConversation(_ conversation: BotConversation) throws {

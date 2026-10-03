@@ -134,6 +134,9 @@ struct NewBotSheet: View {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
                     BotBackstoryEditor(backstory: $backstory)
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        FoldersSettingsRow(folders: $folders, owner: .bot)
+                    }
                 case .runtime:
                     AgentConfigurationFields(
                         selectedHarnessIdentifier: Binding(
@@ -144,9 +147,6 @@ struct NewBotSheet: View {
                         selectedEffort: $selectedEffort,
                         selectedProfileID: $selectedProfileID
                     )
-                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
-                        BotFolderPicker(folders: $folders)
-                    }
                 case .mcp:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs)
@@ -353,6 +353,9 @@ struct EditBotSheet: View {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
                     BotBackstoryEditor(backstory: $backstory)
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        FoldersSettingsRow(folders: $folders, owner: .bot)
+                    }
                     if let conversation = directConversation {
                         ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
                     }
@@ -368,9 +371,6 @@ struct EditBotSheet: View {
                         selectedEffort: $selectedEffort,
                         selectedProfileID: $selectedProfileID
                     )
-                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
-                        BotFolderPicker(folders: $folders)
-                    }
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -609,6 +609,7 @@ struct GroupInfoSheet: View {
     @State private var name: String
     @State private var publicDescription: String
     @State private var selectedIDs: Set<UUID>
+    @State private var folders: [AgentFolder]
     @State private var backgroundDraft: BackgroundSelection?
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
@@ -618,6 +619,7 @@ struct GroupInfoSheet: View {
         _name = State(initialValue: conversation.displayName)
         _publicDescription = State(initialValue: conversation.publicDescription ?? "")
         _selectedIDs = State(initialValue: Set(conversation.participantIDs))
+        _folders = State(initialValue: conversation.folders ?? [])
     }
 
     var body: some View {
@@ -669,6 +671,11 @@ struct GroupInfoSheet: View {
                     .font(.caption)
                     .foregroundStyle(!selectedIDs.isEmpty ? Color.secondary : Color.red)
 
+                // A Hub's bots run there, out of reach of this Mac's folders.
+                if store.hubMirror(forConversation: conversation.id) == nil {
+                    FoldersSettingsRow(folders: $folders, owner: .group)
+                }
+
                 ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
 
                 Divider()
@@ -701,7 +708,8 @@ struct GroupInfoSheet: View {
 
     private func save() {
         if store.saveSettings(background: backgroundDraft, for: conversation, saving: {
-            store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs)
+            store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
+                              folders: folders)
         }) {
             dismiss()
         }
@@ -713,7 +721,7 @@ struct GroupInfoSheet: View {
         return ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (
             trimmedName != conversation.displayName ||
                 trimmedDescription != (conversation.publicDescription ?? "") ||
-                selectedIDs != Set(conversation.participantIDs) || backgroundDraft != nil
+                selectedIDs != Set(conversation.participantIDs) || folders != (conversation.folders ?? []) || backgroundDraft != nil
         )
     }
 }
@@ -749,6 +757,7 @@ struct NewGroupSheet: View {
     @State private var name = ""
     @State private var publicDescription = ""
     @State private var selectedIDs = Set<UUID>()
+    @State private var folders: [AgentFolder] = []
     /// The joined Hub to keep the group on, or nil for this Mac.
     @State private var hubID: ObjectIdentifier?
     @FocusState private var nameFocused: Bool
@@ -771,6 +780,7 @@ struct NewGroupSheet: View {
                         named: name,
                         publicDescription: publicDescription,
                         participantIDs: selectedIDs,
+                        folders: hub == nil ? folders : [],
                         on: hub
                     )
                 }
@@ -827,6 +837,12 @@ struct NewGroupSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 14)
+
+            if hub == nil {
+                FoldersSettingsRow(folders: $folders, owner: .group)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+            }
         }
         .frame(width: 480)
         .onAppear { nameFocused = true }

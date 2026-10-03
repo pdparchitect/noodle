@@ -281,15 +281,25 @@ import NoodleRuntime
         onBotsEdited?()
         return group(updated)
     }
+        try restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
 
     /// Deletes a group and its messages. Its bots stay.
     public func deleteGroup(_ id: UUID, for user: HubUser) throws {
-        _ = try ownedGroup(id, by: user)
+        let group = try ownedGroup(id, by: user)
         try repository.deleteConversation(id: id)
+    /// As in Noodle: a group's folders reach its bots' sandbox only when they launch.
+    private func restartBots(_ ids: Set<UUID>) throws {
+        guard running || watching, !ids.isEmpty else { return }
+        for agent in try repository.loadAgents() where ids.contains(agent.id) {
+            runtime.restart(agent: agent, repository: repository)
+        }
+    }
+
         if readMarks.removeValue(forKey: id) != nil { try? saveReadMarks() }
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
     }
+        try restartBots(BotConversation.botsWithChangedFolders(from: group, to: nil))
 
     /// Archives or brings back one of the user's bots or groups. Everything is kept; an archived bot
     /// stops, whichever runtime runs it, and neither takes messages until brought back.
@@ -300,8 +310,9 @@ import NoodleRuntime
             runtime.archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
             onChange?(user.id, .botsChanged)
         } else {
-            _ = try ownedGroup(id, by: user)
-            try repository.setConversationArchived(archived, conversationID: id)
+            let before = try ownedGroup(id, by: user)
+            let after = try repository.setConversationArchived(archived, conversationID: id)
+            try restartBots(BotConversation.botsWithChangedFolders(from: before, to: after))
             onChange?(user.id, .groupsChanged)
         }
         onBotsEdited?()

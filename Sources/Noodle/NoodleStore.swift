@@ -518,8 +518,10 @@ final class NoodleStore {
         }
         do {
             let updated = try repository.setConversationArchived(archived, conversationID: conversationID)
+            let before = conversations.first { $0.id == conversationID }
             if let index = conversations.firstIndex(where: { $0.id == conversationID }) { conversations[index] = updated }
             if archived {
+            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
                 markConversationRead(conversationID)
                 if selectedConversationID == conversationID { selectedConversationID = nil }
             }
@@ -893,7 +895,13 @@ final class NoodleStore {
         return agents.filter { !runtime.remoteAgentIDs.contains($0.id) }
     }
 
-    func createGroup(named name: String, publicDescription: String, participantIDs: Set<UUID>, on hub: HubMirror? = nil) -> Bool {
+    /// A group's folders reach its bots' sandbox only when they launch.
+    private func restartBots(_ ids: Set<UUID>) {
+        for agent in agents where ids.contains(agent.id) { runtime.restart(agent: agent, repository: repository) }
+    }
+
+    func createGroup(named name: String, publicDescription: String, participantIDs: Set<UUID>, folders: [AgentFolder] = [],
+                     on hub: HubMirror? = nil) -> Bool {
         if let hub {
             creationSheet = nil
             Task {
@@ -913,11 +921,13 @@ final class NoodleStore {
                 named: name,
                 publicDescription: publicDescription,
                 participantIDs: Array(participantIDs),
-                existingAgents: agents
+                existingAgents: agents,
+                folders: folders
             )
             conversations.insert(conversation, at: 0)
             messagesByConversation[conversation.id] = []
             attachmentsByConversation[conversation.id] = []
+            restartBots(BotConversation.botsWithChangedFolders(from: nil, to: conversation))
             selectedConversationID = conversation.id
             creationSheet = nil
             refreshAppShortcuts()
@@ -932,7 +942,8 @@ final class NoodleStore {
         _ conversation: BotConversation,
         named name: String,
         publicDescription: String,
-        participantIDs: Set<UUID>
+        participantIDs: Set<UUID>,
+        folders: [AgentFolder]? = nil
     ) -> Bool {
         if let hub = hubMirror(forConversation: conversation.id) {
             groupBeingEdited = nil
@@ -956,14 +967,17 @@ final class NoodleStore {
                 named: name,
                 publicDescription: publicDescription,
                 participantIDs: Array(participantIDs),
-                existingAgents: agents
+                existingAgents: agents,
+                folders: folders
             )
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
                 conversations[index] = updated
+            let before = conversations.first { $0.id == conversation.id } ?? conversation
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
             if membershipChanged || descriptionChanged {
                 messagesByConversation[conversation.id] = try repository.loadMessages(
+            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
                     conversationID: conversation.id
                 )
                 runtime.notify(participants(for: updated), repository: repository)
@@ -1023,6 +1037,7 @@ final class NoodleStore {
                 try repository.deleteConversation(id: conversation.id)
             }
 
+                restartBots(BotConversation.botsWithChangedFolders(from: conversation, to: nil))
             drafts.clear(conversation.id)
             if selectedConversationID == conversation.id {
                 selectedConversationID = nil

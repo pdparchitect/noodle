@@ -33,8 +33,9 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
     }
 
     /// Normalizes the list and rejects anything that would widen access to
-    /// Noodle's storage. Order is preserved; repeated paths keep the first entry.
-    public static func validated(_ folders: [AgentFolder], protecting protected: [URL]) throws -> [AgentFolder] {
+    /// Noodle's storage. Order is preserved; repeated paths merge as `merged` does.
+    public static func validated(_ folders: [AgentFolder], protecting protected: [URL],
+                                 limit: Int? = limit) throws -> [AgentFolder] {
         var result: [AgentFolder] = []
         for folder in folders {
             guard folder.path.hasPrefix("/"), !folder.path.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else {
@@ -49,7 +50,6 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
                     throw AgentStorageError("“\(path)” overlaps Noodle's own storage and cannot be shared with a bot.")
                 }
             }
-            guard !result.contains(where: { $0.path == path }) else { continue }
             // One generated list item per folder: keep the note on a single line.
             let description = (folder.description ?? "").split(whereSeparator: { $0.isNewline || $0.unicodeScalars.contains { $0.properties.generalCategory == .control } })
                 .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
@@ -58,17 +58,37 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
             }
             result.append(AgentFolder(path: path, writable: folder.writable, description: description.isEmpty ? nil : description))
         }
-        guard result.count <= limit else { throw AgentStorageError("A bot can have at most \(limit) shared folders.") }
+        result = merged(result)
+        if let limit, result.count > limit { throw AgentStorageError("At most \(limit) folders can be shared.") }
         return result
     }
 
-    /// The folders Agent Host may add to a restricted profile. A bot can
-    /// replace anything inside a writable folder with a link, so an entry
-    /// nested inside one is never resolved separately. Missing folders, such
-    /// as an ejected disk, are skipped instead of blocking the launch.
+    /// One entry per path, in first-seen order. Read and write wins, since the
+    /// bot can write wherever any entry allows it; the first description stays.
+    static func merged(_ folders: [AgentFolder]) -> [AgentFolder] {
+        var result: [AgentFolder] = []
+        for folder in folders {
+            if let index = result.firstIndex(where: { $0.path == folder.path }) {
+                result[index].writable = result[index].writable || folder.writable
+                result[index].description = result[index].description ?? folder.description
+            } else {
+                result.append(folder)
+            }
+        }
+        return result
+    }
+
+    /// The folders Agent Host may add to a restricted profile: the bot's own
+    /// and its groups'. A bot can replace anything inside a writable folder
+    /// with a link, so an entry nested inside one is never resolved
+    /// separately. Missing folders, such as an ejected disk, are skipped
+    /// instead of blocking the launch.
     public static func granted(workspace: URL, protecting protected: [URL]) throws -> [AgentFolder] {
         let layout = AgentStorageLayout(workspace: workspace)
-        let folders = try validated(AgentConfiguration.load(from: layout).folders, protecting: protected + [layout.package])
+        let configuration = try AgentConfiguration.load(from: layout)
+        // Each list was limited when saved; together they may be longer.
+        let folders = try validated(configuration.folders + configuration.groupFolders,
+                                    protecting: protected + [layout.package], limit: nil)
         let resolved = folders.map { RestrictedAgentSandbox.sandboxPath($0.path).lowercased() }
         return folders.indices.filter { index in
             var isDirectory: ObjCBool = false
@@ -77,12 +97,15 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
         }.map { folders[$0] }
     }
 
-    static func instructions(_ folders: [AgentFolder]) -> String {
-        guard !folders.isEmpty else { return "" }
-        let entries = folders.map {
-            "- `\($0.path)` (\($0.writable ? "read and write" : "read only"))" + ($0.description.map { ": \($0)" } ?? "")
+    static func instructions(_ folders: [AgentFolder], groups: [BotConversation] = []) -> String {
+        let shared = merged(folders + groups.flatMap(\.sharedFolders))
+        guard !shared.isEmpty else { return "" }
+        let entries = shared.map { folder in
+            let names = groups.filter { $0.sharedFolders.contains { $0.path == folder.path } }.map { "“\($0.displayName)”" }
+            let source = names.isEmpty ? "" : ", shared by group\(names.count == 1 ? "" : "s") " + names.joined(separator: ", ")
+            return "- `\(folder.path)` (\(folder.writable ? "read and write" : "read only")\(source))" + (folder.description.map { ": \($0)" } ?? "")
         }.joined(separator: "\n")
-        return "\n## Shared folders\n\nThe user shared these folders outside your workspace; a note after a path is the user's description of that folder. Reach them by absolute path; your workspace stays the working directory. In restricted mode every other location outside the workspace remains unavailable, and a folder that is missing or disconnected is not shared until the bot restarts.\n\n" + entries + "\n"
+        return "\n## Shared folders\n\nThe user shared these folders outside your workspace; a note after a path is the user's description of that folder. A folder shared by a group is meant for that group's work, though you can reach it from every conversation. Reach them by absolute path; your workspace stays the working directory. In restricted mode every other location outside the workspace remains unavailable, and a folder that is missing or disconnected is not shared until the bot restarts.\n\n" + entries + "\n"
     }
 
     // Case-insensitive on purpose: APFS usually is, and a false match only
@@ -90,5 +113,19 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
     private static func overlaps(_ first: String, _ second: String) -> Bool {
         let first = first.lowercased(), second = second.lowercased()
         return first == second || first.hasPrefix(second + "/") || second.hasPrefix(first + "/")
+    }
+}
+
+extension BotConversation {
+    /// What an active group shares with its bots.
+    public var sharedFolders: [AgentFolder] { kind == .group && archivedAt == nil ? folders ?? [] : [] }
+
+    /// The bots whose shared folders change when a group goes from `before` to
+    /// `after`, nil being no group. Their sandbox is fixed at launch, so they restart.
+    public static func botsWithChangedFolders(from before: BotConversation?, to after: BotConversation?) -> Set<UUID> {
+        let old = before?.sharedFolders ?? [], new = after?.sharedFolders ?? []
+        let oldBots = old.isEmpty ? [] : Set(before?.participantIDs ?? [])
+        let newBots = new.isEmpty ? [] : Set(after?.participantIDs ?? [])
+        return old == new ? oldBots.symmetricDifference(newBots) : oldBots.union(newBots)
     }
 }

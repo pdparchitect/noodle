@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Groups on this Mac can share folders with their bots: choose Folders in New Group or Group Info. Each bot can use them in all its conversations, and its instructions name the group they come from. A folder shared as Read & Write anywhere is Read & Write for the bot.
+
+### Changed
+
+- A bot's folders moved from the Harness tab to a Folders row above Conversation Background in New Bot and Edit Bot.
+
 ### Fixed
 
 - Settings > Groups scrolls a long list of groups, as Settings > Bots does, instead of growing past the screen.

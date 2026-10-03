@@ -70,6 +70,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
     public var updatedAt: Date
     /// Only groups are archived; a bot's direct conversation follows its bot.
     public var archivedAt: Date?
+    /// Folders a group on this Mac shares with its bots; nil when there are none.
+    public var folders: [AgentFolder]?
 
     public init(
         id: UUID = UUID(),
@@ -79,7 +81,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         participantIDs: [UUID],
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        folders: [AgentFolder]? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -89,6 +92,7 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.archivedAt = archivedAt
+        self.folders = folders
     }
 }
 

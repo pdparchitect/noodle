@@ -95,6 +95,65 @@ final class AgentFolderTests: XCTestCase {
         _ = nested
     }
 
+    func testActiveGroupsShareTheirFoldersWithTheirBotsAndReadAndWriteWins() throws {
+        let ada = try repository.createAgent(named: "Ada").agent, grace = try repository.createAgent(named: "Grace").agent
+        let alan = try repository.createAgent(named: "Alan").agent
+        let project = try folder("Project"), reference = try folder("Reference", writable: false), old = try folder("Old")
+        var readOnlyProject = project
+        readOnlyProject.writable = false
+        readOnlyProject.description = "Ada's own copy"
+        try repository.updateAgentFolders(ada, folders: [readOnlyProject])
+        let agents = try repository.loadAgents()
+        let group = try repository.createGroup(named: "Design", participantIDs: [ada.id, grace.id], existingAgents: agents,
+                                               folders: [reference, project])
+        let archived = try repository.createGroup(named: "Archive", participantIDs: [ada.id, alan.id], existingAgents: agents,
+                                                  folders: [old])
+        try repository.setConversationArchived(true, conversationID: archived.id)
+        XCTAssertThrowsError(try repository.createGroup(named: "Greedy", participantIDs: [alan.id], existingAgents: agents,
+                                                        folders: [AgentFolder(path: root.path)]))
+        try repository.synchronizeAgentWorkspaces([ada, grace, alan])
+        func granted(_ agent: AgentRecord) throws -> [AgentFolder] {
+            try AgentFolder.granted(workspace: repository.directory(for: agent), protecting: [root])
+        }
+
+        var adaProject = project
+        adaProject.description = "Ada's own copy"
+        XCTAssertEqual(try granted(ada), [adaProject, reference])
+        XCTAssertEqual(try granted(grace), [reference, project])
+        XCTAssertEqual(try granted(alan), [])
+        XCTAssertEqual(try repository.loadAgentFolders(ada), [readOnlyProject], "Group folders never join the bot's own list")
+        let instructions = try String(contentsOf: repository.directory(for: ada).appendingPathComponent("AGENTS.md"), encoding: .utf8)
+        XCTAssertTrue(instructions.contains("- `\(project.path)` (read and write, shared by group “Design”): Ada's own copy\n"))
+        XCTAssertTrue(instructions.contains("- `\(reference.path)` (read only, shared by group “Design”)\n"))
+        XCTAssertFalse(instructions.contains(old.path))
+
+        _ = try repository.updateGroup(conversationID: group.id, named: "Design", publicDescription: nil,
+                                       participantIDs: [ada.id], existingAgents: agents)
+        try repository.synchronizeAgentWorkspace(grace)
+        XCTAssertEqual(try granted(grace), [])
+        XCTAssertEqual(try repository.loadConversations().first { $0.id == group.id }?.folders, [reference, project],
+                       "Saving without folders keeps them")
+    }
+
+    func testGroupChangesRestartOnlyTheBotsWhoseFoldersChange() {
+        let ada = UUID(), grace = UUID(), alan = UUID(), shared = AgentFolder(path: "/Shared")
+        let plain = BotConversation(displayName: "Plain", kind: .group, participantIDs: [ada, grace])
+        let group = BotConversation(displayName: "Design", kind: .group, participantIDs: [ada, grace], folders: [shared])
+        func changed(_ change: (inout BotConversation) -> Void, from before: BotConversation = group) -> Set<UUID> {
+            var after = before
+            change(&after)
+            return BotConversation.botsWithChangedFolders(from: before, to: after)
+        }
+        XCTAssertEqual(changed({ $0.participantIDs = [ada, alan] }, from: plain), [])
+        XCTAssertEqual(changed({ $0.displayName = "Renamed"; $0.publicDescription = "New" }), [])
+        XCTAssertEqual(changed({ $0.participantIDs = [ada, alan] }), [grace, alan])
+        XCTAssertEqual(changed({ $0.folders![0].writable = false }), [ada, grace])
+        XCTAssertEqual(changed({ $0.archivedAt = Date() }), [ada, grace])
+        XCTAssertEqual(changed({ $0.folders = [shared] }, from: plain), [ada, grace])
+        XCTAssertEqual(BotConversation.botsWithChangedFolders(from: nil, to: group), [ada, grace])
+        XCTAssertEqual(BotConversation.botsWithChangedFolders(from: group, to: nil), [ada, grace])
+    }
+
     func testRestrictedProfileGrantsOnlyTheSharedFolders() throws {
         let agent = try repository.createAgent(named: "Sandbox Bot").agent
         let workspace = repository.directory(for: agent)

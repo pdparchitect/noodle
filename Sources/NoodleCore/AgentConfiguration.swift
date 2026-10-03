@@ -18,6 +18,9 @@ struct AgentConfiguration: Codable {
     var agent: AgentRecord
     var backstory: String?
     var folders: [AgentFolder] = []
+    /// What the bot's active groups share, copied from them on every workspace
+    /// synchronization so Agent Host reads this file alone.
+    var groupFolders: [AgentFolder] = []
     /// Nil selects the system profile: the harness's login in the user's home.
     var harnessProfile: UUID?
     /// Only on Noodle Hub; its bots cannot change it, since only their workspace is theirs.
@@ -28,7 +31,7 @@ struct AgentConfiguration: Codable {
         self.backstory = backstory
     }
 
-    private enum CodingKeys: String, CodingKey { case backstory, folders, harnessProfile, owner }
+    private enum CodingKeys: String, CodingKey { case backstory, folders, groupFolders, harnessProfile, owner }
 
     init(from decoder: Decoder) throws {
         agent = try AgentRecord(from: decoder)
@@ -37,6 +40,7 @@ struct AgentConfiguration: Codable {
         // values are corruption, not a request to reimport generated Markdown.
         backstory = values.contains(.backstory) ? try values.decode(String.self, forKey: .backstory) : nil
         folders = try values.decodeIfPresent([AgentFolder].self, forKey: .folders) ?? []
+        groupFolders = try values.decodeIfPresent([AgentFolder].self, forKey: .groupFolders) ?? []
         harnessProfile = try values.decodeIfPresent(UUID.self, forKey: .harnessProfile)
         owner = try values.decodeIfPresent(AgentOwner.self, forKey: .owner)
     }
@@ -46,6 +50,7 @@ struct AgentConfiguration: Codable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encodeIfPresent(backstory, forKey: .backstory)
         if !folders.isEmpty { try values.encode(folders, forKey: .folders) }
+        if !groupFolders.isEmpty { try values.encode(groupFolders, forKey: .groupFolders) }
         try values.encodeIfPresent(harnessProfile, forKey: .harnessProfile)
         try values.encodeIfPresent(owner, forKey: .owner)
     }
