@@ -31,6 +31,7 @@ remains in development until its first dated version section is prepared. PRs va
 See [Computer releases](../Computer/RELEASING.md), [Applet releases](../Applet/RELEASING.md), [Browser releases](../Browser/RELEASING.md), and [Hub releases](../Hub/RELEASING.md)
 for their separate download channels, and [image releases](../Computer/RELEASING.md#computer-images) for registry checks.
 Mobile has no download: each release goes to TestFlight, and anyone can join the beta from the [public link](https://testflight.apple.com/join/wYKkNSP9).
+Mobile is tested and built on the `xcode-27` image too, since it uses iOS 27 features.
 Once the whole release succeeds, the build joins the External group and goes to beta review, and
 testers get it when Apple approves it. Its release notes become TestFlight's What to Test, or only
 the version's `### What to Test` list when it has one. If that step fails, fix the cause and push
