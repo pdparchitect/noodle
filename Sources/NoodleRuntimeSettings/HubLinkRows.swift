@@ -12,6 +12,8 @@ public struct HubLinkRows<Extra: View>: View {
     let extra: Extra
     @State private var editingAddress = false
     @State private var address = ""
+    @State private var name = ""
+    @FocusState private var editingName: Bool
 
     public init(link: HubLinkService, statusTitle: String? = nil, @ViewBuilder extra: () -> Extra = { EmptyView() }) {
         self.link = link
@@ -26,6 +28,30 @@ public struct HubLinkRows<Extra: View>: View {
             status
         }
         extra
+        LabeledContent("Name") {
+            HStack(spacing: 4) {
+                TextField("Name", text: $name, prompt: Text(link.macName))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    .focused($editingName)
+                    .onSubmit { link.customName = name }
+                if !link.customName.isEmpty {
+                    Button {
+                        link.customName = ""
+                        name = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help("Use this Mac’s name")
+                }
+            }
+        }
+        .help("What paired devices call this Hub")
+        .onAppear { name = link.customName }
+        .onChange(of: editingName) { if !editingName { link.customName = name } }
+        .onChange(of: link.customName) { if !editingName { name = link.customName } }
         Toggle(isOn: $link.opensRouterPort) {
             Text("Open Port on Router")
             routerStatus

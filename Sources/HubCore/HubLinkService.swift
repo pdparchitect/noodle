@@ -51,7 +51,17 @@ import os
     /// Bumped whenever an interface comes or goes or a Tailscale name turns up, so views reading the endpoints draw them again.
     private var networkChanges = 0
     public let key: LinkPublicKey
-    public let hubName: String
+    /// What devices call this Hub: the owner's own name for it, or else the Mac's.
+    public var hubName: String { customName.isEmpty ? macName : customName }
+    /// The Mac's name, which the Hub goes by until the owner names it.
+    public let macName: String
+    /// The owner's name for this Hub; empty goes back to the Mac's. Devices take it up when they next check in.
+    public var customName: String {
+        didSet {
+            let trimmed = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed != customName { customName = trimmed } else { saveSettings() }
+        }
+    }
 
     @ObservationIgnored private let identity: LinkIdentity
     @ObservationIgnored private let directory: URL
@@ -89,6 +99,7 @@ import os
         var manualAddress: String
         var opensRouterPort: Bool?
         var uploadLimit: Int?
+        var name: String?
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
@@ -97,7 +108,7 @@ import os
                 port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
                 now: @escaping () -> Date = Date.init, pushes: (any HubPushPublisher)? = nil, pushDelay: Duration = .seconds(2)) {
-        self.hubName = hubName
+        macName = hubName
         self.directory = directory
         self.access = access
         self.profiles = profiles
@@ -122,6 +133,7 @@ import os
         manualAddress = settings?.manualAddress ?? ""
         opensRouterPort = settings?.opensRouterPort ?? true
         uploadLimit = settings?.uploadLimit ?? Self.defaultUploadLimit
+        customName = settings?.name ?? ""
         bots?.onChange = { [weak self] user, event in
             self?.push(event, to: user)
             self?.schedulePushes(for: event, of: user)
@@ -900,7 +912,7 @@ import os
     private func saveSettings() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? JSONEncoder().encode(Settings(manualAddress: manualAddress, opensRouterPort: opensRouterPort,
-                                                  uploadLimit: uploadLimit)).write(to: directory.appendingPathComponent("link.json"), options: .atomic)
+                                                  uploadLimit: uploadLimit, name: customName)).write(to: directory.appendingPathComponent("link.json"), options: .atomic)
     }
 }
 

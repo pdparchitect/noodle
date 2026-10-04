@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- The Hub can be given a name of its own in Settings > Network > Name, so it is not known by the Mac's name. Paired devices pick up the new name the next time they check in, within a minute. Clearing the name goes back to the Mac's.
+
 ### Changed
 
 - Activity in the menu bar menu is now called Logs, so it is not mistaken for a bot's activity, and its person menu has more room.

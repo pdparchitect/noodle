@@ -61,6 +61,24 @@ import XCTest
         XCTAssertNotNil(hub.access.devices.first?.lastSeen)
     }
 
+    func testARenamedHubIsKnownByItsNameOnPairedDevicesUntilItGoesBackToTheMacs() async throws {
+        let (hub, link, device) = try await fixture()
+        let pairing = HubPairing(directory: device, deviceName: "Mac")
+        await pairing.join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+
+        link.customName = "  Family Hub "
+        XCTAssertEqual(link.hubName, "Family Hub")
+        await pairing.refresh()
+        XCTAssertEqual(pairing.hub?.name, "Family Hub")
+        let relaunched = HubLinkService(hubName: "Mac mini", directory: device.deletingLastPathComponent().appendingPathComponent("Hub/Link"),
+                                        access: hub.access, profiles: hub.harnessProfiles)
+        XCTAssertEqual(relaunched.hubName, "Family Hub")
+
+        link.customName = ""
+        await pairing.refresh()
+        XCTAssertEqual(pairing.hub?.name, "Mac mini")
+    }
+
     func testAnInvitationWorksOnce() async throws {
         let (hub, link, device) = try await fixture()
         let invitation = link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString
