@@ -298,7 +298,7 @@ public struct WorkspaceRepository: Sendable {
         if !workspaceFiles.contains("preferences.md") {
             try workspaceFiles.writeData(Data(Self.initialAgentPreferences.utf8), named: "preferences.md", replaceExisting: false)
         }
-        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory) + folderInstructions + ToolProviderSkills.instructions(workspace: directory)).utf8), named: "AGENTS.md")
+        try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory, owner: configuration.owner) + folderInstructions + ToolProviderSkills.instructions(workspace: directory)).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
         Self.removeAppletCommand(workspace: directory)
@@ -395,6 +395,8 @@ public struct WorkspaceRepository: Sendable {
         guard configuration.owner != owner else { return }
         configuration.owner = owner
         try configuration.save(to: layout)
+        // Its AGENTS.md names the owner.
+        if FileManager.default.fileExists(atPath: directory(for: agent).path) { try synchronizeAgentWorkspace(agent) }
     }
 
     public func deleteAgent(_ agent: AgentRecord) throws {
@@ -540,8 +542,12 @@ public struct WorkspaceRepository: Sendable {
 
     private static let initialAgentPreferences = "# Preferences\n\n"
 
-    private static func renderedAgentInstructions(backstory: String) -> String {
+    private static func renderedAgentInstructions(backstory: String, owner: AgentOwner?) -> String {
         let normalizedBackstory = backstory.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only a Hub names an owner; on a personal Mac the user is simply the user.
+        let ownerSection = owner.map {
+            "## Owner\n\nYour owner is \($0.name). Their messages come from the `user` sender; anyone else you talk with is someone they shared you with.\n\n"
+        } ?? ""
         return """
         # Noodle Agent
 
@@ -551,7 +557,7 @@ public struct WorkspaceRepository: Sendable {
 
         \(normalizedBackstory)
 
-        \(managedAgentInstructions)
+        \(ownerSection)\(managedAgentInstructions)
         """
     }
 

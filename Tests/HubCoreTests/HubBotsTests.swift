@@ -802,6 +802,18 @@ import XCTest
         XCTAssertEqual(renamed?.sender.displayName, "Grace Hopper")
     }
 
+    /// The bot's AGENTS.md names its owner, before any message arrives, and follows a new name.
+    func testTheBotKnowsItsOwnerFromTheStart() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        guard let agent = try f.hub.repository.loadAgents().first(where: { $0.id == bot.id }) else { return XCTFail("no bot") }
+        let instructions = f.hub.repository.directory(for: agent).appendingPathComponent("AGENTS.md")
+        XCTAssertTrue(try String(contentsOf: instructions, encoding: .utf8).contains("Your owner is Ada."))
+
+        try f.hub.access.rename(f.ada, to: "Ada Lovelace")
+        XCTAssertTrue(try String(contentsOf: instructions, encoding: .utf8).contains("Your owner is Ada Lovelace."))
+    }
+
     /// People a bot is shared with see whether it is working, like its owner, and hear when that changes.
     func testPeopleABotIsSharedWithSeeWhetherItIsWorking() async throws {
         let f = try await fixture()

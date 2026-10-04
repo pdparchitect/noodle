@@ -9,6 +9,7 @@
 ### Changed
 
 - Activity in the menu bar menu is now called Logs, so it is not mistaken for a bot's activity, and its person menu has more room.
+- Bots know who owns them from the start, not only once their owner writes to them, and follow a new name.
 
 ### Fixed
 
