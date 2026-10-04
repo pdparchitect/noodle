@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A noodlet's preview no longer shows its loading screen: Applet waits up to five seconds for the noodlet to draw.
+
 ## [0.25.0] - 2026-10-04
 
 ### Added

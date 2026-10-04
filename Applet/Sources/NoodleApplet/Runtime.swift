@@ -605,12 +605,20 @@ import NoodletRuntime
       session.log.append("lifecycle", "Ready.")
       library.remember(package)
       objectWillChange.send()
+      // The preview. A game shows a plain loading screen first, so a plain picture is kept only
+      // until the noodlet draws, and never replaces one it drew before.
+      let thumbnail = library.root.appendingPathComponent("Thumbnails/\(package.key).png")
       Task { [weak self, weak session] in
-        try? await Task.sleep(for: .milliseconds(500))
-        if let self, let session, session.state == "running",
-          let image = try? await session.snapshot()
-        {
-          _ = try? self.save(image, session: session)
+        for wait in [500, 1500, 3000] {
+          try? await Task.sleep(for: .milliseconds(wait))
+          guard let self, let session, session.state == "running",
+            let image = try? await session.snapshot()
+          else { return }
+          let plain = Self.isPlain(image)
+          if !plain || !FileManager.default.fileExists(atPath: thumbnail.path) {
+            _ = try? self.save(image, session: session)
+          }
+          if !plain { return }
         }
       }
       return status(session)
@@ -711,6 +719,24 @@ import NoodletRuntime
     try PreviewCache.save(png, for: session.package.url)
     objectWillChange.send()
     return url
+  }
+  /// Whether a picture is one colour throughout, as a page is before it draws.
+  private static func isPlain(_ image: NSImage) -> Bool {
+    guard let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return true }
+    let bitmap = NSBitmapImageRep(cgImage: picture)
+    func colour(_ column: Int, _ row: Int) -> NSColor? {
+      bitmap.colorAt(x: (bitmap.pixelsWide - 1) * column / 15, y: (bitmap.pixelsHigh - 1) * row / 15)?
+        .usingColorSpace(.deviceRGB)
+    }
+    guard let first = colour(0, 0) else { return true }
+    for row in 0..<16 {
+      for column in 0..<16 {
+        guard let other = colour(column, row) else { continue }
+        if abs(other.redComponent - first.redComponent) > 0.04 || abs(other.greenComponent - first.greenComponent) > 0.04
+          || abs(other.blueComponent - first.blueComponent) > 0.04 { return false }
+      }
+    }
+    return true
   }
   /// The noodlet's files as one archive, kept once for each revision, and that revision.
   private func archive(_ package: NoodletPackage) throws -> (URL, String) {

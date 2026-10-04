@@ -195,6 +195,43 @@ import WebKit
     try require(!recordedWeb.window.isVisible && recordedWeb.window.alphaValue == 1, "The noodlet stayed on screen after its recording ended")
     _ = try await call(["close"] + watchedTarget)
     print("PASS recording: a noodlet opened only in the background animates while recorded")
+    // A game shows a plain loading screen before its first frame; the preview is the frame, not the screen.
+    let loading = library.documents.appendingPathComponent("Loading.\(AppletBuildIdentity.current.fileExtension)")
+    _ = try NoodletPackage.install([
+      "noodlet.json": try JSONEncoder().encode(NoodletManifest(title: "Preview regression")),
+      "index.html": Data("""
+        <!doctype html><title>Loading</title>
+        <style>body{margin:0;background:#3a9cc6}canvas{display:block}</style>
+        <canvas id="c" width="160" height="120"></canvas>
+        <script>setTimeout(()=>requestAnimationFrame(()=>{const x=c.getContext('2d');
+          x.fillStyle='#ff0000';x.fillRect(0,0,80,120);x.fillStyle='#00ff00';x.fillRect(80,0,80,120);window.drawn=true;}),1200);</script>
+        """.utf8)
+    ], to: loading)
+    library.scan()
+    let loadingTarget = ["--id", try library.linkID(for: NoodletPackage(url: loading)).uuidString]
+    var previewOpen = AppletRequest(.open)
+    previewOpen.noodletID = try library.linkID(for: NoodletPackage(url: loading))
+    previewOpen.mode = "foreground"
+    let previewed = try await runtime.handle(previewOpen, identity: AppletBuildIdentity.current.noodleID).checked()
+    guard let loadingKey = runtime.sessions[previewed.sessionID!]?.package.key else { throw AppletError("Preview session missing") }
+    try await Task.sleep(for: .seconds(6))
+    let thumbnail = root.appendingPathComponent("Thumbnails/\(loadingKey).png")
+    guard let preview = (try? Data(contentsOf: thumbnail)).flatMap(NSBitmapImageRep.init(data:)) else {
+      throw AppletError("The noodlet got no preview")
+    }
+    var previewRed = 0, previewGreen = 0
+    for y in stride(from: 0, to: preview.pixelsHigh, by: 2) {
+      for x in stride(from: 0, to: preview.pixelsWide, by: 2) {
+        guard let color = preview.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+        if color.redComponent > 0.8 && color.greenComponent < 0.2 { previewRed += 1 }
+        if color.greenComponent > 0.8 && color.redComponent < 0.2 { previewGreen += 1 }
+      }
+    }
+    let drawn = try await value(["eval", "--text", "return {drawn:!!window.drawn,hidden:document.hidden};"] + loadingTarget)
+    print("INFO preview after loading screen: red \(previewRed), green \(previewGreen), page \(drawn)")
+    try require(previewRed > 100 && previewGreen > 100, "The preview shows the loading screen, not the noodlet's first frame")
+    _ = try await call(["close"] + loadingTarget)
+    print("PASS preview: a noodlet's preview waits past its loading screen")
     let open = try await call(["open", "--mode", "headless", "--test-clock"] + target)
     let exact = target + ["--session", open.sessionID!.uuidString]
     try require(open.testClock == true && open.dataScope == "test", "Clock did not use test data")
