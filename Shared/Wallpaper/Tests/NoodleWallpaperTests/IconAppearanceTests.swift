@@ -58,6 +58,18 @@ final class IconAppearanceTests: XCTestCase {
         }
     }
 
+    /// Take Photo waits for the camera: there is nothing to take until its first frame arrives.
+    func testTheCameraIsLiveFromItsFirstFrame() throws {
+        let latest = CameraPhotoSheet.LatestFrame()
+        XCTAssertNil(latest.image())
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 16, 16, kCVPixelFormatType_32BGRA, nil, &buffer)
+        let frame = try XCTUnwrap(buffer)
+        XCTAssertTrue(latest.keep(frame), "the first frame makes the camera live")
+        XCTAssertFalse(latest.keep(frame), "later frames change nothing")
+        XCTAssertNotNil(latest.image())
+    }
+
     func testRejectsUnreadableAndOversizeSources() throws {
         XCTAssertThrowsError(try IconImage.prepare(Data("not an image".utf8), encoding: .jpeg(quality: 0.86))) {
             XCTAssertEqual($0 as? IconImageError, .invalidImage)

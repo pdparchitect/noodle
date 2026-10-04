@@ -71,6 +71,8 @@ gives them to their own services.
   privacy settings apply, not yours.
 - A bot shared with other people can tell them what it remembers from your
   conversations with it.
+- The picture you choose on a Hub is kept on the Hub, and everyone on it can
+  see it.
 
 ## Noodle itself
 

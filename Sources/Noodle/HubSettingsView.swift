@@ -626,7 +626,7 @@ private struct QRCameraView: View {
     var body: some View {
         let found = found
         // Mac cameras offer no QR metadata, so frames are read like a chosen picture.
-        CameraView { frame in
+        CameraView(unreadable: "The camera cannot read QR codes.") { frame in
             guard let invitation = try? LinkInvitation(frame: frame) else { return true }
             let text = invitation.url().absoluteString
             DispatchQueue.main.async { MainActor.assumeIsolated { found(text) } }

@@ -7,13 +7,17 @@ import SwiftUI
 public struct CameraView: NSViewRepresentable {
     let frame: @Sendable (CVPixelBuffer) -> Bool
     let failed: @MainActor (String) -> Void
+    /// Said when the camera gives no frames to read.
+    let unreadable: String
 
-    public init(frame: @escaping @Sendable (CVPixelBuffer) -> Bool, failed: @escaping @MainActor (String) -> Void) {
+    public init(unreadable: String = "The camera cannot be read.", frame: @escaping @Sendable (CVPixelBuffer) -> Bool,
+                failed: @escaping @MainActor (String) -> Void) {
+        self.unreadable = unreadable
         self.frame = frame
         self.failed = failed
     }
 
-    public func makeCoordinator() -> Coordinator { Coordinator(frame: frame, failed: failed) }
+    public func makeCoordinator() -> Coordinator { Coordinator(frame: frame, failed: failed, unreadable: unreadable) }
 
     public func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -31,12 +35,14 @@ public struct CameraView: NSViewRepresentable {
         private let session = AVCaptureSession()
         private let frame: @Sendable (CVPixelBuffer) -> Bool
         private let failed: @MainActor (String) -> Void
+        private let unreadable: String
         private let frames = DispatchQueue(label: "com.pdparchitect.noodle.camera")
         private var stopped = false
 
-        init(frame: @escaping @Sendable (CVPixelBuffer) -> Bool, failed: @escaping @MainActor (String) -> Void) {
+        init(frame: @escaping @Sendable (CVPixelBuffer) -> Bool, failed: @escaping @MainActor (String) -> Void, unreadable: String) {
             self.frame = frame
             self.failed = failed
+            self.unreadable = unreadable
         }
 
         @MainActor func start(in view: NSView) {
@@ -54,7 +60,7 @@ public struct CameraView: NSViewRepresentable {
                 let output = AVCaptureVideoDataOutput()
                 output.alwaysDiscardsLateVideoFrames = true
                 guard session.canAddOutput(output) else {
-                    failed("The camera cannot be read.")
+                    failed(unreadable)
                     return
                 }
                 session.addOutput(output)
@@ -89,6 +95,8 @@ public struct CameraPhotoSheet: View {
     let taken: (CGImage) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var latest = LatestFrame()
+    /// Whether a frame has arrived to take.
+    @State private var live = false
     @State private var problem: String?
 
     public init(taken: @escaping (CGImage) -> Void) {
@@ -105,15 +113,15 @@ public struct CameraPhotoSheet: View {
                     taken(image)
                     dismiss()
                 }
-                .foregroundStyle(.blue)
-                .disabled(problem != nil)
+                .foregroundStyle(live ? .blue : .secondary)
+                .disabled(!live || problem != nil)
                 .keyboardShortcut(.defaultAction)
             }.buttonStyle(.plain).padding(16)
             Divider()
             ZStack {
-                let latest = latest
+                let latest = latest, live = $live
                 CameraView { frame in
-                    latest.keep(frame)
+                    if latest.keep(frame) { DispatchQueue.main.async { live.wrappedValue = true } }
                     return true
                 } failed: { problem = $0 }
                 if let problem {
@@ -132,7 +140,13 @@ public struct CameraPhotoSheet: View {
         private var frame: CVPixelBuffer?
         private let context = CIContext()
 
-        func keep(_ frame: CVPixelBuffer) { lock.withLock { self.frame = frame } }
+        /// Whether it is the first: the camera is live from then on.
+        @discardableResult func keep(_ frame: CVPixelBuffer) -> Bool {
+            lock.withLock {
+                defer { self.frame = frame }
+                return self.frame == nil
+            }
+        }
 
         func image() -> CGImage? {
             guard let frame = lock.withLock({ self.frame }) else { return nil }
