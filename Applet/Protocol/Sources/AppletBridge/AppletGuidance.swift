@@ -151,8 +151,10 @@ public enum AppletGuidance {
         "browser" (the default) is a web page that scrolls and zooms; "standalone" is an app that
         fits its view, without page scrolling, zoom, text selection or long-press menu; "fullscreen"
         is an app that also takes the whole screen on a phone. Use "fullscreen" for games and
-        anything drawn on a canvas. Its CSS can still make a field selectable or a panel scroll;
-        env(safe-area-inset-*) keeps controls clear of a phone's notch and home bar.
+        anything drawn on a canvas. In both the page itself never scrolls on a phone, though it
+        does on a Mac: when content can be taller than the view, put it in an element that fills
+        the view with overflow-y: auto, or use "browser". Its CSS can still make a field
+        selectable; env(safe-area-inset-*) keeps controls clear of a phone's notch and home bar.
         Optional orientation, "portrait" or "landscape", holds a phone that way while it is open;
         leave it out, or use "any", to let the phone turn. Optional backgroundColor, a hex colour
         such as "#1d1d1f", shows until the page paints, so a dark game never flashes white.
