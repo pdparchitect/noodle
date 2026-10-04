@@ -47,7 +47,7 @@ let project = Project(
                 "ITSAppUsesNonExemptEncryption": false,
                 // Invitation links and QR codes are noodle://join-hub links, the same as on the Mac.
                 "CFBundleURLTypes": [["CFBundleURLName": "$(MOBILE_APP_BUNDLE_ID)", "CFBundleURLSchemes": ["noodle"]]],
-                "NSCameraUsageDescription": "Noodle scans the QR code of a Noodle Hub invitation, and noodlets you open use the camera when they ask.",
+                "NSCameraUsageDescription": "Noodle takes photos you send or use as your picture, scans the QR code of a Noodle Hub invitation, and noodlets you open use the camera when they ask.",
                 "NSLocalNetworkUsageDescription": "Noodle connects to your Noodle Hub on this network.",
                 "NSMicrophoneUsageDescription": "Record voice messages you choose to send in your conversations, and let noodlets you open listen when they ask. Speech is transcribed on this device.",
                 // Shared with the notification extension, which reaches the Hubs kept there.

@@ -353,8 +353,7 @@ enum HubThread: HubConversation {
 
     /// The other people on the Hub, to share a bot with.
     func people() async throws -> [LinkPerson] {
-        guard case .people(let people) = try await pairing.request(.people) else { throw LinkError("The Hub sent an unexpected answer.") }
-        return people
+        try await pairing.people()
     }
 
     /// Shares one of this user's bots with someone on the Hub, or stops sharing it with them.

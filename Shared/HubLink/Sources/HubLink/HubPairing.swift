@@ -14,6 +14,8 @@ import Observation
     public private(set) var hub: Hub?
     /// What the Hub last said it lends, kept across launches so it shows before the Hub answers again.
     public private(set) var status: LinkStatus?
+    /// This user's picture, its image filled in once this device has it. Nil shows their initials.
+    public private(set) var avatar: LinkAvatar?
     /// The address that answered last.
     public private(set) var endpoint: LinkEndpoint?
     public private(set) var error: String?
@@ -29,6 +31,7 @@ import Observation
         self.deviceName = deviceName
         hub = try? JSONDecoder().decode(Hub.self, from: Data(contentsOf: hubURL))
         if hub != nil { status = try? LinkProtocol.decoder.decode(LinkStatus.self, from: Data(contentsOf: statusURL)) }
+        avatar = keptAvatar
     }
 
     public var keyFingerprint: String? { try? identity().publicKey.fingerprint }
@@ -56,7 +59,56 @@ import Observation
             guard self.hub?.key == hub.key else { return }
             try self.save(Hub(name: status.hubName, key: hub.key, endpoints: status.endpoints, userName: status.userName))
             self.remember(status)
+            if let me = self.me {
+                await self.fetchPictures([me])
+                self.avatar = self.keptAvatar
+            }
         }
+    }
+
+    /// Changes this user's picture on the Hub, or with nil shows their initials.
+    public func setAvatar(_ avatar: LinkAvatar?) async throws {
+        guard case .status(let status) = try await request(.setAvatar(avatar?.leavingOutKnownImage)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        if let me = Me(status), let image = avatar?.image, status.avatar?.imageDigest == LinkPicture.digest(image) {
+            keep(image, for: me)
+        }
+        remember(status)
+    }
+
+    /// The other people on the Hub, with the pictures this device keeps of them.
+    public func people() async throws -> [LinkPerson] {
+        guard case .people(let people) = try await request(.people) else { throw LinkError("The Hub sent an unexpected answer.") }
+        await fetchPictures(people)
+        return keptPictures(people)
+    }
+
+    /// This user, whose picture is kept apart from other people's, as each list forgets what it no longer shows.
+    private struct Me: LinkPictured {
+        static let pictureFolder = "Me"
+        var person: LinkPerson
+        var pictureOwner: LinkPictureOwner { person.pictureOwner }
+        var picture: Data? {
+            get { person.picture }
+            set { person.picture = newValue }
+        }
+        var pictureDigest: String? {
+            get { person.pictureDigest }
+            set { person.pictureDigest = newValue }
+        }
+
+        init?(_ status: LinkStatus?) {
+            guard let status, let id = status.userID else { return nil }
+            person = LinkPerson(id: id, name: status.userName, avatar: status.avatar)
+        }
+    }
+
+    private var me: Me? { Me(status) }
+
+    private var keptAvatar: LinkAvatar? {
+        guard let me else { return status?.avatar }
+        return keptPictures([me]).first?.person.avatar
     }
 
     public static let checkInInterval: Duration = .seconds(60)
@@ -76,6 +128,7 @@ import Observation
         try? FileManager.default.removeItem(at: statusURL)
         hub = nil
         status = nil
+        avatar = nil
         endpoint = nil
         error = nil
         isUnreachable = false
@@ -245,6 +298,12 @@ import Observation
         }
     }
 
+    private func keep<Item: LinkPictured>(_ picture: Data, for item: Item) {
+        let folder = picturesURL(Item.self)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? picture.write(to: folder.appendingPathComponent(LinkPicture.digest(picture)), options: .atomic)
+    }
+
     private func picturesURL<Item: LinkPictured>(_: Item.Type) -> URL {
         directory.appendingPathComponent("Pictures", isDirectory: true).appendingPathComponent(Item.pictureFolder, isDirectory: true)
     }
@@ -318,6 +377,7 @@ import Observation
 
     private func remember(_ status: LinkStatus) {
         self.status = status
+        avatar = keptAvatar
         try? LinkProtocol.encoder.encode(status).write(to: statusURL, options: .atomic)
     }
 

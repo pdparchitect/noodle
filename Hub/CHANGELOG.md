@@ -5,6 +5,7 @@
 ### Added
 
 - The Hub can be given a name of its own in Settings > Network > Name, so it is not known by the Mac's name. Paired devices pick up the new name the next time they check in, within a minute. Clearing the name goes back to the Mac's.
+- People can choose a picture for themselves from their phones and Macs: a photo, or a symbol or their initials on a colour. Everyone on the Hub sees it when sharing a bot. Removing someone removes their picture too.
 
 ### Changed
 

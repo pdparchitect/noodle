@@ -215,7 +215,7 @@ import NoodleRuntime
     /// The other people on the Hub, to share a bot with.
     public func people(for user: HubUser) throws -> [LinkPerson] {
         guard !access.isPersonal else { return [] }
-        return access.users.filter { $0.id != user.id }.map { LinkPerson(id: $0.id, name: $0.name) }
+        return access.users.filter { $0.id != user.id }.map { LinkPerson(id: $0.id, name: $0.name, avatar: $0.avatar) }
     }
 
     /// Shares one of the user's bots with exactly `people`. Each gets a conversation of their own

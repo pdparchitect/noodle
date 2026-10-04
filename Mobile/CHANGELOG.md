@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Your picture on a Hub can be changed: tap it in that Hub's details, under Hubs. Take a photo, choose one or create an image, or pick a symbol or your initials on a colour. Everyone on the Hub sees it, and Sharing in a bot's editor shows each person's picture.
+
 ### Fixed
 
 - Noodlets a bot shares show their own names in the conversation, under Shared and in the game menu, instead of all being called Noodlet.
+
+### What to Test
+
+- Open ••• > Hubs, tap ⓘ beside the Hub, then tap your picture. Take a photo: the camera lets you fit it into a square. Tap Done; the new picture shows at once, and on your other devices within a minute.
+- Pick a colour and a symbol, then your initials, tapping Done each time. On someone else's device on the same Hub, open Sharing in one of their bots' editors: your picture matches.
 
 ## [0.19.0] - 2026-10-04
 

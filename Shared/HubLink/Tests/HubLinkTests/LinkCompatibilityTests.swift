@@ -209,6 +209,8 @@ final class LinkVersion1Tests: XCTestCase {
             "noodlet": .noodlet(conversationID: b, attachmentID: c), "noodletArchive": .noodletArchive(grant: a, offset: 524288),
             "noodletCall": .noodletCall(LinkNoodletCall(grant: a, id: b, offset: 0, total: 2, data: Data([1, 2]))),
             "people": .people, "shareBot": .shareBot(id: a, people: [b, c]),
+            "setAvatar": .setAvatar(LinkAvatar(symbol: "leaf.fill", colour: 3, imageDigest: "abc")), "noAvatar": .setAvatar(nil),
+            "personPicture": .picture(.person(b)),
         ]
     }
     private var group: LinkGroup {
@@ -239,6 +241,10 @@ final class LinkVersion1Tests: XCTestCase {
             "readBot": .bot(LinkBot(id: a, conversationID: b, draft: LinkBotDraft(name: "Alfred", provider: "codex"), createdAt: date,
                                     readUpTo: date)),
             "people": .people([LinkPerson(id: b, name: "Grace")]),
+            "picturedPeople": .people([LinkPerson(id: b, name: "Grace", avatar: LinkAvatar(colour: 2, imageDigest: "abc")),
+                                       LinkPerson(id: c, name: "Bea", avatar: LinkAvatar(symbol: "leaf.fill", colour: 1))]),
+            "avatarStatus": .status(LinkStatus(hubName: "Hub", userName: "Ada", planName: "Family", harnesses: [], endpoints: [],
+                                               userID: a, avatar: LinkAvatar(colour: 4, imageDigest: "abc"))),
             "ownBot": .bot(LinkBot(id: a, conversationID: b, draft: LinkBotDraft(name: "Alfred", provider: "codex"), createdAt: date,
                                    sharedWith: [c])),
             "sharedBot": .bot(LinkBot(id: a, conversationID: c, draft: LinkBotDraft(name: "Alfred", provider: ""), createdAt: date,
@@ -331,7 +337,10 @@ final class LinkVersion1Tests: XCTestCase {
         "noodletArchive": #"{"version":1,"request":{"noodletArchive":{"grant":"00000000-0000-0000-0000-00000000000A","offset":524288}}}"#,
         "noodletCall": #"{"version":1,"request":{"noodletCall":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","id":"00000000-0000-0000-0000-00000000000B","offset":0,"total":2,"data":"AQI="}}}}"#,
         "people": #"{"version":1,"request":{"people":{}}}"#,
-        "shareBot": #"{"version":1,"request":{"shareBot":{"id":"00000000-0000-0000-0000-00000000000A","people":["00000000-0000-0000-0000-00000000000B","00000000-0000-0000-0000-00000000000C"]}}}"#
+        "shareBot": #"{"version":1,"request":{"shareBot":{"id":"00000000-0000-0000-0000-00000000000A","people":["00000000-0000-0000-0000-00000000000B","00000000-0000-0000-0000-00000000000C"]}}}"#,
+        "setAvatar": #"{"version":1,"request":{"setAvatar":{"_0":{"symbol":"leaf.fill","colour":3,"imageDigest":"abc"}}}}"#,
+        "noAvatar": #"{"version":1,"request":{"setAvatar":{}}}"#,
+        "personPicture": #"{"version":1,"request":{"picture":{"_0":{"person":{"_0":"00000000-0000-0000-0000-00000000000B"}}}}}"#
     ]
     private static let nextResponseJSON: [String: String] = [
         "kickConfirmation": #"{"kickConfirmation":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","title":"Safeguards stopped Alfred","message":"Stopped.","confirmTitle":"Resume","offersNewSession":true}}}"#,
@@ -349,6 +358,8 @@ final class LinkVersion1Tests: XCTestCase {
         "toolCatalog": #"{"toolCatalog":{"_0":[{"id":"notion","name":"Notion","summary":"Pages.","instructions":"Search first.","endpoint":"https:\/\/mcp.notion.com\/mcp","badge":"Experimental","icon":"Bw=="}]}}"#,
         "readBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","draft":{"name":"Alfred","provider":"codex"},"createdAt":1790000000,"readUpTo":1790000000}}}"#,
         "people": #"{"people":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","name":"Grace"}]}}"#,
+        "picturedPeople": #"{"people":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","name":"Grace","avatar":{"colour":2,"imageDigest":"abc"}},{"id":"00000000-0000-0000-0000-00000000000C","name":"Bea","avatar":{"symbol":"leaf.fill","colour":1}}]}}"#,
+        "avatarStatus": #"{"status":{"_0":{"hubName":"Hub","userName":"Ada","planName":"Family","harnesses":[],"endpoints":[],"protocolVersion":1,"canPairDevices":false,"isAdmin":false,"canShareBots":false,"userID":"00000000-0000-0000-0000-00000000000A","avatar":{"colour":4,"imageDigest":"abc"}}}}"#,
         "ownBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","draft":{"name":"Alfred","provider":"codex"},"createdAt":1790000000,"sharedWith":["00000000-0000-0000-0000-00000000000C"]}}}"#,
         "sharedBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000C","draft":{"name":"Alfred","provider":""},"createdAt":1790000000,"owner":"Ada"}}}"#,
         "groups": #"{"groups":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}]}}"#,

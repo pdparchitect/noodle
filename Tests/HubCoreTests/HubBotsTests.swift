@@ -728,6 +728,66 @@ import XCTest
         XCTAssertTrue(status.canShareBots)
     }
 
+    /// Someone's picture reaches everyone who can share with them, and their own other devices.
+    func testPeopleSeeThePictureSomeoneChose() async throws {
+        let f = try await fixture()
+        let grace = try await person("Grace", f)
+        func adaAsGraceSees() async throws -> LinkPerson? {
+            try await grace.device.people().first { $0.id == f.ada.id }
+        }
+        var ada = try await adaAsGraceSees()
+        XCTAssertNotNil(ada)
+        XCTAssertNil(ada?.avatar)
+
+        let photo = try smallJPEG()
+        try await f.device.setAvatar(LinkAvatar(colour: 2, image: photo))
+        XCTAssertEqual(f.device.avatar?.image, photo)
+        ada = try await adaAsGraceSees()
+        XCTAssertEqual(ada?.avatar?.image, photo)
+        XCTAssertEqual(ada?.avatar?.colour, 2)
+
+        let phone = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-phone-\(UUID())"),
+                               deviceName: "Phone")
+        addTeardownBlock { try? FileManager.default.removeItem(at: phone.directory) }
+        await phone.join(f.link.invite(f.ada).url().absoluteString)
+        await phone.refresh()
+        XCTAssertEqual(phone.avatar?.image, photo)
+
+        // Changing the colour sends the photo's digest alone, and keeps the photo.
+        var edited = try XCTUnwrap(f.device.avatar)
+        edited.colour = 4
+        XCTAssertNil(edited.leavingOutKnownImage.image)
+        try await f.device.setAvatar(edited)
+        ada = try await adaAsGraceSees()
+        XCTAssertEqual(ada?.avatar, LinkAvatar(colour: 4, image: photo, imageDigest: LinkPicture.digest(photo)))
+
+        try await f.device.setAvatar(LinkAvatar(symbol: "leaf.fill", colour: 1))
+        ada = try await adaAsGraceSees()
+        XCTAssertEqual(ada?.avatar, LinkAvatar(symbol: "leaf.fill", colour: 1))
+        try await f.device.setAvatar(nil)
+        XCTAssertNil(f.device.avatar)
+        ada = try await adaAsGraceSees()
+        XCTAssertNil(ada?.avatar)
+    }
+
+    /// Only a picture fit to show anyone is kept.
+    func testAPictureMustBeAnImageOfAModestSize() async throws {
+        let f = try await fixture()
+        do {
+            try await f.device.setAvatar(LinkAvatar(image: Data("not a picture".utf8)))
+            XCTFail("kept something that is not a picture")
+        } catch {}
+        do {
+            try await f.device.setAvatar(LinkAvatar(image: try smallJPEG() + Data(count: HubAccess.maxPictureBytes)))
+            XCTFail("kept a picture too large")
+        } catch {}
+        do {
+            try await f.device.setAvatar(LinkAvatar(imageDigest: LinkPicture.digest(Data([1]))))
+            XCTFail("kept a picture the Hub never had")
+        } catch {}
+        XCTAssertNil(f.device.avatar)
+    }
+
     /// Activity records who shared a bot with whom and who stopped, and a refused attempt.
     func testSharingIsRecordedInActivity() async throws {
         let f = try await fixture()

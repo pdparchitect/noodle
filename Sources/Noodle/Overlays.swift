@@ -571,9 +571,16 @@ private struct BotSharingSheet: View {
                         .frame(maxWidth: .infinity)
                 } else if let people {
                     ForEach(people) { person in
-                        Toggle(person.name, isOn: Binding(
+                        Toggle(isOn: Binding(
                             get: { selection.contains(person.id) },
-                            set: { if $0 { selection.insert(person.id) } else { selection.remove(person.id) } }))
+                            set: { if $0 { selection.insert(person.id) } else { selection.remove(person.id) } })) {
+                            HStack(spacing: 8) {
+                                let avatar = person.avatar ?? .standard(for: person.id)
+                                IconBadge(appearance: IconAppearance(symbol: avatar.symbol, colour: avatar.colour, image: avatar.image),
+                                          symbol: "person.fill", size: 24, showsShadow: false, initials: LinkAvatar.initials(of: person.name))
+                                Text(person.name)
+                            }
+                        }
                     }
                 } else if let failure {
                     Text(failure).foregroundStyle(.red)

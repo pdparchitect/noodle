@@ -1,5 +1,6 @@
 import Foundation
 import HubLink
+import ImageIO
 import NoodleCore
 import Observation
 
@@ -54,6 +55,8 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
     public var canPairDevices: Bool
     /// Whether they may manage the users who are not admins from their devices. Only the Hub itself makes admins.
     public var isAdmin: Bool
+    /// The picture they chose, its image kept apart under its digest. Nil shows their initials.
+    public var avatar: LinkAvatar?
 
     public init(id: UUID = UUID(), name: String, plan: UUID = HubPlan.defaultID, canPairDevices: Bool = true, isAdmin: Bool = false) {
         self.id = id
@@ -63,7 +66,7 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
         self.isAdmin = isAdmin
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, plan, canPairDevices, isAdmin }
+    private enum CodingKeys: String, CodingKey { case id, name, plan, canPairDevices, isAdmin, avatar }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -72,6 +75,7 @@ public struct HubUser: Identifiable, Codable, Hashable, Sendable {
         plan = try c.decode(UUID.self, forKey: .plan)
         canPairDevices = try c.decodeIfPresent(Bool.self, forKey: .canPairDevices) ?? true
         isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? false
+        avatar = try c.decodeIfPresent(LinkAvatar.self, forKey: .avatar)
     }
 }
 
@@ -234,10 +238,50 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         note(isAdmin ? "Made \(old.name) an admin" : "Made \(old.name) no longer an admin", about: [user.id])
     }
 
+    /// The largest picture of a person the Hub keeps, well within a request. Devices send 512 pixels at most, far smaller.
+    public static let maxPictureBytes = 512 * 1024
+
+    /// Sets the user's picture, or with nil their initials. An image sent as its digest alone keeps the one they have.
+    public func setAvatar(_ avatar: LinkAvatar?, for user: HubUser) throws {
+        guard let old = current(user) else { return }
+        var kept = avatar
+        if var avatar {
+            if let symbol = avatar.symbol, symbol.isEmpty || symbol.count > 64 { throw LinkError("That symbol cannot be used.") }
+            if let image = avatar.image {
+                guard image.count <= Self.maxPictureBytes else { throw LinkError("Choose a smaller picture.") }
+                guard let source = CGImageSourceCreateWithData(image as CFData, nil), CGImageSourceGetCount(source) > 0,
+                      CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else { throw LinkError("That picture cannot be used.") }
+                avatar.imageDigest = LinkPicture.digest(image)
+                try FileManager.default.createDirectory(at: picturesURL, withIntermediateDirectories: true)
+                try AtomicFile.write(image, to: pictureURL(of: user.id))
+            } else if let digest = avatar.imageDigest, digest != old.avatar?.imageDigest {
+                throw LinkError("Send the picture again.")
+            }
+            avatar.image = nil
+            kept = avatar
+        }
+        if kept?.imageDigest == nil { try? FileManager.default.removeItem(at: pictureURL(of: user.id)) }
+        guard kept != old.avatar else { return }
+        update(user) { $0.avatar = kept }
+        note("\(old.name) changed their picture", about: [user.id])
+    }
+
+    /// The user's picture, its image left out.
+    public func avatar(of user: UUID) -> LinkAvatar? {
+        users.first { $0.id == user }?.avatar
+    }
+
+    /// The image of the user's picture, if they chose one.
+    public func picture(of user: UUID) -> Data? {
+        guard avatar(of: user)?.imageDigest != nil else { return nil }
+        return try? Data(contentsOf: pictureURL(of: user))
+    }
+
     /// Their devices go too. Remove a user through `Hub.remove`, which deletes their bots and connections first.
     public func remove(_ user: HubUser) {
         guard let old = current(user) else { return }
         note("Removed \(old.name)", about: [user.id])
+        try? FileManager.default.removeItem(at: pictureURL(of: user.id))
         users.removeAll { $0.id == user.id }
         devices.removeAll { $0.user == user.id }
         botOwners = botOwners.filter { $0.value != user.id }
@@ -384,6 +428,11 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         change(&plans[index])
         save()
     }
+
+    /// Pictures of people, kept beside the file every check-in rewrites rather than in it.
+    private var picturesURL: URL { url.deletingLastPathComponent().appendingPathComponent("People", isDirectory: true) }
+
+    private func pictureURL(of user: UUID) -> URL { picturesURL.appendingPathComponent(user.uuidString) }
 
     private func save() {
         let encoder = JSONEncoder()

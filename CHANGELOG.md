@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - This Mac can be given a name of its own for your devices in Settings > Hub > Name, so it is not known by the Mac's name. Your devices pick up the new name within a minute. Clearing the name goes back to the Mac's.
 - When a bot's harness needs you to sign in again, Noodle shows a notification once, even while it is in front. Clicking it opens Settings > Harness.
+- You can choose your picture on a Noodle Hub with Your Picture… under it in Settings > Hub: a photo, or a symbol or your initials on a colour. Everyone on the Hub sees it, and Sharing in a bot's editor shows each person's picture.
 - A privacy guide in the documentation explains what model providers see, the training risk of personal subscriptions, and how to keep work on your Mac or with a provider that does not train on it.
 
 ### Fixed

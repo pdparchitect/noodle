@@ -44,10 +44,11 @@ public struct IconBadge: View {
     let symbol: String
     let size: CGFloat
     var showsShadow = true
+    let initials: String?
 
-    /// `symbol` is drawn while the appearance has not chosen one of its own.
-    public init(appearance: IconAppearance, symbol: String, size: CGFloat, showsShadow: Bool = true) {
-        self.appearance = appearance; self.symbol = symbol; self.size = size; self.showsShadow = showsShadow
+    /// `symbol` is drawn while the appearance has not chosen one of its own, or `initials` for a person.
+    public init(appearance: IconAppearance, symbol: String, size: CGFloat, showsShadow: Bool = true, initials: String? = nil) {
+        self.appearance = appearance; self.symbol = symbol; self.size = size; self.showsShadow = showsShadow; self.initials = initials
     }
 
     public var body: some View {
@@ -57,8 +58,12 @@ public struct IconBadge: View {
             } else {
                 Circle().fill(LinearGradient(colors: IconPalette.gradients[IconPalette.index(for: appearance.iconColour)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: appearance.iconSymbol ?? symbol)
-                    .font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(.white)
+                if appearance.iconSymbol == nil, let initials {
+                    Text(initials).font(.system(size: size * 0.36, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+                } else {
+                    Image(systemName: appearance.iconSymbol ?? symbol)
+                        .font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(.white)
+                }
             }
         }.frame(width: size, height: size).clipShape(Circle())
             .shadow(color: .black.opacity(showsShadow ? 0.2 : 0), radius: 3, y: 1).accessibilityHidden(true)

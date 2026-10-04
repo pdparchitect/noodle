@@ -606,15 +606,26 @@ struct ProfileView: View {
     @State private var leaving = false
     @State private var pairingDevice = false
     @State private var showingArchived = false
+    @State private var editingPicture = false
 
     var body: some View {
         List {
             Section {
                 VStack(spacing: 8) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 72))
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
+                    Button { editingPicture = true } label: {
+                        PersonAvatar(name: pairing.userName, avatar: pairing.avatar, id: pairing.status?.userID, size: 88)
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "pencil.circle.fill")
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, Color.accentColor)
+                                    .font(.system(size: 28))
+                                    .background(Color(.systemGroupedBackground), in: Circle())
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    // A Hub from before pictures of people cannot keep one.
+                    .disabled(pairing.status?.userID == nil)
+                    .accessibilityLabel("Edit Picture")
                     Text(pairing.userName).font(.title2.bold())
                     Text(pairing.hubName).foregroundStyle(.secondary)
                 }
@@ -667,6 +678,7 @@ struct ProfileView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $pairingDevice) { PairDeviceView(title: "Pair a Device") { try await pairing.invite() } }
+        .sheet(isPresented: $editingPicture) { PersonPictureEditor(pairing: pairing) }
         .sheet(isPresented: $showingArchived) { if let chats { ArchivedView(chats: chats) } }
         .wordmarkRefreshable { await pairing.refresh() }
         .confirmationDialog("Leave \(pairing.hubName)?", isPresented: $leaving, titleVisibility: .visible) {

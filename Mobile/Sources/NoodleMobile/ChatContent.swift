@@ -596,11 +596,14 @@ enum PickedFiles {
 /// The camera, returning one photo.
 struct CameraPicker: UIViewControllerRepresentable {
     static var isAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+    /// Lets the person move and scale the photo into a square before it is used.
+    var cropsSquare = false
     let taken: (UIImage) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
+        picker.allowsEditing = cropsSquare
         picker.delegate = context.coordinator
         return picker
     }
@@ -616,7 +619,7 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage { taken(image) }
+            if let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage { taken(image) }
             picker.dismiss(animated: true)
         }
 

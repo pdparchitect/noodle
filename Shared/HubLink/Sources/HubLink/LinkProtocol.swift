@@ -104,6 +104,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// Shares one of this user's bots with exactly these other people on the Hub, each in a
     /// conversation of their own with it. Answers `bot`.
     case shareBot(id: UUID, people: [UUID])
+    /// Changes this user's picture, as everyone on the Hub sees it, or nil for their initials. Answers `status`.
+    case setAvatar(LinkAvatar?)
     /// This user's groups on the Hub: conversations with several of their bots.
     case groups
     /// Makes a group of this user's bots. Answers `group`.
@@ -340,9 +342,9 @@ public struct LinkNoodletCall: Codable, Equatable, Sendable {
     }
 }
 
-/// Whose picture: a bot's, or the icon of a connection, computer or browser.
+/// Whose picture: a bot's or a person's, or the icon of a connection, computer or browser.
 public enum LinkPictureOwner: Codable, Hashable, Sendable {
-    case bot(UUID), connection(UUID), computer(UUID), browser(UUID)
+    case bot(UUID), connection(UUID), computer(UUID), browser(UUID), person(UUID)
 }
 
 /// Pictures travel apart from the lists that show them: a list carries each one's digest, and
@@ -386,6 +388,19 @@ extension LinkBot: LinkPictured {
     public var pictureDigest: String? {
         get { draft.avatarImageDigest }
         set { draft.avatarImageDigest = newValue }
+    }
+}
+
+extension LinkPerson: LinkPictured {
+    public static let pictureFolder = "People"
+    public var pictureOwner: LinkPictureOwner { .person(id) }
+    public var picture: Data? {
+        get { avatar?.image }
+        set { avatar?.image = newValue }
+    }
+    public var pictureDigest: String? {
+        get { avatar?.imageDigest }
+        set { avatar?.imageDigest = newValue }
     }
 }
 
@@ -501,10 +516,66 @@ public enum LinkEvent: Codable, Equatable, Sendable {
 public struct LinkPerson: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
+    /// Nil until they choose one: they show their initials. Its image travels apart, as `picture`.
+    public var avatar: LinkAvatar?
 
-    public init(id: UUID, name: String) {
+    public init(id: UUID, name: String, avatar: LinkAvatar? = nil) {
         self.id = id
         self.name = name
+        self.avatar = avatar
+    }
+}
+
+/// How a person shows on the Hub: a photo, or a symbol or their initials on a colour.
+public struct LinkAvatar: Codable, Hashable, Sendable {
+    /// Nil shows their initials.
+    public var symbol: String?
+    /// An index into the same colours as bots'.
+    public var colour: Int
+    public var image: Data?
+    /// The image's digest. Sent without `image`, it keeps the one the Hub has.
+    public var imageDigest: String?
+
+    public init(symbol: String? = nil, colour: Int = 0, image: Data? = nil, imageDigest: String? = nil) {
+        self.symbol = symbol
+        self.colour = colour
+        self.image = image
+        self.imageDigest = imageDigest
+    }
+
+    private enum CodingKeys: String, CodingKey { case symbol, colour, image, imageDigest }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
+        colour = try c.decode(.colour, or: 0)
+        image = try c.decodeIfPresent(Data.self, forKey: .image)
+        imageDigest = try c.decodeIfPresent(String.self, forKey: .imageDigest)
+    }
+
+    /// What someone shows until they choose: their initials, on a colour of their own.
+    public static func standard(for id: UUID?) -> LinkAvatar { LinkAvatar(colour: Int(id?.uuid.0 ?? 0)) }
+
+    /// The first letters of the first two words of their name.
+    public static func initials(of name: String) -> String {
+        String(name.split(whereSeparator: \.isWhitespace).prefix(2).compactMap(\.first)).uppercased()
+    }
+
+    /// Whether it shows a photo, fetched yet or not.
+    public var hasImage: Bool { image != nil || imageDigest != nil }
+
+    public mutating func removeImage() {
+        image = nil
+        imageDigest = nil
+    }
+
+    /// As a change sends it: without the image when it is the one the Hub has.
+    public var leavingOutKnownImage: LinkAvatar {
+        var avatar = self
+        if let image {
+            if imageDigest == LinkPicture.digest(image) { avatar.image = nil } else { avatar.imageDigest = nil }
+        }
+        return avatar
     }
 }
 
@@ -761,10 +832,14 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var isAdmin: Bool
     /// Whether the user may share their bots with other people on the Hub with `shareBot`.
     public var canShareBots: Bool
+    /// Who the user is, to fetch their own picture with `picture`. Nil from a Hub without pictures of people.
+    public var userID: UUID?
+    /// The user's picture, its image left out. Nil while they show their initials.
+    public var avatar: LinkAvatar?
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
                 protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false,
-                canShareBots: Bool = false) {
+                canShareBots: Bool = false, userID: UUID? = nil, avatar: LinkAvatar? = nil) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -774,10 +849,12 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.canPairDevices = canPairDevices
         self.isAdmin = isAdmin
         self.canShareBots = canShareBots
+        self.userID = userID
+        self.avatar = avatar
     }
 
     private enum CodingKeys: String, CodingKey {
-        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots
+        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots, userID, avatar
     }
 
     public init(from decoder: Decoder) throws {
@@ -791,6 +868,8 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         canPairDevices = try c.decode(.canPairDevices, or: false)
         isAdmin = try c.decode(.isAdmin, or: false)
         canShareBots = try c.decode(.canShareBots, or: false)
+        userID = try c.decodeIfPresent(UUID.self, forKey: .userID)
+        avatar = try c.decodeIfPresent(LinkAvatar.self, forKey: .avatar)
     }
 }
 

@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import HubCore
+import HubLink
 import NoodleCore
 import XCTest
 
@@ -60,6 +62,26 @@ import XCTest
         let reopened = HubAccess(url: url)
         XCTAssertEqual(reopened.plans, access.plans)
         XCTAssertEqual(reopened.users, access.users)
+    }
+
+    /// A photo is kept beside the file every check-in rewrites, not in it, and goes with its user.
+    func testPicturesSurviveARelaunchAndLeaveWithTheirUser() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-access-\(UUID())", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("access.json")
+        let access = HubAccess(url: url)
+        let user = try access.addUser(named: "Ada")
+        let photo = try smallJPEG()
+        try access.setAvatar(LinkAvatar(colour: 3, image: photo), for: user)
+        XCTAssertFalse(try String(contentsOf: url, encoding: .utf8).contains(photo.base64EncodedString()))
+
+        let reopened = HubAccess(url: url)
+        XCTAssertEqual(reopened.avatar(of: user.id), LinkAvatar(colour: 3, imageDigest: LinkPicture.digest(photo)))
+        XCTAssertEqual(reopened.picture(of: user.id), photo)
+
+        reopened.remove(user)
+        XCTAssertNil(reopened.picture(of: user.id))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.appendingPathComponent("People").path), [])
     }
 
     func testAPlanCanLimitTheModelsOfAHarness() throws {
@@ -124,4 +146,12 @@ import XCTest
         try Data(json.utf8).write(to: url)
         XCTAssertEqual(HubAccess(url: url).users.first?.canPairDevices, true)
     }
+}
+
+/// A small JPEG, as devices send pictures.
+func smallJPEG() throws -> Data {
+    let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8, bitsPerSample: 8,
+                                                samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+                                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+    return try XCTUnwrap(bitmap.representation(using: .jpeg, properties: [:]))
 }

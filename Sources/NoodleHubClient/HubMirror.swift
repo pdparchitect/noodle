@@ -166,8 +166,7 @@ import Observation
 
     /// The other people on the Hub, to share a bot with.
     public func people() async throws -> [LinkPerson] {
-        guard case .people(let people) = try await pairing.request(.people) else { throw LinkError("The Hub sent an unexpected answer.") }
-        return people
+        try await pairing.people()
     }
 
     /// Shares one of this Mac's user's bots on the Hub with exactly `people`.

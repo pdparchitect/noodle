@@ -319,7 +319,8 @@ struct BotSharingScreen: View {
                             do { try await chats.toggleSharing(agent, with: person.id) } catch { problem = error.localizedDescription }
                         }
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
+                            PersonAvatar(name: person.name, avatar: person.avatar, id: person.id, size: 32)
                             Text(person.name).foregroundStyle(.primary)
                             Spacer()
                             if busy == person.id { ProgressView() }

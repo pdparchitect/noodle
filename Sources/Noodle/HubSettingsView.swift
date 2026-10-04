@@ -132,6 +132,8 @@ private struct HubRow: View {
     @State private var confirmingLeave = false
     @State private var showingArchived = false
     @State private var showingUsers = false
+    @State private var editingPicture = false
+    @State private var pictureProblem: String?
 
     private var mirror: HubMirror? { store.hubMirrors.first { $0.pairing === pairing } }
 
@@ -157,6 +159,11 @@ private struct HubRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
+                    // A Hub from before pictures of people cannot keep one.
+                    if pairing.status?.userID != nil {
+                        Button("Your Picture…") { editingPicture = true }
+                            .buttonStyle(.link)
+                    }
                     if pairing.status?.isAdmin == true {
                         Button("Users") { showingUsers = true }
                             .buttonStyle(.link)
@@ -176,6 +183,15 @@ private struct HubRow: View {
         }
         .sheet(isPresented: $showingUsers) {
             HubUsersSheet(hubName: pairing.hub?.name ?? "Noodle Hub", pairing: pairing, mirror: mirror)
+        }
+        .sheet(isPresented: $editingPicture) {
+            HubPictureEditor(pairing: pairing) { pictureProblem = $0 }
+                .noodleSheetSizing()
+        }
+        .alert("Your Picture Was Not Changed", isPresented: Binding(get: { pictureProblem != nil }, set: { if !$0 { pictureProblem = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(pictureProblem ?? "")
         }
         .task(id: pairing.hub?.key) { await pairing.refresh() }
         .alert("Leave \(pairing.hub?.name ?? "Hub")?", isPresented: $confirmingLeave) {
@@ -206,6 +222,37 @@ private struct HubRow: View {
                      harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName
                  }.joined(separator: ", "))
         }
+    }
+}
+
+/// This Mac's user's picture on a Hub, as everyone there sees it, as Noodle Mobile edits it.
+private struct HubPictureEditor: View {
+    let pairing: HubPairing
+    let failed: (String) -> Void
+
+    var body: some View {
+        let current = pairing.avatar ?? .standard(for: pairing.status?.userID)
+        IconEditorSheet(
+            title: "Your Picture",
+            icon: Binding(
+                get: { IconAppearance(symbol: current.symbol, colour: current.colour, image: current.image) },
+                set: { icon in
+                    // The digest of the photo the Hub has, so it is not sent again.
+                    let kept = icon.iconImage != nil && icon.iconImage == current.image
+                    let avatar = LinkAvatar(symbol: icon.iconSymbol, colour: icon.iconColour, image: icon.iconImage,
+                                            imageDigest: kept ? current.imageDigest : nil)
+                    guard avatar != current else { return }
+                    Task {
+                        do { try await pairing.setAvatar(avatar) } catch { failed(error.localizedDescription) }
+                    }
+                }
+            ),
+            symbol: "person.fill",
+            symbols: ["person.fill", "face.smiling", "star.fill", "heart.fill", "leaf.fill", "pawprint.fill",
+                      "music.note", "gamecontroller.fill", "book.fill", "cup.and.saucer.fill", "sun.max.fill"],
+            encoding: .jpeg(quality: 0.86),
+            initials: LinkAvatar.initials(of: pairing.status?.userName ?? pairing.hub?.userName ?? "")
+        )
     }
 }
 

@@ -306,3 +306,183 @@ struct BotPictureEditor: View {
         }
     }
 }
+
+/// A person's picture on a Hub, or their initials on a colour while they have chosen none.
+struct PersonAvatar: View {
+    let name: String
+    let avatar: LinkAvatar?
+    /// Gives someone who chose no picture a colour of their own.
+    var id: UUID?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let data = avatar?.image, let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                AgentAvatar.swatch(AgentAvatar.colourIndex((avatar ?? .standard(for: id)).colour)).overlay {
+                    if let symbol = avatar?.symbol {
+                        Image(systemName: symbol).font(.system(size: size * 0.45, weight: .semibold))
+                    } else {
+                        Text(LinkAvatar.initials(of: name)).font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                    }
+                }
+                .foregroundStyle(.white)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+}
+
+/// Edits this user's picture on a Hub, as everyone there sees it: a photo, or a symbol or their
+/// initials on a colour. It is kept on the Hub, for every device.
+struct PersonPictureEditor: View {
+    let pairing: HubPairing
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
+    private let original: LinkAvatar
+    @State private var draft: LinkAvatar
+    @State private var photo: PhotosPickerItem?
+    @State private var takingPhoto = false
+    @State private var creating = false
+    @State private var loading = false
+    @State private var saving = false
+    @State private var problem: String?
+
+    /// After the initials, in the bot symbols' style.
+    static let symbols = [
+        "person.fill", "face.smiling", "star.fill", "heart.fill", "leaf.fill", "pawprint.fill",
+        "music.note", "gamecontroller.fill", "book.fill", "cup.and.saucer.fill", "sun.max.fill",
+    ]
+
+    init(pairing: HubPairing) {
+        self.pairing = pairing
+        original = pairing.avatar ?? .standard(for: pairing.status?.userID)
+        _draft = State(initialValue: original)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    PersonAvatar(name: pairing.userName, avatar: draft, size: 104)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                }
+                Section("Photo") {
+                    if CameraPicker.isAvailable {
+                        Button { takingPhoto = true } label: { Label("Take Photo", systemImage: "camera") }
+                    }
+                    PhotosPicker(selection: $photo, matching: .images) { Label("Choose Photo", systemImage: "photo") }
+                    if supportsImagePlayground {
+                        Button { creating = true } label: { Label("Create Image", systemImage: "apple.image.playground") }
+                    }
+                    if draft.hasImage {
+                        Button(role: .destructive) { draft.removeImage() } label: { Label("Remove Photo", systemImage: "trash") }
+                    }
+                    if loading { ProgressView() }
+                    if let problem { Text(problem).foregroundStyle(.red) }
+                }
+                Section("Colour") {
+                    HStack(spacing: 12) {
+                        ForEach(0..<AgentAvatar.colourCount, id: \.self) { index in
+                            Button {
+                                draft.colour = index
+                                draft.removeImage()
+                            } label: {
+                                AgentAvatar.swatch(index).frame(width: 34, height: 34).overlay {
+                                    if !draft.hasImage && AgentAvatar.colourIndex(draft.colour) == index {
+                                        Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Colour \(index + 1)")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                }
+                Section("Symbol") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
+                        tile(nil) { Text(LinkAvatar.initials(of: pairing.userName)).font(.system(size: 16, weight: .semibold, design: .rounded)) }
+                            .accessibilityLabel("Initials")
+                        ForEach(Self.symbols, id: \.self) { symbol in
+                            tile(symbol) { Image(systemName: symbol).font(.system(size: 18, weight: .semibold)) }
+                                .accessibilityLabel(symbol)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle("Your Picture")
+            .navigationBarTitleDisplayMode(.inline)
+            .disabled(saving)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if saving { ProgressView() } else { Button("Done", action: save).disabled(loading) }
+                }
+            }
+            .task(id: photo) {
+                guard let photo else { return }
+                await load { try await photo.loadTransferable(type: BackgroundPhoto.self)?.data }
+                self.photo = nil
+            }
+            .fullScreenCover(isPresented: $takingPhoto) {
+                // Square, as the picture shows.
+                CameraPicker(cropsSquare: true) { image in
+                    Task { await load { image.jpegData(compressionQuality: 0.9) } }
+                }
+                .ignoresSafeArea()
+            }
+            .imagePlaygroundSheet(isPresented: $creating, sourceImage: draft.image.flatMap(UIImage.init(data:)).map(Image.init(uiImage:))) { url in
+                Task { await load { try Data(contentsOf: url) } }
+            }
+            .noodleImagePlayground()
+        }
+    }
+
+    private func tile(_ symbol: String?, @ViewBuilder label: () -> some View) -> some View {
+        let selected = !draft.hasImage && draft.symbol == symbol
+        return Button {
+            draft.symbol = symbol
+            draft.removeImage()
+        } label: {
+            label()
+                .frame(maxWidth: .infinity).frame(height: 42)
+                .background(selected ? Color.accentColor : Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(selected ? Color.white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func load(_ source: () async throws -> Data?) async {
+        loading = true
+        problem = nil
+        defer { loading = false }
+        do {
+            guard let data = try await source() else { throw LinkError("Photos could not provide this image.") }
+            draft.image = try BotPicture.prepare(data)
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
+    private func save() {
+        guard draft != original else { return dismiss() }
+        saving = true
+        problem = nil
+        Task {
+            defer { saving = false }
+            do {
+                try await pairing.setAvatar(draft)
+                dismiss()
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+}

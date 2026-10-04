@@ -13,6 +13,7 @@ public struct IconEditorSheet: View {
     private let symbols: [String]
     private let encoding: IconImageEncoding
     private let avatar: AvatarIdea?
+    private let initials: String?
     @Environment(\.dismiss) private var dismiss
     @State private var draft: IconAppearance
     @State private var failure: String?
@@ -21,9 +22,11 @@ public struct IconEditorSheet: View {
     @State private var photoSelection: PhotosPickerItem?
     @State private var isLoadingImage = false
 
+    /// With `initials`, a person's: they come first among the symbols, chosen as no symbol.
     public init(title: String, icon: Binding<IconAppearance>, symbol: String, symbols: [String], encoding: IconImageEncoding,
-                avatar: AvatarIdea? = nil) {
+                avatar: AvatarIdea? = nil, initials: String? = nil) {
         _icon = icon; self.title = title; self.symbol = symbol; self.symbols = symbols; self.encoding = encoding; self.avatar = avatar
+        self.initials = initials
         _draft = State(initialValue: icon.wrappedValue)
     }
 
@@ -37,7 +40,7 @@ public struct IconEditorSheet: View {
             }.buttonStyle(.plain).padding(16)
             Divider()
             VStack(spacing: 18) {
-                IconBadge(appearance: draft, symbol: symbol, size: 104)
+                IconBadge(appearance: draft, symbol: symbol, size: 104, initials: initials)
                     .padding(.top, 4)
                 GroupBox("Image") {
                     VStack(spacing: 8) {
@@ -80,14 +83,16 @@ public struct IconEditorSheet: View {
                 }
                 GroupBox("Symbol") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
+                        if let initials {
+                            tile(nil, selected: draft.iconImage == nil && draft.iconSymbol == nil) {
+                                Text(initials).font(.system(size: 16, weight: .semibold, design: .rounded))
+                            }.accessibilityLabel("Initials")
+                        }
                         ForEach(Array(symbols.enumerated()), id: \.offset) { _, candidate in
-                            let selected = draft.iconImage == nil && (draft.iconSymbol ?? symbol) == candidate
-                            Button { draft.iconSymbol = candidate; draft.iconImage = nil } label: {
+                            let chosen = draft.iconSymbol ?? (initials == nil ? symbol : nil)
+                            tile(candidate, selected: draft.iconImage == nil && chosen == candidate) {
                                 Image(systemName: candidate).font(.system(size: 18, weight: .semibold))
-                                    .frame(maxWidth: .infinity).frame(height: 42)
-                                    .background(selected ? Color.accentColor : Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
-                                    .foregroundStyle(selected ? Color.white : .primary)
-                            }.buttonStyle(.plain).accessibilityLabel(candidate)
+                            }.accessibilityLabel(candidate)
                         }
                     }.padding(8)
                 }
@@ -110,6 +115,15 @@ public struct IconEditorSheet: View {
                     return try await Task.detached { try IconImage.prepare(photo.data, encoding: encoding) }.value
                 }
             }
+    }
+
+    private func tile(_ candidate: String?, selected: Bool, @ViewBuilder label: () -> some View) -> some View {
+        Button { draft.iconSymbol = candidate; draft.iconImage = nil } label: {
+            label()
+                .frame(maxWidth: .infinity).frame(height: 42)
+                .background(selected ? Color.accentColor : Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(selected ? Color.white : .primary)
+        }.buttonStyle(.plain)
     }
 
     private func loadImage(_ url: URL) {
