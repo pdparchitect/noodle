@@ -14,7 +14,7 @@
   <img alt="Free and open source, Apache 2.0" src="https://img.shields.io/badge/free%20%26%20open%20source-Apache%202.0-0a0a0a?style=flat-square">
 </p>
 
-[Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md)
+[Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md) · [Privacy](docs/privacy.md)
 
 </div>
 
@@ -108,7 +108,8 @@ can add an address of your own.
 - [Noodle Applet](Applet/README.md)
 - [Noodle Browser](Browser/README.md)
 - [Noodle Hub](Hub/README.md)
-- [Security and privacy](docs/security.md)
+- [Security](docs/security.md)
+- [Privacy](docs/privacy.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Releases](docs/releases.md)
