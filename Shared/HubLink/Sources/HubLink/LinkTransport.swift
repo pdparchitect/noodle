@@ -398,9 +398,16 @@ public final class LinkChannel: Sendable {
 
 /// Sends one request to a Hub whose key is pinned, trying every endpoint at once.
 public enum LinkClient {
+    /// A Hub stops reading a request past its limit, and a send waits until every byte is read: a
+    /// larger one would wait forever, so it fails before it goes.
+    static func checkSize(_ request: Data) throws {
+        guard request.count <= LinkQUIC.requestLimit else { throw LinkError("This is too large to send to the Hub.") }
+    }
+
     /// Opens a channel: the request goes as a frame, and the stream stays open both ways.
     public static func channel(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkChannel {
+        try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         let channel = LinkChannel(connection: connection, endpoint: endpoint)
@@ -411,6 +418,7 @@ public enum LinkClient {
     /// Opens a stream the Hub keeps pushing frames down.
     public static func subscribe(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                  endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {
+        try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         do {
@@ -424,6 +432,7 @@ public enum LinkClient {
 
     public static func exchange(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> (response: Data, endpoint: LinkEndpoint) {
+        try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
         defer { connection.cancel() }

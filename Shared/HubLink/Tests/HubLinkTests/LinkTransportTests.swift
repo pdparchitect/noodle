@@ -36,6 +36,28 @@ final class LinkTransportTests: XCTestCase {
         XCTAssertEqual(response, answer)
     }
 
+    /// A request larger than a Hub reads fails at once, rather than waiting for an answer that never comes.
+    func testARequestTooLargeFailsInsteadOfWaiting() async throws {
+        let hub = LinkIdentity()
+        let server = try await server(hub)
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        let attempt = Task {
+            try await LinkClient.exchange(Data(repeating: 7, count: 3 * LinkQUIC.requestLimit), identity: LinkIdentity(),
+                                          hubKey: hub.publicKey, endpoints: [endpoint])
+        }
+        let watchdog = Task {
+            try await Task.sleep(for: .seconds(15))
+            attempt.cancel()
+        }
+        defer { watchdog.cancel() }
+        do {
+            _ = try await attempt.value
+            XCTFail("A Hub answered a request larger than it reads")
+        } catch {
+            XCTAssertFalse(error is CancellationError, "Still waiting after 15 seconds")
+        }
+    }
+
     /// A QUIC listener can be handed a stream that ends without a byte alongside a real one;
     /// it is not a request, so the handler never sees it.
     func testAStreamThatSendsNothingIsNotARequest() async throws {
