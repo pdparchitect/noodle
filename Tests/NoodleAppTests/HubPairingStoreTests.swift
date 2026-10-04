@@ -49,6 +49,31 @@ final class HubHarnessChoiceTests: XCTestCase {
 
 /// A bot kept on a Hub uses only the Hub's tools, never this Mac's.
 @MainActor final class HubBotAssignmentTests: XCTestCase {
+    /// A bot someone shared on a Hub is only talked with: Settings > Bots leaves it out and groups never offer it.
+    func testABotSharedOnAHubIsOnlyTalkedWith() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        // Pretend Fixture bot A is this Mac's user's on a joined Hub, and bot B someone shared there.
+        let folder = f.repository.rootURL.appendingPathComponent("Hubs/\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let hub: [String: Any] = ["name": "Mac mini", "key": LinkIdentity().publicKey.x963.base64EncodedString(),
+                                  "endpoints": [], "userName": "Ada"]
+        try JSONSerialization.data(withJSONObject: hub).write(to: folder.appendingPathComponent("hub.json"))
+        let own: [String: Any] = ["remote": UUID().uuidString, "remoteConversation": UUID().uuidString,
+                                  "agent": f.a.id.uuidString, "conversation": f.directA.id.uuidString, "synced": 0]
+        let shared: [String: Any] = ["remote": UUID().uuidString, "remoteConversation": UUID().uuidString,
+                                     "agent": f.b.id.uuidString, "conversation": f.directB.id.uuidString, "synced": 0,
+                                     "owner": "Bea"]
+        try JSONSerialization.data(withJSONObject: [own, shared]).write(to: folder.appendingPathComponent("mirror.json"))
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        let mirror = try XCTUnwrap(store.hubMirror(forAgent: f.b.id))
+
+        XCTAssertFalse(store.isShared(f.a.id))
+        XCTAssertTrue(store.isShared(f.b.id))
+        XCTAssertEqual(store.groupCandidates(on: mirror).map(\.id), [f.a.id])
+        XCTAssertEqual(store.configurableAgents.map(\.id), [f.a.id])
+    }
+
     func testThisMacsToolsAreNotGivenToAHubBot() throws {
         let f = try StoreFixture()
         defer { f.cleanUp() }
