@@ -192,7 +192,11 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   They cannot see its settings or open its computers and browsers themselves,
   but the bot can still use them when asked. Share a bot only with people you
   would let use everything it can reach, and give it its own accounts rather
-  than yours.
+  than yours. Its noodlets run on their devices too, with the saved data and
+  secrets they read. Stopping sharing, or archiving the bot, cuts them off at
+  once.
+- **Everyone on a Hub sees everyone's names.** So that bots can be shared, any
+  user can list the names of the Hub's other users.
 - **Hub bots can reach your network.** Like any bot, a Hub bot can connect to
   the internet, to other devices on your network, and to services on the Hub's
   Mac that accept network connections.

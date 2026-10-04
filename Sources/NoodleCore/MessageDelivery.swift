@@ -63,13 +63,15 @@ public struct MessageDeliveryContext: Codable, Sendable {
         let unreadIDs = Set(unread.map { $0.message.id })
         let conversationIDs = Set(latest.map { $0.conversation.id })
         let guests = Dictionary(latest.map { ($0.conversation.id, $0.conversation.guest) }, uniquingKeysWith: { first, _ in first })
+        // Named as Messenger names them: the owner a Noodle Hub keeps for the bot, else User.
+        let owner = try repository.loadAgents().first { $0.id == agentID }.flatMap { try? repository.loadAgentOwner($0) }
         let history = try conversationIDs.flatMap { try repository.loadMessages(conversationID: $0) }
             .filter { !unreadIDs.contains($0.id) }
             .sorted { $0.createdAt < $1.createdAt }
         func text(_ message: ChatMessage) -> String {
             let sender: String
             switch message.author {
-            case .user: sender = guests[message.conversationID]??.name ?? "User"
+            case .user: sender = guests[message.conversationID]??.name ?? owner?.name ?? "User"
             case .agent(let id): sender = id == agentID ? "Assistant" : "Other agent"
             case .system: sender = "System"
             }

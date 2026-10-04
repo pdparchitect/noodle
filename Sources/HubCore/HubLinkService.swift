@@ -82,6 +82,8 @@ import os
     /// Each conversation's unread replies, as last pushed or as first seen.
     @ObservationIgnored private var pushedUnread: [UUID: Int] = [:]
     @ObservationIgnored private var pendingPushes: [UUID: Task<Void, Never>] = [:]
+    /// Live views open on each conversation, and whose they are, to close when someone loses it.
+    @ObservationIgnored private var surfaces: [UUID: [(user: UUID, stream: LinkStream)]] = [:]
 
     private struct Settings: Codable {
         var manualAddress: String
@@ -103,7 +105,9 @@ import os
         self.connections = connections
         self.computers = computers
         self.browsers = browsers
-        noodlets = bots.map { HubNoodlets(applets: $0.applets, now: now) }
+        noodlets = bots.map { bots in
+            HubNoodlets(applets: bots.applets, now: now, canOpen: { [weak bots] in bots?.canOpen($0, for: $1) ?? false })
+        }
         self.port = port
         routerMapper = router
         self.localEndpoints = localEndpoints
@@ -122,6 +126,7 @@ import os
             self?.push(event, to: user)
             self?.schedulePushes(for: event, of: user)
         }
+        bots?.onClosed = { [weak self] conversation, user in self?.close(conversation, for: user) }
         connections?.onSignInEnded = { [weak self] user in self?.push(.connectionsChanged, to: user) }
         updateGate()
         watchDevices()
@@ -264,6 +269,8 @@ import os
                 }
                 return .stream { stream in
                     Task { @MainActor in
+                        self.surfaces[conversationID, default: []].removeAll { $0.stream.isClosed }
+                        self.surfaces[conversationID, default: []].append((user.id, stream))
                         stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: UUID())))
                         do {
                             let (socket, controls) = try await open()
@@ -423,6 +430,24 @@ import os
             for device in away {
                 do { try await pushes.publish(topic: device.pushTopic!, conversation: conversation, unread: unread) }
                 catch { Self.pushLog.error("Could not notify a device: \(error.localizedDescription, privacy: .public)") }
+            }
+        }
+    }
+
+    /// Someone can no longer open a conversation: what they watch of it live closes, and their
+    /// devices away stop showing its unread replies.
+    private func close(_ conversation: UUID, for user: UUID) {
+        let open = surfaces[conversation] ?? []
+        open.filter { $0.user == user }.forEach { $0.stream.close() }
+        surfaces[conversation] = open.filter { $0.user != user && !$0.stream.isClosed }
+        pendingPushes.removeValue(forKey: conversation)?.cancel()
+        pushedUnread[conversation] = nil
+        guard let pushes else { return }
+        let devices = access.devices.filter { $0.user == user && $0.pushTopic != nil }
+        Task {
+            for device in devices {
+                do { try await pushes.withdraw(topic: device.pushTopic!, conversation: conversation) }
+                catch { Self.pushLog.error("Could not take back a notification: \(error.localizedDescription, privacy: .public)") }
             }
         }
     }
@@ -680,7 +705,7 @@ import os
             guard case (.noodlet(let noodlet), let bot) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user) else {
                 throw LinkError("That is not a noodlet.")
             }
-            return .noodlet(try await hubNoodlets().open(noodlet, of: bot, for: user.id))
+            return .noodlet(try await hubNoodlets().open(noodlet, of: bot, in: conversationID, for: user.id))
         case .noodletArchive(let grant, let offset):
             let (data, total) = try await hubNoodlets().archive(grant, from: offset, for: try user(key).id)
             return .chunk(data: data, total: total)

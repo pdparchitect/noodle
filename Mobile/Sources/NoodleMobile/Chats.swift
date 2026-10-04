@@ -589,6 +589,10 @@ enum HubThread: HubConversation {
     /// Conversations of bots and groups that are gone.
     private func forgetGone() {
         let kept = Set(threads.map(\.conversationID))
+        // A conversation gone from here, as when its bot is no longer shared, leaves no notification to tap.
+        for gone in conversations.keys where !kept.contains(gone) {
+            Task { await HubNotifications.clearDelivered(conversation: gone) }
+        }
         conversations = conversations.filter { kept.contains($0.key) }
         linkPreviews.keep(only: kept)
     }
@@ -981,6 +985,8 @@ struct AgentsView: View {
         if row.thread.bot?.owner == nil {
             Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
             Button { archive(row) } label: { Label(row.thread.group == nil ? "Archive Bot" : "Archive Group", systemImage: "archivebox") }
+        } else {
+            Button { editing = row } label: { Label("Change Background…", systemImage: "photo") }
         }
     }
 
@@ -1313,16 +1319,14 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                let title = HStack(spacing: 8) {
-                    ThreadAvatar(chats: chats, thread: thread, size: 28)
-                    Text(thread.name).font(.headline).foregroundStyle(.primary)
+                Button { editing = true } label: {
+                    HStack(spacing: 8) {
+                        ThreadAvatar(chats: chats, thread: thread, size: 28)
+                        Text(thread.name).font(.headline).foregroundStyle(.primary)
+                    }
                 }
-                if thread.bot?.owner == nil {
-                    Button { editing = true } label: { title }
-                        .accessibilityHint("Edit")
-                } else {
-                    title
-                }
+                // Someone a bot is shared with only sets their conversation's background.
+                .accessibilityHint(thread.bot?.owner == nil ? "Edit" : "Change Background")
             }
             // As the Mac's Shared button: the computers, browser tabs and noodlets shared here, newest first.
             let shared = LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))
@@ -2070,8 +2074,25 @@ struct ThreadEditor: View {
 
     var body: some View {
         switch thread {
+        case .bot(let bot) where bot.owner != nil: SharedBotBackground(chats: chats, thread: thread)
         case .bot(let bot): AgentEditor(chats: chats, agent: bot)
         case .group(let group): GroupEditor(chats: chats, group: group)
+        }
+    }
+}
+
+/// All someone a bot is shared with sets of it: their own conversation's background.
+private struct SharedBotBackground: View {
+    let chats: HubChats
+    let thread: HubThread
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            BackgroundEditor(chats: chats, thread: thread)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                }
         }
     }
 }

@@ -846,10 +846,16 @@ import XCTest
         let grace = try await person("Grace", f)
         let bea = try await person("Bea", f)
         _ = try await share(bot, with: [grace.user], f)
+        guard case .group(let group) = try await f.device.request(.createGroup(LinkGroupDraft(name: "House", botIDs: [bot.id]))) else {
+            return XCTFail("no group")
+        }
         let refused: [LinkRequest] = [
             .shareBot(id: bot.id, people: [grace.user.id, bea.user.id]), .shareBot(id: bot.id, people: []),
             .updateBot(id: bot.id, LinkBotDraft(name: "Mine", provider: "claude-code")), .deleteBot(id: bot.id),
-            .kick(botID: bot.id), .newSession(botID: bot.id), .archive(LinkArchiveChange(id: bot.id, archived: true)),
+            .kick(botID: bot.id), .confirmKick(botID: bot.id, confirmationID: UUID()), .newSession(botID: bot.id),
+            .archive(LinkArchiveChange(id: bot.id, archived: true)), .assignConnections(botID: bot.id, connectionIDs: []),
+            .createGroup(LinkGroupDraft(name: "Mine", botIDs: [bot.id])),
+            .updateGroup(id: group.id, LinkGroupDraft(name: "Mine", botIDs: [bot.id])), .deleteGroup(id: group.id),
         ]
         for request in refused {
             do {
@@ -887,12 +893,13 @@ import XCTest
         XCTAssertFalse(try f.hub.repository.loadConversations().contains { $0.id == graces.conversationID })
     }
 
-    /// People a bot is shared with hear when its owner renames, re-pictures or archives it.
+    /// People a bot is shared with hear when its owner renames, archives or brings it back.
     func testPeopleABotIsSharedWithHearOfItsChanges() async throws {
         let f = try await fixture()
         let bot = try await createBot(f)
         let grace = try await person("Grace", f)
         _ = try await share(bot, with: [grace.user], f)
+        guard let before = try await bots(of: grace.device).first else { return XCTFail("not shared") }
         for change in [LinkRequest.updateBot(id: bot.id, LinkBotDraft(name: "Jeeves", provider: "claude-code")),
                        .archive(LinkArchiveChange(id: bot.id, archived: true))] {
             let events = try await grace.device.subscribe()
@@ -903,11 +910,14 @@ import XCTest
         // Archived, it is its owner's alone until brought back, with the same conversation.
         let whileArchived = try await bots(of: grace.device)
         XCTAssertEqual(whileArchived, [])
+        let events = try await grace.device.subscribe()
+        _ = try await grace.device.request(.bots)
         _ = try await f.device.request(.archive(LinkArchiveChange(id: bot.id, archived: false)))
+        try await expect("that it is back", in: events) { if case .botsChanged = $0 { true } else { false } }
         guard let graces = try await bots(of: grace.device).first else { return XCTFail("not shared") }
         XCTAssertEqual(graces.draft.name, "Jeeves")
         XCTAssertNil(graces.archivedAt)
-        XCTAssertEqual(try f.hub.bots.bots(for: grace.user).first?.conversationID, graces.conversationID)
+        XCTAssertEqual(graces.conversationID, before.conversationID)
     }
 
     /// A bot's replies reach the devices of whoever it replied to.
@@ -923,6 +933,64 @@ import XCTest
         f.hub.bots.checkForChanges()
         let conversation = graces.conversationID
         try await expect("the reply", in: events) { if case .conversationChanged(conversation, 1) = $0 { true } else { false } }
+    }
+
+    /// While its owner has it archived, a shared bot's conversations are closed to everyone else,
+    /// even asked for by their IDs, and open again once it is back.
+    func testAnArchivedSharedBotIsClosedToEveryoneButItsOwner() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        guard let graces = try await bots(of: grace.device).first else { return XCTFail("not shared") }
+        _ = try await grace.device.request(.send(LinkOutgoingMessage(conversationID: graces.conversationID, id: UUID(), body: "Hello")))
+        _ = try await f.device.request(.archive(LinkArchiveChange(id: bot.id, archived: true)))
+        for request in [LinkRequest.messages(conversationID: graces.conversationID, after: 0),
+                        .messagePage(LinkMessagePage(conversationID: graces.conversationID, before: nil, limit: 50))] {
+            do {
+                _ = try await grace.device.request(request)
+                XCTFail("Read an archived bot's conversation: \(request)")
+            } catch {}
+        }
+        guard case .messages = try await f.device.request(.messages(conversationID: bot.conversationID, after: 0)) else {
+            return XCTFail("The owner could not read their own")
+        }
+        _ = try await f.device.request(.archive(LinkArchiveChange(id: bot.id, archived: false)))
+        guard case .messages(let page) = try await grace.device.request(.messages(conversationID: graces.conversationID, after: 0)) else {
+            return XCTFail("not open again")
+        }
+        XCTAssertEqual(page.messages.map(\.body), ["Hello"])
+    }
+
+    /// A notification of unread replies goes once the person can no longer open the conversation.
+    func testUnsharingOrArchivingTakesBackNotifications() async throws {
+        let pushes = RecordedPushes()
+        let f = try await fixture(pushes: pushes)
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await grace.device.request(.pushTopic(LinkPushTopic(topic: "grace-topic")))
+        for cutOff in ["archive", "unshare"] {
+            _ = try await share(bot, with: [grace.user], f)
+            guard let graces = try await bots(of: grace.device).first else { return XCTFail("not shared") }
+            f.hub.bots.checkForChanges()
+            _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: graces.conversationID, body: "Tea?")
+            f.hub.bots.checkForChanges()
+            for _ in 0..<50 where await pushes.unread("grace-topic", graces.conversationID) != 1 { try await Task.sleep(for: .milliseconds(100)) }
+            let shown = await pushes.unread("grace-topic", graces.conversationID)
+            XCTAssertEqual(shown, 1)
+            if cutOff == "archive" {
+                _ = try await f.device.request(.archive(LinkArchiveChange(id: bot.id, archived: true)))
+            } else {
+                _ = try await share(bot, with: [], f)
+            }
+            for _ in 0..<50 where await pushes.unread("grace-topic", graces.conversationID) != nil { try await Task.sleep(for: .milliseconds(100)) }
+            let afterwards = await pushes.unread("grace-topic", graces.conversationID)
+            XCTAssertNil(afterwards, "The notification stayed after \(cutOff)")
+            if cutOff == "archive" {
+                _ = try await f.device.request(.archive(LinkArchiveChange(id: bot.id, archived: false)))
+                _ = try await share(bot, with: [], f)
+            }
+        }
     }
 
     /// Someone a bot is shared with is refused once its owner's plan no longer lends its harness.
@@ -954,6 +1022,14 @@ import XCTest
         let context = try XCTUnwrap(MessageDeliveryContext.load(for: bot.id, repository: f.hub.repository))
         XCTAssertEqual(context.unreadMessages, ["Second"])
         XCTAssertEqual(context.recentMessages, ["Grace: First"])
+
+        // Its owner by name too, as Messenger names them.
+        _ = try f.hub.repository.latestMessages(for: bot.id)
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Mine")))
+        _ = try f.hub.repository.latestMessages(for: bot.id)
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Again")))
+        let owners = try XCTUnwrap(MessageDeliveryContext.load(for: bot.id, repository: f.hub.repository))
+        XCTAssertEqual(owners.recentMessages, ["Ada: Mine"])
     }
 
     /// Deleting a shared bot, or removing someone from the Hub, leaves no conversation behind.
@@ -962,7 +1038,10 @@ import XCTest
         let first = try await createBot(f)
         let grace = try await person("Grace", f)
         _ = try await share(first, with: [grace.user], f)
+        let events = try await grace.device.subscribe()
+        _ = try await grace.device.request(.bots)
         _ = try await f.device.request(.deleteBot(id: first.id))
+        try await expect("that the bot is gone", in: events) { if case .botsChanged = $0 { true } else { false } }
         XCTAssertTrue(try f.hub.repository.loadConversations().isEmpty)
         let gracesBots = try await bots(of: grace.device)
         XCTAssertEqual(gracesBots, [])

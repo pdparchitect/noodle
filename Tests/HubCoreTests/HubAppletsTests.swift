@@ -78,7 +78,9 @@ import XCTest
         let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil,
                       computer: { try HubComputersTests.FakeComputer().call($0) },
                       browser: { try HubBrowsersTests.FakeBrowser().call($0) }, applet: { applet.call($0) },
-                      surfaces: SurfaceOpeners(applet: { try surfaces.open($0.sessionID!.uuidString) }))
+                      surfaces: SurfaceOpeners(computer: { _ in try surfaces.open("computer") },
+                                               browser: { _ in try surfaces.open("browser") },
+                                               applet: { try surfaces.open($0.sessionID!.uuidString) }))
         try hub.repository.prepare()
         let family = try hub.access.addPlan(named: "Family")
         hub.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: family)
@@ -165,13 +167,67 @@ import XCTest
         try f.hub.browsers.assign([browser.id], to: bot.id, for: f.ada)
         for url in [ComputerLink.url(computer: computer.id, terminal: UUID(), view: "terminal"),
                     BrowserLink.url(browser: browser.id, tab: UUID())] {
-            let link = try f.hub.repository.importLinkAttachment(url, into: graces.conversationID, card: LinkCard(title: "Live"))
-            _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: graces.conversationID, body: "Look",
-                                                       attachmentIDs: [link.id])
-            let opened = try? await device.firstSurfacePackets(.openSurface(conversationID: graces.conversationID, attachmentID: link.id))
-            opened?.0.cancel()
-            XCTAssertNil(opened, "\(url)")
+            // The same link opens for the owner, so it is Grace who is refused, not the link.
+            for (conversation, opener, opens) in [(bot.conversationID, f.device, true), (graces.conversationID, device, false)] {
+                let link = try f.hub.repository.importLinkAttachment(url, into: conversation, card: LinkCard(title: "Live"))
+                _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: conversation, body: "Look",
+                                                           attachmentIDs: [link.id])
+                let opened = try? await opener.firstSurfacePackets(.openSurface(conversationID: conversation, attachmentID: link.id))
+                opened?.0.cancel()
+                XCTAssertEqual(opened != nil, opens, "\(url)")
+            }
         }
+    }
+
+    /// Unsharing or archiving a bot cuts someone off at once: the noodlets of it they opened stop
+    /// answering, and one they watch live closes.
+    func testUnsharingOrArchivingClosesWhatSomeoneOpened() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let grace = try f.hub.access.addUser(named: "Grace")
+        let device = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-grace-\(UUID())"),
+                                deviceName: "Grace")
+        addTeardownBlock { try? FileManager.default.removeItem(at: device.directory) }
+        await device.join(f.link.invite(grace).url().absoluteString)
+
+        for cutOff in ["archive", "unshare"] {
+            _ = try f.hub.bots.share(bot.id, with: [grace.id], for: f.ada)
+            let graces = try XCTUnwrap(try f.hub.bots.bots(for: grace).first)
+            let link = try post(made(in: folder(of: bot, f), f), in: graces, byBot: true, hub: f.hub)
+            guard case .noodlet(let opened) = try await device.request(.noodlet(conversationID: graces.conversationID, attachmentID: link)) else {
+                return XCTFail("not opened")
+            }
+            _ = try await device.request(.noodletArchive(grant: opened.grant, offset: 0))
+            let (channel, _) = try await device.firstSurfacePackets(.openSurface(conversationID: graces.conversationID, attachmentID: link))
+
+            if cutOff == "archive" {
+                try f.hub.bots.setArchived(true, id: bot.id, for: f.ada)
+            } else {
+                _ = try f.hub.bots.share(bot.id, with: [], for: f.ada)
+            }
+            let closed = await ends(channel)
+            XCTAssertTrue(closed, "The live view stayed open after \(cutOff)")
+            for request in [LinkRequest.noodletArchive(grant: opened.grant, offset: 0),
+                            .noodletCall(LinkNoodletCall(grant: opened.grant, id: UUID(), offset: 0, total: 2, data: Data([1, 2])))] {
+                do {
+                    _ = try await device.request(request)
+                    XCTFail("A noodlet still answered after \(cutOff)")
+                } catch {}
+            }
+            if cutOff == "archive" { try f.hub.bots.setArchived(false, id: bot.id, for: f.ada) }
+        }
+    }
+
+    /// Whether a live view ends within ten seconds.
+    private func ends(_ channel: LinkChannel) async -> Bool {
+        let start = Date()
+        let timeout = Task {
+            try await Task.sleep(for: .seconds(10))
+            channel.cancel()
+        }
+        defer { timeout.cancel() }
+        do { for try await _ in channel.frames {} } catch {}
+        return Date().timeIntervalSince(start) < 9.5
     }
 
     /// A game's controls come down before its video, so the phone shows them from the start.

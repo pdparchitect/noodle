@@ -15,6 +15,9 @@ import NoodleRuntime
     public var onRead: ((_ conversationID: UUID, _ upTo: Date) -> Void)?
     /// Runs when a conversation's background changed, for whatever else shows it: on the owner's own Mac, Noodle.
     public var onBackgroundChanged: ((_ conversationID: UUID) -> Void)?
+    /// Runs when someone a bot is shared with can no longer open their conversation with it: no
+    /// longer shared, archived, deleted, or they left the Hub. What they still have open of it closes.
+    public var onClosed: ((_ conversationID: UUID, _ user: UUID) -> Void)?
 
     private let repository: WorkspaceRepository
     private let runtime: AgentRuntimeCoordinator
@@ -239,6 +242,7 @@ import NoodleRuntime
             try repository.deleteConversation(id: conversation.id)
             if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
             changed.insert(conversation.guest!.id)
+            onClosed?(conversation.id, conversation.guest!.id)
             access.note("Stopped sharing \(agent.displayName) with \(conversation.guest!.name)", about: [conversation.guest!.id])
         }
         changed.forEach { onChange?($0, .botsChanged) }
@@ -389,6 +393,9 @@ import NoodleRuntime
             runtime.archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
             onChange?(user.id, .botsChanged)
             tellGuests(of: id)
+            if archived {
+                for conversation in try guestConversations(of: id) { onClosed?(conversation.id, conversation.guest!.id) }
+            }
         } else {
             let before = try ownedGroup(id, by: user)
             let after = try repository.setConversationArchived(archived, conversationID: id)
@@ -445,6 +452,7 @@ import NoodleRuntime
         }
         for conversation in (try? repository.loadConversations()) ?? [] where conversation.guest?.id == user.id {
             try? repository.deleteConversation(id: conversation.id)
+            onClosed?(conversation.id, user.id)
             if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
             if let owner = conversation.participantIDs.first.flatMap(access.owner(ofBot:)) { onChange?(owner, .botsChanged) }
         }
@@ -737,7 +745,13 @@ import NoodleRuntime
     private func remove(_ agent: AgentRecord) throws -> Bool {
         let joined = (try? repository.loadConversations().filter { $0.participantIDs.contains(agent.id) }) ?? []
         let conversations = joined.filter { $0.kind == .direct || $0.participantIDs == [agent.id] }.map(\.id)
-        defer { joined.compactMap(\.guest?.id).forEach { onChange?($0, .botsChanged) } }
+        defer {
+            for conversation in joined {
+                guard let guest = conversation.guest?.id else { continue }
+                onClosed?(conversation.id, guest)
+                onChange?(guest, .botsChanged)
+            }
+        }
         if running { runtime.stop(agentID: agent.id, revokeAccess: false) }
         try repository.deleteAgent(agent)
         // Nobody would see a group without bots again.
@@ -860,7 +874,16 @@ import NoodleRuntime
               person(of: conversation, among: agents) == user.id else {
             throw LinkError("There is no such conversation.")
         }
-        return (conversation, conversation.participantIDs.compactMap { id in agents.first { $0.id == id } })
+        let bots = conversation.participantIDs.compactMap { id in agents.first { $0.id == id } }
+        // An archived bot is its owner's alone until they bring it back.
+        if conversation.guest != nil, bots.contains(where: { $0.archivedAt != nil }) { throw LinkError("There is no such conversation.") }
+        return (conversation, bots)
+    }
+
+    /// Whether the user can open a conversation now, for what they opened of it earlier.
+    public func canOpen(_ conversationID: UUID, for user: UUID) -> Bool {
+        guard let user = access.users.first(where: { $0.id == user }) else { return false }
+        return (try? ownedConversation(conversationID, by: user)) != nil
     }
 
     private func ownedGroup(_ id: UUID, by user: HubUser) throws -> BotConversation {

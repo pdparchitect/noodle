@@ -13,6 +13,8 @@ import NoodleRuntime
         let noodlet: UUID
         /// The bot that shared it, as Applet knows it.
         let bot: String
+        /// The conversation it was shared in, which the user must still be able to open.
+        let conversation: UUID
         let archive: UUID
         let byteCount: Int
         var used: Date
@@ -22,16 +24,19 @@ import NoodleRuntime
     static let lifetime: TimeInterval = 12 * 3600
     private let applets: AppletController
     private let now: () -> Date
+    /// Whether a user can still open a conversation.
+    private let canOpen: (_ conversation: UUID, _ user: UUID) -> Bool
     private var grants: [UUID: Grant] = [:]
     /// Calls arriving in pieces, by their id, until the last piece.
     private var pending: [UUID: (grant: UUID, data: Data, started: Date)] = [:]
 
-    init(applets: AppletController, now: @escaping () -> Date) {
+    init(applets: AppletController, now: @escaping () -> Date, canOpen: @escaping (_ conversation: UUID, _ user: UUID) -> Bool) {
         self.applets = applets
         self.now = now
+        self.canOpen = canOpen
     }
 
-    func open(_ noodlet: UUID, of bot: UUID, for user: UUID) async throws -> LinkNoodlet {
+    func open(_ noodlet: UUID, of bot: UUID, in conversation: UUID, for user: UUID) async throws -> LinkNoodlet {
         var request = AppletRequest(.archive)
         request.noodletID = noodlet
         request.owner = bot.uuidString.lowercased()
@@ -42,8 +47,8 @@ import NoodleRuntime
         }
         grants = grants.filter { now().timeIntervalSince($0.value.used) < Self.lifetime }
         let grant = UUID()
-        grants[grant] = Grant(user: user, noodlet: noodlet, bot: bot.uuidString.lowercased(), archive: archive,
-                              byteCount: byteCount, used: now())
+        grants[grant] = Grant(user: user, noodlet: noodlet, bot: bot.uuidString.lowercased(), conversation: conversation,
+                              archive: archive, byteCount: byteCount, used: now())
         return LinkNoodlet(grant: grant, noodletID: noodlet, revision: revision, byteCount: byteCount,
                            manifest: try JSONEncoder().encode(manifest))
     }
@@ -78,7 +83,8 @@ import NoodleRuntime
     }
 
     private func granted(_ id: UUID, to user: UUID) throws -> Grant {
-        guard var grant = grants[id], grant.user == user, now().timeIntervalSince(grant.used) < Self.lifetime else {
+        guard var grant = grants[id], grant.user == user, now().timeIntervalSince(grant.used) < Self.lifetime,
+              canOpen(grant.conversation, user) else {
             throw LinkError(LinkProtocol.noodletForgotten)
         }
         grant.used = now()
