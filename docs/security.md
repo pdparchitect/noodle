@@ -209,7 +209,7 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   of their own as that person, then use that person's bots, chats, connections
   and computers. They can also put anyone on any plan. Make only people you
   trust admins, and remove a lost admin's device in the Hub's **Users** right
-  away. The Hub's **Activity** window shows who did what.
+  away. The Hub's **Logs** window shows who did what.
 - **Check the Hub key before joining.** Any web page or app can open an
   invitation link, so Noodle asks before joining from one. The Hub key it shows
   is the Hub's own and cannot be faked; the Hub's name can. Compare the key with

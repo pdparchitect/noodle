@@ -46,7 +46,7 @@ struct NoodleHubApp: App {
         }
         .defaultSize(width: 860, height: 680)
         .windowResizability(.contentMinSize)
-        Window("Activity", id: HubActivityView.windowID) {
+        Window("Logs", id: HubActivityView.windowID) {
             if let log = delegate.settings.hub.access.log {
                 HubActivityView(log: log, access: delegate.settings.hub.access)
             }
@@ -230,7 +230,7 @@ struct HubMenu: View {
             openWindow(id: UsageView.windowID)
         }
         .keyboardShortcut("u", modifiers: [.command, .shift])
-        Button("Activity") {
+        Button("Logs") {
             NSApp.unhide(nil)
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: HubActivityView.windowID)

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Activity in the menu bar menu is now called Logs, so it is not mistaken for a bot's activity, and its person menu has more room.
+
 ## [0.17.0] - 2026-10-04
 
 ### Added

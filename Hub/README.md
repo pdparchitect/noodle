@@ -2,7 +2,7 @@
 
 Noodle Hub runs bots on an always-on Mac so the people you pair with it can use them.
 It lives in the menu bar and keeps its bots and conversations apart from Noodle's
-own. Its menu bar item pairs a new device, opens Usage, Activity and Settings, and quits the Hub.
+own. Its menu bar item pairs a new device, opens Usage, Logs and Settings, and quits the Hub.
 Quitting asks first, since devices cannot reach the Hub until it opens again. Usage shows
 token use and cost for the Hub's bots. The first launch opens on a welcome that ends in
 pairing your first device.
@@ -23,7 +23,7 @@ the Hub in Noodle's Settings > Hub: add, rename and remove people, change their 
 whether they can pair devices, and invite or remove their devices. Admins cannot change
 themselves or other admins; only the Hub's Settings can. An admin can still pair a device
 of their own as anyone who is not an admin, so make only people you trust admins.
-Activity in the menu bar menu lists, for 90 days, who added, changed or removed users,
+Logs in the menu bar menu lists, for 90 days, who added, changed or removed users,
 made invitations and paired or removed devices, here or from a device, and every attempt
 the Hub refused; choose a person to see only what concerns them. Network shows how many people
 are connected and the addresses invitations carry. To reach the Hub away from home,

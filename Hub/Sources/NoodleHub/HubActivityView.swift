@@ -13,7 +13,7 @@ struct HubActivityView: View {
         let entries = Array(log.entries(about: person).reversed())
         Group {
             if entries.isEmpty {
-                ContentUnavailableView("No Activity", systemImage: "list.bullet.rectangle")
+                ContentUnavailableView("No Logs", systemImage: "list.bullet.rectangle")
             } else {
                 Table(entries) {
                     TableColumn("Date") { entry in
@@ -44,6 +44,8 @@ struct HubActivityView: View {
                     Text("Everyone").tag(UUID?.none)
                     ForEach(access.users) { Text($0.name).tag(Optional($0.id)) }
                 }
+                .pickerStyle(.menu)
+                .padding(.horizontal, 6)
                 .help("Show what concerns one person")
             }
         }
