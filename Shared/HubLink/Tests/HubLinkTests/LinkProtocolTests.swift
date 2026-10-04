@@ -18,6 +18,15 @@ final class LinkProtocolTests: XCTestCase {
 
     /// A background's name comes from the Hub, so a device uses only the Hub's own kind of name for a
     /// file: never a path, nor anything that leaves the folder it is kept in.
+    /// The line under Sharing says who can talk to the bot, as people are picked.
+    func testSharingSaysWhoCanTalkToTheBot() {
+        XCTAssertEqual(LinkPerson.sharingSummary(bot: "Alfred", people: []), "Only you can talk to Alfred.")
+        XCTAssertEqual(LinkPerson.sharingSummary(bot: "Alfred", people: ["Lilia"]), "Lilia can talk to Alfred too.")
+        XCTAssertEqual(LinkPerson.sharingSummary(bot: "Alfred", people: ["Lilia", "Ivana"]), "Lilia and Ivana can talk to Alfred too.")
+        // A bot still being named reads naturally.
+        XCTAssertEqual(LinkPerson.sharingSummary(bot: "  ", people: []), "Only you can talk to this bot.")
+    }
+
     func testBackgroundNamesNeverLeaveTheirFolder() {
         let id = UUID().uuidString.lowercased()
         XCTAssertEqual(LinkBackground(media: "\(id).mov", mediaKind: "video").mediaFilename, "\(id).mov")

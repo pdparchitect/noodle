@@ -537,6 +537,14 @@ public struct LinkPerson: Codable, Equatable, Identifiable, Sendable {
         self.name = name
         self.avatar = avatar
     }
+
+    /// Who can talk to a bot shared with `people`, named, as Sharing says it.
+    public static func sharingSummary(bot: String, people: [String]) -> String {
+        let trimmed = bot.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bot = trimmed.isEmpty ? "this bot" : trimmed
+        guard !people.isEmpty else { return "Only you can talk to \(bot)." }
+        return "\(people.formatted(.list(type: .and))) can talk to \(bot) too."
+    }
 }
 
 /// How a person shows on the Hub: a photo, or a symbol or their initials on a colour.

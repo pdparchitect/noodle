@@ -1955,7 +1955,10 @@ struct AgentEditor: View {
                     // Not on someone's own Mac, which is only theirs.
                     if chats.pairing.status?.canShareBots == true {
                         Section {
-                            NavigationLink("Sharing") { BotSharingScreen(chats: chats, agent: agent) }
+                            NavigationLink { BotSharingScreen(chats: chats, agent: agent) } label: {
+                                let count = (chats.agent(agent.id)?.sharedWith ?? agent.sharedWith).count
+                                LabeledContent("Sharing", value: count == 0 ? "Only You" : count == 1 ? "1 Person" : "\(count) People")
+                            }
                         }
                     }
                     Section {

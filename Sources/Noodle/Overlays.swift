@@ -520,14 +520,6 @@ struct BotSharingPicker: View {
     @State private var people: [LinkPerson]?
     @State private var failure: String?
 
-    /// Who can talk to the bot, as the picked people read.
-    static func summary(bot: String, people: [String]) -> String {
-        let trimmed = bot.trimmingCharacters(in: .whitespacesAndNewlines)
-        let bot = trimmed.isEmpty ? "this bot" : trimmed
-        guard !people.isEmpty else { return "Only you can talk to \(bot)." }
-        return "\(people.formatted(.list(type: .and))) can talk to \(bot) too."
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Sharing")
@@ -561,7 +553,7 @@ struct BotSharingPeople: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 10) {
                 ForEach(people) { person($0) }
             }
-            Text(BotSharingPicker.summary(bot: bot, people: people.filter { selectedIDs.contains($0.id) }.map(\.name)))
+            Text(LinkPerson.sharingSummary(bot: bot, people: people.filter { selectedIDs.contains($0.id) }.map(\.name)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .contentTransition(.opacity)

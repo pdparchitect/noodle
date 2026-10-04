@@ -295,7 +295,8 @@ struct HubToolsScreen: View {
     }
 }
 
-/// The other people on the Hub, ticked when one of this user's bots is shared with them.
+/// The other people on the Hub, each tapped to share one of this user's bots with them or stop. It
+/// applies at once, on the Hub.
 struct BotSharingScreen: View {
     let chats: HubChats
     let agent: LinkBot
@@ -310,24 +311,15 @@ struct BotSharingScreen: View {
             if let people, people.isEmpty {
                 Text("Nobody else is on this Hub").foregroundStyle(.secondary)
             } else if let people {
-                ForEach(people) { person in
-                    Button {
-                        busy = person.id
-                        problem = nil
-                        Task {
-                            defer { busy = nil }
-                            do { try await chats.toggleSharing(agent, with: person.id) } catch { problem = error.localizedDescription }
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            PersonAvatar(name: person.name, avatar: person.avatar, id: person.id, size: 32)
-                            Text(person.name).foregroundStyle(.primary)
-                            Spacer()
-                            if busy == person.id { ProgressView() }
-                            else if sharedWith.contains(person.id) { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                        }
+                Section {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 14) {
+                        ForEach(people) { person($0) }
                     }
-                    .disabled(busy != nil)
+                    .padding(.vertical, 8)
+                } footer: {
+                    Text(LinkPerson.sharingSummary(bot: chats.agent(agent.id)?.name ?? agent.name,
+                                                   people: people.filter { sharedWith.contains($0.id) }.map(\.name)))
+                        .contentTransition(.opacity)
                 }
             } else if problem == nil {
                 ProgressView().frame(maxWidth: .infinity)
@@ -337,9 +329,53 @@ struct BotSharingScreen: View {
             }
         }
         .navigationTitle("Sharing")
+        .sensoryFeedback(.selection, trigger: sharedWith)
         .task {
             do { people = try await chats.people() } catch { problem = error.localizedDescription }
         }
+    }
+
+    private func person(_ person: LinkPerson) -> some View {
+        let selected = sharedWith.contains(person.id)
+        return Button {
+            busy = person.id
+            problem = nil
+            Task {
+                defer { busy = nil }
+                do { try await chats.toggleSharing(agent, with: person.id) } catch { problem = error.localizedDescription }
+            }
+        } label: {
+            VStack(spacing: 6) {
+                PersonAvatar(name: person.name, avatar: person.avatar, id: person.id, size: 56)
+                    .padding(3)
+                    .overlay { Circle().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 2.5) }
+                    .overlay(alignment: .bottomTrailing) {
+                        if busy == person.id {
+                            ProgressView().controlSize(.small)
+                                .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                        } else if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
+                                .font(.system(size: 20))
+                                .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .opacity(selected ? 1 : 0.55)
+                Text(person.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(selected ? .primary : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .animation(.snappy(duration: 0.2), value: selected)
+        }
+        .buttonStyle(.plain)
+        .disabled(busy != nil)
+        .accessibilityLabel(person.name)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
 
