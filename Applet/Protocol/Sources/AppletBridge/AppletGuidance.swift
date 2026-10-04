@@ -75,7 +75,7 @@ public enum AppletGuidance {
         case .close: "Stop the session and release its instance lock. Durable data and logs remain."
         case .terminate: "Stop a running or blocked noodlet, including one opened in the foreground."
         case .restart: "Stop the old session and reload the package at the same location; returns a new sessionID."
-        case .present: "Capture the running noodlet for its preview and attach its noodlet:// URL to --conversation UUID. Shares the live package by reference; inspect content before sharing."
+        case .present: "Capture the running noodlet as its preview and attach its noodlet:// URL to --conversation UUID. Nothing else sets the preview: present once the noodlet shows something worth seeing, past any loading screen. Shares the live package by reference; inspect content before sharing."
         // Never a bot's command: Noodle and Noodle Hub show noodlets to people and read captures with these.
         case .show, .artifact, .surfaceStream, .archive, .store: ""
         }

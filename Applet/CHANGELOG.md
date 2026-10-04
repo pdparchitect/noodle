@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- A noodlet's preview no longer shows its loading screen: Applet waits up to five seconds for the noodlet to draw.
+- A noodlet's preview is what a bot last presented. Opening a noodlet or taking a screenshot no longer replaces it, so it never shows a loading screen; bots are told to present once the noodlet shows something worth seeing.
 
 ## [0.25.0] - 2026-10-04
 
