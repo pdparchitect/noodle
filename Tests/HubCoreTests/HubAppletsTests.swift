@@ -1,4 +1,6 @@
 import AppletBridge
+import BrowserBridge
+import ComputerBridge
 import Foundation
 import HubCore
 import HubLink
@@ -137,6 +139,39 @@ import XCTest
         await waitUntil { !f.surfaces.inputs.isEmpty }
         XCTAssertEqual(f.surfaces.inputs.map(\.view), [f.applet.session.uuidString])
         XCTAssertEqual(f.surfaces.inputs.map(\.input), [.text("go")])
+    }
+
+    /// Someone a bot is shared with opens the noodlets it shares with them, but never the owner's
+    /// computers or browsers, even through a link the bot posted in their conversation.
+    func testSomeoneABotIsSharedWithOpensItsNoodletsButNotItsComputersOrBrowsers() async throws {
+        let f = try await fixture()
+        let bot = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let grace = try f.hub.access.addUser(named: "Grace")
+        _ = try f.hub.bots.share(bot.id, with: [grace.id], for: f.ada)
+        let graces = try XCTUnwrap(try f.hub.bots.bots(for: grace).first)
+        let device = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-grace-\(UUID())"),
+                                deviceName: "Grace")
+        addTeardownBlock { try? FileManager.default.removeItem(at: device.directory) }
+        await device.join(f.link.invite(grace).url().absoluteString)
+
+        let noodlet = try post(made(in: folder(of: bot, f), f), in: graces, byBot: true, hub: f.hub)
+        let (channel, packets) = try await device.firstSurfacePackets(.openSurface(conversationID: graces.conversationID, attachmentID: noodlet))
+        channel.cancel()
+        XCTAssertEqual(packets.first?.width, 640)
+
+        let computer = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
+        try f.hub.computers.assign([computer.id], to: bot.id, for: f.ada)
+        let browser = try await f.hub.browsers.create(BrowserDraft(name: "Work"), for: f.ada)
+        try f.hub.browsers.assign([browser.id], to: bot.id, for: f.ada)
+        for url in [ComputerLink.url(computer: computer.id, terminal: UUID(), view: "terminal"),
+                    BrowserLink.url(browser: browser.id, tab: UUID())] {
+            let link = try f.hub.repository.importLinkAttachment(url, into: graces.conversationID, card: LinkCard(title: "Live"))
+            _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: graces.conversationID, body: "Look",
+                                                       attachmentIDs: [link.id])
+            let opened = try? await device.firstSurfacePackets(.openSurface(conversationID: graces.conversationID, attachmentID: link.id))
+            opened?.0.cancel()
+            XCTAssertNil(opened, "\(url)")
+        }
     }
 
     /// A game's controls come down before its video, so the phone shows them from the start.

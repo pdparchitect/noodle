@@ -15,6 +15,7 @@ import XCTest
         let device: HubPairing
         let local: WorkspaceRepository
         let folder: URL
+        let link: HubLinkService
         @MainActor func mirror() -> HubMirror { HubMirror(pairing: device, repository: local, directory: folder) }
     }
 
@@ -40,7 +41,7 @@ import XCTest
         XCTAssertNil(device.error)
         let local = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         try local.prepare()
-        return Fixture(hub: hub, ada: ada, device: device, local: local, folder: folder)
+        return Fixture(hub: hub, ada: ada, device: device, local: local, folder: folder, link: link)
     }
 
     private func conversation(of agent: UUID, in repository: WorkspaceRepository) throws -> BotConversation {
@@ -55,6 +56,40 @@ import XCTest
         XCTAssertEqual(mirror.localAgentIDs, [agent.id])
         XCTAssertEqual(try f.hub.repository.loadAgents().map(\.displayName), ["Alfred"])
         XCTAssertEqual(try f.local.loadAgentBackstory(agent), "A butler.")
+    }
+
+    /// Sharing a bot from this Mac, and a bot someone shared with this Mac's user, which they can
+    /// only talk with: it shows whose it is, and the mirror keeps nothing of how it is made.
+    func testBotsAreSharedFromHereAndSharedBotsShowWhoseTheyAre() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code", backstory: "A butler."))
+        let grace = try f.hub.access.addUser(named: "Grace")
+        let people = try await mirror.people()
+        XCTAssertEqual(people, [LinkPerson(id: grace.id, name: "Grace")])
+        try await mirror.share(localAgentID: agent.id, with: [grace.id])
+        XCTAssertEqual(mirror.sharedWith(agent: agent.id), [grace.id])
+        XCTAssertNil(mirror.owner(ofAgent: agent.id))
+
+        let root = f.folder.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let graceFolder = root.appendingPathComponent("Grace/Hubs/one")
+        let device = HubPairing(directory: graceFolder, deviceName: "Grace")
+        await device.join(f.link.invite(grace).url().absoluteString)
+        let local = WorkspaceRepository(rootURL: root.appendingPathComponent("Grace"))
+        try local.prepare()
+        let graces = HubMirror(pairing: device, repository: local, directory: graceFolder)
+        await graces.sync()
+        let shared = try XCTUnwrap(try local.loadAgents().first)
+        XCTAssertEqual(shared.displayName, "Alfred")
+        XCTAssertEqual(graces.owner(ofAgent: shared.id), "Ada")
+        XCTAssertEqual(try local.loadAgentBackstory(shared), "")
+        XCTAssertNil(graces.harness(ofAgent: shared.id))
+
+        let conversation = try conversation(of: shared.id, in: local)
+        let sent = try local.sendUserMessage(conversationID: conversation.id, body: "Hello")
+        await graces.pushPending()
+        let remote = try XCTUnwrap(f.hub.repository.loadConversations().first { $0.guest?.id == grace.id })
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: remote.id).map(\.id), [sent.id])
     }
 
     func testMessagesTravelBothWaysWithTheirIDs() async throws {

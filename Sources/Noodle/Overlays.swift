@@ -4,6 +4,7 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import NoodleCore
+import HubLink
 import NoodleHubClient
 import NoodleRuntimeSettings
 
@@ -284,6 +285,7 @@ struct EditBotSheet: View {
     @State private var builtInTools: Set<EventKitAssignments.Kind> = []
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
+    @State private var sharedWith: Set<UUID> = []
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @State private var backgroundDraft: BackgroundSelection?
@@ -359,6 +361,9 @@ struct EditBotSheet: View {
                     if let conversation = directConversation {
                         ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
                     }
+                    if let sharingHub {
+                        BotSharingSettingsRow(mirror: sharingHub, selectedIDs: $sharedWith)
+                    }
                     Divider()
                     DestructiveActionButton(title: "Delete Bot") {
                         confirmingDeletion = true
@@ -419,6 +424,7 @@ struct EditBotSheet: View {
                 mcpConnectionIDs = mirror.connectionIDs(forAgent: agent.id)
                 computerIDs = mirror.computerIDs(forAgent: agent.id)
                 browserIDs = mirror.browserIDs(forAgent: agent.id)
+                sharedWith = Set(mirror.sharedWith(agent: agent.id))
             }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
@@ -457,6 +463,13 @@ struct EditBotSheet: View {
         }
     }
 
+    /// The Noodle Hub this Mac's user keeps the bot on, when they can share it there: not on their own Mac.
+    private var sharingHub: HubMirror? {
+        store.hubMirror(forAgent: agent.id).flatMap {
+            $0.owner(ofAgent: agent.id) == nil && $0.pairing.status?.canShareBots == true ? $0 : nil
+        }
+    }
+
     private var canSave: Bool {
         ConversationName.error(for: name) == nil && (HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil ||
             store.runtime.availableInstallations.contains {
@@ -489,10 +502,92 @@ struct EditBotSheet: View {
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
                 computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
-                harnessProfile: .some(selectedProfileID)
+                harnessProfile: .some(selectedProfileID),
+                sharedWith: sharingHub == nil ? nil : sharedWith
             )
         }) {
             dismiss()
+        }
+    }
+}
+
+/// Whom a bot kept on a Noodle Hub is shared with, chosen in a sheet and saved with the bot.
+private struct BotSharingSettingsRow: View {
+    let mirror: HubMirror
+    @Binding var selectedIDs: Set<UUID>
+    @State private var editing = false
+
+    var body: some View {
+        Button { editing = true } label: {
+            HStack {
+                Label("Sharing", systemImage: "person.2")
+                Spacer()
+                Text(selectedIDs.isEmpty ? "Only You" : selectedIDs.count == 1 ? "1 Person" : "\(selectedIDs.count) People")
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+            }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $editing) {
+            BotSharingSheet(mirror: mirror, selectedIDs: $selectedIDs)
+                .noodleSheetSizing()
+        }
+    }
+}
+
+/// The other people on a Noodle Hub, to share a bot kept there with.
+private struct BotSharingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let mirror: HubMirror
+    @Binding var selectedIDs: Set<UUID>
+    @State private var selection: Set<UUID> = []
+    @State private var people: [LinkPerson]?
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text("Sharing").font(.headline)
+                Spacer()
+                Button("Apply") {
+                    selectedIDs = selection
+                    dismiss()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                .disabled(selection == selectedIDs)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                if let people, people.isEmpty {
+                    Text("Nobody else is on this Hub")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                } else if let people {
+                    ForEach(people) { person in
+                        Toggle(person.name, isOn: Binding(
+                            get: { selection.contains(person.id) },
+                            set: { if $0 { selection.insert(person.id) } else { selection.remove(person.id) } }))
+                    }
+                } else if let failure {
+                    Text(failure).foregroundStyle(.red)
+                } else {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+        }
+        .frame(width: 360)
+        .onAppear { selection = selectedIDs }
+        .task {
+            do { people = try await mirror.people() } catch { failure = error.localizedDescription }
         }
     }
 }

@@ -83,13 +83,13 @@ struct SidebarView: View {
             Button("Edit Group…") { store.groupBeingEdited = conversation }
             Button("Change Background…") { store.backgroundBeingEdited = conversation }
         case .direct:
-            if let agent = store.participants(for: conversation).first {
+            if let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
                 Button("Edit Bot…") {
                     store.agentBeingEdited = agent
                 }
             }
             Button("Change Background…") { store.backgroundBeingEdited = conversation }
-            if let agent = store.participants(for: conversation).first {
+            if let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
                 Divider()
                 Button("Show Activity") { store.showActivity(for: agent) }
                 Button("Show Workspace in Finder") {
@@ -113,7 +113,7 @@ struct SidebarView: View {
             Divider()
             Button("Archive Group") { store.setArchived(true, conversationID: conversation.id) }
         case .direct:
-            if let agent = store.participants(for: conversation).first {
+            if let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
                 Divider()
                 Button("Archive Bot") { store.setArchived(true, agentID: agent.id) }
             }

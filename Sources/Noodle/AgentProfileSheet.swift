@@ -94,21 +94,24 @@ struct AgentProfileSheet: View {
                     }
                     Divider().frame(height: 32).accessibilityHidden(true)
                 }
-                Button(action: edit) {
-                    actionLabel("Edit", systemImage: "pencil")
+                // A bot someone shared is only talked with.
+                if !isShared {
+                    Button(action: edit) {
+                        actionLabel("Edit", systemImage: "pencil")
+                    }
+                    .help("Edit Bot")
+                    .accessibilityLabel("Edit Bot")
+                    Divider().frame(height: 32).accessibilityHidden(true)
+                    Button {
+                        store.usage.agentFilter = agent.id
+                        openWindow(id: UsageView.windowID)
+                        dismiss()
+                    } label: {
+                        actionLabel("Usage", systemImage: "chart.bar")
+                    }
+                    .help("Show Usage")
+                    .accessibilityLabel("Show Usage")
                 }
-                .help("Edit Bot")
-                .accessibilityLabel("Edit Bot")
-                Divider().frame(height: 32).accessibilityHidden(true)
-                Button {
-                    store.usage.agentFilter = agent.id
-                    openWindow(id: UsageView.windowID)
-                    dismiss()
-                } label: {
-                    actionLabel("Usage", systemImage: "chart.bar")
-                }
-                .help("Show Usage")
-                .accessibilityLabel("Show Usage")
             }
             .buttonStyle(.plain)
         }
@@ -118,9 +121,11 @@ struct AgentProfileSheet: View {
         .background(ProfileOutsideClickDismissal { dismiss() })
     }
 
+    private var isShared: Bool { store.isShared(agent.id) }
+
     private var actionCount: Int {
         [reply != nil, directMessage != nil, !store.computers.assigned(to: agent).isEmpty,
-         !store.browsers.assigned(to: agent).isEmpty].filter { $0 }.count + 2
+         !store.browsers.assigned(to: agent).isEmpty].filter { $0 }.count + (isShared ? 0 : 2)
     }
 
     private func actionLabel(_ title: String, systemImage: String) -> some View {

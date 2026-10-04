@@ -512,6 +512,10 @@ import os
         case .deleteBot(let id):
             try hubBots().delete(id, for: try user(key))
             return .done
+        case .people:
+            return .people(try hubBots().people(for: try user(key)))
+        case .shareBot(let id, let people):
+            return try logged(request, from: key) { .bot(try hubBots().share(id, with: people, for: try user(key))) }
         case .groups:
             return .groups(try hubBots().groups(for: try user(key)))
         case .createGroup(let draft):
@@ -760,6 +764,8 @@ import os
             return ("Tried to invite a device for \(name(id))", [id])
         case .leave:
             return ("Tried to leave", [])
+        case .shareBot(let id, _):
+            return ("Tried to change whom \(bots?.name(ofBot: id) ?? "a bot") is shared with", [])
         default:
             return (actor.map { "Tried to invite a device for \($0.name)" } ?? "Tried to invite a device", [])
         }
@@ -822,7 +828,7 @@ import os
         .sorted { ($0.providerName, $0.profileName ?? "") < ($1.providerName, $1.profileName ?? "") }
         return LinkStatus(hubName: hubName, userName: user?.name ?? "", planName: plan?.name ?? "",
                           harnesses: harnesses, endpoints: endpoints, canPairDevices: user?.canPairDevices ?? false,
-                          isAdmin: !access.isPersonal && user?.isAdmin == true)
+                          isAdmin: !access.isPersonal && user?.isAdmin == true, canShareBots: !access.isPersonal && bots != nil)
     }
 
     /// Opens the port on the router, then renews it halfway through each lease, or every

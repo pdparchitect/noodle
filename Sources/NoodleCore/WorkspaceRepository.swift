@@ -763,6 +763,14 @@ public struct WorkspaceRepository: Sendable {
         return folders.isEmpty ? nil : folders
     }
 
+    /// Another conversation with a bot, for someone its owner shares it with on a Noodle Hub.
+    public func createGuestConversation(with agent: AgentRecord, guest: ConversationGuest, now: Date = Date()) throws -> BotConversation {
+        let conversation = BotConversation(displayName: agent.displayName, kind: .direct, participantIDs: [agent.id],
+                                           createdAt: now, updatedAt: now, guest: guest)
+        try createConversationFiles(conversation)
+        return conversation
+    }
+
     public func updateConversation(_ conversation: BotConversation) throws {
         let file = conversationDirectory(id: conversation.id).appendingPathComponent("conversation.json")
         try write(conversation, to: file)
@@ -1099,6 +1107,7 @@ public struct WorkspaceRepository: Sendable {
         }
         let agentsByID = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
         let me = MessengerIdentity(handle: .me, agentID: agentID, displayName: readingAgent.displayName)
+        let owner = try? loadAgentOwner(readingAgent)
         let conversations = try loadConversations().filter {
             $0.participantIDs.contains(agentID) && (conversationID == nil || $0.id == conversationID)
         }
@@ -1107,9 +1116,11 @@ public struct WorkspaceRepository: Sendable {
         var deliveries: [MessengerDelivery] = []
         var fetched: [(conversationID: UUID, count: Int)] = []
 
-        func identity(for author: MessageAuthor) -> MessengerIdentity {
+        func identity(for author: MessageAuthor, in conversation: BotConversation) -> MessengerIdentity {
             switch author {
-            case .user: return MessengerIdentity(handle: .user, displayName: "User")
+            case .user:
+                if let guest = conversation.guest { return MessengerIdentity(handle: .guest, displayName: guest.name) }
+                return MessengerIdentity(handle: .user, displayName: owner?.name ?? "User")
             case .agent(let id):
                 return id == agentID ? me : MessengerIdentity(
                     handle: .bot, agentID: id,
@@ -1139,7 +1150,7 @@ public struct WorkspaceRepository: Sendable {
                         me: me,
                         conversation: conversation,
                         participants: participants,
-                        sender: identity(for: message.author),
+                        sender: identity(for: message.author, in: conversation),
                         message: message,
                         attachments: message.attachments.compactMap { attachmentID in
                             guard let attachment = byID[attachmentID] else { return nil }
@@ -1150,7 +1161,7 @@ public struct WorkspaceRepository: Sendable {
                         }
                 )
                 delivery.reactions = (message.reactions ?? []).map {
-                    MessengerReaction(emoji: $0.emoji, sender: identity(for: $0.author))
+                    MessengerReaction(emoji: $0.emoji, sender: identity(for: $0.author, in: conversation))
                 }
                 return delivery
             }
@@ -1170,7 +1181,7 @@ public struct WorkspaceRepository: Sendable {
                     var item = delivery(for: message)
                     item.reactionChange = MessengerReactionChange(
                         id: change.id, emoji: change.emoji, removed: change.removed,
-                        sender: identity(for: change.author), createdAt: change.createdAt
+                        sender: identity(for: change.author, in: conversation), createdAt: change.createdAt
                     )
                     deliveries.append(item)
                 }

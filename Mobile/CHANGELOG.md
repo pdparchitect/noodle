@@ -4,6 +4,7 @@
 
 ### Added
 
+- Bots on a Hub can be shared with other people on it, from Sharing in the bot's editor. Each person talks with the bot in a conversation of their own. A bot someone shared with you is for talking with only: it cannot be edited or archived, and is not offered for groups.
 - Admins of a Hub can manage its users from the phone: Users in that Hub's details, under Hubs, lists everyone. Add someone with +, and tap a person to change their plan and whether they can pair devices, rename them, invite or remove their devices, or remove them. Admins are listed but changed only on the Hub.
 - Games can show a thumbstick on the screen instead of a d-pad: its knob follows your thumb, and it steers in eight directions like the d-pad.
 
@@ -16,6 +17,7 @@
 - Leave a Hub: it disappears from Hubs at once, and the phone disappears from Users on the Hub, also when the Hub was off while you left and is turned on later.
 - On the Hub, turn on Admin for yourself in Settings > Users. On the phone, open ••• > Hubs, tap ⓘ beside the Hub, then Users: add someone, invite a device for them, change their plan, then remove them.
 - Without Admin, Users does not appear.
+- On the phone, open a Hub bot's editor, tap Sharing and tick someone else on the Hub. On their device the bot appears; they can talk with it, but tapping its name opens nothing and holding its row offers only Pin. Untick them: the bot disappears from their device.
 - Ask a bot for a twin-stick shooter played with thumbsticks and open it on the phone: both sticks show as rings with a knob that follows your thumb and springs back when you let go, and the ship moves and aims in eight directions.
 
 ## [0.18.0] - 2026-10-03

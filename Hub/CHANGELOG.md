@@ -5,6 +5,7 @@
 ### Added
 
 - Users can be made admins in Settings > Users. The Hub lets an admin's devices add, rename and remove the users who are not admins, move them to another plan, and invite or unpair their devices, ready for Noodle and Noodle Mobile to offer it. Only the Hub's own Settings makes or changes admins.
+- A bot's owner can share it with other people on the Hub from Noodle. Each person talks with the same bot in a conversation of their own, on the owner's plan, and the bot knows them by name. They only talk with it: they see whether it is working but never its backstory, harness or the status it sets, never open its computers or browsers (noodlets it shares open as usual), and cannot edit, kick, archive, delete or share it. Only the owner shares it or stops sharing it, which removes that person's conversation with it. While the owner has it archived, it is gone from the others' devices, and it comes back with their conversations when brought back. Activity records who shared which bot with whom, who stopped, and refused attempts.
 - Activity in the menu bar menu lists who added, changed or removed users, made invitations and paired or removed devices, on the Hub or from a device, and every attempt the Hub refused, with its reason. Entries are kept for 90 days, and a person can be chosen to see only what concerns them. However many refused requests a device sends, they never push out the record of a change.
 
 ### Changed

@@ -208,6 +208,7 @@ final class LinkVersion1Tests: XCTestCase {
             "toolCatalog": .toolCatalog,
             "noodlet": .noodlet(conversationID: b, attachmentID: c), "noodletArchive": .noodletArchive(grant: a, offset: 524288),
             "noodletCall": .noodletCall(LinkNoodletCall(grant: a, id: b, offset: 0, total: 2, data: Data([1, 2]))),
+            "people": .people, "shareBot": .shareBot(id: a, people: [b, c]),
         ]
     }
     private var group: LinkGroup {
@@ -237,6 +238,11 @@ final class LinkVersion1Tests: XCTestCase {
                                                 attachments: [link])),
             "readBot": .bot(LinkBot(id: a, conversationID: b, draft: LinkBotDraft(name: "Alfred", provider: "codex"), createdAt: date,
                                     readUpTo: date)),
+            "people": .people([LinkPerson(id: b, name: "Grace")]),
+            "ownBot": .bot(LinkBot(id: a, conversationID: b, draft: LinkBotDraft(name: "Alfred", provider: "codex"), createdAt: date,
+                                   sharedWith: [c])),
+            "sharedBot": .bot(LinkBot(id: a, conversationID: c, draft: LinkBotDraft(name: "Alfred", provider: ""), createdAt: date,
+                                      owner: "Ada")),
             "toolCatalog": .toolCatalog([LinkToolPreset(id: "notion", name: "Notion", summary: "Pages.", instructions: "Search first.",
                                                         endpoint: URL(string: "https://mcp.notion.com/mcp")!, badge: "Experimental",
                                                         icon: Data([7]))]),
@@ -323,7 +329,9 @@ final class LinkVersion1Tests: XCTestCase {
         "deleteGroup": #"{"version":1,"request":{"deleteGroup":{"id":"00000000-0000-0000-0000-00000000000B"}}}"#,
         "noodlet": #"{"version":1,"request":{"noodlet":{"attachmentID":"00000000-0000-0000-0000-00000000000C","conversationID":"00000000-0000-0000-0000-00000000000B"}}}"#,
         "noodletArchive": #"{"version":1,"request":{"noodletArchive":{"grant":"00000000-0000-0000-0000-00000000000A","offset":524288}}}"#,
-        "noodletCall": #"{"version":1,"request":{"noodletCall":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","id":"00000000-0000-0000-0000-00000000000B","offset":0,"total":2,"data":"AQI="}}}}"#
+        "noodletCall": #"{"version":1,"request":{"noodletCall":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","id":"00000000-0000-0000-0000-00000000000B","offset":0,"total":2,"data":"AQI="}}}}"#,
+        "people": #"{"version":1,"request":{"people":{}}}"#,
+        "shareBot": #"{"version":1,"request":{"shareBot":{"id":"00000000-0000-0000-0000-00000000000A","people":["00000000-0000-0000-0000-00000000000B","00000000-0000-0000-0000-00000000000C"]}}}"#
     ]
     private static let nextResponseJSON: [String: String] = [
         "kickConfirmation": #"{"kickConfirmation":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","title":"Safeguards stopped Alfred","message":"Stopped.","confirmTitle":"Resume","offersNewSession":true}}}"#,
@@ -340,6 +348,9 @@ final class LinkVersion1Tests: XCTestCase {
         "picture": #"{"picture":{"_0":"Bg=="}}"#,
         "toolCatalog": #"{"toolCatalog":{"_0":[{"id":"notion","name":"Notion","summary":"Pages.","instructions":"Search first.","endpoint":"https:\/\/mcp.notion.com\/mcp","badge":"Experimental","icon":"Bw=="}]}}"#,
         "readBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","draft":{"name":"Alfred","provider":"codex"},"createdAt":1790000000,"readUpTo":1790000000}}}"#,
+        "people": #"{"people":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","name":"Grace"}]}}"#,
+        "ownBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000B","draft":{"name":"Alfred","provider":"codex"},"createdAt":1790000000,"sharedWith":["00000000-0000-0000-0000-00000000000C"]}}}"#,
+        "sharedBot": #"{"bot":{"_0":{"id":"00000000-0000-0000-0000-00000000000A","conversationID":"00000000-0000-0000-0000-00000000000C","draft":{"name":"Alfred","provider":""},"createdAt":1790000000,"owner":"Ada"}}}"#,
         "groups": #"{"groups":{"_0":[{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}]}}"#,
         "group": #"{"group":{"_0":{"id":"00000000-0000-0000-0000-00000000000B","draft":{"name":"House","publicDescription":"Staff","botIDs":["00000000-0000-0000-0000-00000000000A"]},"createdAt":1790000000,"readUpTo":1790000000}}}"#,
         "noodlet": #"{"noodlet":{"_0":{"grant":"00000000-0000-0000-0000-00000000000A","noodletID":"00000000-0000-0000-0000-00000000000B","revision":"abc","byteCount":9,"manifest":"Aw=="}}}"#,

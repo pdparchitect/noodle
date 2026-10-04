@@ -253,12 +253,12 @@ struct MessageBubble: View {
                     .help(agent.displayName)
                     .accessibilityLabel("Show \(agent.displayName)'s profile")
                     .contextMenu {
-                        Button("Show Activity") { store.showActivity(for: agent) }
+                        if !store.isShared(agent.id) { Button("Show Activity") { store.showActivity(for: agent) } }
                     }
                 } else {
                     BotAvatar(agent: agent, size: 27)
                         .contextMenu {
-                            Button("Show Activity") { store.showActivity(for: agent) }
+                            if !store.isShared(agent.id) { Button("Show Activity") { store.showActivity(for: agent) } }
                         }
                 }
             }

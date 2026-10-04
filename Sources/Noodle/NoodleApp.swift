@@ -453,7 +453,7 @@ struct RootView: View {
             ToolbarItem(placement: .primaryAction) {
                 if let conversation = store.selectedConversation {
                     if conversation.kind == .direct,
-                       let agent = store.participants(for: conversation).first {
+                       let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
                         Button {
                             store.agentBeingEdited = agent
                         } label: {

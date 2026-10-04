@@ -19,6 +19,10 @@ import Observation
         var profile: UUID?
         /// The Hub's background for the conversation, as last copied here.
         var background: LinkBackground?
+        /// Whose it is, when someone shared it with this Mac's user.
+        var owner: String?
+        /// Whom it is shared with, when it is this Mac's user's.
+        var sharedWith: [UUID]?
     }
 
     /// A group of bots on the Hub and its local copy.
@@ -128,7 +132,7 @@ import Observation
 
     /// The Hub harness a local stand-in runs on.
     public func harness(ofAgent id: UUID) -> HubHarnessChoice? {
-        guard let entry = entries.first(where: { $0.agent == id }),
+        guard let entry = entries.first(where: { $0.agent == id }), entry.owner == nil,
               let agent = try? repository.loadAgents().first(where: { $0.id == id }) else { return nil }
         return HubHarnessChoice(hub: pairing.hub?.key, provider: agent.harnessIdentifier ?? "", profile: entry.profile)
     }
@@ -159,6 +163,28 @@ import Observation
         try apply(bot, to: entry)
         onChange?()
     }
+
+    /// The other people on the Hub, to share a bot with.
+    public func people() async throws -> [LinkPerson] {
+        guard case .people(let people) = try await pairing.request(.people) else { throw LinkError("The Hub sent an unexpected answer.") }
+        return people
+    }
+
+    /// Shares one of this Mac's user's bots on the Hub with exactly `people`.
+    public func share(localAgentID: UUID, with people: [UUID]) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        guard case .bot(let bot) = try await pairing.request(.shareBot(id: entry.remote, people: people)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        try apply(bot, to: entry)
+        onChange?()
+    }
+
+    /// Whom a bot of this Mac's user is shared with on the Hub.
+    public func sharedWith(agent id: UUID) -> [UUID] { entries.first { $0.agent == id }?.sharedWith ?? [] }
+
+    /// Whose a bot someone shared with this Mac's user is; nil for their own. They only talk with it.
+    public func owner(ofAgent id: UUID) -> String? { entries.first { $0.agent == id }?.owner }
 
     public func deleteBot(localAgentID: UUID) async throws {
         guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
@@ -680,7 +706,8 @@ import Observation
             avatarSymbolName: draft.avatarSymbolName, avatarColorIndex: draft.avatarColorIndex,
             avatarImageData: draft.avatarImageData, backstory: draft.backstory)
         entries.append(Entry(remote: bot.id, remoteConversation: bot.conversationID, agent: created.agent.id,
-                             conversation: created.conversation.id, synced: 0, profile: draft.profile))
+                             conversation: created.conversation.id, synced: 0, profile: draft.profile, owner: bot.owner,
+                             sharedWith: bot.sharedWith))
         save()
         var agent = created.agent
         if let archivedAt = bot.archivedAt { agent = try repository.setAgentArchived(true, agentID: agent.id, now: archivedAt) }
@@ -701,7 +728,11 @@ import Observation
         var draft = bot.draft
         // A picture that could not be fetched yet keeps the one here.
         if draft.avatarImageData == nil, draft.avatarImageDigest != nil { draft.avatarImageData = agent.avatarImageData }
-        update(entry.remote) { $0.profile = draft.profile }
+        update(entry.remote) {
+            $0.profile = draft.profile
+            $0.owner = bot.owner
+            $0.sharedWith = bot.sharedWith
+        }
         let unchanged = agent.displayName == draft.name && agent.harnessIdentifier == draft.provider
             && agent.modelIdentifier == draft.model && agent.reasoningEffort == draft.reasoningEffort
             && (agent.publicDescription ?? "") == draft.publicDescription && agent.avatarSymbolName == draft.avatarSymbolName

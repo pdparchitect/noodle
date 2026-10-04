@@ -351,6 +351,23 @@ enum HubThread: HubConversation {
         saveCache()
     }
 
+    /// The other people on the Hub, to share a bot with.
+    func people() async throws -> [LinkPerson] {
+        guard case .people(let people) = try await pairing.request(.people) else { throw LinkError("The Hub sent an unexpected answer.") }
+        return people
+    }
+
+    /// Shares one of this user's bots with someone on the Hub, or stops sharing it with them.
+    func toggleSharing(_ agent: LinkBot, with person: UUID) async throws {
+        var people = Set(self.agent(agent.id)?.sharedWith ?? agent.sharedWith)
+        if people.remove(person) == nil { people.insert(person) }
+        guard case .bot(let bot) = try await pairing.request(.shareBot(id: agent.id, people: Array(people))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index] = bot }
+        saveCache()
+    }
+
     /// Deletes the bot and its conversation on the Hub, for every device.
     func delete(_ agent: LinkBot) async throws {
         guard case .done = try await pairing.request(.deleteBot(id: agent.id)) else {
@@ -960,8 +977,11 @@ struct AgentsView: View {
         } else {
             Button { row.chats.togglePin(row.thread) } label: { Label("Pin", systemImage: "pin.fill") }
         }
-        Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
-        Button { archive(row) } label: { Label(row.thread.group == nil ? "Archive Bot" : "Archive Group", systemImage: "archivebox") }
+        // A bot someone shared is only talked with.
+        if row.thread.bot?.owner == nil {
+            Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
+            Button { archive(row) } label: { Label(row.thread.group == nil ? "Archive Bot" : "Archive Group", systemImage: "archivebox") }
+        }
     }
 
     private func archive(_ row: Row) {
@@ -1293,13 +1313,16 @@ struct ChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Button { editing = true } label: {
-                    HStack(spacing: 8) {
-                        ThreadAvatar(chats: chats, thread: thread, size: 28)
-                        Text(thread.name).font(.headline).foregroundStyle(.primary)
-                    }
+                let title = HStack(spacing: 8) {
+                    ThreadAvatar(chats: chats, thread: thread, size: 28)
+                    Text(thread.name).font(.headline).foregroundStyle(.primary)
                 }
-                .accessibilityHint("Edit")
+                if thread.bot?.owner == nil {
+                    Button { editing = true } label: { title }
+                        .accessibilityHint("Edit")
+                } else {
+                    title
+                }
             }
             // As the Mac's Shared button: the computers, browser tabs and noodlets shared here, newest first.
             let shared = LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))
@@ -1926,6 +1949,12 @@ struct AgentEditor: View {
                         NavigationLink("Computers") { HubToolsScreen(chats: chats, agent: agent, kind: .computer) }
                         NavigationLink("Browsers") { HubToolsScreen(chats: chats, agent: agent, kind: .browser) }
                     }
+                    // Not on someone's own Mac, which is only theirs.
+                    if chats.pairing.status?.canShareBots == true {
+                        Section {
+                            NavigationLink("Sharing") { BotSharingScreen(chats: chats, agent: agent) }
+                        }
+                    }
                     Section {
                         NavigationLink("Background") { BackgroundEditor(chats: chats, thread: .bot(agent)) }
                     }
@@ -2081,7 +2110,7 @@ struct GroupEditor: View {
 
     /// Archived bots stay members until removed, but are never added.
     private var bots: [LinkBot] {
-        chats.agents.filter { $0.archivedAt == nil || draft.botIDs.contains($0.id) }
+        chats.agents.filter { $0.owner == nil && ($0.archivedAt == nil || draft.botIDs.contains($0.id)) }
             .sorted { $0.draft.name.localizedStandardCompare($1.draft.name) == .orderedAscending }
     }
 

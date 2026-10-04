@@ -56,7 +56,8 @@ struct NoodleSettingsView: View {
                     Label("Harness", systemImage: "terminal")
                 }
                 .tag(NoodleSettingsTab.harnesses)
-            BotsSettingsView(store: store)
+            // Bots someone shared on a Hub are only talked with, so they have nothing to set here.
+            BotsSettingsView(store: store, agents: store.agents.filter { !store.isShared($0.id) })
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Bots", systemImage: "sparkles") }
                 .tag(NoodleSettingsTab.bots)

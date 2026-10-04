@@ -202,9 +202,9 @@ public enum MessengerDocumentation {
     /// Stored wire field names and descriptions. Encoding coverage tests catch drift.
     public static let deliveryFields: [(String, String)] = [
         ("me", "The receiving bot's identity."),
-        ("conversation", "id, displayName, publicDescription?, kind (direct/group), participantIDs, createdAt, updatedAt."),
+        ("conversation", "id, displayName, publicDescription?, kind (direct/group), participantIDs, createdAt, updatedAt, guest? (id and name of someone your owner shared you with, who talks with you in this conversation)."),
         ("participants", "Named participant roster; the receiving bot has handle me."),
-        ("sender", "Original message author's identity: handle (user/me/bot/system), agentID?, displayName."),
+        ("sender", "Original message author's identity: handle (user/guest/me/bot/system), agentID?, displayName. user is your owner; guest is someone your owner shared you with, who may ask only for what your owner would want shared with them."),
         ("message", "The ChatMessage payload described below."),
         ("attachments", "Attachments linked to the message: id, conversationID, originalFilename, storedFilename, mediaType, byteCount, createdAt, absolutePath, optional url. A url identifies a link attachment; absolutePath then points to its owned .webloc bookmark, not downloaded web content. Ordinary files omit url."),
         ("reactions", "Optional current reactions, each with emoji and named sender."),

@@ -295,6 +295,53 @@ struct HubToolsScreen: View {
     }
 }
 
+/// The other people on the Hub, ticked when one of this user's bots is shared with them.
+struct BotSharingScreen: View {
+    let chats: HubChats
+    let agent: LinkBot
+    @State private var people: [LinkPerson]?
+    @State private var busy: UUID?
+    @State private var problem: String?
+
+    private var sharedWith: [UUID] { chats.agent(agent.id)?.sharedWith ?? agent.sharedWith }
+
+    var body: some View {
+        List {
+            if let people, people.isEmpty {
+                Text("Nobody else is on this Hub").foregroundStyle(.secondary)
+            } else if let people {
+                ForEach(people) { person in
+                    Button {
+                        busy = person.id
+                        problem = nil
+                        Task {
+                            defer { busy = nil }
+                            do { try await chats.toggleSharing(agent, with: person.id) } catch { problem = error.localizedDescription }
+                        }
+                    } label: {
+                        HStack {
+                            Text(person.name).foregroundStyle(.primary)
+                            Spacer()
+                            if busy == person.id { ProgressView() }
+                            else if sharedWith.contains(person.id) { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }
+                    .disabled(busy != nil)
+                }
+            } else if problem == nil {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+            if let problem {
+                Text(problem).foregroundStyle(.red)
+            }
+        }
+        .navigationTitle("Sharing")
+        .task {
+            do { people = try await chats.people() } catch { problem = error.localizedDescription }
+        }
+    }
+}
+
 /// A new computer or browser is named for its bot, as in "Chloe’s Computer".
 func companionName(_ noun: String, for bot: String) -> String {
     let bot = bot.trimmingCharacters(in: .whitespacesAndNewlines)

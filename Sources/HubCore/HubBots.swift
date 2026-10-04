@@ -6,7 +6,8 @@ import NoodleCore
 import NoodleRuntime
 
 /// Bots paired devices keep on the Hub. Each belongs to one user, runs on a harness that
-/// user's plan lends, and talks only with that user, alone or in groups of their bots.
+/// user's plan lends, and talks with that user, alone or in groups of their bots, and with
+/// whoever else they share it with, each in a conversation of their own.
 @MainActor public final class HubBots {
     /// Where an owner's devices are told that something changed.
     public var onChange: ((_ user: UUID, LinkEvent) -> Void)?
@@ -139,6 +140,13 @@ import NoodleRuntime
             let user = access.owner(ofBot: agent.id).flatMap { id in access.users.first { $0.id == id } }
             try? repository.updateAgentOwner(agent, owner: user.map { AgentOwner(id: $0.id, name: $0.name) })
         }
+        // So a bot knows the people it is shared with by their current names.
+        for var conversation in (try? repository.loadConversations()) ?? [] {
+            guard let guest = conversation.guest, let user = access.users.first(where: { $0.id == guest.id }),
+                  user.name != guest.name else { continue }
+            conversation.guest?.name = user.name
+            try? repository.updateConversation(conversation)
+        }
     }
 
     /// Lets bots call the tools assigned to them.
@@ -185,11 +193,73 @@ import NoodleRuntime
     /// The models the Hub's own copy of the harness offers.
     public func models(for provider: HarnessProvider) -> [HarnessModel] { runtime.models(for: provider.rawValue) }
 
+    /// The user's own bots, then those shared with them.
     public func bots(for user: HubUser) throws -> [LinkBot] {
         let conversations = try repository.loadConversations()
-        return try repository.loadAgents()
-            .filter { access.owner(ofBot: $0.id) == user.id && !isHidden($0.id) }
-            .compactMap { try bot($0, conversations: conversations) }
+        let agents = try repository.loadAgents().filter { !isHidden($0.id) }
+        let owned = try agents.filter { access.owner(ofBot: $0.id) == user.id }.compactMap { try bot($0, conversations: conversations) }
+        // An archived bot is its owner's alone until they bring it back.
+        let shared = conversations.compactMap { conversation -> LinkBot? in
+            guard conversation.guest?.id == user.id, let agent = agents.first(where: { conversation.participantIDs == [$0.id] }),
+                  agent.archivedAt == nil else {
+                return nil
+            }
+            return sharedBot(agent, in: conversation)
+        }
+        return owned + shared
+    }
+
+    /// The other people on the Hub, to share a bot with.
+    public func people(for user: HubUser) throws -> [LinkPerson] {
+        guard !access.isPersonal else { return [] }
+        return access.users.filter { $0.id != user.id }.map { LinkPerson(id: $0.id, name: $0.name) }
+    }
+
+    /// Shares one of the user's bots with exactly `people`. Each gets a conversation of their own
+    /// with it; whoever it is no longer shared with loses theirs, with its messages.
+    public func share(_ id: UUID, with people: [UUID], for user: HubUser) throws -> LinkBot {
+        let agent = try owned(id, by: user)
+        let people = Set(people)
+        guard !access.isPersonal || people.isEmpty else { throw LinkError("This Mac is only yours; nobody else can be added.") }
+        let guests = try people.map { id in
+            guard id != user.id, let person = access.users.first(where: { $0.id == id }) else {
+                throw LinkError("There is no such person on this Hub.")
+            }
+            return ConversationGuest(id: person.id, name: person.name)
+        }
+        let conversations = try guestConversations(of: agent.id)
+        var changed: Set<UUID> = []
+        for guest in guests.sorted(by: { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
+        where !conversations.contains(where: { $0.guest?.id == guest.id }) {
+            _ = try repository.createGuestConversation(with: agent, guest: guest)
+            changed.insert(guest.id)
+            access.note("Shared \(agent.displayName) with \(guest.name)", about: [guest.id])
+        }
+        for conversation in conversations where !people.contains(conversation.guest!.id) {
+            try repository.deleteConversation(id: conversation.id)
+            if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
+            changed.insert(conversation.guest!.id)
+            access.note("Stopped sharing \(agent.displayName) with \(conversation.guest!.name)", about: [conversation.guest!.id])
+        }
+        changed.forEach { onChange?($0, .botsChanged) }
+        onChange?(user.id, .botsChanged)
+        return try bot(agent, conversations: try repository.loadConversations()) ?? {
+            throw LinkError("The bot was shared but could not be read back.")
+        }()
+    }
+
+    /// A bot's name, for Activity.
+    public func name(ofBot id: UUID) -> String? {
+        (try? repository.loadAgents())?.first { $0.id == id && !isHidden($0.id) }?.displayName
+    }
+
+    /// Tells the people a bot is shared with that it changed: its name, picture or description, or that it was archived.
+    private func tellGuests(of bot: UUID) {
+        ((try? guestConversations(of: bot)) ?? []).compactMap(\.guest?.id).forEach { onChange?($0, .botsChanged) }
+    }
+
+    private func guestConversations(of bot: UUID) throws -> [BotConversation] {
+        try repository.loadConversations().filter { $0.guest != nil && $0.kind == .direct && $0.participantIDs == [bot] }
     }
 
     public func create(_ draft: LinkBotDraft, for user: HubUser) throws -> LinkBot {
@@ -237,6 +307,7 @@ import NoodleRuntime
         // As Edit Bot does in Noodle, whose runtime runs the bot when this only watches.
         if running || watching { runtime.restart(agent: updated, repository: repository) }
         onChange?(user.id, .botsChanged)
+        tellGuests(of: id)
         onBotsEdited?()
         return try bot(updated, conversations: try repository.loadConversations()) ?? {
             throw LinkError("The bot was saved but could not be read back.")
@@ -244,7 +315,11 @@ import NoodleRuntime
     }
 
     public func picture(ofBot id: UUID, for user: HubUser) throws -> Data? {
-        try owned(id, by: user).avatarImageData
+        if try guestConversations(of: id).contains(where: { $0.guest?.id == user.id }),
+           let agent = try repository.loadAgents().first(where: { $0.id == id && !isHidden($0.id) }) {
+            return agent.avatarImageData
+        }
+        return try owned(id, by: user).avatarImageData
     }
 
     public func delete(_ id: UUID, for user: HubUser) throws {
@@ -313,6 +388,7 @@ import NoodleRuntime
             try repository.setAgentArchived(archived, agentID: id)
             runtime.archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
             onChange?(user.id, .botsChanged)
+            tellGuests(of: id)
         } else {
             let before = try ownedGroup(id, by: user)
             let after = try repository.setConversationArchived(archived, conversationID: id)
@@ -362,10 +438,15 @@ import NoodleRuntime
         runtime.startNewSession(agent: agent, repository: repository)
     }
 
-    /// Deletes every bot of a user who is being removed.
+    /// Deletes every bot of a user who is being removed, and their conversations with bots shared with them.
     public func removeBots(of user: HubUser) {
         for agent in (try? repository.loadAgents()) ?? [] where access.owner(ofBot: agent.id) == user.id {
             _ = try? remove(agent)
+        }
+        for conversation in (try? repository.loadConversations()) ?? [] where conversation.guest?.id == user.id {
+            try? repository.deleteConversation(id: conversation.id)
+            if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
+            if let owner = conversation.participantIDs.first.flatMap(access.owner(ofBot:)) { onChange?(owner, .botsChanged) }
         }
     }
 
@@ -522,7 +603,7 @@ import NoodleRuntime
 
     public func send(_ body: String, id: UUID, attachmentIDs: [UUID] = [], in conversationID: UUID,
                      for user: HubUser) throws -> LinkMessage {
-        let bots = try ownedConversation(conversationID, by: user).bots
+        let (conversation, bots) = try ownedConversation(conversationID, by: user)
         let files = try attachments(in: conversationID)
         if let existing = try repository.loadMessages(conversationID: conversationID).first(where: { $0.id == id }) {
             return linkMessage(existing, files: files)
@@ -531,6 +612,14 @@ import NoodleRuntime
             throw LinkError("An attachment has not reached the Hub yet.")
         }
         for agent in bots {
+            // Someone a bot is shared with talks with it on its owner's plan.
+            if conversation.guest != nil {
+                guard let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }),
+                      lendsBot(agent, to: owner) else {
+                    throw LinkError("\(agent.displayName) cannot take messages right now.")
+                }
+                continue
+            }
             let profile = try repository.loadAgentHarnessProfile(agent)
             // On the owner's own Mac, a bot runs on whatever Noodle gives it.
             guard access.isPersonal || agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)).map({
@@ -560,7 +649,7 @@ import NoodleRuntime
     public func checkForChanges() {
         guard let agents = try? repository.loadAgents(), let conversations = try? repository.loadConversations() else { return }
         for conversation in conversations {
-            guard let owner = owner(of: conversation, among: agents) else { continue }
+            guard let owner = person(of: conversation, among: agents) else { continue }
             let background = (try? repository.loadBackground(conversationID: conversation.id)) ?? ConversationBackground()
             if let known = backgrounds[conversation.id], known != background {
                 onChange?(owner, .backgroundChanged(conversationID: conversation.id, background: self.background(of: conversation.id)))
@@ -591,7 +680,9 @@ import NoodleRuntime
             guard let owner = access.owner(ofBot: agent.id) else { continue }
             let phase = runtime.snapshot(for: agent.id).phase
             if let known = phases[agent.id], known != phase, let link = LinkBotPhase(rawValue: phase.rawValue) {
-                onChange?(owner, .botPhase(botID: agent.id, phase: link))
+                // Whether it is working reaches the people it is shared with too; the status it sets does not.
+                let guests = conversations.filter { $0.participantIDs == [agent.id] }.compactMap(\.guest?.id)
+                for person in [owner] + guests { onChange?(person, .botPhase(botID: agent.id, phase: link)) }
             }
             phases[agent.id] = phase
             // A bot sets its status through Messenger; devices list the bots again to see it.
@@ -646,6 +737,7 @@ import NoodleRuntime
     private func remove(_ agent: AgentRecord) throws -> Bool {
         let joined = (try? repository.loadConversations().filter { $0.participantIDs.contains(agent.id) }) ?? []
         let conversations = joined.filter { $0.kind == .direct || $0.participantIDs == [agent.id] }.map(\.id)
+        defer { joined.compactMap(\.guest?.id).forEach { onChange?($0, .botsChanged) } }
         if running { runtime.stop(agentID: agent.id, revokeAccess: false) }
         try repository.deleteAgent(agent)
         // Nobody would see a group without bots again.
@@ -667,6 +759,15 @@ import NoodleRuntime
             try? saveReadMarks()
         }
         return joined.contains { $0.kind == .group }
+    }
+
+    /// Whether the user's plan lends the harness and model the bot runs on.
+    private func lendsBot(_ agent: AgentRecord, to user: HubUser) -> Bool {
+        guard !access.isPersonal else { return true }
+        guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) else { return false }
+        let profile: UUID?
+        do { profile = try repository.loadAgentHarnessProfile(agent) } catch { return false }
+        return access.lends(HubHarness(provider: provider, profile: profile), model: agent.modelIdentifier, to: user)
     }
 
     /// Reads the user's current plan, not the one they were on when `user` was read.
@@ -752,18 +853,19 @@ import NoodleRuntime
                             colour: card.colour, icon: card.icon, capturedAt: card.capturedAt)
     }
 
-    /// A conversation the user owns and its bots: one bot's own, or a group of theirs.
+    /// A conversation the user has and its bots: one bot's own, a group of theirs, or theirs with a bot shared with them.
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> (conversation: BotConversation, bots: [AgentRecord]) {
         let agents = try repository.loadAgents()
         guard let conversation = try repository.loadConversations().first(where: { $0.id == id }),
-              owner(of: conversation, among: agents) == user.id else {
+              person(of: conversation, among: agents) == user.id else {
             throw LinkError("There is no such conversation.")
         }
         return (conversation, conversation.participantIDs.compactMap { id in agents.first { $0.id == id } })
     }
 
     private func ownedGroup(_ id: UUID, by user: HubUser) throws -> BotConversation {
-        guard let conversation = try? ownedConversation(id, by: user).conversation, conversation.kind == .group else {
+        guard let conversation = try? ownedConversation(id, by: user).conversation, conversation.kind == .group,
+              conversation.guest == nil else {
             throw LinkError("There is no such group.")
         }
         return conversation
@@ -779,6 +881,12 @@ import NoodleRuntime
         return owner
     }
 
+    /// Whom a conversation devices see is with: someone its bot is shared with, or the user its bots belong to.
+    private func person(of conversation: BotConversation, among agents: [AgentRecord]) -> UUID? {
+        guard let owner = owner(of: conversation, among: agents) else { return nil }
+        return conversation.guest?.id ?? owner
+    }
+
     private func group(_ conversation: BotConversation) -> LinkGroup {
         LinkGroup(id: conversation.id,
                   draft: LinkGroupDraft(name: conversation.displayName, publicDescription: conversation.publicDescription ?? "",
@@ -788,9 +896,8 @@ import NoodleRuntime
     }
 
     private func bot(_ agent: AgentRecord, conversations: [BotConversation]) throws -> LinkBot? {
-        guard let conversation = conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agent.id] }) else {
-            return nil
-        }
+        let direct = conversations.filter { $0.kind == .direct && $0.participantIDs == [agent.id] }
+        guard let conversation = direct.first(where: { $0.guest == nil }) else { return nil }
         var draft = LinkBotDraft(
             name: agent.displayName, provider: agent.harnessIdentifier ?? "", profile: try repository.loadAgentHarnessProfile(agent),
             model: agent.modelIdentifier, reasoningEffort: agent.reasoningEffort, publicDescription: agent.publicDescription ?? "",
@@ -799,7 +906,20 @@ import NoodleRuntime
         draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue), readUpTo: readMarks[conversation.id],
-                       status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id))
+                       status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id),
+                       sharedWith: direct.compactMap(\.guest?.id))
+    }
+
+    /// A bot as someone it is shared with sees it: whose it is and whether it is working, nothing of how it works.
+    private func sharedBot(_ agent: AgentRecord, in conversation: BotConversation) -> LinkBot? {
+        guard let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }) else { return nil }
+        var draft = LinkBotDraft(name: agent.displayName, provider: "", publicDescription: agent.publicDescription ?? "",
+                                 avatarSymbolName: agent.avatarSymbolName, avatarColorIndex: agent.avatarColorIndex ?? agent.accentSeed,
+                                 avatarImageData: agent.avatarImageData)
+        draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
+        return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
+                       phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue),
+                       readUpTo: readMarks[conversation.id], background: background(of: conversation.id), owner: owner.name)
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.

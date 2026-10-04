@@ -83,7 +83,7 @@ struct ConversationWindowView: View {
                 if let conversation, !isFloatingPanel {
                     Menu {
                         if conversation.kind == .direct, let agent = store.participants(for: conversation).first {
-                            Button("Edit Bot…") { agentBeingEdited = agent }
+                            if !store.isShared(agent.id) { Button("Edit Bot…") { agentBeingEdited = agent } }
                         } else if conversation.kind == .group {
                             Button("Edit Group…") { groupBeingEdited = conversation }
                         }

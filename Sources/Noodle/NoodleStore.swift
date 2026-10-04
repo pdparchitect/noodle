@@ -577,6 +577,9 @@ final class NoodleStore {
         hubMirrors.first { $0.localAgentIDs.contains(id) }
     }
 
+    /// Whether someone shared this bot with this Mac's user on a Noodle Hub, who then only talks with it.
+    func isShared(_ agentID: UUID) -> Bool { hubMirror(forAgent: agentID)?.owner(ofAgent: agentID) != nil }
+
     func joinHub(_ invitation: String) async {
         await hubs.join(invitation)
         refreshHubMirrors()
@@ -745,7 +748,8 @@ final class NoodleStore {
         calendarIDs: Set<String>? = nil,
         reminderListIDs: Set<String>? = nil,
         folders: [AgentFolder]? = nil,
-        harnessProfile: UUID?? = nil
+        harnessProfile: UUID?? = nil,
+        sharedWith: Set<UUID>? = nil
     ) -> Bool {
         if let mirror = hubMirror(forAgent: agent.id) {
             let choice = HubHarnessChoice(identifier: harnessIdentifier) ?? mirror.harness(ofAgent: agent.id)
@@ -767,6 +771,9 @@ final class NoodleStore {
                     }
                     if let browserIDs, browserIDs != mirror.browserIDs(forAgent: agent.id) {
                         try await mirror.assignBrowsers(browserIDs, toAgent: agent.id)
+                    }
+                    if let sharedWith, sharedWith != Set(mirror.sharedWith(agent: agent.id)) {
+                        try await mirror.share(localAgentID: agent.id, with: Array(sharedWith))
                     }
                 } catch {
                     errorMessage = error.localizedDescription
@@ -893,7 +900,7 @@ final class NoodleStore {
 
     /// The bots a group kept on `hub` may have, or on this Mac when nil. Groups never mix the two.
     func groupCandidates(on hub: HubMirror?) -> [AgentRecord] {
-        if let hub { return agents.filter { hub.localAgentIDs.contains($0.id) } }
+        if let hub { return agents.filter { hub.localAgentIDs.contains($0.id) && hub.owner(ofAgent: $0.id) == nil } }
         return agents.filter { !runtime.remoteAgentIDs.contains($0.id) }
     }
 

@@ -62,13 +62,14 @@ public struct MessageDeliveryContext: Codable, Sendable {
         let latest = Array(unread.suffix(4))
         let unreadIDs = Set(unread.map { $0.message.id })
         let conversationIDs = Set(latest.map { $0.conversation.id })
+        let guests = Dictionary(latest.map { ($0.conversation.id, $0.conversation.guest) }, uniquingKeysWith: { first, _ in first })
         let history = try conversationIDs.flatMap { try repository.loadMessages(conversationID: $0) }
             .filter { !unreadIDs.contains($0.id) }
             .sorted { $0.createdAt < $1.createdAt }
         func text(_ message: ChatMessage) -> String {
             let sender: String
             switch message.author {
-            case .user: sender = "User"
+            case .user: sender = guests[message.conversationID]??.name ?? "User"
             case .agent(let id): sender = id == agentID ? "Assistant" : "Other agent"
             case .system: sender = "System"
             }

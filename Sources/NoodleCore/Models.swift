@@ -72,6 +72,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
     public var archivedAt: Date?
     /// Folders a group on this Mac shares with its bots; nil when there are none.
     public var folders: [AgentFolder]?
+    /// On a Noodle Hub, someone the bot's owner shared it with, who talks with it here.
+    public var guest: ConversationGuest?
 
     public init(
         id: UUID = UUID(),
@@ -82,7 +84,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         archivedAt: Date? = nil,
-        folders: [AgentFolder]? = nil
+        folders: [AgentFolder]? = nil,
+        guest: ConversationGuest? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -93,6 +96,18 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         self.updatedAt = updatedAt
         self.archivedAt = archivedAt
         self.folders = folders
+        self.guest = guest
+    }
+}
+
+/// Someone other than a bot's owner who talks with it, as its bot knows them.
+public struct ConversationGuest: Codable, Hashable, Sendable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
     }
 }
 
@@ -233,7 +248,10 @@ public struct AgentInbox: Codable, Hashable, Sendable {
 }
 
 public enum MessengerHandle: String, Codable, Hashable, Sendable {
+    /// The bot's owner.
     case user
+    /// Someone the bot's owner shared it with.
+    case guest
     case me
     case bot
     case system

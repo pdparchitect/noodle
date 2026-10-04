@@ -99,6 +99,11 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case createBot(LinkBotDraft)
     case updateBot(id: UUID, LinkBotDraft)
     case deleteBot(id: UUID)
+    /// The other people on the Hub, to share a bot with. Answered with `people`.
+    case people
+    /// Shares one of this user's bots with exactly these other people on the Hub, each in a
+    /// conversation of their own with it. Answers `bot`.
+    case shareBot(id: UUID, people: [UUID])
     /// This user's groups on the Hub: conversations with several of their bots.
     case groups
     /// Makes a group of this user's bots. Answers `group`.
@@ -447,6 +452,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case invitation(LinkInvitation)
     case users(LinkUsers)
     case user(LinkUser)
+    case people([LinkPerson])
     case kickConfirmation(LinkKickConfirmation)
     case noodlet(LinkNoodlet)
     /// What a noodlet's call answered, as its app encodes it.
@@ -489,6 +495,17 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case backgroundChanged(conversationID: UUID, background: LinkBackground)
     /// Pushed to admins: the Hub's users, their devices or its plans changed.
     case usersChanged
+}
+
+/// Someone else on the Hub, as anyone sharing a bot sees them.
+public struct LinkPerson: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
 /// The Hub's users as its admins see them, and the plans they can be put on.
@@ -742,9 +759,12 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var canPairDevices: Bool
     /// Whether the user may manage the Hub's other users with `users` and the requests after it.
     public var isAdmin: Bool
+    /// Whether the user may share their bots with other people on the Hub with `shareBot`.
+    public var canShareBots: Bool
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
-                protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false) {
+                protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false,
+                canShareBots: Bool = false) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -753,10 +773,11 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.protocolVersion = protocolVersion
         self.canPairDevices = canPairDevices
         self.isAdmin = isAdmin
+        self.canShareBots = canShareBots
     }
 
     private enum CodingKeys: String, CodingKey {
-        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin
+        case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots
     }
 
     public init(from decoder: Decoder) throws {
@@ -769,6 +790,7 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         protocolVersion = try c.decode(.protocolVersion, or: 1)
         canPairDevices = try c.decode(.canPairDevices, or: false)
         isAdmin = try c.decode(.isAdmin, or: false)
+        canShareBots = try c.decode(.canShareBots, or: false)
     }
 }
 
@@ -926,7 +948,7 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
     }
 }
 
-/// A bot on the Hub and its conversation with its owner.
+/// A bot on the Hub and its conversation with whoever it is listed for: its owner, or someone it is shared with.
 public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var conversationID: UUID
@@ -943,9 +965,15 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var archivedAt: Date?
     /// Its conversation's background. Nil from a Hub that does not keep backgrounds.
     public var background: LinkBackground?
+    /// For its owner: the people it is shared with.
+    public var sharedWith: [UUID]
+    /// For someone it is shared with: whose it is. They talk with it and nothing else, so its
+    /// draft carries only its name, description and picture, and it comes without its status.
+    public var owner: String?
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
-                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil) {
+                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
+                sharedWith: [UUID] = [], owner: String? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -955,9 +983,13 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.status = status
         self.archivedAt = archivedAt
         self.background = background
+        self.sharedWith = sharedWith
+        self.owner = owner
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background }
+    private enum CodingKeys: String, CodingKey {
+        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -970,6 +1002,8 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         status = try c.decodeIfPresent(String.self, forKey: .status)
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         background = try c.decodeIfPresent(LinkBackground.self, forKey: .background)
+        sharedWith = try c.decodeIfPresent([UUID].self, forKey: .sharedWith) ?? []
+        owner = try c.decodeIfPresent(String.self, forKey: .owner)
     }
 }
 

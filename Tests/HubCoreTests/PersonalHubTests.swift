@@ -94,6 +94,8 @@ import XCTest
         let (f, _) = try await fixture(bots: [], installed: [".codex/packages/standalone/current/bin/codex", ".local/bin/fx"],
                                        models: [.codex: codex], profiles: [(.fx, "Work"), (.openCode, "Side")])
         guard case .status(let status) = try await f.device.request(.status) else { return XCTFail("no status") }
+        // The Mac is only its owner's, so there is nobody to share a bot with.
+        XCTAssertFalse(status.canShareBots)
         XCTAssertEqual(status.harnesses.map { [$0.providerName, $0.profileName ?? ""] },
                        [["Codex", ""], ["FX", ""], ["FX", "Work"]])
         XCTAssertEqual(status.harnesses.map(\.provider), ["codex", "fx", "fx"])

@@ -166,7 +166,8 @@ requests to shared noodlets, though one already running may still finish.
 
 A noodlet from a Noodle Hub can run on your phone or Mac instead of on the Hub;
 one that uses the camera, microphone, screen or local network always does, so it
-gets yours and never the Hub's. Only you can open your bots' noodlets. On your
+gets yours and never the Hub's. Only you, and the people you share a bot with,
+can open its noodlets. On your
 device it sees only its own files. It asks once on each device before it uses the
 camera, microphone or your local network, and you can take that back in Settings.
 Its saved data and secrets are kept on the Hub,
@@ -184,6 +185,14 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   account directly, outside the Hub, until you sign out of it at the provider.
   Lend only to people you would trust with that account, or lend a profile
   signed in to a separate account.
+- **A shared bot works for whoever talks with it.** Sharing a bot does not make
+  a lesser copy: anyone you share it with talks with the same bot, with its
+  memory, files, tools, sign-ins and plan, and can ask it to use any of them.
+  It can also tell them what it remembers from your conversations with it.
+  They cannot see its settings or open its computers and browsers themselves,
+  but the bot can still use them when asked. Share a bot only with people you
+  would let use everything it can reach, and give it its own accounts rather
+  than yours.
 - **Hub bots can reach your network.** Like any bot, a Hub bot can connect to
   the internet, to other devices on your network, and to services on the Hub's
   Mac that accept network connections.
