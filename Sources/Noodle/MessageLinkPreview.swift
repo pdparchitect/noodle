@@ -28,9 +28,11 @@ struct MessageLinkPreview: View {
 
 /// A web page's picture, title and site, as unfurled from a message or shared as a link attachment.
 struct LinkPreviewCard: View {
-    private let cardWidth: CGFloat = 280
-    private let imageHeight: CGFloat = 158
+    static let cardWidth: CGFloat = 280
+    static let imageHeight: CGFloat = 158
     private let cardHeight: CGFloat = 220
+    private var cardWidth: CGFloat { Self.cardWidth }
+    private var imageHeight: CGFloat { Self.imageHeight }
 
     let url: URL
     let shouldLoad: Bool
@@ -284,7 +286,8 @@ final class LinkPreviewMetadataCache {
             metadata?.url = url
             metadata?.title = saved.title
         }
-        let result = Result(metadata: metadata, image: saved.image.flatMap(NSImage.init(data:)), savedAt: saved.savedAt)
+        let result = Result(metadata: metadata, image: saved.image.flatMap(NSImage.init(data:)).map(Self.cardPicture),
+                            savedAt: saved.savedAt)
         cache.setObject(result, forKey: url as NSURL)
         return result
     }
@@ -340,16 +343,32 @@ final class LinkPreviewMetadataCache {
         pending[url] = nil
         request.deadline?.cancel()
         request.cancellations.forEach { $0() }
-        let result = Result(metadata: request.metadata, image: image, savedAt: now())
+        let result = Result(metadata: request.metadata, image: image.map(Self.cardPicture), savedAt: now())
         // Cache failures too, for this launch: rebuilding visible rows must not start retry loops.
         cache.setObject(result, forKey: url as NSURL)
         if request.metadata != nil || image != nil, let file = file(for: url) {
-            let png = image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?.representation(using: .png, properties: [:])
+            let png = result.image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?.representation(using: .png, properties: [:])
             let saved = Saved(fetched: request.metadata != nil, title: request.metadata?.title, image: png, savedAt: result.savedAt)
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? JSONEncoder().encode(saved).write(to: file, options: .atomic)
         }
         request.completions.forEach { $0(result) }
+    }
+    /// A web page's picture scaled down to cover its card at twice the card's size, for Retina displays.
+    /// Scrolled rows redraw it constantly, and a full-size picture had to be decoded again on every redraw.
+    static func cardPicture(_ image: NSImage) -> NSImage {
+        guard let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        let scale = max(LinkPreviewCard.cardWidth * 2 / CGFloat(source.width),
+                        LinkPreviewCard.imageHeight * 2 / CGFloat(source.height))
+        guard scale < 1 else { return image }
+        let width = Int((CGFloat(source.width) * scale).rounded(.up))
+        let height = Int((CGFloat(source.height) * scale).rounded(.up))
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        context.interpolationQuality = .high
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage().map { NSImage(cgImage: $0, size: NSSize(width: width, height: height)) } ?? image
     }
     private func isFresh(_ savedAt: Date) -> Bool { now().timeIntervalSince(savedAt) < Self.lifetime }
     private func file(for url: URL) -> URL? {

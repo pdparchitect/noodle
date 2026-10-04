@@ -126,6 +126,45 @@ import XCTest
         XCTAssertNil(launch().cachedResult(for: second), "A failed preview is tried again after a relaunch")
     }
 
+    /// Scrolled rows redraw their picture constantly; a full-size web image made each redraw decode it again.
+    func testPreviewPicturesAreKeptNoLargerThanTheirCardShowsThem() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        func picture(_ width: Int, _ height: Int) -> NSImage {
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            let image = NSImage(size: .init(width: width, height: height))
+            image.addRepresentation(bitmap)
+            return image
+        }
+        func pixels(_ image: NSImage?) -> CGSize? {
+            image?.cgImage(forProposedRect: nil, context: nil, hints: nil).map { CGSize(width: $0.width, height: $0.height) }
+        }
+        let card = CGSize(width: LinkPreviewCard.cardWidth * 2, height: LinkPreviewCard.imageHeight * 2)
+        for (url, width, height) in [(first, 2400, 1260), (second, 3000, 300)] {
+            let cache = LinkPreviewMetadataCache(fetchMetadata: { _, _, completion in
+                let value = LPLinkMetadata(); value.title = "Big"; value.imageProvider = NSItemProvider()
+                completion(value)
+                return {}
+            }, fetchImage: { _, completion in
+                completion(picture(width, height))
+                return {}
+            }, fetchMap: { _, _, _ in {} }, folder: folder)
+            var result: LinkPreviewMetadataCache.Result?
+            cache.load(url) { result = $0 }
+            try await wait { result != nil }
+            let reopened = LinkPreviewMetadataCache(fetchMetadata: { _, _, _ in {} }, folder: folder).cachedResult(for: url)
+            for (name, size) in [("loaded", pixels(result?.image)), ("reopened", pixels(reopened?.image))] {
+                let size = try XCTUnwrap(size, "The \(name) \(width)×\(height) preview lost its picture")
+                XCTAssertLessThanOrEqual(min(size.width / card.width, size.height / card.height), 1.01,
+                    "The \(name) \(width)×\(height) preview keeps a \(size) picture for a \(card) card")
+                XCTAssertGreaterThanOrEqual(size.width, min(card.width, CGFloat(width)) - 1, "The \(name) picture no longer fills the card")
+                XCTAssertGreaterThanOrEqual(size.height, min(card.height, CGFloat(height)) - 1, "The \(name) picture no longer fills the card")
+                XCTAssertEqual(size.width / size.height, CGFloat(width) / CGFloat(height), accuracy: 0.05, "The \(name) picture is distorted")
+            }
+        }
+    }
+
     func testFailedMetadataIsCachedWithoutStartingARetryLoop() async throws {
         let f = loader(); var results: [LinkPreviewMetadataCache.Result] = []
         f.cache.load(first) { results.append($0) }; f.metadata[0].1(nil)
