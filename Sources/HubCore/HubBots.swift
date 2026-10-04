@@ -851,11 +851,11 @@ import NoodleRuntime
 
     /// The title and preview of a live attachment, without opening it.
     public func card(of attachmentID: UUID, in conversationID: UUID, for user: HubUser) async throws -> LinkCardInfo? {
-        let (link, bot) = try await companionLink(attachmentID, in: conversationID, for: user)
+        let (link, _) = try await companionLink(attachmentID, in: conversationID, for: user)
         if case .noodlet(let noodlet) = link {
+            // Asked for as the Hub, as its picture is: Noodle Applet keeps pictures from requests made for a bot.
             var info = AppletRequest(.info)
             info.noodletID = noodlet
-            info.owner = bot.uuidString.lowercased()
             info.includePreview = true
             let response = try await applets.companion(info)
             guard let title = response.title else { return nil }

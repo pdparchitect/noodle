@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Noodlets a bot shares show their own names in the conversation, under Shared and in the game menu, instead of all being called Noodlet.
+
 ## [0.19.0] - 2026-10-04
 
 ### Added

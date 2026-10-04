@@ -10,6 +10,10 @@
 
 - Activity in the menu bar menu is now called Logs, so it is not mistaken for a bot's activity, and its person menu has more room.
 
+### Fixed
+
+- Noodlets a bot shares show their names on paired phones again, instead of all being called Noodlet.
+
 ## [0.17.0] - 2026-10-04
 
 ### Added

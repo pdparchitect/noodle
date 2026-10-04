@@ -32,7 +32,8 @@ struct AttachmentView: View {
     @State private var failed = false
     @State private var previewing: URL?
     @State private var gallery: [URL] = []
-    @State private var livePicture: Data?
+    /// A live link with the card the Hub resolved for it, as a noodlet's name and picture.
+    @State private var liveCard: LinkCardInfo?
     @Environment(\.watchLive) private var watchLive
 
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
@@ -75,7 +76,7 @@ struct AttachmentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     Color(.secondarySystemBackground)
-                    if let data = attachment.card?.image ?? livePicture, let image = UIImage(data: data) {
+                    if let data = (liveCard ?? attachment.card)?.image, let image = UIImage(data: data) {
                         Image(uiImage: image).resizable().scaledToFit()
                     } else if attachment.liveKind == .computer, let terminal = attachment.card?.detail {
                         // A computer shared as its terminal shows its latest lines, as on the Mac.
@@ -88,7 +89,7 @@ struct AttachmentView: View {
                 }
                 .frame(width: 240, height: 150)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text(attachment.liveTitle)
+                Text(liveCard?.title ?? attachment.liveTitle)
                     .font(.subheadline.weight(.medium)).lineLimit(1)
             }
             .padding(8)
@@ -103,9 +104,9 @@ struct AttachmentView: View {
             }
         }
         .task(id: attachment.id) {
-            // Cards come without their pictures; each is fetched as its card comes into view.
+            // Cards come without their pictures, a noodlet's without its name; each is fetched as its card comes into view.
             guard attachment.card?.image == nil else { return }
-            livePicture = try? await chats.picture(for: attachment, in: thread)
+            liveCard = await chats.sharedAttachment(attachment, in: thread).card
         }
     }
 

@@ -50,6 +50,10 @@ import XCTest
                 case .list:
                     response.features = [SurfaceSocket.feature]
                 case .info:
+                    // As Noodle Applet: pictures are for the Hub itself, never a request made for a bot.
+                    if request.includePreview == true, request.owner != nil {
+                        return AppletResponse(error: "Preview access is reserved for the Noodle interface.")
+                    }
                     response.title = "Counter"
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
                     response.permissions = request.noodletID.flatMap { permissions[$0] }
