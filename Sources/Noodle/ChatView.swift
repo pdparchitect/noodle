@@ -573,7 +573,7 @@ private struct ConversationStartView: View {
                 .help(agent.displayName)
                 .accessibilityLabel("Show \(agent.displayName)'s profile")
                 .contextMenu {
-                    if !store.isShared(agent.id) { Button("Show Activity") { store.showActivity(for: agent) } }
+                    if store.runsHere(agent.id) { Button("Show Activity") { store.showActivity(for: agent) } }
                 }
             } else {
                 Button(action: showGroupProfile) {

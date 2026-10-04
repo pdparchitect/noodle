@@ -71,6 +71,7 @@ conversation then closes the open one and takes its exact place and size.
 Right-click a bot in the sidebar or its avatar in a conversation and choose
 **Show Activity**. Each bot has one floating log window showing its runtime
 status, tool activity, and output across direct and group conversations.
+Bots kept on a Noodle Hub run there and have no activity on this Mac.
 Drag the header to move it, resize it from its edges, and close it with the close control, **Esc**, or **⌘W**.
 
 Scroll up or select text to pause automatic following. Right-click the log for

@@ -74,6 +74,26 @@ final class HubHarnessChoiceTests: XCTestCase {
         XCTAssertEqual(store.configurableAgents.map(\.id), [f.a.id])
     }
 
+    /// A bot of this Mac's user's kept on a Hub runs there, so there is no activity or workspace here to show.
+    func testABotOnAHubDoesNotRunHere() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        // Pretend Fixture bot A was made on a joined Hub, while bot B stays on this Mac.
+        let folder = f.repository.rootURL.appendingPathComponent("Hubs/\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let hub: [String: Any] = ["name": "Mac mini", "key": LinkIdentity().publicKey.x963.base64EncodedString(),
+                                  "endpoints": [], "userName": "Ada"]
+        try JSONSerialization.data(withJSONObject: hub).write(to: folder.appendingPathComponent("hub.json"))
+        let entry: [String: Any] = ["remote": UUID().uuidString, "remoteConversation": UUID().uuidString,
+                                    "agent": f.a.id.uuidString, "conversation": f.directA.id.uuidString, "synced": 0]
+        try JSONSerialization.data(withJSONObject: [entry]).write(to: folder.appendingPathComponent("mirror.json"))
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertNotNil(store.hubMirror(forAgent: f.a.id))
+
+        XCTAssertFalse(store.runsHere(f.a.id))
+        XCTAssertTrue(store.runsHere(f.b.id))
+    }
+
     func testThisMacsToolsAreNotGivenToAHubBot() throws {
         let f = try StoreFixture()
         defer { f.cleanUp() }

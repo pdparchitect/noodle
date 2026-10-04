@@ -89,23 +89,21 @@ struct SidebarView: View {
                 }
             }
             Button("Change Background…") { store.backgroundBeingEdited = conversation }
-            if let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
+            if let agent = store.participants(for: conversation).first, store.runsHere(agent.id) {
                 Divider()
                 Button("Show Activity") { store.showActivity(for: agent) }
                 Button("Show Workspace in Finder") {
                     store.revealWorkspace(for: agent)
                 }
-                if !store.runtime.remoteAgentIDs.contains(agent.id) {
-                    Divider()
-                    if store.runtime.snapshot(for: agent.id).phase == .failed {
-                        Button("Kick") {
-                            kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                        }
-                        .disabled(store.runtime.changingAccess.contains(agent.id))
+                Divider()
+                if store.runtime.snapshot(for: agent.id).phase == .failed {
+                    Button("Kick") {
+                        kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
                     }
-                    Button("New Session") { newSessionAgent = agent }
-                        .disabled(store.runtime.changingAccess.contains(agent.id))
+                    .disabled(store.runtime.changingAccess.contains(agent.id))
                 }
+                Button("New Session") { newSessionAgent = agent }
+                    .disabled(store.runtime.changingAccess.contains(agent.id))
             }
         }
         switch conversation.kind {

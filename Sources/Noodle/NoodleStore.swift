@@ -584,6 +584,9 @@ final class NoodleStore {
     /// Whether someone shared this bot with this Mac's user on a Noodle Hub, who then only talks with it.
     func isShared(_ agentID: UUID) -> Bool { hubMirror(forAgent: agentID)?.owner(ofAgent: agentID) != nil }
 
+    /// Whether the bot runs on this Mac, so its activity and workspace are here to show.
+    func runsHere(_ agentID: UUID) -> Bool { !runtime.remoteAgentIDs.contains(agentID) }
+
     /// The bots Settings > Bots lists: those someone shared on a Hub have nothing to set.
     var configurableAgents: [AgentRecord] { agents.filter { !isShared($0.id) } }
 
