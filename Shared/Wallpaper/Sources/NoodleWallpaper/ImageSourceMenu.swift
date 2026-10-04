@@ -10,14 +10,17 @@ public struct ImageSourceMenu: View {
     let choosePhoto: () -> Void
     /// Backgrounds pass this to offer the system wallpapers already on disk.
     var chooseWallpaper: (() -> Void)? = nil
+    /// A person's picture passes this to offer the camera.
+    var takePhoto: (() -> Void)? = nil
     @State private var presenter = Presenter()
 
     public init(title: String, chooseFile: @escaping () -> Void, choosePhoto: @escaping () -> Void,
-                chooseWallpaper: (() -> Void)? = nil) {
+                chooseWallpaper: (() -> Void)? = nil, takePhoto: (() -> Void)? = nil) {
         self.title = title
         self.chooseFile = chooseFile
         self.choosePhoto = choosePhoto
         self.chooseWallpaper = chooseWallpaper
+        self.takePhoto = takePhoto
     }
 
     public var body: some View {
@@ -25,7 +28,7 @@ public struct ImageSourceMenu: View {
             guard let anchor = presenter.anchor else { return }
             // Offer wallpapers only while this Mac actually has some on disk.
             let wallpapers = chooseWallpaper.flatMap { SystemWallpaper.available().isEmpty ? nil : $0 }
-            presenter.makeMenu(chooseFile: chooseFile, choosePhoto: choosePhoto, chooseWallpaper: wallpapers)
+            presenter.makeMenu(chooseFile: chooseFile, choosePhoto: choosePhoto, chooseWallpaper: wallpapers, takePhoto: takePhoto)
                 .popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.maxY), in: anchor)
         } label: {
             HStack(spacing: 6) {
@@ -47,9 +50,10 @@ public struct ImageSourceMenu: View {
         private var actions: [() -> Void] = []
 
         func makeMenu(chooseFile: @escaping () -> Void, choosePhoto: @escaping () -> Void,
-                      chooseWallpaper: (() -> Void)? = nil) -> NSMenu {
+                      chooseWallpaper: (() -> Void)? = nil, takePhoto: (() -> Void)? = nil) -> NSMenu {
             var entries = [("Choose File…", "folder", chooseFile), ("Photos Library…", "photo.on.rectangle", choosePhoto)]
             if let chooseWallpaper { entries.append(("System Wallpapers…", "desktopcomputer", chooseWallpaper)) }
+            if let takePhoto { entries.insert(("Take Photo…", "camera", takePhoto), at: 0) }
             actions = entries.map(\.2)
             let menu = NSMenu()
             for (index, item) in entries.enumerated() {

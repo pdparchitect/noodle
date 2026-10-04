@@ -3,6 +3,7 @@ import HubLink
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
+import NoodleWallpaper
 import SwiftUI
 
 /// People the Hub lends harnesses to, each on one plan.
@@ -94,7 +95,7 @@ struct HubUsersSettingsView: View {
 
     private func userRow(_ user: HubUser) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle").font(.title3).foregroundStyle(.secondary)
+            HubPersonBadge(user: user, access: access, size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.name).lineLimit(1)
                 if let plan = access.plans.first(where: { $0.id == user.plan }) {
@@ -445,5 +446,20 @@ struct ConnectedLabelStyle: LabelStyle {
             configuration.icon.font(.system(size: 6)).foregroundStyle(.green)
             configuration.title
         }
+    }
+}
+
+/// The picture someone chose on their device, or their initials on a colour, as their devices show them.
+struct HubPersonBadge: View {
+    let user: HubUser
+    let access: HubAccess
+    let size: CGFloat
+    @State private var image: Data?
+
+    var body: some View {
+        let avatar = user.avatar ?? .standard(for: user.id)
+        IconBadge(appearance: IconAppearance(symbol: avatar.symbol, colour: avatar.colour, image: image),
+                  symbol: "person.fill", size: size, showsShadow: false, initials: LinkAvatar.initials(of: user.name))
+            .task(id: user.avatar?.imageDigest) { image = access.picture(of: user.id) }
     }
 }

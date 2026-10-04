@@ -575,9 +575,7 @@ private struct BotSharingSheet: View {
                             get: { selection.contains(person.id) },
                             set: { if $0 { selection.insert(person.id) } else { selection.remove(person.id) } })) {
                             HStack(spacing: 8) {
-                                let avatar = person.avatar ?? .standard(for: person.id)
-                                IconBadge(appearance: IconAppearance(symbol: avatar.symbol, colour: avatar.colour, image: avatar.image),
-                                          symbol: "person.fill", size: 24, showsShadow: false, initials: LinkAvatar.initials(of: person.name))
+                                PersonBadge(name: person.name, avatar: person.avatar, id: person.id, size: 24)
                                 Text(person.name)
                             }
                         }

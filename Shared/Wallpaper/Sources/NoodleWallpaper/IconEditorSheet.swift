@@ -14,6 +14,7 @@ public struct IconEditorSheet: View {
     private let encoding: IconImageEncoding
     private let avatar: AvatarIdea?
     private let initials: String?
+    private let takesPhotos: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var draft: IconAppearance
     @State private var failure: String?
@@ -21,12 +22,14 @@ public struct IconEditorSheet: View {
     @State private var choosingPhoto = false
     @State private var photoSelection: PhotosPickerItem?
     @State private var isLoadingImage = false
+    @State private var takingPhoto = false
 
-    /// With `initials`, a person's: they come first among the symbols, chosen as no symbol.
+    /// With `initials`, a person's: they come first among the symbols, chosen as no symbol. `takesPhotos`
+    /// offers the camera, which only a person's picture does.
     public init(title: String, icon: Binding<IconAppearance>, symbol: String, symbols: [String], encoding: IconImageEncoding,
-                avatar: AvatarIdea? = nil, initials: String? = nil) {
+                avatar: AvatarIdea? = nil, initials: String? = nil, takesPhotos: Bool = false) {
         _icon = icon; self.title = title; self.symbol = symbol; self.symbols = symbols; self.encoding = encoding; self.avatar = avatar
-        self.initials = initials
+        self.initials = initials; self.takesPhotos = takesPhotos
         _draft = State(initialValue: icon.wrappedValue)
     }
 
@@ -48,7 +51,8 @@ public struct IconEditorSheet: View {
                             ImageSourceMenu(
                                 title: "Choose Image…",
                                 chooseFile: { choosingFile = true },
-                                choosePhoto: { photoSelection = nil; choosingPhoto = true }
+                                choosePhoto: { photoSelection = nil; choosingPhoto = true },
+                                takePhoto: takesPhotos ? { takingPhoto = true } : nil
                             ).frame(minWidth: 0, maxWidth: .infinity)
                             if #available(macOS 15.1, *) {
                                 NoodleImagePlaygroundButton(sourceImageData: draft.iconImage, concepts: avatar?.concepts ?? []) { url in loadImage(url) }
@@ -102,6 +106,12 @@ public struct IconEditorSheet: View {
                 switch result {
                 case .success(let url): loadImage(url)
                 case .failure(let error): failure = error.localizedDescription
+                }
+            }
+            .sheet(isPresented: $takingPhoto) {
+                CameraPhotoSheet { frame in
+                    let encoding = encoding
+                    Task { await load { try await Task.detached { try IconImage.photo(frame, encoding: encoding) }.value } }
                 }
             }
             .photosPicker(isPresented: $choosingPhoto, selection: $photoSelection, matching: .images, preferredItemEncoding: .current)

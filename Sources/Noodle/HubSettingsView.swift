@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import HubCore
 import HubLink
 import NoodleHubClient
@@ -225,6 +224,20 @@ private struct HubRow: View {
     }
 }
 
+/// Someone's picture on a Hub, or their initials on a colour while they have chosen none.
+struct PersonBadge: View {
+    let name: String
+    let avatar: LinkAvatar?
+    let id: UUID
+    let size: CGFloat
+
+    var body: some View {
+        let avatar = avatar ?? .standard(for: id)
+        IconBadge(appearance: IconAppearance(symbol: avatar.symbol, colour: avatar.colour, image: avatar.image),
+                  symbol: "person.fill", size: size, showsShadow: false, initials: LinkAvatar.initials(of: name))
+    }
+}
+
 /// This Mac's user's picture on a Hub, as everyone there sees it, as Noodle Mobile edits it.
 private struct HubPictureEditor: View {
     let pairing: HubPairing
@@ -251,7 +264,8 @@ private struct HubPictureEditor: View {
             symbols: ["person.fill", "face.smiling", "star.fill", "heart.fill", "leaf.fill", "pawprint.fill",
                       "music.note", "gamecontroller.fill", "book.fill", "cup.and.saucer.fill", "sun.max.fill"],
             encoding: .jpeg(quality: 0.86),
-            initials: LinkAvatar.initials(of: pairing.status?.userName ?? pairing.hub?.userName ?? "")
+            initials: LinkAvatar.initials(of: pairing.status?.userName ?? pairing.hub?.userName ?? ""),
+            takesPhotos: true
         )
     }
 }
@@ -403,7 +417,7 @@ private struct HubUsersSheet: View {
 
     private func userRow(_ user: LinkUser) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle").font(.title3).foregroundStyle(.secondary)
+            PersonBadge(name: user.name, avatar: user.avatar, id: user.id, size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.name).lineLimit(1)
                 let plan = users.planName(of: user) ?? ""
@@ -605,80 +619,18 @@ struct HubJoinSheet: View {
 }
 
 /// The Mac's camera, reporting the first QR code it sees.
-private struct QRCameraView: NSViewRepresentable {
+private struct QRCameraView: View {
     let found: @MainActor (String) -> Void
     let failed: @MainActor (String) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(found: found, failed: failed) }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.black.cgColor
-        context.coordinator.start(in: view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.stop() }
-
-    final class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
-        private let session = AVCaptureSession()
-        private let found: @MainActor (String) -> Void
-        private let failed: @MainActor (String) -> Void
-        private let frames = DispatchQueue(label: "com.pdparchitect.noodle.qr-camera")
-        private var reported = false
-
-        init(found: @escaping @MainActor (String) -> Void, failed: @escaping @MainActor (String) -> Void) {
-            self.found = found
-            self.failed = failed
-        }
-
-        @MainActor func start(in view: NSView) {
-            Task { @MainActor in
-                guard await AVCaptureDevice.requestAccess(for: .video) else {
-                    failed("Allow Noodle to use the camera in System Settings > Privacy & Security > Camera.")
-                    return
-                }
-                guard let device = AVCaptureDevice.default(for: .video),
-                      let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) else {
-                    failed("No camera is available.")
-                    return
-                }
-                session.addInput(input)
-                // Mac cameras offer no QR metadata, so frames are read like a chosen picture.
-                let output = AVCaptureVideoDataOutput()
-                output.alwaysDiscardsLateVideoFrames = true
-                guard session.canAddOutput(output) else {
-                    failed("The camera cannot read QR codes.")
-                    return
-                }
-                session.addOutput(output)
-                output.setSampleBufferDelegate(self, queue: frames)
-                let preview = AVCaptureVideoPreviewLayer(session: session)
-                preview.videoGravity = .resizeAspectFill
-                preview.frame = view.bounds
-                preview.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-                view.layer?.addSublayer(preview)
-                let session = session
-                DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
-            }
-        }
-
-        func stop() {
-            let session = session
-            DispatchQueue.global(qos: .userInitiated).async { session.stopRunning() }
-        }
-
-        func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-            guard !reported, let frame = sampleBuffer.imageBuffer,
-                  let invitation = try? LinkInvitation(frame: frame) else { return }
-            reported = true
-            stop()
+    var body: some View {
+        let found = found
+        // Mac cameras offer no QR metadata, so frames are read like a chosen picture.
+        CameraView { frame in
+            guard let invitation = try? LinkInvitation(frame: frame) else { return true }
             let text = invitation.url().absoluteString
-            let found = found
             DispatchQueue.main.async { MainActor.assumeIsolated { found(text) } }
-        }
+            return false
+        } failed: { failed($0) }
     }
 }

@@ -757,10 +757,13 @@ struct UsersView: View {
             Section {
                 ForEach(users.users) { user in
                     NavigationLink { UserView(users: users, id: user.id) } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(user.name)
-                            let plan = users.planName(of: user) ?? ""
-                            Text(user.isAdmin ? "\(plan) · Admin" : plan).font(.subheadline).foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            PersonAvatar(name: user.name, avatar: user.avatar, id: user.id, size: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(user.name)
+                                let plan = users.planName(of: user) ?? ""
+                                Text(user.isAdmin ? "\(plan) · Admin" : plan).font(.subheadline).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

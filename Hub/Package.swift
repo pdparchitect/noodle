@@ -14,6 +14,7 @@ let package = Package(
         .package(path: "../Shared/Brand"),
         .package(path: "../Shared/HubLink"),
         .package(path: "../Shared/LaunchChecks"),
+        .package(path: "../Shared/Wallpaper"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
@@ -26,6 +27,7 @@ let package = Package(
                 .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
                 .product(name: "NoodleRuntimeSettings", package: "noodle"),
                 .product(name: "NoodleSettingsUI", package: "SettingsUI"),
+                .product(name: "NoodleWallpaper", package: "Wallpaper"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ]),
     ],

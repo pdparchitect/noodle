@@ -19,7 +19,9 @@ import Observation
     public func load() async {
         do {
             guard case .users(let listed) = try await pairing.request(.users) else { throw Self.unknownAnswer }
-            users = listed.users
+            users = pairing.keptPictures(listed.users)
+            await pairing.fetchPictures(listed.users)
+            users = pairing.keptPictures(listed.users)
             plans = listed.plans
             error = nil
         } catch {

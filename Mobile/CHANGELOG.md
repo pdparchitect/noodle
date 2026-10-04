@@ -4,7 +4,7 @@
 
 ### Added
 
-- Your picture on a Hub can be changed: tap it in that Hub's details, under Hubs. Take a photo, choose one or create an image, or pick a symbol or your initials on a colour. Everyone on the Hub sees it, and Sharing in a bot's editor shows each person's picture.
+- Your picture on a Hub can be changed: tap it in that Hub's details, under Hubs. Take a photo, choose one or create an image, or pick a symbol or your initials on a colour. Everyone on the Hub sees it, and Sharing in a bot's editor and an admin's Users list show each person's picture.
 
 ### Fixed
 
@@ -14,6 +14,7 @@
 
 - Open ••• > Hubs, tap ⓘ beside the Hub, then tap your picture. Take a photo: the camera lets you fit it into a square. Tap Done; the new picture shows at once, and on your other devices within a minute.
 - Pick a colour and a symbol, then your initials, tapping Done each time. On someone else's device on the same Hub, open Sharing in one of their bots' editors: your picture matches.
+- As an admin, open Users in the Hub's details: each person shows their picture, or their initials if they chose none.
 
 ## [0.19.0] - 2026-10-04
 

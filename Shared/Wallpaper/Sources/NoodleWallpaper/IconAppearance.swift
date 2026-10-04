@@ -102,6 +102,26 @@ public enum IconImage {
                 kCGImageSourceThumbnailMaxPixelSize: 512,
                 kCGImageSourceCreateThumbnailWithTransform: true
               ] as CFDictionary) else { throw IconImageError.invalidImage }
+        return try encode(image, encoding: encoding)
+    }
+
+    /// A camera frame as a picture: its middle square, scaled to fit 512 pixels.
+    public static func photo(_ frame: CGImage, encoding: IconImageEncoding) throws -> Data {
+        let side = min(frame.width, frame.height)
+        guard side > 0, let square = frame.cropping(to: CGRect(x: (frame.width - side) / 2, y: (frame.height - side) / 2,
+                                                               width: side, height: side)) else { throw IconImageError.invalidImage }
+        let size = min(side, 512)
+        guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+            throw IconImageError.invalidImage
+        }
+        context.interpolationQuality = .high
+        context.draw(square, in: CGRect(x: 0, y: 0, width: size, height: size))
+        guard let scaled = context.makeImage() else { throw IconImageError.invalidImage }
+        return try encode(scaled, encoding: encoding)
+    }
+
+    private static func encode(_ image: CGImage, encoding: IconImageEncoding) throws -> Data {
         let bitmap = NSBitmapImageRep(cgImage: image)
         switch encoding {
         case .png(let maxBytes):

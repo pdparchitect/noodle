@@ -37,6 +37,27 @@ final class IconAppearanceTests: XCTestCase {
         XCTAssertEqual(Array(prepared.prefix(3)), [0xFF, 0xD8, 0xFF], "Noodle stores JPEG")
     }
 
+    /// A wide camera frame keeps its middle, square, as the phone's camera crops a picture.
+    func testACameraPhotoKeepsTheMiddleOfTheFrameAsASquare() throws {
+        // Red, green and blue thirds: only the green middle may survive.
+        let width = 1200, height = 400
+        let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        for (index, colour) in [CGColor(red: 1, green: 0, blue: 0, alpha: 1), CGColor(red: 0, green: 1, blue: 0, alpha: 1),
+                                CGColor(red: 0, green: 0, blue: 1, alpha: 1)].enumerated() {
+            context.setFillColor(colour)
+            context.fill(CGRect(x: index * 400, y: 0, width: 400, height: height))
+        }
+        let prepared = try IconImage.photo(try XCTUnwrap(context.makeImage()), encoding: .png(maxBytes: 2 * 1024 * 1024))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: prepared))
+        XCTAssertEqual([bitmap.pixelsWide, bitmap.pixelsHigh], [400, 400])
+        for (x, y) in [(2, 2), (397, 2), (200, 200), (2, 397), (397, 397)] {
+            let colour = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+            XCTAssertGreaterThan(colour.greenComponent, 0.9, "(\(x), \(y))")
+            XCTAssertLessThan(colour.redComponent + colour.blueComponent, 0.1, "(\(x), \(y))")
+        }
+    }
+
     func testRejectsUnreadableAndOversizeSources() throws {
         XCTAssertThrowsError(try IconImage.prepare(Data("not an image".utf8), encoding: .jpeg(quality: 0.86))) {
             XCTAssertEqual($0 as? IconImageError, .invalidImage)

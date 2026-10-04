@@ -147,7 +147,7 @@ struct HubPairView: View {
             VStack(spacing: 8) {
                 ForEach(access.users) { user in
                     card(.user(user.id)) {
-                        avatar(user.name)
+                        HubPersonBadge(user: user, access: access, size: 36)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(user.name).font(.headline)
                             Text(devicesText(access.devices(of: user).count))
@@ -194,15 +194,6 @@ struct HubPairView: View {
         .onTapGesture { choice = option }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private func avatar(_ name: String) -> some View {
-        Text(name.first.map { String($0).uppercased() } ?? "?")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
-            .background(Color.accentColor.gradient, in: Circle())
-            .accessibilityHidden(true)
     }
 
     private func devicesText(_ count: Int) -> String {

@@ -404,6 +404,19 @@ extension LinkPerson: LinkPictured {
     }
 }
 
+extension LinkUser: LinkPictured {
+    public static let pictureFolder = "Users"
+    public var pictureOwner: LinkPictureOwner { .person(id) }
+    public var picture: Data? {
+        get { avatar?.image }
+        set { avatar?.image = newValue }
+    }
+    public var pictureDigest: String? {
+        get { avatar?.imageDigest }
+        set { avatar?.imageDigest = newValue }
+    }
+}
+
 extension LinkConnection: LinkPictured {
     public static let pictureFolder = "Connections"
     public var pictureOwner: LinkPictureOwner { .connection(id) }
@@ -598,14 +611,18 @@ public struct LinkUser: Codable, Equatable, Identifiable, Sendable {
     /// Admins are managed only on the Hub itself, so a device shows them without changing them.
     public var isAdmin: Bool
     public var devices: [LinkUserDevice]
+    /// Nil until they choose one: they show their initials. Its image travels apart, as `picture`.
+    public var avatar: LinkAvatar?
 
-    public init(id: UUID, name: String, plan: UUID, canPairDevices: Bool, isAdmin: Bool, devices: [LinkUserDevice]) {
+    public init(id: UUID, name: String, plan: UUID, canPairDevices: Bool, isAdmin: Bool, devices: [LinkUserDevice],
+                avatar: LinkAvatar? = nil) {
         self.id = id
         self.name = name
         self.plan = plan
         self.canPairDevices = canPairDevices
         self.isAdmin = isAdmin
         self.devices = devices
+        self.avatar = avatar
     }
 }
 

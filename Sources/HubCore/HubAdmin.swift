@@ -82,6 +82,7 @@ import NoodleCore
         LinkUser(id: user.id, name: user.name, plan: user.plan, canPairDevices: user.canPairDevices, isAdmin: user.isAdmin,
                  devices: access.devices(of: user).map {
                      LinkUserDevice(id: $0.id, name: $0.name, paired: $0.paired, lastSeen: $0.lastSeen, isConnected: isConnected($0))
-                 })
+                 },
+                 avatar: user.avatar)
     }
 }

@@ -51,7 +51,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Scan the QR code of a Noodle Hub invitation when you choose Scan with Camera.</string>
+	<string>Take your picture for a Noodle Hub, or scan the QR code of a Noodle Hub invitation when you choose Scan with Camera.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Let the bots you assign a calendar read and change that calendar. No bot sees a calendar you have not assigned.</string>
 	<key>NSHighResolutionCapable</key>

@@ -431,6 +431,18 @@ import XCTest
         XCTAssertNil(users.planName(of: LinkUser(id: UUID(), name: "X", plan: UUID(), canPairDevices: true, isAdmin: false, devices: [])))
     }
 
+    /// An admin sees the picture each person chose, and initials for those who chose none.
+    func testAnAdminSeesEveryonesPicture() async throws {
+        let f = try await fixture()
+        let photo = try smallJPEG()
+        try await f.phone.setAvatar(LinkAvatar(colour: 3, image: photo))
+        let users = HubUsers(pairing: f.admin)
+        await users.load()
+        XCTAssertEqual(try user(users, "Ada").avatar?.image, photo)
+        XCTAssertEqual(try user(users, "Ada").avatar?.colour, 3)
+        XCTAssertNil(try user(users, "Grace").avatar)
+    }
+
     func testAnAdminChangesSomeoneAndSeesIt() async throws {
         let f = try await fixture()
         let users = HubUsers(pairing: f.admin)
