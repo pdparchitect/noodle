@@ -694,6 +694,25 @@ import XCTest
         return shared
     }
 
+    /// Waits for the first event `matches` accepts, failing rather than waiting forever when none comes.
+    private func expect(_ what: String, in events: AsyncThrowingStream<LinkEvent, Error>, file: StaticString = #filePath,
+                        line: UInt = #line, where matches: @escaping @Sendable (LinkEvent) -> Bool) async throws {
+        let heard = try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                for try await event in events where matches(event) { return true }
+                return false
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(10))
+                return false
+            }
+            let first = try await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        if !heard { XCTFail("Never heard \(what)", file: file, line: line) }
+    }
+
     private func bots(of device: HubPairing) async throws -> [LinkBot] {
         guard case .bots(let bots) = try await device.request(.bots) else { throw XCTSkip("unexpected answer") }
         return bots
@@ -800,9 +819,8 @@ import XCTest
         harnessless.harnessIdentifier = nil
         f.hub.runtime.refresh(agents: [harnessless])
         f.hub.bots.checkForChanges()
-        for try await event in events {
-            if case .botPhase(bot.id, .failed) = event { break }
-        }
+        let id = bot.id
+        try await expect("that the bot failed", in: events) { if case .botPhase(id, .failed) = $0 { true } else { false } }
     }
 
     /// People a bot is shared with only talk with it: they never see how it is made or the status it sets.
@@ -857,7 +875,7 @@ import XCTest
         _ = try await grace.device.request(.bots)
         let shared = try await share(bot, with: [bea.user], f)
         XCTAssertEqual(shared.sharedWith, [bea.user.id])
-        for try await event in events { if case .botsChanged = event { break } }
+        try await expect("that the bot is gone", in: events) { if case .botsChanged = $0 { true } else { false } }
         let gracesBots = try await bots(of: grace.device)
         XCTAssertEqual(gracesBots, [])
         let beasBots = try await bots(of: bea.device)
@@ -880,7 +898,7 @@ import XCTest
             let events = try await grace.device.subscribe()
             _ = try await grace.device.request(.bots)
             _ = try await f.device.request(change)
-            for try await event in events { if case .botsChanged = event { break } }
+            try await expect("of \(change)", in: events) { if case .botsChanged = $0 { true } else { false } }
         }
         // Archived, it is its owner's alone until brought back, with the same conversation.
         let whileArchived = try await bots(of: grace.device)
@@ -903,9 +921,39 @@ import XCTest
         _ = try await grace.device.request(.bots)
         _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: graces.conversationID, body: "Tea?")
         f.hub.bots.checkForChanges()
-        for try await event in events {
-            if case .conversationChanged(graces.conversationID, 1) = event { break }
+        let conversation = graces.conversationID
+        try await expect("the reply", in: events) { if case .conversationChanged(conversation, 1) = $0 { true } else { false } }
+    }
+
+    /// Someone a bot is shared with is refused once its owner's plan no longer lends its harness.
+    func testASharedBotStopsWhenItsOwnersPlanNoLongerLendsItsHarness() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        guard let graces = try await bots(of: grace.device).first else { return XCTFail("not shared") }
+        f.hub.access.move(f.ada, to: f.hub.access.plans[0])
+        do {
+            _ = try await grace.device.request(.send(LinkOutgoingMessage(conversationID: graces.conversationID, id: UUID(), body: "Hi")))
+            XCTFail("Talked with a bot its owner's plan no longer lends")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.message, "Alfred cannot take messages right now.")
         }
+    }
+
+    /// The recent history a bot is woken with names whoever it is talking with.
+    func testTheHistoryABotIsWokenWithNamesThePerson() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        guard let graces = try await bots(of: grace.device).first else { return XCTFail("not shared") }
+        _ = try await grace.device.request(.send(LinkOutgoingMessage(conversationID: graces.conversationID, id: UUID(), body: "First")))
+        _ = try f.hub.repository.latestMessages(for: bot.id)
+        _ = try await grace.device.request(.send(LinkOutgoingMessage(conversationID: graces.conversationID, id: UUID(), body: "Second")))
+        let context = try XCTUnwrap(MessageDeliveryContext.load(for: bot.id, repository: f.hub.repository))
+        XCTAssertEqual(context.unreadMessages, ["Second"])
+        XCTAssertEqual(context.recentMessages, ["Grace: First"])
     }
 
     /// Deleting a shared bot, or removing someone from the Hub, leaves no conversation behind.
