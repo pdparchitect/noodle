@@ -151,6 +151,10 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored public var onUsage: (@MainActor (UsageSample) -> Void)?
     /// What the usage ledger holds for a session, so resumed totals are not counted twice.
     @ObservationIgnored public var recordedUsage: (@MainActor (String) -> [String: UsageTotal])?
+    /// Called once when a bot's harness needs the person to sign in again.
+    @ObservationIgnored public var onSignInRequired: (@MainActor (UUID) -> Void)?
+    /// Retries before a turn finishes fail the same way, so they stay quiet.
+    @ObservationIgnored private var signInAnnounced: Set<UUID> = []
     @ObservationIgnored private var usageMeters: [UUID: UsageMeter] = [:]
     private var lifecycleID = UUID()
     private var transitionIDs: [UUID: UUID] = [:]
@@ -523,6 +527,7 @@ public final class AgentRuntimeCoordinator {
             sessionStartDates[id] = nil
             lastInteractionDates[id] = nil
             heartbeatTurns.remove(id)
+            signInAnnounced.remove(id)
             saveSessionDates()
         }
 
@@ -901,6 +906,7 @@ public final class AgentRuntimeCoordinator {
         failedStops.removeValue(forKey: agentID)?.stop { _ in }
         blockedRestarts.remove(agentID)
         snapshots.removeValue(forKey: agentID)
+        signInAnnounced.remove(agentID)
         heartbeatScheduler.remove(agentID)
         saveHeartbeatActivityDates()
         lastHeartbeatDates.removeValue(forKey: agentID)
@@ -943,6 +949,11 @@ public final class AgentRuntimeCoordinator {
     public func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
         guard !isStoppingAll else { return }
         for agent in agents where installation(for: agent) != nil && !neverStarts(agent.id) {
+            // A bot waiting on the person for a reported failure keeps it until Kick;
+            // restarting cannot sign in, restore usage or answer a safety stop.
+            if let process = processes[agent.id], process.snapshot.phase == .failed, process.snapshot.failure != nil {
+                continue
+            }
             if let process = processes[agent.id], process.isAlive {
                 if agent.harnessIdentifier == HarnessProvider.codex.rawValue,
                    process.snapshot.phase == .working,
@@ -1044,6 +1055,10 @@ public final class AgentRuntimeCoordinator {
                 self.recordActivity(for: agentID)
                 if self.heartbeatTurns.remove(agentID) == nil { self.recordInteraction(for: agentID) }
                 self.connectionRecoveryAttempts[agentID] = nil
+                self.signInAnnounced.remove(agentID)
+            }
+            if snapshot.failure == .authenticationRequired, self.signInAnnounced.insert(agentID).inserted {
+                self.onSignInRequired?(agentID)
             }
             self.snapshots[agentID] = snapshot
             if snapshot.phase == .ready { self.markStable(agentID: agentID) }

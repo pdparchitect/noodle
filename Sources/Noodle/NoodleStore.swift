@@ -270,6 +270,10 @@ final class NoodleStore {
         thisMac.onBackgroundChanged = { [weak self] in self?.reloadBackground(of: $0) }
         // A device changed this Mac's tools, computers or browsers, in the files these controllers keep.
         thisMac.onToolsEdited = { [weak self] in self?.reloadToolsEditedElsewhere() }
+        self.runtime.onSignInRequired = { [weak self] id in
+            guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
+            NoodleNotifications.postSignInRequired(for: agent)
+        }
         Self.active = self
     }
 

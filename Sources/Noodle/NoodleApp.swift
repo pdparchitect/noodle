@@ -257,9 +257,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        let signIn = notification.request.content.userInfo[NoodleNotifications.signInKey] != nil
         Task { @MainActor in
             completionHandler(
-                NoodleNotifications.shouldPresentActivity ? [.banner, .sound] : []
+                signIn || NoodleNotifications.shouldPresentActivity ? [.banner, .sound] : []
             )
         }
     }
@@ -272,8 +273,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         let conversationID = (userInfo[NoodleNotifications.conversationIDKey] as? String).flatMap(UUID.init)
         let messageID = (userInfo[NoodleNotifications.messageIDKey] as? String).flatMap(UUID.init)
+        let signIn = userInfo[NoodleNotifications.signInKey] != nil
 
         Task { @MainActor in
+            if signIn {
+                NoodleStore.active?.showHarnessSettings()
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
             if let conversationID {
                 NoodleStore.active?.openNotification(conversationID: conversationID, messageID: messageID)
             }

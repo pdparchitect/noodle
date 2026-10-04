@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- When a bot's harness needs you to sign in again, Noodle shows a notification once, even while it is in front. Clicking it opens Settings > Harness.
+
+### Fixed
+
+- A bot waiting for you to sign in, for usage to return or for a Kick after a safety stop no longer restarts its harness every 30 seconds. Claude Code and Antigravity bots did this after their sign-in expired.
+
 ## [0.45.0] - 2026-10-04
 
 ### Added

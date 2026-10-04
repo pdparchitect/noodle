@@ -208,4 +208,56 @@ import XCTest
         XCTAssertFalse(saved.recoveryBlocked)
         XCTAssertEqual(f.factory.processes.count, 2)
     }
+    func testBotWaitingOnAnAccountFailureIsNotRestartedWhenItsHarnessExits() throws {
+        let failures: [AgentRuntimeFailure] = [.authenticationRequired, .usageLimit, .safetyStop, .recoveryFailed, .missingSession("s")]
+        for failure in failures {
+            let f = try fixture(), agent = try f.agent(harness: .claudeCode), process = try f.start(agent)
+            process.transition(.failed, failure: failure)
+            process.isAlive = false
+            f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+            XCTAssertEqual(process.stops, 0, "\(failure)")
+            XCTAssertEqual(f.factory.processes.count, 1, "Restarting cannot fix \(failure)")
+            XCTAssertEqual(f.runtime.snapshot(for: agent.id).failure, failure)
+        }
+    }
+
+    func testSignInIsAnnouncedOnceUntilATurnFinishes() throws {
+        let f = try fixture(), agent = try f.agent(harness: .claudeCode), process = try f.start(agent)
+        var announced: [UUID] = []
+        f.runtime.onSignInRequired = { announced.append($0) }
+        process.transition(.failed, failure: .authenticationRequired)
+        XCTAssertEqual(announced, [agent.id])
+        // A new message retries: the harness starts, reports ready, then fails the same way.
+        process.transition(.starting)
+        process.transition(.ready)
+        process.transition(.working)
+        process.transition(.failed, failure: .authenticationRequired)
+        XCTAssertEqual(announced, [agent.id], "Retries without signing in stay quiet")
+        process.transition(.working)
+        process.transition(.ready)
+        process.transition(.failed, failure: .authenticationRequired)
+        XCTAssertEqual(announced, [agent.id, agent.id], "A finished turn proves sign-in worked")
+    }
+    func testMessageToABotWaitingForSignInReachesItsHarness() throws {
+        let f = try fixture(), agent = try f.agent(harness: .claudeCode), process = try f.start(agent)
+        process.transition(.failed, failure: .authenticationRequired)
+        process.isAlive = false
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        f.runtime.notify([agent], repository: f.repository)
+        XCTAssertEqual(process.notifications.count, 1, "Signing in and sending a message is enough to continue")
+        XCTAssertEqual(f.factory.processes.count, 1)
+    }
+
+    func testStoppedOrRemovedBotIsAnnouncedAgainWhenItsSignInExpires() throws {
+        let f = try fixture(), agent = try f.agent(harness: .claudeCode)
+        var announced: [UUID] = []
+        f.runtime.onSignInRequired = { announced.append($0) }
+        try f.start(agent).transition(.failed, failure: .authenticationRequired)
+        f.runtime.stop(agentID: agent.id)
+        try f.start(agent).transition(.failed, failure: .authenticationRequired)
+        XCTAssertEqual(announced.count, 2, "Stopping forgets the earlier alert")
+        f.runtime.refresh(agents: [])
+        try f.start(agent).transition(.failed, failure: .authenticationRequired)
+        XCTAssertEqual(announced.count, 3, "Removing forgets the earlier alert")
+    }
 }

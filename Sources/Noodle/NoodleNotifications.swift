@@ -10,6 +10,7 @@ import NoodleRuntimeSettings
 enum NoodleNotifications {
     static let conversationIDKey = "conversationID"
     static let messageIDKey = "messageID"
+    static let signInKey = "signIn"
 
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle",
@@ -63,6 +64,27 @@ enum NoodleNotifications {
             content: content,
             trigger: nil
         )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                logger.error("Unable to deliver notification: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Shown even while Noodle is in front: the bot waits until the person signs in.
+    @MainActor
+    static func postSignInRequired(for agent: AgentRecord) {
+        let harness = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.displayName ?? "The harness"
+        let content = UNMutableNotificationContent()
+        content.title = agent.displayName
+        content.body = "\(harness) needs you to sign in again."
+        content.sound = .default
+        content.userInfo = [signInKey: true]
+        if let avatar = avatarAttachment(for: agent, messageID: UUID()) {
+            content.attachments = [avatar]
+        }
+        // One per bot: a later expiry replaces the earlier banner.
+        let request = UNNotificationRequest(identifier: "sign-in-\(agent.id.uuidString)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
                 logger.error("Unable to deliver notification: \(error.localizedDescription, privacy: .public)")
