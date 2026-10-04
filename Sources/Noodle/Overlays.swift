@@ -362,7 +362,7 @@ struct EditBotSheet: View {
                         ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
                     }
                     if let sharingHub {
-                        BotSharingSettingsRow(mirror: sharingHub, selectedIDs: $sharedWith)
+                        BotSharingPicker(mirror: sharingHub, bot: name, selectedIDs: $sharedWith)
                     }
                     Divider()
                     DestructiveActionButton(title: "Delete Bot") {
@@ -511,89 +511,97 @@ struct EditBotSheet: View {
     }
 }
 
-/// Whom a bot kept on a Noodle Hub is shared with, chosen in a sheet and saved with the bot.
-private struct BotSharingSettingsRow: View {
+/// Whom a bot kept on a Noodle Hub is shared with: everyone else on the Hub, picked by tapping them,
+/// and saved with the bot.
+struct BotSharingPicker: View {
     let mirror: HubMirror
+    let bot: String
     @Binding var selectedIDs: Set<UUID>
-    @State private var editing = false
-
-    var body: some View {
-        Button { editing = true } label: {
-            HStack {
-                Label("Sharing", systemImage: "person.2")
-                Spacer()
-                Text(selectedIDs.isEmpty ? "Only You" : selectedIDs.count == 1 ? "1 Person" : "\(selectedIDs.count) People")
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-            }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-        .sheet(isPresented: $editing) {
-            BotSharingSheet(mirror: mirror, selectedIDs: $selectedIDs)
-                .noodleSheetSizing()
-        }
-    }
-}
-
-/// The other people on a Noodle Hub, to share a bot kept there with.
-private struct BotSharingSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let mirror: HubMirror
-    @Binding var selectedIDs: Set<UUID>
-    @State private var selection: Set<UUID> = []
     @State private var people: [LinkPerson]?
     @State private var failure: String?
 
+    /// Who can talk to the bot, as the picked people read.
+    static func summary(bot: String, people: [String]) -> String {
+        let trimmed = bot.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bot = trimmed.isEmpty ? "this bot" : trimmed
+        guard !people.isEmpty else { return "Only you can talk to \(bot)." }
+        return "\(people.formatted(.list(type: .and))) can talk to \(bot) too."
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("Sharing").font(.headline)
-                Spacer()
-                Button("Apply") {
-                    selectedIDs = selection
-                    dismiss()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.blue)
-                .disabled(selection == selectedIDs)
-                .keyboardShortcut(.defaultAction)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sharing")
+                .font(.caption.weight(.semibold))
+            if let people, people.isEmpty {
+                Text("Nobody else is on this Hub").font(.caption).foregroundStyle(.secondary)
+            } else if let people {
+                BotSharingPeople(people: people, bot: bot, selectedIDs: $selectedIDs)
+            } else if let failure {
+                Text(failure).font(.caption).foregroundStyle(.red)
+            } else {
+                ProgressView().controlSize(.small)
             }
-            .padding(16)
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                if let people, people.isEmpty {
-                    Text("Nobody else is on this Hub")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                } else if let people {
-                    ForEach(people) { person in
-                        Toggle(isOn: Binding(
-                            get: { selection.contains(person.id) },
-                            set: { if $0 { selection.insert(person.id) } else { selection.remove(person.id) } })) {
-                            HStack(spacing: 8) {
-                                PersonBadge(name: person.name, avatar: person.avatar, id: person.id, size: 24)
-                                Text(person.name)
-                            }
-                        }
-                    }
-                } else if let failure {
-                    Text(failure).foregroundStyle(.red)
-                } else {
-                    ProgressView().frame(maxWidth: .infinity)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
         }
-        .frame(width: 360)
-        .onAppear { selection = selectedIDs }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task {
             do { people = try await mirror.people() } catch { failure = error.localizedDescription }
         }
+    }
+
+}
+
+/// Everyone else on the Hub, each tapped to share the bot with them or stop, and who that lets talk to it.
+struct BotSharingPeople: View {
+    let people: [LinkPerson]
+    let bot: String
+    @Binding var selectedIDs: Set<UUID>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 10) {
+                ForEach(people) { person($0) }
+            }
+            Text(BotSharingPicker.summary(bot: bot, people: people.filter { selectedIDs.contains($0.id) }.map(\.name)))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+        }
+    }
+
+    private func person(_ person: LinkPerson) -> some View {
+        let selected = selectedIDs.contains(person.id)
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                if selected { selectedIDs.remove(person.id) } else { selectedIDs.insert(person.id) }
+            }
+        } label: {
+            VStack(spacing: 5) {
+                PersonBadge(name: person.name, avatar: person.avatar, id: person.id, size: 44)
+                    .padding(3)
+                    .overlay { Circle().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 2) }
+                    .overlay(alignment: .bottomTrailing) {
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
+                                .font(.system(size: 16))
+                                .background(.background, in: Circle())
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .opacity(selected ? 1 : 0.55)
+                Text(person.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(selected ? .primary : .secondary)
+            }
+            .frame(width: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(selected ? "Stop sharing with \(person.name)" : "Share with \(person.name)")
+        .accessibilityLabel(person.name)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
 

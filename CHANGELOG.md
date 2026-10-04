@@ -13,6 +13,10 @@ All notable changes to Noodle are documented here, following
 - You can choose your picture on a Noodle Hub with Your Picture… under it in Settings > Hub: take a photo with the Mac's camera, choose one, or pick a symbol or your initials on a colour. Everyone on the Hub sees it, and Sharing in a bot's editor and the Hub's Users show each person's picture.
 - A privacy guide in the documentation explains what model providers see, the training risk of personal subscriptions, and how to keep work on your Mac or with a provider that does not train on it.
 
+### Changed
+
+- Sharing in a bot's editor shows everyone on the Hub as pictures to click, right in the editor rather than in a separate sheet, with a line saying who can talk to the bot.
+
 ### Fixed
 
 - A bot waiting for you to sign in, for usage to return or for a Kick after a safety stop no longer restarts its harness every 30 seconds. Claude Code and Antigravity bots did this after their sign-in expired.
