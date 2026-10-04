@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-04
+
 ### Added
 
 - Apple Intelligence bots can use any server with an OpenAI-compatible API: choose Add Account > Custom in Settings > Harness > Apple Intelligence > Remote Models and enter its address and, if it needs one, an API key. Add Model describes each model: its ID, which can be picked from the ones the server lists, its context and output limits, whether it accepts images and which reasoning levels it supports. Only the models added are offered to bots.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-04
+
 ### Added
 
 - A noodlet's controls can show a pad as a thumbstick: add `"stick": true` to it in `noodlet.json`. Bots are told when to use one.

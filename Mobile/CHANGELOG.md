@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-04
+
 ### Added
 
 - Bots on a Hub can be shared with other people on it, from Sharing in the bot's editor. Each person talks with the bot in a conversation of their own. A bot someone shared with you is for talking with only: it cannot be edited or archived, and is not offered for groups. Tapping its name, or Change Background… when holding its row, sets your conversation's background.

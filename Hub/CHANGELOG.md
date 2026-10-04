@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-04
+
 ### Added
 
 - Users can be made admins in Settings > Users. The Hub lets an admin's devices add, rename and remove the users who are not admins, move them to another plan, and invite or unpair their devices, ready for Noodle and Noodle Mobile to offer it. Only the Hub's own Settings makes or changes admins.
