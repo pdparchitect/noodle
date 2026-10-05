@@ -896,7 +896,10 @@ import os
             }
             return LinkHarness(provider: harness.provider.rawValue, providerName: harness.provider.displayName,
                                profile: harness.profile, profileName: profileName, models: models,
-                               restrictsModels: allowed != nil)
+                               restrictsModels: allowed != nil,
+                               voices: harness.provider.voices.map {
+                                   LinkCallVoice(id: $0.id, name: $0.name, presentation: $0.presentation == .feminine ? .feminine : .masculine)
+                               })
         }
         .sorted { ($0.providerName, $0.profileName ?? "") < ($1.providerName, $1.profileName ?? "") }
         return LinkStatus(hubName: hubName, userName: user?.name ?? "", planName: plan?.name ?? "",

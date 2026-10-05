@@ -732,6 +732,12 @@ import XCTest
         f.hub.bots.voiceGuesser = MasculineNames()
         let family = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
         f.hub.access.set(HubHarness(provider: .codex, profile: nil), included: true, in: family)
+        // Devices choose a bot's voice from what its harness offers.
+        guard case .status(let status) = try await f.device.request(.status),
+              let codex = status.harnesses.first(where: { $0.provider == "codex" }) else { return XCTFail("no codex") }
+        XCTAssertEqual(codex.voices.filter { $0.presentation == .feminine }.map(\.id), ["juniper", "maple", "sol", "vale"])
+        XCTAssertEqual(codex.voices.first?.name, "Juniper")
+        XCTAssertEqual(status.harnesses.first { $0.provider == "claude-code" }?.voices, [])
         guard case .bot(let made) = try await f.device.request(.createBot(LinkBotDraft(name: "Kai", provider: "codex"))) else {
             return XCTFail("no bot")
         }

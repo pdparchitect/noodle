@@ -4,12 +4,15 @@
 
 ### Added
 
-- You can call your Codex bots on the Hub, and Codex bots shared with you: tap the phone in a conversation's top bar and talk things through. The bot answers aloud and works on what you ask. A bar at the top shows the call's time with Mute and End, and the conversation stays open, so you can type and share files while you talk; the call hears about them. What is said shows in the conversation as short transcript blocks; tap one to read all of it.
+- You can call your Codex bots on the Hub, and Codex bots shared with you: tap the phone in a conversation's top bar and talk things through. The bot answers aloud and works on what you ask. Calls start on the earpiece, where the bot sounds clearest; Speaker switches to the loudspeaker. A bar at the top shows the call's time with Speaker, Mute and End, and the conversation stays open, so you can type and share files while you talk; the call hears about them. What is said shows in the conversation as short transcript blocks; tap one to read all of it. Each bot's voice is chosen under Voice in its editor, with a sample of each to hear.
 
 ### What to Test
 
 - Open a conversation with one of your Codex bots and tap the phone. Allow the microphone. After a short wait you hear a chime and the bar starts counting: ask the bot something and hear it answer.
 - During the call, type a message or share a photo. The bot hears about it, and the transcript splits around it in the conversation.
+- The call starts on the earpiece: hold the phone to your ear and the bot sounds clear. Tap Speaker: it moves to the loudspeaker without the bot hearing itself, though it sounds more like a phone line. Tap Speaker again to go back.
+- With AirPods connected, the bot sounds clear in them.
+- In a Codex bot's editor, tap Voice: tap each voice to hear it, pick one and save. The next call uses it.
 - Tap Mute: the bot stops hearing you. Tap End: the call ends and its card shows how long it lasted.
 - Lock the phone during a call: the call should keep going.
 - Call a Codex bot someone shared with you: it works the same, and the call shows only in your conversation with it.

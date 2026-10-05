@@ -37,5 +37,10 @@ final class LinkCallTests: XCTestCase {
         XCTAssertFalse(try decoder.decode(LinkBot.self, from: encoder.encode(bot)).canCall)
         bot.canCall = true
         XCTAssertTrue(try decoder.decode(LinkBot.self, from: encoder.encode(bot)).canCall)
+
+        var harness = LinkHarness(provider: "codex", providerName: "Codex", profileName: nil)
+        XCTAssertEqual(try decoder.decode(LinkHarness.self, from: encoder.encode(harness)).voices, [])
+        harness.voices = [LinkCallVoice(id: "maple", name: "Maple", presentation: .feminine)]
+        XCTAssertEqual(try decoder.decode(LinkHarness.self, from: encoder.encode(harness)).voices, harness.voices)
     }
 }

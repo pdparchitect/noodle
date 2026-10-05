@@ -56,7 +56,8 @@ let project = Project(
                 "NoodleAppGroup": "group.$(MOBILE_APP_BUNDLE_ID)",
             ]),
             sources: ["Sources/NoodleMobile/**", "Sources/Shared/**"],
-            resources: ["Support/Assets.xcassets"],
+            // The Mac's samples of each harness voice, to hear before choosing one.
+            resources: ["Support/Assets.xcassets", .folderReference(path: "../Support/VoicePreviews")],
             entitlements: .file(path: "Support/NoodleMobile.entitlements"),
             dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore"), .package(product: "NoodleBrand"),
                            .package(product: "NoodletRuntime"),

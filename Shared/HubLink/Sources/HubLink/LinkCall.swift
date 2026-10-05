@@ -52,6 +52,21 @@ public struct LinkCallRecord: Codable, Equatable, Sendable {
     }
 }
 
+/// A voice a bot on a harness can speak with on calls.
+public struct LinkCallVoice: Codable, Hashable, Identifiable, Sendable {
+    public enum Presentation: String, Codable, Sendable { case feminine, masculine }
+
+    public var id: String
+    public var name: String
+    public var presentation: Presentation
+
+    public init(id: String, name: String, presentation: Presentation) {
+        self.id = id
+        self.name = name
+        self.presentation = presentation
+    }
+}
+
 /// What comes down a call's channel, one JSON frame each. Closing the channel hangs up.
 public enum LinkCallEvent: Codable, Equatable, Sendable {
     /// The voice service's WebRTC answer to the device's offer.
@@ -70,8 +85,8 @@ public enum LinkCallEvent: Codable, Equatable, Sendable {
 }
 
 /// The page that captures the microphone and plays the bot's voice on a device, in a hidden
-/// web view: WebKit gives every Noodle app WebRTC, echo cancellation and playback. `offer()`
-/// returns the WebRTC offer, `answer(sdp)` completes the call, `mute(bool)`, `chime()` and
+/// web view: WebKit gives every Noodle app WebRTC, echo cancellation and playback. `offer(processVoice)`
+/// returns the WebRTC offer, `answer(sdp)` completes the call, `stopMicrophone()` and `startMicrophone(bool)` swap it, `mute(bool)`, `chime()` and
 /// `hangUp()` do as named, and a lost connection posts `{failed: true}` to the `call` handler.
 public enum LinkCallMedia {
     /// A secure origin, which the microphone needs.
@@ -81,14 +96,20 @@ public enum LinkCallMedia {
     // sending on digital silence, so a faint noise floor keeps it flowing while muted.
     public static let page = """
     <!doctype html><html><body><audio id="voice" autoplay></audio><script>
-    let peer, microphone, context, gain;
-    async function offer() {
-      microphone = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+    let peer, microphone, source, context, gain;
+    // A device whose system cancels echo itself passes false, keeping WebKit's own voice
+    // processing, which narrows playback to a phone line, off.
+    async function offer(processVoice = true) {
+      microphone = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: processVoice, noiseSuppression: processVoice, autoGainControl: processVoice}});
       context = new AudioContext();
+      // iOS pauses the context whenever the device changes its audio set-up, as on switching to
+      // the loudspeaker; paused, nothing reaches the bot, so it resumes at once.
+      context.onstatechange = () => { if (context.state === 'suspended' || context.state === 'interrupted') context.resume(); };
       await context.resume();
       const destination = context.createMediaStreamDestination();
       gain = context.createGain();
-      context.createMediaStreamSource(microphone).connect(gain).connect(destination);
+      source = context.createMediaStreamSource(microphone);
+      source.connect(gain).connect(destination);
       const noise = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
       const samples = noise.getChannelData(0);
       for (let i = 0; i < samples.length; i++) samples[i] = (Math.random() * 2 - 1) * 0.002;
@@ -108,6 +129,22 @@ public enum LinkCallMedia {
       return peer.localDescription.sdp;
     }
     async function answer(sdp) { await peer.setRemoteDescription({type: 'answer', sdp}); }
+    // Swap the microphone for one with voice processing on or off, mid-call, in two steps so the
+    // device can change its audio set-up in between. The noise floor keeps audio flowing meanwhile.
+    function stopMicrophone() {
+      if (microphone) microphone.getTracks().forEach(track => track.stop());
+      if (source) source.disconnect();
+      microphone = null;
+    }
+    async function startMicrophone(processVoice) {
+      microphone = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: processVoice, noiseSuppression: processVoice, autoGainControl: processVoice}});
+      source = context.createMediaStreamSource(microphone);
+      source.connect(gain);
+      if (context.state !== 'running') await context.resume();
+      // The device pauses the bot's voice too when it changes its audio set-up.
+      const voice = document.getElementById('voice');
+      if (voice.srcObject) await voice.play().catch(() => {});
+    }
     function mute(muted) { if (gain) gain.gain.value = muted ? 0 : 1; }
     // Played on the speakers, not into the call, so the bot never hears it.
     function chime() {

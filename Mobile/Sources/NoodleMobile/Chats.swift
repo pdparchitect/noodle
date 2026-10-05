@@ -1888,6 +1888,7 @@ struct AgentEditor: View {
             draft.profile = harness?.profile
             draft.reasoningEffort = nil
             draft.setModel(harness?.initialModel, on: harness)
+            if let voice = draft.voice, harness?.voices.contains(where: { $0.id == voice }) != true { draft.voice = nil }
         }
     }
 
@@ -1973,6 +1974,14 @@ struct AgentEditor: View {
                             Picker("Effort", selection: $draft.reasoningEffort) {
                                 Text("Default").tag(String?.none)
                                 ForEach(efforts) { Text($0.name).tag(String?.some($0.id)) }
+                            }
+                        }
+                        if let lent = harness.wrappedValue, !lent.voices.isEmpty {
+                            NavigationLink {
+                                VoicePicker(provider: lent.provider, voices: lent.voices, selection: $draft.voice)
+                            } label: {
+                                // Until one is chosen, the Hub picks a voice that suits the bot's name.
+                                LabeledContent("Voice", value: lent.voices.first { $0.id == draft.voice }?.name ?? "Automatic")
                             }
                         }
                     }

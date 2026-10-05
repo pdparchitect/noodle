@@ -17,6 +17,7 @@ import Testing
     var offerError: Error?
     var answers: [String] = []
     var muted: [Bool] = []
+    var speaker: [Bool] = []
     var chimes = 0
     var closed = 0
     func prepareOffer() async throws -> String {
@@ -25,6 +26,7 @@ import Testing
     }
     func accept(answer: String) async throws { answers.append(answer) }
     func setMuted(_ muted: Bool) { self.muted.append(muted) }
+    func setSpeaker(_ on: Bool) { speaker.append(on) }
     func announceConnected() { chimes += 1 }
     func close() { closed += 1 }
 }
@@ -65,6 +67,13 @@ private struct Failure: LocalizedError {
         #expect(calls.call?.isMuted == true)
         #expect(audio.muted == [true])
 
+        // Calls start on the earpiece, which needs no echo cancellation and so sounds clean.
+        #expect(calls.call?.isSpeaker == false)
+        calls.toggleSpeaker()
+        calls.toggleSpeaker()
+        #expect(calls.call?.isSpeaker == false)
+        #expect(audio.speaker == [true, false])
+
         calls.hangUp()
         #expect(calls.call == nil)
         #expect(channel.cancelled == 1)
@@ -93,6 +102,13 @@ private struct Failure: LocalizedError {
         #expect(opened == 0)
         #expect(calls.problem == "Microphone access is off.")
         #expect(audio.closed == 1)
+    }
+
+    @Test func everyVoiceAHubOffersHasASampleHere() {
+        for voice in ["juniper", "maple", "sol", "vale", "arbor", "breeze", "cove", "ember", "spruce"] {
+            #expect(VoiceSample.url(provider: "codex", voice: voice) != nil, "\(voice)")
+        }
+        #expect(VoiceSample.url(provider: "codex", voice: "nobody") == nil)
     }
 
     @Test func whatWasSaidSitsAmongWhatWasSentDuringTheCall() {

@@ -19,6 +19,7 @@ extension LinkChannel: CallChannel {}
     func prepareOffer() async throws -> String
     func accept(answer: String) async throws
     func setMuted(_ muted: Bool)
+    func setSpeaker(_ on: Bool)
     func announceConnected()
     func close()
 }
@@ -32,6 +33,7 @@ extension LinkChannel: CallChannel {}
         /// Nil while connecting.
         var startedAt: Date?
         var isMuted = false
+        var isSpeaker = false
         var lines: [LinkCallLine] = []
     }
 
@@ -84,6 +86,12 @@ extension LinkChannel: CallChannel {}
         end(call.id, problem: nil)
     }
 
+    func toggleSpeaker() {
+        guard call != nil else { return }
+        call?.isSpeaker.toggle()
+        audio?.setSpeaker(call?.isSpeaker ?? false)
+    }
+
     func toggleMute() {
         guard call != nil else { return }
         call?.isMuted.toggle()
@@ -120,8 +128,13 @@ extension LinkChannel: CallChannel {}
     }
 }
 
-/// The shared call page in a web view kept in the window, since WebKit does not run audio for a
-/// web view that is not in one.
+/// The shared call page in a web view kept in the window. Faded out, iOS would treat it as hidden
+/// and slow it, and the bot's voice would come in bursts with gaps filled in; it stays opaque
+/// to iOS but clear and empty.
+///
+/// iOS cancels echo only through its call voice processing, which narrows the bot's voice to a
+/// phone line. A call therefore starts on the earpiece, which the microphone barely hears, with
+/// that processing off and the voice at full quality; the loudspeaker needs it on.
 @MainActor final class WebCallAudio: NSObject, CallAudio, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var onFailure: ((String) -> Void)?
     private var webView: WKWebView?
@@ -131,8 +144,10 @@ extension LinkChannel: CallChannel {}
         guard await AVAudioApplication.requestRecordPermission() else {
             throw LinkError("Microphone access is off. Allow Noodle in Settings → Privacy & Security → Microphone.")
         }
+        // Set once before the microphone starts and left alone: changed under a running microphone,
+        // the session silences it. With processing off WebKit plays on the earpiece.
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true)
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
@@ -141,7 +156,9 @@ extension LinkChannel: CallChannel {}
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1), configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        webView.alpha = 0.01
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
         webView.isUserInteractionEnabled = false
         let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
         window?.addSubview(webView)
@@ -150,10 +167,36 @@ extension LinkChannel: CallChannel {}
             loading = continuation
             webView.loadHTMLString(LinkCallMedia.page, baseURL: LinkCallMedia.baseURL)
         }
-        guard let offer = try await webView.callAsyncJavaScript("return await offer()", contentWorld: .page) as? String else {
+        guard let offer = try await webView.callAsyncJavaScript("return await offer(false)", contentWorld: .page) as? String else {
             throw LinkError("The call could not start.")
         }
         return offer
+    }
+
+    /// The earpiece, or headphones and AirPods when connected, play the voice as it is; the
+    /// loudspeaker needs echo cancellation, which comes with call voice processing.
+    private static func setUp(speaker: Bool) throws {
+        let session = AVAudioSession.sharedInstance()
+        if speaker {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
+        } else {
+            // A2DP plays AirPods at full quality while the phone's microphone listens.
+            try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothA2DP])
+        }
+        try session.setActive(true)
+        try session.overrideOutputAudioPort(speaker ? .speaker : .none)
+    }
+
+    /// Changing the session under a running microphone silences it, so the microphone stops first
+    /// and starts again, with echo cancellation only for the loudspeaker, once the session is set.
+    private func route(speaker: Bool) async throws {
+        guard let webView else { return }
+        _ = try await webView.callAsyncJavaScript("stopMicrophone(); return true", contentWorld: .page)
+        try Self.setUp(speaker: speaker)
+        _ = try await webView.callAsyncJavaScript("await startMicrophone(on); return true", arguments: ["on": speaker], contentWorld: .page)
+        // Starting it makes WebKit set the session up again.
+        try AVAudioSession.sharedInstance().overrideOutputAudioPort(speaker ? .speaker : .none)
+        _ = try await webView.callAsyncJavaScript("await context.resume(); return true", contentWorld: .page)
     }
 
     func accept(answer: String) async throws {
@@ -161,6 +204,12 @@ extension LinkChannel: CallChannel {}
     }
 
     func setMuted(_ muted: Bool) { webView?.evaluateJavaScript("mute(\(muted))") }
+
+    func setSpeaker(_ on: Bool) {
+        Task { [weak self] in
+            do { try await self?.route(speaker: on) } catch { self?.onFailure?(error.localizedDescription) }
+        }
+    }
 
     func announceConnected() { webView?.evaluateJavaScript("chime()") }
 
@@ -253,6 +302,12 @@ struct CallBar: View {
             .monospacedDigit()
             .accessibilityLabel(call.startedAt == nil ? "Connecting" : "On a call")
             Spacer()
+            Button { calls.toggleSpeaker() } label: {
+                Image(systemName: call.isSpeaker ? "speaker.wave.3.fill" : "speaker.fill").frame(width: 28)
+            }
+            .tint(call.isSpeaker ? .accentColor : .primary)
+            .accessibilityLabel("Speaker")
+            .accessibilityAddTraits(call.isSpeaker ? .isSelected : [])
             Button { calls.toggleMute() } label: {
                 Image(systemName: call.isMuted ? "mic.slash.fill" : "mic.fill").frame(width: 24)
             }
@@ -358,4 +413,90 @@ struct CallBlockRow: View {
     }
 
     private func speaker(_ line: LinkCallLine) -> String { line.speaker == .you ? "You" : name }
+}
+
+/// A short sample of each harness voice, shipped with the app, so choosing needs no call.
+enum VoiceSample {
+    static func url(provider: String, voice: String) -> URL? {
+        Bundle.main.url(forResource: "\(provider)-\(voice)", withExtension: "m4a", subdirectory: "VoicePreviews")
+    }
+}
+
+/// A bot's voice: tapping one chooses it and plays its sample, so voices can be compared.
+struct VoicePicker: View {
+    let provider: String
+    let voices: [LinkCallVoice]
+    @Binding var selection: String?
+    @State private var player: AVAudioPlayer?
+    @State private var playing: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                group("Feminine", .feminine)
+                group("Masculine", .masculine)
+            }
+            .padding()
+        }
+        .navigationTitle("Voice")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { player?.stop() }
+    }
+
+    private func group(_ title: String, _ presentation: LinkCallVoice.Presentation) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                ForEach(voices.filter { $0.presentation == presentation }) { voice in tile(voice) }
+            }
+        }
+    }
+
+    private func tile(_ voice: LinkCallVoice) -> some View {
+        let isSelected = selection == voice.id
+        return Button {
+            selection = voice.id
+            play(voice.id)
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: "waveform")
+                    .font(.title3)
+                    .symbolEffect(.variableColor.iterative, isActive: playing == voice.id)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Text(voice.name).font(.subheadline.weight(isSelected ? .semibold : .regular))
+            }
+            .frame(maxWidth: .infinity, minHeight: 72)
+            .background(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(voice.name)
+        .accessibilityHint("Chooses this voice and plays a sample")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func play(_ voice: String) {
+        player?.stop()
+        playing = nil
+        guard let url = VoiceSample.url(provider: provider, voice: voice), let next = try? AVAudioPlayer(contentsOf: url) else { return }
+        // Heard with the ring switch on silent, as a voice someone asked to hear should be; a call
+        // in progress keeps its own audio set-up.
+        let session = AVAudioSession.sharedInstance()
+        if session.category != .playAndRecord {
+            try? session.setCategory(.playback)
+            try? session.setActive(true)
+        }
+        next.play()
+        player = next
+        playing = voice
+        Task {
+            try? await Task.sleep(for: .seconds(next.duration))
+            if player === next { playing = nil }
+        }
+    }
 }

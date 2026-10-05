@@ -911,18 +911,21 @@ public struct LinkHarness: Codable, Hashable, Sendable {
     public var models: [LinkModel]
     /// Only `models` may be used, so a bot cannot be left on the harness default.
     public var restrictsModels: Bool
+    /// The voices a bot on it can speak with on calls; empty when it takes no calls.
+    public var voices: [LinkCallVoice]
 
     public init(provider: String, providerName: String, profile: UUID? = nil, profileName: String?,
-                models: [LinkModel] = [], restrictsModels: Bool = false) {
+                models: [LinkModel] = [], restrictsModels: Bool = false, voices: [LinkCallVoice] = []) {
         self.provider = provider
         self.providerName = providerName
         self.profile = profile
         self.profileName = profileName
         self.models = models
         self.restrictsModels = restrictsModels
+        self.voices = voices
     }
 
-    private enum CodingKeys: String, CodingKey { case provider, providerName, profile, profileName, models, restrictsModels }
+    private enum CodingKeys: String, CodingKey { case provider, providerName, profile, profileName, models, restrictsModels, voices }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -932,6 +935,7 @@ public struct LinkHarness: Codable, Hashable, Sendable {
         profileName = try c.decodeIfPresent(String.self, forKey: .profileName)
         models = try c.decode(.models, or: [])
         restrictsModels = try c.decode(.restrictsModels, or: false)
+        voices = try c.decode(.voices, or: [])
     }
 
     /// What a new bot starts on: the first model when the plan leaves no harness default.
