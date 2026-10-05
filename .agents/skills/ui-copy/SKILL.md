@@ -13,6 +13,9 @@ footer text unless explicitly requested.
 
 Put optional guidance in tooltips or documentation.
 
+Annotating is by keyboard shortcut only. Never add an Annotate button or link
+to any window, panel, header or footer; the Annotate menu commands stay.
+
 ## Ellipsis
 
 End a label with `…` (the single character, never three dots) only when the

@@ -49,22 +49,22 @@ struct HubSurfaceTarget: Hashable {
             kind: target.noodlet ? "Noodlet" : "Live View", save: { [weak store] note, content, source, raw in
                 try store?.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
             })
-        let annotate = Self.annotateButton(annotations)
         if target.noodlet {
             let run = HubNoodletRun(target: target, requested: place)
             runs[target] = run
             let content = NSHostingView(rootView: HubNoodletView(run: run).environment(store).preferredColorScheme(.dark))
             content.sizingOptions = []
-            let place = NSHostingView(rootView: HubNoodletSwitch(run: run).preferredColorScheme(.dark))
-            let accessory = NSStackView(views: [place, annotate])
-            accessory.spacing = 12
+            let place = NSHostingView(rootView: HubNoodletSwitch(run: run))
+            place.appearance = NSAppearance(named: .darkAqua)
+            // It sits in the transparent title bar, whose safe area would push it below the header line.
+            place.safeAreaRegions = []
             panel.contentView = AnnotationPreviewFrame(content: content, filename: target.title, kindLabel: "Noodlet",
-                closeHint: "Close Noodlet (⌘W)", closeLabel: "Close Noodlet", accessory: accessory)
+                closeHint: "Close Noodlet (⌘W)", closeLabel: "Close Noodlet", accessory: place)
         } else {
             let content = NSHostingView(rootView: HubSurfaceWindow(target: target).environment(store).preferredColorScheme(.dark))
             content.sizingOptions = []
             panel.contentView = AnnotationPreviewFrame(content: content, filename: target.title, kindLabel: "Live",
-                closeHint: "Close Live View (⌘W)", closeLabel: "Close Live View", accessory: annotate)
+                closeHint: "Close Live View (⌘W)", closeLabel: "Close Live View")
         }
         let screen = NSApp.keyWindow?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
         var frame = panel.frame
@@ -77,18 +77,6 @@ struct HubSurfaceTarget: Hashable {
         self.annotations[target] = annotations
         annotations.attach(to: panel)
         panel.makeKeyAndOrderFront(nil)
-    }
-
-    /// Freezes the view and lets the person mark a region of it, as in a conversation.
-    private static func annotateButton(_ annotations: ConversationAnnotationController) -> NSButton {
-        let button = NSButton(title: "Annotate…", target: annotations,
-                              action: #selector(ConversationAnnotationController.startRegion))
-        button.isBordered = false
-        button.attributedTitle = NSAttributedString(string: "Annotate…", attributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.linkColor,
-        ])
-        button.toolTip = KeyboardBindings.shared.help("Annotate Region", for: .annotateRegion)
-        return button
     }
 
     func windowWillClose(_ notification: Notification) {

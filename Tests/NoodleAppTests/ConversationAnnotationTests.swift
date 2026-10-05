@@ -238,10 +238,15 @@ private final class KeyedWindow: NSWindow {
         let controller = try XCTUnwrap(panels.annotations(for: target))
         XCTAssertTrue(controller.window === panel)
         XCTAssertEqual(controller.conversationID, target.conversationID)
-        let button = try XCTUnwrap(allViews(try XCTUnwrap(panel.contentView))
-            .compactMap { $0 as? NSButton }.first { $0.title == "Annotate…" }, "The header offers Annotate…")
-        XCTAssertTrue(button.target === controller)
-        XCTAssertEqual(button.action, #selector(ConversationAnnotationController.startRegion))
+        let views = allViews(try XCTUnwrap(panel.contentView))
+        XCTAssertFalse(views.compactMap { $0 as? NSButton }.contains { $0.title.hasPrefix("Annotate") },
+                       "Annotating is by shortcut, not a header button")
+        // The header lies in the transparent title bar, whose safe area would push the switch down.
+        let switches = views.compactMap { $0 as? NSHostingView<HubNoodletSwitch> }
+        for header in switches {
+            XCTAssertEqual(header.safeAreaRegions, [], "The Run on Hub switch sits on the header line")
+        }
+        XCTAssertEqual(!switches.isEmpty, target.noodlet)
         panel.close()
         XCTAssertNil(panels.annotations(for: target), "Closing the panel ends its annotations")
     }

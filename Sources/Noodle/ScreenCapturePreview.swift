@@ -330,8 +330,6 @@ struct ScreenCapturePreview: View {
                     Button("Add to Message") { model.saveAnnotation() }
                         .buttonStyle(.borderedProminent).disabled(!model.canSaveAnnotation)
                 } else {
-                    Button("Annotate…") { model.annotate() }.disabled(!model.canCapture)
-                        .help(KeyboardBindings.shared.help("Annotate Region", for: .annotateRegion))
                     Button("Capture") { model.capture() }.buttonStyle(.borderedProminent).disabled(!model.canCapture)
                         .help("Capture (↩)")
                 }

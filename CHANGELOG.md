@@ -13,6 +13,14 @@ All notable changes to Noodle are documented here, following
 - You can call a Codex bot that runs on this Mac: click the phone button in its conversation's toolbar and talk things through. The bot answers aloud and works on what you ask. The toolbar shows the call's time, Mute and End Call, so you can keep typing and sharing files while you talk, and the call hears about them too. What is said appears in the conversation as compact transcript blocks, split by anything typed or shared during the call so everything stays in order. Each bot has its own voice, chosen on the Harness tab when you create or edit it, with a sample of each to listen to; until you choose, Noodle picks one that suits its name. Calls use the bot's Codex sign-in, so your voice is sent to OpenAI.
 - Codex bots you keep on a Noodle Hub, and ones shared with you there, take calls too, from Noodle and from Noodle for iPhone. The Hub runs the bot and keeps the call in the conversation; your voice goes straight to OpenAI, not through the Hub. A Hub bot's voice is chosen in its editor, as for bots on this Mac.
 
+### Changed
+
+- Hub live views, Hub noodlets and the screen capture picker no longer show an Annotate button; annotate with the Annotate Region shortcut.
+
+### Fixed
+
+- Run on Hub and Run on This Mac in a Hub noodlet's panel sit on the header line again instead of being cut off below it.
+
 ## [0.46.0] - 2026-10-05
 
 ### Added
