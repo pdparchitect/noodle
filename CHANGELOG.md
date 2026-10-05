@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-10-05
+
 ### Added
 
 - This Mac can be given a name of its own for your devices in Settings > Hub > Name, so it is not known by the Mac's name. Your devices pick up the new name within a minute. Clearing the name goes back to the Mac's.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-05
+
 ### Changed
 
 - A noodlet's preview is what a bot last presented. Opening a noodlet or taking a screenshot no longer replaces it, so it never shows a loading screen; bots are told to present once the noodlet shows something worth seeing.

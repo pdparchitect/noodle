@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-05
+
 ### Added
 
 - The Hub can be given a name of its own in Settings > Network > Name, so it is not known by the Mac's name. Paired devices pick up the new name the next time they check in, within a minute. Clearing the name goes back to the Mac's.
