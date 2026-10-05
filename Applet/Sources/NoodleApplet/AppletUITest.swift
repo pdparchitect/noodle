@@ -109,6 +109,26 @@ import AppletCore
         return last
     }
 
+    /// Presses a toolbar button until the state it leads to shows up. A press through
+    /// accessibility is sometimes dropped on a loaded machine, leaving the old layout in place.
+    /// The button is pressed again only while the old state is plainly still there, because a
+    /// second press on top of one that is merely slow would undo it.
+    @discardableResult
+    static func toggle(
+        attempts: Int = 3, polls: Int = 20, sleep: (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+        press: () async throws -> Void, arrived: () -> Bool, unchanged: () -> Bool
+    ) async throws -> Bool {
+        for _ in 0..<attempts {
+            try await press()
+            for _ in 0..<polls {
+                if arrived() { return true }
+                await sleep(.milliseconds(100))
+            }
+            guard unchanged() else { break }
+        }
+        return arrived()
+    }
+
     /// Open Noodlet follows the sidebar toggle inside the sidebar's toolbar section. Both leave
     /// with the sidebar, where the system toggle and the detail toolbar's Open Noodlet return.
     private static func verifySidebarToolbar(_ window: NSWindow) async throws {
@@ -145,16 +165,20 @@ import AppletCore
         func settled(_ labels: [String]) async -> [CGRect] {
             await settle(expecting: labels.count) { frames(labels) }
         }
+        func flip(_ from: String, to: String) async throws {
+            try await toggle(press: { try await press(from) },
+                             arrived: { !frames([to]).isEmpty }, unchanged: { !frames([from]).isEmpty })
+        }
         // An aborted run can leave a collapsed sidebar persisted; start expanded.
         if !frames(["Show Sidebar"]).isEmpty {
-            try await press("Show Sidebar")
+            try await flip("Show Sidebar", to: "Hide Sidebar")
             _ = await settled(["Hide Sidebar", "Open Noodlet"])
         }
         let ordered: ([CGRect]) -> Bool = { zip($0, $0.dropFirst()).allSatisfy { $0.maxX < $1.minX } }
         let expanded = await settled(["Hide Sidebar", "Open Noodlet"])
-        try await press("Hide Sidebar")
+        try await flip("Hide Sidebar", to: "Show Sidebar")
         let collapsed = await settled(["Show Sidebar", "Open Noodlet"])
-        try await press("Show Sidebar")
+        try await flip("Show Sidebar", to: "Hide Sidebar")
         let restored = await settled(["Hide Sidebar", "Open Noodlet"])
         print("APPLET_UI_SIDEBAR_TOOLBAR: expanded=\(expanded) collapsed=\(collapsed) restored=\(restored)")
         // The toolbar drops Open Noodlet while there is no room for it; the toggle must

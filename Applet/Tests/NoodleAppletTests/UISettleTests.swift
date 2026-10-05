@@ -38,3 +38,27 @@ final class UISettleTests: XCTestCase {
         XCTAssertLessThanOrEqual(taken, 7, "Kept waiting for an item that is never coming")
     }
 }
+
+final class UIToggleTests: XCTestCase {
+    /// A press on a SwiftUI toolbar button through accessibility is sometimes dropped on a loaded
+    /// machine: the sidebar stays as it was and the check reads the wrong layout.
+    @MainActor func testADroppedPressIsRepeated() async throws {
+        var presses = 0, collapsed = false
+        let arrived = try await AppletUITest.toggle(sleep: { _ in }, press: {
+            presses += 1
+            if presses == 2 { collapsed = true }
+        }, arrived: { collapsed }, unchanged: { !collapsed })
+        XCTAssertTrue(arrived)
+        XCTAssertEqual(presses, 2)
+    }
+
+    /// A press still on its way would be undone by a second one, so the button is only pressed
+    /// again while the old state is plainly still there.
+    @MainActor func testAPressInFlightIsNotRepeated() async throws {
+        var presses = 0
+        let arrived = try await AppletUITest.toggle(sleep: { _ in }, press: { presses += 1 },
+                                                    arrived: { false }, unchanged: { false })
+        XCTAssertFalse(arrived)
+        XCTAssertEqual(presses, 1)
+    }
+}
