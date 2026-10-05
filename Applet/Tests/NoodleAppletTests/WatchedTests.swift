@@ -30,7 +30,7 @@ final class WatchedTests: XCTestCase {
     @MainActor func testAWatchedNoodletIsNeverNapped() async throws {
         let (runner, root) = try makeRunner()
         defer { try? FileManager.default.removeItem(at: root) }
-        try await runner.start(foreground: false)
+        try await runner.start()
         defer { runner.stop() }
         XCTAssertEqual(mayNap(runner), true, "an unwatched background noodlet should save energy as any page does")
         runner.watched = true
@@ -43,7 +43,7 @@ final class WatchedTests: XCTestCase {
         let (runner, root) = try makeRunner()
         defer { try? FileManager.default.removeItem(at: root) }
         runner.stillAfter = .milliseconds(50)
-        try await runner.start(foreground: false)
+        try await runner.start()
         defer { runner.stop() }
         runner.watched = true
         try await Task.sleep(for: .milliseconds(400))
@@ -60,7 +60,7 @@ final class WatchedTests: XCTestCase {
         let (runner, root) = try makeRunner()
         defer { try? FileManager.default.removeItem(at: root) }
         runner.stillAfter = .milliseconds(50)
-        try await runner.start(foreground: false)
+        try await runner.start()
         defer { runner.stop() }
         runner.watched = true
         runner.show()

@@ -568,7 +568,7 @@ import NoodletRuntime
       defaults.set(storeID.uuidString, forKey: storeKey)
       let runner = WebRunner(
         package: package, dataRoot: session.dataRoot, log: session.log,
-        size: session.size, storeID: storeID,
+        size: session.size, storeID: storeID, foreground: session.mode == "foreground",
         rememberFrame: session.mode != "headless" && request.width == nil && request.height == nil,
         testClock: session.testClock, secrets: library.secrets
       )
@@ -600,7 +600,7 @@ import NoodletRuntime
         return true
       }
       session.web = runner
-      try await runner.start(foreground: session.mode == "foreground", in: place)
+      try await runner.start(in: place)
       session.state = "running"
       session.log.append("lifecycle", "Ready.")
       library.remember(package)

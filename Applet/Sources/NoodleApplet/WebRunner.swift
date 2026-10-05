@@ -32,14 +32,18 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
   private(set) var rendering: AppletRenderingState?
   /// A noodlet the user cannot see must not be heard either.
   private(set) var muted = false
+  /// Opened by the person, so heard from the start; any other noodlet starts out of sight and silent.
+  let foreground: Bool
   /// Where the page's sound goes while a recording listens: interleaved stereo at
   /// AppletRecording.audioRate, and when it was heard.
   private var soundSink: (([Int16], Double) -> Void)?
   init(
     package: NoodletPackage, dataRoot: URL, log: AppletLog, size: CGSize, storeID: UUID,
-    rememberFrame: Bool = true, testClock: Bool = false, secrets: AppletSecrets = .shared
+    foreground: Bool = false, rememberFrame: Bool = true, testClock: Bool = false,
+    secrets: AppletSecrets = .shared
   ) {
     self.package = package
+    self.foreground = foreground
     self.dataRoot = dataRoot
     self.log = log
     let resources = AppletResources.bundle.url(forResource: "Resources", withExtension: nil)!
@@ -55,6 +59,9 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       log: { [log] in log.append($0, $1) }
     ) { configuration in
       configuration.preferences.inactiveSchedulingPolicy = .none
+      // Muting a page leaves its speech synthesis audible, so a noodlet started out of sight
+      // has none: shown later, it still cannot speak.
+      if !foreground { Self.withoutSpeech(configuration.preferences, log: log) }
       configuration.userContentController.addUserScript(WKUserScript(
         source: "(() => { const synthetic = \(testClock);\n\(animation)\n})();",
         injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -126,7 +133,7 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       frame: window.frame, focused: NSApp.isActive && window.isKeyWindow, window: window.windowNumber)
   }
   /// A page taking another's place comes up once it has loaded, over the one it replaces.
-  func start(foreground: Bool, in place: WindowPlace? = nil) async throws {
+  func start(in place: WindowPlace? = nil) async throws {
     setMuted(!foreground)
     if !foreground { log.append("audio", "Muted: a noodlet makes sound only while it is in the foreground.") }
     if foreground, let place {
@@ -210,6 +217,15 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       return
     }
     unsafeBitCast(method_getImplementation(method), to: Setter.self)(web.configuration.preferences, selector, enabled)
+  }
+  private static func withoutSpeech(_ preferences: WKPreferences, log: AppletLog) {
+    let features = NSSelectorFromString("_features"), selector = NSSelectorFromString("_setEnabled:forFeature:")
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool, AnyObject) -> Void
+    guard WKPreferences.responds(to: features), let method = class_getInstanceMethod(WKPreferences.self, selector),
+      let speech = (WKPreferences.perform(features)?.takeUnretainedValue() as? [NSObject])?
+        .first(where: { $0.value(forKey: "key") as? String == "SpeechSynthesisAPIEnabled" })
+    else { return log.append("audio", "This WebKit build lets a noodlet out of sight speak.") }
+    unsafeBitCast(method_getImplementation(method), to: Setter.self)(preferences, selector, false, speech)
   }
   private func setOcclusionDetection(_ enabled: Bool) {
     let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
