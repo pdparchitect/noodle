@@ -6,7 +6,7 @@
 - [Work with individual agents and teams](usage.md)
 - [Install and sign in to a harness](harness-setup.md)
 - [Connect tools](mcp-connections.md)
-- [Voice messages](voice-messages.md)
+- [Voice messages and calls](voice-messages.md)
 - [Keyboard shortcuts](keyboard-shortcuts.md)
 - [Attachment annotations](attachment-annotations.md)
 - [Chat effects](chat-effects.md)

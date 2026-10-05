@@ -1,4 +1,6 @@
-# Voice messages
+# Voice messages and calls
+
+## Voice messages
 
 Voice messages need macOS 26 and Apple's on-device transcription for your Mac and
 system language. Noodle may download a speech model the first time. Transcription
@@ -25,5 +27,32 @@ relaunch Noodle. If transcription fails, choose **Retry Transcription** or
 Sent voice messages show an audio player. Right-click and choose
 **Show Transcript** to read or copy the text. Bots receive the audio and the
 transcript when there is one.
+
+## Voice calls
+
+You can call a Codex bot that runs on this Mac and talk things through with it.
+
+1. Open the bot's conversation and click the phone button in the toolbar. Allow
+   microphone access when asked.
+2. Talk once you hear the chime. The bot answers aloud and works on what you
+   ask, as it does in the chat.
+3. Click the red phone to end the call.
+
+Each bot has its own voice, chosen under **Voice** on the **Harness** tab when
+you create or edit it. Until you choose one, Noodle picks a voice that suits the
+bot's name, using Apple Intelligence when it is turned on.
+
+During a call the toolbar shows how long it has lasted, with **Mute**, which
+stops the bot hearing you. Once the call connects, a card in the conversation
+shows it; click **Show Transcript** on the card to read what has been said. The
+card stays afterwards with the call's length and transcript.
+
+The chat stays open while you talk. Type or share files as usual: the bot
+receives them, and the call hears about them too. Files, links and anything
+better read than heard arrive in the conversation.
+
+There is one call at a time; calling another bot ends the current call. Calls
+use the bot's Codex sign-in, so your voice is sent to OpenAI. Bots using other
+harnesses cannot take calls yet.
 
 [Documentation](README.md)

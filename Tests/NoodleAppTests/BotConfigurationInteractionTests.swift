@@ -19,7 +19,7 @@ import NoodleCore
     private func fields(_ selection: ConfigurationSelection, fixture: StoreFixture) -> some View {
         AgentConfigurationFields(selectedHarnessIdentifier: selection.binding(\.harness),
             selectedModelIdentifier: selection.binding(\.model), selectedEffort: selection.binding(\.effort),
-            selectedProfileID: Binding(get: { selection.profile }, set: { selection.profile = $0 }))
+            selectedProfileID: Binding(get: { selection.profile }, set: { selection.profile = $0 }), selectedVoice: .constant(""))
             .environment(fixture.store)
     }
     private func readyFixture() throws -> StoreFixture {

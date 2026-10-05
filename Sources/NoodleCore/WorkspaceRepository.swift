@@ -384,6 +384,18 @@ public struct WorkspaceRepository: Sendable {
         try configuration.save(to: layout)
     }
 
+    public func loadAgentVoice(_ agent: AgentRecord) throws -> String? {
+        try AgentConfiguration.load(from: storage(for: agent.id)).voice
+    }
+
+    public func updateAgentVoice(_ agent: AgentRecord, voice: String?) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard configuration.voice != voice else { return }
+        configuration.voice = voice
+        try configuration.save(to: layout)
+    }
+
     public func loadAgentOwner(_ agent: AgentRecord) throws -> AgentOwner? {
         try AgentConfiguration.load(from: storage(for: agent.id)).owner
     }
@@ -1174,6 +1186,8 @@ public struct WorkspaceRepository: Sendable {
 
             for message in messages.dropFirst(offset) {
                 if !includingRead, case .agent(let authorID) = message.author, authorID == agentID { continue }
+                // The bot was on the call; its card is the person's record of it.
+                if !includingRead, message.call != nil { continue }
                 deliveries.append(delivery(for: message))
             }
 
@@ -1409,6 +1423,35 @@ public struct WorkspaceRepository: Sendable {
         conversation.updatedAt = now
         try updateConversation(conversation)
         return message
+    }
+
+    /// The call's card in the person's conversation with the bot they called.
+    public func recordVoiceCall(agentID: UUID, conversationID: UUID, now: Date = Date()) throws -> ChatMessage {
+        guard var conversation = try loadConversations().first(where: { $0.id == conversationID }),
+              conversation.participantIDs.contains(agentID) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        try requireActive(conversation)
+        var message = ChatMessage(conversationID: conversationID, author: .user, body: "Voice call",
+                                  createdAt: now, delivery: .delivered)
+        message.call = VoiceCallRecord(agentID: agentID)
+        try append(message)
+        conversation.updatedAt = now
+        try updateConversation(conversation)
+        return message
+    }
+
+    public func finishVoiceCall(messageID: UUID, conversationID: UUID, lines: [VoiceCallLine], endedAt: Date) throws -> ChatMessage {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.id == messageID }), messages[index].call != nil else {
+                throw WorkspaceError.missingMessage(messageID)
+            }
+            messages[index].call?.lines = lines
+            messages[index].call?.endedAt = endedAt
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+            return messages[index]
+        }
     }
 
     /// Queue retries reuse the request UUID, so restarting after delivery never sends twice.

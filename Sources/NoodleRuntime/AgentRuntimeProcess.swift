@@ -14,10 +14,19 @@ public protocol AgentRuntimeProcess: AnyObject {
     @discardableResult func notify(immediately: Bool) -> UUID
     func promoteNotification(_ id: UUID)
     func heartbeat()
+    /// Only harnesses with voices take calls; the rest keep these defaults.
+    func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws
+    func sendToVoiceCall(_ text: String)
+    func endVoiceCall()
 }
 
 extension AgentRuntimeProcess {
     func notify() { _ = notify(immediately: false) }
+    public func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
+        throw VoiceCallUnavailable()
+    }
+    public func sendToVoiceCall(_ text: String) {}
+    public func endVoiceCall() {}
 }
 
 /// Construction is injected after workspace and access checks, so tests exercise

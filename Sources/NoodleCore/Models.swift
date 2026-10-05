@@ -134,6 +134,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var attachmentIDs: [UUID]?
     public var reactions: [MessageReaction]?
     public var reactionChanges: [MessageReactionChange]?
+    public var call: VoiceCallRecord?
 
     public init(
         id: UUID = UUID(),

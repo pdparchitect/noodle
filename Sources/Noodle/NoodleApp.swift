@@ -479,6 +479,9 @@ struct RootView: View {
 
             ToolbarSpacer(.flexible)
             ToolbarItem {
+                if let conversation = store.selectedConversation { VoiceCallToolbarControl(conversation: conversation) }
+            }
+            ToolbarItem {
                 if let conversation = store.selectedConversation { ConversationCompanionsMenu(conversation: conversation) }
             }
 

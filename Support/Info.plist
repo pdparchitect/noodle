@@ -61,7 +61,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Reach the Noodle Hub you join when it is on your network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Record voice messages you choose to send in your conversations. Speech is transcribed on this Mac.</string>
+	<string>Record voice messages you choose to send, transcribed on this Mac, and talk with bots on calls you start.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

@@ -226,7 +226,9 @@ struct MessageBubble: View {
 
     @ViewBuilder private var row: some View {
         let attachments = store.attachments(for: message)
-        if isSystem {
+        if let call = message.call {
+            VoiceCallCard(message: message, record: call)
+        } else if isSystem {
             HStack {
                 Spacer(minLength: 80)
                 Label(message.body, systemImage: "person.2.fill")

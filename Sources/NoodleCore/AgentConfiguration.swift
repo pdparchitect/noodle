@@ -25,13 +25,15 @@ struct AgentConfiguration: Codable {
     var harnessProfile: UUID?
     /// Only on Noodle Hub; its bots cannot change it, since only their workspace is theirs.
     var owner: AgentOwner?
+    /// The harness voice the bot speaks with on calls.
+    var voice: String?
 
     init(agent: AgentRecord, backstory: String) {
         self.agent = agent
         self.backstory = backstory
     }
 
-    private enum CodingKeys: String, CodingKey { case backstory, folders, groupFolders, harnessProfile, owner }
+    private enum CodingKeys: String, CodingKey { case backstory, folders, groupFolders, harnessProfile, owner, voice }
 
     init(from decoder: Decoder) throws {
         agent = try AgentRecord(from: decoder)
@@ -43,6 +45,7 @@ struct AgentConfiguration: Codable {
         groupFolders = try values.decodeIfPresent([AgentFolder].self, forKey: .groupFolders) ?? []
         harnessProfile = try values.decodeIfPresent(UUID.self, forKey: .harnessProfile)
         owner = try values.decodeIfPresent(AgentOwner.self, forKey: .owner)
+        voice = try values.decodeIfPresent(String.self, forKey: .voice)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -53,6 +56,7 @@ struct AgentConfiguration: Codable {
         if !groupFolders.isEmpty { try values.encode(groupFolders, forKey: .groupFolders) }
         try values.encodeIfPresent(harnessProfile, forKey: .harnessProfile)
         try values.encodeIfPresent(owner, forKey: .owner)
+        try values.encodeIfPresent(voice, forKey: .voice)
     }
 
     func requireBackstory() throws -> String {

@@ -890,6 +890,22 @@ public final class AgentRuntimeCoordinator {
         }
     }
 
+    public func startVoiceCall(agentID: UUID, _ request: VoiceCallRequest,
+                               events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
+        guard let process = processes[agentID] else { throw VoiceCallUnavailable() }
+        try process.startVoiceCall(request, events: events)
+        recordActivity(for: agentID)
+        recordInteraction(for: agentID)
+    }
+
+    public func sendToVoiceCall(agentID: UUID, _ text: String) {
+        processes[agentID]?.sendToVoiceCall(text)
+    }
+
+    public func endVoiceCall(agentID: UUID) {
+        processes[agentID]?.endVoiceCall()
+    }
+
     public func stop(agentID: UUID, revokeAccess: Bool = true) {
         connectionRecoveryAttempts[agentID] = nil
         blockedRecoveries.remove(agentID)

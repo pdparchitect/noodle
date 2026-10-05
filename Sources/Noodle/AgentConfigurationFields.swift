@@ -10,7 +10,10 @@ struct AgentConfigurationFields: View {
     @Binding var selectedModelIdentifier: String
     @Binding var selectedEffort: String
     @Binding var selectedProfileID: UUID?
+    /// Empty leaves the voice to the harness.
+    @Binding var selectedVoice: String
     @State private var choosingHarness = false
+    @State private var choosingVoice = false
     @State private var choosingProfile = false
     @State private var choosingModel = false
 
@@ -144,6 +147,24 @@ struct AgentConfigurationFields: View {
                     Divider().padding(.leading, 44)
                     EffortControl(model: selectedModel, selection: $selectedEffort)
                 }
+                }
+
+                // Calls are only with bots on this Mac.
+                if hubChoice == nil, let selectedProvider, !selectedProvider.voices.isEmpty {
+                    Divider().padding(.leading, 44)
+
+                    Button { choosingVoice = true } label: {
+                        RuntimeSelectionRow(
+                            title: "Voice",
+                            value: selectedProvider.voices.first { $0.id == selectedVoice }?.name
+                                ?? "\(selectedProvider.displayName) default",
+                            icon: AnyView(Image(systemName: "waveform"))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $choosingVoice, arrowEdge: .leading) {
+                        VoiceChooser(voices: selectedProvider.voices, selection: $selectedVoice)
+                    }
                 }
             }
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -358,6 +379,63 @@ struct HarnessProfileChooser: View {
                 Text(name)
                 Spacer()
                 if selection == id {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+extension View {
+    /// Until a voice is picked, the bot's voice follows its name as it is typed.
+    func followsNameForVoice(_ voice: Binding<String>, chosen: Binding<Bool>, name: String,
+                             harnessIdentifier: String, store: NoodleStore) -> some View {
+        task(id: name + "\n" + harnessIdentifier) {
+            guard !chosen.wrappedValue else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            let fitting = await store.defaultVoice(forBotNamed: name, harnessIdentifier: harnessIdentifier) ?? ""
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            voice.wrappedValue = fitting
+        }
+    }
+}
+
+/// The voice a bot speaks with on calls.
+struct VoiceChooser: View {
+    let voices: [HarnessVoice]
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Choose Voice")
+                .font(.headline)
+                .padding(14)
+
+            Divider()
+
+            List {
+                Section("Feminine") { ForEach(voices.filter { $0.presentation == .feminine }, id: \.id, content: voiceButton) }
+                Section("Masculine") { ForEach(voices.filter { $0.presentation == .masculine }, id: \.id, content: voiceButton) }
+            }
+            .listStyle(.inset)
+        }
+        .frame(width: 260, height: 380)
+    }
+
+    private func voiceButton(_ voice: HarnessVoice) -> some View {
+        Button {
+            selection = voice.id
+            dismiss()
+        } label: {
+            HStack {
+                Text(voice.name)
+                Spacer()
+                if selection == voice.id {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.tint)
                 }

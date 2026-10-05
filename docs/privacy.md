@@ -12,6 +12,7 @@ A bot sends its model what it needs to answer, including:
 - your messages, and in a group everyone else's messages too
 - the bot's backstory and memory
 - attachments, screenshots and voice messages you send it
+- your voice when you call it
 - files it reads in its workspace and shared folders
 - what its tools, computers and browsers return, such as web pages, screenshots
   and command output

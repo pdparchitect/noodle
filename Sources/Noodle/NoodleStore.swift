@@ -672,7 +672,8 @@ final class NoodleStore {
         calendarIDs: Set<String> = [],
         reminderListIDs: Set<String> = [],
         folders: [AgentFolder] = [],
-        harnessProfile: UUID? = nil
+        harnessProfile: UUID? = nil,
+        voice: String? = nil
     ) -> Bool {
         if let choice = HubHarnessChoice(identifier: harnessIdentifier) {
             return createHubAgent(on: choice, draft: LinkBotDraft(
@@ -705,6 +706,9 @@ final class NoodleStore {
             if !folders.isEmpty { try repository.updateAgentFolders(result.agent, folders: folders) }
             if let profile = validHarnessProfile(harnessProfile, harnessIdentifier: harnessIdentifier) {
                 try repository.updateAgentHarnessProfile(result.agent, profile: profile)
+            }
+            if let voice = validVoice(voice, harnessIdentifier: harnessIdentifier) {
+                try repository.updateAgentVoice(result.agent, voice: voice)
             }
             try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
@@ -759,7 +763,8 @@ final class NoodleStore {
         reminderListIDs: Set<String>? = nil,
         folders: [AgentFolder]? = nil,
         harnessProfile: UUID?? = nil,
-        sharedWith: Set<UUID>? = nil
+        sharedWith: Set<UUID>? = nil,
+        voice: String?? = nil
     ) -> Bool {
         if let mirror = hubMirror(forAgent: agent.id) {
             let choice = HubHarnessChoice(identifier: harnessIdentifier) ?? mirror.harness(ofAgent: agent.id)
@@ -821,6 +826,7 @@ final class NoodleStore {
             let savedProfile = try repository.loadAgentHarnessProfile(updated)
             let profile = validHarnessProfile(harnessProfile ?? savedProfile, harnessIdentifier: harnessIdentifier)
             if profile != savedProfile { try repository.updateAgentHarnessProfile(updated, profile: profile) }
+            if let voice { try repository.updateAgentVoice(updated, voice: validVoice(voice, harnessIdentifier: harnessIdentifier)) }
             if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
@@ -1082,6 +1088,95 @@ final class NoodleStore {
         return "\u{201c}\(name)\u{201d}, its messages, and its attachments will be permanently deleted. The bots in the group will not be deleted. This cannot be undone."
     }
 
+    @ObservationIgnored lazy var voiceCalls = VoiceCallController(
+        runtime: runtime, makeMedia: { WebRTCVoiceCallMedia() }, report: { [weak self] in self?.errorMessage = $0 },
+        record: { [weak self] in self?.recordVoiceCall($0) },
+        finish: { [weak self] in self?.finishVoiceCall($0, messageID: $1, endedAt: $2) })
+
+    private func recordVoiceCall(_ call: VoiceCallController.Call) -> UUID? {
+        do {
+            let message = try repository.recordVoiceCall(agentID: call.agentID, conversationID: call.conversationID)
+            markConversationRead(call.conversationID)
+            messagesByConversation[call.conversationID, default: []].append(message)
+            if let index = conversations.firstIndex(where: { $0.id == call.conversationID }) {
+                conversations[index].updatedAt = message.createdAt
+                conversations.sort { $0.updatedAt > $1.updatedAt }
+            }
+            sendToHub(call.conversationID)
+            return message.id
+        } catch {
+            errorMessage = "Could not add the call to the conversation: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    private func finishVoiceCall(_ call: VoiceCallController.Call, messageID: UUID, endedAt: Date) {
+        do {
+            let message = try repository.finishVoiceCall(messageID: messageID, conversationID: call.conversationID,
+                                                         lines: call.lines, endedAt: endedAt)
+            if let index = messagesByConversation[call.conversationID]?.firstIndex(where: { $0.id == messageID }) {
+                messagesByConversation[call.conversationID]?[index] = message
+            }
+            sendToHub(call.conversationID)
+        } catch {
+            errorMessage = "Could not save the call's transcript: \(error.localizedDescription)"
+        }
+    }
+
+    /// A voice from another harness is dropped rather than kept for a harness that cannot use it.
+    private func validVoice(_ voice: String?, harnessIdentifier: String) -> String? {
+        guard let voice, HarnessProvider(rawValue: harnessIdentifier)?.voices.contains(where: { $0.id == voice }) == true else { return nil }
+        return voice
+    }
+
+    @ObservationIgnored var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
+
+    func voice(for agent: AgentRecord) -> String? { try? repository.loadAgentVoice(agent) }
+
+    /// What a bot with this name sounds like until a voice is chosen for it.
+    func defaultVoice(forBotNamed name: String, harnessIdentifier: String) async -> String? {
+        guard let provider = HarnessProvider(rawValue: harnessIdentifier), !provider.voices.isEmpty,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return provider.defaultVoice(for: await voiceGuesser.presentation(forName: name))
+    }
+
+    /// A bot without a voice gets one matching its name, kept so it always sounds the same.
+    private func callVoice(for agent: AgentRecord) async -> String? {
+        let voices = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.map(\.id) ?? []
+        if let saved = voice(for: agent), voices.contains(saved) { return saved }
+        guard let fitting = await defaultVoice(forBotNamed: agent.displayName, harnessIdentifier: agent.harnessIdentifier ?? "")
+        else { return nil }
+        try? repository.updateAgentVoice(agent, voice: fitting)
+        return fitting
+    }
+
+    /// Calls are one-to-one with a bot on this Mac whose harness has voices. The bot
+    /// need not be running: calling starts it.
+    func voiceCallTarget(for conversation: BotConversation) -> AgentRecord? {
+        guard conversation.kind == .direct, let agent = participants(for: conversation).first,
+              runsHere(agent.id), !isShared(agent.id),
+              HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.isEmpty == false else { return nil }
+        return agent
+    }
+
+    func startVoiceCall(in conversation: BotConversation, media: (any VoiceCallMedia)? = nil) {
+        guard let agent = voiceCallTarget(for: conversation) else { return }
+        let personName = (try? repository.loadAgentOwner(agent))?.name ?? "User"
+        let recentLines = messages(for: conversation).suffix(12).compactMap { message -> VoiceCallLine? in
+            switch message.author {
+            case .user: .init(.person, message.body)
+            case .agent: .init(.bot, message.body)
+            case .system: nil
+            }
+        }
+        runtime.start(agent: agent, repository: repository)
+        Task {
+            let voice = await callVoice(for: agent)
+            voiceCalls.start(agentID: agent.id, conversationID: conversation.id, voice: voice,
+                             personName: personName, recentLines: recentLines, media: media)
+        }
+    }
+
     func sendVoiceMessage(from url: URL, voice: VoiceMessage, to conversationID: UUID) throws {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
@@ -1101,6 +1196,8 @@ final class NoodleStore {
         }
         // The text draft is independent and remains untouched.
         runtime.notify(participants(for: conversation), repository: repository)
+        voiceCalls.shared(in: conversationID, body: voice.transcript ?? VoiceMessage.messageBody,
+                          attachmentNames: staged.map(\.originalFilename))
         sendToHub(conversationID)
     }
 
@@ -1132,6 +1229,7 @@ final class NoodleStore {
 
             drafts.clear(conversation.id)
             runtime.notify(participants(for: conversation), repository: repository)
+            voiceCalls.shared(in: conversation.id, body: body, attachmentNames: pendingAttachments.map(\.originalFilename))
             sendToHub(conversation.id)
         } catch {
             errorMessage = error.localizedDescription

@@ -16,6 +16,10 @@ import XCTest
     var stops = 0
     var heartbeats = 0
     var notifications: [Bool] = []
+    var voiceCallRequests: [VoiceCallRequest] = []
+    var voiceCallTexts: [String] = []
+    var voiceCallEnds = 0
+    var voiceCallEvents: (@MainActor (VoiceCallEvent) -> Void)?
     private var stopCompletions: [(Bool) -> Void] = []
 
     init(_ launch: AgentRuntimeLaunch) {
@@ -52,6 +56,12 @@ import XCTest
     }
     func promoteNotification(_ id: UUID) { XCTFail("Explicit delivery should not need a classifier") }
     func heartbeat() { heartbeats += 1; launch.onHeartbeat() }
+    func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
+        voiceCallRequests.append(request)
+        voiceCallEvents = events
+    }
+    func sendToVoiceCall(_ text: String) { voiceCallTexts.append(text) }
+    func endVoiceCall() { voiceCallEnds += 1 }
 }
 
 @MainActor final class RuntimeFactoryFixture {

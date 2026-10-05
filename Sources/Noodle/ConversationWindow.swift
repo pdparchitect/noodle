@@ -71,6 +71,10 @@ struct ConversationWindowView: View {
                 .sharedBackgroundVisibility(.hidden)
 
             ToolbarItem(placement: .primaryAction) {
+                if let conversation { VoiceCallToolbarControl(conversation: conversation) }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 if conversation != nil {
                     Button { store.returnConversationToMainWindow(conversationID) } label: {
                         Label("Show in Main Window", systemImage: "pip.exit")

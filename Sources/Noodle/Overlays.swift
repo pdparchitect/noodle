@@ -49,6 +49,8 @@ struct NewBotSheet: View {
     @State private var hasChosenHarness = false
     @State private var selectedModelIdentifier = ""
     @State private var selectedEffort = ""
+    @State private var selectedVoice = ""
+    @State private var hasChosenVoice = false
     @State private var publicDescription = ""
     @State private var backstory = ""
     @State private var avatarSymbolName: String? = "sparkles"
@@ -146,7 +148,8 @@ struct NewBotSheet: View {
                         ),
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort,
-                        selectedProfileID: $selectedProfileID
+                        selectedProfileID: $selectedProfileID,
+                        selectedVoice: Binding(get: { selectedVoice }, set: { selectedVoice = $0; hasChosenVoice = true })
                     )
                 case .mcp:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
@@ -183,6 +186,8 @@ struct NewBotSheet: View {
             nameFocused = true
             store.runtime.refreshCapabilities()
         }
+        .followsNameForVoice($selectedVoice, chosen: $hasChosenVoice, name: name,
+                             harnessIdentifier: selectedHarnessIdentifier, store: store)
         .onChange(of: store.runtime.availableInstallations) { _, _ in
             selectAvailableHarnessIfNeeded()
         }
@@ -232,7 +237,8 @@ struct NewBotSheet: View {
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
             computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
-            harnessProfile: selectedProfileID
+            harnessProfile: selectedProfileID,
+            voice: selectedVoice.nilIfEmpty
         )
     }
 
@@ -271,6 +277,8 @@ struct EditBotSheet: View {
     @State private var selectedHarnessIdentifier: String
     @State private var selectedModelIdentifier: String
     @State private var selectedEffort: String
+    @State private var selectedVoice = ""
+    @State private var hasChosenVoice = false
     @State private var publicDescription: String
     @State private var backstory = ""
     @State private var avatarSymbolName: String?
@@ -374,7 +382,8 @@ struct EditBotSheet: View {
                         selectedHarnessIdentifier: $selectedHarnessIdentifier,
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort,
-                        selectedProfileID: $selectedProfileID
+                        selectedProfileID: $selectedProfileID,
+                        selectedVoice: Binding(get: { selectedVoice }, set: { selectedVoice = $0; hasChosenVoice = true })
                     )
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -405,6 +414,8 @@ struct EditBotSheet: View {
             .padding(20)
         }
         .frame(width: 520)
+        .followsNameForVoice($selectedVoice, chosen: $hasChosenVoice, name: name,
+                             harnessIdentifier: selectedHarnessIdentifier, store: store)
         .onAppear {
             nameFocused = selectedTab == .general
             backstory = store.backstory(for: agent)
@@ -418,6 +429,8 @@ struct EditBotSheet: View {
             })
             folders = store.folders(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
+            selectedVoice = store.voice(for: agent) ?? ""
+            hasChosenVoice = !selectedVoice.isEmpty
             // A bot on a Noodle Hub runs on that Hub's harness.
             if let mirror = store.hubMirror(forAgent: agent.id), let choice = mirror.harness(ofAgent: agent.id) {
                 selectedHarnessIdentifier = choice.identifier
@@ -503,7 +516,8 @@ struct EditBotSheet: View {
                 mcpConnectionIDs: mcpConnectionIDs,
                 computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
                 harnessProfile: .some(selectedProfileID),
-                sharedWith: sharingHub == nil ? nil : sharedWith
+                sharedWith: sharingHub == nil ? nil : sharedWith,
+                voice: .some(selectedVoice.nilIfEmpty)
             )
         }) {
             dismiss()

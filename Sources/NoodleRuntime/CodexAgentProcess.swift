@@ -15,6 +15,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         case setThreadName
         case startTurn(AgentWakeReason)
         case steerTurn(UUID, String)
+        case startVoiceCall
+        case voiceCall
     }
 
     private struct PersistedState: Codable {
@@ -64,6 +66,13 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     private var intentionallyStopped = false
     private var terminationReported = false
     private var lastErrorText: String?
+    /// A call asked for while Codex is still starting, placed once its thread is open.
+    private var pendingVoiceCall: [String: Any]?
+    private var voiceCallEvents: (@MainActor (VoiceCallEvent) -> Void)?
+    /// A spoken request is answered by the turn it starts or joins; only that answer is read aloud.
+    private var spokenTurnID: String?
+    private var spokenRequestPending = false
+    private var lastAgentMessage: String?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: .codex, workspace: workspaceURL)
 
     public private(set) var snapshot: AgentRuntimeSnapshot
@@ -181,6 +190,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         steeringNotificationID = nil
         steeringTimeout?.cancel()
         notifications.take()
+        endVoiceCallLocally("The bot stopped.")
         update(.offline, "Stopped")
         shutdown.stop(connection, completion: completion)
     }
@@ -202,6 +212,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     public var canReceiveHeartbeat: Bool {
         hostRunning && snapshot.phase == .ready
             && !turnIsActive && !notificationPending && steeringNotificationID == nil && threadID != nil
+            && voiceCallEvents == nil
     }
 
     public var isAlive: Bool { hostRunning }
@@ -233,6 +244,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         hostConnection = nil
         purposes.removeAll()
         turnIsActive = false
+        endVoiceCallLocally(detail)
         fail(detail)
         onUnexpectedTermination(self, detail, needsRecovery)
     }
@@ -264,6 +276,12 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                     // Keep the old pointer until a new private thread is saved.
                     openThread()
                     return
+                }
+                switch purpose {
+                case .startVoiceCall, .voiceCall:
+                    endVoiceCallLocally(error["message"] as? String ?? "The call could not continue.")
+                    return
+                default: break
                 }
                 if case .setThreadName = purpose {
                     // Naming is presentational. An older Codex installation that
@@ -299,6 +317,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                 needsHistoryRecovery = false
                 if let threadID, !saveState(threadID: threadID) { return }
                 activeTurnID = id
+                if spokenRequestPending { spokenTurnID = id; spokenRequestPending = false }
                 trace.record(.turnAccepted)
                 turnIsActive = true
                 update(.working, snapshot.detail)
@@ -312,6 +331,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                     handle(completion)
                 }
                 sendPendingNotificationIfPossible()
+            case .startVoiceCall, .voiceCall:
+                break
             case .steerTurn(let notificationID, let expectedTurnID):
                 steeringTimeout?.cancel()
                 steeringNotificationID = nil
@@ -325,6 +346,31 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         }
 
         guard let method = message["method"] as? String else { return }
+        let params = message["params"] as? [String: Any]
+        if method.hasPrefix("thread/realtime/") {
+            handleVoiceCall(method, params ?? [:])
+            return
+        }
+        if method == "turn/started", !turnIsActive, voiceCallEvents != nil,
+           params?["threadId"] as? String == threadID,
+           let id = (params?["turn"] as? [String: Any])?["id"] as? String {
+            // Only the call starts turns Noodle did not ask for. Track it so inbox
+            // notifications steer into it instead of racing it.
+            try? turnRecovery.begin()
+            turnIsActive = true
+            activeTurnID = id
+            spokenTurnID = id
+            spokenRequestPending = false
+            lastAgentMessage = nil
+            update(.working, "Answering on a call")
+            return
+        }
+        if method == "item/completed", let activeTurnID, params?["turnId"] as? String == activeTurnID,
+           params?["threadId"] as? String == threadID,
+           let item = params?["item"] as? [String: Any], item["type"] as? String == "agentMessage",
+           let text = item["text"] as? String {
+            lastAgentMessage = text
+        }
         if method.hasPrefix("item/"), turnIsActive,
            let params = message["params"] as? [String: Any],
            params["threadId"] as? String == threadID,
@@ -393,6 +439,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             }
             turnIsActive = false
             finishedTurnID = activeTurnID
+            speakAnswer(of: activeTurnID)
             self.activeTurnID = nil
             turnErrorDetail = nil
             reconnectingSince = nil
@@ -459,6 +506,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     private func finishOpeningThread() {
         startupTimeout?.cancel()
         update(.ready, "Codex ready")
+        placePendingVoiceCall()
         if recoveryPending {
             recoveryPending = false
             startTurn(reason: .runtimeRecovered)
@@ -521,6 +569,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     private func startTurn(reason: AgentWakeReason) {
         guard let threadID else { return }
         activeTurnID = nil
+        spokenTurnID = nil
+        lastAgentMessage = nil
         earlyTurnCompletion = nil
         earlyTurnError = nil
         turnErrorDetail = nil
@@ -559,6 +609,103 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             if reason == .inboxChanged { notifications.enqueue() }
             fail(error.localizedDescription)
         }
+    }
+
+    public func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
+        guard voiceCallEvents == nil, hostConnection != nil else { throw VoiceCallUnavailable() }
+        var params: [String: Any] = [
+            "outputModality": "audio",
+            "version": "v3",
+            // Noodle reads out only answers to spoken requests, never its own inbox turns.
+            "clientManagedHandoffs": true,
+            "transport": ["type": "webrtc", "sdp": request.offer],
+            "realtimeStartInstructions": VoiceCallDocumentation.startInstructions(
+                conversationID: request.conversationID, personName: request.personName),
+            "realtimeEndInstructions": VoiceCallDocumentation.endInstructions,
+            "initialItems": request.recentLines.map {
+                ["role": $0.speaker == .person ? "user" : "assistant", "text": $0.text]
+            }
+        ]
+        if let voice = request.voice { params["voice"] = voice }
+        voiceCallEvents = events
+        spokenRequestPending = false
+        pendingVoiceCall = params
+        placePendingVoiceCall()
+    }
+
+    private func placePendingVoiceCall() {
+        guard var params = pendingVoiceCall, let threadID, snapshot.phase == .ready || snapshot.phase == .working else { return }
+        pendingVoiceCall = nil
+        params["threadId"] = threadID
+        do { try request(.startVoiceCall, method: "thread/realtime/start", params: params) }
+        catch { endVoiceCallLocally(error.localizedDescription) }
+    }
+
+    public func sendToVoiceCall(_ text: String) {
+        guard voiceCallEvents != nil, let threadID else { return }
+        try? request(.voiceCall, method: "thread/realtime/appendText", params: ["threadId": threadID, "text": text])
+    }
+
+    public func endVoiceCall() {
+        guard voiceCallEvents != nil, let threadID else { return }
+        voiceCallEvents = nil
+        spokenRequestPending = false
+        // Hung up before Codex was ready: nothing was placed to stop.
+        if pendingVoiceCall != nil { pendingVoiceCall = nil; return }
+        try? request(.voiceCall, method: "thread/realtime/stop", params: ["threadId": threadID])
+    }
+
+    private func endVoiceCallLocally(_ detail: String?) {
+        pendingVoiceCall = nil
+        guard let events = voiceCallEvents else { return }
+        voiceCallEvents = nil
+        spokenRequestPending = false
+        events(.ended(detail))
+    }
+
+    private func handleVoiceCall(_ method: String, _ params: [String: Any]) {
+        guard let events = voiceCallEvents, params["threadId"] as? String == threadID else { return }
+        switch method {
+        case "thread/realtime/sdp":
+            if let sdp = params["sdp"] as? String { events(.answer(sdp)) }
+        case "thread/realtime/started":
+            events(.started)
+        case "thread/realtime/transcript/done":
+            let text = (params["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            switch params["role"] as? String {
+            case "user": events(.line(.init(.person, text)))
+            case "assistant": events(.line(.init(.bot, text)))
+            default: break
+            }
+        case "thread/realtime/itemAdded":
+            // A handoff joins the running turn, or starts the next one.
+            guard (params["item"] as? [String: Any])?["handoff_id"] != nil else { return }
+            if turnIsActive, let activeTurnID { spokenTurnID = activeTurnID } else { spokenRequestPending = true }
+        case "thread/realtime/error":
+            endVoiceCallLocally(Self.voiceCallErrorMessage(params["message"] as? String))
+        case "thread/realtime/closed":
+            endVoiceCallLocally(nil)
+        default:
+            break
+        }
+    }
+
+    /// The realtime service's errors can arrive as its raw JSON body.
+    private static func voiceCallErrorMessage(_ text: String?) -> String {
+        guard let text else { return "The call failed." }
+        let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+        return (body?["error"] as? [String: Any])?["message"] as? String ?? text
+    }
+
+    private func speakAnswer(of turnID: String) {
+        defer { spokenTurnID = nil; lastAgentMessage = nil }
+        guard voiceCallEvents != nil, spokenTurnID == turnID, let threadID,
+              let answer = lastAgentMessage?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        let text = answer.hasPrefix("[FINAL]")
+            ? String(answer.dropFirst("[FINAL]".count)).trimmingCharacters(in: .whitespaces) : answer
+        guard !text.isEmpty else { return }
+        try? request(.voiceCall, method: "thread/realtime/appendSpeech", params: ["threadId": threadID, "text": text])
     }
 
     private func request(_ purpose: RequestPurpose, method: String, params: [String: Any]) throws {
