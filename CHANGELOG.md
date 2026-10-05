@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 - Voice calls with any bot whose harness supports realtime voice, not only Codex, with a native fallback on this Mac for the rest.
 - Better local AI with Apple Intelligence.
+- Animated avatars.
 - Bug fixes and performance.
 
 ## [Unreleased]
