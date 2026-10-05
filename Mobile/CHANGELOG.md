@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-05
+
 ### Added
 
 - You can call your Codex bots on the Hub, and Codex bots shared with you: tap the phone in a conversation's top bar and talk things through. The bot answers aloud and works on what you ask. Calls start on the earpiece, where the bot sounds clearest; Speaker switches to the loudspeaker. A bar at the top shows the call's time with Speaker, Mute and End, and the conversation stays open, so you can type and share files while you talk; the call hears about them. What is said shows in the conversation as short transcript blocks; tap one to read all of it. Each bot's voice is chosen under Voice in its editor, with a sample of each to hear.
