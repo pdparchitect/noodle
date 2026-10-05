@@ -275,6 +275,7 @@ import NoodleRuntime
             avatarImageData: draft.avatarImageData, backstory: draft.backstory)
         do {
             if let profile = draft.profile { try repository.updateAgentHarnessProfile(created.agent, profile: profile) }
+            if let voice = validVoice(draft.voice, on: provider) { try repository.updateAgentVoice(created.agent, voice: voice) }
             access.setOwner(user, ofBot: created.agent.id)
         } catch {
             try? repository.deleteAgent(created.agent)
@@ -308,6 +309,8 @@ import NoodleRuntime
             avatarImageData: draft.avatarImageData ?? (draft.avatarImageDigest == nil ? nil : agent.avatarImageData))
         try repository.updateAgentBackstory(updated, backstory: draft.backstory)
         try repository.updateAgentHarnessProfile(updated, profile: draft.profile)
+        // A device from before voices sends none, which keeps the one the bot has.
+        if draft.voice != nil { try repository.updateAgentVoice(updated, voice: validVoice(draft.voice, on: provider)) }
         // As Edit Bot does in Noodle, whose runtime runs the bot when this only watches.
         if running || watching { runtime.restart(agent: updated, repository: repository) }
         onChange?(user.id, .botsChanged)
@@ -628,25 +631,133 @@ import NoodleRuntime
                 }
                 continue
             }
-            let profile = try repository.loadAgentHarnessProfile(agent)
-            // On the owner's own Mac, a bot runs on whatever Noodle gives it.
-            guard access.isPersonal || agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)).map({
-                lends(HubHarness(provider: $0, profile: profile), to: user)
-            }) == true else {
-                let name = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.displayName ?? "this harness"
-                throw LinkError("Your plan no longer lends \(name).")
-            }
-            if let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
-               !access.lends(HubHarness(provider: provider, profile: profile), model: agent.modelIdentifier, to: user) {
-                throw LinkError(agent.modelIdentifier.map { "Your plan no longer lends \($0) on \(provider.displayName)." }
-                                ?? "Your plan needs a model chosen for \(provider.displayName).")
-            }
+            try requireLends(agent, to: user)
         }
         let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
                                                      attachmentIDs: attachmentIDs, id: id)
         if running || watching { runtime.notify(bots, repository: repository) }
+        // The bot reads it from its inbox; the call hears about it here.
+        if let call = calls[conversationID] {
+            runtime.sendToVoiceCall(agentID: call.agentID, VoiceCallDocumentation.typedMessage(
+                body: body, attachmentNames: attachmentIDs.compactMap { files[$0]?.originalFilename }))
+        }
         checkForChanges()
         return linkMessage(message, files: files)
+    }
+
+    /// Whether the owner's plan still lends what the bot runs on.
+    private func requireLends(_ agent: AgentRecord, to user: HubUser) throws {
+        let profile = try repository.loadAgentHarnessProfile(agent)
+        // On the owner's own Mac, a bot runs on whatever Noodle gives it.
+        guard access.isPersonal || agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)).map({
+            lends(HubHarness(provider: $0, profile: profile), to: user)
+        }) == true else {
+            let name = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.displayName ?? "this harness"
+            throw LinkError("Your plan no longer lends \(name).")
+        }
+        if let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
+           !access.lends(HubHarness(provider: provider, profile: profile), model: agent.modelIdentifier, to: user) {
+            throw LinkError(agent.modelIdentifier.map { "Your plan no longer lends \($0) on \(provider.displayName)." }
+                            ?? "Your plan needs a model chosen for \(provider.displayName).")
+        }
+    }
+
+    // MARK: Voice calls
+
+    private final class Call {
+        let agentID: UUID
+        let conversationID: UUID
+        var cardID: UUID?
+        var lines: [VoiceCallLine] = []
+        init(agentID: UUID, conversationID: UUID) {
+            self.agentID = agentID
+            self.conversationID = conversationID
+        }
+    }
+
+    /// Calls in progress, by conversation. The Hub keeps their cards and passes them what is typed.
+    private var calls: [UUID: Call] = [:]
+    /// Picks a voice for a bot without one from its name; tests pass their own.
+    public var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
+
+    /// Starts a call with the bot of one of the user's conversations: their own bot, or one shared
+    /// with them, who calls it as they talk with it, on its owner's plan. The bot need not be
+    /// running. `send` gets what the device needs, ending with `ended`; the returned closure hangs up.
+    public func startCall(_ start: LinkCallStart, for user: HubUser,
+                          send: @escaping @MainActor (LinkCallEvent) -> Void) async throws -> @MainActor () -> Void {
+        let (conversation, bots) = try ownedConversation(start.conversationID, by: user)
+        guard conversation.kind == .direct, let agent = bots.first, agent.archivedAt == nil,
+              agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false else {
+            throw LinkError("This bot cannot take calls.")
+        }
+        guard running || watching else { throw LinkError("This Hub is not running bots right now.") }
+        if conversation.guest != nil {
+            guard let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }),
+                  lendsBot(agent, to: owner) else {
+                throw LinkError("\(agent.displayName) cannot take calls right now.")
+            }
+        } else {
+            try requireLends(agent, to: user)
+        }
+        let recentLines = try repository.loadMessages(conversationID: conversation.id).suffix(12).compactMap { message -> VoiceCallLine? in
+            switch message.author {
+            case .user: .init(.person, message.body)
+            case .agent: .init(.bot, message.body)
+            case .system: nil
+            }
+        }
+        let voice = await BotVoice.forCall(agent, repository: repository, guesser: voiceGuesser)
+        if let previous = calls[conversation.id] { finish(previous, failure: nil, hangingUp: true) }
+        runtime.start(agent: agent, repository: repository)
+        let call = Call(agentID: agent.id, conversationID: conversation.id)
+        calls[conversation.id] = call
+        do {
+            try runtime.startVoiceCall(agentID: agent.id, VoiceCallRequest(
+                offer: start.offer, voice: voice, conversationID: conversation.id,
+                personName: user.name, recentLines: Array(recentLines)
+            )) { [weak self, weak call] event in
+                guard let self, let call, self.calls[call.conversationID] === call else { return }
+                switch event {
+                case .answer(let sdp):
+                    send(.answer(sdp))
+                case .started:
+                    // Only a call that connected gets its card in the conversation.
+                    if call.cardID == nil {
+                        call.cardID = try? self.repository.recordVoiceCall(agentID: call.agentID, conversationID: call.conversationID).id
+                        self.checkForChanges()
+                    }
+                    send(.started)
+                case .line(var line):
+                    line.at = line.at ?? Date()
+                    call.lines.append(line)
+                    send(.line(LinkCallLine(speaker: line.speaker == .person ? .you : .bot, text: line.text, at: line.at)))
+                case .ended(let detail):
+                    self.finish(call, failure: detail, hangingUp: false)
+                    send(.ended(detail))
+                }
+            }
+        } catch {
+            calls[conversation.id] = nil
+            throw error
+        }
+        return { [weak self, weak call] in
+            guard let self, let call, self.calls[call.conversationID] === call else { return }
+            self.finish(call, failure: nil, hangingUp: true)
+        }
+    }
+
+    private func finish(_ call: Call, failure: String?, hangingUp: Bool) {
+        calls[call.conversationID] = nil
+        if hangingUp { runtime.endVoiceCall(agentID: call.agentID) }
+        guard let cardID = call.cardID,
+              let card = try? repository.finishVoiceCall(messageID: cardID, conversationID: call.conversationID,
+                                                         lines: call.lines, endedAt: Date()) else { return }
+        // Finishing changes a message already sent, which a device reading on from its count would miss.
+        if let agents = try? repository.loadAgents(),
+           let conversation = try? repository.loadConversations().first(where: { $0.id == call.conversationID }),
+           let person = person(of: conversation, among: agents), let files = try? attachments(in: call.conversationID) {
+            onChange?(person, .messageChanged(linkMessage(card, files: files)))
+        }
     }
 
     private func attachments(in conversationID: UUID) throws -> [UUID: ConversationAttachment] {
@@ -802,6 +913,11 @@ import NoodleRuntime
         return provider
     }
 
+    private func validVoice(_ voice: String?, on provider: HarnessProvider) -> String? {
+        guard let voice, provider.voices.contains(where: { $0.id == voice }) else { return nil }
+        return voice
+    }
+
     private func owned(_ id: UUID, by user: HubUser) throws -> AgentRecord {
         guard access.owner(ofBot: id) == user.id, !isHidden(id), let agent = try repository.loadAgents().first(where: { $0.id == id }) else {
             throw LinkError("There is no such bot.")
@@ -927,10 +1043,12 @@ import NoodleRuntime
             backstory: try repository.loadAgentBackstory(agent), avatarSymbolName: agent.avatarSymbolName,
             avatarColorIndex: agent.avatarColorIndex ?? agent.accentSeed, avatarImageData: agent.avatarImageData)
         draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
+        draft.voice = try repository.loadAgentVoice(agent)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue), readUpTo: readMarks[conversation.id],
                        status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id),
-                       sharedWith: direct.compactMap(\.guest?.id))
+                       sharedWith: direct.compactMap(\.guest?.id),
+                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false)
     }
 
     /// A bot as someone it is shared with sees it: whose it is and whether it is working, nothing of how it works.
@@ -942,7 +1060,8 @@ import NoodleRuntime
         draft.avatarImageDigest = agent.avatarImageData.map(LinkPicture.digest)
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue),
-                       readUpTo: readMarks[conversation.id], background: background(of: conversation.id), owner: owner.name)
+                       readUpTo: readMarks[conversation.id], background: background(of: conversation.id), owner: owner.name,
+                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false)
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.
@@ -978,8 +1097,13 @@ import NoodleRuntime
             case .system: nil
             }
         }
+        let call = message.call.map { record in
+            LinkCallRecord(botID: record.agentID, endedAt: record.endedAt, lines: record.lines.map {
+                LinkCallLine(speaker: $0.speaker == .person ? .you : .bot, text: $0.text, at: $0.at)
+            })
+        }
         return LinkMessage(id: message.id, conversationID: message.conversationID, author: author, body: message.body,
                            createdAt: message.createdAt, delivered: message.delivery == .delivered, attachments: attachments,
-                           reactions: reactions)
+                           reactions: reactions, call: call)
     }
 }

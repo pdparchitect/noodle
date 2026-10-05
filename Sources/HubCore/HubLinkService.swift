@@ -236,6 +236,30 @@ import os
                 Task { @MainActor in self?.register(stream) }
             }
         }
+        if case .startCall(let start) = request {
+            do {
+                let user = try user(key)
+                let bots = try hubBots()
+                // Starting the bot and the call can outlast a request, so the channel opens first
+                // and anything that then goes wrong comes down it as the call ending.
+                return .stream { stream in
+                    Task { @MainActor in
+                        do {
+                            let hangUp = try await bots.startCall(start, for: user) { event in
+                                stream.send(event.encoded)
+                                if case .ended = event { stream.close() }
+                            }
+                            stream.onClose { Task { @MainActor in hangUp() } }
+                        } catch {
+                            stream.send(LinkCallEvent.ended(error.localizedDescription).encoded)
+                            stream.close()
+                        }
+                    }
+                }
+            } catch {
+                return .response(LinkProtocol.encode(LinkResponse.failure(error.localizedDescription)))
+            }
+        }
         if case .openSurface(let conversationID, let attachmentID) = request {
             do {
                 let user = try user(key)
@@ -685,6 +709,8 @@ import os
             return .computer(computers.link(changed, for: user))
         case .openSurface:
             throw LinkError("Surfaces open a stream.")
+        case .startCall:
+            throw LinkError("Calls open a stream.")
         case .browsers:
             let browsers = try hubBrowsers()
             await browsers.refresh()

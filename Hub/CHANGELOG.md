@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- People can call their Codex bots, and Codex bots shared with them, from Noodle and Noodle for iPhone. The Hub starts the bot if needed, uses the voice chosen in its editor, or one that suits its name, and keeps the call and what was said in the conversation. The audio goes between the person's device and OpenAI, not through the Hub. Someone a bot is shared with calls it on its owner's plan, as they talk with it, and the call stays in their own conversation.
+
 ## [0.18.0] - 2026-10-05
 
 ### Added

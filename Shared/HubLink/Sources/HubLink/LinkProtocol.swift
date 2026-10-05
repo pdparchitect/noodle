@@ -183,6 +183,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// Opens a channel showing what a link in one of this user's conversations points at, live.
     /// See `LinkSurface` for what travels on it.
     case openSurface(conversationID: UUID, attachmentID: UUID)
+    /// Opens a channel for a voice call with the bot of one of this user's conversations. See
+    /// `LinkCallEvent` for what comes down it; closing it hangs up.
+    case startCall(LinkCallStart)
     /// The latest picture of what a link a bot shared points at, for its card, when the link
     /// itself carries none, as a noodlet's does not. Answered with `picture`.
     case linkPreview(conversationID: UUID, attachmentID: UUID)
@@ -987,6 +990,8 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
     public var avatarImageData: Data?
     /// The picture the Hub has. Sent without `avatarImageData`, it keeps that picture.
     public var avatarImageDigest: String?
+    /// The voice it speaks with on calls. Nil leaves it to the Hub, which picks one for its name.
+    public var voice: String?
 
     public init(name: String, provider: String, profile: UUID? = nil, model: String? = nil, reasoningEffort: String? = nil,
                 publicDescription: String = "", backstory: String = "", avatarSymbolName: String? = nil,
@@ -1005,7 +1010,7 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case name, provider, profile, model, reasoningEffort, publicDescription, backstory, avatarSymbolName, avatarColorIndex, avatarImageData,
-             avatarImageDigest
+             avatarImageDigest, voice
     }
 
     public init(from decoder: Decoder) throws {
@@ -1021,6 +1026,7 @@ public struct LinkBotDraft: Codable, Equatable, Sendable {
         avatarColorIndex = try c.decode(.avatarColorIndex, or: 0)
         avatarImageData = try c.decodeIfPresent(Data.self, forKey: .avatarImageData)
         avatarImageDigest = try c.decodeIfPresent(String.self, forKey: .avatarImageDigest)
+        voice = try c.decodeIfPresent(String.self, forKey: .voice)
     }
 
     /// Puts the bot on `model` of `harness`. Its effort stays while that model offers it; otherwise it
@@ -1074,10 +1080,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     /// For someone it is shared with: whose it is. They talk with it and nothing else, so its
     /// draft carries only its name, description and picture, and it comes without its status.
     public var owner: String?
+    /// Whether this person can call it: its harness speaks. False from a Hub without calls.
+    public var canCall: Bool
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
-                sharedWith: [UUID] = [], owner: String? = nil) {
+                sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1089,10 +1097,11 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.background = background
         self.sharedWith = sharedWith
         self.owner = owner
+        self.canCall = canCall
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner
+        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall
     }
 
     public init(from decoder: Decoder) throws {
@@ -1108,6 +1117,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         background = try c.decodeIfPresent(LinkBackground.self, forKey: .background)
         sharedWith = try c.decodeIfPresent([UUID].self, forKey: .sharedWith) ?? []
         owner = try c.decodeIfPresent(String.self, forKey: .owner)
+        canCall = try c.decode(.canCall, or: false)
     }
 }
 
@@ -1257,11 +1267,14 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
     public var delivered: Bool
     public var attachments: [LinkAttachment]
     public var reactions: [LinkReaction]
+    /// Set on the message that marks where a voice call started.
+    public var call: LinkCallRecord?
 
     public init(id: UUID, conversationID: UUID, author: Author, body: String, createdAt: Date, delivered: Bool,
-                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = []) {
+                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = [], call: LinkCallRecord? = nil) {
         self.attachments = attachments
         self.reactions = reactions
+        self.call = call
         self.id = id
         self.conversationID = conversationID
         self.author = author
@@ -1270,7 +1283,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         self.delivered = delivered
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions, call }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1282,6 +1295,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         delivered = try c.decode(.delivered, or: false)
         attachments = try c.decode(.attachments, or: [])
         reactions = try c.decode(.reactions, or: [])
+        call = try c.decodeIfPresent(LinkCallRecord.self, forKey: .call)
     }
 }
 

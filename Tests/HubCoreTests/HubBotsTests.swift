@@ -3,6 +3,7 @@ import Foundation
 import HubCore
 import HubLink
 import NoodleCore
+import NoodleRuntime
 import XCTest
 
 /// A paired device keeping a bot on the Hub, over real QUIC on this Mac.
@@ -35,10 +36,10 @@ import XCTest
         func unread(_ topic: String, _ conversation: UUID) -> Int? { shown[key(topic, conversation)] }
     }
 
-    private func fixture(pushes: RecordedPushes? = nil) async throws -> Fixture {
+    private func fixture(pushes: RecordedPushes? = nil, runtime: AgentRuntimeCoordinator? = nil) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-bots-\(UUID())")
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil)
+        let hub = Hub(root: root.appendingPathComponent("Hub"), messenger: nil, runtime: runtime)
         try hub.repository.prepare()
         let link = HubLinkService(hubName: "Mac mini", directory: root.appendingPathComponent("Hub/Link"),
                                   access: hub.access, profiles: hub.harnessProfiles, bots: hub.bots,
@@ -716,6 +717,45 @@ import XCTest
     private func bots(of device: HubPairing) async throws -> [LinkBot] {
         guard case .bots(let bots) = try await device.request(.bots) else { throw XCTSkip("unexpected answer") }
         return bots
+    }
+
+    private struct MasculineNames: VoicePresentationGuessing {
+        func presentation(forName name: String) async -> VoicePresentation? { .masculine }
+    }
+
+    /// Someone a bot is shared with calls it as they talk with it: on its owner's plan, in their
+    /// own conversation with it, which keeps the call.
+    func testSomeoneABotIsSharedWithCallsItInTheirOwnConversation() async throws {
+        let (runtime, processes) = try fakeRuntime()
+        let f = try await fixture(runtime: runtime)
+        f.hub.bots.watch()
+        f.hub.bots.voiceGuesser = MasculineNames()
+        let family = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        f.hub.access.set(HubHarness(provider: .codex, profile: nil), included: true, in: family)
+        guard case .bot(let made) = try await f.device.request(.createBot(LinkBotDraft(name: "Kai", provider: "codex"))) else {
+            return XCTFail("no bot")
+        }
+        let grace = try await person("Grace", f)
+        _ = try await share(made, with: [grace.user], f)
+        let graceBots = try await bots(of: grace.device)
+        let theirs = try XCTUnwrap(graceBots.first { $0.id == made.id })
+        XCTAssertTrue(theirs.canCall)
+        XCTAssertNotEqual(theirs.conversationID, made.conversationID)
+
+        let channel = try await grace.device.channel(.startCall(LinkCallStart(conversationID: theirs.conversationID, offer: "offer-sdp")))
+        await waitUntil { processes().last?.callRequests.count == 1 }
+        let process = try XCTUnwrap(processes().last)
+        let request = try XCTUnwrap(process.callRequests.first)
+        XCTAssertEqual(request.personName, "Grace")
+        XCTAssertEqual(request.conversationID, theirs.conversationID)
+        XCTAssertEqual(request.voice, "cove")
+        process.callEvents?(.started)
+        await waitUntil { (try? f.hub.repository.loadMessages(conversationID: theirs.conversationID).contains { $0.call != nil }) == true }
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: theirs.conversationID).filter { $0.call != nil }.count, 1)
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: made.conversationID).filter { $0.call != nil }.count, 0)
+        channel.cancel()
+        await waitUntil { process.callEnds == 1 }
+        XCTAssertEqual(process.callEnds, 1)
     }
 
     /// Anyone on the Hub can be picked to share with; nobody picks themselves.

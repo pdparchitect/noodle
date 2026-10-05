@@ -88,6 +88,7 @@ import XCTest
         realtime(wire, "transcript/done", ["role": "assistant", "text": "Two files."])
         realtime(wire, "closed")
         realtime(wire, "started")
+        try await f.wait { self.events.count >= 5 }
         await f.drain()
         XCTAssertEqual(events, [.answer("answer-sdp"), .started, .line(.init(.person, "What changed?")),
                                 .line(.init(.bot, "Two files.")), .ended(nil)])

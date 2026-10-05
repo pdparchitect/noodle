@@ -80,7 +80,7 @@ struct VoiceCallCard: View {
     let record: VoiceCallRecord
 
     var body: some View {
-        let live = store.voiceCalls.call.flatMap { $0.messageID == message.id ? $0 : nil }
+        let live = store.liveCallCardID(in: message.conversationID) == message.id ? store.voiceCalls.call : nil
         HStack {
             Spacer(minLength: 60)
             HStack(spacing: 10) {

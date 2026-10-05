@@ -30,7 +30,9 @@ transcript when there is one.
 
 ## Voice calls
 
-You can call a Codex bot that runs on this Mac and talk things through with it.
+You can call a Codex bot that runs on this Mac, or one you keep on a Noodle Hub,
+and talk things through with it. Noodle for iPhone calls your bots on the Hub
+the same way.
 
 1. Open the bot's conversation and click the phone button in the toolbar. Allow
    microphone access when asked.
@@ -57,6 +59,7 @@ better read than heard arrive in the conversation.
 
 There is one call at a time; calling another bot ends the current call. Calls
 use the bot's Codex sign-in, so your voice is sent to OpenAI. Bots using other
-harnesses cannot take calls yet.
+harnesses cannot take calls. A bot someone shared with you on a Noodle Hub takes
+calls on its owner's sign-in, as it does your messages.
 
 [Documentation](README.md)

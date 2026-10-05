@@ -58,6 +58,76 @@ import XCTest
         XCTAssertEqual(try f.local.loadAgentBackstory(agent), "A butler.")
     }
 
+    /// A bot's voice is chosen here and kept on the Hub, which calls with it.
+    func testABotsVoiceTravelsToTheHubAndBack() async throws {
+        let f = try await fixture()
+        let plan = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        f.hub.access.set(HubHarness(provider: .codex, profile: nil), included: true, in: plan)
+        let mirror = f.mirror()
+        var draft = LinkBotDraft(name: "Yuki", provider: "codex")
+        draft.voice = "maple"
+        let agent = try await mirror.createBot(draft)
+        let hubAgent = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        XCTAssertEqual(try f.hub.repository.loadAgentVoice(hubAgent), "maple")
+        XCTAssertEqual(try f.local.loadAgentVoice(agent), "maple")
+
+        draft.voice = "sol"
+        try await mirror.updateBot(localAgentID: agent.id, with: draft)
+        XCTAssertEqual(try f.hub.repository.loadAgentVoice(hubAgent), "sol")
+        XCTAssertEqual(try f.local.loadAgentVoice(agent), "sol")
+    }
+
+    /// Whether a bot can be called comes from the Hub, for shared bots too, which arrive without their harness.
+    func testTheHubSaysWhichBotsCanBeCalledIncludingSharedOnes() async throws {
+        let f = try await fixture()
+        let plan = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        f.hub.access.set(HubHarness(provider: .codex, profile: nil), included: true, in: plan)
+        let mirror = f.mirror()
+        let speaking = try await mirror.createBot(LinkBotDraft(name: "Yuki", provider: "codex"))
+        let quiet = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        XCTAssertTrue(mirror.canCall(agent: speaking.id))
+        XCTAssertFalse(mirror.canCall(agent: quiet.id))
+
+        let grace = try f.hub.access.addUser(named: "Grace")
+        try await mirror.share(localAgentID: speaking.id, with: [grace.id])
+        let root = f.folder.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let graceFolder = root.appendingPathComponent("Grace/Hubs/one")
+        let device = HubPairing(directory: graceFolder, deviceName: "Grace")
+        await device.join(f.link.invite(grace).url().absoluteString)
+        let local = WorkspaceRepository(rootURL: root.appendingPathComponent("Grace"))
+        try local.prepare()
+        let graces = HubMirror(pairing: device, repository: local, directory: graceFolder)
+        await graces.sync()
+        let shared = try XCTUnwrap(try local.loadAgents().first)
+        XCTAssertTrue(graces.canCall(agent: shared.id))
+    }
+
+    /// A call the Hub keeps shows here as its card, live at first and with what was said once it ends.
+    func testCallCardsFromTheHubShowHereAndGetTheirTranscriptWhenTheCallEnds() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let hubAgent = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        let hubConversation = try conversation(of: hubAgent.id, in: f.hub.repository)
+        let local = try conversation(of: agent.id, in: f.local)
+        let card = try f.hub.repository.recordVoiceCall(agentID: hubAgent.id, conversationID: hubConversation.id)
+        await mirror.sync()
+        let live = try XCTUnwrap(f.local.loadMessages(conversationID: local.id).first { $0.id == card.id })
+        XCTAssertEqual(live.call?.agentID, agent.id, "The card names the bot as it is known here")
+        XCTAssertNil(live.call?.endedAt)
+
+        let said = Date(timeIntervalSince1970: 1_800_000_000)
+        _ = try f.hub.repository.finishVoiceCall(messageID: card.id, conversationID: hubConversation.id,
+                                                 lines: [VoiceCallLine(.person, "Is it done?", at: said), VoiceCallLine(.bot, "Yes.", at: said)],
+                                                 endedAt: said)
+        await mirror.sync()
+        let ended = try XCTUnwrap(f.local.loadMessages(conversationID: local.id).first { $0.id == card.id })
+        XCTAssertNotNil(ended.call?.endedAt)
+        XCTAssertEqual(ended.call?.lines.map(\.text), ["Is it done?", "Yes."])
+        XCTAssertEqual(ended.call?.lines.map(\.speaker), [.person, .bot])
+        XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).filter { $0.call != nil }.count, 1)
+    }
+
     /// Sharing a bot from this Mac, and a bot someone shared with this Mac's user, which they can
     /// only talk with: it shows whose it is, and the mirror keeps nothing of how it is made.
     func testBotsAreSharedFromHereAndSharedBotsShowWhoseTheyAre() async throws {

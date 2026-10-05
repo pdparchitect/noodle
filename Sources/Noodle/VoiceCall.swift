@@ -1,12 +1,10 @@
 import AppKit
 import AVFoundation
 import Foundation
+import HubLink
 import NoodleCore
 import NoodleRuntime
 import WebKit
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
 @MainActor protocol VoiceCallRuntime: AnyObject {
     func startVoiceCall(agentID: UUID, _ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws
@@ -16,44 +14,67 @@ import FoundationModels
 
 extension AgentRuntimeCoordinator: VoiceCallRuntime {}
 
-@MainActor protocol VoicePresentationGuessing {
-    func presentation(forName name: String) async -> VoicePresentation?
+/// A call's channel to the Hub keeping its bot.
+protocol VoiceCallChannel: AnyObject {
+    var frames: AsyncThrowingStream<Data, Error> { get }
+    func cancel()
 }
 
-/// Asks the on-device model, which knows names from many languages. Without Apple
-/// Intelligence the harness's own default voice is used.
-struct AppleVoicePresentationGuesser: VoicePresentationGuessing {
-    func presentation(forName name: String) async -> VoicePresentation? {
-        #if canImport(FoundationModels)
-        guard SystemLanguageModel.default.availability == .available else { return nil }
-        let session = LanguageModelSession()
-        // The macOS 26 SDK used by CI predates the samplingMode label.
-        #if canImport(FoundationModels, _version: 2)
-        let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 16)
-        #else
-        let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 16)
-        #endif
-        // Offered "either", the model hedges even on names like Alfred, so it has to choose.
-        let response = try? await session.respond(
-            to: "People named \(name): are they more often women or men? Answer with the more common one.",
-            generating: NamePresentation.self, options: options)
-        return switch response?.content {
-        case .woman: .feminine
-        case .man: .masculine
-        case nil: nil
+extension LinkChannel: VoiceCallChannel {}
+
+/// Sends a call to a bot on this Mac to its runtime, and one to a bot kept on a Hub through
+/// that Hub, which runs the bot, keeps the call's card and hears what is typed meanwhile.
+@MainActor final class VoiceCallRouter: VoiceCallRuntime {
+    private let local: any VoiceCallRuntime
+    private let isOnHub: @MainActor (UUID) -> Bool
+    private let openHubCall: @MainActor (UUID, VoiceCallRequest) async throws -> any VoiceCallChannel
+    private var channels: [UUID: any VoiceCallChannel] = [:]
+    private var calls: [UUID: Task<Void, Never>] = [:]
+
+    init(local: any VoiceCallRuntime, isOnHub: @escaping @MainActor (UUID) -> Bool,
+         openHubCall: @escaping @MainActor (UUID, VoiceCallRequest) async throws -> any VoiceCallChannel) {
+        self.local = local
+        self.isOnHub = isOnHub
+        self.openHubCall = openHubCall
+    }
+
+    func startVoiceCall(agentID: UUID, _ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
+        guard isOnHub(agentID) else { return try local.startVoiceCall(agentID: agentID, request, events: events) }
+        endVoiceCall(agentID: agentID)
+        calls[agentID] = Task { [weak self] in
+            do {
+                guard let self else { return }
+                let channel = try await self.openHubCall(agentID, request)
+                guard !Task.isCancelled else { return channel.cancel() }
+                self.channels[agentID] = channel
+                for try await frame in channel.frames {
+                    guard let event = LinkCallEvent(frame) else { continue }
+                    switch event {
+                    case .answer(let sdp): events(.answer(sdp))
+                    case .started: events(.started)
+                    case .line(let line): events(.line(VoiceCallLine(line.speaker == .you ? .person : .bot, line.text, at: line.at)))
+                    case .ended(let detail): events(.ended(detail)); return
+                    }
+                }
+                events(.ended(nil))
+            } catch {
+                guard !Task.isCancelled else { return }
+                events(.ended(error.localizedDescription))
+            }
         }
-        #else
-        return nil
-        #endif
+    }
+
+    func sendToVoiceCall(agentID: UUID, _ text: String) {
+        guard !isOnHub(agentID) else { return }
+        local.sendToVoiceCall(agentID: agentID, text)
+    }
+
+    func endVoiceCall(agentID: UUID) {
+        guard isOnHub(agentID) else { return local.endVoiceCall(agentID: agentID) }
+        calls.removeValue(forKey: agentID)?.cancel()
+        channels.removeValue(forKey: agentID)?.cancel()
     }
 }
-
-#if canImport(FoundationModels)
-@Generable
-private enum NamePresentation {
-    case woman, man
-}
-#endif
 
 /// Captures the microphone and plays the bot's voice for one call.
 @MainActor protocol VoiceCallMedia: AnyObject {
@@ -210,7 +231,7 @@ private enum NamePresentation {
         self.webView = webView
         try await withCheckedThrowingContinuation { continuation in
             loading = continuation
-            webView.loadHTMLString(Self.page, baseURL: URL(string: "https://call.noodle.invalid/"))
+            webView.loadHTMLString(LinkCallMedia.page, baseURL: LinkCallMedia.baseURL)
         }
         guard let offer = try await webView.callAsyncJavaScript("return await offer()", contentWorld: .page) as? String else {
             throw VoiceCallUnavailable()
@@ -287,62 +308,6 @@ private enum NamePresentation {
             MainActor.assumeIsolated { media?.received(body) }
         }
     }
-
-    // The voice model's clock only advances while audio arrives, and WebKit stops
-    // sending on digital silence, so a faint noise floor keeps it flowing while muted.
-    private static let page = """
-    <!doctype html><html><body><audio id="voice" autoplay></audio><script>
-    let peer, microphone, context, gain;
-    async function offer() {
-      microphone = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
-      context = new AudioContext();
-      await context.resume();
-      const destination = context.createMediaStreamDestination();
-      gain = context.createGain();
-      context.createMediaStreamSource(microphone).connect(gain).connect(destination);
-      const noise = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
-      const samples = noise.getChannelData(0);
-      for (let i = 0; i < samples.length; i++) samples[i] = (Math.random() * 2 - 1) * 0.002;
-      const floor = context.createBufferSource();
-      floor.buffer = noise; floor.loop = true; floor.connect(destination); floor.start();
-      peer = new RTCPeerConnection();
-      destination.stream.getAudioTracks().forEach(track => peer.addTrack(track, destination.stream));
-      peer.createDataChannel('oai-events');
-      peer.ontrack = event => { const voice = document.getElementById('voice'); voice.srcObject = event.streams[0]; voice.play().catch(() => {}); };
-      peer.onconnectionstatechange = () => { if (peer.connectionState === 'failed') window.webkit.messageHandlers.call.postMessage({failed: true}); };
-      await peer.setLocalDescription(await peer.createOffer());
-      await new Promise(resolve => {
-        if (peer.iceGatheringState === 'complete') return resolve();
-        peer.onicegatheringstatechange = () => { if (peer.iceGatheringState === 'complete') resolve(); };
-        setTimeout(resolve, 3000);
-      });
-      return peer.localDescription.sdp;
-    }
-    async function answer(sdp) { await peer.setRemoteDescription({type: 'answer', sdp}); }
-    function mute(muted) { if (gain) gain.gain.value = muted ? 0 : 1; }
-    // Played on the speakers, not into the call, so the bot never hears it.
-    function chime() {
-      if (!context) return;
-      const start = context.currentTime;
-      [[660, 0], [880, 0.13]].forEach(([frequency, offset]) => {
-        const tone = context.createOscillator(), level = context.createGain();
-        tone.type = 'sine';
-        tone.frequency.value = frequency;
-        level.gain.setValueAtTime(0, start + offset);
-        level.gain.linearRampToValueAtTime(0.18, start + offset + 0.02);
-        level.gain.exponentialRampToValueAtTime(0.001, start + offset + 0.28);
-        tone.connect(level).connect(context.destination);
-        tone.start(start + offset);
-        tone.stop(start + offset + 0.3);
-      });
-    }
-    function hangUp() {
-      if (peer) peer.close();
-      if (microphone) microphone.getTracks().forEach(track => track.stop());
-      if (context) context.close();
-    }
-    </script></body></html>
-    """
 }
 
 /// A short sample of each harness voice, recorded once and shipped with the app, so

@@ -49,7 +49,9 @@ let project = Project(
                 "CFBundleURLTypes": [["CFBundleURLName": "$(MOBILE_APP_BUNDLE_ID)", "CFBundleURLSchemes": ["noodle"]]],
                 "NSCameraUsageDescription": "Noodle takes photos you send or use as your picture, scans the QR code of a Noodle Hub invitation, and noodlets you open use the camera when they ask.",
                 "NSLocalNetworkUsageDescription": "Noodle connects to your Noodle Hub on this network.",
-                "NSMicrophoneUsageDescription": "Record voice messages you choose to send in your conversations, and let noodlets you open listen when they ask. Speech is transcribed on this device.",
+                "NSMicrophoneUsageDescription": "Record voice messages you choose to send, transcribed on this device, talk with bots on calls you start, and let noodlets you open listen when they ask.",
+                // A call keeps going with the screen locked or another app in front.
+                "UIBackgroundModes": ["audio"],
                 // Shared with the notification extension, which reaches the Hubs kept there.
                 "NoodleAppGroup": "group.$(MOBILE_APP_BUNDLE_ID)",
             ]),

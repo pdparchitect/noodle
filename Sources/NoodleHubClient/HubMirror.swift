@@ -23,6 +23,8 @@ import Observation
         var owner: String?
         /// Whom it is shared with, when it is this Mac's user's.
         var sharedWith: [UUID]?
+        /// Whether the Hub takes calls with it. Nil from before calls.
+        var canCall: Bool?
     }
 
     /// A group of bots on the Hub and its local copy.
@@ -113,6 +115,16 @@ import Observation
     public func openSurface(attachment: UUID, in conversation: UUID) async throws -> LinkChannel {
         guard let thread = thread(local: conversation) else { throw LinkError("That conversation is not on this Hub.") }
         return try await pairing.channel(.openSurface(conversationID: thread.remote, attachmentID: attachment))
+    }
+
+    /// Whether the Hub takes calls with a bot here, as it said when it last listed it.
+    public func canCall(agent: UUID) -> Bool { entries.first { $0.agent == agent }?.canCall == true }
+
+    /// Calls the bot of a conversation here on the Hub. What happens comes down the channel as
+    /// `LinkCallEvent`s; cancelling it hangs up.
+    public func openCall(in conversation: UUID, offer: String) async throws -> LinkChannel {
+        guard let thread = thread(local: conversation) else { throw LinkError("That conversation is not on this Hub.") }
+        return try await pairing.channel(.startCall(LinkCallStart(conversationID: thread.remote, offer: offer)))
     }
 
     /// Opens a noodlet a bot shared in a conversation here to run on this Mac.
@@ -447,9 +459,9 @@ import Observation
                         Task { await openSignInPage(id, url: url) }
                     case .botPhase(let bot, let phase):
                         record(phase, ofBot: bot)
-                    // Reactions made on the Hub are not shown on the Mac yet.
-                    case .messageChanged:
-                        break
+                    // Reactions made on the Hub are not shown on the Mac yet; a call's card is.
+                    case .messageChanged(let message):
+                        if message.call != nil { try await syncMessages(message.conversationID) }
                     case .usersChanged:
                         usersChanges += 1
                     case .readChanged(let id, let upTo):
@@ -604,6 +616,12 @@ import Observation
         for message in page.messages {
             acknowledged.insert(message.id)
             if message.author == .you, message.delivered { delivered.insert(message.id) }
+            if known.contains(message.id), let call = message.call {
+                // A call's card gets what was said when the call ends.
+                _ = try? repository.finishVoiceCall(messageID: message.id, conversationID: thread.local,
+                                                    lines: callRecord(call).lines, endedAt: call.endedAt ?? Date())
+                continue
+            }
             guard !known.contains(message.id) else { continue }
             try await fetchMissing(message.attachments, into: thread)
             let author: MessageAuthor = switch message.author {
@@ -612,9 +630,11 @@ import Observation
             case .bot(let bot): .agent(entries.first { $0.remote == bot }?.agent ?? bot)
             case .system: .system
             }
-            try repository.append(ChatMessage(id: message.id, conversationID: thread.local, author: author, body: message.body,
-                                              createdAt: message.createdAt, delivery: message.delivered ? .delivered : .queued,
-                                              attachmentIDs: message.attachments.map(\.id)))
+            var copy = ChatMessage(id: message.id, conversationID: thread.local, author: author, body: message.body,
+                                   createdAt: message.createdAt, delivery: message.delivered ? .delivered : .queued,
+                                   attachmentIDs: message.attachments.map(\.id))
+            copy.call = message.call.map(callRecord)
+            try repository.append(copy)
             known.insert(message.id)
             latest = message.createdAt
         }
@@ -623,10 +643,16 @@ import Observation
             conversation.updatedAt = max(conversation.updatedAt, latest)
             try repository.updateConversation(conversation)
         }
-        // Delivery changes after the first read, so the last user message is read again until the bot takes it.
-        let pendingFrom = page.messages.firstIndex { $0.author == .you && !$0.delivered }
+        // Delivery changes after the first read, so the last user message is read again until the bot
+        // takes it, and a call's card until the call ends.
+        let pendingFrom = page.messages.firstIndex { ($0.author == .you && !$0.delivered) || ($0.call != nil && $0.call?.endedAt == nil) }
         setSynced(pendingFrom.map { thread.synced + $0 } ?? thread.synced + page.messages.count, in: thread.remote)
         return page
+    }
+
+    private func callRecord(_ record: LinkCallRecord) -> VoiceCallRecord {
+        VoiceCallRecord(agentID: entries.first { $0.remote == record.botID }?.agent ?? record.botID, endedAt: record.endedAt,
+                        lines: record.lines.map { VoiceCallLine($0.speaker == .you ? .person : .bot, $0.text, at: $0.at) })
     }
 
     private func setSynced(_ count: Int, in remote: UUID) {
@@ -706,9 +732,11 @@ import Observation
             avatarImageData: draft.avatarImageData, backstory: draft.backstory)
         entries.append(Entry(remote: bot.id, remoteConversation: bot.conversationID, agent: created.agent.id,
                              conversation: created.conversation.id, synced: 0, profile: draft.profile, owner: bot.owner,
-                             sharedWith: bot.sharedWith))
+                             sharedWith: bot.sharedWith, canCall: bot.canCall))
         save()
         var agent = created.agent
+        // Shown in the bot's editor here; the Hub calls with it.
+        if let voice = draft.voice { try repository.updateAgentVoice(agent, voice: voice) }
         if let archivedAt = bot.archivedAt { agent = try repository.setAgentArchived(true, agentID: agent.id, now: archivedAt) }
         // The Hub checked it when the bot set it.
         guard let status = bot.status, let withStatus = try? repository.setAgentStatus(status, agentID: agent.id) else {
@@ -731,6 +759,7 @@ import Observation
             $0.profile = draft.profile
             $0.owner = bot.owner
             $0.sharedWith = bot.sharedWith
+            $0.canCall = bot.canCall
         }
         let unchanged = agent.displayName == draft.name && agent.harnessIdentifier == draft.provider
             && agent.modelIdentifier == draft.model && agent.reasoningEffort == draft.reasoningEffort
@@ -747,6 +776,7 @@ import Observation
         if try repository.loadAgentBackstory(agent) != draft.backstory {
             try repository.updateAgentBackstory(agent, backstory: draft.backstory)
         }
+        try repository.updateAgentVoice(agent, voice: draft.voice)
     }
 
     private func forget(_ entry: Entry) throws {

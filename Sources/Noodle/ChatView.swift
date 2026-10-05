@@ -510,8 +510,8 @@ private struct ConversationTranscript: View {
         let first = firstShown(in: all)
         let messages = all[first...]
         let _ = TranscriptRenderProbe.transcript(messages)
-        let spoken = VoiceCallLayout.spokenLines(in: all, live: store.voiceCalls.call.flatMap { call in
-            call.messageID.map { ($0, call.lines) }
+        let spoken = VoiceCallLayout.spokenLines(in: all, live: store.liveCallCardID(in: conversation.id).map {
+            ($0, store.voiceCalls.call?.lines ?? [])
         })
         TranscriptScrollView(
             initialViewport: initialViewport,

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- You can call your Codex bots on the Hub, and Codex bots shared with you: tap the phone in a conversation's top bar and talk things through. The bot answers aloud and works on what you ask. A bar at the top shows the call's time with Mute and End, and the conversation stays open, so you can type and share files while you talk; the call hears about them. What is said shows in the conversation as short transcript blocks; tap one to read all of it.
+
+### What to Test
+
+- Open a conversation with one of your Codex bots and tap the phone. Allow the microphone. After a short wait you hear a chime and the bar starts counting: ask the bot something and hear it answer.
+- During the call, type a message or share a photo. The bot hears about it, and the transcript splits around it in the conversation.
+- Tap Mute: the bot stops hearing you. Tap End: the call ends and its card shows how long it lasted.
+- Lock the phone during a call: the call should keep going.
+- Call a Codex bot someone shared with you: it works the same, and the call shows only in your conversation with it.
+- Bots on other harnesses show no phone.
+
 ## [0.20.0] - 2026-10-05
 
 ### Added

@@ -150,8 +150,7 @@ struct AgentConfigurationFields: View {
                 }
                 }
 
-                // Calls are only with bots on this Mac.
-                if hubChoice == nil, let selectedProvider, !selectedProvider.voices.isEmpty {
+                if let selectedProvider, !selectedProvider.voices.isEmpty {
                     Divider().padding(.leading, 44)
 
                     Button { choosingVoice = true } label: {

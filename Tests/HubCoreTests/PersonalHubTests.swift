@@ -342,54 +342,75 @@ import XCTest
         XCTAssertEqual(fetched, .picture(picture))
     }
 
-    /// Stands in for a harness, so the Mac's own runtime can be told to fail and seen to restart.
-    private final class FakeProcess: AgentRuntimeProcess {
-        let launch: AgentRuntimeLaunch
-        var configuration: AgentRecord { launch.agent }
-        var snapshot: AgentRuntimeSnapshot
-        var isAlive = false
-        var hasInterruptedWork: Bool { false }
-        var canReceiveHeartbeat: Bool { false }
-        var stops = 0
-
-        init(_ launch: AgentRuntimeLaunch) {
-            self.launch = launch
-            snapshot = AgentRuntimeSnapshot(agentID: launch.agent.id, phase: .offline, detail: "")
-        }
-        func set(_ phase: AgentRuntimePhase, failure: AgentRuntimeFailure? = nil) {
-            snapshot.phase = phase
-            snapshot.failure = failure
-            launch.onSnapshot(snapshot)
-        }
-        func start() { isAlive = true; set(.ready) }
-        func stop(completion: @escaping (Bool) -> Void) { stops += 1; isAlive = false; set(.offline); completion(true) }
-        func notify(immediately: Bool) -> UUID { UUID() }
-        func promoteNotification(_ id: UUID) {}
-        func heartbeat() {}
+    private struct FeminineNames: VoicePresentationGuessing {
+        func presentation(forName name: String) async -> VoicePresentation? { .feminine }
     }
 
-    /// Noodle's own runtime, with a harness that is only a file and processes that are fakes.
-    private func fakeRuntime() throws -> (AgentRuntimeCoordinator, () -> [FakeProcess]) {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-personal-runtime-\(UUID())").resolvingSymlinksInPath()
-        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let bin = root.appendingPathComponent("bin"), codex = root.appendingPathComponent("bin/codex")
-        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        try Data("#!/bin/sh\nexit 99\n".utf8).write(to: codex)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: codex.path)
-        let suite = "Noodle.PersonalHubTests.\(UUID())"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
-        var processes: [FakeProcess] = []
-        let runtime = AgentRuntimeCoordinator(
-            discovery: HarnessDiscovery(homeDirectory: root, applicationsDirectory: root, executableSearchDirectories: [bin],
-                                        applicationBundleURL: root, environment: [:]),
-            defaults: defaults, makeProcess: { launch in
-                let process = FakeProcess(launch)
-                processes.append(process)
-                return process
-            })
-        addTeardownBlock { await MainActor.run { runtime.stopAll() } }
-        return (runtime, { processes })
+    /// A phone calls a bot on the Mac: the Mac starts the call with the bot's voice, passes back
+    /// what is said, keeps the call in the conversation, and hears what is typed meanwhile.
+    func testAPhoneCallsABotAndTheHubKeepsTheCallInItsConversation() async throws {
+        let (runtime, processes) = try fakeRuntime()
+        let (f, _) = try await fixture(bots: [], runtime: runtime)
+        f.personal.bots.voiceGuesser = FeminineNames()
+        let (agent, process) = try startedBot(f, in: runtime, processes)
+        let quiet = try f.repository.createAgent(named: "Eli", harnessIdentifier: "claude-code").agent
+        guard case .bots(let bots) = try await f.device.request(.bots),
+              let kai = bots.first(where: { $0.id == agent.id }), let eli = bots.first(where: { $0.id == quiet.id }) else {
+            return XCTFail("no bots")
+        }
+        XCTAssertTrue(kai.canCall)
+        XCTAssertFalse(eli.canCall, "Its harness has no voices")
+
+        let refused = try await f.device.channel(.startCall(LinkCallStart(conversationID: eli.conversationID, offer: "offer-sdp")))
+        guard case .ended(let reason)? = try await firstCallEvent(on: refused) else { return XCTFail("a bot without voices took a call") }
+        XCTAssertNotNil(reason)
+
+        let channel = try await f.device.channel(.startCall(LinkCallStart(conversationID: kai.conversationID, offer: "offer-sdp")))
+        await waitUntil { process.callRequests.count == 1 }
+        let request = try XCTUnwrap(process.callRequests.first)
+        XCTAssertEqual(request.offer, "offer-sdp")
+        XCTAssertEqual(request.conversationID, kai.conversationID)
+        XCTAssertEqual(request.personName, f.personal.owner.name)
+        XCTAssertEqual(request.voice, "juniper", "A bot without a voice gets one matching its name")
+        XCTAssertEqual(try f.repository.loadAgentVoice(agent), "juniper")
+
+        process.callEvents?(.answer("answer-sdp"))
+        process.callEvents?(.started)
+        process.callEvents?(.line(.init(.person, "Can you check the build?")))
+        var received: [LinkCallEvent] = []
+        for try await frame in channel.frames {
+            received.append(try XCTUnwrap(LinkCallEvent(frame)))
+            if received.count == 3 { break }
+        }
+        XCTAssertEqual(received.prefix(2), [.answer("answer-sdp"), .started])
+        guard case .line(let line) = received.last else { return XCTFail("no line") }
+        XCTAssertEqual(line.speaker, .you)
+        XCTAssertEqual(line.text, "Can you check the build?")
+        XCTAssertNotNil(line.at)
+
+        let cards = { try f.repository.loadMessages(conversationID: kai.conversationID).filter { $0.call != nil } }
+        XCTAssertEqual(try cards().count, 1)
+        XCTAssertNil(try cards().first?.call?.endedAt)
+
+        _ = try await f.device.request(.send(LinkOutgoingMessage(conversationID: kai.conversationID, id: UUID(), body: "Here is the log")))
+        XCTAssertEqual(process.callTexts, [VoiceCallDocumentation.typedMessage(body: "Here is the log", attachmentNames: [])])
+
+        channel.cancel()
+        await waitUntil { process.callEnds == 1 }
+        XCTAssertEqual(process.callEnds, 1)
+        await waitUntil { (try? cards().first?.call?.endedAt) != nil }
+        let card = try XCTUnwrap(cards().first)
+        XCTAssertNotNil(card.call?.endedAt)
+        XCTAssertEqual(card.call?.lines.map(\.text), ["Can you check the build?"])
+        guard case .messages(let page) = try await f.device.request(.messages(conversationID: kai.conversationID, after: 0)) else {
+            return XCTFail("no messages")
+        }
+        XCTAssertEqual(page.messages.first { $0.id == card.id }?.call?.lines.map(\.text), ["Can you check the build?"])
+    }
+
+    private func firstCallEvent(on channel: LinkChannel) async throws -> LinkCallEvent? {
+        for try await frame in channel.frames { return LinkCallEvent(frame) }
+        return nil
     }
 
     private func startedBot(_ f: Fixture, in runtime: AgentRuntimeCoordinator, _ processes: () -> [FakeProcess]) throws -> (AgentRecord, FakeProcess) {

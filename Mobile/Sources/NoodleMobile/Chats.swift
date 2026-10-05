@@ -102,6 +102,11 @@ enum HubThread: HubConversation {
         var start: [UUID: Int]?
     }
 
+    /// Voice calls with this Hub's bots, which the Hub runs.
+    @ObservationIgnored private(set) lazy var calls = PhoneCalls(open: { [pairing] start in
+        try await pairing.channel(.startCall(start))
+    })
+
     init(pairing: HubPairing) {
         self.pairing = pairing
         linkPreviews = LinkPreviews(folder: pairing.directory.appendingPathComponent("Link Previews", isDirectory: true))
@@ -1262,6 +1267,10 @@ struct ChatView: View {
         let latestOwn = messages.last { $0.author == .you }?.id
         let authors = thread.group == nil ? [:] : HubChats.authorLabels(in: messages) { chats.agent($0)?.draft.name }
         let avatars = thread.group == nil ? [:] : HubChats.authorAvatars(in: messages)
+        // The Hub's card for a call in progress arrives once it connects: the newest call still going.
+        let call = chats.calls.call?.threadID == thread.id ? chats.calls.call : nil
+        let liveCard = call == nil ? nil : messages.last { $0.call != nil && $0.call?.endedAt == nil }?.id
+        let blocks = CallLayout.blocks(in: messages, live: liveCard.map { ($0, call?.lines ?? []) })
         return ScrollView {
             LazyVStack(spacing: Bubble.rowSpacing) {
                 // Reaching the top loads the page before.
@@ -1270,10 +1279,18 @@ struct ChatView: View {
                         .task(id: messages.first?.id) { try? await chats.loadEarlier(thread) }
                 }
                 ForEach(messages) { message in
-                    Bubble(chats: chats, thread: thread, message: message, author: authors[message.id],
-                           avatar: avatars[message.id].flatMap { chats.agent($0)?.draft }, besideAvatars: thread.group != nil,
-                           delivery: message.id == latestOwn || chats.isUnsent(message) ? chats.delivery(of: message) : nil)
-                        .id(message.id)
+                    VStack(spacing: Bubble.rowSpacing) {
+                        if let record = message.call {
+                            CallCardRow(name: thread.name, message: message, record: record, live: liveCard == message.id ? call : nil)
+                        } else {
+                            Bubble(chats: chats, thread: thread, message: message, author: authors[message.id],
+                                   avatar: avatars[message.id].flatMap { chats.agent($0)?.draft }, besideAvatars: thread.group != nil,
+                                   delivery: message.id == latestOwn || chats.isUnsent(message) ? chats.delivery(of: message) : nil)
+                        }
+                        // What was said on a call after this message and before the next.
+                        if let block = blocks[message.id] { CallBlockRow(name: thread.name, block: block) }
+                    }
+                    .id(message.id)
                 }
             }
             // Rows keep their place by ID, so earlier messages loading above do not move the one being read.
@@ -1316,6 +1333,15 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
         .navigationBarTitleDisplayMode(.inline)
+        // The conversation stays usable during a call; the call is only this bar.
+        .safeAreaInset(edge: .top) {
+            if let call = chats.calls.call, call.threadID == thread.id { CallBar(calls: chats.calls, call: call) }
+        }
+        .onChange(of: chats.calls.problem) { _, reason in
+            guard let reason else { return }
+            problem = reason
+            chats.calls.problem = nil
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button { editing = true } label: {
@@ -1326,6 +1352,14 @@ struct ChatView: View {
                 }
                 // Someone a bot is shared with only sets their conversation's background.
                 .accessibilityHint(thread.bot?.owner == nil ? "Edit" : "Change Background")
+            }
+            if let bot = thread.bot, bot.canCall, chats.calls.call?.threadID != thread.id {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { chats.calls.start(threadID: thread.id, conversationID: thread.conversationID) } label: {
+                        Image(systemName: "phone")
+                    }
+                    .accessibilityLabel("Call \(thread.name)")
+                }
             }
             // As the Mac's Shared button: the computers, browser tabs and noodlets shared here, newest first.
             let shared = LinkAttachment.shared(newestFirst: messages.reversed().flatMap(\.attachments))

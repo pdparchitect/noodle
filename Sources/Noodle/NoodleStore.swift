@@ -676,12 +676,14 @@ final class NoodleStore {
         voice: String? = nil
     ) -> Bool {
         if let choice = HubHarnessChoice(identifier: harnessIdentifier) {
-            return createHubAgent(on: choice, draft: LinkBotDraft(
+            var draft = LinkBotDraft(
                 name: name, provider: choice.provider, profile: choice.profile,
                 model: modelIdentifier.flatMap { $0.isEmpty ? nil : $0 },
                 reasoningEffort: reasoningEffort.flatMap { $0.isEmpty ? nil : $0 }, publicDescription: publicDescription,
                 backstory: backstory, avatarSymbolName: avatarSymbolName, avatarColorIndex: avatarColorIndex,
-                avatarImageData: avatarImageData), connectionIDs: mcpConnectionIDs, computerIDs: computerIDs, browserIDs: browserIDs)
+                avatarImageData: avatarImageData)
+            draft.voice = validVoice(voice, harnessIdentifier: choice.provider)
+            return createHubAgent(on: choice, draft: draft, connectionIDs: mcpConnectionIDs, computerIDs: computerIDs, browserIDs: browserIDs)
         }
         guard runtime.availableInstallations.contains(where: { $0.provider.rawValue == harnessIdentifier }) else {
             errorMessage = "Set up a supported harness in Settings before creating a bot."
@@ -768,11 +770,13 @@ final class NoodleStore {
     ) -> Bool {
         if let mirror = hubMirror(forAgent: agent.id) {
             let choice = HubHarnessChoice(identifier: harnessIdentifier) ?? mirror.harness(ofAgent: agent.id)
-            let draft = LinkBotDraft(name: name, provider: choice?.provider ?? harnessIdentifier, profile: choice?.profile,
+            var draft = LinkBotDraft(name: name, provider: choice?.provider ?? harnessIdentifier, profile: choice?.profile,
                                      model: modelIdentifier.flatMap { $0.isEmpty ? nil : $0 },
                                      reasoningEffort: reasoningEffort.flatMap { $0.isEmpty ? nil : $0 },
                                      publicDescription: publicDescription, backstory: backstory, avatarSymbolName: avatarSymbolName,
                                      avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData)
+            // Nil keeps the voice the Hub has.
+            draft.voice = voice.flatMap { validVoice($0, harnessIdentifier: draft.provider) } ?? self.voice(for: agent)
             agentBeingEdited = nil
             Task {
                 do {
@@ -1089,11 +1093,18 @@ final class NoodleStore {
     }
 
     @ObservationIgnored lazy var voiceCalls = VoiceCallController(
-        runtime: runtime, makeMedia: { WebRTCVoiceCallMedia() }, report: { [weak self] in self?.errorMessage = $0 },
+        runtime: VoiceCallRouter(local: runtime, isOnHub: { [weak self] in self?.hubMirror(forAgent: $0) != nil },
+                                 openHubCall: { [weak self] agentID, request in
+            guard let mirror = self?.hubMirror(forAgent: agentID) else { throw VoiceCallUnavailable() }
+            return try await mirror.openCall(in: request.conversationID, offer: request.offer)
+        }),
+        makeMedia: { WebRTCVoiceCallMedia() }, report: { [weak self] in self?.errorMessage = $0 },
         record: { [weak self] in self?.recordVoiceCall($0) },
         finish: { [weak self] in self?.finishVoiceCall($0, messageID: $1, endedAt: $2) })
 
     private func recordVoiceCall(_ call: VoiceCallController.Call) -> UUID? {
+        // A Hub keeps its bots' calls and sends the card here like any message.
+        guard runsHere(call.agentID) else { return nil }
         do {
             let message = try repository.recordVoiceCall(agentID: call.agentID, conversationID: call.conversationID)
             markConversationRead(call.conversationID)
@@ -1135,27 +1146,24 @@ final class NoodleStore {
 
     /// What a bot with this name sounds like until a voice is chosen for it.
     func defaultVoice(forBotNamed name: String, harnessIdentifier: String) async -> String? {
-        guard let provider = HarnessProvider(rawValue: harnessIdentifier), !provider.voices.isEmpty,
-              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return provider.defaultVoice(for: await voiceGuesser.presentation(forName: name))
+        // A harness a Hub lends speaks with the same voices.
+        await BotVoice.fitting(name: name, harnessIdentifier: HubHarnessChoice(identifier: harnessIdentifier)?.provider ?? harnessIdentifier,
+                               guesser: voiceGuesser)
     }
 
-    /// A bot without a voice gets one matching its name, kept so it always sounds the same.
-    private func callVoice(for agent: AgentRecord) async -> String? {
-        let voices = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.map(\.id) ?? []
-        if let saved = voice(for: agent), voices.contains(saved) { return saved }
-        guard let fitting = await defaultVoice(forBotNamed: agent.displayName, harnessIdentifier: agent.harnessIdentifier ?? "")
-        else { return nil }
-        try? repository.updateAgentVoice(agent, voice: fitting)
-        return fitting
+    /// The card of the call in progress in a conversation. A Hub's card arrives once the call
+    /// connects, so until then it is the newest call there still going.
+    func liveCallCardID(in conversationID: UUID) -> UUID? {
+        guard let call = voiceCalls.call, call.conversationID == conversationID else { return nil }
+        return call.messageID ?? messagesByConversation[conversationID]?.last { $0.call != nil && $0.call?.endedAt == nil }?.id
     }
 
-    /// Calls are one-to-one with a bot on this Mac whose harness has voices. The bot
-    /// need not be running: calling starts it.
+    /// Calls are one-to-one with a bot whose harness has voices: on this Mac, or on a Hub, which
+    /// says so for each bot, shared ones included. The bot need not be running: calling starts it.
     func voiceCallTarget(for conversation: BotConversation) -> AgentRecord? {
-        guard conversation.kind == .direct, let agent = participants(for: conversation).first,
-              runsHere(agent.id), !isShared(agent.id),
-              HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.isEmpty == false else { return nil }
+        guard conversation.kind == .direct, let agent = participants(for: conversation).first else { return nil }
+        if let mirror = hubMirror(forAgent: agent.id) { return mirror.canCall(agent: agent.id) ? agent : nil }
+        guard runsHere(agent.id), HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.isEmpty == false else { return nil }
         return agent
     }
 
@@ -1169,9 +1177,11 @@ final class NoodleStore {
             case .system: nil
             }
         }
-        runtime.start(agent: agent, repository: repository)
+        let onHub = !runsHere(agent.id)
+        if !onHub { runtime.start(agent: agent, repository: repository) }
         Task {
-            let voice = await callVoice(for: agent)
+            // A Hub starts its bot and picks its voice itself.
+            let voice = onHub ? nil : await BotVoice.forCall(agent, repository: repository, guesser: voiceGuesser)
             voiceCalls.start(agentID: agent.id, conversationID: conversation.id, voice: voice,
                              personName: personName, recentLines: recentLines, media: media)
         }

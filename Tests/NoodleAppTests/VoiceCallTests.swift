@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import HubLink
 import WebKit
 import XCTest
 @testable import Noodle
@@ -41,6 +42,15 @@ import XCTest
     let answers: [String: VoicePresentation]?
     init(_ answers: [String: VoicePresentation]?) { self.answers = answers }
     func presentation(forName name: String) async -> VoicePresentation? { answers?[name] }
+}
+
+@MainActor final class VoiceCallChannelFake: VoiceCallChannel {
+    let frames: AsyncThrowingStream<Data, Error>
+    private let continuation: AsyncThrowingStream<Data, Error>.Continuation
+    var cancelled = 0
+    init() { (frames, continuation) = AsyncThrowingStream.makeStream() }
+    func push(_ event: LinkCallEvent) { continuation.yield(event.encoded) }
+    nonisolated func cancel() { MainActor.assumeIsolated { cancelled += 1; continuation.finish(throwing: CancellationError()) } }
 }
 
 private struct FixtureError: LocalizedError {
@@ -246,6 +256,41 @@ private struct FixtureError: LocalizedError {
         XCTAssertEqual(live[typed.id]?.lines.map(\.text), ["Live"])
         XCTAssertEqual(live[typed.id]?.isLive, true)
         XCTAssertEqual(live[card.id], nil)
+    }
+
+    func testCallsToABotOnAHubGoThroughTheHubAndOthersToTheirRuntime() async throws {
+        let hubBot = UUID(), localBot = UUID(), channel = VoiceCallChannelFake()
+        var opened: [(UUID, VoiceCallRequest)] = []
+        let router = VoiceCallRouter(local: runtime, isOnHub: { $0 == hubBot }, openHubCall: { agent, request in
+            opened.append((agent, request))
+            return channel
+        })
+        var events: [VoiceCallEvent] = []
+        let request = VoiceCallRequest(offer: "offer-sdp", voice: nil, conversationID: UUID(), personName: "Alex")
+        try router.startVoiceCall(agentID: hubBot, request) { events.append($0) }
+        try await wait { opened.count == 1 }
+        XCTAssertEqual(opened.first?.1.offer, "offer-sdp")
+        XCTAssertTrue(runtime.requests.isEmpty)
+
+        channel.push(.answer("answer-sdp"))
+        channel.push(.started)
+        channel.push(.line(LinkCallLine(speaker: .you, text: "Hi", at: date)))
+        try await wait { events.count == 3 }
+        XCTAssertEqual(events, [.answer("answer-sdp"), .started, .line(.init(.person, "Hi", at: date))])
+
+        // The Hub hears typed messages from the conversation itself.
+        router.sendToVoiceCall(agentID: hubBot, "typed")
+        XCTAssertEqual(runtime.sent, [])
+        router.endVoiceCall(agentID: hubBot)
+        XCTAssertEqual(channel.cancelled, 1)
+        XCTAssertEqual(runtime.ended, [])
+
+        try router.startVoiceCall(agentID: localBot, request) { _ in }
+        router.sendToVoiceCall(agentID: localBot, "typed")
+        router.endVoiceCall(agentID: localBot)
+        XCTAssertEqual(runtime.requests.map(\.agentID), [localBot])
+        XCTAssertEqual(runtime.sent, ["typed"])
+        XCTAssertEqual(runtime.ended, [localBot])
     }
 
     func testCallTimeKeepsOneWidthUntilAnHour() {

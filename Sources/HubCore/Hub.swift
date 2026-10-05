@@ -27,21 +27,26 @@ import NoodleRuntime
     public let bots: HubBots
     public let link: HubLinkService
 
-    /// `computer`, `browser` and `applet` reach Noodle Computer, Browser and Applet on this Mac, and
-    /// `surfaces` opens their live views; tests pass their own.
+    /// `computer`, `browser` and `applet` reach Noodle Computer, Browser and Applet on this Mac,
+    /// `surfaces` opens their live views, and `runtime` runs the bots; tests pass their own.
     public init(root: URL, messenger: URL?, linkPort: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil,
-                applet: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil, surfaces: SurfaceOpeners = SurfaceOpeners()) {
+                applet: (@Sendable (AppletRequest) async throws -> AppletResponse)? = nil, surfaces: SurfaceOpeners = SurfaceOpeners(),
+                runtime: AgentRuntimeCoordinator? = nil) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: messenger)
         // Only the Hub's own storage holds harnesses its Agent Host will trust.
-        let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
-        discovery.removeSupersededManagedHarnesses()
-        runtime = AgentRuntimeCoordinator(discovery: discovery)
-        runtime.remoteModels = RemoteModelAccountStore(repository: root)
+        if let runtime {
+            self.runtime = runtime
+        } else {
+            let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
+            discovery.removeSupersededManagedHarnesses()
+            self.runtime = AgentRuntimeCoordinator(discovery: discovery)
+        }
+        self.runtime.remoteModels = RemoteModelAccountStore(repository: root)
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
-        runtime.onUsage = { [usage] in usage.record($0) }
-        runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
+        self.runtime.onUsage = { [usage] in usage.record($0) }
+        self.runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         access = HubAccess(url: root.appendingPathComponent("access.json"))
         access.log = HubActivityLog(url: root.appendingPathComponent("activity.jsonl"))
         // One broker serves every tool a bot is given here, whichever kind it is.
@@ -53,7 +58,7 @@ import NoodleRuntime
                                  call: computer ?? ComputerToolProvider.liveTransport(), surface: surfaces.computer)
         browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
                                call: browser ?? BrowserToolProvider.liveTransport(), surface: surfaces.browser)
-        bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers, browsers: browsers,
+        bots = HubBots(repository: repository, runtime: self.runtime, access: access, connections: connections, computers: computers, browsers: browsers,
                        applets: AppletController(connection: applet, surface: surfaces.applet),
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true), readMarks: root.appendingPathComponent("read.json"))
         // The Hub's bots get the applet tool from its own controller. This Mac as a Hub shares
