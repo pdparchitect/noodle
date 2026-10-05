@@ -161,7 +161,8 @@ private enum NamePresentation {
             media?.announceConnected()
             // Only a call that connected gets its card in the conversation.
             if let current = call, current.messageID == nil { call?.messageID = record(current) }
-        case .line(let line):
+        case .line(var line):
+            line.at = line.at ?? now()
             call?.lines.append(line)
             if let count = call?.lines.count, count > 100 { call?.lines.removeFirst(count - 100) }
         case .ended(let detail):

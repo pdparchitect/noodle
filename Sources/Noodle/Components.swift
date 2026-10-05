@@ -192,6 +192,8 @@ struct MessageBubble: View {
     /// Opens an attachment together with the others in its message.
     let previewAttachment: (ConversationAttachment, [ConversationAttachment]) -> Void
     let showAgentProfile: ((AgentRecord) -> Void)?
+    /// What was said on a call after this message and before the next.
+    var spokenBlock: VoiceCallBlock?
 
     private var isUser: Bool {
         if case .user = message.author { return true }
@@ -213,7 +215,12 @@ struct MessageBubble: View {
         // Keep this one plain container. A lazy stack builds every row up front, loading the
         // whole conversation at once, when a row's body is a bare if/else (to count its views)
         // or carries a transition (to read it). The transcript applies `insertion` instead.
-        VStack(spacing: 0) { row }
+        VStack(spacing: 0) {
+            row
+            if let spokenBlock {
+                VoiceCallBlockView(block: spokenBlock).padding(.top, 8)
+            }
+        }
             // Every row keeps the badge's clearance, reactions or not, so reacting never moves
             // a message. The transcript's row gap covers all but these few points of it.
             .padding(.top, Self.reactionOverhang - TranscriptMetrics.rowSpacing)

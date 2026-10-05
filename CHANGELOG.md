@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- You can call a Codex bot that runs on this Mac: click the phone button in its conversation's toolbar and talk things through. The bot answers aloud and works on what you ask. The toolbar shows the call's time, Mute and End Call, so you can keep typing and sharing files while you talk, and the call hears about them too. A card in the conversation marks the call and keeps its transcript. Each bot has its own voice, chosen on the Harness tab when you create or edit it, with a sample of each to listen to; until you choose, Noodle picks one that suits its name. Calls use the bot's Codex sign-in, so your voice is sent to OpenAI.
+- You can call a Codex bot that runs on this Mac: click the phone button in its conversation's toolbar and talk things through. The bot answers aloud and works on what you ask. The toolbar shows the call's time, Mute and End Call, so you can keep typing and sharing files while you talk, and the call hears about them too. What is said appears in the conversation as compact transcript blocks, split by anything typed or shared during the call so everything stays in order. Each bot has its own voice, chosen on the Harness tab when you create or edit it, with a sample of each to listen to; until you choose, Noodle picks one that suits its name. Calls use the bot's Codex sign-in, so your voice is sent to OpenAI.
 
 ## [0.46.0] - 2026-10-05
 

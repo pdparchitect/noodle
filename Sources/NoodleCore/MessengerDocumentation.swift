@@ -220,7 +220,7 @@ public enum MessengerDocumentation {
         ("attachmentIDs", "Optional UUIDs linked to conversation-owned files or link bookmarks."),
         ("reactions", "Optional stored reactions with id, author, emoji and createdAt."),
         ("reactionChanges", "Optional stored change log with id, conversationID, messageID, sequence, author, emoji, removed and createdAt."),
-        ("call", "Optional record of a voice call the user had with a bot: agentID, endedAt (absent while the call is on, or if Noodle quit during it) and lines, each with speaker (person or bot) and text. Call records are never unread deliveries, because the bot was on the call; they appear in --list-messages as the conversation's history.")
+        ("call", "Optional record of a voice call the user had with a bot: agentID, endedAt (absent while the call is on, or if Noodle quit during it) and lines, each with speaker (person or bot), text and an optional at timestamp of when it was said; messages sent during the call fall between lines by time. Call records are never unread deliveries, because the bot was on the call; they appear in --list-messages as the conversation's history.")
     ]
 
     public static let attachmentFields: [(String, String)] = [

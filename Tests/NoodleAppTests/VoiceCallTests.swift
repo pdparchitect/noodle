@@ -88,7 +88,8 @@ private struct FixtureError: LocalizedError {
         runtime.events?(.line(.init(.person, "Is the build green?")))
         runtime.events?(.line(.init(.bot, "Checking.")))
         XCTAssertEqual(calls.call?.startedAt, date)
-        XCTAssertEqual(calls.call?.lines, [.init(.person, "Is the build green?"), .init(.bot, "Checking.")])
+        // Each line is stamped when it was said, so it can sit among what was typed meanwhile.
+        XCTAssertEqual(calls.call?.lines, [.init(.person, "Is the build green?", at: date), .init(.bot, "Checking.", at: date)])
 
         calls.toggleMute()
         XCTAssertEqual(calls.call?.isMuted, true)
@@ -213,6 +214,40 @@ private struct FixtureError: LocalizedError {
         }
     }
 
+    func testSpokenLinesSitAmongWhatWasSentDuringTheCall() {
+        let conversationID = UUID(), start = Date(timeIntervalSince1970: 1_000)
+        func at(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        func message(_ seconds: Double, _ body: String, call: VoiceCallRecord? = nil) -> ChatMessage {
+            var message = ChatMessage(conversationID: conversationID, author: .user, body: body, createdAt: at(seconds), delivery: .delivered)
+            message.call = call
+            return message
+        }
+        let before = message(-60, "Earlier")
+        let agentID = UUID()
+        let card = message(0, "Voice call", call: VoiceCallRecord(agentID: agentID, endedAt: at(9), lines: [
+            .init(.person, "Can you look at the log?", at: at(1)),
+            .init(.bot, "Send it over.", at: at(2)),
+            .init(.bot, "Got it, the build failed on tests.", at: at(5)),
+            .init(.person, "Untimed", at: nil),
+            .init(.person, "Thanks!", at: at(8)),
+        ]))
+        let typed = message(3, "build.log")
+        let reply = message(6, "Here is the failing test.")
+        let layout = VoiceCallLayout.spokenLines(in: [before, card, typed, reply], live: nil)
+        XCTAssertEqual(layout[before.id], nil)
+        XCTAssertEqual(layout[card.id]?.lines.map(\.text), ["Can you look at the log?", "Send it over.", "Untimed"])
+        XCTAssertEqual(layout[typed.id]?.lines.map(\.text), ["Got it, the build failed on tests."])
+        XCTAssertEqual(layout[reply.id]?.lines.map(\.text), ["Thanks!"])
+        XCTAssertEqual(layout[reply.id]?.agentID, agentID)
+        XCTAssertEqual(layout[reply.id]?.isLive, false)
+
+        // While the call runs its lines come from the call, not the saved card.
+        let live = VoiceCallLayout.spokenLines(in: [card, typed], live: (card.id, [.init(.bot, "Live", at: at(4))]))
+        XCTAssertEqual(live[typed.id]?.lines.map(\.text), ["Live"])
+        XCTAssertEqual(live[typed.id]?.isLive, true)
+        XCTAssertEqual(live[card.id], nil)
+    }
+
     func testCallTimeKeepsOneWidthUntilAnHour() {
         XCTAssertEqual([0, 5, 65, 599, 3599, 3725].map { VoiceCallTimer.format(TimeInterval($0)) },
                        ["00:00", "00:05", "01:05", "09:59", "59:59", "1:02:05"])
@@ -281,10 +316,12 @@ private struct FixtureError: LocalizedError {
 
         f.store.voiceCalls.hangUp()
         let saved = try XCTUnwrap(try f.repository.loadMessages(conversationID: f.directA.id).first { $0.id == card.id })
-        XCTAssertEqual(saved.call?.lines, [.init(.person, "Can you check the build?"), .init(.bot, "It passed.")])
+        XCTAssertEqual(saved.call?.lines.map(\.text), ["Can you check the build?", "It passed."])
+        XCTAssertEqual(saved.call?.lines.map(\.speaker), [.person, .bot])
+        XCTAssertTrue(saved.call?.lines.allSatisfy { $0.at != nil } == true)
         let endedAt = try XCTUnwrap(saved.call?.endedAt)
         XCTAssertGreaterThanOrEqual(endedAt, saved.createdAt)
-        XCTAssertEqual(callMessages().first?.call?.lines, saved.call?.lines)
+        XCTAssertEqual(callMessages().first?.call?.lines.map(\.text), saved.call?.lines.map(\.text))
         XCTAssertNotNil(callMessages().first?.call?.endedAt)
         XCTAssertEqual(try f.repository.latestMessages(for: f.a.id).count, 0)
     }

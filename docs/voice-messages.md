@@ -46,8 +46,10 @@ bot's name, using Apple Intelligence when it is turned on.
 
 During a call the toolbar shows how long it has lasted, with **Mute**, which
 stops the bot hearing you. Once the call connects, a card in the conversation
-shows it; click **Show Transcript** on the card to read what has been said. The
-card stays afterwards with the call's length and transcript.
+marks it, and what you and the bot say appears below it in a short transcript
+block. Anything typed or shared during the call splits the transcript there,
+so everything stays in order; click a block to read all of it. Afterwards the
+card shows how long the call lasted.
 
 The chat stays open while you talk. Type or share files as usual: the bot
 receives them, and the call hears about them too. Files, links and anything

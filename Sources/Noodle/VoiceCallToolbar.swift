@@ -72,50 +72,39 @@ struct VoiceCallTimer: View {
     }
 }
 
-/// A call's place in its conversation: live while it runs, then its length and transcript.
+/// Where a call starts in its conversation: live while it runs, then its length. What was
+/// said follows it as speech bubbles, among whatever was sent during the call.
 struct VoiceCallCard: View {
     @Environment(NoodleStore.self) private var store
     let message: ChatMessage
     let record: VoiceCallRecord
-    @State private var showsTranscript = false
 
     var body: some View {
         let live = store.voiceCalls.call.flatMap { $0.messageID == message.id ? $0 : nil }
-        let lines = live?.lines ?? record.lines
-        let canShowTranscript = live != nil || !lines.isEmpty
         HStack {
             Spacer(minLength: 60)
-            Button { showsTranscript = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: live == nil ? "phone" : "phone.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(live == nil ? Color.secondary : Color.green)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Voice call with \(botName)")
-                            .font(.system(size: 12.5, weight: .medium))
-                        Group {
-                            if let live {
-                                VoiceCallTimer(startedAt: live.startedAt)
-                            } else if let endedAt = record.endedAt {
-                                Text(Duration.seconds(max(0, endedAt.timeIntervalSince(message.createdAt)))
-                                    .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
-                            }
+            HStack(spacing: 10) {
+                Image(systemName: live == nil ? "phone" : "phone.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(live == nil ? Color.secondary : Color.green)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Voice call with \(botName)")
+                        .font(.system(size: 12.5, weight: .medium))
+                    Group {
+                        if let live {
+                            VoiceCallTimer(startedAt: live.startedAt)
+                        } else if let endedAt = record.endedAt {
+                            Text(Duration.seconds(max(0, endedAt.timeIntervalSince(message.createdAt)))
+                                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
                         }
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
                     }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .contentShape(RoundedRectangle(cornerRadius: 14))
             }
-            .buttonStyle(.plain)
-            .allowsHitTesting(canShowTranscript)
-            .help(canShowTranscript ? "Show Transcript" : "")
-            .popover(isPresented: $showsTranscript, arrowEdge: .bottom) {
-                VoiceCallTranscript(lines: lines, botName: botName)
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
             Spacer(minLength: 60)
         }
     }
@@ -123,6 +112,63 @@ struct VoiceCallCard: View {
     private var botName: String {
         store.agents.first { $0.id == record.agentID }?.displayName ?? "Bot"
     }
+}
+
+/// One stretch of a call between two messages.
+struct VoiceCallBlock: Equatable {
+    let agentID: UUID
+    var lines: [VoiceCallLine]
+    let isLive: Bool
+}
+
+/// A stretch of what was said on a call, kept to a two-line preview so a long call stays
+/// compact. Clicking it shows the whole stretch.
+struct VoiceCallBlockView: View {
+    @Environment(NoodleStore.self) private var store
+    let block: VoiceCallBlock
+    @State private var showsAll = false
+
+    var body: some View {
+        // A live block follows the conversation; a finished one reads from its start.
+        let preview = block.isLive ? Array(block.lines.suffix(2)) : Array(block.lines.prefix(2))
+        HStack {
+            Spacer(minLength: 60)
+            Button { showsAll = true } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(preview.enumerated()), id: \.offset) { _, line in
+                            (Text(speaker(line) + "  ").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.secondary)
+                                + Text(line.text).font(.system(size: 12.5)))
+                                .lineLimit(1)
+                        }
+                        if block.lines.count > preview.count {
+                            Text("\(block.lines.count) lines")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: 380, alignment: .leading)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Show what was said")
+            .popover(isPresented: $showsAll, arrowEdge: .bottom) {
+                VoiceCallTranscript(lines: block.lines, botName: botName)
+            }
+            Spacer(minLength: 60)
+        }
+    }
+
+    private var botName: String { store.agents.first { $0.id == block.agentID }?.displayName ?? "Bot" }
+    private func speaker(_ line: VoiceCallLine) -> String { line.speaker == .person ? "You" : botName }
 }
 
 struct VoiceCallTranscript: View {
@@ -146,8 +192,26 @@ struct VoiceCallTranscript: View {
         }
         .defaultScrollAnchor(.bottom)
         .frame(width: 340, height: 300)
-        .overlay {
-            if lines.isEmpty { Text("Nothing said yet").foregroundStyle(.secondary) }
+    }
+}
+
+enum VoiceCallLayout {
+    /// Each spoken line goes after the last message sent before it was said, but never
+    /// above its own call, so messages sent during a call split its transcript into blocks.
+    /// Lines without a time stay with their call.
+    static func spokenLines(in messages: [ChatMessage], live: (messageID: UUID, lines: [VoiceCallLine])?) -> [UUID: VoiceCallBlock] {
+        var placed: [UUID: VoiceCallBlock] = [:]
+        for (index, card) in messages.enumerated() {
+            guard let record = card.call else { continue }
+            let isLive = live?.messageID == card.id
+            for line in isLive ? live?.lines ?? [] : record.lines {
+                var host = index
+                if let at = line.at {
+                    while host + 1 < messages.count, messages[host + 1].createdAt <= at { host += 1 }
+                }
+                placed[messages[host].id, default: VoiceCallBlock(agentID: record.agentID, lines: [], isLive: isLive)].lines.append(line)
+            }
         }
+        return placed
     }
 }

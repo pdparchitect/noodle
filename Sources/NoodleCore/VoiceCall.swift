@@ -7,10 +7,13 @@ public enum VoiceCallSpeaker: String, Codable, Hashable, Sendable {
 public struct VoiceCallLine: Codable, Hashable, Sendable {
     public var speaker: VoiceCallSpeaker
     public var text: String
+    /// When it was said, so it can be shown among what was typed during the call.
+    public var at: Date?
 
-    public init(_ speaker: VoiceCallSpeaker, _ text: String) {
+    public init(_ speaker: VoiceCallSpeaker, _ text: String, at: Date? = nil) {
         self.speaker = speaker
         self.text = text
+        self.at = at
     }
 }
 

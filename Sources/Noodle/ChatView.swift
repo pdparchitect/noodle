@@ -510,6 +510,9 @@ private struct ConversationTranscript: View {
         let first = firstShown(in: all)
         let messages = all[first...]
         let _ = TranscriptRenderProbe.transcript(messages)
+        let spoken = VoiceCallLayout.spokenLines(in: all, live: store.voiceCalls.call.flatMap { call in
+            call.messageID.map { ($0, call.lines) }
+        })
         TranscriptScrollView(
             initialViewport: initialViewport,
             lastMessageID: messages.last?.id,
@@ -540,7 +543,8 @@ private struct ConversationTranscript: View {
                     hasConversationBackground: !store.background(for: conversation).isDefault,
                     selectedAttachmentID: $selectedAttachmentID,
                     previewAttachment: previewAttachment,
-                    showAgentProfile: showAgentProfile
+                    showAgentProfile: showAgentProfile,
+                    spokenBlock: spoken[message.id]
                 )
                 .transition(MessageBubble.insertion(for: message))
                 .id(TranscriptScrollTarget.message(message.id))
