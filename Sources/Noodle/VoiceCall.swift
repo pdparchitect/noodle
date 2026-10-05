@@ -343,3 +343,44 @@ private enum NamePresentation {
     </script></body></html>
     """
 }
+
+/// A short sample of each harness voice, recorded once and shipped with the app, so
+/// choosing a voice needs neither a sign-in nor a call.
+enum VoicePreview {
+    static func fileName(provider: HarnessProvider, voice: String) -> String { "\(provider.rawValue)-\(voice).m4a" }
+
+    static func url(provider: HarnessProvider, voice: String) -> URL? {
+        Bundle.main.url(forResource: fileName(provider: provider, voice: voice), withExtension: nil, subdirectory: "VoicePreviews")
+    }
+}
+
+/// Plays one preview at a time; starting another stops the current one.
+@MainActor @Observable final class VoicePreviewPlayer: NSObject, AVAudioPlayerDelegate {
+    private(set) var playingVoice: String?
+    @ObservationIgnored private var player: AVAudioPlayer?
+
+    /// Starts the sample from the beginning, even if it was already playing.
+    func play(_ voice: String, provider: HarnessProvider) {
+        stop()
+        guard let url = VoicePreview.url(provider: provider, voice: voice),
+              let player = try? AVAudioPlayer(contentsOf: url) else { return }
+        player.delegate = self
+        player.play()
+        self.player = player
+        playingVoice = voice
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        playingVoice = nil
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        MainActor.assumeIsolated {
+            guard player === self.player else { return }
+            self.player = nil
+            playingVoice = nil
+        }
+    }
+}

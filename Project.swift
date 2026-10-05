@@ -180,6 +180,7 @@ let project = Project(
             resources: [
                 "Support/Assets.xcassets",
                 .folderReference(path: "Support/ToolIcons"),
+                .folderReference(path: "Support/VoicePreviews"),
                 .folderReference(path: "Support/ThirdParty"),
             ],
             entitlements: .variable("$(NOODLE_ENTITLEMENTS)"),

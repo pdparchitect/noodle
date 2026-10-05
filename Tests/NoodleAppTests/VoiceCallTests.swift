@@ -202,6 +202,17 @@ private struct FixtureError: LocalizedError {
         XCTAssertNil(f.store.voice(for: f.a))
     }
 
+    func testEveryHarnessVoiceShipsAPreview() throws {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Support/VoicePreviews")
+        for provider in HarnessProvider.allCases {
+            for voice in provider.voices {
+                let file = folder.appendingPathComponent(VoicePreview.fileName(provider: provider, voice: voice.id))
+                XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), file.lastPathComponent)
+            }
+        }
+    }
+
     func testCallTimeKeepsOneWidthUntilAnHour() {
         XCTAssertEqual([0, 5, 65, 599, 3599, 3725].map { VoiceCallTimer.format(TimeInterval($0)) },
                        ["00:00", "00:05", "01:05", "09:59", "59:59", "1:02:05"])

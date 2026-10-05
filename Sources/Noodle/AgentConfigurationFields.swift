@@ -14,6 +14,7 @@ struct AgentConfigurationFields: View {
     @Binding var selectedVoice: String
     @State private var choosingHarness = false
     @State private var choosingVoice = false
+    @State private var voicePreview = VoicePreviewPlayer()
     @State private var choosingProfile = false
     @State private var choosingModel = false
 
@@ -163,7 +164,7 @@ struct AgentConfigurationFields: View {
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: $choosingVoice, arrowEdge: .leading) {
-                        VoiceChooser(voices: selectedProvider.voices, selection: $selectedVoice)
+                        VoiceChooser(provider: selectedProvider, selection: $selectedVoice, preview: voicePreview)
                     }
                 }
             }
@@ -404,45 +405,72 @@ extension View {
     }
 }
 
-/// The voice a bot speaks with on calls.
+/// The voice a bot speaks with on calls. Choosing a voice plays its sample and keeps
+/// the chooser open, so voices can be compared by clicking through them.
 struct VoiceChooser: View {
-    let voices: [HarnessVoice]
+    let provider: HarnessProvider
     @Binding var selection: String
-    @Environment(\.dismiss) private var dismiss
+    let preview: VoicePreviewPlayer
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Choose Voice")
                 .font(.headline)
-                .padding(14)
-
-            Divider()
-
-            List {
-                Section("Feminine") { ForEach(voices.filter { $0.presentation == .feminine }, id: \.id, content: voiceButton) }
-                Section("Masculine") { ForEach(voices.filter { $0.presentation == .masculine }, id: \.id, content: voiceButton) }
-            }
-            .listStyle(.inset)
+            group("Feminine", .feminine)
+            group("Masculine", .masculine)
         }
-        .frame(width: 260, height: 380)
+        .padding(16)
+        .frame(width: 340)
+        .onDisappear { preview.stop() }
     }
 
-    private func voiceButton(_ voice: HarnessVoice) -> some View {
-        Button {
-            selection = voice.id
-            dismiss()
-        } label: {
-            HStack {
-                Text(voice.name)
-                Spacer()
-                if selection == voice.id {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.tint)
+    private func group(_ title: String, _ presentation: VoicePresentation) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(provider.voices.filter { $0.presentation == presentation }, id: \.id) { voice in
+                    tile(voice)
                 }
             }
-            .contentShape(Rectangle())
+        }
+    }
+
+    private func tile(_ voice: HarnessVoice) -> some View {
+        let isSelected = selection == voice.id, isPlaying = preview.playingVoice == voice.id
+        return Button {
+            selection = voice.id
+            preview.play(voice.id, provider: provider)
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 17))
+                    .symbolEffect(.variableColor.iterative, isActive: isPlaying)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Text(voice.name)
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(5)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .help("Choose \(voice.name) and hear it")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

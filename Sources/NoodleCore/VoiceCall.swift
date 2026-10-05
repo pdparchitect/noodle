@@ -95,7 +95,7 @@ public struct HarnessVoice: Hashable, Sendable {
 extension HarnessProvider {
     /// The voices a bot can speak with on calls. A harness with none cannot take calls.
     /// Codex does not say how its voices sound, so each was sorted once by its measured
-    /// pitch: about 185–215 Hz for the feminine ones, 90–140 Hz for the masculine ones.
+    /// pitch: about 175–240 Hz for the feminine ones, 90–155 Hz for the masculine ones.
     public var voices: [HarnessVoice] {
         switch self {
         case .codex:

@@ -39,7 +39,9 @@ You can call a Codex bot that runs on this Mac and talk things through with it.
 3. Click the red phone to end the call.
 
 Each bot has its own voice, chosen under **Voice** on the **Harness** tab when
-you create or edit it. Until you choose one, Noodle picks a voice that suits the
+you create or edit it. Clicking a voice there plays a short sample, so you can
+click through them to compare.
+Until you choose one, Noodle picks a voice that suits the
 bot's name, using Apple Intelligence when it is turned on.
 
 During a call the toolbar shows how long it has lasted, with **Mute**, which
