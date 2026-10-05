@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-10-05
+
 ### Fixed
 
 - A noodlet a bot or a Hub's live view starts out of sight can no longer talk with speech synthesis, which went on being heard on the Mac although the noodlet was muted.
