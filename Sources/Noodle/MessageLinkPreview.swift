@@ -30,6 +30,8 @@ struct MessageLinkPreview: View {
 struct LinkPreviewCard: View {
     static let cardWidth: CGFloat = 280
     static let imageHeight: CGFloat = 158
+    /// How long a card stays in view before its page is fetched.
+    static let fetchDelay: Duration = .milliseconds(300)
     private let cardHeight: CGFloat = 220
     private var cardWidth: CGFloat { Self.cardWidth }
     private var imageHeight: CGFloat { Self.imageHeight }
@@ -115,8 +117,9 @@ struct LinkPreviewCard: View {
             restoreCachedResult()
             if shouldLoad { requestMetadata() }
         }
-        .onChange(of: shouldLoad, initial: true) { _, visible in
-            guard visible else { return }
+        .task(id: shouldLoad) {
+            // Starting a fetch blocks the main thread, so a row only scrolled past starts none.
+            guard shouldLoad, (try? await Task.sleep(for: Self.fetchDelay)) != nil else { return }
             requestMetadata()
         }
     }

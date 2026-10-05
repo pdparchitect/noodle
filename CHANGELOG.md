@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - A bot waiting for you to sign in, for usage to return or for a Kick after a safety stop no longer restarts its harness every 30 seconds. Claude Code and Antigravity bots did this after their sign-in expired.
+- Scrolling quickly through a conversation with many links no longer freezes Noodle for seconds at a time: a link's preview is fetched once it stays in view, not for every message scrolled past.
 - Link previews keep their picture at the size the card shows it rather than the web page's full-size image, so conversations with many links use less memory and disk.
 - Your bots kept on a Noodle Hub no longer offer Show Activity or Show Workspace in Finder, which opened an empty window and a folder on this Mac; they run on the Hub.
 

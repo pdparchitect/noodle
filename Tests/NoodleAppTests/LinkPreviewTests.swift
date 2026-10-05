@@ -230,6 +230,23 @@ import XCTest
         XCTAssertEqual(f.metadata.count, 1)
     }
 
+    /// Starting a fetch blocks the main thread; one per row flying past froze scrolling for seconds.
+    func testPreviewsScrolledPastDoNotStartFetching() async throws {
+        let f = loader(), selection = LinkSelection()
+        let view = host(LinkFixtureView(selection: selection, cache: f.cache, openURL: { _ in }))
+        _ = try await control("Open link: www.example.com", in: view)
+        for _ in 0..<5 {
+            selection.visible = true
+            try await Task.sleep(for: .milliseconds(30))
+            selection.visible = false
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertTrue(f.metadata.isEmpty, "A preview only scrolled past started \(f.metadata.count) fetches")
+        selection.visible = true
+        try await wait { f.metadata.count == 1 }
+    }
+
     func testWebLinkAttachmentLooksLikeAnUnfurledLink() throws {
         let url = URL(string: "https://www.example.com/\(UUID().uuidString)")!
         let link = ConversationAttachment(conversationID: UUID(), originalFilename: "www.example.com.webloc",
