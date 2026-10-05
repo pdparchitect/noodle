@@ -10,7 +10,7 @@
 - [Keyboard shortcuts](keyboard-shortcuts.md)
 - [Attachment annotations](attachment-annotations.md)
 - [Chat effects](chat-effects.md)
-- [Agent access and privacy](security.md)
+- [Security](security.md)
 - [Privacy](privacy.md)
 - [Noodle Computer](../Computer/README.md)
 - [Noodle Browser](../Browser/README.md)

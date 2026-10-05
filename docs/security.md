@@ -1,4 +1,4 @@
-# Agent access and privacy
+# Security
 
 ## Choose a bot's access
 
@@ -218,16 +218,7 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   Hub, a device paired with it can use every bot, browser, computer and noodlet
   on it. Remove a lost device in **Settings → Hub**.
 
-## Files, recording, and computers
-
-Noodle stores chats and bot workspaces on your Mac. Your harness sends work to
-its model provider under that provider's account and policies. Imported
-attachments and backgrounds are copied into Noodle. A conversation on a Noodle
-Hub keeps its background on the Hub.
-
-Microphone access is requested when you start a [voice recording](voice-messages.md).
-Transcription happens on your Mac; sending shares the audio and transcript with
-the chat's bots.
+## Noodle Computer
 
 [Noodle Computer](../Computer/README.md) runs Linux workspaces that cannot see
 your Mac's folders or clipboard. Bots assigned to the same computer share its

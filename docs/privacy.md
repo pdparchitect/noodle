@@ -3,7 +3,7 @@
 Noodle keeps your chats and bot workspaces on your Mac. What leaves it depends
 mostly on the model each bot uses: everything a bot works with is sent to that
 model's provider. For what a bot can reach on your Mac, see
-[Agent access and privacy](security.md).
+[Security](security.md).
 
 ## What a provider sees
 
