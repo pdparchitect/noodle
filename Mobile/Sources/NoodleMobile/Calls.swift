@@ -16,6 +16,7 @@ extension LinkChannel: CallChannel {}
 /// phone and the bot's voice service, never through the Hub.
 @MainActor protocol CallAudio: AnyObject {
     var onFailure: ((String) -> Void)? { get set }
+    var onConnected: (() -> Void)? { get set }
     func prepareOffer() async throws -> String
     func accept(answer: String) async throws
     func setMuted(_ muted: Bool)
@@ -46,6 +47,8 @@ extension LinkChannel: CallChannel {}
     @ObservationIgnored private var channel: (any CallChannel)?
     @ObservationIgnored private var audio: (any CallAudio)?
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var serverStarted = false
+    @ObservationIgnored private var mediaConnected = false
 
     init(open: @escaping @MainActor (LinkCallStart) async throws -> any CallChannel,
          makeAudio: @escaping @MainActor () -> any CallAudio = { WebCallAudio() }, now: @escaping () -> Date = Date.init) {
@@ -61,7 +64,14 @@ extension LinkChannel: CallChannel {}
         let audio = makeAudio()
         self.call = call
         self.audio = audio
+        serverStarted = false
+        mediaConnected = false
         audio.onFailure = { [weak self] in self?.end(call.id, problem: $0) }
+        audio.onConnected = { [weak self] in
+            guard let self, self.call?.id == call.id else { return }
+            self.mediaConnected = true
+            self.announceIfConnected(call.id)
+        }
         task = Task { [weak self] in
             do {
                 let offer = try await audio.prepareOffer()
@@ -105,14 +115,19 @@ extension LinkChannel: CallChannel {}
             do { try await audio?.accept(answer: sdp) }
             catch { end(id, problem: error.localizedDescription) }
         case .started:
-            guard call?.startedAt == nil else { return }
-            call?.startedAt = now()
-            audio?.announceConnected()
+            serverStarted = true
+            announceIfConnected(id)
         case .line(let line):
             call?.lines.append(line)
         case .ended(let detail):
             end(id, problem: detail)
         }
+    }
+
+    private func announceIfConnected(_ id: UUID) {
+        guard call?.id == id, serverStarted, mediaConnected, call?.startedAt == nil else { return }
+        call?.startedAt = now()
+        audio?.announceConnected()
     }
 
     private func end(_ id: UUID, problem: String?) {
@@ -121,6 +136,8 @@ extension LinkChannel: CallChannel {}
         task = nil
         channel?.cancel()
         channel = nil
+        audio?.onConnected = nil
+        audio?.onFailure = nil
         audio?.close()
         audio = nil
         call = nil
@@ -137,13 +154,22 @@ extension LinkChannel: CallChannel {}
 /// that processing off and the voice at full quality; the loudspeaker needs it on.
 @MainActor final class WebCallAudio: NSObject, CallAudio, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var onFailure: ((String) -> Void)?
+    var onConnected: (() -> Void)?
     private var webView: WKWebView?
     private var loading: CheckedContinuation<Void, Error>?
+    private var routeTask: Task<Void, Never>?
+    private var requestedSpeaker = false
+    private var appliedSpeaker = false
+    private var isMuted = false
+    private var prepared = false
+    private var closed = false
 
     func prepareOffer() async throws -> String {
         guard await AVAudioApplication.requestRecordPermission() else {
             throw LinkError("Microphone access is off. Allow Noodle in Settings → Privacy & Security → Microphone.")
         }
+        try Task.checkCancellation()
+        guard !closed else { throw CancellationError() }
         // Set once before the microphone starts and left alone: changed under a running microphone,
         // the session silences it. With processing off WebKit plays on the earpiece.
         let session = AVAudioSession.sharedInstance()
@@ -167,9 +193,14 @@ extension LinkChannel: CallChannel {}
             loading = continuation
             webView.loadHTMLString(LinkCallMedia.page, baseURL: LinkCallMedia.baseURL)
         }
-        guard let offer = try await webView.callAsyncJavaScript("return await offer(false)", contentWorld: .page) as? String else {
+        guard let offer = try await webView.callAsyncJavaScript("mute(muted); return await offer(false)",
+                                                              arguments: ["muted": isMuted], contentWorld: .page) as? String else {
             throw LinkError("The call could not start.")
         }
+        try Task.checkCancellation()
+        guard !closed else { throw CancellationError() }
+        prepared = true
+        setSpeaker(requestedSpeaker)
         return offer
     }
 
@@ -192,28 +223,57 @@ extension LinkChannel: CallChannel {}
     private func route(speaker: Bool) async throws {
         guard let webView else { return }
         _ = try await webView.callAsyncJavaScript("stopMicrophone(); return true", contentWorld: .page)
+        try checkRoute(webView)
         try Self.setUp(speaker: speaker)
         _ = try await webView.callAsyncJavaScript("await startMicrophone(on); return true", arguments: ["on": speaker], contentWorld: .page)
+        try checkRoute(webView)
         // Starting it makes WebKit set the session up again.
         try AVAudioSession.sharedInstance().overrideOutputAudioPort(speaker ? .speaker : .none)
         _ = try await webView.callAsyncJavaScript("await context.resume(); return true", contentWorld: .page)
+    }
+
+    private func checkRoute(_ webView: WKWebView) throws {
+        try Task.checkCancellation()
+        guard !closed, webView === self.webView else { throw CancellationError() }
     }
 
     func accept(answer: String) async throws {
         _ = try await webView?.callAsyncJavaScript("await answer(sdp); return true", arguments: ["sdp": answer], contentWorld: .page)
     }
 
-    func setMuted(_ muted: Bool) { webView?.evaluateJavaScript("mute(\(muted))") }
+    func setMuted(_ muted: Bool) {
+        isMuted = muted
+        webView?.evaluateJavaScript("mute(\(muted))")
+    }
 
     func setSpeaker(_ on: Bool) {
-        Task { [weak self] in
-            do { try await self?.route(speaker: on) } catch { self?.onFailure?(error.localizedDescription) }
+        requestedSpeaker = on
+        guard prepared, !closed, routeTask == nil, requestedSpeaker != appliedSpeaker else { return }
+        // Only one microphone restart may change the shared session at a time. Further taps
+        // replace the requested route, and hangup cancels the task before it can touch another call.
+        routeTask = Task { [weak self] in
+            guard let self else { return }
+            defer { routeTask = nil }
+            do {
+                while !Task.isCancelled, !closed, requestedSpeaker != appliedSpeaker {
+                    let speaker = requestedSpeaker
+                    try await route(speaker: speaker)
+                    try Task.checkCancellation()
+                    appliedSpeaker = speaker
+                }
+            } catch {
+                if !Task.isCancelled, !closed { onFailure?(error.localizedDescription) }
+            }
         }
     }
 
     func announceConnected() { webView?.evaluateJavaScript("chime()") }
 
     func close() {
+        closed = true
+        prepared = false
+        routeTask?.cancel()
+        routeTask = nil
         webView?.evaluateJavaScript("hangUp()")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "call")
         webView?.removeFromSuperview()
@@ -235,8 +295,9 @@ extension LinkChannel: CallChannel {}
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard (message.body as? [String: Any])?["failed"] != nil, webView != nil else { return }
-        onFailure?("The call connection was lost.")
+        guard let body = message.body as? [String: Any], webView != nil, !closed else { return }
+        if body["failed"] as? Bool == true { onFailure?("The call connection was lost.") }
+        else if body["connected"] as? Bool == true { onConnected?() }
     }
 
     private func finishLoading(_ error: Error?) {

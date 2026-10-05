@@ -4,14 +4,11 @@ All notable changes to Noodle are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## Targets
-
-- Voice calls with any bot whose harness supports realtime voice, not only Codex, with a native fallback on this Mac for the rest.
-- Better local AI with Apple Intelligence.
-- Animated avatars.
-- Bug fixes and performance.
-
 ## [Unreleased]
+
+### Fixed
+
+- Ending a voice call releases microphones that finish starting afterwards, Mute chosen while connecting stays on, and playback failures are reported instead of leaving a silent call running.
 
 ## [0.47.0] - 2026-10-05
 

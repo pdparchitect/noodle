@@ -4,6 +4,14 @@ import Speech
 import Testing
 
 @MainActor @Suite struct VoiceRecorderTests {
+    @Test func discardingAnIdleRecorderDoesNotDeactivateAnotherCallsAudio() async {
+        var deactivations = 0
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let recorder = VoiceRecorder(directory: directory, deactivateAudioSession: { deactivations += 1 })
+        await recorder.discard()
+        #expect(deactivations == 0, "An idle recorder never owned the call's audio session")
+    }
+
     // The engine delivers tapped audio on its own thread, never on the main actor.
     @Test func theMicrophoneTapRunsOffTheMainActor() async throws {
         let source = try #require(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))

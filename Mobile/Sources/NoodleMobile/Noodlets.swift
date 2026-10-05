@@ -285,11 +285,14 @@ struct NoodletDeviceScreen: View {
 /// is, and alongside whatever else is playing.
 @MainActor enum NoodletSound {
     static func start() {
+        // Calls and voice recordings own the shared session until they finish.
+        guard AVAudioSession.sharedInstance().category != .playAndRecord else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 
     static func stop() {
+        guard AVAudioSession.sharedInstance().category != .playAndRecord else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         try? AVAudioSession.sharedInstance().setCategory(.soloAmbient)
     }

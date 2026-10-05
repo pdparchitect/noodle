@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Switching Speaker repeatedly during a call no longer leaves extra microphones running or applies an earlier switch after a later one. Ending a call also releases microphones that finish starting afterwards.
+- Mute chosen while a call connects stays on when the microphone starts.
+- Calls keep their microphone and sound when opening or closing a noodlet, playing a voice message, or leaving a conversation.
+- The call timer and connected chime wait for the phone's voice connection and playback to be ready. A playback failure ends the call with an error instead of leaving it silently connected.
+
+### What to Test
+
+- Start a Codex call and immediately tap Mute: the bot must not hear you until you unmute.
+- Switch Speaker on and off several times, then speak: the bot should hear one voice and the final speaker choice should apply. End the call while it is connecting or switching speakers: the microphone indicator should turn off.
+- During a call, play a voice message, open and close a noodlet, and visit another conversation: the call should keep hearing you and playing the bot's voice.
+- Check that the timer and connected chime start only once the phone's voice connection is ready; a playback failure should end the call with an error.
+
 ## [0.21.0] - 2026-10-05
 
 ### Added

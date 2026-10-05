@@ -35,8 +35,15 @@ import SwiftUI
     private var meterTask: Task<Void, Never>?
     private var generation = UUID()
     private var recognitionError: String?
+    private var ownsAudioSession = false
+    @ObservationIgnored private let deactivateAudioSession: @MainActor () -> Void
 
-    init(directory: URL) { self.directory = directory }
+    init(directory: URL, deactivateAudioSession: @escaping @MainActor () -> Void = {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }) {
+        self.directory = directory
+        self.deactivateAudioSession = deactivateAudioSession
+    }
 
     func start() {
         guard phase == .idle else { return }
@@ -58,6 +65,7 @@ import SwiftUI
                 let session = AVAudioSession.sharedInstance()
                 try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
                 try session.setActive(true)
+                ownsAudioSession = true
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let stream = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(64))
                 let sink = try VoiceAudioSink(url: audioURL, targetFormat: format, continuation: stream.continuation)
@@ -229,7 +237,12 @@ import SwiftUI
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         engine = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Conversation dismissal also discards idle recorders. Only a recorder which activated
+        // the session may deactivate it; otherwise this silences an unrelated call.
+        if ownsAudioSession {
+            ownsAudioSession = false
+            deactivateAudioSession()
+        }
         sink?.finish()
         if let snapshot = sink?.snapshot() { duration = snapshot.duration; levels = snapshot.waveform }
     }
@@ -536,8 +549,12 @@ struct VoiceWaveform: View {
         if playing { stop(); return }
         do {
             // Through the speaker even with the ring switch set to silent, as a voice message expects.
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            // A call or voice recording already owns the session and its microphone.
+            if session.category != .playAndRecord {
+                try session.setCategory(.playback, mode: .spokenAudio)
+                try session.setActive(true)
+            }
             if player == nil { player = try AVAudioPlayer(contentsOf: url); loadedURL = url }
             Self.active?.stop()
             Self.active = self
