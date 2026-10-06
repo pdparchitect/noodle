@@ -4,9 +4,9 @@
   "client_uri": "https://usenoodle.app",
   "logo_uri": "https://usenoodle.app/assets/favicon.png",
   "redirect_uris": [
-    "noodle://mcp/oauth/callback",
-    "noodle-dev://mcp/oauth/callback",
-    "noodle-mobile://mcp/oauth/callback"
+    "https://usenoodle.app/oauth/callback/",
+    "https://usenoodle.app/oauth/callback/dev/",
+    "https://usenoodle.app/oauth/callback/mobile/"
   ],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],

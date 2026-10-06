@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Returning to Noodle</title>
+<style>
+  body { font: 15px -apple-system, BlinkMacSystemFont, sans-serif; display: grid; place-items: center; min-height: 90vh; margin: 0; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #1c1c1e; color: #eee; } a { color: #8ab4ff; } }
+</style>
+</head>
+<body>
+<p id="status">Returning to Noodle…</p>
+<script>
+  // Hands the sign-in result to the app. The code is useless without the app's PKCE verifier.
+  const query = location.search;
+  const params = new URLSearchParams(query);
+  if (params.has("state") && (params.has("code") || params.has("error"))) {
+    const target = "noodle://mcp/oauth/callback" + query;
+    history.replaceState(null, "", location.pathname);
+    location.replace(target);
+    const link = document.createElement("a");
+    link.href = target;
+    link.textContent = "Open Noodle";
+    document.getElementById("status").replaceChildren("If Noodle didn't open, ", link, ".");
+  } else {
+    document.getElementById("status").textContent = "Nothing to return to Noodle.";
+  }
+</script>
+</body>
+</html>
