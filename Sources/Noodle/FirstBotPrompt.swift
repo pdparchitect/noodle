@@ -15,6 +15,19 @@ struct BotSetupCommand: View {
     }
 }
 
+struct ConnectCommand: View {
+    let store: NoodleStore
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Connect") {
+            openWindow(id: "main")
+            store.showConnect()
+        }
+        .disabled(!store.storageReady)
+    }
+}
+
 /// Shown in the empty main window until the first bot exists.
 struct FirstBotPrompt: View {
     let setUp: () -> Void

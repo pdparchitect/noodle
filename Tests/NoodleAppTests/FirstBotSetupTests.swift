@@ -254,6 +254,23 @@ import XCTest
         XCTAssertTrue(store.showsWelcome)
     }
 
+    func testConnectReplacesTheWelcomeAndLeadsToHubSettings() throws {
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("storage"))
+        try repository.prepare()
+        let store = NoodleStore(repository: repository, runtime: runtime, connectsServices: false)
+        addTeardownBlock { @MainActor in store.stopMonitoring() }
+        store.showWelcome()
+        store.showConnect()
+        XCTAssertTrue(store.showsConnect)
+        XCTAssertFalse(store.showsWelcome)
+        store.connectThisMac()
+        XCTAssertFalse(store.showsConnect)
+        XCTAssertEqual(store.selectedSettingsTab, .hub)
+        store.showConnect()
+        store.showWelcome()
+        XCTAssertFalse(store.showsConnect)
+    }
+
     func testSomeoneWithABotIsNotInterrupted() throws {
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("storage"))
         try repository.prepare()

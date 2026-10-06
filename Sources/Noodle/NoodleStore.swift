@@ -88,6 +88,8 @@ final class NoodleStore {
     var creationSheet: CreationSheet?
     /// The first launch's full-window welcome, which ends in setting up the first bot.
     var showsWelcome = false
+    /// Help > Connect, in the main window as the welcome is: reaching this Mac from other devices, or sharing with other people.
+    var showsConnect = false
     var selectedSettingsTab: NoodleSettingsTab = .general
     var agentBeingEdited: AgentRecord?
     var groupBeingEdited: BotConversation?
@@ -293,7 +295,19 @@ final class NoodleStore {
 
     /// Help > Welcome: the welcome again, bots or not.
     func showWelcome() {
+        showsConnect = false
         showsWelcome = true
+    }
+
+    func showConnect() {
+        showsWelcome = false
+        showsConnect = true
+    }
+
+    /// Connecting to this Mac is set up in Settings > Hub.
+    func connectThisMac() {
+        showsConnect = false
+        selectedSettingsTab = .hub
     }
 
     func finishFirstBotSetup(defaults: UserDefaults = .standard) {

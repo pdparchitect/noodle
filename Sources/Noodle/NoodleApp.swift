@@ -124,6 +124,8 @@ struct NoodleApp: App {
                 }
                 Divider()
                 BotSetupCommand(store: store)
+                Divider()
+                ConnectCommand(store: store)
             }
             CommandGroup(after: .appSettings) {
                 CheckForUpdatesButton()
@@ -330,6 +332,8 @@ struct RootView: View {
         Group {
             if store.showsWelcome {
                 WelcomeView()
+            } else if store.showsConnect {
+                ConnectView()
             } else {
                 AttachmentPreviewScope(conversationID: store.selectedConversationID) { attachmentPreview in
                     content(attachmentPreview: attachmentPreview)

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Help > Connect asks whether you want to use this Mac from your other devices, which opens Settings > Hub, or share your harnesses with other people, which points you to Noodle Hub and its download.
+
 ### Fixed
 
 - Settings > Hub > Name shows the current name, ready to edit, and says to press Return while a change is unsaved.
