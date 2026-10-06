@@ -23,6 +23,9 @@ private final class FixtureState: @unchecked Sendable {
     var mismatchedIssuer = false
     var resourceIdentifier = "https://service.example/mcp"
     var pathMetadataMissing = false
+    var protectedResourceMissing = false
+    var listedIssuer = "https://service.example"
+    var reportedIssuer = "https://service.example"
     var tokenResources: [String] = []
     var tokenScope: String?
     var transportError: Error?
@@ -31,10 +34,10 @@ private final class FixtureState: @unchecked Sendable {
             if let transportError { throw transportError }
             switch request.url!.path {
             case "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource":
-                if pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
-                return (200, ["resource": resourceIdentifier, "authorization_servers": ["https://service.example"], "scopes_supported": ["read"]])
+                if protectedResourceMissing || pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
+                return (200, ["resource": resourceIdentifier, "authorization_servers": [listedIssuer], "scopes_supported": ["read"]])
             case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration":
-                return (200, ["issuer": mismatchedIssuer ? "https://wrong.example" : "https://service.example",
+                return (200, ["issuer": mismatchedIssuer ? "https://wrong.example" : reportedIssuer,
                               "authorization_endpoint": "https://service.example/authorize", "token_endpoint": "https://service.example/token",
                               "registration_endpoint": "https://service.example/register"])
             case "/register":
@@ -333,6 +336,41 @@ final class MCPServiceTests: XCTestCase {
         } catch { XCTAssertTrue(error is MCPServiceError) }
         XCTAssertEqual(FixtureProtocol.state.registrations, 0)
         XCTAssertNil(vault.load(record.id))
+    }
+    func testIssuerMayDifferOnlyByATrailingSlash() async throws {
+        for (listed, reported) in [("https://service.example/", "https://service.example"), ("https://service.example", "https://service.example/")] {
+            FixtureProtocol.state = FixtureState()
+            FixtureProtocol.state.listedIssuer = listed
+            FixtureProtocol.state.reportedIssuer = reported
+            let vault = TestVault()
+            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
+            XCTAssertEqual(vault.load(record.id)?.issuer.absoluteString, listed)
+        }
+        for (listed, reported) in [("https://service.example", "https://service.example/other"), ("https://service.example", "https://service.example//"),
+                                   ("https://service.example/tenant", "https://service.example/tenant/other"), ("https://service.example", "https://service.example:444"),
+                                   ("https://service.example", "http://service.example"), ("https://service.example", "https://service.example/?")] {
+            XCTAssertFalse(MCPOAuth.sameIssuer(reported, as: URL(string: listed)!), reported)
+        }
+        XCTAssertTrue(MCPOAuth.sameIssuer("https://service.example/tenant/", as: URL(string: "https://service.example/tenant")!))
+        XCTAssertFalse(MCPOAuth.sameIssuer(nil, as: URL(string: "https://service.example")!))
+    }
+    func testCatalogueAuthorizationServerStandsInForMissingResourceMetadata() async throws {
+        FixtureProtocol.state.protectedResourceMissing = true
+        let oauth = MCPOAuth(session: URLSession(configuration: configuration()))
+        do {
+            _ = try await oauth.discoverAndRegister(endpoint: endpoint, redirect: redirect, clientName: "Test")
+            XCTFail("Sign-in without resource metadata accepted")
+        } catch {
+            guard case .invalidMetadata? = error as? MCPServiceError else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+        let credentials = try await oauth.discoverAndRegister(endpoint: endpoint, redirect: redirect, clientName: "Test",
+                                                              authorizationServer: URL(string: "https://service.example")!)
+        XCTAssertEqual(credentials.issuer.absoluteString, "https://service.example")
+        XCTAssertEqual(credentials.resource, endpoint)
+        XCTAssertNil(credentials.scope)
+        XCTAssertEqual(FixtureProtocol.state.registrations, 1)
     }
     func testCanonicalRootResourcePersistsThroughAuthorizationRefreshAndDiscovery() async throws {
         FixtureProtocol.state.resourceIdentifier = "https://service.example"

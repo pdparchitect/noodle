@@ -55,9 +55,16 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.id, "agentmail")
         for (id, endpoint) in ["asana": "https://mcp.asana.com/mcp", "calendly": "https://mcp.calendly.com",
                                "datadog": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
-                               "socket": "https://mcp.socket.dev/", "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
+                               "socket": "https://mcp.socket.dev/", "semgrep": "https://mcp.semgrep.ai/mcp", "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
             XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.id, id)
         }
+    }
+
+    func testAtlassianNamesItsAuthorizationServer() throws {
+        let tool = try XCTUnwrap(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.atlassian.com/v1/mcp")!))
+        guard case .mcp(let configuration) = tool.configuration else { return XCTFail() }
+        XCTAssertEqual(configuration.authorizationServer, URL(string: "https://mcp.atlassian.com"))
+        XCTAssertNil(configuration.oauth)
     }
 
     func testEveryPresetHasABundledIcon() throws {

@@ -83,7 +83,9 @@ struct MCPOAuth {
         return object
     }
 
-    func discoverAndRegister(endpoint: URL, redirect: URL, clientName: String,
+    /// `authorizationServer` comes from the catalogue, for services that publish no
+    /// protected-resource metadata; published metadata still wins when present.
+    func discoverAndRegister(endpoint: URL, redirect: URL, clientName: String, authorizationServer: URL? = nil,
                              progress: @Sendable (String) async -> Void = { _ in }) async throws -> MCPCredentials {
         await progress("Discovering authorization…")
         let discovery = DefaultOAuthMetadataDiscovery()
@@ -94,17 +96,24 @@ struct MCPOAuth {
                 break
             }
         }
-        guard let protectedResource,
-              let resourceString = protectedResource["resource"] as? String,
-              let resource = URL(string: resourceString),
-              Self.acceptsResource(resource, for: endpoint),
-              let issuers = protectedResource["authorization_servers"] as? [String],
-              let first = issuers.first, let issuer = URL(string: first) else { throw MCPServiceError.invalidMetadata }
+        let resource: URL, issuer: URL
+        if let protectedResource {
+            guard let resourceString = protectedResource["resource"] as? String,
+                  let published = URL(string: resourceString),
+                  Self.acceptsResource(published, for: endpoint),
+                  let issuers = protectedResource["authorization_servers"] as? [String],
+                  let first = issuers.first, let listed = URL(string: first) else { throw MCPServiceError.invalidMetadata }
+            resource = published; issuer = listed
+        } else if let authorizationServer {
+            resource = endpoint; issuer = authorizationServer
+        } else {
+            throw MCPServiceError.invalidMetadata
+        }
         _ = try MCPConnectionRecord.validatedEndpoint(issuer)
         var metadata: Object?
         await progress("Checking authorization server…")
         for candidate in discovery.authorizationServerMetadataURLs(for: issuer) {
-            if let object = try? await request(candidate), object["issuer"] as? String == issuer.absoluteString {
+            if let object = try? await request(candidate), Self.sameIssuer(object["issuer"] as? String, as: issuer) {
                 metadata = object
                 break
             }
@@ -131,7 +140,16 @@ struct MCPOAuth {
         }
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
-                              resource: resource, scope: (protectedResource["scopes_supported"] as? [String])?.joined(separator: " "))
+                              resource: resource, scope: (protectedResource?["scopes_supported"] as? [String])?.joined(separator: " "))
+    }
+
+    /// Metadata must name the issuer it was discovered for. Some servers list it with
+    /// a trailing slash and report it without, or the reverse; that is the same URL,
+    /// so only that one character may differ.
+    static func sameIssuer(_ reported: String?, as issuer: URL) -> Bool {
+        guard let reported else { return false }
+        let listed = issuer.absoluteString
+        return reported == listed || reported == listed + "/" || reported + "/" == listed
     }
 
     /// A canonical OAuth resource may be the server origin rather than its MCP

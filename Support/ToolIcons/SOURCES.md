@@ -13,6 +13,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | apify.icon (2026-10-06) | https://apify.com/apple-icon.png |
 | apollo.icon | https://www.apollo.io/favicon.ico?favicon.0wfmd_usg2d_3.ico |
 | asana.icon (2026-10-06) | https://asana.com/assets/img/brand/asana-logo-favicon.ico |
+| atlassian.icon (2026-10-06) | https://www.atlassian.com/apple-touch-icon.png |
 | attio.icon | https://attio.com/favicon.ico?favicon.0t61hvyp-jaev.ico |
 | axiom.icon (2026-10-06) | https://axiom.co/favicon.ico |
 | buildkite.icon | https://buildkite.com/_site/favicon.png |
@@ -28,11 +29,13 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | cloudinary.icon (2026-10-06) | https://cloudinary-res.cloudinary.com/image/upload/website/cloudinary_web_favicon.png |
 | contentful.icon (2026-10-06) | https://www.google.com/s2/favicons?domain=contentful.com&sz=128 |
 | convex.icon (2026-10-06) | https://www.convex.dev/favicon.ico |
+| coupler.icon (2026-10-06) | https://www.coupler.io/assets/favicon/apple-touch-icon.png |
 | crmkit.icon | https://crmkit.ai/favicon.ico |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | dropbox.icon (2026-10-06) | https://cfl.dropboxstatic.com/static/metaserver/static/images/favicon.ico |
 | evernote.icon (2026-09-29) | https://evernote.com/favicon.ico |
 | exa.icon | https://exa.ai/images/favicon-32x32.png |
+| fal.icon (2026-10-06) | https://fal.ai/apple-touch-icon.png |
 | fathom.icon (2026-10-06) | https://fathom.ai (fathom_favicon.png on its Webflow CDN) |
 | fireflies.icon | https://fireflies.ai/favicon.ico |
 | gamma.icon (2026-10-06) | https://www.google.com/s2/favicons?domain=gamma.app&sz=128 |
@@ -43,6 +46,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | grafana.icon (2026-10-06) | https://grafana.com/static/assets/img/apple-touch-icon.png |
 | granola.icon | https://www.granola.ai/favicon/favicon-96x96.png |
 | guru.icon (2026-10-06) | https://www.getguru.com (Guru_G_Black on its Webflow CDN) |
+| harmonic.icon (2026-10-06) | https://harmonic.ai (256px icon on its Webflow CDN) |
 | hex.icon (2026-10-06) | https://hex.tech/favicon.svg (rendered to PNG) |
 | higgsfield.icon | https://higgsfield.ai/icon.png |
 | honeycomb.icon (2026-10-06) | https://www.honeycomb.io/favicon.ico |
@@ -62,6 +66,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | neon.icon | https://neon.com/favicon.ico |
 | netlify.icon | https://www.netlify.com/favicon/favicon.ico |
 | notion.icon | https://www.notion.com/front-static/favicon.ico |
+| otter.icon (2026-10-06) | https://otter.ai (apple-icon on its Webflow CDN) |
 | parallelai-search.icon | https://parallel.ai/favicon.ico?favicon.a0d6d5e9.ico |
 | parallelai-task.icon | https://parallel.ai/favicon.ico?favicon.a0d6d5e9.ico |
 | paypal.icon | https://www.paypalobjects.com/marketing/web/icons/monogram/pp64.png |
@@ -74,11 +79,13 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | pulumi.icon | https://www.pulumi.com/images/favicon.ico |
 | railway.icon (2026-10-06) | https://railway.com/apple-touch-icon.png |
 | ramp.icon | https://ramp.com/favicon.ico |
+| read-ai.icon (2026-10-06) | https://www.read.ai (ReadLogomark_256x256 on its Webflow CDN) |
 | readwise.icon (2026-10-06) | https://readwise.io (favicon-32x32 on its CloudFront CDN) |
 | replit.icon (2026-09-25) | https://replit.com/public/icons/favicon-prompt-192-rebrand.png |
 | revenuecat.icon | https://www.revenuecat.com/favicon/favicon-96x96.png |
 | runway.icon | https://runwayml.com/icon.png?icon.35ps9bmugbe1e.png |
 | sanity.icon | https://www.sanity.io/_astro/android-icon-192x192.BtdmbFTD.png |
+| semgrep.icon (2026-10-06) | https://semgrep.dev/build/assets/favicon-32x32.png |
 | sentry.icon | https://sentry.io/favicon.ico |
 | socket.icon (2026-10-06) | https://socket.dev/apple-touch-icon.png |
 | sourcegraph.icon (2026-10-06) | https://sourcegraph.com (inline icon in its page) |

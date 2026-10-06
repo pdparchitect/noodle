@@ -4,7 +4,7 @@
 
 ### Added
 
-- AgentMail, Airtable, Amplitude, Apify, Asana, Axiom, Cal.com, Calendly, Circleback, ClickHouse, Close, Cloudinary, Contentful, Convex, Datadog, Dropbox, Fathom, Gamma, Grafana, Guru, Hex, Honeycomb, Intercom, Lucid, Mem, Mercury, Mermaid Chart, Mixpanel, MotherDuck, PostHog, Postman, Railway, Readwise, Socket, Sourcegraph, Square, Tavily, tl;dv, Upstash, Whimsical and WordPress.com can be added as tools.
+- AgentMail, Airtable, Amplitude, Apify, Asana, Atlassian, Axiom, Cal.com, Calendly, Circleback, ClickHouse, Close, Cloudinary, Contentful, Convex, Coupler.io, Datadog, Dropbox, fal, Fathom, Gamma, Grafana, Guru, Harmonic, Hex, Honeycomb, Intercom, Lucid, Mem, Mercury, Mermaid Chart, Mixpanel, MotherDuck, Otter, PostHog, Postman, Railway, Read AI, Readwise, Semgrep, Socket, Sourcegraph, Square, Tavily, tl;dv, Upstash, Whimsical and WordPress.com can be added as tools.
 
 ### Fixed
 

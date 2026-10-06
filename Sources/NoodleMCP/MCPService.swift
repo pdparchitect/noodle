@@ -53,6 +53,10 @@ public actor MCPService {
         guard case .mcp(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
         return configuration.oauth
     }
+    private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
+        guard case .mcp(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
+        return configuration.authorizationServer
+    }
     private func rememberIcons(_ icons: [Icon], id: UUID, epoch: Int) {
         if epochs[id, default: 0] == epoch { serverIcons[id] = icons }
     }
@@ -89,7 +93,9 @@ public actor MCPService {
             }
             if stored == nil {
                 stored = try await oauth.discoverAndRegister(endpoint: connection.endpoint, redirect: redirectURI,
-                                                             clientName: "Noodle — " + connection.name, progress: progress)
+                                                             clientName: "Noodle — " + connection.name,
+                                                             authorizationServer: Self.authorizationServer(for: connection.endpoint),
+                                                             progress: progress)
                 try checkActive(connection.id, epoch: epoch)
                 // Persist client ID BEFORE authorization; never re-register on app restart.
                 try credentials.save(stored!, id: connection.id)
