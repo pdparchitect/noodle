@@ -19,6 +19,9 @@ struct MessageContextMenu: NSViewRepresentable {
     /// For a Hub's noodlet: open it on this Mac, or watch it live on the Hub.
     var openOnThisMac: (() -> Void)? = nil
     var openOnHub: (() -> Void)? = nil
+    /// For a table in the message, as it is shown.
+    var copyTable: (() -> Void)? = nil
+    var saveTable: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> MenuHost { MenuHost() }
 
@@ -57,6 +60,12 @@ struct MessageContextMenu: NSViewRepresentable {
             if let open = configuration.openOnThisMac { addItem("Open on This Mac", symbol: "laptopcomputer", to: menu, action: open) }
             if let open = configuration.openOnHub { addItem("Open on Hub", symbol: "play.display", to: menu, action: open) }
             addItem("Copy", symbol: "doc.on.doc", to: menu, action: configuration.copy)
+            if let copyTable = configuration.copyTable {
+                addItem("Copy as CSV", symbol: "tablecells", to: menu, action: copyTable)
+            }
+            if let saveTable = configuration.saveTable {
+                addItem("Save as CSV…", symbol: "square.and.arrow.down", to: menu, action: saveTable)
+            }
             if let showTranscript = configuration.showTranscript {
                 addItem("Show Transcript", symbol: "text.alignleft", to: menu, action: showTranscript)
             }

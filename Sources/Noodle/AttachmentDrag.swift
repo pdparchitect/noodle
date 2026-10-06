@@ -111,4 +111,20 @@ extension NoodleStore {
         if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
         else { panel.begin(completionHandler: save) }
     }
+
+    func saveTable(_ table: MessageTable) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Table.csv"
+        let save = { [weak self] (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url else { return }
+            do {
+                try Data(table.csv.utf8).write(to: destination, options: .atomic)
+            } catch {
+                self?.errorMessage = "The table could not be saved: \(error.localizedDescription)"
+            }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
+        else { panel.begin(completionHandler: save) }
+    }
 }

@@ -274,15 +274,12 @@ struct MessageBubble: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: Self.contentSpacing) {
                 if showsTextBubble(attachments: attachments) {
-                MessageText(message: message)
-                    .foregroundStyle(isUser ? .white : .primary)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
-                    .background { messageBackground }
-                    .overlay {
-                        reactionContextMenu(attachment: nil)
+                    // Tables split the text into separate bubbles; reactions mark the first.
+                    let segments = MessageMarkdownCache.shared.segments(message)
+                    ForEach(segments.indices, id: \.self) { index in
+                        segmentBubble(segments[index])
+                            .overlay(alignment: .topTrailing) { if index == 0 { cornerReactions } }
                     }
-                    .overlay(alignment: .topTrailing) { cornerReactions }
                 }
 
                 if let linkPreviewURL, !attachments.contains(where: {
@@ -320,6 +317,25 @@ struct MessageBubble: View {
         .sheet(item: $transcriptAttachment) { attachment in
             if let voice = attachment.voice { VoiceTranscriptSheet(voice: voice).noodleSheetSizing() }
         }
+        }
+    }
+
+    @ViewBuilder private func segmentBubble(_ segment: MessageMarkdownCache.Segment) -> some View {
+        switch segment {
+        case .text(let text, let source):
+            MessageText(message: message, text: text, source: source)
+                .foregroundStyle(isUser ? .white : .primary)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background { messageBackground }
+                .overlay {
+                    reactionContextMenu(attachment: nil)
+                }
+        case .table(let table):
+            MessageTableView(table: table) { shown in reactionContextMenu(attachment: nil, table: shown) }
+                .foregroundStyle(isUser ? .white : .primary)
+                .background { messageBackground }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 
@@ -369,7 +385,7 @@ struct MessageBubble: View {
         }
     }
 
-    private func reactionContextMenu(attachment: ConversationAttachment?) -> some View {
+    private func reactionContextMenu(attachment: ConversationAttachment?, table: MessageTable? = nil) -> MessageContextMenu {
         let conversation = store.conversations.first { $0.id == message.conversationID }
         let iconAgent = conversation.flatMap { conversation in
             conversation.kind == .direct && conversation.participantIDs.count == 1
@@ -409,7 +425,9 @@ struct MessageBubble: View {
             },
             openOnHub: attachment.flatMap { item in
                 store.isHubNoodlet(item) ? { Task { try? await store.openCompanion(item, at: .hub) } } : nil
-            }
+            },
+            copyTable: table.map { table in { MessageTableActions.copy(table) } },
+            saveTable: table.map { table in { store.saveTable(table) } }
         )
     }
 

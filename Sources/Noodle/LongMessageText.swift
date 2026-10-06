@@ -17,14 +17,27 @@ enum LongTextPolicy {
     }
 }
 
+/// A message's prose, or one stretch of it between tables.
 struct MessageText: View {
     let message: ChatMessage
+    let text: AttributedString
+    let source: String
     @State private var showingReader = false
 
+    init(message: ChatMessage) {
+        self.init(message: message, text: MessageMarkdownCache.shared.render(message), source: message.body)
+    }
+
+    init(message: ChatMessage, text: AttributedString, source: String) {
+        self.message = message
+        self.text = text
+        self.source = source
+    }
+
     var body: some View {
-        let isLong = LongTextPolicy.requiresPreview(message.body)
+        let isLong = LongTextPolicy.requiresPreview(source)
         VStack(alignment: .leading, spacing: 8) {
-            Text(MessageMarkdownCache.shared.render(message))
+            Text(text)
                 .font(.system(size: 12.5))
                 .lineSpacing(2)
                 .lineLimit(isLong ? 8 : nil)
@@ -41,7 +54,7 @@ struct MessageText: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Read full message")
                 .popover(isPresented: $showingReader, arrowEdge: .bottom) {
-                    MessageTextReader(message: message, close: { showingReader = false })
+                    MessageTextReader(message: message, text: text, close: { showingReader = false })
                 }
             }
         }
@@ -52,6 +65,7 @@ struct MessageTextReader: View {
     @Environment(NoodleStore.self) private var store
     @State private var annotations = ConversationAnnotationController()
     let message: ChatMessage
+    let text: AttributedString
     let close: () -> Void
 
     var body: some View {
@@ -76,7 +90,7 @@ struct MessageTextReader: View {
             .padding(16)
             Divider()
             ScrollView {
-                Text(MessageMarkdownCache.shared.render(message))
+                Text(text)
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .textSelection(.enabled)
