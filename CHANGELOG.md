@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-10-06
+
 ### Added
 
 - Right-click a bot in the sidebar and choose Show Usage to open the Usage window filtered to that bot.

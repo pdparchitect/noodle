@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-06
+
 ### Added
 
 - Tables in messages show as a card between the text around them. Tap it to open the whole table in a sheet, tap a column header to sort it, and copy or share the table as CSV. Notifications, pinned bubbles and the chat list leave tables out.
