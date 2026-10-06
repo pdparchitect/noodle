@@ -207,6 +207,7 @@ enum WebLinkPreview {
     }
     /// The unsaved link attachment an annotation refers to, named as an attached link would be.
     static func source(for url: URL, conversationID: UUID) throws -> (source: ConversationAttachment, data: Data) {
+        let url = MessageLink.webURL(from: url, preservingFragment: true) ?? url
         let data = try PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
         let name = (url.host ?? "Link") + ".webloc"
         return (ConversationAttachment(conversationID: conversationID, originalFilename: name, storedFilename: name,

@@ -138,16 +138,22 @@ final class ConversationAnnotationTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Reviewer")
-        let page = try XCTUnwrap(URL(string: "https://example.com/page"))
-        let (source, raw) = try WebLinkPreview.source(for: page, conversationID: bot.conversation.id)
-        XCTAssertEqual(source.url, page)
-        let note = AttachmentAnnotation(source: source, quote: "Heading", comment: "Look here")
-        let saved = try ConversationAnnotationContent.save(note, content: Data(note.textRepresentation.utf8),
-            source: source, sourceData: raw, repository: repository)
-        XCTAssertEqual(saved.source.url, page)
-        XCTAssertEqual(saved.source.originalFilename, "example.com.webloc")
-        XCTAssertEqual(saved.attachment.annotation?.sourceAttachmentID, saved.source.id)
-        XCTAssertEqual(try repository.loadAttachments(conversationID: bot.conversation.id).first { $0.id == saved.source.id }?.url, page)
+        // Any page the preview opens can be commented on, local servers and mixed-case hosts included.
+        for (link, expected, filename) in [("https://example.com/page", "https://example.com/page", "example.com.webloc"),
+                                           ("http://192.168.64.182:3401/", "http://192.168.64.182:3401/", "192.168.64.182.webloc"),
+                                           ("http://localhost:3000/#top", "http://localhost:3000/#top", "localhost.webloc"),
+                                           ("https://Example.COM/Page", "https://example.com/Page", "example.com.webloc")] {
+            let page = try XCTUnwrap(URL(string: link)), canonical = try XCTUnwrap(URL(string: expected))
+            let (source, raw) = try WebLinkPreview.source(for: page, conversationID: bot.conversation.id)
+            XCTAssertEqual(source.url, canonical)
+            let note = AttachmentAnnotation(source: source, quote: "Heading", comment: "Look here")
+            let saved = try ConversationAnnotationContent.save(note, content: Data(note.textRepresentation.utf8),
+                source: source, sourceData: raw, repository: repository)
+            XCTAssertEqual(saved.source.url, canonical)
+            XCTAssertEqual(saved.source.originalFilename, filename)
+            XCTAssertEqual(saved.attachment.annotation?.sourceAttachmentID, saved.source.id)
+            XCTAssertEqual(try repository.loadAttachments(conversationID: bot.conversation.id).first { $0.id == saved.source.id }?.url, canonical)
+        }
     }
 
     func testInvalidMessageReferenceRollsBackSourceAndOldMetadataStillDecodes() throws {

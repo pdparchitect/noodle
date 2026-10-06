@@ -901,7 +901,7 @@ public struct WorkspaceRepository: Sendable {
             guard card.isValid, let linkURL, CompanionLink(linkURL) != nil else { throw WorkspaceError.invalidAttachment }
         }
         if let linkURL {
-            guard MessageLink.publicWebURL(from: linkURL, preservingFragment: true) == linkURL || CompanionLink.canonical(linkURL) == linkURL,
+            guard MessageLink.webURL(from: linkURL, preservingFragment: true) == linkURL || CompanionLink.canonical(linkURL) == linkURL,
                   mediaType == "application/x-webloc",
                   let bookmark = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
                   bookmark["URL"] == linkURL.absoluteString else { throw WorkspaceError.invalidAttachment }

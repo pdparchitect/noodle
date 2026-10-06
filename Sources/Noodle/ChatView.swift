@@ -317,7 +317,7 @@ struct ChatView: View {
             }
             return
         }
-        if let link = attachment.url, MessageLink.publicWebURL(from: link, preservingFragment: true) != nil,
+        if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil,
            !WebLinkPreview.opensInPreview() {
             attachmentPreview.close()
             NSWorkspace.shared.open(link)

@@ -31,6 +31,13 @@ public enum MessageLink {
     }
 
     public static func publicWebURL(from url: URL, preservingFragment: Bool = false) -> URL? {
+        guard let canonical = webURL(from: url, preservingFragment: preservingFragment),
+              let host = canonical.host, isPublicHost(host) else { return nil }
+        return canonical
+    }
+
+    /// An http(s) page in canonical form, which may be on this Mac or the local network.
+    public static func webURL(from url: URL, preservingFragment: Bool = false) -> URL? {
         guard url.absoluteString.count <= 2_048,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let scheme = components.scheme?.lowercased(),
@@ -38,8 +45,7 @@ public enum MessageLink {
               components.user == nil,
               components.password == nil,
               let rawHost = components.host?.lowercased(),
-              !rawHost.isEmpty,
-              isPublicHost(rawHost) else { return nil }
+              !rawHost.isEmpty else { return nil }
 
         var canonical = components
         canonical.scheme = scheme
