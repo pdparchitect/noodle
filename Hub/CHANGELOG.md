@@ -5,6 +5,7 @@
 ### Fixed
 
 - Settings > Network > Name shows the current name, ready to edit, and says to press Return while a change is unsaved.
+- Claude Code bots that hand work to background agents now show as working until that work finishes, and the follow-up they post afterwards appears in the activity log, instead of showing "Claude Code ready" while they are still busy.
 
 ## [0.19.0] - 2026-10-05
 

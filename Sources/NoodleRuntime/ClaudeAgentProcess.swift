@@ -29,6 +29,8 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
     private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
     private var turnIsActive = false
+    /// Claude Code ends a turn while background tasks keep working, then starts one by itself.
+    private var backgroundTaskCount = 0
     private var interruptRequested = false
     private var interruptRequestID: String?
     private var startupTimeout: Task<Void, Never>?
@@ -160,6 +162,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         terminationReported = true
         running = false
         turnIsActive = false
+        backgroundTaskCount = 0
         notifications.take()
         processIdentifier = nil
         let connection = connection
@@ -218,7 +221,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
             } catch { reportUnexpectedTermination(error.localizedDescription) }
             return
         }
-        guard snapshot.phase == .ready else { return }
+        guard snapshot.phase == .ready || backgroundTaskCount > 0 else { return }
         notifications.take()
         startTurn(reason: .inboxChanged)
     }
@@ -257,10 +260,19 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
 
     private func handle(_ message: [String: Any]) {
         guard !intentionallyStopped, running else { return }
-        if turnIsActive, let rawID = message["session_id"] as? String, UUID(uuidString: rawID) == sessionID {
+        let type = message["type"] as? String
+        let ownSession = (message["session_id"] as? String).flatMap(UUID.init(uuidString:)) == sessionID
+        if ownSession, !turnIsActive, !paused, type == "assistant", message["parent_tool_use_id"] as? String == nil {
+            beginSelfStartedTurn()
+        }
+        if ownSession, turnIsActive || backgroundTaskCount > 0 {
             onActivity(message)
         }
-        let type = message["type"] as? String
+        if ownSession, type == "system", message["subtype"] as? String == "background_tasks_changed" {
+            backgroundTaskCount = (message["tasks"] as? [Any])?.count ?? 0
+            if !turnIsActive, !paused, snapshot.phase == .ready || snapshot.phase == .working { showIdle() }
+            return
+        }
         if type == "control_response", let response = message["response"] as? [String: Any],
            let id = response["request_id"] as? String, id == interruptRequestID {
             interruptRequestID = nil
@@ -324,11 +336,26 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         if interruptRequestID == nil { interruptTimeout?.cancel() }
         trace.finish(wasInterrupted ? .turnInterrupted : (failed ? .turnFailed : .turnCompleted))
         if failed {
-            update(.ready, detail.flatMap { $0.isEmpty ? nil : "Claude Code ready — \(String($0.prefix(240)))" } ?? "Claude Code ready — last task failed")
+            showIdle(detail.flatMap { $0.isEmpty ? nil : "Claude Code ready — \(String($0.prefix(240)))" } ?? "Claude Code ready — last task failed")
         } else {
-            update(.ready, "Claude Code ready")
+            showIdle()
         }
         sendPendingNotificationIfPossible()
+    }
+
+    private func beginSelfStartedTurn() {
+        do { try turnRecovery.begin() }
+        catch { reportUnexpectedTermination(error.localizedDescription); return }
+        turnIsActive = true
+        update(.working, "Following up on background work")
+    }
+
+    private func showIdle(_ detail: String = "Claude Code ready") {
+        if backgroundTaskCount > 0 {
+            update(.working, backgroundTaskCount == 1 ? "1 background task running" : "\(backgroundTaskCount) background tasks running")
+        } else {
+            update(.ready, detail)
+        }
     }
 
     private func didTerminate(status: Int32) {
@@ -371,6 +398,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         terminationReported = true
         running = false
         turnIsActive = false
+        backgroundTaskCount = 0
         processIdentifier = nil
         connection?.invalidate()
         connection = nil

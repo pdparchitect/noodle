@@ -68,11 +68,13 @@ import XCTest
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) }, now: { [clock] in clock.date })
         processes.append(p); return p
     }
-    func claude(_ wire: HarnessWire, extended: Bool = true, apps: Bool = false) -> ClaudeAgentProcess {
+    func claude(_ wire: HarnessWire, extended: Bool = true, apps: Bool = false,
+                onActivity: @escaping @MainActor ([String: Any]) -> Void = { _ in }) -> ClaudeAgentProcess {
         let p = ClaudeAgentProcess(agent: agent(.claudeCode), executableURL: root, workspaceURL: workspace,
             extendedAccess: extended, appsEnabled: apps, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: { [weak self] in self?.heartbeats += 1 },
             onUnexpectedTermination: { [weak self] _, detail, recovery in self?.failures.append((detail, recovery)) },
+            onActivity: onActivity,
             makeConnection: { wire.replacement ?? wire }, sleep: { [clock] in try await clock.sleep($0) })
         processes.append(p); return p
     }

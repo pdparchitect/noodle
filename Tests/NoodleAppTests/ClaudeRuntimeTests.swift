@@ -114,6 +114,36 @@ import XCTest
         XCTAssertTrue(p.snapshot.detail.contains("Fixture task failed"))
     }
 
+    func testBackgroundTasksKeepTheBotWorkingAfterItsTurnEnds() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
+        let session = { try XCTUnwrap(wire.launches.last?.2).uuidString }
+        try await ready(f, wire, p); p.notify()
+        wire.emit(["type": "system", "subtype": "background_tasks_changed", "session_id": try session(),
+                   "tasks": [["task_id": "fixture-task", "task_type": "local_agent"]]])
+        try complete(wire); await f.drain()
+        XCTAssertEqual(p.snapshot.phase, .working)
+        XCTAssertFalse(p.canReceiveHeartbeat)
+        p.notify(); try await f.wait { wire.count("user") == 2 }
+        try complete(wire); await f.drain()
+        XCTAssertEqual(p.snapshot.phase, .working)
+        wire.emit(["type": "system", "subtype": "background_tasks_changed", "session_id": try session(), "tasks": []])
+        try await f.wait { p.canReceiveHeartbeat }
+    }
+
+    func testTurnClaudeStartsByItselfIsShownAndRecorded() async throws {
+        var activity: [String] = []
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire) { activity.append($0["type"] as? String ?? "") }
+        try await ready(f, wire, p)
+        wire.emit(["type": "assistant", "session_id": try XCTUnwrap(wire.launches.last?.2).uuidString,
+                   "parent_tool_use_id": NSNull(), "message": ["content": [["type": "text", "text": "Task finished"]]]])
+        await f.drain()
+        XCTAssertEqual(p.snapshot.phase, .working)
+        XCTAssertFalse(p.canReceiveHeartbeat)
+        XCTAssertEqual(activity, ["assistant"])
+        try complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertFalse(f.recovery(.claudeCode).hasUnfinishedTurn)
+    }
+
     func testInterruptWaitsForBothAcknowledgementAndCompletionInEitherOrder() async throws {
         for acknowledgementFirst in [false, true] {
             let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
