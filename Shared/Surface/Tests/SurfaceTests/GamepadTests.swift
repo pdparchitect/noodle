@@ -519,3 +519,27 @@ extension NSResponder {
     }
 }
 #endif
+
+final class GamepadFeelTests: XCTestCase {
+    private func feel(_ control: GamepadLayout.Control, _ old: Set<String>, _ new: Set<String>, on: Bool = true) -> SensoryFeedback? {
+        GamepadControls.feel(for: control, from: old, to: new, enabled: on)
+    }
+
+    func testButtonsClickDownAndLighterUp() {
+        XCTAssertEqual(feel(.button(0), [], ["x"]), .impact(weight: .medium))
+        XCTAssertEqual(feel(.button(0), ["x"], []), .impact(weight: .light))
+        XCTAssertEqual(feel(.menu, [], ["enter"]), .impact(weight: .medium))
+    }
+
+    func testPadsTickOnEachNewDirectionOnly() {
+        XCTAssertEqual(feel(.pad(0), [], ["right"]), .selection)
+        XCTAssertEqual(feel(.pad(0), ["right"], ["right", "up"]), .selection)
+        XCTAssertEqual(feel(.pad(0), ["right", "up"], ["up"]), .selection)
+        XCTAssertNil(feel(.pad(0), ["right"], []))
+    }
+
+    func testNothingIsFeltWhenTurnedOff() {
+        XCTAssertNil(feel(.button(0), [], ["x"], on: false))
+        XCTAssertNil(feel(.pad(0), [], ["right"], on: false))
+    }
+}

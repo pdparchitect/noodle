@@ -5,6 +5,11 @@ import os
 import SwiftUI
 import WebKit
 
+/// Whether the on-screen game controls tap back under the thumb; off until the person turns it on.
+enum ScreenControlHaptics {
+    static let key = "screenControlHaptics"
+}
+
 /// A noodlet opened from a conversation, which the controller's View button can swap for another
 /// of the conversation's noodlets while it plays on the TV, without closing.
 struct NoodletPlayer: View {
@@ -111,6 +116,7 @@ struct NoodletDeviceScreen: View {
     let runOnHub: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSize
+    @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var page: NoodletPage?
     @State private var host: NoodletDeviceHost?
     @State private var failure: String?
@@ -180,7 +186,7 @@ struct NoodletDeviceScreen: View {
                 } else if let page {
                     MovableView(view: page.web).ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 }
-                if let screenControls, page != nil { GamepadOverlay(gamepad: screenControls, onKey: press) }
+                if let screenControls, page != nil { GamepadOverlay(gamepad: screenControls, haptics: haptics, onKey: press) }
                 if !onTV { GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu).ignoresSafeArea() }
                 if page == nil {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }

@@ -645,6 +645,7 @@ struct LiveSurfaceScreen: View {
     /// For a noodlet this phone can run itself, switches to running it here.
     var runHere: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var feed = SurfaceFeed()
     @State private var channel: LinkChannel?
     @State private var showing = false
@@ -702,7 +703,7 @@ struct LiveSurfaceScreen: View {
                     SurfaceView(feed: feed) { control in channel?.send(LinkSurface.control(control)) }
                         .ignoresSafeArea(edges: fullScreen ? .all : .bottom)
                 }
-                if let screenControls, showing { GamepadOverlay(gamepad: screenControls, onKey: hold) }
+                if let screenControls, showing { GamepadOverlay(gamepad: screenControls, haptics: haptics, onKey: hold) }
                 if !onTV { GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu).ignoresSafeArea() }
                 if !showing {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() }

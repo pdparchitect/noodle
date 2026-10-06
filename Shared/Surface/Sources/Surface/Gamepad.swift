@@ -265,10 +265,12 @@ public struct GamepadLayout: Equatable {
 /// On-screen controls over a live view, kept to its safe area.
 public struct GamepadOverlay: View {
     let gamepad: Gamepad
+    let haptics: Bool
     let onKey: (GamepadKeyChange) -> Void
 
-    public init(gamepad: Gamepad, onKey: @escaping (GamepadKeyChange) -> Void) {
+    public init(gamepad: Gamepad, haptics: Bool = false, onKey: @escaping (GamepadKeyChange) -> Void) {
         self.gamepad = gamepad
+        self.haptics = haptics
         self.onKey = onKey
     }
 
@@ -276,7 +278,8 @@ public struct GamepadOverlay: View {
         // A reader spread over the whole screen reports no safe area, so it stays inside it; the
         // keyboard coming up leaves the controls where they are.
         GeometryReader { proxy in
-            GamepadControls(gamepad: gamepad, layout: GamepadLayout(gamepad, in: proxy.size, safeArea: EdgeInsets()), onKey: onKey)
+            GamepadControls(gamepad: gamepad, layout: GamepadLayout(gamepad, in: proxy.size, safeArea: EdgeInsets()),
+                            haptics: haptics, onKey: onKey)
         }
         .ignoresSafeArea(.keyboard)
     }
@@ -286,15 +289,34 @@ public struct GamepadOverlay: View {
 public struct GamepadControls: View {
     let gamepad: Gamepad
     let layout: GamepadLayout
+    let haptics: Bool
     let onKey: (GamepadKeyChange) -> Void
     @State private var held: [GamepadLayout.Control: Set<String>] = [:]
     /// Where the thumb is on each stick, for its knob.
     @State private var thumbs: [GamepadLayout.Control: CGPoint] = [:]
+    /// The latest press to feel, counted so the same feel twice in a row still plays.
+    @State private var felt = Felt()
 
-    public init(gamepad: Gamepad, layout: GamepadLayout, onKey: @escaping (GamepadKeyChange) -> Void = { _ in }) {
+    private struct Felt: Equatable {
+        var count = 0
+        var feedback: SensoryFeedback?
+    }
+
+    public init(gamepad: Gamepad, layout: GamepadLayout, haptics: Bool = false, onKey: @escaping (GamepadKeyChange) -> Void = { _ in }) {
         self.gamepad = gamepad
         self.layout = layout
+        self.haptics = haptics
         self.onKey = onKey
+    }
+
+    /// What the thumb feels as `control` goes from holding `old` to `new`: a button clicks down
+    /// and lighter back up, a pad ticks as it takes on another direction and lets go silently.
+    public static func feel(for control: GamepadLayout.Control, from old: Set<String>, to new: Set<String>, enabled: Bool) -> SensoryFeedback? {
+        guard enabled, old != new else { return nil }
+        switch control {
+        case .pad: return new.isEmpty ? nil : .selection
+        case .button, .menu: return .impact(weight: new.isEmpty ? .light : .medium)
+        }
     }
 
     public var body: some View {
@@ -308,6 +330,7 @@ public struct GamepadControls: View {
                 }
             }
         }
+        .sensoryFeedback(trigger: felt) { _, felt in felt.feedback }
     }
 
     @ViewBuilder private func control(_ control: GamepadLayout.Control, frame: CGRect) -> some View {
@@ -355,6 +378,9 @@ public struct GamepadControls: View {
     private func hold(_ control: GamepadLayout.Control, _ keys: Set<String>) {
         let changes = GamepadKeyChange.changes(from: held[control] ?? [], to: keys)
         guard !changes.isEmpty else { return }
+        if let feedback = Self.feel(for: control, from: held[control] ?? [], to: keys, enabled: haptics) {
+            felt = Felt(count: felt.count + 1, feedback: feedback)
+        }
         held[control] = keys
         changes.forEach(onKey)
     }

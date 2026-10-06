@@ -1066,6 +1066,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
+    @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var noodlets = NoodletGrants().all
 
     var body: some View {
@@ -1085,6 +1086,9 @@ struct SettingsView: View {
                     Toggle("Preview Web Links", isOn: $previewsLinks)
                 } footer: {
                     Text("Web links open in a preview first, with a button to continue in Safari. When off, they open in Safari.")
+                }
+                Section {
+                    Toggle("Haptics for On-Screen Controls", isOn: $haptics)
                 }
                 if !noodlets.isEmpty {
                     Section("Noodlet Permissions") {

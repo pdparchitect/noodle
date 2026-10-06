@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Settings has Haptics for On-Screen Controls, off by default. When on, the on-screen game controls tap as you press a button and tick as a d-pad or stick moves to a new direction.
+
 ### Fixed
 
 - Switching Speaker repeatedly during a call no longer leaves extra microphones running or applies an earlier switch after a later one. Ending a call also releases microphones that finish starting afterwards.
@@ -15,6 +19,7 @@
 - Switch Speaker on and off several times, then speak: the bot should hear one voice and the final speaker choice should apply. End the call while it is connecting or switching speakers: the microphone indicator should turn off.
 - During a call, play a voice message, open and close a noodlet, and visit another conversation: the call should keep hearing you and playing the bot's voice.
 - Check that the timer and connected chime start only once the phone's voice connection is ready; a playback failure should end the call with an error.
+- Turn on Settings > Haptics for On-Screen Controls and play a noodlet game with on-screen controls: each button press taps, a softer tap on release, and sliding along the d-pad or stick ticks on each new direction. Turn it off: nothing is felt.
 
 ## [0.21.0] - 2026-10-05
 
