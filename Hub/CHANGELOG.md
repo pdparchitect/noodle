@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings > Network > Name shows the current name, ready to edit, and says to press Return while a change is unsaved.
+
 ## [0.19.0] - 2026-10-05
 
 ### Added

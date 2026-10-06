@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Settings > Hub > Name shows the current name, ready to edit, and says to press Return while a change is unsaved.
 - Ending a voice call releases microphones that finish starting afterwards, Mute chosen while connecting stays on, and playback failures are reported instead of leaving a silent call running.
 
 ## [0.47.0] - 2026-10-05

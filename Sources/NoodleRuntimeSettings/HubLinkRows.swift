@@ -28,17 +28,17 @@ public struct HubLinkRows<Extra: View>: View {
             status
         }
         extra
-        LabeledContent("Name") {
+        LabeledContent {
             HStack(spacing: 4) {
                 TextField("Name", text: $name, prompt: Text(link.macName))
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
                     .focused($editingName)
-                    .onSubmit { link.customName = name }
+                    .onSubmit(saveName)
                 if !link.customName.isEmpty {
                     Button {
                         link.customName = ""
-                        name = ""
+                        name = link.hubName
                     } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
@@ -47,11 +47,16 @@ public struct HubLinkRows<Extra: View>: View {
                     .help("Use this Mac’s name")
                 }
             }
+        } label: {
+            Text("Name")
+            if enteredName != link.hubName {
+                Text("Press Return to save")
+            }
         }
         .help("What paired devices call this Hub")
-        .onAppear { name = link.customName }
-        .onChange(of: editingName) { if !editingName { link.customName = name } }
-        .onChange(of: link.customName) { if !editingName { name = link.customName } }
+        .onAppear { name = link.hubName }
+        .onChange(of: editingName) { if !editingName { saveName() } }
+        .onChange(of: link.hubName) { if !editingName { name = link.hubName } }
         Toggle(isOn: $link.opensRouterPort) {
             Text("Open Port on Router")
             routerStatus
@@ -103,6 +108,18 @@ public struct HubLinkRows<Extra: View>: View {
                 }
             }
         }
+    }
+
+    /// The name as typed, or this Mac's when the field is left empty.
+    private var enteredName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? link.macName : trimmed
+    }
+
+    private func saveName() {
+        let entered = enteredName
+        link.customName = entered == link.macName ? "" : entered
+        name = link.hubName
     }
 
     @ViewBuilder private var status: some View {
