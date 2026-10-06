@@ -52,6 +52,7 @@ final class ToolCatalogTests: XCTestCase {
     func testSelfRegisteringServicesAreListed() {
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.klaviyo.com/mcp")!)?.id, "klaviyo")
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.evernote.com/mcp")!)?.id, "evernote")
+        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.id, "agentmail")
     }
 
     func testCreatingPresetDoesNotAssignOrAuthenticateIt() throws {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- AgentMail can be added as a tool.
+
 ### Fixed
 
 - Settings > Network > Name shows the current name, ready to edit, and says to press Return while a change is unsaved.

@@ -7,6 +7,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 
 | Asset | Source |
 | --- | --- |
+| agentmail.icon (2026-10-06) | https://agentmail.to/favicon.ico (256×256 frame, converted to PNG) |
 | apollo.icon | https://www.apollo.io/favicon.ico?favicon.0wfmd_usg2d_3.ico |
 | attio.icon | https://attio.com/favicon.ico?favicon.0t61hvyp-jaev.ico |
 | buildkite.icon | https://buildkite.com/_site/favicon.png |
