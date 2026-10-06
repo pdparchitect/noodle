@@ -9,7 +9,8 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Right-click a bot in the sidebar and choose Show Usage to open the Usage window filtered to that bot.
-- AgentMail can be added as a tool.
+- AgentMail, Airtable, Amplitude, Apify, Asana, Axiom, Cal.com, Calendly, Circleback, ClickHouse, Close, Cloudinary, Contentful, Convex, Datadog, Dropbox, Fathom, Gamma, Grafana, Guru, Hex, Honeycomb, Intercom, Lucid, Mem, Mercury, Mermaid Chart, Mixpanel, MotherDuck, PostHog, Postman, Railway, Readwise, Socket, Sourcegraph, Square, Tavily, tl;dv, Upstash, Whimsical and WordPress.com can be added as tools.
+- Tables in messages appear as tables in their own bubble, between the text around them. Click a column header to sort it. Long tables show their first rows, with a button to see the rest, and the hover or right-click menu copies or saves a table as CSV.
 - Help > Connect asks whether you want to use this Mac from your other devices, which opens Settings > Hub, or share your harnesses with other people, which points you to Noodle Hub and its download.
 
 ### Fixed

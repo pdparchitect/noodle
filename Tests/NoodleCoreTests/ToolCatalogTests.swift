@@ -34,7 +34,7 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.matching("nOtIoN MCP").map(\.id), ["notion"])
         XCTAssertTrue(ToolCatalog.matching("nothing-matches-this").isEmpty)
         XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://example.com/mcp")!))
-        let excluded = ["github", "betterstack", "zapier", "workato", "hubspot", "asana"]
+        let excluded = ["github", "betterstack", "zapier", "workato", "hubspot"]
         XCTAssertTrue(Set(excluded).isDisjoint(with: ToolCatalog.entries.map(\.id)))
         let notion = ToolCatalog.matching("Notion")[0]
         XCTAssertEqual(ToolCatalog.availableName(for: notion, existingNames: []), "Notion")
@@ -53,6 +53,19 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.klaviyo.com/mcp")!)?.id, "klaviyo")
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.evernote.com/mcp")!)?.id, "evernote")
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.id, "agentmail")
+        for (id, endpoint) in ["asana": "https://mcp.asana.com/mcp", "calendly": "https://mcp.calendly.com",
+                               "datadog": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
+                               "socket": "https://mcp.socket.dev/", "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
+            XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.id, id)
+        }
+    }
+
+    func testEveryPresetHasABundledIcon() throws {
+        let icons = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../Support/ToolIcons").standardizedFileURL
+        for tool in ToolCatalog.entries {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: icons.appendingPathComponent(tool.iconName + ".icon").path), tool.id)
+        }
     }
 
     func testCreatingPresetDoesNotAssignOrAuthenticateIt() throws {
