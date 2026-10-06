@@ -79,8 +79,7 @@ codesign -dv --verbose=4 "$app" 2>&1 | grep -q '^Authority=Developer ID Applicat
 NOODLE_REQUIRE_DEVELOPER_ID=1 zsh "$project_root/scripts/verify-$product-release.sh" "$app"
 zsh "$project_root/scripts/verify-launch-hooks.sh" "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$staging/notary.zip"
-xcrun notarytool submit "$staging/notary.zip" --key "$APPLE_API_KEY_PATH" \
-    --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait
+zsh "$project_root/scripts/notarize.sh" "$staging/notary.zip"
 xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 spctl --assess --type execute --verbose=2 "$app"

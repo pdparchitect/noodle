@@ -54,8 +54,7 @@ image="$staging/${output:t}"
 if (( ! preview )); then
     codesign --force --timestamp --sign "$NOODLE_SIGNING_IDENTITY" "$image"
     codesign --verify --strict "$image"
-    xcrun notarytool submit "$image" --key "$APPLE_API_KEY_PATH" \
-        --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait
+    zsh "$project_root/scripts/notarize.sh" "$image"
     xcrun stapler staple "$image"
     xcrun stapler validate "$image"
     spctl --assess --type open --context context:primary-signature --verbose=2 "$image"

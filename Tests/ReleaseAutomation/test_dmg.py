@@ -24,6 +24,7 @@ class DiskImagePackagingTests(unittest.TestCase):
                 root = Path(temporary)
                 (root / 'scripts').mkdir()
                 shutil.copyfile(ROOT / 'scripts/package-dmg.sh', root / 'scripts/package-dmg.sh')
+                shutil.copyfile(ROOT / 'scripts/notarize.sh', root / 'scripts/notarize.sh')
                 app = root / 'Noodle Computer.app'
                 app.mkdir()
                 executable(root / '.build/dmg-tools/bin/python', '''
@@ -38,6 +39,7 @@ print -n 'image' > "$4"
 print "xcrun $*" >> "$TEST_LOG"
 [[ "$1" != "$TEST_FAILURE" && "$2" != "$TEST_FAILURE" ]] || exit 1
 if [[ "$1 $2" == 'stapler staple' ]]; then print -n ticket >> "$3"; fi
+if [[ "$1" == notarytool ]]; then print '{"id":"fixture","status":"Accepted"}'; fi
 ''')
                 executable(root / 'bin/spctl', '''
 print "spctl $*" >> "$TEST_LOG"
@@ -47,7 +49,7 @@ print "spctl $*" >> "$TEST_LOG"
                                    TEST_LOG=str(root / 'commands'), TEST_FAILURE=failure,
                                    NOODLE_SIGNING_IDENTITY='Developer ID Application: Fixture',
                                    APPLE_API_KEY_PATH='/fixture/key', APPLE_API_KEY_ID='fixture',
-                                   APPLE_API_ISSUER_ID='fixture')
+                                   APPLE_API_ISSUER_ID='fixture', NOODLE_NOTARY_POLL='0')
                 output = root / 'dist/Noodle-Computer-arm64.dmg'
                 result = subprocess.run(['zsh', str(root / 'scripts/package-dmg.sh'), str(app), str(output)],
                                         env=environment, capture_output=True, text=True)
@@ -79,6 +81,7 @@ class SuitePackagingTests(unittest.TestCase):
                 root = Path(temporary)
                 (root / 'scripts').mkdir()
                 shutil.copyfile(ROOT / 'scripts/package-dmg.sh', root / 'scripts/package-dmg.sh')
+                shutil.copyfile(ROOT / 'scripts/notarize.sh', root / 'scripts/notarize.sh')
                 apps = root / 'apps'
                 for name in ['Noodle', 'Noodle Computer', 'Noodle Applet', 'Noodle Browser', 'Noodle Hub'][:count]:
                     (apps / f'{name}.app').mkdir(parents=True)
@@ -86,10 +89,13 @@ class SuitePackagingTests(unittest.TestCase):
                 executable(root / 'bin/swift', 'print -n background > "${@: -2:1}"\n')
                 for tool in ['codesign', 'spctl']:
                     executable(root / f'bin/{tool}', 'exit 0\n')
-                executable(root / 'bin/xcrun', 'if [[ "$1 $2" == "stapler staple" ]]; then print -n ticket >> "$3"; fi\n')
+                executable(root / 'bin/xcrun', '''
+if [[ "$1 $2" == "stapler staple" ]]; then print -n ticket >> "$3"; fi
+if [[ "$1" == notarytool ]]; then print '{"id":"fixture","status":"Accepted"}'; fi
+''')
                 environment = dict(os.environ, PATH=f'{root}/bin:' + os.environ['PATH'],
                                    NOODLE_SIGNING_IDENTITY='Developer ID Application: Fixture',
-                                   APPLE_API_KEY_PATH='/fixture/key', APPLE_API_KEY_ID='fixture', APPLE_API_ISSUER_ID='fixture')
+                                   APPLE_API_KEY_PATH='/fixture/key', APPLE_API_KEY_ID='fixture', APPLE_API_ISSUER_ID='fixture', NOODLE_NOTARY_POLL='0')
                 output = root / 'dist/Noodle-Suite-arm64.dmg'
                 result = subprocess.run(['zsh', str(root / 'scripts/package-dmg.sh'), '--suite', str(apps), str(output)],
                                         env=environment, capture_output=True, text=True)
