@@ -9,6 +9,7 @@ struct SidebarView: View {
     var focusRequest: UUID? = nil
     @Environment(NoodleStore.self) private var store
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openWindow) private var openWindow
     @FocusState private var searchIsFocused: Bool
     @State private var kickRequest: AgentKickRequest?
     @State private var newSessionAgent: AgentRecord?
@@ -92,6 +93,10 @@ struct SidebarView: View {
             if let agent = store.participants(for: conversation).first, store.runsHere(agent.id) {
                 Divider()
                 Button("Show Activity") { store.showActivity(for: agent) }
+                Button("Show Usage") {
+                    store.usage.agentFilter = agent.id
+                    openWindow(id: UsageView.windowID)
+                }
                 Button("Show Workspace in Finder") {
                     store.revealWorkspace(for: agent)
                 }
