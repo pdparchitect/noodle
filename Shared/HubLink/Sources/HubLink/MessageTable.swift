@@ -49,6 +49,16 @@ public enum MessageSegment: Equatable, Sendable {
     }
 }
 
+extension MessageSegment {
+    /// What a notification or a one-line preview says: the text around any tables, without them.
+    public static func previewText(_ body: String) -> String {
+        let segments = split(body)
+        guard segments.contains(where: { if case .table = $0 { true } else { false } }) else { return body }
+        let text = segments.compactMap { if case .text(let text) = $0 { text } else { nil } }.joined(separator: "\n\n")
+        return text.isEmpty ? "Sent a table" : text
+    }
+}
+
 public struct MessageTable: Equatable, Sendable {
     public enum Alignment: Equatable, Sendable { case leading, center, trailing, automatic }
 

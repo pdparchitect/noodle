@@ -6,6 +6,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
 import NoodleRuntimeSettings
+import HubLink
 
 enum NoodleNotifications {
     static let conversationIDKey = "conversationID"
@@ -39,6 +40,17 @@ enum NoodleNotifications {
         }
     }
 
+    static func content(message: ChatMessage, from agent: AgentRecord, in conversation: BotConversation) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = agent.displayName
+        if conversation.kind == .group {
+            content.subtitle = conversation.displayName
+        }
+        content.body = MessageSegment.previewText(message.body)
+        content.userInfo = [conversationIDKey: conversation.id.uuidString, messageIDKey: message.id.uuidString]
+        return content
+    }
+
     @MainActor
     static func post(
         message: ChatMessage,
@@ -47,14 +59,8 @@ enum NoodleNotifications {
     ) {
         guard shouldPresentActivity else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = agent.displayName
-        if conversation.kind == .group {
-            content.subtitle = conversation.displayName
-        }
-        content.body = message.body
+        let content = content(message: message, from: agent, in: conversation)
         content.sound = MessageReceivedSound.notificationSound()
-        content.userInfo = [conversationIDKey: conversation.id.uuidString, messageIDKey: message.id.uuidString]
         if let avatar = avatarAttachment(for: agent, messageID: message.id) {
             content.attachments = [avatar]
         }

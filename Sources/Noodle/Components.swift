@@ -1,6 +1,7 @@
 import SwiftUI
 import NoodleCore
 import NoodleRuntimeSettings
+import HubLink
 
 struct ConversationAvatar: View {
     let participants: [AgentRecord]

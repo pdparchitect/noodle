@@ -1,6 +1,7 @@
 import AppKit
 import NoodleCore
 import UniformTypeIdentifiers
+import HubLink
 
 enum AttachmentDrag {
     static func provider(

@@ -458,7 +458,7 @@ enum HubThread: HubConversation {
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.
     func note(for thread: HubThread) -> PinnedNote? {
         if isUnread(thread), let reply = messages(of: thread).last(where: { if case .bot = $0.author { true } else { false } }) {
-            let text = reply.body.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let text = MessageSegment.previewText(reply.body).split(whereSeparator: \.isWhitespace).joined(separator: " ")
             if !text.isEmpty { return .unread(text) }
         }
         return thread.bot?.status.map(PinnedNote.status)
@@ -1091,7 +1091,7 @@ private struct AgentRow: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
-                Text(latest?.body ?? thread.about)
+                Text(latest.map { MessageSegment.previewText($0.body) } ?? thread.about)
                     .font(.subheadline).foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -1700,8 +1700,9 @@ private struct Bubble: View {
     /// Shown under your latest message, and under any that did not go through.
     let delivery: String?
     @State private var expanded = false
-    @State private var pressing = false
-    @State private var textFrame = CGRect.zero
+    /// The bubble being pressed, and where each of the message's bubbles is on screen.
+    @State private var pressing: Int?
+    @State private var segmentFrames: [Int: CGRect] = [:]
     @Environment(\.focusMessage) private var focusMessage
     @Environment(\.unsentActions) private var unsentActions
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
@@ -1788,14 +1789,16 @@ private struct Bubble: View {
     /// they mark its text, and the files only when there is no text to mark.
     @ViewBuilder private func content(foreground: Color, background: Color) -> some View {
         if showsText {
-            MessageText(text: message.body, folded: folded, foreground: foreground, background: background) { expanded = true }
-                .scaleEffect(pressing ? 0.96 : 1)
-                .animation(.spring(duration: 0.25), value: pressing)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { textFrame = $0 }
-                .onLongPressGesture(minimumDuration: 0.35) { lift() } onPressingChanged: { pressing = $0 }
-                .accessibilityAction(named: "React") { lift() }
-                .accessibilityAction(named: "Copy") { UIPasteboard.general.string = message.body }
-                .modifier(Reactions(badges: reactions, shown: !message.reactions.isEmpty))
+            // Tables split the text into separate bubbles, as on the Mac; reactions mark the first.
+            let segments = MessageSegment.split(message.body)
+            ForEach(Array((segments.isEmpty ? [.text(message.body)] : segments).enumerated()), id: \.offset) { index, segment in
+                segmentBubble(segment, at: index, foreground: foreground, background: background)
+                    .scaleEffect(pressing == index ? 0.96 : 1)
+                    .animation(.spring(duration: 0.25), value: pressing)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { segmentFrames[index] = $0 }
+                    .accessibilityAction(named: "Copy") { UIPasteboard.general.string = message.body }
+                    .modifier(Reactions(badges: reactions, shown: index == 0 && !message.reactions.isEmpty))
+            }
         }
         if let url = LinkPreview.firstURL(in: message.body) {
             LinkPreviewCard(url: url, previews: chats.linkPreviews, conversationID: thread.conversationID)
@@ -1806,6 +1809,22 @@ private struct Bubble: View {
                 AttachmentView(chats: chats, thread: thread, attachment: attachment, group: message.attachments, compact: compact)
             }
             .modifier(Reactions(badges: reactions, shown: !showsText && !message.reactions.isEmpty))
+        }
+    }
+
+    /// Prose folds on its own; a table is a card that opens it in a sheet. Either lifts on a long press.
+    @ViewBuilder private func segmentBubble(_ segment: MessageSegment, at index: Int, foreground: Color, background: Color) -> some View {
+        switch segment {
+        case .text(let text):
+            let folded = !expanded && MessageFolding.isLong(text)
+            MessageText(text: text, folded: folded, foreground: foreground, background: background) { expanded = true }
+                .onLongPressGesture(minimumDuration: 0.35) { lift(text, folded: folded, at: index) } onPressingChanged: { pressing = $0 ? index : nil }
+                .accessibilityAction(named: "React") { lift(text, folded: folded, at: index) }
+        case .table(let table):
+            MessageTableCard(table: table, foreground: foreground, background: background)
+                .onLongPressGesture(minimumDuration: 0.35) { lift(MessageSegment.previewText(message.body), folded: false, at: index) }
+                    onPressingChanged: { pressing = $0 ? index : nil }
+                .accessibilityAction(named: "React") { lift(MessageSegment.previewText(message.body), folded: false, at: index) }
         }
     }
 
@@ -1828,10 +1847,8 @@ private struct Bubble: View {
             && !(message.attachments.contains { $0.voice != nil } && message.body == HubChats.voiceBody)
     }
 
-    private var folded: Bool { !expanded && MessageFolding.isLong(message.body) }
-
-    private func lift() {
-        focusMessage(MessageFocus(message: message, frame: textFrame, folded: folded))
+    private func lift(_ text: String, folded: Bool, at index: Int) {
+        focusMessage(MessageFocus(message: message, text: text, frame: segmentFrames[index] ?? .zero, folded: folded))
     }
 }
 

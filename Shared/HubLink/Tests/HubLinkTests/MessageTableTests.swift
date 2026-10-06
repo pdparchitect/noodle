@@ -1,5 +1,5 @@
 import XCTest
-@testable import NoodleCore
+@testable import HubLink
 
 final class MessageTableTests: XCTestCase {
     private let plans = """
@@ -86,5 +86,12 @@ final class MessageTableTests: XCTestCase {
         XCTAssertEqual(MessageTable.foldedRowCount, 6)
         XCTAssertFalse(table(8).folds)
         XCTAssertTrue(table(9).folds)
+    }
+
+    func testPreviewsLeaveTablesOut() {
+        XCTAssertEqual(MessageSegment.previewText(plans), "Here's the comparison:\n\n**Team** fits best.")
+        XCTAssertEqual(MessageSegment.previewText("| A | B |\n|---|---|\n| 1 | 2 |"), "Sent a table")
+        XCTAssertEqual(MessageSegment.previewText("  Untouched | text\n"), "  Untouched | text\n")
+        XCTAssertEqual(MessageSegment.previewText(""), "")
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import HubLink
 
 /// Only handles right clicks; text selection and attachment clicks pass through unchanged.
 struct MessageContextMenu: NSViewRepresentable {

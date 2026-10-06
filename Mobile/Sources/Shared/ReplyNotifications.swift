@@ -75,7 +75,7 @@ enum ReplyNotification {
               let bot = bots.first(where: { $0.conversationID == route.conversation }),
               case .messages(let page)? = try? await pairing.request(.messagePage(LinkMessagePage(conversationID: route.conversation, limit: 10))),
               let reply = page.messages.last(where: { if case .bot = $0.author { true } else { false } }) else { return nil }
-        let body = reply.body.isEmpty ? (reply.attachments.first?.filename ?? "Attachment") : reply.body
+        let body = reply.body.isEmpty ? (reply.attachments.first?.filename ?? "Attachment") : MessageSegment.previewText(reply.body)
         return Content(title: bot.draft.name, body: body)
     }
 }

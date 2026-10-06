@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import HubLink
 
 // Shared by chat messages and the isolated native Markdown fixture.
 final class MessageMarkdownCache: @unchecked Sendable {

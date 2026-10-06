@@ -1969,7 +1969,7 @@ final class NoodleStore {
 
     func preview(for conversation: BotConversation) -> String {
         guard let body = messages(for: conversation).last?.body else { return "No messages yet" }
-        return MarkdownPlainText.convert(body)
+        return MarkdownPlainText.convert(MessageSegment.previewText(body))
     }
 
     func revealWorkspace(for agent: AgentRecord) {

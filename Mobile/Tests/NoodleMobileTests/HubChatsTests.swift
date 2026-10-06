@@ -738,6 +738,24 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(await ReplyNotification.content(for: NotificationRoute(topic: "unknown", conversation: conversation), hubs: hubs) == nil)
     }
 
+    /// Tables stay in the conversation; the notification and the pinned bubble show the text around them.
+    @Test func notificationsAndPinnedBubblesLeaveTablesOut() async throws {
+        let hub = FakeHub()
+        let hubs = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: hubs.appendingPathComponent(UUID().uuidString))
+        defer { server.stop() }
+        try await chats.reload()
+        await hub.botSays("Numbers:\n\n| Day | Messages |\n|---|---|\n| Sep 1 | 4 |\n\nAll quiet.")
+        let conversation = await hub.bot.conversationID
+        let route = NotificationRoute(topic: PushTopic.topic(for: chats.pairing), conversation: conversation)
+        #expect(await ReplyNotification.content(for: route, hubs: hubs)?.body == "Numbers:\n\nAll quiet.")
+        try await chats.reload()
+        #expect(chats.note(for: .bot(try #require(chats.agents.first))) == .unread("Numbers: All quiet."))
+
+        await hub.botSays("| A |\n|---|\n| 1 |")
+        #expect(await ReplyNotification.content(for: route, hubs: hubs)?.body == "Sent a table")
+    }
+
     @Test func unsentTextIsKeptPerConversation() async throws {
         let hub = FakeHub()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

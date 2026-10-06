@@ -29,6 +29,8 @@ struct UnsentActions {
 /// A message held up over the conversation, where its text bubble was on screen.
 struct MessageFocus: Identifiable {
     let message: LinkMessage
+    /// What the lifted bubble shows: the stretch of text pressed, or a preview for a table.
+    let text: String
     /// The text bubble's frame in the window.
     let frame: CGRect
     let folded: Bool
@@ -157,7 +159,7 @@ struct MessageActions: View {
     }
 
     private var bubble: some View {
-        MessageText(text: focus.message.body, folded: focus.folded,
+        MessageText(text: focus.text, folded: focus.folded,
                     foreground: isYours ? .white : .primary,
                     background: isYours ? .accentColor : Color(.secondarySystemBackground))
             .allowsHitTesting(false)

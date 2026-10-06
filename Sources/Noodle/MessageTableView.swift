@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import HubLink
 
 /// A Markdown table drawn as its own bubble, sortable in place and folded when long.
 struct MessageTableView<Menu: View>: View {

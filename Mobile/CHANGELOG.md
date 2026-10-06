@@ -4,6 +4,7 @@
 
 ### Added
 
+- Tables in messages show as a card between the text around them. Tap it to open the whole table in a sheet, tap a column header to sort it, and copy or share the table as CSV. Notifications, pinned bubbles and the chat list leave tables out.
 - Settings has Haptics for On-Screen Controls, off by default. When on, the on-screen game controls tap as you press a button and tick as a d-pad or stick moves to a new direction.
 
 ### Fixed
@@ -15,6 +16,8 @@
 
 ### What to Test
 
+- Ask a bot for a table, for example "compare three phones in a table". The table shows as a card with its column names and row count, between the text around it. Tap the card: the whole table opens in a sheet. Tap a column header to sort it, again to reverse, a third time for the original order. Copy as CSV and Share CSV are in the sheet's menu.
+- Lock the phone and have a bot reply with a table: the notification shows the text around the table, or "Sent a table" if there is nothing else.
 - Start a Codex call and immediately tap Mute: the bot must not hear you until you unmute.
 - Switch Speaker on and off several times, then speak: the bot should hear one voice and the final speaker choice should apply. End the call while it is connecting or switching speakers: the microphone indicator should turn off.
 - During a call, play a voice message, open and close a noodlet, and visit another conversation: the call should keep hearing you and playing the bot's voice.
