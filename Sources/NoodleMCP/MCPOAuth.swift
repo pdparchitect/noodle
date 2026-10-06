@@ -125,8 +125,18 @@ struct MCPOAuth {
         }
         _ = try MCPConnectionRecord.validatedEndpoint(authorization)
         _ = try MCPConnectionRecord.validatedEndpoint(token)
+        let scope = (protectedResource?["scopes_supported"] as? [String])?.joined(separator: " ")
         guard let registrationString = metadata["registration_endpoint"] as? String,
-              let registration = URL(string: registrationString) else { throw MCPServiceError.registrationUnsupported }
+              let registration = URL(string: registrationString) else {
+            // Without registration, a service may instead read Noodle's published client
+            // metadata, which only allows https addresses: hence the relay pages.
+            guard metadata["client_id_metadata_document_supported"] as? Bool == true,
+                  (metadata["token_endpoint_auth_methods_supported"] as? [String])?.contains("none") ?? true,
+                  let relay = Self.relays[redirect.absoluteString] else { throw MCPServiceError.registrationUnsupported }
+            return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
+                                  tokenEndpoint: token, clientID: Self.metadataDocument.absoluteString, redirectURI: redirect,
+                                  relayURI: relay, resource: resource, scope: scope)
+        }
         // Public desktop clients use PKCE, never embedded client secrets.
         await progress("Registering this connection…")
         let registered = try await request(registration, json: [
@@ -140,8 +150,16 @@ struct MCPOAuth {
         }
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
-                              resource: resource, scope: (protectedResource?["scopes_supported"] as? [String])?.joined(separator: " "))
+                              resource: resource, scope: scope)
     }
+
+    /// Published from website/oauth; its redirect_uris must list every relay below.
+    static let metadataDocument = URL(string: "https://usenoodle.app/oauth/client.json")!
+    static let relays: [String: URL] = [
+        "noodle://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/")!,
+        "noodle-dev://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/dev/")!,
+        "noodle-mobile://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/mobile/")!
+    ]
 
     /// Metadata must name the issuer it was discovered for. Some servers list it with
     /// a trailing slash and report it without, or the reverse; that is the same URL,
@@ -178,7 +196,7 @@ struct MCPOAuth {
         var components = URLComponents(url: credentials.authorizationEndpoint, resolvingAgainstBaseURL: false)!
         components.queryItems = [
             .init(name: "response_type", value: "code"), .init(name: "client_id", value: credentials.clientID),
-            .init(name: "redirect_uri", value: credentials.redirectURI.absoluteString),
+            .init(name: "redirect_uri", value: (credentials.relayURI ?? credentials.redirectURI).absoluteString),
             .init(name: "state", value: state), .init(name: "code_challenge", value: challenge),
             .init(name: "code_challenge_method", value: "S256")
         ]
@@ -206,7 +224,7 @@ struct MCPOAuth {
               let code = values["code"]?.first?.value, !code.isEmpty else { throw MCPServiceError.invalidCallback }
         var form = [
             "grant_type": "authorization_code", "code": code, "code_verifier": verifier,
-            "client_id": credentials.clientID, "redirect_uri": credentials.redirectURI.absoluteString
+            "client_id": credentials.clientID, "redirect_uri": (credentials.relayURI ?? credentials.redirectURI).absoluteString
         ]
         if configuration?.usesResourceIndicator ?? true { form["resource"] = credentials.resource.absoluteString }
         let response = try await request(credentials.tokenEndpoint, form: form)

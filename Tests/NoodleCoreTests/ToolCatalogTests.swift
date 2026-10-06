@@ -55,7 +55,8 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.id, "agentmail")
         for (id, endpoint) in ["asana": "https://mcp.asana.com/mcp", "calendly": "https://mcp.calendly.com",
                                "datadog": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
-                               "socket": "https://mcp.socket.dev/", "semgrep": "https://mcp.semgrep.ai/mcp", "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
+                               "socket": "https://mcp.socket.dev/", "semgrep": "https://mcp.semgrep.ai/mcp",
+                               "elevenlabs": "https://api.us.elevenlabs.io/v1/mcp", "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
             XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.id, id)
         }
     }

@@ -33,6 +33,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | crmkit.icon | https://crmkit.ai/favicon.ico |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | dropbox.icon (2026-10-06) | https://cfl.dropboxstatic.com/static/metaserver/static/images/favicon.ico |
+| elevenlabs.icon (2026-10-06) | https://elevenlabs.io/apple-icon.png |
 | evernote.icon (2026-09-29) | https://evernote.com/favicon.ico |
 | exa.icon | https://exa.ai/images/favicon-32x32.png |
 | fal.icon (2026-10-06) | https://fal.ai/apple-touch-icon.png |

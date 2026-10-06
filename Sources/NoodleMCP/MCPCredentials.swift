@@ -7,7 +7,11 @@ struct MCPCredentials: Codable, Sendable {
     let authorizationEndpoint: URL
     let tokenEndpoint: URL
     let clientID: String
+    /// Where the app receives the result; callbacks are checked against it.
     let redirectURI: URL
+    /// The address registered with the service when it differs from `redirectURI`:
+    /// a usenoodle.app page that hands the result to the app.
+    var relayURI: URL? = nil
     let resource: URL
     let scope: String?
     var accessToken: String?

@@ -24,6 +24,9 @@ private final class FixtureState: @unchecked Sendable {
     var resourceIdentifier = "https://service.example/mcp"
     var pathMetadataMissing = false
     var protectedResourceMissing = false
+    var registrationMissing = false
+    var metadataDocumentClients = false
+    var tokenRedirects: [String] = []
     var listedIssuer = "https://service.example"
     var reportedIssuer = "https://service.example"
     var tokenResources: [String] = []
@@ -37,9 +40,10 @@ private final class FixtureState: @unchecked Sendable {
                 if protectedResourceMissing || pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
                 return (200, ["resource": resourceIdentifier, "authorization_servers": [listedIssuer], "scopes_supported": ["read"]])
             case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration":
-                return (200, ["issuer": mismatchedIssuer ? "https://wrong.example" : reportedIssuer,
+                return (200, (["issuer": mismatchedIssuer ? "https://wrong.example" : reportedIssuer,
                               "authorization_endpoint": "https://service.example/authorize", "token_endpoint": "https://service.example/token",
-                              "registration_endpoint": "https://service.example/register"])
+                              "registration_endpoint": registrationMissing ? nil : "https://service.example/register",
+                              "client_id_metadata_document_supported": metadataDocumentClients] as [String: Any?]).compactMapValues { $0 })
             case "/register":
                 registrations += 1
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
@@ -47,6 +51,7 @@ private final class FixtureState: @unchecked Sendable {
                 let body = String(data: Self.body(request), encoding: .utf8) ?? ""
                 let form = URLComponents(string: "https://service.example/?" + body)?.queryItems
                 tokenResources.append(form?.first { $0.name == "resource" }?.value ?? "")
+                tokenRedirects.append(form?.first { $0.name == "redirect_uri" }?.value ?? "")
                 if body.contains("refresh_token") {
                     refreshes += 1
                     if invalidGrant { return (400, ["error": "invalid_grant"]) }
@@ -371,6 +376,47 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertEqual(credentials.resource, endpoint)
         XCTAssertNil(credentials.scope)
         XCTAssertEqual(FixtureProtocol.state.registrations, 1)
+    }
+    func testServicesWithoutRegistrationUseNoodlesMetadataDocument() async throws {
+        FixtureProtocol.state.registrationMissing = true
+        FixtureProtocol.state.metadataDocumentClients = true
+        let vault = TestVault()
+        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        try await service(vault: vault).signIn(record, redirectURI: redirect) { url in
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+            XCTAssertEqual(query.first { $0.name == "client_id" }?.value, "https://usenoodle.app/oauth/client.json")
+            XCTAssertEqual(query.first { $0.name == "redirect_uri" }?.value, "https://usenoodle.app/oauth/callback/dev/")
+            // The relay page hands the result to the app's own address.
+            var callback = URLComponents(url: self.redirect, resolvingAgainstBaseURL: false)!
+            callback.queryItems = [.init(name: "code", value: "one-time-code"), query.first { $0.name == "state" }!]
+            return callback.url!
+        }
+        XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+        XCTAssertEqual(FixtureProtocol.state.tokenRedirects, ["https://usenoodle.app/oauth/callback/dev/"])
+        XCTAssertEqual(vault.load(record.id)?.accessToken, "private-token")
+    }
+    func testPublishedClientMetadataListsEveryRelay() throws {
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../website/oauth/client.json")
+        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertEqual(document["client_id"] as? String, MCPOAuth.metadataDocument.absoluteString)
+        XCTAssertEqual(Set(document["redirect_uris"] as? [String] ?? []), Set(MCPOAuth.relays.values.map(\.absoluteString)))
+        XCTAssertEqual(document["token_endpoint_auth_method"] as? String, "none")
+    }
+    func testMetadataDocumentNeedsServerSupportAndAKnownAppAddress() async throws {
+        for (supported, redirect) in [(false, redirect), (true, URL(string: "other-app://mcp/oauth/callback")!)] {
+            FixtureProtocol.state = FixtureState()
+            FixtureProtocol.state.registrationMissing = true
+            FixtureProtocol.state.metadataDocumentClients = supported
+            let vault = TestVault()
+            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            do {
+                try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
+                XCTFail("Sign-in without a usable client accepted")
+            } catch {
+                guard case .registrationUnsupported? = error as? MCPServiceError else { return XCTFail("\(error)") }
+            }
+            XCTAssertNil(vault.load(record.id))
+        }
     }
     func testCanonicalRootResourcePersistsThroughAuthorizationRefreshAndDiscovery() async throws {
         FixtureProtocol.state.resourceIdentifier = "https://service.example"
