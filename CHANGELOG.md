@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Right-click a bot in the sidebar and choose Show Usage to open the Usage window filtered to that bot.
 - Help > Connect asks whether you want to use this Mac from your other devices, which opens Settings > Hub, or share your harnesses with other people, which points you to Noodle Hub and its download.
 
 ### Fixed
