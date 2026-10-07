@@ -202,11 +202,17 @@ private actor FakeHub {
         case .success(.newSession(let id)) where id == bot.id:
             restarts.append("new session")
             return .done
+        case .success(.pin(let pin)) where pin.conversationID == bot.conversationID:
+            bot.pinnedAt = pin.pinned ? Date() : nil
+            pins.append(pin)
+            return .done
         default:
             return .failure("Not in this test.")
         }
     }
 
+    /// Pins as the phone sent them.
+    var pins: [LinkPin] = []
     /// Kick, confirmations and new sessions, as the phone asked for them.
     var restarts: [String] = []
     /// What Kick asks first, or nil to restart at once.
@@ -370,6 +376,27 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(chats.sortedThreads.map(\.id) == [scout.id, atlas.id])
         let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
         #expect(relaunched.isPinned(scout))
+    }
+
+    /// In a Hub's own space pins are the Hub's, shared with the user's other devices; All keeps this phone's own.
+    @Test func pinsInAHubsSpaceAreKeptOnTheHub() async throws {
+        let hub = FakeHub()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+
+        try await chats.toggleHubPin(scout)
+
+        #expect(chats.isPinned(scout, onHub: true))
+        #expect(!chats.isPinned(scout))
+        #expect(await hub.pins == [LinkPin(conversationID: scout.conversationID, pinned: true)])
+        let relaunched = HubChats(pairing: HubPairing(directory: directory, deviceName: "iPhone"))
+        #expect(relaunched.isPinned(scout, onHub: true))
+        // Unpinned on another device.
+        try await chats.apply(.pinChanged(conversationID: scout.conversationID, pinnedAt: nil))
+        #expect(!chats.isPinned(scout, onHub: true))
     }
 
     /// As in the Mac sidebar: by name, description or what was said, ignoring case and accents.

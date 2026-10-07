@@ -25,6 +25,8 @@ import Observation
         var sharedWith: [UUID]?
         /// Whether the Hub takes calls with it. Nil from before calls.
         var canCall: Bool?
+        /// When this Mac's user pinned it, as the Hub last said, so pins show before the Hub answers.
+        var pinnedAt: Date?
     }
 
     /// A group of bots on the Hub and its local copy.
@@ -33,6 +35,7 @@ import Observation
         var conversation: UUID
         var synced: Int
         var background: LinkBackground?
+        var pinnedAt: Date?
     }
 
     /// A conversation on the Hub, a bot's own or a group's, and its local copy.
@@ -92,6 +95,9 @@ import Observation
     public var localAgentIDs: Set<UUID> { Set(entries.map(\.agent)) }
 
     public func owns(conversation id: UUID) -> Bool { thread(local: id) != nil }
+
+    /// The local copies of this Hub's bots' conversations and its groups.
+    public var localConversationIDs: [UUID] { threads.map(\.local) }
 
     private var threads: [Thread] {
         entries.map { Thread(remote: $0.remoteConversation, local: $0.conversation, synced: $0.synced, background: $0.background) }
@@ -217,6 +223,43 @@ import Observation
         _ = try await pairing.request(.archive(LinkArchiveChange(id: entry.remote, archived: archived)))
         try repository.setConversationArchived(archived, conversationID: conversation)
         onChange?()
+    }
+
+    /// The local copies of this Hub's conversations its user pinned, in the order they were pinned.
+    public var pinnedConversations: [UUID] {
+        (entries.compactMap { entry in entry.pinnedAt.map { ($0, entry.conversation) } }
+            + groups.compactMap { group in group.pinnedAt.map { ($0, group.conversation) } })
+            .sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    /// Pins or unpins a conversation on the Hub, for every device of its user. It shows here at once,
+    /// and goes back when the Hub refuses.
+    public func setPinned(_ pinned: Bool, conversation: UUID) async throws {
+        guard let thread = thread(local: conversation) else { throw LinkError("That conversation is not on this Hub.") }
+        let before = pinnedAt(remote: thread.remote)
+        guard (before != nil) != pinned else { return }
+        setPinnedAt(pinned ? Date() : nil, remote: thread.remote)
+        do {
+            _ = try await pairing.request(.pin(LinkPin(conversationID: thread.remote, pinned: pinned)))
+        } catch {
+            setPinnedAt(before, remote: thread.remote)
+            throw error
+        }
+    }
+
+    private func pinnedAt(remote id: UUID) -> Date? {
+        entries.first { $0.remoteConversation == id }?.pinnedAt ?? groups.first { $0.remote == id }?.pinnedAt
+    }
+
+    private func setPinnedAt(_ date: Date?, remote id: UUID) {
+        if let index = entries.firstIndex(where: { $0.remoteConversation == id }), entries[index].pinnedAt != date {
+            entries[index].pinnedAt = date
+            save()
+        }
+        if let index = groups.firstIndex(where: { $0.remote == id }), groups[index].pinnedAt != date {
+            groups[index].pinnedAt = date
+            saveGroups()
+        }
     }
 
     /// Makes a group on the Hub of bots kept there, by their local stand-ins, and its local copy.
@@ -466,6 +509,8 @@ import Observation
                         usersChanges += 1
                     case .readChanged(let id, let upTo):
                         if let thread = thread(remote: id) { onRead?(thread.local, upTo) }
+                    case .pinChanged(let id, let pinnedAt):
+                        setPinnedAt(pinnedAt, remote: id)
                     case .backgroundChanged(let id, let background):
                         // One that cannot be fetched now is tried again at the next sync.
                         try? await copyBackground(background, of: id)
@@ -512,6 +557,7 @@ import Observation
         for group in listed {
             if let entry = groups.first(where: { $0.remote == group.id }) {
                 if try apply(group, to: entry) { changed = true }
+                setPinnedAt(group.pinnedAt, remote: group.id)
             } else {
                 _ = try adopt(group)
                 changed = true
@@ -732,7 +778,7 @@ import Observation
             avatarImageData: draft.avatarImageData, backstory: draft.backstory)
         entries.append(Entry(remote: bot.id, remoteConversation: bot.conversationID, agent: created.agent.id,
                              conversation: created.conversation.id, synced: 0, profile: draft.profile, owner: bot.owner,
-                             sharedWith: bot.sharedWith, canCall: bot.canCall))
+                             sharedWith: bot.sharedWith, canCall: bot.canCall, pinnedAt: bot.pinnedAt))
         save()
         var agent = created.agent
         // Shown in the bot's editor here; the Hub calls with it.
@@ -760,6 +806,7 @@ import Observation
             $0.owner = bot.owner
             $0.sharedWith = bot.sharedWith
             $0.canCall = bot.canCall
+            $0.pinnedAt = bot.pinnedAt
         }
         let unchanged = agent.displayName == draft.name && agent.harnessIdentifier == draft.provider
             && agent.modelIdentifier == draft.model && agent.reasoningEffort == draft.reasoningEffort
@@ -792,7 +839,7 @@ import Observation
         let conversation = try repository.createGroup(named: group.draft.name, publicDescription: group.draft.publicDescription,
                                                       participantIDs: localAgents(group.draft.botIDs),
                                                       existingAgents: try repository.loadAgents())
-        groups.append(GroupEntry(remote: group.id, conversation: conversation.id, synced: 0))
+        groups.append(GroupEntry(remote: group.id, conversation: conversation.id, synced: 0, pinnedAt: group.pinnedAt))
         saveGroups()
         guard let archivedAt = group.archivedAt else { return conversation }
         return try repository.setConversationArchived(true, conversationID: conversation.id, now: archivedAt)

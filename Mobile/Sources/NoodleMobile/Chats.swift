@@ -63,7 +63,7 @@ enum HubThread: HubConversation {
     var error: String?
     /// Whether the list is known: from the last sync saved on this phone, or from the Hub itself.
     private(set) var isLoaded = false
-    /// Pins belong to this phone alone; the Hub never sees them.
+    /// Pins shown in All belong to this phone alone; those of the Hub's own space are its bots' and groups' `pinnedAt`.
     private var pinned: Set<UUID>
     /// When each conversation was last read on this phone. Nil until the first sync after
     /// installing, which counts everything already there as read.
@@ -304,9 +304,9 @@ enum HubThread: HubConversation {
     var sortedThreads: [HubThread] { Self.sorted(threads.map { (self, $0) }).map(\.1) }
 
     /// Pinned first, then newest conversation first, as in Messages, across however many Hubs.
-    static func sorted(_ threads: [(HubChats, HubThread)]) -> [(HubChats, HubThread)] {
+    static func sorted(_ threads: [(HubChats, HubThread)], onHub: Bool = false) -> [(HubChats, HubThread)] {
         threads.sorted { lhs, rhs in
-            let (left, right) = (lhs.0.isPinned(lhs.1), rhs.0.isPinned(rhs.1))
+            let (left, right) = (lhs.0.isPinned(lhs.1, onHub: onHub), rhs.0.isPinned(rhs.1, onHub: onHub))
             if left != right { return left }
             return lhs.0.recency(of: lhs.1) > rhs.0.recency(of: rhs.1)
         }
@@ -326,7 +326,32 @@ enum HubThread: HubConversation {
         latestMessage(of: conversation)?.createdAt ?? conversation.createdAt
     }
 
-    func isPinned(_ conversation: some HubConversation) -> Bool { pinned.contains(conversation.id) }
+    /// This phone's pin, or with `onHub` the one the Hub keeps for all the user's devices.
+    func isPinned(_ conversation: some HubConversation, onHub: Bool = false) -> Bool {
+        onHub ? hubPin(of: conversation.conversationID) != nil : pinned.contains(conversation.id)
+    }
+
+    /// Pins or unpins on the Hub, for every device. It shows at once, and goes back when the Hub refuses.
+    func toggleHubPin(_ conversation: some HubConversation) async throws {
+        let id = conversation.conversationID, before = hubPin(of: id)
+        setHubPin(before == nil ? Date() : nil, of: id)
+        do {
+            _ = try await pairing.request(.pin(LinkPin(conversationID: id, pinned: before == nil)))
+        } catch {
+            setHubPin(before, of: id)
+            throw error
+        }
+    }
+
+    private func hubPin(of conversationID: UUID) -> Date? {
+        agents.first { $0.conversationID == conversationID }?.pinnedAt ?? groups.first { $0.id == conversationID }?.pinnedAt
+    }
+
+    private func setHubPin(_ date: Date?, of conversationID: UUID) {
+        if let index = agents.firstIndex(where: { $0.conversationID == conversationID }) { agents[index].pinnedAt = date }
+        if let index = groups.firstIndex(where: { $0.id == conversationID }) { groups[index].pinnedAt = date }
+        saveCache()
+    }
 
     func togglePin(_ conversation: some HubConversation) {
         if pinned.remove(conversation.id) == nil { pinned.insert(conversation.id) }
@@ -535,6 +560,9 @@ enum HubThread: HubConversation {
             return
         case .readChanged(let id, let upTo):
             noteRead(id, upTo: upTo)
+            return
+        case .pinChanged(let id, let pinnedAt):
+            setHubPin(pinnedAt, of: id)
             return
         case .backgroundChanged(let id, let background):
             keep(background, for: id)
@@ -850,8 +878,10 @@ struct AgentsView: View {
     @Binding var opening: NotificationRoute?
     @Environment(\.scenePhase) private var phase
     @State private var path: [ChatLink] = []
-    /// Kept per Hub while it stays shown, so switching the option keeps what each Hub loaded.
+    /// Kept per Hub, so what each Hub loaded stays while others join or leave.
     @State private var chats: [HubChats] = []
+    /// The Hub whose space is shown, by its folder's name; empty for All.
+    @AppStorage("space") private var space = ""
     @State private var showingMore = false
     /// What was picked in the … sheet; it opens once that sheet has gone.
     @State private var chosen: MoreChoice?
@@ -868,8 +898,12 @@ struct AgentsView: View {
         let id: ChatLink
     }
 
+    /// The Hub whose bots and groups alone are shown, with the pins it keeps; nil shows All, with this phone's pins.
+    private var spaceChats: HubChats? { chats.first { CurrentHub.name(of: $0.pairing) == space } }
+
     private var rows: [Row] {
-        HubChats.sorted(chats.flatMap { hub in hub.listedThreads.map { (hub, $0) } }).map { hub, thread in
+        let shown = spaceChats.map { [$0] } ?? chats
+        return HubChats.sorted(shown.flatMap { hub in hub.listedThreads.map { (hub, $0) } }, onHub: spaceChats != nil).map { hub, thread in
             Row(chats: hub, thread: thread, id: ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id))
         }
     }
@@ -880,8 +914,9 @@ struct AgentsView: View {
             // As in Messages: pinned bots in circles above the rest, and one plain list of matches while searching.
             let searching = !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let found = rows.filter { $0.chats.matches($0.thread, search: search) }
-            let pinned = searching ? [] : found.filter { $0.chats.isPinned($0.thread) }
-            let others = searching ? found : found.filter { !$0.chats.isPinned($0.thread) }
+            let onHub = spaceChats != nil
+            let pinned = searching ? [] : found.filter { $0.chats.isPinned($0.thread, onHub: onHub) }
+            let others = searching ? found : found.filter { !$0.chats.isPinned($0.thread, onHub: onHub) }
             List {
                 if !pinned.isEmpty {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
@@ -903,14 +938,15 @@ struct AgentsView: View {
                 ForEach(others) { row in
                     NavigationLink(value: row.id) {
                         AgentRow(chats: row.chats, thread: row.thread, latest: row.chats.latestMessage(of: row.thread),
-                                 unread: row.chats.isUnread(row.thread), hub: chats.count > 1 ? row.chats.pairing.hubName : nil)
+                                 unread: row.chats.isUnread(row.thread),
+                                 hub: chats.count > 1 && spaceChats == nil ? row.chats.pairing.hubName : nil)
                     }
                     // As in Messages: dividers between rows, none above the first.
                     .listRowSeparator(row.id == others.first?.id ? .hidden : .visible, edges: .top)
                     // Room for the unread dot, as far from the edge as from the picture.
                     .listRowInsets(.leading, AgentRow.dotGap * 2 + AgentRow.dotSize)
                     .swipeActions(edge: .leading) {
-                        Button { row.chats.togglePin(row.thread) } label: { Label("Pin", systemImage: "pin.fill") }
+                        Button { togglePin(row) } label: { Label("Pin", systemImage: "pin.fill") }
                             .tint(.orange)
                     }
                     .contextMenu { menu(for: row) }
@@ -938,6 +974,9 @@ struct AgentsView: View {
                 }
             }
             .toolbar {
+                if !chats.isEmpty {
+                    ToolbarItem(placement: .principal) { spaceMenu }
+                }
                 // A plain button, as in Messages, not the round glass default.
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showingMore = true } label: { Image(systemName: "ellipsis") }
@@ -977,13 +1016,41 @@ struct AgentsView: View {
         }
     }
 
+    /// All, then a space for each joined Hub: its bots and groups alone, with the pins it keeps.
+    private var spaceMenu: some View {
+        Menu {
+            Picker("Space", selection: $space) {
+                Text("All").tag("")
+                ForEach(chats, id: \.pairing.directory) { hub in
+                    Text(hub.pairing.hubName).tag(CurrentHub.name(of: hub.pairing))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(spaceChats?.pairing.hubName ?? "All").font(.headline)
+                Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.primary)
+        }
+        .accessibilityLabel("Space")
+        .accessibilityValue(spaceChats?.pairing.hubName ?? "All")
+    }
+
+    private func togglePin(_ row: Row) {
+        guard spaceChats != nil else { return row.chats.togglePin(row.thread) }
+        Task {
+            do { try await row.chats.toggleHubPin(row.thread) }
+            catch { row.chats.error = error.localizedDescription }
+        }
+    }
+
     /// A conversation's touch-and-hold menu, the same for its row and its pinned circle.
     @ViewBuilder
     private func menu(for row: Row) -> some View {
-        if row.chats.isPinned(row.thread) {
-            Button { row.chats.togglePin(row.thread) } label: { Label("Unpin", systemImage: "pin.slash.fill") }
+        if row.chats.isPinned(row.thread, onHub: spaceChats != nil) {
+            Button { togglePin(row) } label: { Label("Unpin", systemImage: "pin.slash.fill") }
         } else {
-            Button { row.chats.togglePin(row.thread) } label: { Label("Pin", systemImage: "pin.fill") }
+            Button { togglePin(row) } label: { Label("Pin", systemImage: "pin.fill") }
         }
         // A bot someone shared is only talked with.
         if row.thread.bot?.owner == nil {

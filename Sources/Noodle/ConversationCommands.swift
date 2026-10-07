@@ -112,6 +112,26 @@ struct ConversationCommands: Commands {
     }
 }
 
+/// All, then a space for each joined Hub with its bots, groups and the pins it keeps. ⌘1 is All, ⌘2 on the Hubs.
+struct SpaceCommands: Commands {
+    let store: NoodleStore
+
+    var body: some Commands {
+        // Nothing to choose until a Hub is joined.
+        if !store.hubMirrors.isEmpty {
+            CommandMenu("Spaces") {
+                Toggle("All", isOn: Binding(get: { store.spaceMirror == nil }, set: { if $0 { store.showSpace(nil) } }))
+                    .keyboardShortcut("1")
+                ForEach(Array(store.hubMirrors.enumerated()), id: \.element.pairing.directory) { index, mirror in
+                    Toggle(mirror.pairing.hub?.name ?? "Noodle Hub",
+                           isOn: Binding(get: { store.spaceMirror === mirror }, set: { if $0 { store.showSpace(mirror) } }))
+                        .keyboardShortcut(index < 8 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 2)"))) : nil)
+                }
+            }
+        }
+    }
+}
+
 extension Notification.Name {
     /// Development only. The object is a `ConversationEffectKind`.
     static let previewEffect = Notification.Name("Noodle.previewEffect")

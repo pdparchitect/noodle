@@ -380,6 +380,34 @@ import XCTest
         XCTAssertEqual(heard.last, later.createdAt)
     }
 
+    /// Pins of the Hub's conversations live on the Hub: one made here reaches it, and one made on another
+    /// device shows here, kept so they show at once on the next launch.
+    func testPinsAreSharedWithTheHub() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let alfred = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let jeeves = try await mirror.createBot(LinkBotDraft(name: "Jeeves", provider: "claude-code"))
+        let alfredHere = try conversation(of: alfred.id, in: f.local), jeevesHere = try conversation(of: jeeves.id, in: f.local)
+        let remoteJeeves = try XCTUnwrap(f.hub.repository.loadAgents().first { $0.displayName == "Jeeves" })
+        let jeevesThere = try conversation(of: remoteJeeves.id, in: f.hub.repository)
+        XCTAssertEqual(mirror.pinnedConversations, [])
+
+        try await mirror.setPinned(true, conversation: alfredHere.id)
+        XCTAssertEqual(mirror.pinnedConversations, [alfredHere.id])
+        guard case .bots(let listed) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertNotNil(listed.first { $0.draft.name == "Alfred" }?.pinnedAt)
+
+        let running = Task { await mirror.run() }
+        addTeardownBlock { running.cancel() }
+        for _ in 0..<50 where !mirror.isConnected { try await Task.sleep(for: .milliseconds(100)) }
+        try f.hub.bots.setPinned(true, conversation: jeevesThere.id, for: f.ada)
+        for _ in 0..<50 where mirror.pinnedConversations.count < 2 { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertEqual(mirror.pinnedConversations, [alfredHere.id, jeevesHere.id])
+        running.cancel()
+
+        XCTAssertEqual(f.mirror().pinnedConversations, [alfredHere.id, jeevesHere.id])
+    }
+
     func testRepliesArriveWithoutAskingWhileConnected() async throws {
         let f = try await fixture()
         let mirror = f.mirror()

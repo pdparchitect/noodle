@@ -47,6 +47,46 @@ final class HubHarnessChoiceTests: XCTestCase {
     }
 }
 
+/// All shows every bot and group with this Mac's own pins; a joined Hub's space shows only that Hub's, with the pins it keeps.
+@MainActor final class SpaceStoreTests: XCTestCase {
+    func testAHubsSpaceShowsItsBotsAndPins() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey)
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey) }
+        // Pretend Fixture bot A is on a joined Hub, pinned there, while bot B stays on this Mac, pinned here.
+        let folder = f.repository.rootURL.appendingPathComponent("Hubs/\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let hub: [String: Any] = ["name": "Mac mini", "key": LinkIdentity().publicKey.x963.base64EncodedString(),
+                                  "endpoints": [], "userName": "Ada"]
+        try JSONSerialization.data(withJSONObject: hub).write(to: folder.appendingPathComponent("hub.json"))
+        let entry: [String: Any] = ["remote": UUID().uuidString, "remoteConversation": UUID().uuidString,
+                                    "agent": f.a.id.uuidString, "conversation": f.directA.id.uuidString, "synced": 0,
+                                    "pinnedAt": 0]
+        try JSONSerialization.data(withJSONObject: [entry]).write(to: folder.appendingPathComponent("mirror.json"))
+        try f.repository.savePinnedConversationIDs([f.directB.id])
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        let mirror = try XCTUnwrap(store.hubMirror(forAgent: f.a.id))
+
+        XCTAssertNil(store.spaceMirror)
+        XCTAssertEqual(Set(store.filteredConversations.map(\.id)), [f.directA.id, f.directB.id])
+        XCTAssertEqual(store.pinnedConversations.map(\.id), [f.directB.id])
+        XCTAssertEqual(store.directConversations.map(\.id), [f.directA.id])
+
+        store.showSpace(mirror)
+        XCTAssertEqual(store.filteredConversations.map(\.id), [f.directA.id])
+        XCTAssertEqual(store.pinnedConversations.map(\.id), [f.directA.id])
+        XCTAssertTrue(store.isPinned(f.directA.id))
+        XCTAssertTrue(store.directConversations.isEmpty)
+
+        // Kept for the next launch.
+        let again = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertTrue(again.spaceMirror === again.hubMirror(forAgent: f.a.id))
+        again.showSpace(nil)
+        XCTAssertEqual(again.pinnedConversations.map(\.id), [f.directB.id])
+    }
+}
+
 /// A bot kept on a Hub uses only the Hub's tools, never this Mac's.
 @MainActor final class HubBotAssignmentTests: XCTestCase {
     /// A bot someone shared on a Hub is only talked with: Settings > Bots leaves it out and groups never offer it.

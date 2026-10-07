@@ -48,7 +48,7 @@ import NoodleRuntime
                                call: browser ?? BrowserToolProvider.liveTransport())
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
                        browsers: browsers, applets: applets, uploads: directory.appendingPathComponent("Uploads", isDirectory: true),
-                       readMarks: directory.appendingPathComponent("read.json"))
+                       readMarks: directory.appendingPathComponent("read.json"), pins: directory.appendingPathComponent("pins.json"))
         link = HubLinkService(hubName: name, directory: directory.appendingPathComponent("Link", isDirectory: true),
                               access: access, profiles: profiles, bots: bots, connections: connections, computers: computers,
                               browsers: browsers, port: port, router: router, localEndpoints: localEndpoints,

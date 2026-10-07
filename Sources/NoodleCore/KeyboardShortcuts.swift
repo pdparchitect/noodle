@@ -42,6 +42,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
         let standard: [String: String] = ["q": "Quit", "w": "Close Window", "h": "Hide", "m": "Minimize",
             ",": "Settings", "c": "Copy", "x": "Cut", "v": "Paste", "z": "Undo", "a": "Select All",
             "o": "Open", "\t": "Switch Applications", " ": "Spotlight"]
+        if modifiers == .command, ("1"..."9").contains(key) { return "Spaces" }
         if modifiers == .command { return standard[key] }
         if modifiers == [.command, .shift] {
             if key == "z" { return "Redo" }

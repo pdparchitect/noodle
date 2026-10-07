@@ -5,6 +5,7 @@
 ### Added
 
 - Coinbase can be added as a tool.
+- The Hub keeps each user's pins for its bots and groups, so a pin made in the Hub's space on one device shows on all of them.
 
 ## [0.20.0] - 2026-10-06
 

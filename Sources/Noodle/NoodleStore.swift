@@ -58,6 +58,9 @@ final class NoodleStore {
         }
     }
     private(set) var pinnedConversationIDs: [UUID] = []
+    /// The joined Hub whose space the sidebar shows, by its folder's name; nil shows All.
+    private(set) var spaceHub: String? = UserDefaults.standard.string(forKey: NoodleStore.spaceKey)
+    static let spaceKey = "Noodle.space"
     private(set) var unreadConversationIDs: Set<UUID> = [] {
         didSet { updateDockBadge() }
     }
@@ -320,9 +323,23 @@ final class NoodleStore {
         creationSheet = .bot
     }
 
+    /// The Hub whose space is shown, while it is still joined; nil for All.
+    var spaceMirror: HubMirror? {
+        spaceHub.flatMap { name in hubMirrors.first { $0.pairing.directory.lastPathComponent == name } }
+    }
+
+    func showSpace(_ mirror: HubMirror?) {
+        spaceHub = mirror?.pairing.directory.lastPathComponent
+        UserDefaults.standard.set(spaceHub, forKey: Self.spaceKey)
+    }
+
+    /// All's pins are this Mac's own; a Hub's space shows the pins the Hub keeps for every device.
+    private var shownPinnedIDs: [UUID] { spaceMirror?.pinnedConversations ?? pinnedConversationIDs }
+
     var filteredConversations: [BotConversation] {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let conversations = conversations.filter { !isArchived($0) }
+        let space = spaceMirror.map { Set($0.localConversationIDs) }
+        let conversations = conversations.filter { !isArchived($0) && space?.contains($0.id) != false }
         guard !term.isEmpty else { return conversations }
 
         return conversations.filter { conversation in
@@ -340,23 +357,32 @@ final class NoodleStore {
     /// Pinned bots and groups sit above the rest, in the order they were pinned.
     var pinnedConversations: [BotConversation] {
         let visible = Dictionary(uniqueKeysWithValues: filteredConversations.map { ($0.id, $0) })
-        return pinnedConversationIDs.compactMap { visible[$0] }
+        return shownPinnedIDs.compactMap { visible[$0] }
     }
 
     var directConversations: [BotConversation] {
-        filteredConversations.filter { $0.kind == .direct && !pinnedConversationIDs.contains($0.id) }
+        let pinned = shownPinnedIDs
+        return filteredConversations.filter { $0.kind == .direct && !pinned.contains($0.id) }
     }
 
     var groupConversations: [BotConversation] {
-        filteredConversations.filter { $0.kind == .group && !pinnedConversationIDs.contains($0.id) }
+        let pinned = shownPinnedIDs
+        return filteredConversations.filter { $0.kind == .group && !pinned.contains($0.id) }
     }
 
     func isPinned(_ conversationID: UUID) -> Bool {
-        pinnedConversationIDs.contains(conversationID)
+        shownPinnedIDs.contains(conversationID)
     }
 
     func setPinned(_ pinned: Bool, conversationID: UUID) {
         guard pinned != isPinned(conversationID) else { return }
+        if let mirror = spaceMirror {
+            Task {
+                do { try await mirror.setPinned(pinned, conversation: conversationID) }
+                catch { errorMessage = error.localizedDescription }
+            }
+            return
+        }
         var updated = pinnedConversationIDs.filter { $0 != conversationID }
         if pinned { updated.append(conversationID) }
         do {

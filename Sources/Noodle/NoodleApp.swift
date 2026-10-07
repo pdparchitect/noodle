@@ -155,6 +155,7 @@ struct NoodleApp: App {
             }, floatOnTop: {
                 if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.floatConversation(id) }
             })
+            SpaceCommands(store: store)
             CompanionAppCommands(store: store)
             #if NOODLE_DEV_HOOKS
             ScenarioCommands()

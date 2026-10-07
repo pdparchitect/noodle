@@ -68,6 +68,25 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(request, .archive(LinkArchiveChange(id: id, archived: true)))
     }
 
+    func testPinsReadAcrossAppVersions() throws {
+        let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
+        let bot = try decode(LinkBot.self,
+            #"{"id":"\#(id)","conversationID":"\#(conversation)","draft":{"name":"Alfred","provider":"codex"},"createdAt":0}"#)
+        XCTAssertNil(bot.pinnedAt)
+        let group = try decode(LinkGroup.self, #"{"id":"\#(id)","draft":{"name":"House","publicDescription":"","botIDs":[]},"createdAt":0}"#)
+        XCTAssertNil(group.pinnedAt)
+
+        var pinned = bot
+        pinned.pinnedAt = Date(timeIntervalSinceReferenceDate: 100)
+        XCTAssertEqual(try decode(LinkBot.self, String(decoding: try LinkProtocol.encoder.encode(pinned), as: UTF8.self)), pinned)
+
+        let request = try decode(LinkRequest.self,
+            #"{"pin":{"_0":{"conversationID":"00000000-0000-0000-0000-00000000000A","pinned":true}}}"#)
+        XCTAssertEqual(request, .pin(LinkPin(conversationID: id, pinned: true)))
+        let event = LinkEvent.pinChanged(conversationID: id, pinnedAt: nil)
+        XCTAssertEqual(LinkProtocol.decodeEvent(LinkProtocol.encode(event)), event)
+    }
+
     func testFieldsAddedLaterMayBeMissing() throws {
         let id = UUID(), conversation = UUID()
         let message = try decode(LinkMessage.self,

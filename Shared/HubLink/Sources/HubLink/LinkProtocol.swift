@@ -140,6 +140,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// This user has read a conversation up to a message, on this device. The Hub keeps the
     /// furthest and pushes `readChanged` to the user's devices.
     case markRead(LinkReadMark)
+    /// Pins or unpins one of this user's conversations, for all their devices. The Hub pushes `pinChanged`.
+    case pin(LinkPin)
     /// Where this device hears of unread replies while it is away from the Hub, or nil to stop.
     case pushTopic(LinkPushTopic)
     /// This user's tool connections on the Hub.
@@ -505,6 +507,8 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case botPhase(botID: UUID, phase: LinkBotPhase)
     /// This user read a conversation further, on one of their devices: every message sent up to `upTo`.
     case readChanged(conversationID: UUID, upTo: Date)
+    /// This user pinned a conversation, on one of their devices, or unpinned it: nil.
+    case pinChanged(conversationID: UUID, pinnedAt: Date?)
     /// This user's connections, their sign-in or their bots changed.
     case connectionsChanged
     /// Open this page in the browser to sign a connection in, then send `finishSignIn`.
@@ -1086,10 +1090,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var owner: String?
     /// Whether this person can call it: its harness speaks. False from a Hub without calls.
     public var canCall: Bool
+    /// When its user pinned its conversation, which orders pins. Nil when not pinned, or from a Hub without pins.
+    public var pinnedAt: Date?
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
-                sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false) {
+                sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1102,10 +1108,11 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.sharedWith = sharedWith
         self.owner = owner
         self.canCall = canCall
+        self.pinnedAt = pinnedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall
+        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -1122,6 +1129,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         sharedWith = try c.decodeIfPresent([UUID].self, forKey: .sharedWith) ?? []
         owner = try c.decodeIfPresent(String.self, forKey: .owner)
         canCall = try c.decode(.canCall, or: false)
+        pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
     }
 }
 
@@ -1151,15 +1159,18 @@ public struct LinkGroup: Codable, Equatable, Identifiable, Sendable {
     public var archivedAt: Date?
     /// Its background. Nil from a Hub that does not keep backgrounds.
     public var background: LinkBackground?
+    /// When its user pinned it, which orders pins. Nil when not pinned, or from a Hub without pins.
+    public var pinnedAt: Date?
 
     public init(id: UUID, draft: LinkGroupDraft, createdAt: Date, readUpTo: Date? = nil, archivedAt: Date? = nil,
-                background: LinkBackground? = nil) {
+                background: LinkBackground? = nil, pinnedAt: Date? = nil) {
         self.id = id
         self.draft = draft
         self.createdAt = createdAt
         self.readUpTo = readUpTo
         self.archivedAt = archivedAt
         self.background = background
+        self.pinnedAt = pinnedAt
     }
 }
 
@@ -1171,6 +1182,17 @@ public struct LinkArchiveChange: Codable, Equatable, Sendable {
     public init(id: UUID, archived: Bool) {
         self.id = id
         self.archived = archived
+    }
+}
+
+/// A conversation to pin or unpin for its user.
+public struct LinkPin: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var pinned: Bool
+
+    public init(conversationID: UUID, pinned: Bool) {
+        self.conversationID = conversationID
+        self.pinned = pinned
     }
 }
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Tap the title to choose All, or one joined Hub's space with only its bots and groups. Pins in a Hub's space are kept on the Hub, so they are the same on all your devices; pins in All stay on this phone.
+
 ### Changed
 
 - The bots and groups of every Hub you joined share one list. Hubs no longer switches between them: tap a Hub there for its details.
@@ -9,6 +13,7 @@
 ### What to Test
 
 - Join two Hubs: both Hubs' bots and groups show in one list, each marked with its Hub. In ••• > Hubs, tapping a Hub opens its details, and there is no Show All Hubs Together.
+- Tap the title and choose a Hub: only its bots and groups show, without the Hub's name on each row. Pin one there: it shows pinned in that Hub's space in Noodle on the Mac too, but not in All. Unpin it on the Mac: it unpins on the phone. Pins made in All stay on the phone only. Quit and reopen the app: it opens on the same space with its pins.
 
 ## [0.22.0] - 2026-10-06
 

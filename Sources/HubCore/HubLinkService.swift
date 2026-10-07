@@ -635,6 +635,9 @@ import os
         case .markRead(let mark):
             try hubBots().markRead(mark, for: try user(key))
             return .done
+        case .pin(let pin):
+            try hubBots().setPinned(pin.pinned, conversation: pin.conversationID, for: try user(key))
+            return .done
         case .pushTopic(let registration):
             let topic = registration.topic.flatMap { (1...128).contains($0.count) ? $0 : nil }
             access.setPushTopic(topic, for: try paired(key))

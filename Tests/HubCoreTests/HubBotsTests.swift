@@ -190,6 +190,51 @@ import XCTest
         XCTAssertEqual(page.messages.first?.author, .bot(bot.id))
     }
 
+    /// A pin made on one device shows on all of the user's devices, in the order they were pinned, and no one else's.
+    func testPinsAreKeptOnTheHub() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        guard case .group(let group) = try await f.device.request(.createGroup(LinkGroupDraft(name: "House", botIDs: [bot.id]))) else {
+            return XCTFail("no group")
+        }
+        XCTAssertNil(bot.pinnedAt)
+        let phone = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-phone-\(UUID())"),
+                               deviceName: "Phone")
+        await phone.join(f.link.invite(f.ada).url().absoluteString)
+        let events = try await phone.subscribe()
+
+        let answer = try await f.device.request(.pin(LinkPin(conversationID: group.id, pinned: true)))
+        XCTAssertEqual(answer, .done)
+        var heard: Date?
+        for try await event in events {
+            if case .pinChanged(group.id, let pinnedAt) = event { heard = pinnedAt; break }
+        }
+        XCTAssertNotNil(heard)
+        _ = try await phone.request(.pin(LinkPin(conversationID: bot.conversationID, pinned: true)))
+        guard case .bots(let bots) = try await phone.request(.bots), case .groups(let groups) = try await phone.request(.groups) else {
+            return XCTFail("no lists")
+        }
+        let groupPin = try XCTUnwrap(groups.first?.pinnedAt), botPin = try XCTUnwrap(bots.first?.pinnedAt)
+        XCTAssertLessThanOrEqual(groupPin, botPin)
+        // Pinning again keeps its place.
+        _ = try await phone.request(.pin(LinkPin(conversationID: group.id, pinned: true)))
+        guard case .groups(let again) = try await phone.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertEqual(again.first?.pinnedAt, groupPin)
+
+        _ = try await phone.request(.pin(LinkPin(conversationID: group.id, pinned: false)))
+        guard case .groups(let unpinned) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertNil(unpinned.first?.pinnedAt)
+
+        let grace = try f.hub.access.addUser(named: "Grace")
+        let other = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-other-\(UUID())"),
+                               deviceName: "Other")
+        await other.join(f.link.invite(grace).url().absoluteString)
+        do {
+            _ = try await other.request(.pin(LinkPin(conversationID: bot.conversationID, pinned: true)))
+            XCTFail("Pinned another user's conversation")
+        } catch {}
+    }
+
     /// Reading on one device reads on all of the user's devices, and a device that joins later starts from it.
     func testReadingIsKeptOnTheHub() async throws {
         let f = try await fixture()

@@ -53,12 +53,16 @@ import NoodleRuntime
     /// How far each conversation's owner has read it, so all their devices agree.
     private let readMarksURL: URL
     private lazy var readMarks: [UUID: Date] = (try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: readMarksURL))) ?? [:]
+    /// When each conversation's owner pinned it, so all their devices show the same pins.
+    private let pinsURL: URL
+    private lazy var pins: [UUID: Date] = (try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: pinsURL))) ?? [:]
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
                 connections: HubConnections, computers: HubComputers, browsers: HubBrowsers,
-                applets: AppletController, uploads: URL, readMarks: URL) {
+                applets: AppletController, uploads: URL, readMarks: URL, pins: URL) {
         self.uploads = uploads
         readMarksURL = readMarks
+        pinsURL = pins
         self.repository = repository
         self.runtime = runtime
         self.access = access
@@ -240,7 +244,7 @@ import NoodleRuntime
         }
         for conversation in conversations where !people.contains(conversation.guest!.id) {
             try repository.deleteConversation(id: conversation.id)
-            if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
+            forgetMarks(of: [conversation.id])
             changed.insert(conversation.guest!.id)
             onClosed?(conversation.id, conversation.guest!.id)
             access.note("Stopped sharing \(agent.displayName) with \(conversation.guest!.name)", about: [conversation.guest!.id])
@@ -382,7 +386,7 @@ import NoodleRuntime
         let group = try ownedGroup(id, by: user)
         try repository.deleteConversation(id: id)
         try restartBots(BotConversation.botsWithChangedFolders(from: group, to: nil))
-        if readMarks.removeValue(forKey: id) != nil { try? saveReadMarks() }
+        forgetMarks(of: [id])
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
     }
@@ -456,7 +460,7 @@ import NoodleRuntime
         for conversation in (try? repository.loadConversations()) ?? [] where conversation.guest?.id == user.id {
             try? repository.deleteConversation(id: conversation.id)
             onClosed?(conversation.id, user.id)
-            if readMarks.removeValue(forKey: conversation.id) != nil { try? saveReadMarks() }
+            forgetMarks(of: [conversation.id])
             if let owner = conversation.participantIDs.first.flatMap(access.owner(ofBot:)) { onChange?(owner, .botsChanged) }
         }
     }
@@ -852,6 +856,32 @@ import NoodleRuntime
         try JSONEncoder().encode(readMarks).write(to: readMarksURL, options: .atomic)
     }
 
+    /// Pins or unpins one of the user's conversations and tells their devices. Pinning again keeps its place.
+    public func setPinned(_ pinned: Bool, conversation id: UUID, for user: HubUser) throws {
+        _ = try ownedConversation(id, by: user)
+        guard (pins[id] != nil) != pinned else { return }
+        pins[id] = pinned ? Date() : nil
+        try savePins()
+        onChange?(user.id, .pinChanged(conversationID: id, pinnedAt: pins[id]))
+    }
+
+    private func savePins() throws {
+        try FileManager.default.createDirectory(at: pinsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(pins).write(to: pinsURL, options: .atomic)
+    }
+
+    /// Drops how far deleted conversations were read and whether they were pinned.
+    private func forgetMarks(of conversations: [UUID]) {
+        if conversations.contains(where: { readMarks[$0] != nil }) {
+            conversations.forEach { readMarks[$0] = nil }
+            try? saveReadMarks()
+        }
+        if conversations.contains(where: { pins[$0] != nil }) {
+            conversations.forEach { pins[$0] = nil }
+            try? savePins()
+        }
+    }
+
     /// Deletes a bot, and any group left without bots. Returns whether it was in a group.
     private func remove(_ agent: AgentRecord) throws -> Bool {
         let joined = (try? repository.loadConversations().filter { $0.participantIDs.contains(agent.id) }) ?? []
@@ -879,10 +909,7 @@ import NoodleRuntime
         browsers.forget(bot: agent.id)
         if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
         access.setOwner(nil, ofBot: agent.id)
-        if conversations.contains(where: { readMarks[$0] != nil }) {
-            conversations.forEach { readMarks[$0] = nil }
-            try? saveReadMarks()
-        }
+        forgetMarks(of: conversations)
         return joined.contains { $0.kind == .group }
     }
 
@@ -1031,7 +1058,7 @@ import NoodleRuntime
                   draft: LinkGroupDraft(name: conversation.displayName, publicDescription: conversation.publicDescription ?? "",
                                         botIDs: conversation.participantIDs),
                   createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id], archivedAt: conversation.archivedAt,
-                  background: background(of: conversation.id))
+                  background: background(of: conversation.id), pinnedAt: pins[conversation.id])
     }
 
     private func bot(_ agent: AgentRecord, conversations: [BotConversation]) throws -> LinkBot? {
@@ -1048,7 +1075,8 @@ import NoodleRuntime
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue), readUpTo: readMarks[conversation.id],
                        status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id),
                        sharedWith: direct.compactMap(\.guest?.id),
-                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false)
+                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
+                       pinnedAt: pins[conversation.id])
     }
 
     /// A bot as someone it is shared with sees it: whose it is and whether it is working, nothing of how it works.
@@ -1061,7 +1089,8 @@ import NoodleRuntime
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: runtime.snapshot(for: agent.id).phase.rawValue),
                        readUpTo: readMarks[conversation.id], background: background(of: conversation.id), owner: owner.name,
-                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false)
+                       canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
+                       pinnedAt: pins[conversation.id])
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.

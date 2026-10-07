@@ -159,6 +159,16 @@ Bots and groups on a Noodle Hub are archived there, for all your devices. Archiv
 from the sidebar as any other; bring them back with **Archived** beside that Hub in
 **Settings → Hub**, where clicking **Unarchive** restores one.
 
+## Spaces
+
+Once you join a Noodle Hub, the **Spaces** menu shows **All**, with every bot and group,
+and a space for each Hub with only that Hub's. Press ⌘1 for All, and ⌘2 onwards for the
+Hubs in the order the menu lists them. Noodle opens on the space you last chose.
+
+Pins belong to the space you pin in. Pins in a Hub's space are kept on the Hub, so they
+are the same in Noodle on your other Macs and on your iPhone; pins in All stay on this
+Mac.
+
 ## Manage a Noodle Hub's users
 
 If the Hub made you an admin, **Users** appears beside it in **Settings → Hub**. It lists
