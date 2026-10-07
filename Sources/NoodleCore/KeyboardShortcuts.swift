@@ -57,7 +57,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
 }
 
 public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiable {
-    case newBot, newGroup, searchConversations, recordVoice, capture, annotateSelection, annotateRegion, saveAnnotation
+    case newBot, newGroup, searchConversations, recordVoice, call, capture, annotateSelection, annotateRegion, saveAnnotation
     case chooseConversation, showUsage
     public var id: String { rawValue }
     public var title: String {
@@ -66,6 +66,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .newGroup: "New Group"
         case .searchConversations: "Search Conversations"
         case .recordVoice: "Record / Stop Voice Message"
+        case .call: "Call / End Call"
         case .capture: "Capture"
         case .annotateSelection: "Add Annotation"
         case .annotateRegion: "Annotate Region"
@@ -80,6 +81,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .newGroup: "Create a group conversation."
         case .searchConversations: "Focus the conversation search field."
         case .recordVoice: "Start or stop recording in the current chat."
+        case .call: "Call the bot in the current chat, or end the call in progress."
         case .capture: "Open the window picker or focus the existing capture preview."
         case .annotateSelection: "Comment on selected conversation or preview text; select a region for images."
         case .annotateRegion: "Mark a region of the Noodle window, an attachment preview, or a live capture."
@@ -94,6 +96,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .newGroup: KeyBinding("n", modifiers: [.command, .shift])
         case .searchConversations: KeyBinding("f")
         case .recordVoice: KeyBinding("d", modifiers: [.command, .shift])
+        case .call: KeyBinding("c", modifiers: [.command, .shift])
         case .capture: KeyBinding("s", modifiers: [.command, .shift])
         case .annotateSelection: KeyBinding("a", modifiers: [.command, .shift])
         case .annotateRegion: KeyBinding("r", modifiers: [.command, .shift])

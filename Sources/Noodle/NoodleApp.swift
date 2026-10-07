@@ -154,6 +154,8 @@ struct NoodleApp: App {
                 if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.dockConversation(id) }
             }, floatOnTop: {
                 if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.floatConversation(id) }
+            }, isOnCall: { store.voiceCalls.call != nil }, toggleCall: {
+                store.toggleVoiceCall(in: store.conversationWindows.conversationID(in: NSApp.keyWindow))
             })
             SpaceCommands(store: store)
             CompanionAppCommands(store: store)

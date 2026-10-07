@@ -163,6 +163,10 @@ final class FloatingConversationPanel: NSPanel {
             command.perform(in: self, bindings: bindings)
             return true
         }
+        if event.type == .keyDown, bindings.matches(.call, event: event), let store = NoodleStore.active {
+            if !event.isARepeat { store.toggleVoiceCall(in: conversationID) }
+            return true
+        }
         return super.performKeyEquivalent(with: event)
     }
 

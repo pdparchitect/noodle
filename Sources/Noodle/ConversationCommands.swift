@@ -75,6 +75,8 @@ struct ConversationCommands: Commands {
     /// Act on the key window's conversation, as the sidebar menu does for its row.
     var openInNewWindow: () -> Void = {}
     var floatOnTop: () -> Void = {}
+    var isOnCall: () -> Bool = { false }
+    var toggleCall: () -> Void = {}
     private let annotations = AnnotationCommandsState.shared
 
     var body: some Commands {
@@ -97,6 +99,12 @@ struct ConversationCommands: Commands {
             Button(command?.title ?? "Record Voice Message") { command?.perform() }
                 .appShortcut(.recordVoice)
                 .disabled(command?.isEnabled != true)
+            Button(isOnCall() ? "End Call" : "Call") {
+                // Holding the shortcut must not end the call it just started.
+                if let event = NSApp.currentEvent, event.type == .keyDown, event.isARepeat { return }
+                toggleCall()
+            }
+            .appShortcut(.call)
             if NoodleAppIdentity.isDevelopment {
                 Divider()
                 // Plays in the key chat directly, skipping the queue a bot's effect goes through.

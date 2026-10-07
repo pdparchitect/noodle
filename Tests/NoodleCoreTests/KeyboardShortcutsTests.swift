@@ -14,6 +14,7 @@ final class KeyboardShortcutsTests: XCTestCase {
         XCTAssertEqual(preferences.binding(for: .annotateSelection)?.displayName, "⇧⌘A")
         XCTAssertEqual(preferences.binding(for: .capture), KeyBinding("s", modifiers: [.command, .shift]))
         XCTAssertEqual(preferences.binding(for: .saveAnnotation)?.displayName, "⌘↩")
+        XCTAssertEqual(preferences.binding(for: .call)?.displayName, "⇧⌘C")
     }
 
     func testAnyShortcutMayUseOptionAloneButNeverShiftOrNoModifier() throws {

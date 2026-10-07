@@ -331,6 +331,23 @@ private struct FixtureError: LocalizedError {
         XCTAssertEqual(process.voiceCallEnds, 1)
     }
 
+    func testTheCallShortcutCallsTheShownBotOrEndsTheCallInProgress() async throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        f.store.voiceGuesser = VoiceGuesserFake(nil)
+        f.store.toggleVoiceCall(in: try f.group().id)
+        f.store.toggleVoiceCall(in: nil)
+        XCTAssertNil(f.store.voiceCalls.call)
+
+        f.store.toggleVoiceCall(in: f.directA.id, media: VoiceCallMediaFake())
+        try await wait { f.runtime.factory.processes.first?.voiceCallRequests.count == 1 }
+        XCTAssertEqual(f.store.voiceCalls.call?.conversationID, f.directA.id)
+        // Any window ends the one call there is, wherever it was started.
+        f.store.toggleVoiceCall(in: nil)
+        XCTAssertNil(f.store.voiceCalls.call)
+        XCTAssertEqual(f.runtime.factory.processes.first?.voiceCallEnds, 1)
+    }
+
     func testAConnectedCallIsLoggedInTheConversationWithItsTranscriptButNeverReachesTheBotsInbox() async throws {
         let f = try StoreFixture()
         addTeardownBlock { @MainActor in f.cleanUp() }

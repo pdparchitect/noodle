@@ -1249,6 +1249,13 @@ final class NoodleStore {
         }
     }
 
+    /// There is one call at a time, so this ends it from any window; otherwise it calls the conversation's bot.
+    func toggleVoiceCall(in conversationID: UUID?, media: (any VoiceCallMedia)? = nil) {
+        if voiceCalls.call != nil { return voiceCalls.hangUp() }
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
+        startVoiceCall(in: conversation, media: media)
+    }
+
     func sendVoiceMessage(from url: URL, voice: VoiceMessage, to conversationID: UUID) throws {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
