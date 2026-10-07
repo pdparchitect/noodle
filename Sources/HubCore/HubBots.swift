@@ -80,6 +80,7 @@ import NoodleRuntime
         self.browsers = browsers
         self.applets = applets
         messenger = MessengerBroker(repository: repository)
+        messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         browsers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }

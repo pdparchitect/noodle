@@ -63,6 +63,16 @@ import Observation
         let response = try await call(request).checked()
         return try NoodletPreviewAccess(response: response, expectedID: id)
     }
+    /// Whether a noodlet has a preview, which only a bot's `present` sets. Says yes when
+    /// Noodle Applet cannot answer, so bots are not sent after a preview that may exist.
+    public func hasPreview(_ url: URL) async -> Bool {
+        guard let id = try? NoodletLink.requireID(in: url) else { return true }
+        var request = AppletRequest(.info)
+        request.noodletID = id
+        request.includePreview = true
+        guard let response = try? await call(request).checked() else { return true }
+        return response.mediaType == "image/png" && response.data != nil
+    }
     @discardableResult
     public func openNoodlet(_ url: URL, annotation: AppletAnnotation? = nil) async throws -> AppletResponse {
         let id = try NoodletLink.requireID(in: url)

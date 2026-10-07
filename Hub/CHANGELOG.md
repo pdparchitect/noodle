@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Noodlets bots share now show their preview instead of a plain icon: bots are told to present a noodlet rather than just attach it, and a bot that attaches one with no preview is told to present it.
+
 ## [0.22.0] - 2026-10-07
 
 ### Added

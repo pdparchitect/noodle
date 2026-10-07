@@ -279,6 +279,7 @@ final class NoodleStore {
         reload()
         // A device made, changed or deleted one of this Mac's bots.
         messenger.onAgentChanged = { [weak self] id in Task { @MainActor in self?.reloadStatus(of: id) } }
+        messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         noodletAnnotations.present = { [weak self] capture in
             self?.noodletOverlay.present(capture) { note, content, source, raw in

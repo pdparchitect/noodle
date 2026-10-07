@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import AppletBridge
 
 public struct MessengerBridgeRequest: Codable, Sendable {
     public let id: UUID
@@ -56,6 +57,9 @@ public final class MessengerBroker: @unchecked Sendable {
     private let mailboxMonitor = WorkspaceMailboxMonitor()
     /// Called on the broker's queue when a bot changed its own record, such as its status.
     public var onAgentChanged: (@Sendable (UUID) -> Void)?
+    /// Whether a noodlet has a preview. Only `present` sets one, so a bot attaching a noodlet
+    /// without is told to present it rather than leave a plain icon in the conversation.
+    public var noodletHasPreview: (@Sendable (URL) async -> Bool)?
 
     public init(repository: WorkspaceRepository) { self.repository = repository }
     deinit { timer?.cancel() }
@@ -96,7 +100,8 @@ public final class MessengerBroker: @unchecked Sendable {
             for name in names where name.hasSuffix(".request") {
                 let stem = String(name.dropLast(".request".count))
                 guard let id = UUID(uuidString: stem), stem == id.uuidString.lowercased() else { continue }
-                let response: MessengerCommandResult
+                var response: MessengerCommandResult
+                var noodlets: [URL] = []
                 do {
                     let request = try JSONDecoder().decode(MessengerBridgeRequest.self,
                         from: mailbox.read(name, limit: MessengerBridgeClient.maxRequestBytes))
@@ -107,15 +112,35 @@ public final class MessengerBroker: @unchecked Sendable {
                     claimed[id] = request.expiresAt
                     response = MessengerCLI.perform(request.action, repository: repository, agentID: agent.id, brokered: true)
                     if case .setStatus = request.action, response.exitCode == 0 { onAgentChanged?(agent.id) }
+                    if case .send(_, _, let urls) = request.action, response.exitCode == 0 {
+                        noodlets = urls.filter { NoodletLink.canonical($0) != nil }
+                    }
                 } catch { response = .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
-                if let data = try? JSONEncoder().encode(response), data.count <= MessengerBridgeClient.maxResponseBytes {
-                    try? mailbox.writeData(data, named: stem + ".response")
-                } else {
-                    try? mailbox.write(MessengerCommandResult(exitCode: 2, standardError: "Messenger response is too large. Read one conversation at a time.\n"), named: stem + ".response")
+                guard !noodlets.isEmpty, let hasPreview = noodletHasPreview else {
+                    respond(response, stem: stem, in: mailbox); continue
                 }
-                mailbox.remove(name); mailbox.remove(stem + ".running")
+                // The request is claimed, so later scans leave it alone while Applet answers.
+                Task { [response] in
+                    var missing: [URL] = []
+                    for url in noodlets where !(await hasPreview(url)) { missing.append(url) }
+                    let notice = missing.map {
+                        "messenger: \($0.absoluteString) has no preview, so its card shows a plain icon. Use the applet tool's present command once it shows something worth seeing; it sets the preview and attaches the noodlet.\n"
+                    }.joined()
+                    let answer = MessengerCommandResult(exitCode: response.exitCode, standardOutput: response.standardOutput,
+                                                        standardError: response.standardError + notice)
+                    queue.async { self.respond(answer, stem: stem, in: mailbox) }
+                }
             }
         }
+    }
+
+    private func respond(_ response: MessengerCommandResult, stem: String, in mailbox: WorkspaceMailbox) {
+        if let data = try? JSONEncoder().encode(response), data.count <= MessengerBridgeClient.maxResponseBytes {
+            try? mailbox.writeData(data, named: stem + ".response")
+        } else {
+            try? mailbox.write(MessengerCommandResult(exitCode: 2, standardError: "Messenger response is too large. Read one conversation at a time.\n"), named: stem + ".response")
+        }
+        mailbox.remove(stem + ".request"); mailbox.remove(stem + ".running")
     }
 }
 

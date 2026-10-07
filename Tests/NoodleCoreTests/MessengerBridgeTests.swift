@@ -1,4 +1,5 @@
 import XCTest
+import AppletBridge
 @testable import NoodleCore
 
 final class MessengerBridgeTests: XCTestCase {
@@ -37,6 +38,17 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertNotEqual(try call(.listParticipants(conversationID: privateConversation.id)).exitCode, 0)
         XCTAssertNotEqual(try call(.send(conversationID: privateConversation.id, body: "forged", attachmentURLs: [])).exitCode, 0)
         XCTAssertFalse(try repository.loadMessages(conversationID: privateConversation.id).contains { $0.body == "forged" })
+    }
+
+    func testAttachingNoodletWithoutPreviewTellsBotToPresent() throws {
+        let bare = NoodletLink.url(for: UUID()), shown = NoodletLink.url(for: UUID())
+        broker.noodletHasPreview = { $0 == shown }
+        let sent = try call(.send(conversationID: conversation.id, body: "Two", attachmentURLs: [bare, shown]))
+        XCTAssertEqual(sent.exitCode, 0, sent.standardError)
+        XCTAssertTrue(sent.standardError.contains(bare.absoluteString), sent.standardError)
+        XCTAssertTrue(sent.standardError.contains("present"), sent.standardError)
+        XCTAssertFalse(sent.standardError.contains(shown.absoluteString), sent.standardError)
+        XCTAssertEqual(try call(.send(conversationID: conversation.id, body: "One", attachmentURLs: [shown])).standardError, "")
     }
 
     func testMissingBridgeDoesNotFallBackToRepositoryFiles() throws {

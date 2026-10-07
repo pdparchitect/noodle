@@ -98,14 +98,15 @@ public enum AppletGuidance {
         and commit useful checkpoints. Hidden files and folders, such as `.git`, are not
         part of the noodlet.
 
-        For delivery, prefer validating the source and attaching the returned url using
-        Messenger --attach "noodlet://UUID". HTML needs no build step. Validation returns
-        the persistent noodletID and url without running the creation. Never invent IDs
+        For delivery, open the noodlet and present it to the conversation once it shows
+        something worth seeing: present sets the noodlet's preview and attaches its
+        noodlet:// URL. Only a noodlet that cannot run should be attached with
+        Messenger --attach "noodlet://UUID"; it then has no preview. HTML needs no build
+        step. Validation returns the persistent noodletID and url. Never invent IDs
         or add them to noodlet.json. Use info --path PACKAGE or list to recover URLs.
-        Noodle stores a .webloc reference with a thumbnail in the conversation. Clicking
-        opens the live creation in Noodle Applet, or brings its existing window forward,
-        with full interaction and saved data. Attaching alone
-        does not launch it. Use the returned noodlet URL when asked for an applet link.
+        Clicking the attachment opens the live creation in Noodle Applet, or brings its
+        existing window forward, with full interaction and saved data.
+        Use the returned noodlet URL when asked for an applet link.
         Deleting the package makes its links unavailable. Links are local to this Mac.
         A conversation member can use info/open/status/inspection/input/capture commands
         with --link URL --conversation UUID for a noodlet linked in a sent message.
