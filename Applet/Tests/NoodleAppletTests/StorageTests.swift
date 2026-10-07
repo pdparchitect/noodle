@@ -32,4 +32,26 @@ final class StorageTests: XCTestCase {
         await AppletStorage.remove("gone", root: root, defaults: defaults)
         XCTAssertNil(defaults.string(forKey: "store.gone.user"))
     }
+
+    /// Settings shows the last sizes at once and measures again in the background.
+    @MainActor func testUsageKeepsTheLastSizesWhileMeasuringAgain() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func save(_ key: String, _ count: Int) throws {
+            let folder = root.appendingPathComponent("Data/\(key)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data(count: count).write(to: folder.appendingPathComponent("file"))
+        }
+        try save("a", 3)
+        let usage = AppletStorageUsage()
+        XCTAssertNil(usage.sizes)
+        await usage.refresh(root: root).value
+        XCTAssertEqual(usage.sizes, ["a": 3])
+
+        try save("b", 5)
+        let measuring = usage.refresh(root: root)
+        XCTAssertEqual(usage.sizes, ["a": 3])
+        await measuring.value
+        XCTAssertEqual(usage.sizes, ["a": 3, "b": 5])
+    }
 }

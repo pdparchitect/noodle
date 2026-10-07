@@ -4,7 +4,7 @@ import WebKit
 
 /// What each noodlet has saved: its data directory and its WebKit store.
 @MainActor enum AppletStorage {
-  static func sizes(root: URL) -> [String: Int] {
+  nonisolated static func sizes(root: URL) -> [String: Int] {
     let data = root.appendingPathComponent("Data")
     var sizes: [String: Int] = [:]
     for key in (try? FileManager.default.contentsOfDirectory(atPath: data.path)) ?? [] {
@@ -32,6 +32,23 @@ import WebKit
         try? await WKWebsiteDataStore.remove(forIdentifier: id)
       }
       defaults.removeObject(forKey: name)
+    }
+  }
+}
+
+/// The last measured sizes, kept so Settings shows them at once while it measures again.
+@MainActor final class AppletStorageUsage: ObservableObject {
+  static let shared = AppletStorageUsage()
+  @Published private(set) var sizes: [String: Int]?
+  private var generation = 0
+
+  /// Measures off the main thread; a large library takes long to walk.
+  @discardableResult func refresh(root: URL) -> Task<Void, Never> {
+    generation += 1
+    let current = generation
+    return Task {
+      let sizes = await Task.detached(priority: .utility) { AppletStorage.sizes(root: root) }.value
+      if current == generation { self.sizes = sizes }
     }
   }
 }

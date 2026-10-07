@@ -116,13 +116,18 @@ private struct SettingsListRow<Accessory: View>: View {
     }
 }
 
-@MainActor private func noodletTitle(_ key: String, in library: AppletLibrary) -> String {
-    library.entries.first { $0.package.key == key }?.package.manifest.title ?? "Removed Noodlet"
+@MainActor private func noodletTitle(_ key: String, in entries: [String: LibraryEntry]) -> String {
+    entries[key]?.title ?? "Removed Noodlet"
+}
+
+/// The library by key, so a long list looks each noodlet up once instead of scanning per row.
+@MainActor private func noodletEntries(_ library: AppletLibrary) -> [String: LibraryEntry] {
+    Dictionary(library.entries.map { ($0.id, $0) }) { first, _ in first }
 }
 
 /// Where the noodlet lives, so noodlets with the same title can be told apart.
-@MainActor private func noodletLocation(_ key: String, in library: AppletLibrary) -> String? {
-    guard let path = library.entries.first(where: { $0.package.key == key })?.package.url.path else { return nil }
+@MainActor private func noodletLocation(_ key: String, in entries: [String: LibraryEntry]) -> String? {
+    guard let path = entries[key]?.package.url.path else { return nil }
     // The sandbox's own home is the container, so abbreviate against the real one.
     let home = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
     return path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
@@ -133,13 +138,14 @@ private struct AppletPermissionsSettingsView: View {
     @State private var grants: [String: [String]] = [:]
 
     var body: some View {
-        let keys = grants.keys.sorted { noodletTitle($0, in: library) < noodletTitle($1, in: library) }
+        let entries = noodletEntries(library)
+        let keys = grants.keys.sorted { noodletTitle($0, in: entries) < noodletTitle($1, in: entries) }
         SettingsListPanel(empty: "No noodlets have permissions.", isEmpty: keys.isEmpty) {
             ForEach(keys, id: \.self) { key in
                 SettingsListRow(
-                    title: noodletTitle(key, in: library),
+                    title: noodletTitle(key, in: entries),
                     detail: (grants[key] ?? []).compactMap { AppletPermissions.titles[$0] }.joined(separator: ", "),
-                    location: noodletLocation(key, in: library),
+                    location: noodletLocation(key, in: entries),
                     divider: key != keys.last
                 ) {
                     Button("Remove") {
@@ -163,16 +169,17 @@ private struct AppletSecretsSettingsView: View {
     @State private var removing: Secret?
 
     /// Accounts are a package key followed by .user or .test.
-    private func title(_ account: String) -> String {
+    private func title(_ account: String, in entries: [String: LibraryEntry]) -> String {
         let key = account.split(separator: ".").dropLast().joined(separator: ".")
-        return noodletTitle(key, in: library) + (account.hasSuffix(".test") ? " (Test)" : "")
+        return noodletTitle(key, in: entries) + (account.hasSuffix(".test") ? " (Test)" : "")
     }
     var body: some View {
-        let secrets = names.keys.sorted { title($0) < title($1) }
+        let entries = noodletEntries(library)
+        let secrets = names.keys.sorted { title($0, in: entries) < title($1, in: entries) }
             .flatMap { account in (names[account] ?? []).map { Secret(account: account, name: $0) } }
         SettingsListPanel(empty: "No noodlets have secrets.", isEmpty: secrets.isEmpty) {
             ForEach(secrets) { secret in
-                SettingsListRow(title: secret.name, detail: title(secret.account), divider: secret != secrets.last) {
+                SettingsListRow(title: secret.name, detail: title(secret.account, in: entries), divider: secret != secrets.last) {
                     Button("Remove") { removing = secret }
                 }
             }
@@ -189,7 +196,7 @@ private struct AppletSecretsSettingsView: View {
                 names = AppletSecrets.shared.names()
             }
         } message: {
-            Text("“\(removing.map { title($0.account) } ?? "")” will need “\(removing?.name ?? "")” entered again.")
+            Text("“\(removing.map { title($0.account, in: entries) } ?? "")” will need “\(removing?.name ?? "")” entered again.")
         }
     }
 }
@@ -197,20 +204,24 @@ private struct AppletSecretsSettingsView: View {
 private struct AppletStorageSettingsView: View {
     @ObservedObject var library: AppletLibrary
     @ObservedObject var runtime: AppletRuntime
-    @State private var sizes: [String: Int] = [:]
+    @ObservedObject private var usage = AppletStorageUsage.shared
     @State private var removing: String?
 
     private func running(_ key: String) -> Bool {
         runtime.sessions.values.contains { $0.package.key == key && $0.isActive }
     }
     var body: some View {
-        let keys = sizes.keys.sorted { noodletTitle($0, in: library) < noodletTitle($1, in: library) }
-        SettingsListPanel(empty: "No noodlets have saved data.", isEmpty: keys.isEmpty) {
+        let entries = noodletEntries(library)
+        let sizes = usage.sizes ?? [:]
+        let keys = sizes.keys.sorted { noodletTitle($0, in: entries) < noodletTitle($1, in: entries) }
+        SettingsListPanel(
+            empty: usage.sizes == nil ? "Calculating…" : "No noodlets have saved data.", isEmpty: keys.isEmpty
+        ) {
             ForEach(keys, id: \.self) { key in
                 SettingsListRow(
-                    title: noodletTitle(key, in: library),
+                    title: noodletTitle(key, in: entries),
                     detail: ByteCountFormatter.string(fromByteCount: Int64(sizes[key] ?? 0), countStyle: .file),
-                    location: noodletLocation(key, in: library),
+                    location: noodletLocation(key, in: entries),
                     divider: key != keys.last
                 ) {
                     Button("Remove") { removing = key }
@@ -219,7 +230,7 @@ private struct AppletStorageSettingsView: View {
                 }
             }
         }
-        .onAppear { sizes = AppletStorage.sizes(root: library.root) }
+        .onAppear { usage.refresh(root: library.root) }
         .confirmationDialog(
             "Remove Saved Data?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             titleVisibility: .visible
@@ -228,11 +239,11 @@ private struct AppletStorageSettingsView: View {
                 guard let key = removing else { return }
                 Task {
                     await AppletStorage.remove(key, root: library.root, defaults: .standard)
-                    sizes = AppletStorage.sizes(root: library.root)
+                    usage.refresh(root: library.root)
                 }
             }
         } message: {
-            Text("Everything “\(removing.map { noodletTitle($0, in: library) } ?? "")” has saved will be deleted.")
+            Text("Everything “\(removing.map { noodletTitle($0, in: entries) } ?? "")” has saved will be deleted.")
         }
     }
 }

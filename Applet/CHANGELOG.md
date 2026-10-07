@@ -6,6 +6,10 @@
 
 - Noodle Hub has its own section in the sidebar, listing the people whose bots made noodlets, instead of a row under Categories. It shows only when there are such people.
 
+### Fixed
+
+- The Storage settings no longer freeze the app with a large library. They show the last sizes at once and measure again in the background.
+
 ## [0.26.1] - 2026-10-05
 
 ### Fixed
