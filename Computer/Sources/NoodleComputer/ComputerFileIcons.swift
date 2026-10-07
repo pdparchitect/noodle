@@ -49,6 +49,14 @@ private final class FileIconItem: NSCollectionViewItem {
     }
 }
 
+enum FileGridNavigation {
+    static func target(from selected: Set<Int>, keyCode: UInt16, columns: Int, count: Int) -> Int {
+        let delta = keyCode == 123 ? -1 : keyCode == 124 ? 1 : keyCode == 125 ? columns : -columns
+        // Like Finder, move on from the last chosen item and back from the first.
+        return (delta > 0 ? selected.max() : selected.min()).map { min(count - 1, max(0, $0 + delta)) } ?? 0
+    }
+}
+
 private final class FileIconCollection: NSCollectionView {
     var quickLook: (() -> Void)?
     var keyAction: ((NSEvent) -> Bool)?
@@ -87,7 +95,6 @@ private final class FileIconCollection: NSCollectionView {
         if keyAction?(event) == true { return }
         let modifiers = event.modifierFlags.intersection([.command, .control, .option])
         guard modifiers.isEmpty, !names.isEmpty else { super.keyDown(with: event); return }
-        let current = selectionIndexPaths.first?.item
         var target: Int?
         if (123...126).contains(event.keyCode) {
             let layout = collectionViewLayout as? NSCollectionViewFlowLayout
@@ -95,8 +102,7 @@ private final class FileIconCollection: NSCollectionView {
             let gap = layout?.minimumInteritemSpacing ?? 12
             let inset = (layout?.sectionInset.left ?? 18) + (layout?.sectionInset.right ?? 18)
             let columns = max(1, Int((bounds.width - inset + gap) / (width + gap)))
-            let delta = event.keyCode == 123 ? -1 : event.keyCode == 124 ? 1 : event.keyCode == 125 ? columns : -columns
-            target = current.map { min(names.count - 1, max(0, $0 + delta)) } ?? 0
+            target = FileGridNavigation.target(from: Set(selectionIndexPaths.map(\.item)), keyCode: event.keyCode, columns: columns, count: names.count)
             typed = ""
         } else if let characters = event.characters, !characters.isEmpty,
                   characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && $0.value < 0xF700 }) {

@@ -46,9 +46,9 @@ struct ComputerFilesView: View {
         } message: { Text("Enter a path inside this computer.") }
         .confirmationDialog(deleteTitle, isPresented: $deleting) {
             Button("Delete", role: .destructive) { model.removeSelected() }
-        } message: { Text(model.selection.count > 1 ? "This permanently removes these guest files and empty folders. Nonempty folders cannot be deleted here." : "This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
+        } message: { Text(model.selectedFiles.count > 1 ? "This permanently removes these guest files and empty folders. Nonempty folders cannot be deleted here." : "This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
     }
-    private var deleteTitle: String { model.selection.count > 1 ? "Delete \(model.selection.count) items?" : "Delete \(model.selected?.name ?? "item")?" }
+    private var deleteTitle: String { model.selectedFiles.count > 1 ? "Delete \(model.selectedFiles.count) items?" : "Delete \(model.selected?.name ?? "item")?" }
     private var fileContent: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -69,7 +69,7 @@ struct ComputerFilesView: View {
                             Divider()
                             Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
                             Button("Duplicate") { model.duplicateSelected() }.disabled(!model.selectedFiles.contains(where: \.regular) || model.busy)
-                            Button("Delete", role: .destructive) { deleting = true }.disabled(model.selection.isEmpty || model.busy)
+                            Button("Delete", role: .destructive) { deleting = true }.disabled(model.selectedFiles.isEmpty || model.busy)
                         }
                 }.frame(minWidth: 260).frame(height: model.previewEnabled ? 150 : nil)
 
@@ -167,7 +167,7 @@ struct ComputerFilesView: View {
                     Divider()
                     Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
                     Button("Duplicate") { model.duplicateSelected() }.disabled(!model.selectedFiles.contains(where: \.regular) || model.busy)
-                    Button("Delete", role: .destructive) { deleting = true }.disabled(model.selection.isEmpty || model.busy)
+                    Button("Delete", role: .destructive) { deleting = true }.disabled(model.selectedFiles.isEmpty || model.busy)
                     Divider()
                     Button("Go to Folder…") { path = model.folder; enteringPath = true }
                     Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
@@ -349,12 +349,16 @@ private struct GuestFileTable: NSViewRepresentable {
         let items = model.visible
         if coordinator.items != items { coordinator.items = items; table.reloadData() }
         let rows = IndexSet(items.indices.filter { model.selection.contains(items[$0].name) })
-        if table.selectedRowIndexes != rows { table.selectRowIndexes(rows, byExtendingSelection: false) }
+        if table.selectedRowIndexes != rows {
+            // Showing the model's selection is not a change by the person; hidden chosen items stay chosen.
+            coordinator.applying = true; table.selectRowIndexes(rows, byExtendingSelection: false); coordinator.applying = false
+        }
     }
     @MainActor final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let model: ComputerFilesModel
         var items: [GuestFile] = []
         var focusRequest = 0
+        var applying = false
         var dragged: [GuestFile] = []
         var draggedFolder: String?
         var dropFolder: String?
@@ -388,7 +392,7 @@ private struct GuestFileTable: NSViewRepresentable {
             return stack
         }
         func tableViewSelectionDidChange(_ notification: Notification) {
-            guard let table = notification.object as? NSTableView else { return }
+            guard !applying, let table = notification.object as? NSTableView else { return }
             let names = Set(table.selectedRowIndexes.compactMap { items.indices.contains($0) ? items[$0].name : nil })
             if model.selection != names { model.select(names) }
         }

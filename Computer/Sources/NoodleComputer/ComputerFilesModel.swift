@@ -35,9 +35,10 @@ import Foundation
         self.service = service; self.computerID = computerID
     }
     convenience init(runtime: ContainerComputer, computerID: UUID) { self.init(service: GuestFiles(runtime: runtime), computerID: computerID) }
+    /// Only what is shown counts, so a search or hiding dotfiles cannot leave unseen items to be deleted.
+    var selectedFiles: [GuestFile] { visible.filter { selection.contains($0.name) } }
     /// The single chosen item, for actions that only make sense on one (rename, preview, Quick Look).
-    var selected: GuestFile? { selection.count == 1 ? files.first { selection.contains($0.name) } : nil }
-    var selectedFiles: [GuestFile] { files.filter { selection.contains($0.name) } }
+    var selected: GuestFile? { let files = selectedFiles; return files.count == 1 ? files[0] : nil }
     var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
     var emptyFolder: EmptyFolder? { loading ? nil : EmptyFolder(files: files, showHidden: showHidden, filter: filter) }
     var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }

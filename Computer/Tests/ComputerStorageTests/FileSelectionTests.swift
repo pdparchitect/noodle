@@ -102,6 +102,29 @@ import XCTest
         XCTAssertEqual(model.selection, [], "Right-clicking empty space leaves nothing to act on")
     }
 
+    func testActionsSkipChosenItemsThatAreNoLongerShown() async throws {
+        let service = RecordingService(files: [file("a.txt"), file("b.txt"), file(".hidden")])
+        let model = try await loaded(service)
+        model.showHidden = true
+        model.select(["a.txt", "b.txt", ".hidden"])
+        model.showHidden = false; model.filter = "a"
+        XCTAssertEqual(model.selectedFiles.map(\.name), ["a.txt"])
+        XCTAssertEqual(model.selected?.name, "a.txt")
+        model.removeSelected(); try await idle(model)
+        let changes = await service.changes
+        XCTAssertEqual(changes, [["remove", "/workspace/a.txt"]])
+    }
+
+    func testArrowKeysMoveFromTheEdgeOfASelection() {
+        let move = { (key: UInt16, selected: Set<Int>) in FileGridNavigation.target(from: selected, keyCode: key, columns: 3, count: 10) }
+        XCTAssertEqual(move(124, [2, 5]), 6, "Right moves past the last item")
+        XCTAssertEqual(move(125, [2, 5]), 8, "Down moves below the last item")
+        XCTAssertEqual(move(123, [2, 5]), 1, "Left moves before the first item")
+        XCTAssertEqual(move(126, [2, 5]), 0, "Up stops at the top")
+        XCTAssertEqual(move(124, [9]), 9)
+        XCTAssertEqual(move(124, []), 0)
+    }
+
     func testDroppingOntoADraggedFolderIsRejected() {
         let folder = file("Folder", kind: "directory"), other = file("Other", kind: "directory")
         XCTAssertNil(FileDropDestination.folder("/workspace", hovered: folder, moving: [other, folder]))
