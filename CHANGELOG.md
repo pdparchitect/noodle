@@ -20,6 +20,7 @@ All notable changes to Noodle are documented here, following
 
 - Noodlets bots share now show their preview instead of a plain icon: bots are told to present a noodlet rather than just attach it, and a bot that attaches one with no preview is told to present it.
 - When a Codex bot's model service rejects a request, Needs Attention shows the service's message instead of its raw response.
+- Restricted Codex bots can use custom models from your Codex settings. They now get your chosen model provider, custom providers and model catalogue, where before every message failed.
 
 ## [0.50.0] - 2026-10-07
 

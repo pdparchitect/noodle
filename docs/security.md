@@ -60,7 +60,11 @@ own workspace.
 ### Sign-ins
 
 Each restricted bot gets a private copy of your harness sign-in. Your other
-conversations, skills and settings for that harness are not copied.
+conversations, skills and settings for that harness are not copied. The
+exception is Codex: a restricted Codex bot also gets your chosen model provider,
+your custom providers and your model catalogue from `~/.codex/config.toml`, so
+custom models work. A provider's sign-in command is not copied, and keys set
+only in your shell environment are not available.
 
 - The copies are the same account. Identity, quotas, billing, and revocation are
   shared, and the provider may ask you to sign in again.

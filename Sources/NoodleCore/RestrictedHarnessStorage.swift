@@ -44,8 +44,12 @@ public enum RestrictedHarnessStorage {
             try share(".credentials.json", from: .item(JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth], options: [.sortedKeys])))
         case .codex, .grokBuild:
             try share("auth.json")
-            if provider == .codex, !destination.contains("config.toml") {
-                try destination.writeData(Data("cli_auth_credentials_store = \"file\"\n".utf8), named: "config.toml")
+            if provider == .codex {
+                let routing = try CodexModelRouting(config: sourceData("config.toml"), codexHome: loginHome.appendingPathComponent(accountPath))
+                if let catalogue = routing.catalogue { try seed(catalogue, name: CodexModelRouting.catalogueName) }
+                try seed(Data(("cli_auth_credentials_store = \"file\"\n"
+                    + routing.config(catalogue: destination.url.appendingPathComponent(CodexModelRouting.catalogueName))).utf8),
+                    name: "config.toml")
             }
         case .fx:
             let settings = try sourceData("settings.json").flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
@@ -102,6 +106,119 @@ public enum RestrictedHarnessStorage {
         let shared = try SharedLogin(provider: provider, workspace: workspace, loginHome: loginHome, accountPath: accountPath)
         for name in loginNames(provider) where shared.holds(name, runtime: runtime) {
             _ = try shared.exchange(name, from: .unknown, destination: destination, runtime: runtime)
+        }
+    }
+
+    /// Codex routes every model through the one provider its config selects, so
+    /// custom models need that choice, the provider tables and the model catalogue.
+    /// Nothing else is carried, and neither is a provider's `auth` command.
+    struct CodexModelRouting {
+        static let catalogueName = "model-catalog.json"
+        private(set) var provider: String?
+        private(set) var tables: [String] = []
+        private(set) var catalogue: Data?
+
+        init(config: Data?, codexHome: URL) throws {
+            guard let config else { return }
+            var table: [String]?, keep = false, depth = 0, multiline: String?
+            func close() {
+                guard keep, var table else { return }
+                while table.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { table.removeLast() }
+                tables.append(table.joined(separator: "\n"))
+            }
+            for line in String(decoding: config, as: UTF8.self).components(separatedBy: .newlines) {
+                if let delimiter = multiline {
+                    if keep { table?.append(line) }
+                    if line.contains(delimiter) { multiline = nil }
+                    continue
+                }
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("[") {
+                    close()
+                    let path = trimmed.hasPrefix("[[") ? [] : Self.headerPath(trimmed)
+                    keep = path.count >= 2 && path[0] == "model_providers" && !path.dropFirst(2).contains("auth")
+                    depth = path.count
+                    table = [line]
+                    continue
+                }
+                if let delimiter = ["\"\"\"", "'''"].first(where: { trimmed.components(separatedBy: $0).count == 2 }) {
+                    multiline = delimiter
+                }
+                if table == nil {
+                    switch Self.key(trimmed) {
+                    case "model_provider": provider = Self.string(trimmed)
+                    case "model_catalog_json": catalogue = try Self.string(trimmed).flatMap { try Self.catalogue($0, codexHome: codexHome) }
+                    default: break
+                    }
+                } else if keep, depth > 2 || Self.key(trimmed) != "auth" {
+                    table?.append(line)
+                }
+            }
+            close()
+        }
+
+        func config(catalogue path: URL) -> String {
+            var lines: [String] = []
+            if let provider { lines.append("model_provider = " + Self.quoted(provider)) }
+            if catalogue != nil { lines.append("model_catalog_json = " + Self.quoted(path.path)) }
+            return (lines + tables.map { "\n" + $0 }).map { $0 + "\n" }.joined()
+        }
+
+        private static func key(_ line: String) -> String? {
+            guard let equals = line.firstIndex(of: "=") else { return nil }
+            return line[..<equals].trimmingCharacters(in: .whitespaces)
+        }
+
+        /// A single-line basic or literal string value; anything else is ignored.
+        private static func string(_ line: String) -> String? {
+            guard let equals = line.firstIndex(of: "=") else { return nil }
+            var value = line[line.index(after: equals)...].trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("'"), let end = value.dropFirst().firstIndex(of: "'") {
+                return String(value[value.index(after: value.startIndex)..<end])
+            }
+            guard value.hasPrefix("\"") else { return nil }
+            // TOML basic strings escape like JSON strings; read up to the closing quote.
+            var escaped = false, end: String.Index?
+            for index in value.indices.dropFirst() {
+                if escaped { escaped = false } else if value[index] == "\\" { escaped = true } else if value[index] == "\"" { end = index; break }
+            }
+            guard let end else { return nil }
+            value = String(value[...end])
+            return try? JSONDecoder().decode(String.self, from: Data(value.utf8))
+        }
+
+        private static func quoted(_ value: String) -> String {
+            String(decoding: (try? JSONEncoder().encode(value)) ?? Data("\"\"".utf8), as: UTF8.self)
+                .replacingOccurrences(of: "\\/", with: "/")
+        }
+
+        private static func headerPath(_ header: String) -> [String] {
+            guard let close = header.lastIndex(of: "]") else { return [] }
+            var parts: [String] = [], current = "", quote: Character?
+            for character in header[header.index(after: header.startIndex)..<close] {
+                if let open = quote {
+                    if character == open { quote = nil } else { current.append(character) }
+                } else if character == "\"" || character == "'" {
+                    quote = character
+                } else if character == "." {
+                    parts.append(current.trimmingCharacters(in: .whitespaces)); current = ""
+                } else {
+                    current.append(character)
+                }
+            }
+            return parts + [current.trimmingCharacters(in: .whitespaces)]
+        }
+
+        private static func catalogue(_ path: String, codexHome: URL) throws -> Data? {
+            let expanded = (path as NSString).expandingTildeInPath
+            let url = (expanded.hasPrefix("/") ? URL(fileURLWithPath: expanded) : codexHome.appendingPathComponent(expanded))
+                .resolvingSymlinksInPath()
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
+            guard (attributes[.size] as? NSNumber)?.intValue ?? .max <= 4_194_304 else {
+                throw HarnessSetupError("Codex’s model catalogue is too large.")
+            }
+            return try Data(contentsOf: url)
         }
     }
 

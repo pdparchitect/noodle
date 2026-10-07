@@ -146,6 +146,58 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         }
     }
 
+    /// Custom models route through the provider the person chose, so a restricted
+    /// bot gets that choice and its catalogue, but no commands, servers or hooks.
+    func testCodexCarriesOnlyModelRoutingIntoTheBotsConfig() throws {
+        let (home, workspace, _) = try fixture()
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let source = try WorkspaceMailbox(workspace: home, path: ".codex", create: true)
+        try source.writeData(Data("login".utf8), named: "auth.json")
+        let catalogue = home.appendingPathComponent("catalogue.json")
+        try Data(#"{"models":[{"slug":"ollama-cloud/deepseek"}]}"#.utf8).write(to: catalogue)
+        try source.writeData(Data("""
+            model = "gpt-5"
+            model_provider = "opencodex"
+            model_catalog_json = "\(catalogue.path)"
+            notify = ["/bin/sh", "-c", "private notify"]
+
+            [mcp_servers.private]
+            command = "private-server"
+
+            [model_providers.opencodex]
+            name = "OpenCodeX"
+            base_url = "http://127.0.0.1:10100/v1"
+            wire_api = "responses"
+
+            [model_providers.opencodex.http_headers]
+            X-Route = "ollama"
+
+            [model_providers.opencodex.auth]
+            command = "private-token-command"
+
+            [projects."/private/project"]
+            trust_level = "trusted"
+            """.utf8), named: "config.toml")
+        try RestrictedHarnessStorage.prepare(provider: .codex, workspace: workspace, loginHome: home)
+        let copy = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex")
+        let config = String(decoding: try copy.read("config.toml", limit: 10_000), as: UTF8.self)
+        XCTAssertEqual(config, """
+            cli_auth_credentials_store = "file"
+            model_provider = "opencodex"
+            model_catalog_json = "\(copy.url.appendingPathComponent("model-catalog.json").path)"
+
+            [model_providers.opencodex]
+            name = "OpenCodeX"
+            base_url = "http://127.0.0.1:10100/v1"
+            wire_api = "responses"
+
+            [model_providers.opencodex.http_headers]
+            X-Route = "ollama"
+
+            """)
+        XCTAssertEqual(try copy.read("model-catalog.json", limit: 1000), try Data(contentsOf: catalogue))
+    }
+
     func testANewSignInWinsOverARefreshMadeFromTheOldLogin() throws {
         let (home, workspace, _) = try fixture()
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
