@@ -15,6 +15,7 @@ All notable changes to Noodle are documented here, following
 - The Spaces menu shows All, or only the bots and groups of one joined Noodle Hub. Press ⌘1 for All and ⌘2 onwards for each Hub. Pins in a Hub's space are kept on the Hub, so they are the same on all your devices, in the order they were pinned; pins in All stay on this Mac, and are shared with your devices joined to it through Settings → Hub.
 - In a Hub's space, New Bot starts on a harness that Hub lends and New Group starts on that Hub, so they show in the space. You can still choose another.
 - Press ⇧⌘C to call the bot in the current chat, or to end the call in progress. You can change the shortcut in Settings → Keybindings, like the one for voice messages.
+- In Choose Conversation, press ⇧⌘C instead of Return to open the selected conversation and call its bot, or ⇧⌘D to open it and start a voice message.
 
 ## [0.48.0] - 2026-10-06
 

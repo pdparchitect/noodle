@@ -158,6 +158,14 @@ final class FloatingConversationPanel: NSPanel {
     // An attachment preview makes its host main, and AppKit throws if the host refuses.
     override var canBecomeMain: Bool { true }
 
+    /// Starts a voice message, waiting for the chat to mount if the panel has just opened.
+    func recordVoiceMessage() {
+        commands.whenRecordingReady { [weak self] command in
+            guard let self else { return }
+            command.perform(in: self, bindings: bindings)
+        }
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.type == .keyDown, bindings.matches(.recordVoice, event: event), let command = commands.voiceRecording {
             command.perform(in: self, bindings: bindings)

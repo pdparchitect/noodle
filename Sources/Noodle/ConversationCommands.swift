@@ -44,7 +44,19 @@ struct VoiceRecordingCommand {
 /// A floating panel is not a scene, so focused scene values never reach the menu
 /// from it. Its chat publishes commands here and the panel runs their shortcuts.
 @MainActor final class FloatingPanelCommands {
-    var voiceRecording: VoiceRecordingCommand?
+    var voiceRecording: VoiceRecordingCommand? {
+        didSet {
+            guard let voiceRecording, let ready = onRecordingReady else { return }
+            onRecordingReady = nil
+            ready(voiceRecording)
+        }
+    }
+    private var onRecordingReady: ((VoiceRecordingCommand) -> Void)?
+
+    /// Runs now if the chat is showing, otherwise once its composer mounts.
+    func whenRecordingReady(_ run: @escaping (VoiceRecordingCommand) -> Void) {
+        if let voiceRecording { run(voiceRecording) } else { onRecordingReady = run }
+    }
 }
 
 private struct FloatingPanelCommandsKey: EnvironmentKey {

@@ -7,8 +7,8 @@ Open **Noodle → Settings → Keybindings** to discover commands and change the
 | New Bot | ⌘N | Noodle, when a harness is available |
 | New Group | ⇧⌘N | Noodle |
 | Search Conversations | ⌘F | The current chat window |
-| Record / Stop Voice Message | ⇧⌘D | The current chat, on macOS 26 or later |
-| Call / End Call | ⇧⌘C | A bot that takes voice calls in the current chat; ends a call in progress from any chat |
+| Record / Stop Voice Message | ⇧⌘D | The current chat, on macOS 26 or later. In Choose Conversation, opens the selected conversation and starts a voice message |
+| Call / End Call | ⇧⌘C | A bot that takes voice calls in the current chat; ends a call in progress from any chat. In Choose Conversation, opens the selected conversation and calls its bot |
 | Capture | ⇧⌘S | The current chat window |
 | Add Annotation | ⇧⌘A | Selected conversation text or attachment-preview text; starts region selection for previewed images |
 | Annotate Region | ⇧⌘R | The current conversation window or attachment preview |

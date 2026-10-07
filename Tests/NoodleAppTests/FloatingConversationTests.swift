@@ -181,6 +181,44 @@ import NoodleCore
         XCTAssertEqual(AgentPickerItem.visible([old, recent, open], filter: "des").map(\.title), ["Designer"])
     }
 
+    func testPickerCallsOrRecordsInThePickedConversationWithTheirShortcuts() throws {
+        let bindings = KeyboardBindings(defaults: defaults())
+        let panel = AgentPickerController.shared.makePanel()
+        panel.bindings = bindings
+        var keys: [String] = []
+        panel.onKey = { keys.append("\($0)") }
+        func press(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags) throws -> Bool {
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                isARepeat: false, keyCode: code))
+            return panel.performKeyEquivalent(with: event)
+        }
+        XCTAssertTrue(try press("c", code: 8, flags: [.command, .shift]))
+        try bindings.set(KeyBinding("k", modifiers: [.command, .control]), for: .call)
+        XCTAssertFalse(try press("c", code: 8, flags: [.command, .shift]))
+        XCTAssertTrue(try press("k", code: 40, flags: [.command, .control]))
+        XCTAssertTrue(try press("d", code: 2, flags: [.command, .shift]))
+        XCTAssertEqual(keys, ["call", "call", "record"])
+    }
+
+    func testFloatingPanelStartsARequestedVoiceMessageOnceItsChatIsReady() {
+        let panel = FloatingConversationPanel.make(frame: NSRect(x: 0, y: 0, width: 420, height: 560))
+        panel.bindings = KeyboardBindings(defaults: defaults())
+        var toggles = 0
+        let command = VoiceRecordingCommand(phase: { .idle }, isSending: { false }, toggle: { toggles += 1 })
+        panel.recordVoiceMessage()
+        XCTAssertEqual(toggles, 0)
+        panel.commands.voiceRecording = command
+        XCTAssertEqual(toggles, 1)
+        // A remount does not start another recording.
+        panel.commands.voiceRecording = nil
+        panel.commands.voiceRecording = command
+        XCTAssertEqual(toggles, 1)
+        // A chat that is already showing records at once.
+        panel.recordVoiceMessage()
+        XCTAssertEqual(toggles, 2)
+    }
+
     func testNewFloatingPanelsAreStaggeredSoTheyDoNotHideEachOther() {
         let visible = NSRect(x: 0, y: 0, width: 1440, height: 900)
         let first = NSRect(x: 500, y: 200, width: 420, height: 560)

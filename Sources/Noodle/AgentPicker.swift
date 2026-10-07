@@ -229,10 +229,19 @@ enum AgentPickerLayout {
         NoodleStore.active?.floatConversation(id)
     }
 
-    private func pickSelection() {
+    private enum Then { case nothing, call, record }
+
+    private func pickSelection(then: Then = .nothing) {
         let visible = model.visible
         guard visible.indices.contains(model.selection) else { return }
-        pick(visible[model.selection].id)
+        let id = visible[model.selection].id
+        pick(id)
+        switch then {
+        case .nothing: break
+        // A call in progress elsewhere is not ended by picking another conversation.
+        case .call: if let store = NoodleStore.active, store.voiceCalls.call == nil { store.toggleVoiceCall(in: id) }
+        case .record: (FloatingConversationPanels.shared.panel(for: id) as? FloatingConversationPanel)?.recordVoiceMessage()
+        }
     }
 
     func makePanel() -> AgentPickerPanel {
@@ -253,6 +262,8 @@ enum AgentPickerLayout {
             switch key {
             case .move(let direction): model.move(direction)
             case .pick: pickSelection()
+            case .call: pickSelection(then: .call)
+            case .record: pickSelection(then: .record)
             case .cancel: close()
             }
         }
@@ -263,11 +274,25 @@ enum AgentPickerLayout {
 }
 
 final class AgentPickerPanel: NSPanel {
-    enum Key { case move(AgentPickerItem.Direction), pick, cancel }
+    enum Key { case move(AgentPickerItem.Direction), pick, call, record, cancel }
     var onKey: ((Key) -> Void)?
+    var bindings = KeyboardBindings.shared
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onKey?(.cancel) }
+
+    /// The call and voice message shortcuts open the selected conversation and act in it, ahead of the menu.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, bindings.matches(.call, event: event) {
+            if !event.isARepeat { onKey?(.call) }
+            return true
+        }
+        if event.type == .keyDown, bindings.matches(.recordVoice, event: event) {
+            if !event.isARepeat { onKey?(.record) }
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     // The filter field is first responder, so grid keys are taken before it sees them.
     override func sendEvent(_ event: NSEvent) {

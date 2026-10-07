@@ -55,7 +55,8 @@ Conversation Info menu. Drag its header to move it. Closing it ends floating, an
 
 Press ⌃⌥Space in any app, or choose **Conversation → Choose Conversation…**, to
 pick a bot or group from a grid. Type to filter, move with the arrow keys, press
-Return to choose and Escape to cancel. Conversations that are already floating
+Return to choose and Escape to cancel. Press ⇧⌘C instead of Return to also
+call the bot, if it takes voice calls, or ⇧⌘D to start a voice message. Conversations that are already floating
 come first and carry a badge, so the grid also switches between them. A blue dot
 before a name marks unread messages. The conversation opens as a floating window
 by the pointer, or where you last left it, ready for typing. Capture and
