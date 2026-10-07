@@ -14,7 +14,7 @@
   <img alt="Free and open source, Apache 2.0" src="https://img.shields.io/badge/free%20%26%20open%20source-Apache%202.0-0a0a0a?style=flat-square">
 </p>
 
-[Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md) · [Privacy](docs/privacy.md)
+[Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md) · [Privacy](docs/privacy.md) · [Devlog](https://x.com/search?q=from%3Apdp%20noodle&f=live)
 
 </div>
 
