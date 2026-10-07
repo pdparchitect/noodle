@@ -220,7 +220,7 @@ import SwiftUI
                 let host = NSHostingView(rootView: BrowserLibraryView(presentation: browserPresentation).preferredColorScheme(.dark))
                 window.contentView = host; host.frame = window.contentLayoutRect; host.layoutSubtreeIfNeeded()
                 try await Task.sleep(for: .milliseconds(300))
-                try await verifyTabSwitching(browserPresentation, tab: tab, window: window, url: URL(string: base)!)
+                try await verifyTabSwitching(browserPresentation, tab: tab, window: window, url: URL(string: base)!, otherBrowser: other.id)
                 // WebKit commits its resized rendering surface asynchronously.
                 try await Task.sleep(for: .milliseconds(300))
                 if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
@@ -288,7 +288,7 @@ import SwiftUI
         print("PASS live view: a tab watched with no browser window open animates and counts as seen")
     }
 
-    private static func verifyTabSwitching(_ presentation: BrowserPresentation, tab: BrowserTab, window: NSWindow, url: URL) async throws {
+    private static func verifyTabSwitching(_ presentation: BrowserPresentation, tab: BrowserTab, window: NSWindow, url: URL, otherBrowser: UUID) async throws {
         let runtime = presentation.runtime
         let other = try runtime.makeTab(browserID: tab.browserID)
         defer { try? runtime.closeTab(browserID: tab.browserID, tabID: other.id) }
@@ -328,6 +328,16 @@ import SwiftUI
         try require(!resizedWhileHidden && tab.web.frame.size == size, "Switching tabs changed the page viewport")
         try require(state["scroll"] as? Int == 500, "Switching tabs lost the scroll position")
         try require((state["resizes"] as? [[Int]])?.isEmpty == true, "Switching tabs dispatched page resize events")
+        for _ in 0..<3 {
+            presentation.selection = otherBrowser
+            try await eventually("switch browser away") { tab.web.window === tab.surface }
+            presentation.selection = tab.browserID
+            try await eventually("switch browser back") { tab.web.window === window }
+            // The browser left behind is torn down after the returning one mounts.
+            try await Task.sleep(for: .milliseconds(300))
+            try require(tab.web.window === window, "Switching browsers left the returning page out of the window")
+        }
+        print("PASS switching browsers keeps the returning page in the window")
         presentation.mode = .history
         try await eventually("hidden page capture") { tab.web.window === tab.surface }
         try require(NSImage(data: try await tab.snapshot()) != nil, "Hidden page screenshot failed after switching tabs")

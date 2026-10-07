@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Switching to another browser and back shows the page again, instead of a blank panel.
+- Clicking a person under Hub only folds or unfolds their browsers, instead of showing "This browser no longer exists."
+
 ## [0.11.2] - 2026-10-03
 
 ### Changed

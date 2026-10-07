@@ -65,7 +65,10 @@ struct BrowserLibraryView: View {
                             DisclosureGroup(isExpanded: Binding(
                                 get: { !foldedPeople.contains(group.owner.id) },
                                 set: { if $0 { foldedPeople.remove(group.owner.id) } else { foldedPeople.insert(group.owner.id) } })
-                            ) { rows(group.profiles) } label: { Label(group.owner.name, systemImage: "person") }
+                            ) { rows(group.profiles) } label: {
+                                // ForEach tags the row with the person's ID, which the list would select as a browser.
+                                Label(group.owner.name, systemImage: "person").selectionDisabled()
+                            }
                         }
                         rows(hub.unowned)
                     }
@@ -409,6 +412,8 @@ private struct BrowserWebView: NSViewRepresentable {
     }
     func updateNSView(_ view: BrowserWebContainer, context: Context) {}
     static func dismantleNSView(_ view: BrowserWebContainer, coordinator: BrowserTab) {
+        // Switching browsers can tear this view down after the returning one took the page.
+        guard view.web.superview === view else { return }
         coordinator.detachSurface(); coordinator.restoreSurface()
     }
 }

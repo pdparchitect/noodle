@@ -55,6 +55,7 @@ import SwiftUI
             settingsWindow.close()
             try await verifyWebSurface(presentation, window: window)
             try await verifyTabTargets(presentation, window: window)
+            try await verifyPersonRow(presentation, window: window)
             // Delete the currently displayed profile while its window is mounted.
             // This catches retained WKWebViews that prevent data-store removal.
             try await BrowserSmokeTest.eventually("the selected webpage mounted before deletion") { presentation.currentTab?.web.window === window }
@@ -161,6 +162,29 @@ import SwiftUI
             presentation.profile?.tabs.contains(where: { $0.id == other.id }) == false
         }
         guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Closing another tab changed the selected tab.") }
+    }
+    /// The person a Hub keeps browsers for heads their group; clicking them selects nothing.
+    private static func verifyPersonRow(_ presentation: BrowserPresentation, window: NSWindow) async throws {
+        guard let content = window.contentView, let selected = presentation.selection else { throw BrowserError("Missing sidebar fixture.") }
+        let runtime = presentation.runtime, hubID = BrowserBuildIdentity.current.hubID
+        var create = BrowserRequest(.create); create.profile = BrowserDraft(name: "Kept")
+        let kept = try await runtime.perform(create, caller: hubID).browser!
+        var owner = BrowserRequest(.setOwner, browserID: kept.id); owner.owner = BrowserOwner(id: UUID(), name: "Ada")
+        _ = try await runtime.perform(owner, caller: hubID)
+        try await BrowserSmokeTest.eventually("person row key window") { NSApp.isActive && window.isKeyWindow }
+        try await BrowserSmokeTest.eventually("person row layout") {
+            content.layoutSubtreeIfNeeded()
+            return elements(content).contains { attribute($0, .title) as? String == "Ada" || attribute($0, .description) as? String == "Ada" }
+        }
+        guard let row = elements(content).first(where: { attribute($0, .title) as? String == "Ada" || attribute($0, .description) as? String == "Ada" }),
+              let frame = (row.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue, !frame.isEmpty else {
+            throw BrowserError("Missing accessible person row.")
+        }
+        try click(window.convertPoint(fromScreen: .init(x: frame.midX, y: frame.midY)), in: window)
+        try await Task.sleep(for: .milliseconds(600))
+        guard presentation.selection == selected, runtime.failure == nil else {
+            throw BrowserError("Clicking a person selected them as a browser: \(runtime.failure ?? "no alert").")
+        }
     }
     /// Posts `count` consecutive clicks; events stay in this process.
     private static func click(_ point: NSPoint, in window: NSWindow, count: Int = 1) throws {
