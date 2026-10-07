@@ -10,6 +10,7 @@
 - [Keyboard shortcuts](keyboard-shortcuts.md)
 - [Attachment annotations](attachment-annotations.md)
 - [Chat effects](chat-effects.md)
+- [Games](gaming.md)
 - [Security](security.md)
 - [Privacy](privacy.md)
 - [Noodle Computer](../Computer/README.md)

@@ -104,17 +104,21 @@ can add an address of your own.
 
 - [Working with agents](docs/usage.md)
 - [Harness setup](docs/harness-setup.md)
+- [Games](docs/gaming.md)
 - [Noodle Computer](Computer/README.md)
 - [Noodle Applet](Applet/README.md)
 - [Noodle Browser](Browser/README.md)
 - [Noodle Hub](Hub/README.md)
 - [Security](docs/security.md)
 - [Privacy](docs/privacy.md)
-- [Contributing](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Releases](docs/releases.md)
 - [All documentation](docs/README.md)
+
+## Project
+
 - [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Comparison
 
