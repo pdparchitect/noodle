@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Restricted bots can no longer connect to other programs on the Mac through local sockets, such as ssh-agent, Docker or other apps' helpers. Internet access and the bot's own workspace are unchanged.
+
 ## [0.49.0] - 2026-10-07
 
 ### Added

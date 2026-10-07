@@ -62,6 +62,70 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         }
     }
 
+    func testOnlyWorkspaceSocketsAreReachable() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        let agent = try repository.createAgent(named: "Socket boundary").agent
+        let workspace = repository.directory(for: agent)
+        let outside = root.appendingPathComponent("Outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        // Stands in for a user's daemon socket, such as ssh-agent or Docker.
+        // Relative names keep both paths inside the 104-byte sun_path limit.
+        let script = #"""
+        require 'socket'
+        require 'timeout'
+        outside = Dir.chdir(ARGV[1]) { UNIXServer.new('s.sock') }
+        inside = Dir.chdir(ARGV[2]) { UNIXServer.new('s.sock') }
+        child = <<~'RUBY'
+          require 'socket'
+          def reach(directory, name)
+            Dir.chdir(directory)
+            UNIXSocket.new(name).close
+            true
+          rescue SystemCallError => error
+            warn "#{directory}/#{name}: #{error.message}"
+            false
+          end
+          abort 'outside socket reachable' if reach(ARGV[0], 's.sock')
+          abort 'workspace socket unreachable' unless reach(ARGV[1], 's.sock')
+          abort 'name resolution unreachable' unless reach('/var/run', 'mDNSResponder')
+          puts 'sockets-checked'
+        RUBY
+        pid = nil
+        begin
+          Timeout.timeout(10) do
+            pid = Process.spawn('/usr/bin/sandbox-exec', '-p', ARGV[0], '/usr/bin/ruby', '--disable-gems', '-e', child,
+              ARGV[1], ARGV[2])
+            Process.wait(pid)
+            status = $?.exitstatus || 1
+            pid = nil
+            exit(status)
+          end
+        ensure
+          Process.kill('KILL', pid) rescue nil if pid
+          [outside, inside].each(&:close)
+        end
+        """#
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity] {
+            let policy = provider == .codex
+                ? RestrictedAgentSandbox.profile(workspace: workspace, repository: root, codexHome: workspace,
+                    executableDirectory: URL(fileURLWithPath: "/usr/bin"), application: workspace, temporary: workspace)
+                : try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: root,
+                    home: root, executable: URL(fileURLWithPath: "/usr/bin/ruby"), application: workspace, temporary: workspace)
+            for directory in [outside, workspace] { try? FileManager.default.removeItem(at: directory.appendingPathComponent("s.sock")) }
+            let process = Process(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ruby")
+            process.arguments = ["--disable-gems", "-e", script, policy, outside.path, workspace.path]
+            process.standardOutput = output; process.standardError = output
+            try process.run()
+            let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0, "\(provider): \(result)")
+            XCTAssertTrue(result.contains("sockets-checked"), "\(provider): \(result)")
+        }
+    }
+
     func testInstalledCodexCanInitializeWithAnIsolatedAccountDirectory() throws {
         for enabled in [false, true] { try checkInstalledCodex(appsEnabled: enabled) }
     }

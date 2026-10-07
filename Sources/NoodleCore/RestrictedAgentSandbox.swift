@@ -113,6 +113,9 @@ public enum RestrictedAgentSandbox {
                      AgentStorageLayout(workspace: workspace).package.path, application.path] + executablePaths
             + folders.map(\.path)
         let writes = [workspace.path] + folders.filter(\.writable).map(\.path)
+        // Unfiltered outbound would also reach every Unix socket on the Mac:
+        // ssh-agent, Docker, other apps' daemons and Noodle's own bridges.
+        // Name resolution needs mDNSResponder; harness sockets stay in the workspace.
         return """
         (version 1)
         (deny default)
@@ -127,7 +130,10 @@ public enum RestrictedAgentSandbox {
         (allow file-write*
           \(writes.map { "(subpath \(quoted(sandboxPath($0))))" }.joined(separator: "\n  ")))
         (allow file-read* file-write-data file-ioctl (literal "/dev/null") (literal "/dev/tty") (subpath "/dev/fd"))
-        (allow network-outbound)
+        (allow network-outbound
+          (remote ip)
+          (literal "/private/var/run/mDNSResponder")
+          (subpath \(quoted(sandboxPath(workspace.path)))))
         (allow mach-lookup
           (global-name "com.apple.system.logger")
           (global-name "com.apple.logd")

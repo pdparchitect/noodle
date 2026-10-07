@@ -97,6 +97,9 @@ typed answer are declined; Noodle never makes up an answer or consent.
   Noodle's storage cannot be read or changed, whatever the model is told.
 - **Bots stay apart.** A bot cannot read another bot's files or saved
   conversations.
+- **Other programs stay out of reach.** A bot cannot talk to other programs on
+  your Mac through their local sockets, such as ssh-agent or Docker. A tool that
+  needs one fails; make the bot unrestricted instead.
 - **Only genuine harnesses run.** Noodle checks a harness is genuine before
   starting it, and a restricted bot cannot ask for wider access.
 
