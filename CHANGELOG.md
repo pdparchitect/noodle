@@ -6,12 +6,15 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-07
+
 ### Added
 
 - Bots on this Mac can be shared with people on any Noodle Hub you joined, in Edit Bot under Sharing. They talk to the bot on the Hub in conversations of their own, while it runs here with its folders, tools and sign-ins. It shows online to them while this Mac is connected, and answers what they wrote meanwhile once it is back.
 - Typing @ also offers the people a conversation's bots are shared with on a Noodle Hub, below the bots, so you can ask a bot to write to them.
 - Make your own spaces with any bots and groups, from this Mac and any joined Noodle Hub. Choose Spaces → New Space, or New Space in a conversation's Spaces menu, which also adds that conversation. Each space keeps its own pins, and new bots and groups made in a space join it. Your spaces are the same on your Mac, iPhone and iPad through iCloud; this Mac picks up changes from your other devices whenever you switch to Noodle.
 - Once you have joined a Noodle Hub, the Spaces menu also has This Mac, right after All on ⌘2, with only the bots and groups kept on this Mac and the same pins as All. The Hubs now start at ⌘3.
+- A games guide in the documentation explains how to have bots make games and how to play them on a Mac, iPhone, iPad or TV, with game controllers, and together with other people through a Noodle Hub.
 
 ### Fixed
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-07
+
 ### Added
 
 - Make your own spaces with any bots and groups from all your Hubs. Tap the title and choose New Space, or touch and hold a conversation and choose Spaces, which also adds it. Each space keeps its own pins, and bots and groups made in a space join it. Your spaces are the same on your iPhone, iPad and Mac through iCloud.

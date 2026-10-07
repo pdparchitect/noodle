@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-07
+
 ### Added
 
 - People can talk to bots that run on their owner's Mac, shared from Noodle. The Hub keeps their conversations and shows the bot online while that Mac is connected; it runs nothing of the bot. Settings → Bots shows which Mac such a bot runs on.
