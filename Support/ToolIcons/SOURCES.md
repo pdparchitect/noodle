@@ -27,6 +27,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | close.icon (2026-10-06) | https://www.close.com/apple-touch-icon.png |
 | cloudflare.icon | https://www.cloudflare.com/favicon.ico |
 | cloudinary.icon (2026-10-06) | https://cloudinary-res.cloudinary.com/image/upload/website/cloudinary_web_favicon.png |
+| coinbase.icon (2026-10-07) | https://www.coinbase.com/apple-touch-icon.png (512×512, resized to 180×180) |
 | contentful.icon (2026-10-06) | https://www.google.com/s2/favicons?domain=contentful.com&sz=128 |
 | convex.icon (2026-10-06) | https://www.convex.dev/favicon.ico |
 | coupler.icon (2026-10-06) | https://www.coupler.io/assets/favicon/apple-touch-icon.png |
