@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Noodle Hub has its own section in the sidebar, listing the people whose bots made noodlets, instead of a row under Categories. It shows only when there are such people.
+
 ## [0.26.1] - 2026-10-05
 
 ### Fixed

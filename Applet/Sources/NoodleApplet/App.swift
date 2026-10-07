@@ -272,7 +272,7 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
   }
 }
 
-/// A library section, a category from the noodlets' manifests, or someone's noodlets under Hub.
+/// A library section, a category from the noodlets' manifests, or someone's noodlets from Noodle Hub.
 private enum LibraryFilter: Hashable {
   case section(LibrarySection)
   case category(String)
@@ -345,9 +345,15 @@ private struct LibraryView: View {
             Label(section.rawValue, systemImage: section.symbol).tag(LibraryFilter.section(section))
           }
         }
-        if hasHub || !library.categories.isEmpty {
+        if !library.hubPeople.isEmpty {
+          Section(LibrarySection.hub.rawValue, isExpanded: $hubExpanded) {
+            ForEach(library.hubPeople) { person in
+              Label(person.name, systemImage: "person").tag(LibraryFilter.hubPerson(person.id))
+            }
+          }
+        }
+        if !library.categories.isEmpty {
           Section("Categories", isExpanded: $categoriesExpanded) {
-            if hasHub { hubRow }
             ForEach(library.categories, id: \.self) { category in
               Label(category.capitalized, systemImage: LibraryFilter.categorySymbols[category] ?? "tag")
                 .tag(LibraryFilter.category(category))
@@ -406,7 +412,7 @@ private struct LibraryView: View {
     }
     .onChange(of: library.hubPeople) { _, people in
       if case .hubPerson(let id) = selection, !people.contains(where: { $0.id == id }) {
-        selection = .section(hasHub ? .hub : .all)
+        selection = .section(.all)
       }
     }
     .onChange(of: searching) { _, active in if !active { searchFocused = false } }
@@ -443,20 +449,6 @@ private struct LibraryView: View {
       }
     } message: {
       Text("“\(trashing?.title ?? "")” will be moved to the Trash. Its saved data, secrets and permissions will be deleted.")
-    }
-  }
-  private var hasHub: Bool { library.entries.contains { library.hub.contains($0.id) } }
-  /// Noodle Hub's noodlets, always the first category, with the people whose bots made them beneath.
-  @ViewBuilder private var hubRow: some View {
-    let hub = Label(LibrarySection.hub.rawValue, systemImage: LibrarySection.hub.symbol).tag(LibraryFilter.section(.hub))
-    if library.hubPeople.isEmpty {
-      hub
-    } else {
-      DisclosureGroup(isExpanded: $hubExpanded) {
-        ForEach(library.hubPeople) { person in
-          Label(person.name, systemImage: "person").tag(LibraryFilter.hubPerson(person.id))
-        }
-      } label: { hub }
     }
   }
   /// SwiftUI places its own sidebar toggle last in the sidebar's toolbar section, so
