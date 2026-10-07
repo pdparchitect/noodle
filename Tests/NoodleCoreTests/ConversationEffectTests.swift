@@ -112,7 +112,7 @@ final class ConversationEffectTests: XCTestCase {
         XCTAssertNil(try reopened.takePendingEffect(conversationID: bot.conversation.id, now: instant))
     }
 
-    func testExpiryAndPerConversationThrottling() throws {
+    func testAnEffectWaitsADayToBeSeenAndSendingIsThrottled() throws {
         let bot = try repository.createAgent(named: "Builder")
         let other = try repository.createAgent(named: "Other")
         _ = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id, kind: "confetti", now: instant)
@@ -120,9 +120,23 @@ final class ConversationEffectTests: XCTestCase {
             XCTAssertEqual($0 as? ConversationEffectError, .rateLimited)
         }
         XCTAssertNoThrow(try repository.sendEffect(agentID: other.agent.id, conversationID: other.conversation.id, kind: "confetti", now: instant))
-        XCTAssertNil(try repository.takePendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(30)))
-        let fresh = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id, kind: "confetti", now: instant.addingTimeInterval(31))
-        XCTAssertEqual(try repository.takePendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(60))?.id, fresh.id)
+        // Nobody may be looking: it waits for the conversation to be seen, for up to a day.
+        let hours = 60.0 * 60
+        XCTAssertNotNil(try repository.takePendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(23 * hours)))
+        let unseen = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id, kind: "confetti",
+                                               now: instant.addingTimeInterval(24 * hours))
+        XCTAssertTrue(try repository.hasPendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(47 * hours)))
+        XCTAssertNil(try repository.takePendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(48 * hours + 1)),
+                     "Dropped after a day")
+        XCTAssertFalse(try repository.hasPendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(48 * hours + 1)))
+        // One sent while another waits does not drop it: the newer one plays.
+        let first = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id, kind: "confetti",
+                                              now: instant.addingTimeInterval(50 * hours))
+        let second = try repository.sendEffect(agentID: bot.agent.id, conversationID: bot.conversation.id, kind: "fireworks",
+                                               now: instant.addingTimeInterval(50 * hours + 600))
+        XCTAssertNotEqual(first.id, unseen.id)
+        XCTAssertEqual(try repository.takePendingEffect(conversationID: bot.conversation.id, now: instant.addingTimeInterval(60 * hours))?.id,
+                       second.id)
     }
 
     func testQueueIsBoundedAndOnlyNewestPendingEffectIsClaimed() throws {
@@ -168,6 +182,7 @@ final class ConversationEffectTests: XCTestCase {
         XCTAssertTrue(text.contains("--effect confetti"))
         XCTAssertTrue(text.contains("--list-effects"))
         XCTAssertTrue(text.contains("not that the user saw it"))
+        XCTAssertTrue(text.contains("the next time the user has that conversation in front"))
         let startup = try String(contentsOf: directory.appendingPathComponent("AGENTS.md"), encoding: .utf8)
         XCTAssertTrue(startup.contains(MessengerDocumentation.bootstrapInstructions))
         XCTAssertFalse(startup.contains("--effect confetti"))

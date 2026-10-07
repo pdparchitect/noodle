@@ -48,6 +48,8 @@ import NoodleRuntime
     public var isHidden: (UUID) -> Bool = { _ in false }
     /// The last seen size and date of each conversation's messages, their count, and the latest reaction change.
     private var transcripts: [UUID: (size: Int, modified: Date, count: Int, reactions: Int)] = [:]
+    /// When each conversation's chat effects last changed, as last checked.
+    private var effectsChanged: [UUID: Date] = [:]
     /// Each conversation's background when last checked.
     private var backgrounds: [UUID: ConversationBackground] = [:]
     /// What each bot was last reported doing.
@@ -816,6 +818,17 @@ import NoodleRuntime
         return linkMessage(message, files: try attachments(in: change.conversationID))
     }
 
+    /// A chat effect the bot sent on the Mac, kept once however often it comes, to wait for the person to see it.
+    public func hostedEffect(_ kind: String, id: UUID, in conversationID: UUID, on device: HubDevice) throws {
+        let agent = try hostedConversation(conversationID, on: device)
+        do {
+            _ = try repository.sendEffect(agentID: agent.id, conversationID: conversationID, kind: kind, requestID: id)
+        } catch let error as ConversationEffectError {
+            throw LinkError(error.localizedDescription)
+        }
+        checkForChanges()
+    }
+
     public func setHostedPhase(_ phase: LinkBotPhase, of bot: UUID, on device: HubDevice) throws {
         guard access.host(ofBot: bot) == device.id else { throw LinkError("There is no such bot.") }
         hostedPhases[bot] = phase
@@ -952,6 +965,15 @@ import NoodleRuntime
                 onBackgroundChanged?(conversation.id)
             }
             backgrounds[conversation.id] = background
+            // A device that shows the conversation takes the effect waiting there.
+            let effects = (try? repository.conversationDirectory(id: conversation.id).appendingPathComponent("effects.json")
+                .resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let effects, effects != effectsChanged[conversation.id] {
+                effectsChanged[conversation.id] = effects
+                if (try? repository.hasPendingEffect(conversationID: conversation.id)) == true {
+                    onChange?(owner, .effectWaiting(conversationID: conversation.id))
+                }
+            }
             let url = repository.conversationDirectory(id: conversation.id).appendingPathComponent("messages.json")
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
                   let size = (attributes[.size] as? NSNumber)?.intValue,
@@ -992,6 +1014,12 @@ import NoodleRuntime
             statuses[agent.id] = .some(agent.status)
         }
         restated.forEach { onChange?($0, .botsChanged) }
+    }
+
+    /// The chat effect waiting in one of the user's conversations, taken by the device that shows it, so it plays once.
+    public func takeEffect(in conversationID: UUID, for user: HubUser) throws -> LinkEffect? {
+        _ = try ownedConversation(conversationID, by: user)
+        return try repository.takePendingEffect(conversationID: conversationID).map { LinkEffect(id: $0.id, kind: $0.kind) }
     }
 
     /// Adds or removes the owner's reaction to a message in one of their bots' conversations.

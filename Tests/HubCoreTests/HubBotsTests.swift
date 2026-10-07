@@ -879,6 +879,34 @@ import XCTest
         XCTAssertNil(f.device.avatar)
     }
 
+    /// A chat effect a bot sends waits until one of its person's devices shows the conversation; that device
+    /// takes it, so it plays once, and nobody else can.
+    func testAChatEffectWaitsForADeviceToShowTheConversation() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let phone = HubPairing(directory: FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-phone-\(UUID())"),
+                               deviceName: "iPhone")
+        addTeardownBlock { try? FileManager.default.removeItem(at: phone.directory) }
+        await phone.join(f.link.invite(f.ada).url().absoluteString)
+        let grace = try await person("Grace", f)
+        let events = try await f.device.subscribe()
+        _ = try await f.device.request(.status)
+        f.hub.bots.checkForChanges()
+
+        let sent = try f.hub.repository.sendEffect(agentID: bot.id, conversationID: bot.conversationID, kind: "confetti")
+        f.hub.bots.checkForChanges()
+        let conversation = bot.conversationID
+        try await expect("that an effect waits", in: events) { if case .effectWaiting(conversation) = $0 { true } else { false } }
+        do {
+            _ = try await grace.device.request(.takeEffect(conversationID: bot.conversationID))
+            XCTFail("Took an effect from someone else's conversation")
+        } catch {}
+        let taken = try await phone.request(.takeEffect(conversationID: bot.conversationID))
+        XCTAssertEqual(taken, .effect(LinkEffect(id: sent.id, kind: "confetti")))
+        let again = try await f.device.request(.takeEffect(conversationID: bot.conversationID))
+        XCTAssertEqual(again, .effect(nil), "It plays on one device only")
+    }
+
     /// Activity records who shared a bot with whom and who stopped, and a refused attempt.
     func testSharingIsRecordedInActivity() async throws {
         let f = try await fixture()

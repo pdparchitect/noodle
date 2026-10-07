@@ -1,4 +1,5 @@
 import HubLink
+import NoodleBrand
 import NoodletRuntime
 import NoodleWallpaperCore
 import PhotosUI
@@ -79,6 +80,8 @@ enum HubThread: HubConversation {
     var browsers: [LinkBrowser] = []
     /// Counts the Hub saying its users changed, which it tells admins only, so their Users screen can follow.
     private(set) var usersChanges = 0
+    /// Conversations where a chat effect may wait on the Hub: it said so, or this phone was away when it might have.
+    private(set) var waitingEffects: Set<UUID> = []
     /// Computers being made, waiting for the Hub to say they are ready.
     @ObservationIgnored var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// How far each conversation has been read. It stops at a message the bot has not taken yet,
@@ -439,6 +442,16 @@ enum HubThread: HubConversation {
         return sharing
     }
 
+    func hasWaitingEffect(in conversation: UUID) -> Bool { waitingEffects.contains(conversation) }
+
+    /// Takes the chat effect waiting on the Hub in a conversation, now that it is on screen, so it plays on no other
+    /// device. Nil when none waits or the Hub cannot be asked now; it is asked again once it says one waits.
+    func takeEffect(in conversation: UUID) async -> LinkEffect? {
+        guard waitingEffects.remove(conversation) != nil,
+              case .effect(let effect)? = try? await pairing.request(.takeEffect(conversationID: conversation)) else { return nil }
+        return effect
+    }
+
     /// Deletes the bot and its conversation on the Hub, for every device.
     func delete(_ agent: LinkBot) async throws {
         guard case .done = try await pairing.request(.deleteBot(id: agent.id)) else {
@@ -556,6 +569,8 @@ enum HubThread: HubConversation {
         while !Task.isCancelled {
             do {
                 try await reload()
+                // Effects sent while this phone was away were heard of by nobody here.
+                waitingEffects.formUnion(agents.map(\.conversationID) + groups.map(\.id))
                 for try await event in try await pairing.subscribe() { try await apply(event) }
             } catch {
                 self.error = error.localizedDescription
@@ -608,6 +623,9 @@ enum HubThread: HubConversation {
             return
         case .backgroundChanged(let id, let background):
             keep(background, for: id)
+            return
+        case .effectWaiting(let id):
+            waitingEffects.insert(id)
             return
         }
         saveCache()
@@ -1446,6 +1464,39 @@ struct ConversationScrolling: ViewModifier {
 }
 
 /// A bot's or a group's conversation, laid out like Messages.
+/// The chat effect waiting for this conversation, played once it is on screen with the app in front.
+private struct ChatEffectsOverlay: View {
+    let chats: HubChats
+    let conversationID: UUID
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var playing: (effect: ChatEffect, seed: UUID, startedAt: Date)?
+
+    var body: some View {
+        ZStack {
+            if let playing { ChatEffectView(effect: playing.effect, seed: playing.seed, startedAt: playing.startedAt) }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear(perform: take)
+        .onChange(of: scenePhase) { take() }
+        .onChange(of: chats.hasWaitingEffect(in: conversationID)) { take() }
+        .task(id: playing?.seed) {
+            guard playing != nil else { return }
+            try? await Task.sleep(for: .seconds(ChatEffect.duration))
+            playing = nil
+        }
+    }
+
+    /// Taking the effect clears what says it waits, so the request runs on its own rather than in a task that ends with it.
+    private func take() {
+        guard scenePhase == .active, playing == nil, chats.hasWaitingEffect(in: conversationID) else { return }
+        Task {
+            guard let effect = await chats.takeEffect(in: conversationID), let known = ChatEffect(rawValue: effect.kind) else { return }
+            playing = (known, effect.id, Date())
+        }
+    }
+}
+
 struct ChatView: View {
     /// The height of a one-line message field, which the buttons beside it match.
     static let controlHeight: CGFloat = 48
@@ -1495,6 +1546,9 @@ struct ChatView: View {
     var body: some View {
         Group {
             if let thread = chats.thread(threadID) { conversation(in: thread) }
+        }
+        .overlay {
+            if let thread = chats.thread(threadID) { ChatEffectsOverlay(chats: chats, conversationID: thread.conversationID) }
         }
         // Deleted here or on another device.
         .onChange(of: chats.thread(threadID) == nil) { _, gone in if gone { dismiss() } }

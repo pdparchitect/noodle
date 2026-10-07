@@ -196,7 +196,7 @@ public enum MessengerDocumentation {
 
     /// Rules shared by every effect, stated once ahead of the per-effect guidance.
     public static let effectInstructions = """
-    You can mark a moment with a temporary chat effect: `./.agents/skills/messenger/messenger --effect <name> --conversation <uuid>`; `--list-effects` lists the names. Use effects sparingly and never in place of a reply. An effect plays once, and only if the user has that conversation in front within 30 seconds; the receipt confirms queuing, not that the user saw it. Send at most one per conversation every two seconds, and reuse `--request-id <uuid>` when retrying.
+    You can mark a moment with a temporary chat effect: `./.agents/skills/messenger/messenger --effect <name> --conversation <uuid>`; `--list-effects` lists the names. Use effects sparingly and never in place of a reply. An effect plays once, the next time the user has that conversation in front, on whichever of their devices shows it first; one not seen within a day is dropped. The receipt confirms queuing, not that the user saw it. Send at most one per conversation every two seconds, and reuse `--request-id <uuid>` when retrying.
     """
 
     /// Stored wire field names and descriptions. Encoding coverage tests catch drift.

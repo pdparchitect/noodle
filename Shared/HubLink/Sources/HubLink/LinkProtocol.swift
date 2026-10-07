@@ -235,6 +235,21 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// On the owner's own Mac: shares one of its bots with exactly `people` on one of those Hubs, by its ID
     /// there. Answered with `hubSharing`.
     case shareOnHub(botID: UUID, hub: String, people: [UUID])
+    /// Takes the chat effect waiting in one of this user's conversations, now that this device shows it; it
+    /// plays on no other device. Answered with `effect`, empty when none waits.
+    case takeEffect(conversationID: UUID)
+}
+
+/// A chat effect a bot sent, waiting for its conversation to be seen. Its kind is a name; one an app does
+/// not know is no effect there.
+public struct LinkEffect: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var kind: String
+
+    public init(id: UUID, kind: String) {
+        self.id = id
+        self.kind = kind
+    }
 }
 
 /// A Noodle Hub the owner's Mac joined, whose people one of the Mac's bots can be shared with.
@@ -276,6 +291,8 @@ public enum LinkHostRequest: Codable, Equatable, Sendable {
     case phase(botID: UUID, phase: LinkBotPhase)
     /// The bot's reaction to a message in one of its conversations, or taking it back. Answered with `message`.
     case react(LinkReactionChange)
+    /// A chat effect the bot sent in one of its conversations, which waits on the Hub to be seen. Answered with `done`.
+    case effect(conversationID: UUID, id: UUID, kind: String)
 }
 
 /// A bot a device hosts, with its conversation with each person it is shared with.
@@ -596,6 +613,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case hostedBots([LinkHostedBot])
     case hostedBot(LinkHostedBot)
     case hubSharing([LinkHubSharing])
+    case effect(LinkEffect?)
     case done
     case failure(String)
 }
@@ -635,6 +653,8 @@ public enum LinkEvent: Codable, Equatable, Sendable {
     case backgroundChanged(conversationID: UUID, background: LinkBackground)
     /// Pushed to admins: the Hub's users, their devices or its plans changed.
     case usersChanged
+    /// A chat effect waits in one of this user's conversations, to be taken by the device that shows it.
+    case effectWaiting(conversationID: UUID)
 }
 
 /// Someone else on the Hub, as anyone sharing a bot sees them.

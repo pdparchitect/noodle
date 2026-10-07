@@ -181,6 +181,24 @@ import XCTest
         XCTAssertEqual(try f.local.loadMessages(conversationID: graces.conversationID).first { $0.id == reply.id }?.reactions?.count, 1)
     }
 
+    /// A chat effect the bot sends in Grace's conversation here waits on the Hub until she sees it, once.
+    func testChatEffectsGoToTheHubToWaitForThePerson() async throws {
+        let f = try await fixture()
+        let hosting = f.hosting()
+        try await hosting.share(f.alfred, with: [f.grace.id])
+        await hosting.sync()
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        let sent = try f.local.sendEffect(agentID: f.alfred.id, conversationID: graces.conversationID, kind: "confetti")
+        await hosting.step()
+        XCTAssertNil(hosting.error)
+        let relaunched = f.hosting()
+        await relaunched.sync()
+        let taken = try await f.gracesPhone.request(.takeEffect(conversationID: graces.conversationID))
+        XCTAssertEqual(taken, .effect(LinkEffect(id: sent.id, kind: "confetti")))
+        let again = try await f.gracesPhone.request(.takeEffect(conversationID: graces.conversationID))
+        XCTAssertEqual(again, .effect(nil), "Sent once, and played once")
+    }
+
     /// Files travel both ways; links to web pages go along, and those that open live on this Mac stay here.
     func testFilesAndLinksTravelBothWays() async throws {
         let f = try await fixture()

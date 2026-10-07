@@ -18,6 +18,9 @@ public struct ConversationEffect: Codable, Equatable, Identifiable, Sendable {
     public var consumedAt: Date?
 
     public var supportedKind: ConversationEffectKind? { ConversationEffectKind(rawValue: kind) }
+
+    /// How long an effect waits for its conversation to be seen: nobody may be looking when it is sent.
+    public static let lifetime: TimeInterval = 24 * 60 * 60
 }
 
 public enum ConversationEffectError: LocalizedError, Equatable {
@@ -59,11 +62,31 @@ extension WorkspaceRepository {
             }
             let event = ConversationEffect(id: requestID, conversationID: conversationID,
                 agentID: agentID, kind: kind, createdAt: now,
-                expiresAt: now.addingTimeInterval(30), consumedAt: nil)
-            queue.events = Array(queue.events.filter { now.timeIntervalSince($0.createdAt) < 300 }.suffix(31))
+                expiresAt: now.addingTimeInterval(ConversationEffect.lifetime), consumedAt: nil)
+            queue.events = Array(queue.events.filter { now.timeIntervalSince($0.createdAt) < ConversationEffect.lifetime }.suffix(31))
             queue.events.append(event)
             try writeEffects(queue, conversationID)
             return event
+        }
+    }
+
+    /// The effects that wait for the conversation to be seen, oldest first, without claiming them.
+    public func waitingEffects(conversationID: UUID, now: Date = Date()) throws -> [ConversationEffect] {
+        let file = conversationDirectory(id: conversationID).appendingPathComponent("effects.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        return try withEffectsLock(conversationID) {
+            try readEffects(conversationID).events
+                .filter { $0.consumedAt == nil && $0.expiresAt > now && $0.supportedKind != nil }
+                .sorted { $0.createdAt < $1.createdAt }
+        }
+    }
+
+    /// Whether an effect waits for the conversation to be seen, without claiming it.
+    public func hasPendingEffect(conversationID: UUID, now: Date = Date()) throws -> Bool {
+        let file = conversationDirectory(id: conversationID).appendingPathComponent("effects.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return false }
+        return try withEffectsLock(conversationID) {
+            try liveEffect(in: readEffects(conversationID), of: effectConversation(conversationID), now: now) != nil
         }
     }
 
@@ -75,12 +98,7 @@ extension WorkspaceRepository {
         return try withEffectsLock(conversationID) {
             let conversation = try effectConversation(conversationID)
             var queue = try readEffects(conversationID)
-            let live = queue.events.filter {
-                $0.consumedAt == nil && $0.conversationID == conversationID &&
-                $0.createdAt <= now && $0.expiresAt > now &&
-                $0.expiresAt.timeIntervalSince($0.createdAt) <= 30 &&
-                $0.supportedKind != nil && conversation.participantIDs.contains($0.agentID)
-            }.max { $0.createdAt < $1.createdAt }
+            let live = liveEffect(in: queue, of: conversation, now: now)
             var changed = false
             for index in queue.events.indices where queue.events[index].consumedAt == nil {
                 queue.events[index].consumedAt = now
@@ -89,6 +107,16 @@ extension WorkspaceRepository {
             if changed { try writeEffects(queue, conversationID) }
             return live
         }
+    }
+
+    /// The newest effect still waiting to be seen, from one of the conversation's bots.
+    private func liveEffect(in queue: EffectQueue, of conversation: BotConversation, now: Date) -> ConversationEffect? {
+        queue.events.filter {
+            $0.consumedAt == nil && $0.conversationID == conversation.id &&
+            $0.createdAt <= now && $0.expiresAt > now &&
+            $0.expiresAt.timeIntervalSince($0.createdAt) <= ConversationEffect.lifetime &&
+            $0.supportedKind != nil && conversation.participantIDs.contains($0.agentID)
+        }.max { $0.createdAt < $1.createdAt }
     }
 
     private func effectConversation(_ id: UUID) throws -> BotConversation {

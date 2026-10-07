@@ -10,6 +10,11 @@ All notable changes to Noodle are documented here, following
 
 - When your devices use this Mac as a Hub, they can share this Mac's bots with people on the Noodle Hubs it joined, as Edit Bot does here.
 - Reactions now travel both ways with people a bot on this Mac is shared with through a Noodle Hub: theirs reach the bot, and the bot's reach them.
+- Chat effects from bots kept on a Noodle Hub now play here, and those from bots on this Mac reach the people they are shared with.
+
+### Changed
+
+- A chat effect a bot sends now waits until you open its conversation, for up to a day, instead of being dropped when you are not looking. It plays once, on whichever of your devices shows the conversation first.
 
 ### Fixed
 

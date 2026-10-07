@@ -206,6 +206,10 @@ private actor FakeHub {
             bot.pinnedAt = pin.pinned ? Date() : nil
             pins.append(pin)
             return .done
+        case .success(.takeEffect(let id)) where id == bot.conversationID:
+            defer { effect = nil }
+            takes += 1
+            return .effect(effect)
         case .success(.hubSharing(let id)) where id == bot.id:
             return .hubSharing(hubSharing)
         case .success(.shareOnHub(let id, let hub, let people)) where id == bot.id:
@@ -216,6 +220,12 @@ private actor FakeHub {
             return .failure("Not in this test.")
         }
     }
+
+    /// The chat effect waiting in Scout's conversation, taken once, and how often the phone asked.
+    var effect: LinkEffect?
+    var takes = 0
+
+    func setEffect(_ effect: LinkEffect?) { self.effect = effect }
 
     /// As the owner's Mac answers: the Hubs it joined, whose people its bot can be shared with.
     var hubSharing: [LinkHubSharing] = []
@@ -263,6 +273,23 @@ private actor RecordedSubscriptions: PushSubscriptions {
         await pairing.join(invitation.url().absoluteString)
         try #require(pairing.hub != nil)
         return (HubChats(pairing: pairing), server)
+    }
+
+    /// A chat effect waits on the Hub until the phone shows its conversation: the phone hears of it, takes it
+    /// once, and asks no more until it hears of another.
+    @Test func aChatEffectIsTakenOnceWhenItsConversationIsShown() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        let scout = await hub.bot
+        #expect(!chats.hasWaitingEffect(in: scout.conversationID))
+        let confetti = LinkEffect(id: UUID(), kind: "confetti")
+        await hub.setEffect(confetti)
+        try await chats.apply(.effectWaiting(conversationID: scout.conversationID))
+        #expect(chats.hasWaitingEffect(in: scout.conversationID))
+        #expect(await chats.takeEffect(in: scout.conversationID) == confetti)
+        #expect(await chats.takeEffect(in: scout.conversationID) == nil)
+        #expect(await hub.takes == 1, "Not asked again until another is heard of")
     }
 
     /// On the owner's own Mac, a bot there is shared through the Hubs the Mac joined, one at a time, a person at a time.

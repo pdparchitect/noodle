@@ -119,6 +119,19 @@ import Observation
 
     private func thread(local id: UUID) -> Thread? { threads.first { $0.local == id } }
 
+    /// Conversations here where a chat effect may wait on the Hub: it said so, or this Mac was away when it might have.
+    @ObservationIgnored private var waitingEffects: Set<UUID> = []
+
+    public func hasWaitingEffect(in conversation: UUID) -> Bool { waitingEffects.contains(conversation) }
+
+    /// Takes the chat effect waiting on the Hub in a conversation here, now that it is in front, so it plays on no
+    /// other device. Nil when none waits, or when the Hub cannot be asked now; it is asked again once it says so.
+    public func takeEffect(in conversation: UUID) async -> LinkEffect? {
+        guard waitingEffects.remove(conversation) != nil, let thread = thread(local: conversation),
+              case .effect(let effect)? = try? await pairing.request(.takeEffect(conversationID: thread.remote)) else { return nil }
+        return effect
+    }
+
     /// What the bot a stand-in here keeps on the Hub is doing there, as last heard.
     public func phase(ofAgent id: UUID) -> AgentRuntimePhase? { phases[id] }
 
@@ -527,6 +540,8 @@ import Observation
             try await syncComputers()
             try await syncBrowsers()
             for thread in threads { try await syncMessages(thread.remote) }
+            // Effects sent while this Mac was away were heard of by nobody here.
+            waitingEffects.formUnion(threads.map(\.local))
             try await sendPending()
             error = nil
         } catch {
@@ -588,6 +603,8 @@ import Observation
                         if message.call != nil { try await syncMessages(message.conversationID) }
                     case .usersChanged:
                         usersChanges += 1
+                    case .effectWaiting(let id):
+                        if let thread = thread(remote: id) { waitingEffects.insert(thread.local) }
                     case .readChanged(let id, let upTo):
                         if let thread = thread(remote: id) { onRead?(thread.local, upTo) }
                     case .pinChanged(let id, let pinnedAt):

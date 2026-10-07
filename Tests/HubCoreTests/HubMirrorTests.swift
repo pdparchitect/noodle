@@ -167,6 +167,40 @@ import XCTest
         XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: remote.id).map(\.id), [sent.id])
     }
 
+    /// A chat effect a bot on the Hub sends waits there; this Mac hears of it, or asks after reconnecting, and
+    /// takes it when the conversation is in front, so it plays here and on no other device.
+    func testChatEffectsOfHubBotsWaitToBeSeenHere() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let hubAgent = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        let remote = try conversation(of: hubAgent.id, in: f.hub.repository)
+        let local = try conversation(of: agent.id, in: f.local)
+        XCTAssertFalse(mirror.hasWaitingEffect(in: local.id))
+
+        // Sent while this Mac was away: it asks once it follows the Hub again.
+        let missed = try f.hub.repository.sendEffect(agentID: hubAgent.id, conversationID: remote.id, kind: "fireworks")
+        await mirror.sync()
+        XCTAssertTrue(mirror.hasWaitingEffect(in: local.id))
+        let first = await mirror.takeEffect(in: local.id)
+        XCTAssertEqual(first, LinkEffect(id: missed.id, kind: "fireworks"))
+        XCTAssertFalse(mirror.hasWaitingEffect(in: local.id))
+
+        // Sent while it follows the Hub: it hears of it.
+        let following = Task { await mirror.run() }
+        defer { following.cancel() }
+        for _ in 0..<100 where !mirror.isConnected { try await Task.sleep(for: .milliseconds(50)) }
+        _ = await mirror.takeEffect(in: local.id)
+        try await Task.sleep(for: .seconds(2))
+        let sent = try f.hub.repository.sendEffect(agentID: hubAgent.id, conversationID: remote.id, kind: "confetti")
+        f.hub.bots.checkForChanges()
+        for _ in 0..<100 where !mirror.hasWaitingEffect(in: local.id) { try await Task.sleep(for: .milliseconds(50)) }
+        let second = await mirror.takeEffect(in: local.id)
+        XCTAssertEqual(second, LinkEffect(id: sent.id, kind: "confetti"))
+        let again = await mirror.takeEffect(in: local.id)
+        XCTAssertNil(again, "Taken once")
+    }
+
     func testMessagesTravelBothWaysWithTheirIDs() async throws {
         let f = try await fixture()
         let mirror = f.mirror()

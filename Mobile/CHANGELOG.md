@@ -5,11 +5,14 @@
 ### Added
 
 - When your phone is joined to your Mac, you can share the Mac's bots with people on the Noodle Hubs the Mac joined. Edit the bot and tap Sharing, or Sharing on a Hub's name when the Mac joined several.
+- Chat effects: confetti or fireworks a bot sends play when you open its conversation, within a day, on whichever of your devices shows it first.
 
 ### What to Test
 
 - With your phone joined to your Mac (Settings → Hub → This Mac on the Mac), and the Mac joined to a Noodle Hub with other people on it, edit one of the Mac's bots on the phone: Sharing shows. Tap it, tap a person: the bot shows for them on that Hub, and in Edit Bot on the Mac.
 - With the Mac joined to two Hubs, Edit Bot on the phone shows Sharing on each Hub's name, each with that Hub's people.
+- Ask a bot on a Hub to celebrate with confetti while the app is closed, then open its conversation: the confetti plays once. Open the same conversation on your Mac or iPad afterwards: it does not play again. Ask for fireworks with the conversation already open: they play straight away.
+- With Reduce Motion on (Settings → Accessibility → Motion), the effect shows as a still 🎉 or 🎆 instead.
 - Bots kept on a Noodle Hub show Sharing as before.
 
 ## [0.24.0] - 2026-10-07

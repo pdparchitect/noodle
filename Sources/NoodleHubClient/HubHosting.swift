@@ -45,6 +45,8 @@ import Observation
         var postedUpTo: Date
         /// The bot's reactions here up to this change are on the Hub.
         var reactionsSent: Int?
+        /// The bot's chat effects here up to this moment are on the Hub, waiting for the person.
+        var effectsSentUpTo: Date?
     }
 
     public private(set) var error: String?
@@ -173,6 +175,7 @@ import Observation
             try await publishChanges()
             try await sendReplies()
             try await sendReactions()
+            try await sendEffects()
             try await sendDelivered()
             try await sendPhases()
             error = nil
@@ -487,6 +490,19 @@ import Observation
         if let title = file.card?.title, !title.isEmpty { return title }
         let name = (file.originalFilename as NSString).deletingPathExtension
         return name.isEmpty ? "A live link" : name
+    }
+
+    /// Sends the bot's chat effects, which wait on the Hub for the person to see their conversation.
+    private func sendEffects() async throws {
+        for entry in entries where !entry.archived {
+            for thread in entry.threads {
+                let sent = thread.effectsSentUpTo ?? .distantPast
+                for effect in try repository.waitingEffects(conversationID: thread.conversation) where effect.createdAt > sent {
+                    _ = try await pairing.request(.host(.effect(conversationID: thread.conversation, id: effect.id, kind: effect.kind)))
+                    setThread(thread.conversation) { $0.effectsSentUpTo = effect.createdAt }
+                }
+            }
+        }
     }
 
     /// Tells the Hub which of the person's messages the bot has taken.

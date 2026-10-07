@@ -785,6 +785,8 @@ import os
             return try host(request, from: key)
         case .hubSharing(let botID):
             return .hubSharing(try await sharingThroughHubs(botID, from: key).list(botID))
+        case .takeEffect(let conversationID):
+            return .effect(try hubBots().takeEffect(in: conversationID, for: try user(key)))
         case .shareOnHub(let botID, let hub, let people):
             return .hubSharing(try await sharingThroughHubs(botID, from: key).share(botID, hub, people))
         }
@@ -817,6 +819,9 @@ import os
             return .done
         case .react(let change):
             return .message(try bots.hostedReact(change, on: device))
+        case .effect(let conversationID, let id, let kind):
+            try bots.hostedEffect(kind, id: id, in: conversationID, on: device)
+            return .done
         }
     }
 

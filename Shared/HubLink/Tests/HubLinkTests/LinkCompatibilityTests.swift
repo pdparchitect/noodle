@@ -112,6 +112,28 @@ final class LinkCompatibilityTests: XCTestCase {
                        .hubSharing([sharing]))
     }
 
+    /// Chat effects wait on the Hub until a device shows the conversation, which then takes the effect.
+    func testChatEffectsReadAsSent() throws {
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let expected: [(String, LinkRequest)] = [
+            (#"{"takeEffect":{"conversationID":"\#(b)"}}"#, .takeEffect(conversationID: b)),
+            (#"{"host":{"_0":{"effect":{"conversationID":"\#(b)","id":"\#(a)","kind":"confetti"}}}}"#,
+             .host(.effect(conversationID: b, id: a, kind: "confetti"))),
+        ]
+        for (json, request) in expected {
+            XCTAssertEqual(try decode(LinkRequest.self, json), request, json)
+            XCTAssertEqual(try LinkProtocol.decode(try LinkProtocol.encode(request)).get(), request, json)
+        }
+        for response in [LinkResponse.effect(LinkEffect(id: a, kind: "fireworks")), .effect(nil)] {
+            XCTAssertEqual(try LinkProtocol.decodeResponse(LinkProtocol.encode(response)), response)
+        }
+        XCTAssertEqual(try decode(LinkResponse.self, #"{"effect":{"_0":{"id":"\#(a)","kind":"future-kind"}}}"#),
+                       .effect(LinkEffect(id: a, kind: "future-kind")), "A kind this app does not know still reads")
+        XCTAssertEqual(LinkProtocol.decodeEvent(Data(#"{"effectWaiting":{"conversationID":"\#(b)"}}"#.utf8)),
+                       .effectWaiting(conversationID: b))
+    }
+
     func testArchivingReadsAcrossAppVersions() throws {
         let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
         let bot = try decode(LinkBot.self,

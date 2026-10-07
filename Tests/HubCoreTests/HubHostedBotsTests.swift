@@ -151,6 +151,7 @@ import XCTest
             .delivered(conversationID: graces.conversationID, messageIDs: []),
             .phase(botID: id, phase: .ready),
             .react(LinkReactionChange(conversationID: graces.conversationID, messageID: UUID(), emoji: "👍", present: true)),
+            .effect(conversationID: graces.conversationID, id: UUID(), kind: "confetti"),
         ]
         for (name, device) in [("Ada's phone", adasPhone), ("Grace", f.gracesPhone)] {
             for request in refused {
@@ -323,6 +324,27 @@ import XCTest
             _ = try await f.mac.request(.host(.react(LinkReactionChange(conversationID: graces.conversationID, messageID: hello,
                                                                         emoji: "not one", present: true))))
             XCTFail("Took a reaction that is not an emoji")
+        } catch {}
+    }
+
+    /// A chat effect the bot sends from the Mac waits on the Hub for Grace to see her conversation.
+    func testAChatEffectFromTheMacWaitsForThePerson() async throws {
+        let f = try await fixture()
+        _ = try await host(f)
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        let events = try await f.gracesPhone.subscribe()
+        _ = try await f.gracesPhone.request(.status)
+        f.hub.bots.checkForChanges()
+        let id = UUID()
+        _ = try await f.mac.request(.host(.effect(conversationID: graces.conversationID, id: id, kind: "fireworks")))
+        _ = try await f.mac.request(.host(.effect(conversationID: graces.conversationID, id: id, kind: "fireworks")))
+        let conversation = graces.conversationID
+        try await expect("that an effect waits", in: events) { if case .effectWaiting(conversation) = $0 { true } else { false } }
+        let taken = try await f.gracesPhone.request(.takeEffect(conversationID: graces.conversationID))
+        XCTAssertEqual(taken, .effect(LinkEffect(id: id, kind: "fireworks")))
+        do {
+            _ = try await f.mac.request(.host(.effect(conversationID: graces.conversationID, id: UUID(), kind: "shell")))
+            XCTFail("Took an effect no app draws")
         } catch {}
     }
 
