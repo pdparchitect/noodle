@@ -17,9 +17,9 @@ final class FileExportTests: XCTestCase {
         XCTAssertEqual(FileDropDestination.folder("/workspace", hovered: folder), "/workspace/Folder")
         XCTAssertEqual(FileDropDestination.folder("/workspace", hovered: nil), "/workspace")
         XCTAssertNil(FileDropDestination.folder("/workspace", hovered: item))
-        XCTAssertEqual(FileDropDestination.folder("/workspace", hovered: folder, moving: item), "/workspace/Folder")
-        XCTAssertNil(FileDropDestination.folder("/workspace", hovered: folder, moving: folder))
-        XCTAssertNil(FileDropDestination.folder("/workspace", hovered: nil, moving: item))
+        XCTAssertEqual(FileDropDestination.folder("/workspace", hovered: folder, moving: [item]), "/workspace/Folder")
+        XCTAssertNil(FileDropDestination.folder("/workspace", hovered: folder, moving: [folder]))
+        XCTAssertNil(FileDropDestination.folder("/workspace", hovered: nil, moving: [item]))
         XCTAssertNil(FileDropDestination.folder("/workspace", hovered: file("../escape", kind: "directory")))
     }
 

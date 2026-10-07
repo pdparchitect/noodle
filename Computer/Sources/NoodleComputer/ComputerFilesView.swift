@@ -46,9 +46,9 @@ struct ComputerFilesView: View {
         } message: { Text("Enter a path inside this computer.") }
         .confirmationDialog(deleteTitle, isPresented: $deleting) {
             Button("Delete", role: .destructive) { model.removeSelected() }
-        } message: { Text("This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
+        } message: { Text(model.selection.count > 1 ? "This permanently removes these guest files and empty folders. Nonempty folders cannot be deleted here." : "This permanently removes the guest file or empty folder. Nonempty folders cannot be deleted here.") }
     }
-    private var deleteTitle: String { "Delete \(model.selected?.name ?? "item")?" }
+    private var deleteTitle: String { model.selection.count > 1 ? "Delete \(model.selection.count) items?" : "Delete \(model.selected?.name ?? "item")?" }
     private var fileContent: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -65,11 +65,11 @@ struct ComputerFilesView: View {
                             Divider()
                             Button("Open Folder") { if let file = model.selected { model.open(file) } }.disabled(model.selected?.directory != true)
                             Button("Quick Look", action: requestQuickLook).disabled(model.selected?.regular != true)
-                            Button("Export…") { model.exportPanel() }.disabled((model.selected?.regular != true && model.selected?.directory != true) || model.busy)
+                            Button("Export…") { model.exportPanel() }.disabled(!model.selectedFiles.contains { $0.regular || $0.directory } || model.busy)
                             Divider()
                             Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
-                            Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
-                            Button("Delete", role: .destructive) { deleting = true }.disabled(model.selected == nil || model.busy)
+                            Button("Duplicate") { model.duplicateSelected() }.disabled(!model.selectedFiles.contains(where: \.regular) || model.busy)
+                            Button("Delete", role: .destructive) { deleting = true }.disabled(model.selection.isEmpty || model.busy)
                         }
                 }.frame(minWidth: 260).frame(height: model.previewEnabled ? 150 : nil)
 
@@ -163,11 +163,11 @@ struct ComputerFilesView: View {
                 Menu {
                     Button("New Folder…") { name = "Untitled Folder"; naming = "New Folder" }.disabled(model.busy)
                     Button("Import Files or Folders…") { model.importPanel() }.disabled(model.busy)
-                    Button("Export…") { model.exportPanel() }.disabled((model.selected?.regular != true && model.selected?.directory != true) || model.busy)
+                    Button("Export…") { model.exportPanel() }.disabled(!model.selectedFiles.contains { $0.regular || $0.directory } || model.busy)
                     Divider()
                     Button("Rename…") { name = model.selected?.name ?? ""; naming = "Rename" }.disabled(model.selected == nil || model.busy)
-                    Button("Duplicate") { model.duplicateSelected() }.disabled(model.selected?.regular != true || model.busy)
-                    Button("Delete", role: .destructive) { deleting = true }.disabled(model.selected == nil || model.busy)
+                    Button("Duplicate") { model.duplicateSelected() }.disabled(!model.selectedFiles.contains(where: \.regular) || model.busy)
+                    Button("Delete", role: .destructive) { deleting = true }.disabled(model.selection.isEmpty || model.busy)
                     Divider()
                     Button("Go to Folder…") { path = model.folder; enteringPath = true }
                     Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
@@ -311,7 +311,7 @@ private struct GuestFileTable: NSViewRepresentable {
         table.target = context.coordinator; table.doubleAction = #selector(Coordinator.open)
         table.rowHeight = 30; table.usesAlternatingRowBackgroundColors = false
         table.backgroundColor = .clear
-        table.allowsMultipleSelection = false
+        table.allowsMultipleSelection = true
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         for (id, title, width) in [("name", "Name", 250.0), ("size", "Size", 85.0)] {
             let column = NSTableColumn(identifier: .init(id)); column.title = title; column.width = width; column.minWidth = id == "name" ? 140 : 75
@@ -336,14 +336,14 @@ private struct GuestFileTable: NSViewRepresentable {
         }
         let items = model.visible
         if coordinator.items != items { coordinator.items = items; table.reloadData() }
-        let index = items.firstIndex { $0.name == model.selection }
-        if table.selectedRow != (index ?? -1) { table.selectRowIndexes(index.map { IndexSet(integer: $0) } ?? [], byExtendingSelection: false) }
+        let rows = IndexSet(items.indices.filter { model.selection.contains(items[$0].name) })
+        if table.selectedRowIndexes != rows { table.selectRowIndexes(rows, byExtendingSelection: false) }
     }
     @MainActor final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         let model: ComputerFilesModel
         var items: [GuestFile] = []
         var focusRequest = 0
-        var dragged: GuestFile?
+        var dragged: [GuestFile] = []
         var draggedFolder: String?
         var dropFolder: String?
         var quickLook: (() -> Void)?
@@ -377,26 +377,31 @@ private struct GuestFileTable: NSViewRepresentable {
         }
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard let table = notification.object as? NSTableView else { return }
-            let file = items.indices.contains(table.selectedRow) ? items[table.selectedRow] : nil
-            if model.selection != file?.name { model.choose(file) }
+            let names = Set(table.selectedRowIndexes.compactMap { items.indices.contains($0) ? items[$0].name : nil })
+            if model.selection != names { model.select(names) }
         }
         @objc func open(_ table: NSTableView) { if items.indices.contains(table.clickedRow) { let file = items[table.clickedRow]; model.choose(file); if file.directory { model.open(file) } else { quickLook?() } } }
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
             guard !model.busy else { return nil }
-            let file = items[row]; dragged = file; draggedFolder = model.folder
-            return FileExportPromise.provider(model: model, file: file)
+            return FileExportPromise.provider(model: model, file: items[row])
+        }
+        func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
+            dragged = rowIndexes.compactMap { items.indices.contains($0) ? items[$0] : nil }; draggedFolder = model.folder
+        }
+        func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+            dragged = []
         }
         func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
             dropFolder = nil
             guard !model.busy, !model.loading else { return [] }
             let local = (info.draggingSource as? NSTableView) === tableView
-            if local { guard dragged != nil, draggedFolder == model.folder else { return [] } }
+            if local { guard !dragged.isEmpty, draggedFolder == model.folder else { return [] } }
             else if !info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) { return [] }
             let dragOperation: NSDragOperation = local ? .move : .copy
             guard info.draggingSourceOperationMask.contains(dragOperation) else { return [] }
             let hit = tableView.row(at: tableView.convert(info.draggingLocation, from: nil))
             let hovered = items.indices.contains(hit) ? items[hit] : nil
-            guard let folder = FileDropDestination.folder(model.folder, hovered: hovered, moving: local ? dragged : nil) else { return [] }
+            guard let folder = FileDropDestination.folder(model.folder, hovered: hovered, moving: local ? dragged : []) else { return [] }
             dropFolder = folder
             tableView.setDropRow(hovered == nil ? -1 : hit, dropOperation: .on)
             return dragOperation
@@ -405,7 +410,7 @@ private struct GuestFileTable: NSViewRepresentable {
             guard !model.busy, !model.loading, let folder = dropFolder else { return false }
             defer { dropFolder = nil }
             if (info.draggingSource as? NSTableView) === tableView {
-                guard let dragged, draggedFolder == model.folder else { return false }
+                guard !dragged.isEmpty, draggedFolder == model.folder else { return false }
                 model.move(dragged, intoFolder: folder); return true
             }
             guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty else { return false }

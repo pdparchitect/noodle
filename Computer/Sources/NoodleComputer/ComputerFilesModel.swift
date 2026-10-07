@@ -7,7 +7,7 @@ import Foundation
     let computerID: UUID
     @Published var folder = "/workspace"
     @Published var files: [GuestFile] = []
-    @Published var selection: String?
+    @Published var selection: Set<String> = []
     @Published var loading = false
     @Published var busy = false
     @Published var transferProgress: FileTransferProgress?
@@ -29,12 +29,15 @@ import Foundation
     private var listingID = UUID()
     private var previewID = UUID()
     private var transferID = UUID()
+    private var queuedExports: [(start: () -> Void, cancel: () -> Void)] = []
 
     init(service: any ComputerFileService, computerID: UUID) {
         self.service = service; self.computerID = computerID
     }
     convenience init(runtime: ContainerComputer, computerID: UUID) { self.init(service: GuestFiles(runtime: runtime), computerID: computerID) }
-    var selected: GuestFile? { files.first { $0.name == selection } }
+    /// The single chosen item, for actions that only make sense on one (rename, preview, Quick Look).
+    var selected: GuestFile? { selection.count == 1 ? files.first { selection.contains($0.name) } : nil }
+    var selectedFiles: [GuestFile] { files.filter { selection.contains($0.name) } }
     var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
     var emptyFolder: EmptyFolder? { loading ? nil : EmptyFolder(files: files, showHidden: showHidden, filter: filter) }
     var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }
@@ -60,7 +63,7 @@ import Foundation
     private func navigate(resolving destination: @escaping () async throws -> String,
                           record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         listing?.cancel()
-        stopPreview(); selection = nil
+        stopPreview(); selection = []
         loading = true
         let id = UUID(); listingID = id
         listing = Task {
@@ -83,8 +86,9 @@ import Foundation
     func goUp() { guard folder != "/" else { return }; navigate(parent, selecting: (folder as NSString).lastPathComponent) }
     func back() { guard let path = history.popLast() else { return }; forwardHistory.append(folder); navigate(path, record: false) }
     func forward() { guard let path = forwardHistory.popLast() else { return }; history.append(folder); navigate(path, record: false) }
-    func choose(_ file: GuestFile?) {
-        selection = file?.name
+    func choose(_ file: GuestFile?) { select(file.map { [$0.name] } ?? []) }
+    func select(_ names: Set<String>) {
+        selection = names
         if previewEnabled { loadPreview() } else { stopPreview() }
     }
     func open(_ file: GuestFile) { if file.directory, let path = try? GuestFile.path(folder, file.name) { navigate(path) } }
@@ -133,12 +137,15 @@ import Foundation
                 status = cancelled ? cancellationMessage : "Could not complete operation"
             }
             busy = false; transfer = nil; transferProgress = nil; cancellingTransfer = false
+            if !queuedExports.isEmpty { queuedExports.removeFirst().start(); return }
             navigate(folder, record: false, clearStatus: false)
         }
     }
     func cancelTransfer() {
         guard busy, !cancellingTransfer else { return }
         cancellingTransfer = true; status = "Cancelling…"; transfer?.cancel()
+        let queued = queuedExports; queuedExports = []
+        for export in queued { export.cancel() }
     }
     func importFiles(_ urls: [URL], into destination: String? = nil) {
         guard !urls.isEmpty else { return }
@@ -162,7 +169,24 @@ import Foundation
         panel.begin { [weak self] response in if response == .OK { self?.importFiles(panel.urls) } }
     }
     func exportPanel() {
-        guard let file = selected, file.regular || file.directory, let path = try? GuestFile.path(folder, file.name) else { return }
+        let files = selectedFiles.filter { $0.regular || $0.directory }
+        if files.count > 1 {
+            let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
+            panel.prompt = "Export Here"; panel.message = "Choose where to export \(files.count) items."
+            panel.begin { [weak self] response in
+                guard response == .OK, let parent = panel.url, let self else { return }
+                let folder = self.folder
+                self.perform("Preparing export…") {
+                    let scoped = parent.startAccessingSecurityScopedResource()
+                    defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
+                    for file in files {
+                        try await self.export(file, path: try GuestFile.path(folder, file.name), to: parent.appendingPathComponent(file.name), replace: false)
+                    }
+                }
+            }
+            return
+        }
+        guard let file = files.first, file.regular || file.directory, let path = try? GuestFile.path(folder, file.name) else { return }
         if file.directory {
             let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
             panel.prompt = "Export Here"; panel.message = "Choose where to export “\(file.displayName)”."
@@ -193,11 +217,15 @@ import Foundation
         }
     }
     func promisedExport(_ file: GuestFile, path: String, to destination: URL, completion: @escaping (Error?) -> Void) {
-        guard !busy else { completion(ComputerError("Wait for the current transfer to finish.")); return }
-        perform("Exporting \(file.name)…") {
-            do { try await self.export(file, path: path, to: destination, replace: false); completion(nil) }
-            catch { completion(error); throw error }
+        // Dragging several items out promises each one separately; run them one after another.
+        let start = { [weak self] in
+            guard let self else { completion(CancellationError()); return }
+            self.perform("Exporting \(file.name)…") {
+                do { try await self.export(file, path: path, to: destination, replace: false); completion(nil) }
+                catch { completion(error); throw error }
+            }
         }
+        if busy { queuedExports.append((start, { completion(CancellationError()) })) } else { start() }
     }
     func createFolder(_ name: String) {
         do { let path = try GuestFile.path(folder, name); perform("Creating folder…") { try await self.service.change("mkdir", path: path) } }
@@ -211,24 +239,32 @@ import Foundation
         } catch { self.error = error.localizedDescription }
     }
     func removeSelected() {
-        guard let file = selected, let path = try? GuestFile.path(folder, file.name) else { return }
-        perform("Deleting…") { try await self.service.change("remove", path: path) }
+        let paths = selectedFiles.compactMap { try? GuestFile.path(folder, $0.name) }
+        guard !paths.isEmpty else { return }
+        perform("Deleting…") { for path in paths { try await self.service.change("remove", path: path) } }
     }
     func duplicateSelected() {
-        guard let file = selected, file.regular else { return }
         do {
-            let source = try GuestFile.path(folder, file.name)
-            let destination = try GuestFile.path(folder, "Copy of " + file.name)
-            perform("Duplicating…") { try await self.service.change("copy", path: source, extra: [file.version, destination]) }
+            let copies = try selectedFiles.filter(\.regular).map { file in
+                (source: try GuestFile.path(folder, file.name), version: file.version, destination: try GuestFile.path(folder, "Copy of " + file.name))
+            }
+            guard !copies.isEmpty else { return }
+            perform("Duplicating…") {
+                for copy in copies { try await self.service.change("copy", path: copy.source, extra: [copy.version, copy.destination]) }
+            }
         } catch { self.error = error.localizedDescription }
     }
-    func move(_ file: GuestFile, intoFolder destinationFolder: String) {
+    func move(_ files: [GuestFile], intoFolder destinationFolder: String) {
         do {
-            let source = try GuestFile.path(folder, file.name)
             let parent = try GuestFile.normalize(destinationFolder)
-            guard parent != folder, parent != source, !parent.hasPrefix(source + "/") else { return }
-            let destination = try GuestFile.path(parent, file.name)
-            perform("Moving…") { try await self.service.change("rename", path: source, extra: [destination]) }
+            guard parent != folder else { return }
+            let moves = try files.compactMap { file -> (String, String)? in
+                let source = try GuestFile.path(folder, file.name)
+                guard parent != source, !parent.hasPrefix(source + "/") else { return nil }
+                return (source, try GuestFile.path(parent, file.name))
+            }
+            guard !moves.isEmpty else { return }
+            perform("Moving…") { for (source, destination) in moves { try await self.service.change("rename", path: source, extra: [destination]) } }
         } catch { self.error = error.localizedDescription }
     }
     func disappear() { listing?.cancel(); stopPreview() }
