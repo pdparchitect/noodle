@@ -334,6 +334,19 @@ final class NoodleStore {
         UserDefaults.standard.set(spaceHub, forKey: Self.spaceKey)
     }
 
+    /// The harness New Bot starts on: in a Hub's space, the first that Hub lends, so the bot shows there.
+    /// Nil in All, for one on this Mac. Either way the person can choose another.
+    var spaceHarnessIdentifier: String? {
+        guard let pairing = spaceMirror?.pairing, let hub = pairing.hub, let lent = pairing.status?.harnesses.first else { return nil }
+        return HubHarnessChoice(hub: hub.key, provider: lent.provider, profile: lent.profile).identifier
+    }
+
+    /// Where New Group starts: the Hub whose space is shown, unless it starts with bots that are not that Hub's.
+    func groupCreationHub(participantIDs: Set<UUID>) -> HubMirror? {
+        guard let mirror = spaceMirror, participantIDs.isSubset(of: mirror.localAgentIDs) else { return nil }
+        return mirror
+    }
+
     /// All's pins are this Mac's own; a Hub's space shows the pins the Hub keeps for every device.
     private var shownPinnedIDs: [UUID] { spaceMirror?.pinnedConversations ?? pinnedConversationIDs }
 

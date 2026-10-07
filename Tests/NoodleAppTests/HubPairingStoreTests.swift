@@ -87,6 +87,40 @@ final class HubHarnessChoiceTests: XCTestCase {
     }
 }
 
+/// New bots and groups start on the Hub whose space is shown, so they appear there; the person can still choose another place.
+@MainActor final class SpaceCreationTests: XCTestCase {
+    func testNewBotsAndGroupsStartOnTheShownHub() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey)
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey) }
+        // Pretend Fixture bot A is on a joined Hub that lends Codex; bot B stays on this Mac.
+        let folder = f.repository.rootURL.appendingPathComponent("Hubs/\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let key = LinkIdentity().publicKey
+        let hub: [String: Any] = ["name": "Mac mini", "key": key.x963.base64EncodedString(), "endpoints": [], "userName": "Ada"]
+        try JSONSerialization.data(withJSONObject: hub).write(to: folder.appendingPathComponent("hub.json"))
+        let status = LinkStatus(hubName: "Mac mini", userName: "Ada", planName: "Family",
+                                harnesses: [LinkHarness(provider: "codex", providerName: "Codex", profileName: nil)], endpoints: [])
+        try JSONEncoder().encode(status).write(to: folder.appendingPathComponent("status.json"))
+        let entry: [String: Any] = ["remote": UUID().uuidString, "remoteConversation": UUID().uuidString,
+                                    "agent": f.a.id.uuidString, "conversation": f.directA.id.uuidString, "synced": 0]
+        try JSONSerialization.data(withJSONObject: [entry]).write(to: folder.appendingPathComponent("mirror.json"))
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        let mirror = try XCTUnwrap(store.hubMirror(forAgent: f.a.id))
+
+        XCTAssertNil(store.spaceHarnessIdentifier)
+        XCTAssertNil(store.groupCreationHub(participantIDs: []))
+
+        store.showSpace(mirror)
+        XCTAssertEqual(store.spaceHarnessIdentifier, HubHarnessChoice(hub: key, provider: "codex", profile: nil).identifier)
+        XCTAssertTrue(store.groupCreationHub(participantIDs: []) === mirror)
+        XCTAssertTrue(store.groupCreationHub(participantIDs: [f.a.id]) === mirror)
+        // A group started from this Mac's bot stays on this Mac.
+        XCTAssertNil(store.groupCreationHub(participantIDs: [f.b.id]))
+    }
+}
+
 /// A bot kept on a Hub uses only the Hub's tools, never this Mac's.
 @MainActor final class HubBotAssignmentTests: XCTestCase {
     /// A bot someone shared on a Hub is only talked with: Settings > Bots leaves it out and groups never offer it.

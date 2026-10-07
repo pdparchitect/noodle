@@ -11,6 +11,7 @@ All notable changes to Noodle are documented here, following
 - Coinbase can be added as a tool.
 - Bots that take voice calls have a Call button on their profile card, which starts the call and opens your conversation with them. With more than four actions, the card puts them on two rows instead of growing wider.
 - The Spaces menu shows All, or only the bots and groups of one joined Noodle Hub. Press ⌘1 for All and ⌘2 onwards for each Hub. Pins in a Hub's space are kept on the Hub, so they are the same on all your devices, in the order they were pinned; pins in All stay on this Mac, and are shared with your devices joined to it through Settings → Hub.
+- In a Hub's space, New Bot starts on a harness that Hub lends and New Group starts on that Hub, so they show in the space. You can still choose another.
 
 ## [0.48.0] - 2026-10-06
 

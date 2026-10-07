@@ -1001,11 +1001,12 @@ struct AgentsView: View {
             }
             .sheet(isPresented: $showingProfile) { HubsView(chats: chats) }
             .sheet(isPresented: $showingSettings) { SettingsView() }
+            // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
-                if let first = chats.first { AgentEditor(chats: first, agent: nil, hubs: chats) }
+                if let hub = spaceChats ?? chats.first { AgentEditor(chats: hub, agent: nil, hubs: chats) }
             }
             .sheet(isPresented: $creatingGroup) {
-                if let first = chats.first { GroupEditor(chats: first, group: nil, hubs: chats) }
+                if let hub = spaceChats ?? chats.first { GroupEditor(chats: hub, group: nil, hubs: chats) }
             }
             .sheet(item: $editing) { row in ThreadEditor(chats: row.chats, thread: row.thread) }
         }

@@ -211,9 +211,11 @@ struct NewBotSheet: View {
 
     private func selectAvailableHarnessIfNeeded() {
         let installations = store.runtime.availableInstallations
-        if hasChosenHarness, installations.contains(where: { $0.provider.rawValue == selectedHarnessIdentifier }) { return }
+        if hasChosenHarness, HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil
+            || installations.contains(where: { $0.provider.rawValue == selectedHarnessIdentifier }) { return }
         hasChosenHarness = false
-        let preferred = installations.first?.provider.rawValue ?? ""
+        // In a Hub's space, on that Hub, so the new bot shows there.
+        let preferred = store.spaceHarnessIdentifier ?? installations.first?.provider.rawValue ?? ""
         guard selectedHarnessIdentifier != preferred else { return }
         selectedHarnessIdentifier = preferred
         selectedModelIdentifier = ""
@@ -959,7 +961,11 @@ struct NewGroupSheet: View {
             }
         }
         .frame(width: 480)
-        .onAppear { nameFocused = true }
+        .onAppear {
+            nameFocused = true
+            // In a Hub's space, on that Hub, so the new group shows there.
+            hubID = store.groupCreationHub(participantIDs: selectedIDs).map(ObjectIdentifier.init)
+        }
     }
 
     private var hub: HubMirror? { store.hubMirrors.first { ObjectIdentifier($0) == hubID } }

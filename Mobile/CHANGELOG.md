@@ -5,6 +5,7 @@
 ### Added
 
 - Tap the title to choose All, or one joined Hub's space with only its bots and groups. Pins in a Hub's space are kept on the Hub, so they are the same on all your devices; pins in All stay on this phone.
+- In a Hub's space, New Bot and New Group start on that Hub, so they show there. You can still choose another Hub.
 
 ### Changed
 
