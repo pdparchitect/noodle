@@ -31,6 +31,20 @@ import NoodleCore
         XCTAssertFalse(ComposerNameCompletion.insertLineBreak(for: returnKey(.shift), in: editor))
     }
 
+    /// The @ menu lists the bots, then, below a separator, the people the conversation's bots are shared with.
+    func testNameMenuListsPeopleBelowTheBots() {
+        let mara = AgentRecord(displayName: "Mara"), mary = AgentRecord(displayName: "Mary")
+        let request = AgentNameCompletion.request(in: "@", selection: NSRange(location: 1, length: 0))!
+        XCTAssertEqual(ComposerNameCompletion.entries(for: request, agents: [mara, mary], preferredIDs: [mary.id],
+                                                      separatesPreferredAgents: true, people: ["Grace"]),
+                       [.bot(mary), .separator, .bot(mara), .separator, .person("Grace")])
+        XCTAssertEqual(ComposerNameCompletion.entries(for: request, agents: [mara], preferredIDs: [], separatesPreferredAgents: false,
+                                                      people: []), [.bot(mara)])
+        let grace = AgentNameCompletion.request(in: "@Gr", selection: NSRange(location: 3, length: 0))!
+        XCTAssertEqual(ComposerNameCompletion.entries(for: grace, agents: [mara], preferredIDs: [], separatesPreferredAgents: false,
+                                                      people: ["Grace", "Bea"]), [.person("Grace")])
+    }
+
     /// The @ menu shows a bot's description on one line, cut to 72 characters.
     func testNameMenuTitlesCollapseAndShortenDescriptions() {
         let mara = AgentRecord(displayName: "Mara", publicDescription: "  Reviews\n ideas.  ")

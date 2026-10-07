@@ -51,6 +51,45 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(LinkProtocol.decodeEvent(Data(#"{"usersChanged":{}}"#.utf8)), .usersChanged)
     }
 
+    /// What a Mac hosting a bot sends, and what the Hub answers it with.
+    func testHostRequestsReadAsSent() throws {
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let c = UUID(uuidString: "00000000-0000-0000-0000-00000000000C")!
+        let file = LinkAttachment(id: c, filename: "a.png", mediaType: "image/png", byteCount: 1)
+        let expected: [(String, LinkRequest)] = [
+            (#"{"host":{"_0":{"bots":{}}}}"#, .host(.bots)),
+            (#"{"host":{"_0":{"publish":{"id":"\#(a)","_1":{"name":"Alfred","provider":""}}}}}"#,
+             .host(.publish(id: a, LinkBotDraft(name: "Alfred", provider: "")))),
+            (#"{"host":{"_0":{"messagePage":{"_0":{"conversationID":"\#(b)","after":3,"limit":100}}}}}"#,
+             .host(.messagePage(LinkMessagePage(conversationID: b, after: 3, limit: 100)))),
+            (#"{"host":{"_0":{"download":{"conversationID":"\#(b)","attachmentID":"\#(c)","offset":0}}}}"#,
+             .host(.download(conversationID: b, attachmentID: c, offset: 0))),
+            (#"{"host":{"_0":{"upload":{"conversationID":"\#(b)","attachment":{"id":"\#(c)","filename":"a.png","mediaType":"image/png","byteCount":1},"offset":0,"data":"CQ=="}}}}"#,
+             .host(.upload(conversationID: b, attachment: file, offset: 0, data: Data([9])))),
+            (#"{"host":{"_0":{"reply":{"_0":{"conversationID":"\#(b)","id":"\#(a)","body":"Tea?"}}}}}"#,
+             .host(.reply(LinkHostedReply(conversationID: b, id: a, body: "Tea?")))),
+            (#"{"host":{"_0":{"delivered":{"conversationID":"\#(b)","messageIDs":["\#(a)"]}}}}"#,
+             .host(.delivered(conversationID: b, messageIDs: [a]))),
+            (#"{"host":{"_0":{"phase":{"botID":"\#(a)","phase":"working"}}}}"#, .host(.phase(botID: a, phase: .working))),
+        ]
+        for (json, request) in expected {
+            XCTAssertEqual(try decode(LinkRequest.self, json), request, json)
+            XCTAssertEqual(try LinkProtocol.decode(try LinkProtocol.encode(request)).get(), request, json)
+        }
+        // A reply's links and files may be left out.
+        let reply = try decode(LinkHostedReply.self, #"{"conversationID":"\#(b)","id":"\#(a)","body":"Tea?"}"#)
+        XCTAssertEqual(reply.attachmentIDs, [])
+        XCTAssertEqual(reply.links, [])
+
+        let bot = LinkHostedBot(id: a, conversations: [LinkGuestConversation(id: b, person: c, name: "Grace")])
+        for response in [LinkResponse.hostedBots([bot]), .hostedBot(bot)] {
+            XCTAssertEqual(try LinkProtocol.decodeResponse(LinkProtocol.encode(response)), response)
+        }
+        XCTAssertEqual(try decode(LinkResponse.self, #"{"hostedBots":{"_0":[{"id":"\#(a)","conversations":[{"id":"\#(b)","person":"\#(c)","name":"Grace"}]}]}}"#),
+                       .hostedBots([bot]))
+    }
+
     func testArchivingReadsAcrossAppVersions() throws {
         let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
         let bot = try decode(LinkBot.self,

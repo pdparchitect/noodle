@@ -12,6 +12,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     let agents: [AgentRecord]
     let preferredIDs: Set<UUID>
     let separatesPreferredAgents: Bool
+    var people: [String] = []
     let completion: ComposerNameCompletion
     let submit: () -> Void
     var focusSidebar: (() -> Void)? = nil
@@ -116,7 +117,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
             guard let view, view.window?.firstResponder === view.editor else { return }
             parent.completion.attach(to: view.editor, anchor: view, agents: parent.agents,
                 preferredIDs: parent.preferredIDs, separatesPreferredAgents: parent.separatesPreferredAgents,
-                showDescriptions: parent.showDescriptions)
+                people: parent.people, showDescriptions: parent.showDescriptions)
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {

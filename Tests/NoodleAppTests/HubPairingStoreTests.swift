@@ -168,6 +168,43 @@ final class HubHarnessChoiceTests: XCTestCase {
         XCTAssertTrue(store.runsHere(f.b.id))
     }
 
+    /// A bot here shared through a Hub talks with people there in conversations this Mac keeps for it,
+    /// which are theirs: none shows here, however the conversations are read again, and the bot still runs here.
+    func testConversationsOfPeopleABotIsSharedWithAreNotShownHere() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        let guest = try f.repository.createGuestConversation(with: f.a, guest: ConversationGuest(id: UUID(), name: "Grace"))
+        _ = try f.repository.sendUserMessage(conversationID: guest.id, body: "Hello")
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertFalse(store.conversations.contains { $0.id == guest.id })
+        XCTAssertNil(store.messagesByConversation[guest.id])
+        store.refreshTranscripts()
+        XCTAssertFalse(store.conversations.contains { $0.id == guest.id })
+        XCTAssertTrue(store.conversations.contains { $0.id == f.directA.id })
+        XCTAssertTrue(store.runsHere(f.a.id))
+    }
+
+    /// A bot here can be shared through every joined Hub whose people may share bots; a bot kept on a Hub cannot.
+    func testABotHereIsSharedThroughEveryHubThatLetsItsPeopleShare() throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        func join(_ name: String, canShareBots: Bool) throws {
+            let folder = f.repository.rootURL.appendingPathComponent("Hubs/\(UUID())", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let hub: [String: Any] = ["name": name, "key": LinkIdentity().publicKey.x963.base64EncodedString(),
+                                      "endpoints": [], "userName": "Ada"]
+            try JSONSerialization.data(withJSONObject: hub).write(to: folder.appendingPathComponent("hub.json"))
+            try JSONEncoder().encode(LinkStatus(hubName: name, userName: "Ada", planName: "", harnesses: [], endpoints: [],
+                                                canShareBots: canShareBots))
+                .write(to: folder.appendingPathComponent("status.json"))
+        }
+        try join("Mac mini", canShareBots: true)
+        try join("Studio", canShareBots: true)
+        try join("Laptop", canShareBots: false)
+        let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertEqual(Set(store.sharingHubs(forLocalAgent: f.a.id).compactMap(\.pairing.hub?.name)), ["Mac mini", "Studio"])
+    }
+
     func testThisMacsToolsAreNotGivenToAHubBot() throws {
         let f = try StoreFixture()
         defer { f.cleanUp() }

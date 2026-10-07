@@ -36,6 +36,12 @@ public struct AgentNameCompletion: Equatable {
             }
     }
 
+    /// People a bot is shared with, by name: each once, alphabetically.
+    public func matches(people: [String]) -> [String] {
+        Set(people).filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     public func replacement(name: String, in text: String) -> String {
         guard let replacementRange = Range(range, in: text) else { return name }
         return name + (replacementRange.upperBound == text.endIndex ? " " : "")

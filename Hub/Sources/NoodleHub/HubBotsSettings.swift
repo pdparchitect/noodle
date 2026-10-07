@@ -28,6 +28,8 @@ struct HubBotProfileButton: View {
     private var profile: some View {
         let snapshot = host.runtime.snapshot(for: agent.id)
         let owner = host.hub.access.owner(ofBot: agent.id).flatMap { id in host.hub.access.users.first { $0.id == id }?.name }
+        // A bot its owner's Mac hosts runs there; the Hub only keeps its conversations.
+        let device = host.hub.access.host(ofBot: agent.id).flatMap { id in host.hub.access.devices.first { $0.id == id }?.name }
         return VStack(spacing: 16) {
             HStack {
                 Spacer()
@@ -43,14 +45,15 @@ struct HubBotProfileButton: View {
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
                     .textSelection(.enabled)
-                Text([owner, agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.displayName]
+                Text([owner, device.map { "On \($0)" } ?? agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.displayName]
                         .compactMap { $0 }.joined(separator: " · "))
                     .foregroundStyle(.secondary)
             }
             if agent.archivedAt != nil {
                 ArchivedTag()
             } else {
-                SettingsStatusLabel(title: snapshot.phase.title, systemImage: "circle.fill", color: snapshot.phase.color)
+                let phase = host.hub.bots.phase(of: agent.id)
+                SettingsStatusLabel(title: phase.title, systemImage: "circle.fill", color: phase.color)
                     .help(snapshot.detail)
             }
             HStack(spacing: 8) {
@@ -82,7 +85,7 @@ struct HubBotProfileButton: View {
                 }
                 .help("New Session")
                 .accessibilityLabel("New Session")
-                .disabled(host.runtime.changingAccess.contains(agent.id))
+                .disabled(device != nil || host.runtime.changingAccess.contains(agent.id))
             }
             .buttonStyle(.plain)
         }

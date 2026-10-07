@@ -6,6 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Bots on this Mac can be shared with people on any Noodle Hub you joined, in Edit Bot under Sharing. They talk to the bot on the Hub in conversations of their own, while it runs here with its folders, tools and sign-ins. It shows online to them while this Mac is connected, and answers what they wrote meanwhile once it is back.
+- Typing @ also offers the people a conversation's bots are shared with on a Noodle Hub, below the bots, so you can ask a bot to write to them.
+
 ### Fixed
 
 - Restricted bots can no longer connect to other programs on the Mac through local sockets, such as ssh-agent, Docker or other apps' helpers. Internet access and the bot's own workspace are unchanged.

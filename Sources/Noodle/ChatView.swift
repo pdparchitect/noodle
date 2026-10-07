@@ -434,6 +434,7 @@ private struct ComposerDraftInput: View {
                 agents: store.activeAgents,
                 preferredIDs: Set(conversation.participantIDs),
                 separatesPreferredAgents: conversation.kind == .group,
+                people: store.sharedPeople(in: conversation),
                 completion: completion,
                 submit: { store.sendDraft(to: conversation.id) },
                 focusSidebar: focusSidebar,

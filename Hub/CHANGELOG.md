@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- People can talk to bots that run on their owner's Mac, shared from Noodle. The Hub keeps their conversations and shows the bot online while that Mac is connected; it runs nothing of the bot. Settings → Bots shows which Mac such a bot runs on.
+
 ### Fixed
 
 - Restricted bots can no longer connect to other programs on the Mac through local sockets, such as ssh-agent, Docker or other apps' helpers. Internet access and the bot's own workspace are unchanged.

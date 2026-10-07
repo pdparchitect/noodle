@@ -198,6 +198,11 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   than yours. Its noodlets run on their devices too, with the saved data and
   secrets they read. Stopping sharing, or archiving the bot, cuts them off at
   once.
+- **A bot shared from your Mac works on your Mac.** People you share a bot on
+  this Mac with through a Hub ask it to use whatever it reaches here: its
+  folders, tools, sign-ins, computers and browsers, unrestricted if you made it
+  so. The Hub only keeps their conversations. Share such a bot only with people
+  you would let use all of that.
 - **Everyone on a Hub sees everyone's names.** So that bots can be shared, any
   user can list the names of the Hub's other users.
 - **Hub bots can reach your network.** Like any bot, a Hub bot can connect to

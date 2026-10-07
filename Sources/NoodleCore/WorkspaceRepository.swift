@@ -145,12 +145,14 @@ public struct WorkspaceRepository: Sendable {
         avatarColorIndex: Int? = nil,
         avatarImageData: Data? = nil,
         backstory: String = "",
+        id: UUID = UUID(),
         now: Date = Date()
     ) throws -> CreatedAgentWorkspace {
         let name = try ConversationName.validated(rawName)
         try prepare()
 
         let agent = AgentRecord(
+            id: id,
             displayName: name,
             createdAt: now,
             updatedAt: now,
@@ -781,9 +783,11 @@ public struct WorkspaceRepository: Sendable {
         return folders.isEmpty ? nil : folders
     }
 
-    /// Another conversation with a bot, for someone its owner shares it with on a Noodle Hub.
-    public func createGuestConversation(with agent: AgentRecord, guest: ConversationGuest, now: Date = Date()) throws -> BotConversation {
-        let conversation = BotConversation(displayName: agent.displayName, kind: .direct, participantIDs: [agent.id],
+    /// Another conversation with a bot, for someone its owner shares it with on a Noodle Hub. `id` lets a
+    /// Mac hosting the bot keep the Hub's conversation under the Hub's ID.
+    public func createGuestConversation(with agent: AgentRecord, guest: ConversationGuest, id: UUID = UUID(),
+                                        now: Date = Date()) throws -> BotConversation {
+        let conversation = BotConversation(id: id, displayName: agent.displayName, kind: .direct, participantIDs: [agent.id],
                                            createdAt: now, updatedAt: now, guest: guest)
         try createConversationFiles(conversation)
         return conversation
@@ -1346,6 +1350,7 @@ public struct WorkspaceRepository: Sendable {
         conversationID: UUID,
         body: String,
         attachmentIDs: [UUID] = [],
+        id: UUID = UUID(),
         now: Date = Date()
     ) throws -> ChatMessage {
         let name = try validatedName(body)
@@ -1364,6 +1369,7 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.invalidAttachment
         }
         let message = ChatMessage(
+            id: id,
             conversationID: conversationID,
             author: .agent(agentID),
             body: name,

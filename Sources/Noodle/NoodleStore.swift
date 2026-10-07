@@ -439,7 +439,7 @@ final class NoodleStore {
                 browsers.start(agents: agents)
                 applets.start(agents: agents)
             }
-            conversations = try repository.loadConversations()
+            conversations = try repository.loadConversations().filter(\.isShownHere)
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
             })
@@ -610,6 +610,12 @@ final class NoodleStore {
                 mirror.onChange = { [weak self] in self?.hubBotsChanged() }
                 mirror.onRead = { [weak self] in self?.readElsewhere($0, upTo: $1) }
                 mirror.onBackgroundChanged = { [weak self] in self?.reloadBackground(of: $0) }
+                // People on the Hub talk to this Mac's own bots there, which run here.
+                mirror.hosting.onMessages = { [weak self] ids in
+                    guard let self else { return }
+                    self.runtime.notify(self.agents.filter { ids.contains($0.id) }, repository: self.repository)
+                }
+                mirror.hosting.phase = { [weak self] in self?.runtime.snapshot(for: $0).phase }
                 mirror.onSignInPage = { [weak self] connection, url in
                     guard let self else { throw ToolProviderError("Noodle is closing.") }
                     return try await self.mcp.authorizeInBrowser(url, callbackURL: MCPController.redirectURI(for: connection.draft.endpoint))
@@ -645,6 +651,20 @@ final class NoodleStore {
 
     /// Whether someone shared this bot with this Mac's user on a Noodle Hub, who then only talks with it.
     func isShared(_ agentID: UUID) -> Bool { hubMirror(forAgent: agentID)?.owner(ofAgent: agentID) != nil }
+
+    /// The people a conversation's bots are shared with on Noodle Hubs, whom the @ menu offers by name.
+    func sharedPeople(in conversation: BotConversation) -> [String] {
+        conversation.participantIDs.flatMap { id in
+            (hubMirror(forAgent: id).map { $0.owner(ofAgent: id) == nil ? $0.sharedNames(agent: id) : [] } ?? [])
+                + hubMirrors.flatMap { $0.hosting.sharedNames(agent: id) }
+        }
+    }
+
+    /// The joined Hubs a bot on this Mac can be shared through: each it is shared on, and each whose people may share bots.
+    func sharingHubs(forLocalAgent id: AgentRecord.ID) -> [HubMirror] {
+        guard runsHere(id) else { return [] }
+        return hubMirrors.filter { $0.hosting.hostedAgentIDs.contains(id) || $0.pairing.status?.canShareBots == true }
+    }
 
     /// Whether the bot runs on this Mac, so its activity and workspace are here to show.
     func runsHere(_ agentID: UUID) -> Bool { !runtime.remoteAgentIDs.contains(agentID) }
@@ -828,6 +848,7 @@ final class NoodleStore {
         folders: [AgentFolder]? = nil,
         harnessProfile: UUID?? = nil,
         sharedWith: Set<UUID>? = nil,
+        sharedOnHubs: [URL: Set<UUID>]? = nil,
         voice: String?? = nil
     ) -> Bool {
         if let mirror = hubMirror(forAgent: agent.id) {
@@ -921,6 +942,14 @@ final class NoodleStore {
             resetThread: previousBackstory != backstory.trimmingCharacters(in: .whitespacesAndNewlines))
         agentBeingEdited = nil
         refreshAppShortcuts()
+        // People on each Hub, by the folder this Mac keeps it in, talk to it there while it runs here.
+        for hub in sharingHubs(forLocalAgent: updated.id) {
+            guard let people = sharedOnHubs?[hub.pairing.directory], people != Set(hub.hosting.sharedWith(agent: updated.id)) else { continue }
+            Task {
+                do { try await hub.hosting.share(updated, with: Array(people)) }
+                catch { errorMessage = error.localizedDescription }
+            }
+        }
         return true
     }
 
@@ -1702,7 +1731,7 @@ final class NoodleStore {
         currentAttachments: [UUID: [ConversationAttachment]],
         currentRevisions: [UUID: TranscriptRevision]
     ) throws -> TranscriptSnapshot {
-        let conversations = try repository.loadConversations()
+        let conversations = try repository.loadConversations().filter(\.isShownHere)
         var messages: [UUID: [ChatMessage]] = [:]
         var attachments: [UUID: [ConversationAttachment]] = [:]
         var revisions: [UUID: TranscriptRevision] = [:]
@@ -2094,4 +2123,9 @@ final class NoodleStore {
         hubMirrorTasks.removeAll()
         runtime.stopAll()
     }
+}
+
+extension BotConversation {
+    /// A conversation someone this Mac's bot is shared with keeps with it through a Hub is theirs; the bot reads it here.
+    var isShownHere: Bool { guest == nil }
 }

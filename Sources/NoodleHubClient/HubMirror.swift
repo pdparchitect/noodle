@@ -73,11 +73,15 @@ import Observation
 
 
     public let pairing: HubPairing
+    /// This Mac's own bots that people on the Hub talk to.
+    public let hosting: HubHosting
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let url: URL
     private var entries: [Entry] = []
     @ObservationIgnored private let groupsURL: URL
     private var groups: [GroupEntry] = []
+    /// The names of the other people on the Hub, as last listed, for the bots shared with them.
+    private var peopleNames: [UUID: String] = [:]
     /// Local messages the Hub already has, so they are not sent again.
     @ObservationIgnored private var acknowledged: Set<UUID> = []
     /// Conversations on the Hub whose background is being sent from here, which the Hub's answer settles.
@@ -86,6 +90,7 @@ import Observation
     public init(pairing: HubPairing, repository: WorkspaceRepository, directory: URL) {
         self.pairing = pairing
         self.repository = repository
+        hosting = HubHosting(pairing: pairing, repository: repository, directory: directory)
         url = directory.appendingPathComponent("mirror.json")
         groupsURL = directory.appendingPathComponent("groups.json")
         entries = (try? JSONDecoder().decode([Entry].self, from: Data(contentsOf: url))) ?? []
@@ -161,6 +166,7 @@ import Observation
         for entry in entries { try? forget(entry) }
         try? FileManager.default.removeItem(at: url)
         try? FileManager.default.removeItem(at: groupsURL)
+        hosting.forgetLocalCopies()
         onChange?()
     }
 
@@ -194,11 +200,21 @@ import Observation
             throw LinkError("The Hub sent an unexpected answer.")
         }
         try apply(bot, to: entry)
+        await listPeople()
         onChange?()
+    }
+
+    /// Learns the names of the people the bots here are shared with. A Hub that does not answer keeps the last names.
+    private func listPeople() async {
+        guard entries.contains(where: { !($0.sharedWith ?? []).isEmpty }), let people = try? await pairing.people() else { return }
+        peopleNames = Dictionary(people.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Whom a bot of this Mac's user is shared with on the Hub.
     public func sharedWith(agent id: UUID) -> [UUID] { entries.first { $0.agent == id }?.sharedWith ?? [] }
+
+    /// The names of the people a bot of this Mac's user is shared with on the Hub.
+    public func sharedNames(agent id: UUID) -> [String] { sharedWith(agent: id).compactMap { peopleNames[$0] } }
 
     /// Whose a bot someone shared with this Mac's user is; nil for their own. They only talk with it.
     public func owner(ofAgent id: UUID) -> String? { entries.first { $0.agent == id }?.owner }
@@ -470,14 +486,19 @@ import Observation
 
     /// Keeps a stream open to the Hub and follows what it pushes, reconnecting until cancelled.
     public func run() async {
+        // This Mac's own bots take part through the same stream.
+        let hosted = Task { await hosting.run() }
+        defer { hosted.cancel() }
         var delay: Duration = .seconds(1)
         while !Task.isCancelled {
             do {
                 let events = try await pairing.subscribe()
                 isConnected = true
+                hosting.isConnected = true
                 delay = .seconds(1)
                 await sync()
                 for try await event in events {
+                    hosting.heard(event)
                     switch event {
                     case .botsChanged:
                         try await syncBots()
@@ -520,10 +541,12 @@ import Observation
                 self.error = error.localizedDescription
             }
             isConnected = false
+            hosting.isConnected = false
             try? await Task.sleep(for: delay)
             delay = min(delay * 2, .seconds(60))
         }
         isConnected = false
+        hosting.isConnected = false
     }
 
     private func syncBots() async throws {
@@ -544,6 +567,7 @@ import Observation
             changed = true
         }
         for bot in bots { record(bot.phase, ofBot: bot.id) }
+        await listPeople()
         if changed { onChange?() }
         for bot in bots { if let background = bot.background { try? await copyBackground(background, of: bot.conversationID) } }
         for bot in bots {

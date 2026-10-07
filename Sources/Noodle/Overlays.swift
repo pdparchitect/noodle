@@ -296,6 +296,8 @@ struct EditBotSheet: View {
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var sharedWith: Set<UUID> = []
+    /// Whom a bot here is shared with on each Hub, by the folder this Mac keeps the Hub in.
+    @State private var sharedOnHubs: [URL: Set<UUID>] = [:]
     @State private var confirmingDeletion = false
     @State private var selectedTab = BotEditorTab.general
     @State private var backgroundDraft: BackgroundSelection?
@@ -374,6 +376,12 @@ struct EditBotSheet: View {
                     if let sharingHub {
                         BotSharingPicker(mirror: sharingHub, bot: name, selectedIDs: $sharedWith)
                     }
+                    ForEach(localSharingHubs, id: \.pairing.directory) { hub in
+                        BotSharingPicker(mirror: hub, bot: name, selectedIDs: Binding(
+                            get: { sharedOnHubs[hub.pairing.directory] ?? [] },
+                            set: { sharedOnHubs[hub.pairing.directory] = $0 }),
+                            title: localSharingHubs.count > 1 ? "Sharing on \(hub.pairing.hub?.name ?? "Noodle Hub")" : "Sharing")
+                    }
                     Divider()
                     DestructiveActionButton(title: "Delete Bot") {
                         confirmingDeletion = true
@@ -441,6 +449,9 @@ struct EditBotSheet: View {
                 browserIDs = mirror.browserIDs(forAgent: agent.id)
                 sharedWith = Set(mirror.sharedWith(agent: agent.id))
             }
+            for hub in store.sharingHubs(forLocalAgent: agent.id) {
+                sharedOnHubs[hub.pairing.directory] = Set(hub.hosting.sharedWith(agent: agent.id))
+            }
             if selectedHarnessIdentifier.isEmpty {
                 selectedHarnessIdentifier = store.runtime.availableInstallations.first?.provider.rawValue ?? ""
             }
@@ -485,6 +496,11 @@ struct EditBotSheet: View {
         }
     }
 
+    /// The Hubs a bot that runs here is shared through, each for as long as this Mac is connected to it.
+    private var localSharingHubs: [HubMirror] {
+        HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil ? store.sharingHubs(forLocalAgent: agent.id) : []
+    }
+
     private var canSave: Bool {
         ConversationName.error(for: name) == nil && (HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil ||
             store.runtime.availableInstallations.contains {
@@ -519,6 +535,7 @@ struct EditBotSheet: View {
                 computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, folders: folders,
                 harnessProfile: .some(selectedProfileID),
                 sharedWith: sharingHub == nil ? nil : sharedWith,
+                sharedOnHubs: localSharingHubs.isEmpty ? nil : sharedOnHubs,
                 voice: .some(selectedVoice.nilIfEmpty)
             )
         }) {
@@ -533,12 +550,13 @@ struct BotSharingPicker: View {
     let mirror: HubMirror
     let bot: String
     @Binding var selectedIDs: Set<UUID>
+    var title = "Sharing"
     @State private var people: [LinkPerson]?
     @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Sharing")
+            Text(title)
                 .font(.caption.weight(.semibold))
             if let people, people.isEmpty {
                 Text("Nobody else is on this Hub").font(.caption).foregroundStyle(.secondary)

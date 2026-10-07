@@ -139,7 +139,12 @@ import XCTest
         XCTAssertEqual(people, [LinkPerson(id: grace.id, name: "Grace")])
         try await mirror.share(localAgentID: agent.id, with: [grace.id])
         XCTAssertEqual(mirror.sharedWith(agent: agent.id), [grace.id])
+        XCTAssertEqual(mirror.sharedNames(agent: agent.id), ["Grace"])
         XCTAssertNil(mirror.owner(ofAgent: agent.id))
+        // Known by name after a relaunch too, once the Hub is followed again.
+        let relaunched = f.mirror()
+        await relaunched.sync()
+        XCTAssertEqual(relaunched.sharedNames(agent: agent.id), ["Grace"])
 
         let root = f.folder.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let graceFolder = root.appendingPathComponent("Grace/Hubs/one")

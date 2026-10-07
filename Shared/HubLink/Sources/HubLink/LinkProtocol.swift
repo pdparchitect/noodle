@@ -227,6 +227,84 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case uploadBackground(LinkBackgroundPiece)
     /// One piece of a conversation's background file. Answered with `chunk`.
     case backgroundMedia(LinkBackgroundFetch)
+    /// For a bot that runs on this device, which the people its owner shares it with talk to through the Hub.
+    case host(LinkHostRequest)
+}
+
+/// What a device asks of the Hub for the bots it runs itself. The Hub keeps their conversations with
+/// the people they are shared with, and only the device that published a bot may ask about it.
+public enum LinkHostRequest: Codable, Equatable, Sendable {
+    /// Keeps a bot of this device on the Hub, or changes it: its name, description and picture, nothing
+    /// of how it runs. Its ID is the device's own for it. Answered with `hostedBot`; share it with `shareBot`,
+    /// archive it with `archive` and take it off the Hub with `deleteBot`.
+    case publish(id: UUID, LinkBotDraft)
+    /// The bots this device hosts, with their conversations. Answered with `hostedBots`.
+    case bots
+    /// Part of one of their conversations, as `messagePage` reads one.
+    case messagePage(LinkMessagePage)
+    /// One piece of a file someone sent in one of their conversations. Answered with `chunk`.
+    case download(conversationID: UUID, attachmentID: UUID, offset: Int)
+    /// One piece of a file for the bot's next reply in one of their conversations. Answered with `done`.
+    case upload(conversationID: UUID, attachment: LinkAttachment, offset: Int, data: Data)
+    /// A reply from the bot, kept once however often it is sent. Answered with `message`.
+    case reply(LinkHostedReply)
+    /// The person's messages the bot has taken. Answered with `done`.
+    case delivered(conversationID: UUID, messageIDs: [UUID])
+    /// What the bot is doing, shown to the people it is shared with while this device is connected. Answered with `done`.
+    case phase(botID: UUID, phase: LinkBotPhase)
+}
+
+/// A bot a device hosts, with its conversation with each person it is shared with.
+public struct LinkHostedBot: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var conversations: [LinkGuestConversation]
+
+    public init(id: UUID, conversations: [LinkGuestConversation]) {
+        self.id = id
+        self.conversations = conversations
+    }
+}
+
+/// Someone a hosted bot is shared with, and their conversation with it.
+public struct LinkGuestConversation: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    public var person: UUID
+    public var name: String
+
+    public init(id: UUID, person: UUID, name: String) {
+        self.id = id
+        self.person = person
+        self.name = name
+    }
+}
+
+/// A hosted bot's reply: its files uploaded first, its links sent along as their addresses.
+public struct LinkHostedReply: Codable, Equatable, Sendable {
+    public var conversationID: UUID
+    public var id: UUID
+    public var body: String
+    public var attachmentIDs: [UUID]
+    /// Links to web pages; links that open live on the device are not sent.
+    public var links: [LinkAttachment]
+
+    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [], links: [LinkAttachment] = []) {
+        self.conversationID = conversationID
+        self.id = id
+        self.body = body
+        self.attachmentIDs = attachmentIDs
+        self.links = links
+    }
+
+    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, links }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        conversationID = try c.decode(UUID.self, forKey: .conversationID)
+        id = try c.decode(UUID.self, forKey: .id)
+        body = try c.decode(.body, or: "")
+        attachmentIDs = try c.decode(.attachmentIDs, or: [])
+        links = try c.decode(.links, or: [])
+    }
 }
 
 /// A conversation's background, kept on the Hub so every device shows the same one.
@@ -491,6 +569,8 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     /// What a noodlet's call answered, as its app encodes it.
     case noodletAnswer(Data)
     case background(LinkBackground)
+    case hostedBots([LinkHostedBot])
+    case hostedBot(LinkHostedBot)
     case done
     case failure(String)
 }

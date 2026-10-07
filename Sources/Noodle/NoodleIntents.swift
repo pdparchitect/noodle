@@ -54,7 +54,7 @@ struct NoodleConversationQuery: EntityStringQuery {
         try repository.prepare()
         let archivedAgentIDs = Set(try repository.loadAgents().filter { $0.archivedAt != nil }.map(\.id))
         return try repository.loadConversations()
-            .filter { $0.archivedAt == nil && !($0.kind == .direct && $0.participantIDs.allSatisfy(archivedAgentIDs.contains)) }
+            .filter { $0.isShownHere && $0.archivedAt == nil && !($0.kind == .direct && $0.participantIDs.allSatisfy(archivedAgentIDs.contains)) }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 }

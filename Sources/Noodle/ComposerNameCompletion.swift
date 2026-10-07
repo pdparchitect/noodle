@@ -12,14 +12,17 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
     private var agents: [AgentRecord] = []
     private var preferredIDs: Set<UUID> = []
     private var separatesPreferredAgents = false
+    private var people: [String] = []
     private var showDescriptions = true
     private var dismissedRequest: AgentNameCompletion?
     private var observers: [NSObjectProtocol] = []
     private var returnKeyMonitor: Any?
     private var presentationScheduled = false
 
-    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, separatesPreferredAgents: Bool = false, showDescriptions: Bool) {
+    func attach(to editor: NSTextView, anchor: NSView, agents: [AgentRecord], preferredIDs: Set<UUID>, separatesPreferredAgents: Bool = false,
+                people: [String] = [], showDescriptions: Bool) {
         self.agents = agents
+        self.people = people
         self.preferredIDs = preferredIDs
         self.separatesPreferredAgents = separatesPreferredAgents
         self.showDescriptions = showDescriptions
@@ -87,16 +90,28 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
             return
         }
         guard request != dismissedRequest else { return }
-        let candidates = request.matches(agents, preferredIDs: preferredIDs)
-        guard !candidates.isEmpty else { return }
+        let entries = Self.entries(for: request, agents: agents, preferredIDs: preferredIDs,
+                                   separatesPreferredAgents: separatesPreferredAgents, people: people)
+        guard !entries.isEmpty else { return }
 
         let picker = NSMenu(title: "Bot names")
         picker.autoenablesItems = false
         picker.minimumWidth = showDescriptions ? 360 : 220
-        let separatorIndex = separatesPreferredAgents ? candidates.firstIndex { !preferredIDs.contains($0.id) } : nil
-        for (index, agent) in candidates.enumerated() {
-            if index > 0, index == separatorIndex {
+        for entry in entries {
+            let agent: AgentRecord
+            switch entry {
+            case .separator:
                 picker.addItem(.separator())
+                continue
+            case .person(let name):
+                let item = NSMenuItem(title: name, action: #selector(selectName(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = name
+                item.image = NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
+                picker.addItem(item)
+                continue
+            case .bot(let bot):
+                agent = bot
             }
             let item = NSMenuItem(title: Self.menuTitle(for: agent, showDescriptions: showDescriptions),
                                   action: #selector(selectName(_:)), keyEquivalent: "")
@@ -130,6 +145,25 @@ final class ComposerNameCompletion: NSObject, ObservableObject {
         let localPosition = anchor.convert(window.convertPoint(fromScreen: position), from: nil)
         picker.popUp(positioning: nil, at: localPosition, in: anchor)
         if menu === picker { menu = nil }
+    }
+
+    enum MenuEntry: Equatable {
+        case bot(AgentRecord), separator, person(String)
+    }
+
+    static func entries(for request: AgentNameCompletion, agents: [AgentRecord], preferredIDs: Set<UUID>,
+                        separatesPreferredAgents: Bool, people: [String]) -> [MenuEntry] {
+        let candidates = request.matches(agents, preferredIDs: preferredIDs)
+        let separatorIndex = separatesPreferredAgents ? candidates.firstIndex { !preferredIDs.contains($0.id) } : nil
+        var entries: [MenuEntry] = []
+        for (index, agent) in candidates.enumerated() {
+            if index > 0, index == separatorIndex { entries.append(.separator) }
+            entries.append(.bot(agent))
+        }
+        // People the conversation's bots are shared with on a Hub, whom a bot can write to.
+        let named = request.matches(people: people)
+        if !entries.isEmpty, !named.isEmpty { entries.append(.separator) }
+        return entries + named.map(MenuEntry.person)
     }
 
     static func menuTitle(for agent: AgentRecord, showDescriptions: Bool) -> String {

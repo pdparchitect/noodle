@@ -17,9 +17,11 @@ Use the conversation to divide work, share findings, and review results together
 Each agent's public description helps others understand its role; its backstory
 stays private.
 
-Type `@` to insert an agent's name. Click its avatar to see its profile or open a
-direct conversation. Right-click a group in the sidebar to change its members or
-description. Removing a member keeps the group's history.
+Type `@` to insert an agent's name. Below the agents, the menu lists the people the
+conversation's bots are shared with on a Noodle Hub, so you can ask a bot to write to one
+of them. Click an agent's avatar to see its profile or open a direct conversation.
+Right-click a group in the sidebar to change its members or description. Removing a
+member keeps the group's history.
 
 ## Keep conversations in separate windows
 
@@ -170,6 +172,20 @@ Pins belong to the space you pin in. Pins in a Hub's space are kept on the Hub, 
 are the same, in the same order, in Noodle on your other Macs and on your iPhone. Pins in
 All stay on this Mac, and when your devices use this Mac as a Hub, they share these pins
 in its space.
+
+## Share a bot on this Mac through a Hub
+
+A bot that runs on this Mac can be shared with people on any Noodle Hub you joined. In
+**Edit Bot**, pick them under **Sharing**, with a section for each Hub, and save. They find the bot on the Hub with
+their other bots and talk to it there, each in a conversation of their own, which you do
+not see. The bot runs here as always, with its folders, tools and sign-ins, and knows each
+person by name.
+
+They see it online while this Mac is awake and connected to the Hub. What they write
+meanwhile waits on the Hub, and the bot reads it and answers once this Mac is back. Links
+to the bot's computers, browsers and noodlets stay on this Mac, and its reply says so;
+files and web links reach them. Archiving the bot closes it to them until you bring it back; sharing it with nobody,
+or deleting it, removes it and their conversations from the Hub.
 
 ## Manage a Noodle Hub's users
 

@@ -36,4 +36,11 @@ final class AgentNameCompletionTests: XCTestCase {
         XCTAssertEqual(request("@")?.matches([mara, angy], preferredIDs: []).count, 2)
         XCTAssertTrue(try XCTUnwrap(request("@zzzz")).matches([mara], preferredIDs: []).isEmpty)
     }
+
+    /// People a bot is shared with are offered by name too, each once, alphabetically.
+    func testFiltersPeoplesNames() throws {
+        XCTAssertEqual(try XCTUnwrap(request("@gr")).matches(people: ["Greg", "Bea", "Grace", "Grace"]), ["Grace", "Greg"])
+        XCTAssertEqual(try XCTUnwrap(request("@")).matches(people: ["Bea", "Ada"]), ["Ada", "Bea"])
+        XCTAssertEqual(try XCTUnwrap(request("@zz")).matches(people: ["Bea"]), [])
+    }
 }

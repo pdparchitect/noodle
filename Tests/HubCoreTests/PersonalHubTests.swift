@@ -68,6 +68,38 @@ import XCTest
         MCPService(credentials: NoPersonalCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
     }
 
+    /// This Mac is its owner's alone, so nothing is hosted on it, and Noodle's runtime is left alone.
+    func testNothingIsHostedOnThisMac() async throws {
+        let (runtime, _) = try fakeRuntime()
+        let (f, _) = try await fixture(bots: [], runtime: runtime)
+        let id = UUID()
+        runtime.remoteAgentIDs = [id]
+        do {
+            _ = try await f.device.request(.host(.publish(id: UUID(), LinkBotDraft(name: "Alfred", provider: ""))))
+            XCTFail("Hosted a bot on This Mac as a Hub")
+        } catch {}
+        guard case .hostedBots(let hosted) = try await f.device.request(.host(.bots)) else { return XCTFail("no answer") }
+        XCTAssertEqual(hosted, [])
+        XCTAssertEqual(runtime.remoteAgentIDs, [id])
+        XCTAssertTrue(try f.repository.loadAgents().isEmpty)
+    }
+
+    /// A bot on the Mac shared through another Hub keeps its copies of those people's conversations
+    /// beside Noodle's own; the owner's phone neither sees them nor can drop them.
+    func testThePhoneLeavesConversationsKeptForAnotherHubAlone() async throws {
+        let (f, made) = try await fixture(bots: ["Kai"])
+        let guest = try f.repository.createGuestConversation(with: made[0], guest: ConversationGuest(id: UUID(), name: "Grace"))
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(bots.first?.sharedWith, [])
+        XCTAssertNotEqual(bots.first?.conversationID, guest.id)
+        _ = try? await f.device.request(.shareBot(id: made[0].id, people: []))
+        XCTAssertTrue(try f.repository.loadConversations().contains { $0.id == guest.id })
+        do {
+            _ = try await f.device.request(.messagePage(LinkMessagePage(conversationID: guest.id, after: 0)))
+            XCTFail("The phone read someone else's conversation")
+        } catch {}
+    }
+
     func testAPhoneSeesTheBotsAlreadyOnTheMacAndTalksToThem() async throws {
         let (f, made) = try await fixture(bots: ["Kai", "Eli"])
         guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }

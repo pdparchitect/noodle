@@ -139,6 +139,11 @@ import os
             self?.schedulePushes(for: event, of: user)
         }
         bots?.onClosed = { [weak self] conversation, user in self?.close(conversation, for: user) }
+        bots?.onHostChange = { [weak self] device, event in self?.push(event, toDevice: device) }
+        bots?.isHostConnected = { [weak self] device in
+            guard let self, let device = self.access.devices.first(where: { $0.id == device }) else { return false }
+            return self.isFollowing(device)
+        }
         connections?.onSignInEnded = { [weak self] user in self?.push(.connectionsChanged, to: user) }
         updateGate()
         watchDevices()
@@ -389,6 +394,7 @@ import os
         withObservationTracking { _ = access.devices } onChange: { [weak self] in
             Task { @MainActor in
                 self?.updateGate()
+                self?.bots?.removeBotsOfUnpairedHosts()
                 self?.watchDevices()
             }
         }
@@ -404,8 +410,13 @@ import os
     private func register(_ stream: LinkStream) {
         let id = ObjectIdentifier(stream)
         streams[id] = stream
+        // The bots a device hosts are online while it follows the Hub.
+        bots?.hostsChanged()
         stream.onClose { [weak self] in
-            Task { @MainActor in self?.streams[id] = nil }
+            Task { @MainActor in
+                self?.streams[id] = nil
+                self?.bots?.hostsChanged()
+            }
         }
     }
 
@@ -413,6 +424,12 @@ import os
         guard let stream = streams.values.first(where: { $0.peer == key && !$0.isClosed }) else { return false }
         stream.send(LinkProtocol.encode(event))
         return true
+    }
+
+    private func push(_ event: LinkEvent, toDevice id: UUID) {
+        guard let key = access.devices.first(where: { $0.id == id })?.key else { return }
+        let payload = LinkProtocol.encode(event)
+        for stream in streams.values where stream.peer == key && !stream.isClosed { stream.send(payload) }
     }
 
     private func push(_ event: LinkEvent, to user: UUID) {
@@ -760,6 +777,36 @@ import os
             return .chunk(data: data, total: total)
         case .noodletCall(let piece):
             return try await hubNoodlets().call(piece, for: try user(key).id).map(LinkResponse.noodletAnswer) ?? .done
+        case .host(let request):
+            return try host(request, from: key)
+        }
+    }
+
+    /// A request from a device about the bots it runs itself, answered for that device alone.
+    private func host(_ request: LinkHostRequest, from key: LinkPublicKey) throws -> LinkResponse {
+        let device = try paired(key), bots = try hubBots()
+        switch request {
+        case .publish(let id, let draft):
+            return .hostedBot(try bots.publish(id, draft, for: try user(key), on: device))
+        case .bots:
+            return .hostedBots(try bots.hostedBots(on: device))
+        case .messagePage(let page):
+            return .messages(try bots.hostedPage(page, on: device))
+        case .download(let conversationID, let attachmentID, let offset):
+            let (data, total) = try bots.hostedChunk(of: attachmentID, in: conversationID, at: offset, on: device)
+            return .chunk(data: data, total: total)
+        case .upload(let conversationID, let attachment, let offset, let data):
+            try checkUploadSize(attachment.byteCount)
+            try bots.hostedReceive(data, at: offset, of: attachment, in: conversationID, on: device)
+            return .done
+        case .reply(let reply):
+            return .message(try bots.hostedReply(reply, on: device))
+        case .delivered(let conversationID, let messageIDs):
+            try bots.hostedDelivered(messageIDs, in: conversationID, on: device)
+            return .done
+        case .phase(let botID, let phase):
+            try bots.setHostedPhase(phase, of: botID, on: device)
+            return .done
         }
     }
 

@@ -229,6 +229,23 @@ import Observation
         try await download(to: destination) { .download(conversationID: conversationID, attachmentID: attachment.id, offset: $0) }
     }
 
+    /// Sends a file for the reply of a bot this device hosts, piece by piece.
+    public func upload(_ file: URL, as attachment: LinkAttachment, toHosted conversationID: UUID) async throws {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var offset = 0
+        repeat {
+            let data = try handle.read(upToCount: LinkProtocol.chunkSize) ?? Data()
+            _ = try await request(.host(.upload(conversationID: conversationID, attachment: attachment, offset: offset, data: data)))
+            offset += data.count
+        } while offset < attachment.byteCount
+    }
+
+    /// Saves a file someone sent a bot this device hosts to `destination`.
+    public func download(_ attachment: LinkAttachment, fromHosted conversationID: UUID, to destination: URL) async throws {
+        try await download(to: destination) { .host(.download(conversationID: conversationID, attachmentID: attachment.id, offset: $0)) }
+    }
+
     /// Sends a picture or video to be a conversation's background on the Hub, piece by piece.
     public func uploadBackground(_ file: URL, to conversationID: UUID) async throws -> LinkBackground {
         let handle = try FileHandle(forReadingFrom: file)

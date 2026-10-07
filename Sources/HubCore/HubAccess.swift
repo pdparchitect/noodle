@@ -109,6 +109,8 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     public private(set) var devices: [HubDevice] = []
     /// Which user each bot on the Hub belongs to.
     public private(set) var botOwners: [UUID: UUID] = [:]
+    /// The device each bot that runs on its owner's device, rather than here, runs on.
+    public private(set) var botHosts: [UUID: UUID] = [:]
     /// Which user each tool connection on the Hub belongs to.
     public private(set) var connectionOwners: [UUID: UUID] = [:]
     /// Which user each computer the Hub lends belongs to.
@@ -128,6 +130,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         var plans: [HubPlan]
         var devices: [HubDevice]?
         var botOwners: [UUID: UUID]?
+        var botHosts: [UUID: UUID]?
         var connectionOwners: [UUID: UUID]?
         var computerOwners: [UUID: UUID]?
         var browserOwners: [UUID: UUID]?
@@ -145,6 +148,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
             plans = stored.plans
             devices = stored.devices ?? []
             botOwners = stored.botOwners ?? [:]
+            botHosts = stored.botHosts ?? [:]
             connectionOwners = stored.connectionOwners ?? [:]
             computerOwners = stored.computerOwners ?? [:]
             browserOwners = stored.browserOwners ?? [:]
@@ -285,6 +289,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         users.removeAll { $0.id == user.id }
         devices.removeAll { $0.user == user.id }
         botOwners = botOwners.filter { $0.value != user.id }
+        botHosts = botHosts.filter { botOwners[$0.key] != nil }
         connectionOwners = connectionOwners.filter { $0.value != user.id }
         computerOwners = computerOwners.filter { $0.value != user.id }
         browserOwners = browserOwners.filter { $0.value != user.id }
@@ -301,6 +306,14 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
         botOwners[bot] = user?.id
         save()
         onOwnersChange?()
+    }
+
+    /// The device a bot runs on, when it runs on one of its owner's devices rather than here.
+    public func host(ofBot bot: UUID) -> UUID? { botHosts[bot] }
+
+    public func setHost(_ device: HubDevice?, ofBot bot: UUID) {
+        botHosts[bot] = device?.id
+        save()
     }
 
     public func owner(ofConnection connection: UUID) -> UUID? { personalOwner ?? connectionOwners[connection] }
@@ -437,7 +450,7 @@ public struct HubDevice: Identifiable, Codable, Hashable, Sendable {
     private func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners,
+        guard let data = try? encoder.encode(Stored(users: users, plans: plans, devices: devices, botOwners: botOwners, botHosts: botHosts,
                                                          connectionOwners: connectionOwners, computerOwners: computerOwners,
                                                          browserOwners: browserOwners)) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
