@@ -54,4 +54,42 @@ final class StorageTests: XCTestCase {
         await measuring.value
         XCTAssertEqual(usage.sizes, ["a": 3, "b": 5])
     }
+
+    /// Website data counts with the data folder; WebKit's own salts and empty folders do not.
+    @MainActor func testUsageCountsWebsiteDataAndSkipsNoodletsWithNothingSaved() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "StorageTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        func write(_ path: String, _ count: Int) throws {
+            let file = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(count: count).write(to: file)
+        }
+        let (web, salted, tested) = (UUID(), UUID(), UUID())
+        defaults.set(web.uuidString, forKey: "store.web.user")
+        defaults.set(tested.uuidString, forKey: "store.web.test")
+        defaults.set(salted.uuidString, forKey: "store.salted.user")
+        try write("Data/files/notes.txt", 3)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Data/empty/User"), withIntermediateDirectories: true)
+        let stores = "WebKit/WebsiteDataStore/"
+        try write(stores + "\(web.uuidString.lowercased())/Origins/salt", 8)
+        try write(stores + "\(web.uuidString.lowercased())/Origins/a/a/LocalStorage/localstorage.sqlite3", 7)
+        try write(stores + "\(tested.uuidString.lowercased())/Cookies/Cookies.binarycookies", 5)
+        try write(stores + "\(tested.uuidString.lowercased())/ResourceLoadStatistics/observations.db", 9)
+        try write(stores + "\(salted.uuidString.lowercased())/Origins/salt", 8)
+
+        let usage = AppletStorageUsage()
+        await usage.refresh(
+            root: root, defaults: defaults, websiteData: root.appendingPathComponent(stores)).value
+        XCTAssertEqual(usage.sizes, ["files": 3, "web": 12])
+
+        // Where WebKit's folder cannot be found, noodlets with stores stay listed to be removed.
+        await usage.refresh(root: root, defaults: defaults, websiteData: nil).value
+        XCTAssertEqual(usage.sizes, ["files": 3, "web": 0, "salted": 0])
+    }
 }

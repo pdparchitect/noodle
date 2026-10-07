@@ -8,7 +8,8 @@
 
 ### Fixed
 
-- The Storage settings no longer freeze the app with a large library. They show the last sizes at once and measure again in the background.
+- The Storage and Secrets settings no longer freeze the app with a large library. Storage shows the last sizes at once and measures again in the background.
+- Storage settings count what noodlets save in their web pages, such as local storage, and list only noodlets that have saved something.
 
 ## [0.26.1] - 2026-10-05
 

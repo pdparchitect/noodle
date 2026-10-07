@@ -165,8 +165,20 @@ private struct AppletSecretsSettingsView: View {
         var id: String { account + "\0" + name }
     }
     @ObservedObject var library: AppletLibrary
-    @State private var names: [String: [String]] = [:]
+    @State private var names: [String: [String]]?
     @State private var removing: Secret?
+
+    /// Reads the Keychain off the main thread, one item per noodlet; the last list stays meanwhile.
+    private func load(deleting secret: Secret? = nil) {
+        Task {
+            names = await Task.detached(priority: .userInitiated) {
+                if let secret {
+                    _ = try? AppletSecrets.shared.perform("delete", name: secret.name, value: nil, account: secret.account)
+                }
+                return AppletSecrets.shared.names()
+            }.value
+        }
+    }
 
     /// Accounts are a package key followed by .user or .test.
     private func title(_ account: String, in entries: [String: LibraryEntry]) -> String {
@@ -175,26 +187,24 @@ private struct AppletSecretsSettingsView: View {
     }
     var body: some View {
         let entries = noodletEntries(library)
+        let names = self.names ?? [:]
         let secrets = names.keys.sorted { title($0, in: entries) < title($1, in: entries) }
             .flatMap { account in (names[account] ?? []).map { Secret(account: account, name: $0) } }
-        SettingsListPanel(empty: "No noodlets have secrets.", isEmpty: secrets.isEmpty) {
+        SettingsListPanel(
+            empty: self.names == nil ? "Loading…" : "No noodlets have secrets.", isEmpty: secrets.isEmpty
+        ) {
             ForEach(secrets) { secret in
                 SettingsListRow(title: secret.name, detail: title(secret.account, in: entries), divider: secret != secrets.last) {
                     Button("Remove") { removing = secret }
                 }
             }
         }
-        .onAppear { names = AppletSecrets.shared.names() }
+        .onAppear { load() }
         .confirmationDialog(
             "Remove Secret?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Remove Secret", role: .destructive) {
-                if let removing {
-                    _ = try? AppletSecrets.shared.perform("delete", name: removing.name, value: nil, account: removing.account)
-                }
-                names = AppletSecrets.shared.names()
-            }
+            Button("Remove Secret", role: .destructive) { load(deleting: removing) }
         } message: {
             Text("“\(removing.map { title($0.account, in: entries) } ?? "")” will need “\(removing?.name ?? "")” entered again.")
         }

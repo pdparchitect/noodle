@@ -4,19 +4,54 @@ import WebKit
 
 /// What each noodlet has saved: its data directory and its WebKit store.
 @MainActor enum AppletStorage {
-  nonisolated static func sizes(root: URL) -> [String: Int] {
+  /// Bytes saved per noodlet. `stores` are its website data stores and `websiteData` the
+  /// folder WebKit keeps them in; only the page's own data counts, not WebKit's bookkeeping.
+  nonisolated static func sizes(root: URL, stores: [String: [UUID]] = [:], websiteData: URL? = nil) -> [String: Int] {
     let data = root.appendingPathComponent("Data")
     var sizes: [String: Int] = [:]
     for key in (try? FileManager.default.contentsOfDirectory(atPath: data.path)) ?? [] {
-      let files = FileManager.default.enumerator(
-        at: data.appendingPathComponent(key), includingPropertiesForKeys: [.fileSizeKey])
-      var total = 0
-      while let file = files?.nextObject() as? URL {
-        total += (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+      sizes[key] = bytes(in: data.appendingPathComponent(key))
+    }
+    guard let websiteData else { return sizes }
+    for (key, ids) in stores {
+      for id in ids {
+        let store = websiteData.appendingPathComponent(id.uuidString.lowercased())
+        // Every origin's folder holds a salt even before the page saves anything.
+        let saved = bytes(in: store.appendingPathComponent("Origins")) { $0.lastPathComponent != "salt" }
+          + bytes(in: store.appendingPathComponent("Cookies"))
+        if saved > 0 { sizes[key, default: 0] += saved }
       }
-      sizes[key] = total
     }
     return sizes
+  }
+  nonisolated private static func bytes(in folder: URL, counting: (URL) -> Bool = { _ in true }) -> Int {
+    let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey])
+    var total = 0
+    while let file = files?.nextObject() as? URL {
+      guard counting(file) else { continue }
+      total += (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+    }
+    return total
+  }
+  /// The website data stores each noodlet has used, as launch records them.
+  static func stores(defaults: UserDefaults) -> [String: [UUID]] {
+    var stores: [String: [UUID]] = [:]
+    for (name, value) in defaults.dictionaryRepresentation() where name.hasPrefix("store.") {
+      guard let id = (value as? String).flatMap(UUID.init(uuidString:)) else { continue }
+      let key = name.dropFirst("store.".count).split(separator: ".").dropLast().joined(separator: ".")
+      stores[key, default: []].append(id)
+    }
+    return stores
+  }
+  /// Where WebKit keeps identified stores: a sandboxed app's container has no bundle folder.
+  nonisolated static var websiteData: URL? {
+    guard let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
+    else { return nil }
+    let webKit = library.appendingPathComponent("WebKit")
+    let candidates = [Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName, nil].map {
+      ($0.map { webKit.appendingPathComponent($0) } ?? webKit).appendingPathComponent("WebsiteDataStore")
+    }
+    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
   }
   static func remove(_ key: String, root: URL, defaults: UserDefaults) async {
     try? FileManager.default.removeItem(at: root.appendingPathComponent("Data/\(key)"))
@@ -42,12 +77,21 @@ import WebKit
   @Published private(set) var sizes: [String: Int]?
   private var generation = 0
 
-  /// Measures off the main thread; a large library takes long to walk.
-  @discardableResult func refresh(root: URL) -> Task<Void, Never> {
+  /// Measures off the main thread; a large library takes long to walk. Noodlets with nothing
+  /// saved are left out.
+  @discardableResult func refresh(
+    root: URL, defaults: UserDefaults = .standard, websiteData: URL? = AppletStorage.websiteData
+  ) -> Task<Void, Never> {
     generation += 1
     let current = generation
+    let stores = AppletStorage.stores(defaults: defaults)
     return Task {
-      let sizes = await Task.detached(priority: .utility) { AppletStorage.sizes(root: root) }.value
+      let sizes = await Task.detached(priority: .utility) {
+        let sizes = AppletStorage.sizes(root: root, stores: stores, websiteData: websiteData)
+        // Without WebKit's folder, website data cannot be measured, so its noodlets stay listed.
+        let unmeasured = websiteData == nil ? stores.mapValues { _ in 0 } : [:]
+        return sizes.merging(unmeasured) { size, _ in size }.filter { $0.value > 0 || unmeasured[$0.key] != nil }
+      }.value
       if current == generation { self.sizes = sizes }
     }
   }
