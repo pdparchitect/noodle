@@ -150,6 +150,7 @@ import XCTest
             .reply(LinkHostedReply(conversationID: graces.conversationID, id: UUID(), body: "Hi")),
             .delivered(conversationID: graces.conversationID, messageIDs: []),
             .phase(botID: id, phase: .ready),
+            .react(LinkReactionChange(conversationID: graces.conversationID, messageID: UUID(), emoji: "👍", present: true)),
         ]
         for (name, device) in [("Ada's phone", adasPhone), ("Grace", f.gracesPhone)] {
             for request in refused {
@@ -291,6 +292,38 @@ import XCTest
             return first
         }
         XCTAssertFalse(heard, "Ada's phone heard of Grace's conversation")
+    }
+
+    /// Reactions travel both ways: the bot's, from the Mac, reach Grace, and the Mac hears of hers.
+    func testReactionsTravelBothWays() async throws {
+        let f = try await fixture()
+        let id = try await host(f)
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        let hello = UUID()
+        _ = try await f.gracesPhone.request(.send(LinkOutgoingMessage(conversationID: graces.conversationID, id: hello, body: "Hello")))
+        let thumbs = LinkReactionChange(conversationID: graces.conversationID, messageID: hello, emoji: "👍", present: true)
+        guard case .message(let reacted) = try await f.mac.request(.host(.react(thumbs))) else { return XCTFail("not reacted") }
+        XCTAssertEqual(reacted.reactions, [LinkReaction(author: .bot(id), emoji: "👍")])
+        let seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.first?.reactions, [LinkReaction(author: .bot(id), emoji: "👍")])
+
+        let reply = LinkHostedReply(conversationID: graces.conversationID, id: UUID(), body: "Good evening.")
+        _ = try await f.mac.request(.host(.reply(reply)))
+        let macEvents = try await f.mac.subscribe()
+        _ = try await f.mac.request(.status)
+        f.hub.bots.checkForChanges()
+        _ = try await f.gracesPhone.request(.react(LinkReactionChange(conversationID: graces.conversationID, messageID: reply.id,
+                                                                      emoji: "❤️", present: true)))
+        let replyID = reply.id
+        try await expect("Grace's reaction", in: macEvents) {
+            if case .messageChanged(let message) = $0 { message.id == replyID && message.reactions == [LinkReaction(author: .you, emoji: "❤️")] }
+            else { false }
+        }
+        do {
+            _ = try await f.mac.request(.host(.react(LinkReactionChange(conversationID: graces.conversationID, messageID: hello,
+                                                                        emoji: "not one", present: true))))
+            XCTFail("Took a reaction that is not an emoji")
+        } catch {}
     }
 
     /// Files travel both ways, and links too, except those that open live on the Mac.

@@ -203,6 +203,10 @@ plans lend. Its bots are restricted bots, with the same limits and the same gaps
   folders, tools, sign-ins, computers and browsers, unrestricted if you made it
   so. The Hub only keeps their conversations. Share such a bot only with people
   you would let use all of that.
+- **Their files land on your Mac.** Whatever people send a bot shared from your
+  Mac, photos and documents included, is copied to your Mac so the bot can read
+  it. It stays there with the bot's copy of their conversation, which Noodle
+  does not show you, until you stop sharing the bot with them or delete it.
 - **Everyone on a Hub sees everyone's names.** So that bots can be shared, any
   user can list the names of the Hub's other users.
 - **Hub bots can reach your network.** Like any bot, a Hub bot can connect to

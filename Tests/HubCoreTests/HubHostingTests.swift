@@ -135,6 +135,52 @@ import XCTest
         XCTAssertEqual(seen.map(\.body), ["Hello", "Hello, Grace.", "Are you there?", "Tea, please."])
     }
 
+    /// The bot's reactions reach Grace, taken back too, and hers reach the bot, which is woken for them;
+    /// those made while this Mac was away are picked up when it is back.
+    func testReactionsTravelBothWays() async throws {
+        let f = try await fixture()
+        let hosting = f.hosting()
+        var woken = 0
+        hosting.onMessages = { _ in woken += 1 }
+        try await hosting.share(f.alfred, with: [f.grace.id])
+        await hosting.sync()
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        let hello = try await send("Hello", to: graces.conversationID, from: f.gracesPhone)
+        await hosting.sync()
+        _ = try f.local.setReaction(conversationID: graces.conversationID, messageID: hello, author: .agent(f.alfred.id),
+                                    emoji: "👍", present: true)
+        await hosting.step()
+        var seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.first?.reactions, [LinkReaction(author: .bot(f.alfred.id), emoji: "👍")])
+        _ = try f.local.setReaction(conversationID: graces.conversationID, messageID: hello, author: .agent(f.alfred.id),
+                                    emoji: "👍", present: false)
+        await hosting.step()
+        seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.first?.reactions, [])
+
+        let reply = try f.local.sendAgentMessage(agentID: f.alfred.id, conversationID: graces.conversationID, body: "Good evening.")
+        await hosting.step()
+        woken = 0
+        _ = try await f.gracesPhone.request(.react(LinkReactionChange(conversationID: graces.conversationID, messageID: reply.id,
+                                                                      emoji: "❤️", present: true)))
+        // As after a while away: picked up when this Mac follows the Hub again.
+        let relaunched = f.hosting()
+        relaunched.onMessages = { _ in woken += 1 }
+        await relaunched.sync()
+        let local = try XCTUnwrap(f.local.loadMessages(conversationID: graces.conversationID).first { $0.id == reply.id })
+        XCTAssertEqual(local.reactions?.map(\.emoji), ["❤️"])
+        XCTAssertEqual(local.reactions?.map(\.author), [.user])
+        XCTAssertEqual(woken, 1, "The bot is woken for it")
+        let delivered = try f.local.latestMessages(for: f.alfred.id)
+        XCTAssertTrue(delivered.contains { $0.reactionChange?.emoji == "❤️" && $0.reactionChange?.sender.displayName == "Grace" })
+
+        // Nothing comes back doubled, and the bot's own reaction is not sent again.
+        await relaunched.sync()
+        seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.first?.reactions, [])
+        XCTAssertEqual(try f.local.loadMessages(conversationID: graces.conversationID).first { $0.id == reply.id }?.reactions?.count, 1)
+    }
+
     /// Files travel both ways; links to web pages go along, and those that open live on this Mac stay here.
     func testFilesAndLinksTravelBothWays() async throws {
         let f = try await fixture()
@@ -291,6 +337,17 @@ import XCTest
             try await self.messages(in: graces.conversationID, of: f.gracesPhone).map(\.body) == ["Hello", "Hello, Grace."]
         }
         try await until("showed it taken") { try await self.messages(in: graces.conversationID, of: f.gracesPhone).first?.delivered == true }
+
+        // Her reaction reaches the bot as it is made, and wakes it.
+        let thread = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        let reply = try XCTUnwrap(thread.last)
+        woken = []
+        _ = try await f.gracesPhone.request(.react(LinkReactionChange(conversationID: graces.conversationID, messageID: reply.id,
+                                                                      emoji: "❤️", present: true)))
+        try await until("passed on her reaction") {
+            try f.local.loadMessages(conversationID: graces.conversationID).first { $0.id == reply.id }?.reactions?.map(\.emoji) == ["❤️"]
+        }
+        XCTAssertEqual(woken, [f.alfred.id])
 
         following.cancel()
         try await until("offline") { try await self.bots(of: f.gracesPhone).first?.phase == .offline }

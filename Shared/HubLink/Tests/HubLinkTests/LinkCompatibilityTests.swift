@@ -72,6 +72,8 @@ final class LinkCompatibilityTests: XCTestCase {
             (#"{"host":{"_0":{"delivered":{"conversationID":"\#(b)","messageIDs":["\#(a)"]}}}}"#,
              .host(.delivered(conversationID: b, messageIDs: [a]))),
             (#"{"host":{"_0":{"phase":{"botID":"\#(a)","phase":"working"}}}}"#, .host(.phase(botID: a, phase: .working))),
+            (#"{"host":{"_0":{"react":{"_0":{"conversationID":"\#(b)","messageID":"\#(a)","emoji":"👍","present":true}}}}}"#,
+             .host(.react(LinkReactionChange(conversationID: b, messageID: a, emoji: "👍", present: true)))),
         ]
         for (json, request) in expected {
             XCTAssertEqual(try decode(LinkRequest.self, json), request, json)

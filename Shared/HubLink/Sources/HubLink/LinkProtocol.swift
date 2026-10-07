@@ -274,6 +274,8 @@ public enum LinkHostRequest: Codable, Equatable, Sendable {
     case delivered(conversationID: UUID, messageIDs: [UUID])
     /// What the bot is doing, shown to the people it is shared with while this device is connected. Answered with `done`.
     case phase(botID: UUID, phase: LinkBotPhase)
+    /// The bot's reaction to a message in one of its conversations, or taking it back. Answered with `message`.
+    case react(LinkReactionChange)
 }
 
 /// A bot a device hosts, with its conversation with each person it is shared with.

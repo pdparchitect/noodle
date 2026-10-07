@@ -800,6 +800,22 @@ import NoodleRuntime
         try repository.markDelivered(conversationID: conversationID, messageIDs: Set(messageIDs))
     }
 
+    /// The bot's reaction to a message in one of its conversations, or taking it back.
+    public func hostedReact(_ change: LinkReactionChange, on device: HubDevice) throws -> LinkMessage {
+        let agent = try hostedConversation(change.conversationID, on: device)
+        let message: ChatMessage
+        do {
+            message = try repository.setReaction(conversationID: change.conversationID, messageID: change.messageID,
+                                                 author: .agent(agent.id), emoji: change.emoji, present: change.present)
+        } catch WorkspaceError.invalidReaction {
+            throw LinkError("Reactions are a single emoji.")
+        } catch WorkspaceError.missingMessage(_) {
+            throw LinkError("There is no such message.")
+        }
+        checkForChanges()
+        return linkMessage(message, files: try attachments(in: change.conversationID))
+    }
+
     public func setHostedPhase(_ phase: LinkBotPhase, of bot: UUID, on device: HubDevice) throws {
         guard access.host(ofBot: bot) == device.id else { throw LinkError("There is no such bot.") }
         hostedPhases[bot] = phase
@@ -953,8 +969,11 @@ import NoodleRuntime
             }
             // Reactions change messages already sent, which a device reading on from its count would miss.
             if let known, latestReaction > known.reactions, let files = try? attachments(in: conversation.id) {
+                let host = conversation.guest == nil ? nil : conversation.participantIDs.first.flatMap(access.host(ofBot:))
                 for message in messages where (message.reactionChanges ?? []).contains(where: { $0.sequence > known.reactions }) {
                     onChange?(owner, .messageChanged(linkMessage(message, files: files)))
+                    // The Mac hosting the bot passes the person's reactions on to it.
+                    if let host { onHostChange?(host, .messageChanged(linkMessage(message, files: files))) }
                 }
             }
         }

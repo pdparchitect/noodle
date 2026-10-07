@@ -815,6 +815,8 @@ import os
         case .phase(let botID, let phase):
             try bots.setHostedPhase(phase, of: botID, on: device)
             return .done
+        case .react(let change):
+            return .message(try bots.hostedReact(change, on: device))
         }
     }
 

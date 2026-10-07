@@ -185,8 +185,9 @@ with its folders, tools and sign-ins, and knows each person by name.
 They see it online while this Mac is awake and connected to the Hub. What they write
 meanwhile waits on the Hub, and the bot reads it and answers once this Mac is back. Links
 to the bot's computers, browsers and noodlets stay on this Mac, and its reply says so;
-files and web links reach them. Archiving the bot closes it to them until you bring it back; sharing it with nobody,
-or deleting it, removes it and their conversations from the Hub.
+files, web links and reactions reach them, and theirs reach the bot. Archiving the bot
+closes it to them until you bring it back; sharing it with nobody, or deleting it,
+removes it and their conversations from the Hub.
 
 ## Manage a Noodle Hub's users
 

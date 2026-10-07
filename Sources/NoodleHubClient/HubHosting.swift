@@ -43,6 +43,8 @@ import Observation
         var synced: Int
         /// The bot's messages after this are not on the Hub yet.
         var postedUpTo: Date
+        /// The bot's reactions here up to this change are on the Hub.
+        var reactionsSent: Int?
     }
 
     public private(set) var error: String?
@@ -73,6 +75,8 @@ import Observation
     @ObservationIgnored private var needsFullSync = true
     @ObservationIgnored private var botsChanged = true
     @ObservationIgnored private var changedConversations: Set<UUID> = []
+    /// Messages whose reactions changed on the Hub, as it said.
+    @ObservationIgnored private var changedMessages: [LinkMessage] = []
     /// The work in progress, so the next waits for it: each reads and writes the copies here.
     @ObservationIgnored private var queue: Task<Void, Never>?
 
@@ -116,6 +120,7 @@ import Observation
         switch event {
         case .botsChanged: botsChanged = true
         case .conversationChanged(let id, _) where owns(conversation: id): changedConversations.insert(id)
+        case .messageChanged(let message) where owns(conversation: message.conversationID): changedMessages.append(message)
         default: break
         }
     }
@@ -151,17 +156,23 @@ import Observation
         let full = needsFullSync
         let bots = full || botsChanged
         let conversations = full ? Set(entries.flatMap { $0.threads.map(\.conversation) }) : changedConversations
+        let messages = changedMessages
         needsFullSync = false
         botsChanged = false
         changedConversations = []
+        changedMessages = []
         do {
             try await removeDeletedHere()
             if bots { try await syncBots() }
             // Conversations new to this Mac are read in full.
             let read = full || bots ? Set(entries.flatMap { $0.threads.map(\.conversation) }) : conversations
             for id in read { try await syncMessages(id) }
+            // Reactions the Hub told of while this Mac was away come with the latest messages.
+            if full { for id in read { try await syncRecentReactions(id) } }
+            try wake(for: messages)
             try await publishChanges()
             try await sendReplies()
+            try await sendReactions()
             try await sendDelivered()
             try await sendPhases()
             error = nil
@@ -169,6 +180,7 @@ import Observation
             needsFullSync = needsFullSync || full
             botsChanged = botsChanged || bots
             changedConversations.formUnion(conversations)
+            changedMessages = messages + changedMessages
             self.error = error.localizedDescription
         }
     }
@@ -343,6 +355,7 @@ import Observation
                 known.insert(message.id)
                 if message.author == .you { woke = true }
             }
+            for message in page.messages where try copyReactions(of: message) { woke = true }
             if let latest = page.messages.last?.createdAt, var copy = try repository.loadConversations().first(where: { $0.id == conversation }) {
                 copy.updatedAt = max(copy.updatedAt, latest)
                 try repository.updateConversation(copy)
@@ -354,6 +367,60 @@ import Observation
             guard page.messages.count > 0, synced > thread.synced, synced < page.count else { break }
         }
         if woke, let agent = thread(conversation)?.agent { onMessages?([agent]) }
+    }
+
+    /// Makes the person's reactions to a message here the Hub's, and says whether any changed.
+    private func copyReactions(of message: LinkMessage) throws -> Bool {
+        guard let copy = try repository.loadMessages(conversationID: message.conversationID).first(where: { $0.id == message.id }) else {
+            return false
+        }
+        let wanted = Set(message.reactions.filter { $0.author == .you }.map(\.emoji))
+        let present = Set((copy.reactions ?? []).filter { $0.author == .user }.map(\.emoji))
+        for emoji in wanted.symmetricDifference(present).sorted() {
+            _ = try repository.setReaction(conversationID: message.conversationID, messageID: message.id, author: .user,
+                                           emoji: emoji, present: wanted.contains(emoji))
+        }
+        return wanted != present
+    }
+
+    /// Copies the person's reactions to the latest messages, which may have changed while this Mac was away.
+    private func syncRecentReactions(_ conversation: UUID) async throws {
+        guard let agent = thread(conversation)?.agent,
+              case .messages(let page) = try await pairing.request(.host(.messagePage(LinkMessagePage(conversationID: conversation,
+                                                                                                    limit: 100)))) else { return }
+        var changed = false
+        for message in page.messages where try copyReactions(of: message) { changed = true }
+        if changed { onMessages?([agent]) }
+    }
+
+    /// Copies the reactions of messages the Hub said changed, and wakes their bots for them.
+    private func wake(for messages: [LinkMessage]) throws {
+        var bots: Set<UUID> = []
+        for message in messages where try copyReactions(of: message) {
+            if let agent = thread(message.conversationID)?.agent { bots.insert(agent) }
+        }
+        if !bots.isEmpty { onMessages?(bots.sorted { $0.uuidString < $1.uuidString }) }
+    }
+
+    /// Sends the bot's reactions here, and those it took back, in order.
+    private func sendReactions() async throws {
+        for entry in entries where !entry.archived {
+            for thread in entry.threads {
+                let bot = MessageAuthor.agent(entry.agent), sent = thread.reactionsSent ?? 0
+                let all: [MessageReactionChange] = try repository.loadMessages(conversationID: thread.conversation)
+                    .flatMap { $0.reactionChanges ?? [] }
+                let changes = all.filter { $0.author == bot && $0.sequence > sent }.sorted { $0.sequence < $1.sequence }
+                for change in changes {
+                    do {
+                        _ = try await pairing.request(.host(.react(LinkReactionChange(
+                            conversationID: thread.conversation, messageID: change.messageID, emoji: change.emoji, present: !change.removed))))
+                    } catch let failure as LinkError where failure.message == "There is no such message." {
+                        // A message the Hub never had.
+                    }
+                    setThread(thread.conversation) { $0.reactionsSent = change.sequence }
+                }
+            }
+        }
     }
 
     /// Downloads the files of the person's message that this copy lacks, keeping their IDs.
