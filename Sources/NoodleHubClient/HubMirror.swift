@@ -109,6 +109,12 @@ import Observation
             + groups.map { Thread(remote: $0.remote, local: $0.conversation, synced: $0.synced, background: $0.background) }
     }
 
+    /// A conversation's ID on the Hub, as the person's other devices know it.
+    public func remoteConversation(local id: UUID) -> UUID? { thread(local: id)?.remote }
+
+    /// The local copy of a conversation on the Hub.
+    public func localConversation(remote id: UUID) -> UUID? { thread(remote: id)?.local }
+
     private func thread(remote id: UUID) -> Thread? { threads.first { $0.remote == id } }
 
     private func thread(local id: UUID) -> Thread? { threads.first { $0.local == id } }

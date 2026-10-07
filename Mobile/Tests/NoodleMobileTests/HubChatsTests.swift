@@ -413,6 +413,35 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(HubChats.sorted(threads, onHub: true).map(\.1.id) == [scout.id, atlas.id])
     }
 
+    /// A space the person made holds only its members, named by their Hub and conversation there as on the Mac,
+    /// with its own pins first in the order they were pinned.
+    @Test func aCustomSpaceShowsItsMembersWithItsPins() async throws {
+        let (chats, server) = try await paired(to: FakeHub())
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let atlas = try await chats.create(LinkBotDraft(name: "Atlas", provider: "codex"))
+        _ = try await chats.create(LinkBotDraft(name: "Nova", provider: "codex"))
+        let member = chats.spaceMember(of: atlas)
+        #expect(member == CustomSpace.Member(hub: chats.pairing.hub?.key.x963.base64EncodedString(), conversation: atlas.conversationID))
+        let space = CustomSpace(name: "Work", members: [chats.spaceMember(of: scout), member,
+                                                        CustomSpace.Member(hub: "left", conversation: UUID())],
+                                pins: [chats.spaceMember(of: scout)])
+
+        // Scout is older than Atlas, but pinned.
+        #expect(HubChats.threads(in: space, of: [chats]).map(\.1.id) == [scout.id, atlas.id])
+        #expect(!chats.isPinned(scout))
+    }
+
+    /// The title menu ticks All once the chosen space is gone: deleted on another device, or its Hub left.
+    @Test func aSpaceGoneLeavesAllTicked() {
+        let work = CustomSpace(name: "Work")
+        #expect(AgentsView.tickedSpace(work.id.uuidString, hubs: ["studio"], spaces: [work]) == work.id.uuidString)
+        #expect(AgentsView.tickedSpace("studio", hubs: ["studio"], spaces: []) == "studio")
+        #expect(AgentsView.tickedSpace(work.id.uuidString, hubs: ["studio"], spaces: []) == "")
+        #expect(AgentsView.tickedSpace("left", hubs: ["studio"], spaces: [work]) == "")
+    }
+
     /// As in the Mac sidebar: by name, description or what was said, ignoring case and accents.
     @Test func searchFindsAgentsByNameDescriptionAndMessages() async throws {
         let hub = FakeHub()

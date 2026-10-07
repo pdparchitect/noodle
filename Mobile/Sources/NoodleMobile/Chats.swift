@@ -326,6 +326,25 @@ enum HubThread: HubConversation {
             || messages(of: conversation).contains { $0.body.localizedStandardContains(term) }
     }
 
+    /// The bots and groups a space the person made holds: its pins first, in the order they were pinned, then newest
+    /// conversation first. Members on Hubs this phone has not joined stay in the space, unseen.
+    static func threads(in space: CustomSpace, of hubs: [HubChats]) -> [(HubChats, HubThread)] {
+        let members = Set(space.members)
+        let listed = hubs.flatMap { hub in hub.listedThreads.filter { members.contains(hub.spaceMember(of: $0)) }.map { (hub, $0) } }
+        return listed.sorted { lhs, rhs in
+            let left = space.pins.firstIndex(of: lhs.0.spaceMember(of: lhs.1))
+            let right = space.pins.firstIndex(of: rhs.0.spaceMember(of: rhs.1))
+            if (left == nil) != (right == nil) { return left != nil }
+            if let left, let right { return left < right }
+            return lhs.0.recency(of: lhs.1) > rhs.0.recency(of: rhs.1)
+        }
+    }
+
+    /// How a space names the bot or group: by this Hub's key and its conversation here, as the Mac does.
+    func spaceMember(of conversation: some HubConversation) -> CustomSpace.Member {
+        CustomSpace.Member(hub: CurrentHub.space(of: pairing), conversation: conversation.conversationID)
+    }
+
     /// When the conversation last moved, or the bot or group was made.
     private func recency(of conversation: some HubConversation) -> Date {
         latestMessage(of: conversation)?.createdAt ?? conversation.createdAt
@@ -885,8 +904,15 @@ struct AgentsView: View {
     @State private var path: [ChatLink] = []
     /// Kept per Hub, so what each Hub loaded stays while others join or leave.
     @State private var chats: [HubChats] = []
-    /// The Hub whose space is shown, by `CurrentHub.space`; empty for All.
+    /// The space shown: a Hub's by `CurrentHub.space`, or one the person made by its ID; empty for All.
     @AppStorage("space") private var space = ""
+    /// The spaces the person made, kept on this phone.
+    @State private var spaceList = SpaceList(file: URL.applicationSupportDirectory.appendingPathComponent("spaces.json"))
+    /// Carries them to the person's other devices through iCloud.
+    @State private var spaceSync: SpaceCloudSync?
+    @State private var naming: SpaceNaming?
+    @State private var spaceName = ""
+    @State private var deletingSpace: CustomSpace?
     @State private var showingMore = false
     /// What was picked in the … sheet; it opens once that sheet has gone.
     @State private var chosen: MoreChoice?
@@ -903,12 +929,30 @@ struct AgentsView: View {
         let id: ChatLink
     }
 
+    /// A new space, starting with the bot or group it was made from, or a new name for one.
+    private enum SpaceNaming: Identifiable {
+        case new(adding: Row?)
+        case rename(CustomSpace)
+
+        var id: String {
+            switch self {
+            case .new(let row): "new-\(row.map { "\($0.id)" } ?? "")"
+            case .rename(let space): "rename-\(space.id)"
+            }
+        }
+    }
+
+    /// The space the person made that is shown; nil for All and the Hubs' spaces.
+    private var customSpace: CustomSpace? { UUID(uuidString: space).flatMap(spaceList.space) }
+
     /// The Hub whose bots and groups alone are shown, with the pins it keeps; nil shows All, with this phone's pins.
     private var spaceChats: HubChats? { chats.first { CurrentHub.space(of: $0.pairing) == space } }
 
     private var rows: [Row] {
         let shown = spaceChats.map { [$0] } ?? chats
-        return HubChats.sorted(shown.flatMap { hub in hub.listedThreads.map { (hub, $0) } }, onHub: spaceChats != nil).map { hub, thread in
+        let threads = customSpace.map { HubChats.threads(in: $0, of: chats) }
+            ?? HubChats.sorted(shown.flatMap { hub in hub.listedThreads.map { (hub, $0) } }, onHub: spaceChats != nil)
+        return threads.map { hub, thread in
             Row(chats: hub, thread: thread, id: ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id))
         }
     }
@@ -919,9 +963,8 @@ struct AgentsView: View {
             // As in Messages: pinned bots in circles above the rest, and one plain list of matches while searching.
             let searching = !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let found = rows.filter { $0.chats.matches($0.thread, search: search) }
-            let onHub = spaceChats != nil
-            let pinned = searching ? [] : found.filter { $0.chats.isPinned($0.thread, onHub: onHub) }
-            let others = searching ? found : found.filter { !$0.chats.isPinned($0.thread, onHub: onHub) }
+            let pinned = searching ? [] : found.filter(isPinned)
+            let others = searching ? found : found.filter { !isPinned($0) }
             List {
                 if !pinned.isEmpty {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
@@ -1003,14 +1046,37 @@ struct AgentsView: View {
             .sheet(isPresented: $showingSettings) { SettingsView() }
             // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
-                if let hub = spaceChats ?? chats.first { AgentEditor(chats: hub, agent: nil, hubs: chats) }
+                if let hub = spaceChats ?? chats.first { AgentEditor(chats: hub, agent: nil, hubs: chats, created: joinShownSpace) }
             }
             .sheet(isPresented: $creatingGroup) {
-                if let hub = spaceChats ?? chats.first { GroupEditor(chats: hub, group: nil, hubs: chats) }
+                if let hub = spaceChats ?? chats.first { GroupEditor(chats: hub, group: nil, hubs: chats, created: joinShownSpace) }
+            }
+            .alert(isRenamingSpace ? "Rename Space" : "New Space",
+                   isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+                TextField("Name", text: $spaceName)
+                Button("Cancel", role: .cancel) {}
+                Button(isRenamingSpace ? "Rename" : "Create") { saveSpace() }
+                    .disabled(spaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .alert("Delete \(deletingSpace?.name ?? "Space")?",
+                   isPresented: Binding(get: { deletingSpace != nil }, set: { if !$0 { deletingSpace = nil } }),
+                   presenting: deletingSpace) { deleted in
+                Button("Delete", role: .destructive) { changeSpaces { try spaceList.delete(deleted.id) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Its bots and groups stay in All.")
             }
             .sheet(item: $editing) { row in ThreadEditor(chats: row.chats, thread: row.thread) }
         }
         .onChange(of: opening, initial: true, open)
+        // Pushes bring changes while the app runs; coming to the front asks as well.
+        .task(id: phase == .active) {
+            if spaceSync == nil {
+                spaceSync = SpaceCloudSync.ifEntitled(list: spaceList,
+                                                      stateFile: URL.applicationSupportDirectory.appendingPathComponent("spaces-sync.json"))
+            }
+            if phase == .active { await spaceSync?.fetch() }
+        }
         .onChange(of: rows.map(\.id)) { open() }
         // Not while the phone is away, so the Hub knows at once to notify it instead.
         .task(id: FollowKey(hubs: pairings.map(CurrentHub.name), away: phase == .background)) {
@@ -1022,27 +1088,98 @@ struct AgentsView: View {
         }
     }
 
-    /// All, then a space for each joined Hub: its bots and groups alone, with the pins it keeps.
+    /// All, a space for each joined Hub with its bots and groups alone and the pins it keeps, then the spaces the person made.
     private var spaceMenu: some View {
         Menu {
-            Picker("Space", selection: $space) {
+            Picker("Space", selection: ticked) {
                 Text("All").tag("")
                 ForEach(chats, id: \.pairing.directory) { hub in
                     Text(hub.pairing.hubName).tag(CurrentHub.space(of: hub.pairing))
                 }
             }
+            if !spaceList.spaces.isEmpty {
+                Picker("Space", selection: ticked) {
+                    ForEach(spaceList.spaces) { Text($0.name).tag($0.id.uuidString) }
+                }
+            }
+            Divider()
+            Button { name(.new(adding: nil)) } label: { Label("New Space…", systemImage: "plus") }
+            if let customSpace {
+                Button { name(.rename(customSpace)) } label: { Label("Rename Space…", systemImage: "pencil") }
+                Button(role: .destructive) { deletingSpace = customSpace } label: { Label("Delete Space", systemImage: "trash") }
+            }
         } label: {
             HStack(spacing: 4) {
-                Text(spaceChats?.pairing.hubName ?? "All").font(.headline)
+                Text(spaceTitle).font(.headline)
                 Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
             .foregroundStyle(.primary)
         }
         .accessibilityLabel("Space")
-        .accessibilityValue(spaceChats?.pairing.hubName ?? "All")
+        .accessibilityValue(spaceTitle)
+    }
+
+    /// The space the title menu ticks: All once the chosen one is gone, deleted on another device or its Hub left.
+    static func tickedSpace(_ space: String, hubs: [String], spaces: [CustomSpace]) -> String {
+        hubs.contains(space) || spaces.contains { $0.id.uuidString == space } ? space : ""
+    }
+
+    private var ticked: Binding<String> {
+        Binding(get: { Self.tickedSpace(space, hubs: chats.map { CurrentHub.space(of: $0.pairing) }, spaces: spaceList.spaces) },
+                set: { space = $0 })
+    }
+
+    private var spaceTitle: String { customSpace?.name ?? spaceChats?.pairing.hubName ?? "All" }
+
+    private var isRenamingSpace: Bool {
+        if case .rename = naming { true } else { false }
+    }
+
+    private func name(_ naming: SpaceNaming) {
+        if case .rename(let space) = naming { spaceName = space.name } else { spaceName = "" }
+        self.naming = naming
+    }
+
+    /// A new space is shown at once, holding the bot or group it was made from.
+    private func saveSpace() {
+        switch naming {
+        case .new(let row):
+            guard let made = changeSpaces({ try spaceList.add(named: spaceName) }) else { return }
+            if let row { changeSpaces { try spaceList.setMember(true, row.chats.spaceMember(of: row.thread), of: made.id) } }
+            space = made.id.uuidString
+        case .rename(let renamed):
+            changeSpaces { try spaceList.rename(renamed.id, to: spaceName) }
+        case nil:
+            break
+        }
+    }
+
+    /// A bot or group made while a space the person made is shown joins it, so it shows there.
+    private func joinShownSpace(_ hub: HubChats, _ conversation: some HubConversation) {
+        guard let customSpace else { return }
+        changeSpaces { try spaceList.setMember(true, hub.spaceMember(of: conversation), of: customSpace.id) }
+    }
+
+    @discardableResult
+    private func changeSpaces<T>(_ change: () throws -> T) -> T? {
+        do { return try change() } catch {
+            chats.first?.error = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// This phone's pin in All, the Hub's in its space, or the one a space the person made keeps.
+    private func isPinned(_ row: Row) -> Bool {
+        if let customSpace { return customSpace.pins.contains(row.chats.spaceMember(of: row.thread)) }
+        return row.chats.isPinned(row.thread, onHub: spaceChats != nil)
     }
 
     private func togglePin(_ row: Row) {
+        if let customSpace {
+            let pinned = isPinned(row)
+            changeSpaces { try spaceList.setPinned(!pinned, row.chats.spaceMember(of: row.thread), in: customSpace.id) }
+            return
+        }
         guard spaceChats != nil else { return row.chats.togglePin(row.thread) }
         Task {
             do { try await row.chats.toggleHubPin(row.thread) }
@@ -1053,10 +1190,21 @@ struct AgentsView: View {
     /// A conversation's touch-and-hold menu, the same for its row and its pinned circle.
     @ViewBuilder
     private func menu(for row: Row) -> some View {
-        if row.chats.isPinned(row.thread, onHub: spaceChats != nil) {
+        if isPinned(row) {
             Button { togglePin(row) } label: { Label("Unpin", systemImage: "pin.slash.fill") }
         } else {
             Button { togglePin(row) } label: { Label("Pin", systemImage: "pin.fill") }
+        }
+        Menu {
+            let member = row.chats.spaceMember(of: row.thread)
+            ForEach(spaceList.spaces) { space in
+                Toggle(space.name, isOn: Binding(get: { space.members.contains(member) },
+                                                 set: { on in changeSpaces { try spaceList.setMember(on, member, of: space.id) } }))
+            }
+            if !spaceList.spaces.isEmpty { Divider() }
+            Button { name(.new(adding: row)) } label: { Label("New Space…", systemImage: "plus") }
+        } label: {
+            Label("Spaces", systemImage: "square.stack")
         }
         // A bot someone shared is only talked with.
         if row.thread.bot?.owner == nil {
@@ -1933,6 +2081,8 @@ struct AgentEditor: View {
     let agent: LinkBot?
     /// The Hubs a new agent can be made on.
     private let hubs: [HubChats]
+    /// Told of a new bot once the Hub has made it.
+    private let created: (HubChats, LinkBot) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var draft: LinkBotDraft
     @State private var saving = false
@@ -1942,10 +2092,11 @@ struct AgentEditor: View {
     @State private var confirmingNewSession = false
     @State private var problem: String?
 
-    init(chats: HubChats, agent: LinkBot?, hubs: [HubChats] = []) {
+    init(chats: HubChats, agent: LinkBot?, hubs: [HubChats] = [], created: @escaping (HubChats, LinkBot) -> Void = { _, _ in }) {
         _chats = State(initialValue: chats)
         self.agent = agent
         self.hubs = hubs
+        self.created = created
         _draft = State(initialValue: agent?.draft ?? LinkBotDraft(name: "", provider: "", avatarSymbolName: "sparkles",
                                                                   avatarColorIndex: Int.random(in: 0..<AgentAvatar.colourCount)))
     }
@@ -2192,7 +2343,7 @@ struct AgentEditor: View {
                     agent.draft = draft
                     try await chats.update(agent)
                 } else {
-                    _ = try await chats.create(draft)
+                    created(chats, try await chats.create(draft))
                 }
                 dismiss()
             } catch {
@@ -2240,16 +2391,19 @@ struct GroupEditor: View {
     let group: LinkGroup?
     /// The Hubs a new group can be made on.
     private let hubs: [HubChats]
+    /// Told of a new group once the Hub has made it.
+    private let created: (HubChats, LinkGroup) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var draft: LinkGroupDraft
     @State private var saving = false
     @State private var confirmingDelete = false
     @State private var problem: String?
 
-    init(chats: HubChats, group: LinkGroup?, hubs: [HubChats] = []) {
+    init(chats: HubChats, group: LinkGroup?, hubs: [HubChats] = [], created: @escaping (HubChats, LinkGroup) -> Void = { _, _ in }) {
         _chats = State(initialValue: chats)
         self.group = group
         self.hubs = hubs
+        self.created = created
         _draft = State(initialValue: group?.draft ?? LinkGroupDraft(name: "", botIDs: []))
     }
 
@@ -2378,7 +2532,7 @@ struct GroupEditor: View {
                     group.draft = draft
                     try await chats.updateGroup(group)
                 } else {
-                    _ = try await chats.createGroup(draft)
+                    created(chats, try await chats.createGroup(draft))
                 }
                 dismiss()
             } catch {

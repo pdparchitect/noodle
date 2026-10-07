@@ -521,6 +521,7 @@ struct RootView: View {
                 .noodleSheetSizing()
         }
         .modifier(ConversationErrorAlert())
+        .modifier(SpaceAlerts())
         .onReceive(NotificationCenter.default.publisher(for: .newBot)) { _ in
             store.showNewBot()
         }

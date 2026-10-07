@@ -58,9 +58,21 @@ final class NoodleStore {
         }
     }
     private(set) var pinnedConversationIDs: [UUID] = []
-    /// The joined Hub whose space the sidebar shows, by its key, so it is kept when the Hub is left and joined again; nil shows All.
-    private(set) var spaceHub: String? = UserDefaults.standard.string(forKey: NoodleStore.spaceKey)
+    /// The space the sidebar shows: a joined Hub's by its key, so it is kept when the Hub is left and joined again,
+    /// or one the person made by its ID; nil shows All.
+    private(set) var space: String? = UserDefaults.standard.string(forKey: NoodleStore.spaceKey)
     static let spaceKey = "Noodle.space"
+    /// The spaces the person made, in Noodle's own folder.
+    @ObservationIgnored private(set) lazy var spaceList = SpaceList(file: repository.rootURL.appendingPathComponent("spaces.json"))
+    var customSpaces: [CustomSpace] { spaceList.spaces }
+    /// Carries them to the person's other devices through iCloud, in builds signed for it.
+    @ObservationIgnored private var spaceSync: SpaceCloudSync?
+
+    /// A new space, starting with the bot or group it was made from, or a new name for one.
+    enum SpaceNaming: Equatable {
+        case new(adding: UUID?)
+        case rename(CustomSpace)
+    }
     private(set) var unreadConversationIDs: Set<UUID> = [] {
         didSet { updateDockBadge() }
     }
@@ -97,6 +109,8 @@ final class NoodleStore {
     var agentBeingEdited: AgentRecord?
     var groupBeingEdited: BotConversation?
     var backgroundBeingEdited: BotConversation?
+    var spaceNaming: SpaceNaming?
+    var spaceBeingDeleted: CustomSpace?
     private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
     private(set) var storageReady = false
@@ -280,7 +294,16 @@ final class NoodleStore {
             guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
             NoodleNotifications.postSignInRequired(for: agent)
         }
+        if connectsServices {
+            spaceSync = SpaceCloudSync.ifEntitled(list: spaceList, stateFile: self.repository.rootURL.appendingPathComponent("spaces-sync.json"))
+        }
         Self.active = self
+    }
+
+    /// The Mac hears of iCloud changes only when it asks, so it asks whenever Noodle comes to the front.
+    func fetchSpaces() {
+        guard let spaceSync else { return }
+        Task { await spaceSync.fetch() }
     }
 
     var selectedConversation: BotConversation? {
@@ -324,14 +347,104 @@ final class NoodleStore {
         creationSheet = .bot
     }
 
-    /// The Hub whose space is shown, while it is still joined; nil for All.
+    /// The Hub whose space is shown, while it is still joined; nil for All and the spaces the person made.
     var spaceMirror: HubMirror? {
-        spaceHub.flatMap { key in hubMirrors.first { $0.pairing.hub?.key.x963.base64EncodedString() == key } }
+        space.flatMap { key in hubMirrors.first { Self.spaceKey(of: $0) == key } }
+    }
+
+    /// The space the person made that is shown; nil for All and the Hubs' spaces.
+    var shownCustomSpace: CustomSpace? {
+        space.flatMap { id in customSpaces.first { $0.id.uuidString == id } }
+    }
+
+    /// Neither a joined Hub's space, this Mac's nor one the person made, including one left or deleted elsewhere.
+    var isShowingAll: Bool { spaceMirror == nil && shownCustomSpace == nil && !showsThisMac }
+
+    /// Only the bots and groups kept on this Mac; with no Hub joined, that is All.
+    var showsThisMac: Bool { space == Self.thisMacSpace && !hubMirrors.isEmpty }
+    private static let thisMacSpace = "this-mac"
+
+    func showThisMac() {
+        setSpace(Self.thisMacSpace)
     }
 
     func showSpace(_ mirror: HubMirror?) {
-        spaceHub = mirror?.pairing.hub?.key.x963.base64EncodedString()
-        UserDefaults.standard.set(spaceHub, forKey: Self.spaceKey)
+        setSpace(mirror.flatMap(Self.spaceKey(of:)))
+    }
+
+    func showSpace(custom id: UUID) {
+        setSpace(id.uuidString)
+    }
+
+    private func setSpace(_ space: String?) {
+        self.space = space
+        UserDefaults.standard.set(space, forKey: Self.spaceKey)
+    }
+
+    private static func spaceKey(of mirror: HubMirror) -> String? { mirror.pairing.hub?.key.x963.base64EncodedString() }
+
+    /// Makes a space and shows it.
+    @discardableResult
+    func addSpace(named name: String) -> CustomSpace? {
+        guard let created = changeSpaces({ try spaceList.add(named: name) }) else { return nil }
+        showSpace(custom: created.id)
+        return created
+    }
+
+    func renameSpace(_ id: UUID, to name: String) {
+        changeSpaces { try spaceList.rename(id, to: name) }
+    }
+
+    /// Only the space goes; its bots and groups stay where they are.
+    func deleteSpace(_ id: UUID) {
+        changeSpaces { try spaceList.delete(id) }
+        if shownCustomSpace == nil, spaceMirror == nil { setSpace(nil) }
+    }
+
+    func isMember(_ conversationID: UUID, of spaceID: UUID) -> Bool {
+        spaceList.space(spaceID).flatMap { heldMember(for: conversationID, in: $0) } != nil
+    }
+
+    func setMember(_ isMember: Bool, of spaceID: UUID, conversationID: UUID) {
+        guard let space = spaceList.space(spaceID) else { return }
+        let held = heldMember(for: conversationID, in: space)
+        guard isMember != (held != nil) else { return }
+        changeSpaces { try spaceList.setMember(isMember, held ?? spaceMember(for: conversationID), of: spaceID) }
+    }
+
+    @discardableResult
+    private func changeSpaces<T>(_ change: () throws -> T) -> T? {
+        do { return try change() } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// A bot or group made while a space the person made is shown joins it, so it shows there.
+    private func joinShownSpace(_ conversationID: UUID?) {
+        guard let conversationID, let space = shownCustomSpace else { return }
+        setMember(true, of: space.id, conversationID: conversationID)
+    }
+
+    /// A Hub's bots and groups by the Hub's key and their conversation there, so the person's other devices find them too.
+    private func spaceMember(for conversationID: UUID) -> CustomSpace.Member {
+        if let mirror = hubMirror(forConversation: conversationID), let key = Self.spaceKey(of: mirror),
+           let remote = mirror.remoteConversation(local: conversationID) {
+            return CustomSpace.Member(hub: key, conversation: remote)
+        }
+        return CustomSpace.Member(hub: thisMac.key, conversation: conversationID)
+    }
+
+    /// The member a space holds for the conversation, however it was named: this Mac's own may be named by
+    /// this Mac's key or, from before it served any device, by none.
+    private func heldMember(for conversationID: UUID, in space: CustomSpace) -> CustomSpace.Member? {
+        space.members.first { self.conversationID(of: $0) == conversationID }
+    }
+
+    /// The local conversation a member names, while its Hub is joined.
+    private func conversationID(of member: CustomSpace.Member) -> UUID? {
+        guard let hub = member.hub, hub != thisMac.key else { return member.conversation }
+        return hubMirrors.first { Self.spaceKey(of: $0) == hub }?.localConversation(remote: member.conversation)
     }
 
     /// The harness New Bot starts on: in a Hub's space, the first that Hub lends, so the bot shows there.
@@ -347,12 +460,23 @@ final class NoodleStore {
         return mirror
     }
 
-    /// All's pins are this Mac's own; a Hub's space shows the pins the Hub keeps for every device.
-    private var shownPinnedIDs: [UUID] { spaceMirror?.pinnedConversations ?? pinnedConversationIDs }
+    /// All's pins are this Mac's own, and This Mac shows them too; a Hub's space shows the pins the Hub keeps
+    /// for every device, and a space the person made its own.
+    private var shownPinnedIDs: [UUID] {
+        if let custom = shownCustomSpace { return custom.pins.compactMap(conversationID(of:)) }
+        return spaceMirror?.pinnedConversations ?? pinnedConversationIDs
+    }
+
+    /// The conversations the shown space holds; nil in All.
+    private var shownSpaceConversationIDs: Set<UUID>? {
+        if let custom = shownCustomSpace { return Set(custom.members.compactMap(conversationID(of:))) }
+        if showsThisMac { return Set(conversations.map(\.id)).subtracting(hubMirrors.flatMap(\.localConversationIDs)) }
+        return spaceMirror.map { Set($0.localConversationIDs) }
+    }
 
     var filteredConversations: [BotConversation] {
         let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let space = spaceMirror.map { Set($0.localConversationIDs) }
+        let space = shownSpaceConversationIDs
         let conversations = conversations.filter { !isArchived($0) && space?.contains($0.id) != false }
         guard !term.isEmpty else { return conversations }
 
@@ -390,6 +514,11 @@ final class NoodleStore {
 
     func setPinned(_ pinned: Bool, conversationID: UUID) {
         guard pinned != isPinned(conversationID) else { return }
+        if let custom = shownCustomSpace {
+            guard let member = heldMember(for: conversationID, in: custom) else { return }
+            changeSpaces { try spaceList.setPinned(pinned, member, in: custom.id) }
+            return
+        }
         if let mirror = spaceMirror {
             Task {
                 do { try await mirror.setPinned(pinned, conversation: conversationID) }
@@ -470,6 +599,8 @@ final class NoodleStore {
                 try repository.savePinnedConversationIDs(pinnedConversationIDs)
                 thisMac.hub?.pinsChanged()
             }
+            // Members out of reach stay stored, so a space is never pruned here.
+            spaceList.reload()
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
             if unreadConversationIDs != storedUnreadIDs {
@@ -716,6 +847,7 @@ final class NoodleStore {
                 if !computerIDs.isEmpty { try await mirror.assignComputers(computerIDs, toAgent: agent.id) }
                 if !browserIDs.isEmpty { try await mirror.assignBrowsers(browserIDs, toAgent: agent.id) }
                 selectedConversationID = conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }?.id
+                joinShownSpace(selectedConversationID)
                 refreshAppShortcuts()
             } catch {
                 errorMessage = error.localizedDescription
@@ -824,6 +956,7 @@ final class NoodleStore {
         runtime.refresh(agents: agents)
         runtime.start(agent: created.agent, repository: repository)
         selectedConversationID = created.conversation.id
+        joinShownSpace(created.conversation.id)
         creationSheet = nil
         refreshAppShortcuts()
         return true
@@ -1029,6 +1162,7 @@ final class NoodleStore {
                     let conversation = try await hub.createGroup(named: name, publicDescription: publicDescription,
                                                                  agentIDs: Array(participantIDs))
                     selectedConversationID = conversation.id
+                    joinShownSpace(conversation.id)
                     refreshAppShortcuts()
                 } catch {
                     errorMessage = error.localizedDescription
@@ -1049,6 +1183,7 @@ final class NoodleStore {
             messagesByConversation[conversation.id] = []
             attachmentsByConversation[conversation.id] = []
             selectedConversationID = conversation.id
+            joinShownSpace(conversation.id)
             creationSheet = nil
             refreshAppShortcuts()
             return true

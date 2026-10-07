@@ -1,5 +1,7 @@
+import CryptoKit
 import Foundation
 import HubCore
+import HubLink
 import NoodleCore
 import NoodleMCP
 import NoodleRuntime
@@ -11,6 +13,8 @@ import Observation
 @MainActor @Observable final class ThisMacHub {
     private(set) var hub: PersonalHub?
     var isOn: Bool { hub != nil }
+    /// Its key, once it has served its owner's devices, who name this Mac's bots and groups by it; so do spaces.
+    var key: String? = ThisMacHub.savedKey()
     /// Runs after a device made, changed or deleted a bot, so Noodle reloads its bots.
     @ObservationIgnored var onBotsEdited: (() -> Void)?
     /// Runs after a device changed tools, computers or browsers, so Noodle reads them again.
@@ -49,8 +53,7 @@ import Observation
     func setOn(_ on: Bool) async {
         defaults.set(on, forKey: Self.enabledKey)
         if on, hub == nil {
-            let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("This Mac Hub", isDirectory: true)
+            let directory = Self.directory
             let port = (Bundle.main.object(forInfoDictionaryKey: "NoodlePersonalHubPort") as? String).flatMap(UInt16.init)
             let hub = PersonalHub(name: Host.current().localizedName ?? "My Mac", directory: directory, repository: repository,
                                   runtime: runtime, applets: applets, profiles: profiles, service: service, port: port ?? PersonalHub.port,
@@ -64,6 +67,7 @@ import Observation
             hub.onToolsEdited = { [weak self] in self?.onToolsEdited?() }
             hub.onPinsEdited = { [weak self] in self?.onPinsEdited?() }
             self.hub = hub
+            key = hub.link.key.x963.base64EncodedString()
             await hub.start()
             awake = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled],
                                                           reason: "Your devices can reach this Mac")
@@ -73,5 +77,17 @@ import Observation
             if let awake { ProcessInfo.processInfo.endActivity(awake) }
             awake = nil
         }
+    }
+
+    private static var directory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("This Mac Hub", isDirectory: true)
+    }
+
+    /// The key it was served with before, without making one.
+    private static func savedKey() -> String? {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("Link/hub.key")),
+              let key = try? P256.Signing.PrivateKey(rawRepresentation: data) else { return nil }
+        return LinkPublicKey(key.publicKey).x963.base64EncodedString()
     }
 }

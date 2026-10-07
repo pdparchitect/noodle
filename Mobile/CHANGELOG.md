@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Make your own spaces with any bots and groups from all your Hubs. Tap the title and choose New Space, or touch and hold a conversation and choose Spaces, which also adds it. Each space keeps its own pins, and bots and groups made in a space join it. Your spaces are the same on your iPhone, iPad and Mac through iCloud.
+
+### What to Test
+
+- Tap the title, choose New Space and name it: the empty space shows. Touch and hold bots from two different Hubs, choose Spaces and tick the space: both show there, and nowhere else changes. Pin one in the space: it is pinned there only, not in All or in its Hub's space.
+- In your space, make a new bot or group: it shows in the space. Untick a pinned bot under Spaces: it leaves the space and its pin there.
+- Tap the title for Rename Space and Delete Space. Deleting asks first, and its bots and groups stay in All. Quit and reopen the app: it opens on the same space with its members and pins.
+- Signed in to the same iCloud account on two devices, make a space on one: it shows on the other, with its members and pins, within moments (on the Mac, once you switch to Noodle). Rename, change and delete it on either side: the other follows.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added

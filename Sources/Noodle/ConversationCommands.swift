@@ -132,22 +132,89 @@ struct ConversationCommands: Commands {
     }
 }
 
-/// All, then a space for each joined Hub with its bots, groups and the pins it keeps. ⌘1 is All, ⌘2 on the Hubs.
+/// All, This Mac's, a space for each joined Hub with its bots, groups and the pins it keeps, then the spaces the
+/// person made. ⌘1 is All, ⌘2 on the rest.
 struct SpaceCommands: Commands {
     let store: NoodleStore
 
     var body: some Commands {
-        // Nothing to choose until a Hub is joined.
-        if !store.hubMirrors.isEmpty {
+        // Nothing to choose until a Hub is joined or a space made; a conversation's menu makes the first.
+        if !store.hubMirrors.isEmpty || !store.customSpaces.isEmpty {
             CommandMenu("Spaces") {
-                Toggle("All", isOn: Binding(get: { store.spaceMirror == nil }, set: { if $0 { store.showSpace(nil) } }))
+                Toggle("All", isOn: Binding(get: { store.isShowingAll }, set: { if $0 { store.showSpace(nil) } }))
                     .keyboardShortcut("1")
+                // Only beside a Hub: with none it would be the same as All.
+                if !store.hubMirrors.isEmpty {
+                    Toggle("This Mac", isOn: Binding(get: { store.showsThisMac }, set: { if $0 { store.showThisMac() } }))
+                        .keyboardShortcut("2")
+                }
                 ForEach(Array(store.hubMirrors.enumerated()), id: \.element.pairing.directory) { index, mirror in
                     Toggle(mirror.pairing.hub?.name ?? "Noodle Hub",
                            isOn: Binding(get: { store.spaceMirror === mirror }, set: { if $0 { store.showSpace(mirror) } }))
-                        .keyboardShortcut(index < 8 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 2)"))) : nil)
+                        .keyboardShortcut(Self.shortcut(1 + index))
+                }
+                if !store.customSpaces.isEmpty { Divider() }
+                ForEach(Array(store.customSpaces.enumerated()), id: \.element.id) { index, space in
+                    Toggle(space.name, isOn: Binding(get: { store.shownCustomSpace?.id == space.id },
+                                                     set: { if $0 { store.showSpace(custom: space.id) } }))
+                        .keyboardShortcut(Self.shortcut((store.hubMirrors.isEmpty ? 0 : store.hubMirrors.count + 1) + index))
+                }
+                Divider()
+                Button("New Space…") { store.spaceNaming = .new(adding: nil) }
+                if let space = store.shownCustomSpace {
+                    Button("Rename Space…") { store.spaceNaming = .rename(space) }
+                    Button("Delete Space") { store.spaceBeingDeleted = space }
                 }
             }
+        }
+    }
+
+    /// ⌘2 to ⌘9, after All.
+    private static func shortcut(_ index: Int) -> KeyboardShortcut? {
+        index < 8 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 2)"))) : nil
+    }
+}
+
+/// Naming and deleting the spaces the person made, in the main window.
+struct SpaceAlerts: ViewModifier {
+    @Environment(NoodleStore.self) private var store
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert(isRenaming ? "Rename Space" : "New Space",
+                   isPresented: Binding(get: { store.spaceNaming != nil }, set: { if !$0 { store.spaceNaming = nil } })) {
+                TextField("Name", text: $name)
+                Button("Cancel", role: .cancel) {}
+                Button(isRenaming ? "Rename" : "Create") { save(store.spaceNaming) }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .onChange(of: store.spaceNaming) { _, naming in
+                if case .rename(let space) = naming { name = space.name } else { name = "" }
+            }
+            .alert("Delete \(store.spaceBeingDeleted?.name ?? "Space")?",
+                   isPresented: Binding(get: { store.spaceBeingDeleted != nil }, set: { if !$0 { store.spaceBeingDeleted = nil } }),
+                   presenting: store.spaceBeingDeleted) { space in
+                Button("Delete", role: .destructive) { store.deleteSpace(space.id) }
+                Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+            } message: { _ in
+                Text("Its bots and groups stay in All.")
+            }
+    }
+
+    private var isRenaming: Bool {
+        if case .rename = store.spaceNaming { true } else { false }
+    }
+
+    private func save(_ naming: NoodleStore.SpaceNaming?) {
+        switch naming {
+        case .new(let conversationID):
+            guard let space = store.addSpace(named: name), let conversationID else { return }
+            store.setMember(true, of: space.id, conversationID: conversationID)
+        case .rename(let space):
+            store.renameSpace(space.id, to: name)
+        case nil:
+            break
         }
     }
 }

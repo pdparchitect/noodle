@@ -38,7 +38,12 @@ struct SidebarView: View {
         .searchFocused($searchIsFocused)
         .overlay {
             if !store.conversations.isEmpty && store.filteredConversations.isEmpty {
-                ContentUnavailableView.search(text: store.searchText)
+                if store.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // A space with nothing in it yet.
+                    ContentUnavailableView("No Bots", systemImage: "square.stack")
+                } else {
+                    ContentUnavailableView.search(text: store.searchText)
+                }
             }
         }
         .onChange(of: store.selectedConversationID) { _, conversationID in
@@ -49,6 +54,7 @@ struct SidebarView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.markSelectedConversationReadIfVisible()
+            store.fetchSpaces()
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             searchIsFocused = true
@@ -77,6 +83,14 @@ struct SidebarView: View {
             Button("Unpin") { store.setPinned(false, conversationID: conversation.id) }
         } else {
             Button("Pin") { store.setPinned(true, conversationID: conversation.id) }
+        }
+        Menu("Spaces") {
+            ForEach(store.customSpaces) { space in
+                Toggle(space.name, isOn: Binding(get: { store.isMember(conversation.id, of: space.id) },
+                                                 set: { store.setMember($0, of: space.id, conversationID: conversation.id) }))
+            }
+            if !store.customSpaces.isEmpty { Divider() }
+            Button("New Space…") { store.spaceNaming = .new(adding: conversation.id) }
         }
         Divider()
         switch conversation.kind {
