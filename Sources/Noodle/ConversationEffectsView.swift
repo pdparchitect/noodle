@@ -42,23 +42,12 @@ struct ConversationEffectsView: View {
         }
         .task(id: conversationID) {
             playing = nil
-            let repository = store.repository
             while !Task.isCancelled {
                 if playing != nil, Date().timeIntervalSince(startedAt) >= ChatEffect.duration {
                     playing = nil
                 }
                 if isVisibleChat, playing == nil {
-                    let taken: (id: UUID, kind: String)?
-                    if let mirror = store.hubMirror(forConversation: conversationID) {
-                        // A Hub bot's effect waits on the Hub, for whichever device shows the conversation first.
-                        taken = mirror.hasWaitingEffect(in: conversationID)
-                            ? await mirror.takeEffect(in: conversationID).map { ($0.id, $0.kind) } : nil
-                    } else {
-                        // Filesystem I/O and locking must not block the main thread.
-                        taken = await Task.detached(priority: .utility) {
-                            try? repository.takePendingEffect(conversationID: conversationID)
-                        }.value.map { ($0.id, $0.kind) }
-                    }
+                    let taken = await store.takeEffect(in: conversationID)
                     guard !Task.isCancelled else { return }
                     if let taken, isVisibleChat {
                         startedAt = Date()

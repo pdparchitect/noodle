@@ -192,6 +192,32 @@ import XCTest
 
     /// A conversation's background is the Mac's, whichever device sets it. The phone fetches a
     /// small copy of a video, and the Mac hears when the phone changes it.
+    /// A chat effect a bot on the Mac sends waits for the owner to open the conversation on the phone or the Mac,
+    /// and plays on whichever does first, once.
+    func testAChatEffectPlaysOnThePhoneOrTheMacOnce() async throws {
+        let (f, made) = try await fixture(bots: ["Kai"])
+        let conversation = try XCTUnwrap(f.repository.loadConversations().first { $0.participantIDs == [made[0].id] })
+        let events = try await f.device.subscribe()
+        f.personal.bots.checkForChanges()
+        _ = try await f.device.request(.status)
+        let sent = try f.repository.sendEffect(agentID: made[0].id, conversationID: conversation.id, kind: "confetti")
+        f.personal.bots.checkForChanges()
+        let heard = try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                for try await event in events { if case .effectWaiting(conversation.id) = event { return true } }
+                return false
+            }
+            group.addTask { try await Task.sleep(for: .seconds(10)); return false }
+            let first = try await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        XCTAssertTrue(heard, "The phone hears that an effect waits")
+        let taken = try await f.device.request(.takeEffect(conversationID: conversation.id))
+        XCTAssertEqual(taken, .effect(LinkEffect(id: sent.id, kind: "confetti")))
+        XCTAssertNil(try f.repository.takePendingEffect(conversationID: conversation.id), "Not again on the Mac")
+    }
+
     func testThePhoneShowsAndSetsTheMacsBackgrounds() async throws {
         let (f, made) = try await fixture(bots: ["Eli"])
         let conversation = try XCTUnwrap(f.repository.loadConversations().first { $0.participantIDs == [made[0].id] })

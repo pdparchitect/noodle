@@ -439,3 +439,46 @@ final class HubHarnessChoiceTests: XCTestCase {
         XCTAssertTrue(try studio.repository.loadConversations().contains { $0.guest?.id == grace.id && $0.participantIDs == [f.a.id] })
     }
 }
+
+/// Where a chat effect comes from when a conversation is in front: this Mac for its own bots, the Hub for its.
+@MainActor final class ChatEffectSourceTests: XCTestCase {
+    func testEffectsComeFromThisMacOrTheHubTheConversationIsOn() async throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-effect-source-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let studio = Hub(root: root.appendingPathComponent("Studio"), messenger: nil)
+        try studio.repository.prepare()
+        let link = HubLinkService(hubName: "Studio", directory: root.appendingPathComponent("Studio/Link"),
+                                  access: studio.access, profiles: studio.harnessProfiles, bots: studio.bots, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let plan = try studio.access.addPlan(named: "Family")
+        studio.access.set(HubHarness(provider: .claudeCode, profile: nil), included: true, in: plan)
+        let ada = try studio.access.addUser(named: "Ada")
+        studio.access.move(ada, to: plan)
+        await f.store.joinHub(link.invite(ada).url().absoluteString)
+        let mirror = try XCTUnwrap(f.store.hubMirrors.first)
+        let standIn = try await mirror.createBot(LinkBotDraft(name: "Jeeves", provider: "claude-code"))
+        let local = try XCTUnwrap(try f.repository.loadConversations().first { $0.participantIDs == [standIn.id] })
+        let hubBot = try XCTUnwrap(try studio.repository.loadAgents().first)
+        let remote = try XCTUnwrap(try studio.repository.loadConversations().first { $0.participantIDs == [hubBot.id] })
+
+        // This Mac's own bot: from this Mac, once.
+        let own = try f.repository.sendEffect(agentID: f.a.id, conversationID: f.directA.id, kind: "confetti")
+        let first = await f.store.takeEffect(in: f.directA.id)
+        XCTAssertEqual(first?.id, own.id)
+        XCTAssertEqual(first?.kind, "confetti")
+        let again = await f.store.takeEffect(in: f.directA.id)
+        XCTAssertNil(again)
+
+        // A Hub bot: from the Hub, where it waits for whichever device shows the conversation first.
+        let onHub = try studio.repository.sendEffect(agentID: hubBot.id, conversationID: remote.id, kind: "fireworks")
+        await mirror.sync()
+        let fromHub = await f.store.takeEffect(in: local.id)
+        XCTAssertEqual(fromHub?.id, onHub.id)
+        XCTAssertNil(try studio.repository.takePendingEffect(conversationID: remote.id), "Taken on the Hub, for every device")
+    }
+}

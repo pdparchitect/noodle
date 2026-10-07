@@ -536,12 +536,12 @@ import Observation
             do { try await syncGroups() } catch {
                 // A Hub from before groups says it does not know the request; it has none to copy.
             }
+            // Effects sent while this Mac was away were heard of by nobody here, whatever else fails to sync.
+            waitingEffects.formUnion(threads.map(\.local))
             try await syncConnections()
             try await syncComputers()
             try await syncBrowsers()
             for thread in threads { try await syncMessages(thread.remote) }
-            // Effects sent while this Mac was away were heard of by nobody here.
-            waitingEffects.formUnion(threads.map(\.local))
             try await sendPending()
             error = nil
         } catch {

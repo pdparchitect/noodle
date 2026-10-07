@@ -292,6 +292,30 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(await hub.takes == 1, "Not asked again until another is heard of")
     }
 
+    /// Nothing is taken while the app is in the background, so the effect still waits; one this phone cannot draw is
+    /// taken all the same, so it does not wait for ever, and plays nothing.
+    @Test func aChatEffectPlaysOnlyWithTheAppInFrontAndOnlyIfThePhoneDrawsIt() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        let scout = await hub.bot
+        let fireworks = LinkEffect(id: UUID(), kind: "fireworks")
+        await hub.setEffect(fireworks)
+        try await chats.apply(.effectWaiting(conversationID: scout.conversationID))
+        #expect(await chats.effectToPlay(in: scout.conversationID, appInFront: false) == nil)
+        #expect(chats.hasWaitingEffect(in: scout.conversationID), "Still waiting")
+        #expect(await hub.takes == 0)
+        let played = await chats.effectToPlay(in: scout.conversationID, appInFront: true)
+        #expect(played?.effect == .fireworks)
+        #expect(played?.id == fireworks.id)
+
+        await hub.setEffect(LinkEffect(id: UUID(), kind: "future-kind"))
+        try await chats.apply(.effectWaiting(conversationID: scout.conversationID))
+        #expect(await chats.effectToPlay(in: scout.conversationID, appInFront: true) == nil)
+        #expect(!chats.hasWaitingEffect(in: scout.conversationID))
+        #expect(await hub.takes == 2)
+    }
+
     /// On the owner's own Mac, a bot there is shared through the Hubs the Mac joined, one at a time, a person at a time.
     @Test func aBotOnTheOwnersMacIsSharedThroughTheHubsItJoined() async throws {
         let hub = FakeHub()

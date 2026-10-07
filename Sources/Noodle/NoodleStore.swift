@@ -791,6 +791,20 @@ final class NoodleStore {
     /// Whether someone shared this bot with this Mac's user on a Noodle Hub, who then only talks with it.
     func isShared(_ agentID: UUID) -> Bool { hubMirror(forAgent: agentID)?.owner(ofAgent: agentID) != nil }
 
+    /// Takes the chat effect waiting in a conversation now in front: this Mac's own, or one waiting on the Hub the
+    /// conversation is on, for whichever device shows it first.
+    func takeEffect(in conversationID: UUID) async -> (id: UUID, kind: String)? {
+        if let mirror = hubMirror(forConversation: conversationID) {
+            guard mirror.hasWaitingEffect(in: conversationID) else { return nil }
+            return await mirror.takeEffect(in: conversationID).map { ($0.id, $0.kind) }
+        }
+        let repository = repository
+        // Filesystem I/O and locking must not block the main thread.
+        return await Task.detached(priority: .utility) {
+            try? repository.takePendingEffect(conversationID: conversationID)
+        }.value.map { ($0.id, $0.kind) }
+    }
+
     /// The people a conversation's bots are shared with on Noodle Hubs, whom the @ menu offers by name.
     func sharedPeople(in conversation: BotConversation) -> [String] {
         conversation.participantIDs.flatMap { id in

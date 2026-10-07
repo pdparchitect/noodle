@@ -452,6 +452,13 @@ enum HubThread: HubConversation {
         return effect
     }
 
+    /// The chat effect to play now in a conversation on screen. Nothing is taken while the app is in the background, so
+    /// it still waits; one this phone cannot draw is taken all the same, so it does not wait for ever, and plays nothing.
+    func effectToPlay(in conversation: UUID, appInFront: Bool) async -> (effect: ChatEffect, id: UUID)? {
+        guard appInFront, let effect = await takeEffect(in: conversation), let known = ChatEffect(rawValue: effect.kind) else { return nil }
+        return (known, effect.id)
+    }
+
     /// Deletes the bot and its conversation on the Hub, for every device.
     func delete(_ agent: LinkBot) async throws {
         guard case .done = try await pairing.request(.deleteBot(id: agent.id)) else {
@@ -1491,8 +1498,8 @@ private struct ChatEffectsOverlay: View {
     private func take() {
         guard scenePhase == .active, playing == nil, chats.hasWaitingEffect(in: conversationID) else { return }
         Task {
-            guard let effect = await chats.takeEffect(in: conversationID), let known = ChatEffect(rawValue: effect.kind) else { return }
-            playing = (known, effect.id, Date())
+            guard let effect = await chats.effectToPlay(in: conversationID, appInFront: scenePhase == .active) else { return }
+            playing = (effect.effect, effect.id, Date())
         }
     }
 }
