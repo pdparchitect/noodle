@@ -185,6 +185,24 @@ import SwiftUI
         guard presentation.selection == selected, runtime.failure == nil else {
             throw BrowserError("Clicking a person selected them as a browser: \(runtime.failure ?? "no alert").")
         }
+        // Arrow keys walk past the person too, down to the browser kept for them and back.
+        guard let list = elements(content).compactMap({ $0 as? NSTableView }).first else { throw BrowserError("Missing sidebar list.") }
+        window.makeFirstResponder(list)
+        var visited: Set<UUID> = []
+        for key in [125, 125, 125, 126, 126, 126] as [UInt16] {
+            guard let down = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: key) else {
+                throw BrowserError("Could not create fixture key input.")
+            }
+            NSApp.postEvent(down, atStart: false)
+            try await Task.sleep(for: .milliseconds(400))
+            guard let id = presentation.selection, presentation.library.profiles.contains(where: { $0.id == id }), runtime.failure == nil else {
+                throw BrowserError("Arrow keys selected a person as a browser: \(runtime.failure ?? "no alert").")
+            }
+            visited.insert(id)
+        }
+        guard visited.contains(kept.id) else { throw BrowserError("Arrow keys did not reach the browser kept for a person.") }
+        presentation.selection = selected
     }
     /// Posts `count` consecutive clicks; events stay in this process.
     private static func click(_ point: NSPoint, in window: NSWindow, count: Int = 1) throws {

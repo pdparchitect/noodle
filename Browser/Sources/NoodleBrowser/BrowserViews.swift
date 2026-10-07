@@ -403,7 +403,7 @@ private struct BrowserTabView: View {
         }
     }
 }
-private struct BrowserWebView: NSViewRepresentable {
+struct BrowserWebView: NSViewRepresentable {
     let tab: BrowserTab
     func makeCoordinator() -> BrowserTab { tab }
     func makeNSView(context: Context) -> BrowserWebContainer {
@@ -418,7 +418,7 @@ private struct BrowserWebView: NSViewRepresentable {
     }
 }
 
-private final class BrowserWebContainer: NSView {
+final class BrowserWebContainer: NSView {
     let web: WKWebView
     init(web: WKWebView) {
         self.web = web
