@@ -513,15 +513,12 @@ struct PasteLinkButton: UIViewRepresentable {
     }
 }
 
-/// Every Hub this phone joined: tap one to show its bots, or its info button for its details. Shown
-/// together, tapping a Hub opens its details.
+/// Every Hub this phone joined, whose bots all share one list: tap a Hub for its details.
 struct HubsView: View {
     @Environment(HubMemberships.self) private var hubs
     /// Each Hub's bots and groups, for its profile's archived ones.
     var chats: [HubChats] = []
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(CurrentHub.key) private var current = ""
-    @AppStorage(CurrentHub.togetherKey) private var together = false
     /// The folder of the Hub whose details are open.
     @State private var details: URL?
     @State private var adding = false
@@ -530,19 +527,11 @@ struct HubsView: View {
     var body: some View {
         NavigationStack {
             List {
-                if hubs.hubs.count > 1 {
-                    Section { Toggle("Show All Hubs Together", isOn: $together) }
-                }
                 Section {
                     ForEach(hubs.hubs) { pairing in
                         HStack {
                             Button {
-                                if together {
-                                    details = pairing.directory
-                                } else {
-                                    current = CurrentHub.name(of: pairing)
-                                    dismiss()
-                                }
+                                details = pairing.directory
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(pairing.hubName).foregroundStyle(.primary)
@@ -554,9 +543,6 @@ struct HubsView: View {
                             .buttonStyle(.plain)
                             let connection = HubConnection(pairing)
                             Text(connection.title).font(.subheadline).foregroundStyle(connection.color)
-                            if !together, hubs.hubs.count > 1, CurrentHub.pick(hubs.hubs, saved: current) === pairing {
-                                Image(systemName: "checkmark").foregroundStyle(.tint).accessibilityLabel("Shown")
-                            }
                             Button { details = pairing.directory } label: { Image(systemName: "info.circle") }
                                 .buttonStyle(.borderless)
                                 .accessibilityLabel("Details")

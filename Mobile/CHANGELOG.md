@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The bots and groups of every Hub you joined share one list. Hubs no longer switches between them: tap a Hub there for its details.
+
+### What to Test
+
+- Join two Hubs: both Hubs' bots and groups show in one list, each marked with its Hub. In ••• > Hubs, tapping a Hub opens its details, and there is no Show All Hubs Together.
+
 ## [0.22.0] - 2026-10-06
 
 ### Added

@@ -67,7 +67,7 @@ case "$command" in
         generate
         xcodebuild -workspace "$folder/NoodleMobile.xcworkspace" -scheme NoodleMobile -configuration Debug \
             -derivedDataPath "$folder/Derived" -destination "id=$simulator" \
-            -retry-tests-on-failure -test-iterations 2 test
+            -retry-tests-on-failure -test-iterations 2 -collect-test-diagnostics never test
         ;;
     package)
         version="${1:?Missing version}" build="${2:?Missing build number}" output="${3:?Missing output folder}"
