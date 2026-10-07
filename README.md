@@ -120,6 +120,11 @@ can add an address of your own.
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
+## Follow
+
+- [@pdp on X](https://x.com/pdp)
+- [All posts about Noodle](https://x.com/search?q=from%3Apdp%20noodle&f=live)
+
 ## Comparison
 
 | | Grok Bot | Muse | Noodle |
