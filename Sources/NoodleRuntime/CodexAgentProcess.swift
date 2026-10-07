@@ -455,7 +455,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             trace.finish(outcome)
             if status == "failed" {
                 let error = turn?["error"] as? [String: Any]
-                fail(error?["message"] as? String ?? "Codex turn failed")
+                fail(Self.serviceErrorMessage(error?["message"] as? String) ?? "Codex turn failed")
             } else {
                 update(.ready, "Codex ready")
                 sendPendingNotificationIfPossible()
@@ -683,7 +683,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             guard (params["item"] as? [String: Any])?["handoff_id"] != nil else { return }
             if turnIsActive, let activeTurnID { spokenTurnID = activeTurnID } else { spokenRequestPending = true }
         case "thread/realtime/error":
-            endVoiceCallLocally(Self.voiceCallErrorMessage(params["message"] as? String))
+            endVoiceCallLocally(Self.serviceErrorMessage(params["message"] as? String) ?? "The call failed.")
         case "thread/realtime/closed":
             endVoiceCallLocally(nil)
         default:
@@ -691,9 +691,9 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         }
     }
 
-    /// The realtime service's errors can arrive as its raw JSON body.
-    private static func voiceCallErrorMessage(_ text: String?) -> String {
-        guard let text else { return "The call failed." }
+    /// Model service errors can arrive as their raw JSON body.
+    private static func serviceErrorMessage(_ text: String?) -> String? {
+        guard let text else { return nil }
         let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
         return (body?["error"] as? [String: Any])?["message"] as? String ?? text
     }

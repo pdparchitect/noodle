@@ -236,6 +236,17 @@ import XCTest
         XCTAssertTrue(f.failures.isEmpty)
     }
 
+    /// A model service rejection arrives as its raw JSON body; only its message is shown.
+    func testFailedTurnShowsTheServiceMessageNotItsJSONBody() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
+        try await active(f, wire, p)
+        let body = #"{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'custom/model' model is not supported."}}"#
+        wire.emit(["method": "turn/completed", "params": ["threadId": "fixture-thread",
+            "turn": ["id": "turn-one", "status": "failed", "error": ["message": body]]]])
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.detail, "The 'custom/model' model is not supported.")
+    }
+
     func testDisconnectPreservesRecoveryAndIsReportedOnlyOnce() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.codex(wire)
         try await active(f, wire, p)
