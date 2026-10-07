@@ -74,6 +74,18 @@ struct AgentProfileSheet: View {
                     .accessibilityLabel("Direct Message")
                     Divider().frame(height: 32).accessibilityHidden(true)
                 }
+                if let callable = callableConversation {
+                    Button {
+                        store.startVoiceCall(in: callable)
+                        // The call's controls are in its conversation, so show it.
+                        if let directMessage { directMessage() } else { dismiss() }
+                    } label: {
+                        actionLabel("Call", systemImage: "phone")
+                    }
+                    .help("Call \(agent.displayName)")
+                    .accessibilityLabel("Call \(agent.displayName)")
+                    Divider().frame(height: 32).accessibilityHidden(true)
+                }
                 let computers = store.computers.assigned(to: agent)
                 if !computers.isEmpty {
                     CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
@@ -123,8 +135,16 @@ struct AgentProfileSheet: View {
 
     private var isShared: Bool { store.isShared(agent.id) }
 
+    /// The direct conversation a call would start in, while the bot can take one and isn't already on it.
+    private var callableConversation: BotConversation? {
+        guard let direct = store.conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agent.id] }),
+              store.voiceCallTarget(for: direct) != nil,
+              store.voiceCalls.call?.conversationID != direct.id else { return nil }
+        return direct
+    }
+
     private var actionCount: Int {
-        [reply != nil, directMessage != nil, !store.computers.assigned(to: agent).isEmpty,
+        [reply != nil, directMessage != nil, callableConversation != nil, !store.computers.assigned(to: agent).isEmpty,
          !store.browsers.assigned(to: agent).isEmpty].filter { $0 }.count + (isShared ? 0 : 2)
     }
 
