@@ -38,6 +38,18 @@ import Observation
     @ObservationIgnored private let defaults: UserDefaults
     private static let enabledKey = "ThisMacHubEnabled"
 
+    /// Where it keeps its key and devices, and where devices reach it.
+    struct Placement {
+        var directory = ThisMacHub.directory
+        /// The port this build listens on; nil for its usual one.
+        var port: UInt16? = (Bundle.main.object(forInfoDictionaryKey: "NoodlePersonalHubPort") as? String).flatMap(UInt16.init)
+        /// As a Noodle Hub does: the router forwards the port, for devices away from home.
+        var router: (any RouterPortMapper)? = SystemRouterPortMapper()
+        var localEndpoints: (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:)
+    }
+    /// The Mac's own, unless a test gives another before switching it on.
+    @ObservationIgnored var placement = Placement()
+
     init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, applets: AppletController,
          profiles: HarnessProfilesController, service: MCPService, defaults: UserDefaults = .standard) {
         self.repository = repository
@@ -56,12 +68,10 @@ import Observation
     func setOn(_ on: Bool) async {
         defaults.set(on, forKey: Self.enabledKey)
         if on, hub == nil {
-            let directory = Self.directory
-            let port = (Bundle.main.object(forInfoDictionaryKey: "NoodlePersonalHubPort") as? String).flatMap(UInt16.init)
-            let hub = PersonalHub(name: Host.current().localizedName ?? "My Mac", directory: directory, repository: repository,
-                                  runtime: runtime, applets: applets, profiles: profiles, service: service, port: port ?? PersonalHub.port,
-                                  // As a Noodle Hub does: the router forwards the port, for devices away from home.
-                                  router: SystemRouterPortMapper())
+            let hub = PersonalHub(name: Host.current().localizedName ?? "My Mac", directory: placement.directory, repository: repository,
+                                  runtime: runtime, applets: applets, profiles: profiles, service: service,
+                                  port: placement.port ?? PersonalHub.port, router: placement.router,
+                                  localEndpoints: placement.localEndpoints)
             // Copies of bots kept on joined Hubs are those Hubs', not this Mac's.
             hub.bots.isHidden = { [runtime] in runtime.remoteAgentIDs.contains($0) }
             hub.bots.onBotsEdited = { [weak self] in self?.onBotsEdited?() }
@@ -87,7 +97,7 @@ import Observation
         }
     }
 
-    private static var directory: URL {
+    nonisolated private static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("This Mac Hub", isDirectory: true)
     }

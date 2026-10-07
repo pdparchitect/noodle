@@ -1,4 +1,5 @@
 import Foundation
+import HubCore
 import HubLink
 import NoodleHubClient
 @testable import Noodle
@@ -384,5 +385,57 @@ final class HubHarnessChoiceTests: XCTestCase {
                                         avatarImageData: nil, publicDescription: "", backstory: "",
                                         mcpConnectionIDs: [account.id]))
         XCTAssertEqual(store.mcp.selectedIDs(for: f.a), [])
+    }
+}
+
+/// The owner's phone, joined to this Mac as a Hub, shares a bot that runs here with people on a Noodle Hub this Mac
+/// joined: through Noodle, over real QUIC on this Mac.
+@MainActor final class ThisMacHubSharingTests: XCTestCase {
+    func testThePhoneSharesABotHereThroughAHubThisMacJoined() async throws {
+        let f = try StoreFixture()
+        defer { f.cleanUp() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-this-mac-sharing-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+
+        // A Noodle Hub, Studio, with Ada and Grace, which this Mac joins as Ada.
+        let studio = Hub(root: root.appendingPathComponent("Studio"), messenger: nil)
+        try studio.repository.prepare()
+        let link = HubLinkService(hubName: "Studio", directory: root.appendingPathComponent("Studio/Link"),
+                                  access: studio.access, profiles: studio.harnessProfiles, bots: studio.bots, port: 0,
+                                  localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await link.start()
+        addTeardownBlock { await MainActor.run { link.stop() } }
+        guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
+        let ada = try studio.access.addUser(named: "Ada"), grace = try studio.access.addUser(named: "Grace")
+        await f.store.joinHub(link.invite(ada).url().absoluteString)
+        let joined = try XCTUnwrap(f.store.hubMirrors.first)
+        XCTAssertEqual(joined.pairing.status?.canShareBots, true)
+
+        // This Mac as a Hub, and the owner's phone joined to it.
+        f.store.thisMac.placement = .init(directory: root.appendingPathComponent("This Mac"), port: 0, router: nil,
+                                          localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
+        await f.store.thisMac.setOn(true)
+        addTeardownBlock { await f.store.thisMac.setOn(false) }
+        let personal = try XCTUnwrap(f.store.thisMac.hub)
+        guard case .listening = personal.link.state else { throw XCTSkip("Could not listen: \(personal.link.state)") }
+        let phone = HubPairing(directory: root.appendingPathComponent("Phone"), deviceName: "iPhone")
+        await phone.join(personal.link.invite(personal.owner).url().absoluteString)
+        XCTAssertNil(phone.error)
+
+        guard case .hubSharing(let listed) = try await phone.request(.hubSharing(botID: f.a.id)) else { return XCTFail("no answer") }
+        XCTAssertEqual(listed.map(\.name), ["Studio"])
+        XCTAssertEqual(listed.first?.id, joined.sharingID)
+        XCTAssertEqual(listed.first?.people.map(\.name), ["Grace"])
+        XCTAssertEqual(listed.first?.sharedWith, [])
+
+        guard case .hubSharing(let shared) = try await phone.request(.shareOnHub(botID: f.a.id, hub: joined.sharingID,
+                                                                               people: [grace.id])) else {
+            return XCTFail("no answer")
+        }
+        XCTAssertEqual(shared.first?.sharedWith, [grace.id])
+        XCTAssertEqual(joined.hosting.sharedWith(agent: f.a.id), [grace.id], "Edit Bot on the Mac shows the same")
+        XCTAssertEqual(studio.access.host(ofBot: f.a.id), studio.access.devices.first { $0.user == ada.id }?.id,
+                       "The bot is on Studio, run by this Mac")
+        XCTAssertTrue(try studio.repository.loadConversations().contains { $0.guest?.id == grace.id && $0.participantIDs == [f.a.id] })
     }
 }
