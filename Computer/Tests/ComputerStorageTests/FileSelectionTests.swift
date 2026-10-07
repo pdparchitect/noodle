@@ -4,12 +4,15 @@ import XCTest
 @MainActor final class FileSelectionTests: XCTestCase {
     private actor RecordingService: ComputerFileService {
         let files: [GuestFile]
+        let folders: [String: [GuestFile]]
         var changes: [[String]] = []
-        init(files: [GuestFile]) { self.files = files }
+        init(files: [GuestFile], folders: [String: [GuestFile]] = [:]) { self.files = files; self.folders = folders }
         func homeDirectory() async throws -> String { "/workspace" }
         func change(_ operation: String, path: String, extra: [String]) async throws { changes.append([operation, path] + extra) }
-        func list(_ path: String) async throws -> [GuestFile] { path == "/workspace" ? files : [] }
-        func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool, progress: @escaping @Sendable (Int64) -> Void) async throws {}
+        func list(_ path: String) async throws -> [GuestFile] { path == "/workspace" ? files : folders[path] ?? [] }
+        func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool, progress: @escaping @Sendable (Int64) -> Void) async throws {
+            try Data(repeating: 7, count: Int(file.size)).write(to: destination)
+        }
         func createImportDirectory(_ path: String) async throws {}
         func upload(_ source: URL, to path: String, progress: @escaping @Sendable (Int64) async -> Void) async throws {}
     }
@@ -46,6 +49,57 @@ import XCTest
             ["remove", "/workspace/a.txt"],
             ["remove", "/workspace/Folder"]
         ])
+    }
+
+    private func folder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    func testExportingSeveralItemsPutsEachInTheChosenFolder() async throws {
+        let service = RecordingService(files: [file("a.txt"), file("b.txt"), file("c.txt")])
+        let model = try await loaded(service), destination = try folder()
+        model.select(["a.txt", "c.txt"])
+        model.exportSelected(into: destination); try await idle(model)
+        XCTAssertNil(model.error)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destination.path).sorted(), ["a.txt", "c.txt"])
+    }
+
+    func testDraggingSeveralItemsOutExportsEachInTurn() async throws {
+        let service = RecordingService(files: [file("a.txt"), file("b.txt")])
+        let model = try await loaded(service), destination = try folder()
+        var results: [String: Error?] = [:]
+        for name in ["a.txt", "b.txt"] {
+            model.promisedExport(file(name), path: "/workspace/" + name, to: destination.appendingPathComponent(name)) { results[name] = $0 }
+        }
+        try await idle(model)
+        XCTAssertEqual(results.count, 2)
+        XCTAssertTrue(results.values.allSatisfy { $0 == nil }, "\(results)")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destination.path).sorted(), ["a.txt", "b.txt"])
+    }
+
+    func testDeletingSeveralItemsRemovesNothingWhenAFolderIsNotEmpty() async throws {
+        let service = RecordingService(files: [file("a.txt"), file("Empty", kind: "directory"), file("Full", kind: "directory")],
+                                       folders: ["/workspace/Full": [file(".hidden")]])
+        let model = try await loaded(service)
+        model.select(["a.txt", "Empty", "Full"]); model.removeSelected(); try await idle(model)
+        XCTAssertNotNil(model.error)
+        let changes = await service.changes
+        XCTAssertEqual(changes, [])
+    }
+
+    func testRightClickingAnUnselectedItemSelectsOnlyThatItem() async throws {
+        let service = RecordingService(files: [file("a.txt"), file("b.txt"), file("c.txt")])
+        let model = try await loaded(service)
+        model.select(["a.txt", "c.txt"])
+        model.prepareContextMenu(for: model.files[0])
+        XCTAssertEqual(model.selection, ["a.txt", "c.txt"], "Right-clicking inside the selection keeps it")
+        model.prepareContextMenu(for: model.files[1])
+        XCTAssertEqual(model.selection, ["b.txt"])
+        model.prepareContextMenu(for: nil)
+        XCTAssertEqual(model.selection, [], "Right-clicking empty space leaves nothing to act on")
     }
 
     func testDroppingOntoADraggedFolderIsRejected() {

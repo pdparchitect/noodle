@@ -288,6 +288,15 @@ private final class FilesTableView: NSTableView {
     }
 
     var keyAction: ((NSEvent) -> Bool)?
+    var contextClick: ((Int) -> Void)?
+    override func rightMouseDown(with event: NSEvent) {
+        contextClick?(row(at: convert(event.locationInWindow, from: nil)))
+        super.rightMouseDown(with: event)
+    }
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) { contextClick?(row(at: convert(event.locationInWindow, from: nil))) }
+        super.mouseDown(with: event)
+    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if window?.firstResponder === self, keyAction?(event) == true { return true }
         return super.performKeyEquivalent(with: event)
@@ -308,6 +317,9 @@ private struct GuestFileTable: NSViewRepresentable {
         table.keyAction = keyAction
         table.delegate = context.coordinator; table.dataSource = context.coordinator
         context.coordinator.quickLook = quickLook
+        table.contextClick = { [coordinator = context.coordinator] row in
+            coordinator.model.prepareContextMenu(for: coordinator.items.indices.contains(row) ? coordinator.items[row] : nil)
+        }
         table.target = context.coordinator; table.doubleAction = #selector(Coordinator.open)
         table.rowHeight = 30; table.usesAlternatingRowBackgroundColors = false
         table.backgroundColor = .clear

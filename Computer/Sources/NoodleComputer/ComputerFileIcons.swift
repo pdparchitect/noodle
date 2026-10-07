@@ -67,8 +67,15 @@ private final class FileIconCollection: NSCollectionView {
     }
 
     var doubleClick: ((IndexPath) -> Void)?
+    var contextClick: ((IndexPath?) -> Void)?
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        contextClick?(indexPathForItem(at: convert(event.locationInWindow, from: nil)))
+        super.rightMouseDown(with: event)
+    }
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if event.modifierFlags.contains(.control) { contextClick?(indexPathForItem(at: convert(event.locationInWindow, from: nil))) }
         super.mouseDown(with: event)
         if event.clickCount == 2, let path = indexPathForItem(at: convert(event.locationInWindow, from: nil)) { doubleClick?(path) }
     }
@@ -134,6 +141,9 @@ struct GuestFileGrid: NSViewRepresentable {
         collection.selectIndex = { index in
             guard coordinator.items.indices.contains(index) else { return }
             coordinator.model.choose(coordinator.items[index])
+        }
+        collection.contextClick = { path in
+            coordinator.model.prepareContextMenu(for: path.flatMap { coordinator.items.indices.contains($0.item) ? coordinator.items[$0.item] : nil })
         }
         collection.doubleClick = { [weak collection] path in
             guard coordinator.items.indices.contains(path.item) else { return }

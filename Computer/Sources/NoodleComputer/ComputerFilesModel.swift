@@ -91,6 +91,11 @@ import Foundation
         selection = names
         if previewEnabled { loadPreview() } else { stopPreview() }
     }
+    /// Right-clicking outside the selection acts on the clicked item alone, as in Finder.
+    func prepareContextMenu(for file: GuestFile?) {
+        guard let file else { if !selection.isEmpty { select([]) }; return }
+        if !selection.contains(file.name) { choose(file) }
+    }
     func open(_ file: GuestFile) { if file.directory, let path = try? GuestFile.path(folder, file.name) { navigate(path) } }
 
     func stopPreview() {
@@ -173,17 +178,7 @@ import Foundation
         if files.count > 1 {
             let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
             panel.prompt = "Export Here"; panel.message = "Choose where to export \(files.count) items."
-            panel.begin { [weak self] response in
-                guard response == .OK, let parent = panel.url, let self else { return }
-                let folder = self.folder
-                self.perform("Preparing export…") {
-                    let scoped = parent.startAccessingSecurityScopedResource()
-                    defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
-                    for file in files {
-                        try await self.export(file, path: try GuestFile.path(folder, file.name), to: parent.appendingPathComponent(file.name), replace: false)
-                    }
-                }
-            }
+            panel.begin { [weak self] response in if response == .OK, let parent = panel.url { self?.exportSelected(into: parent) } }
             return
         }
         guard let file = files.first, file.regular || file.directory, let path = try? GuestFile.path(folder, file.name) else { return }
@@ -204,6 +199,17 @@ import Foundation
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             self.perform("Exporting \(file.name)…") { try await self.export(file, path: path, to: url, replace: true) }
+        }
+    }
+    func exportSelected(into parent: URL) {
+        let folder = folder, files = selectedFiles.filter { $0.regular || $0.directory }
+        guard !files.isEmpty else { return }
+        perform("Preparing export…") {
+            let scoped = parent.startAccessingSecurityScopedResource()
+            defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
+            for file in files {
+                try await self.export(file, path: try GuestFile.path(folder, file.name), to: parent.appendingPathComponent(file.name), replace: false)
+            }
         }
     }
     func export(_ file: GuestFile, path: String, to destination: URL, replace: Bool) async throws {
@@ -239,9 +245,15 @@ import Foundation
         } catch { self.error = error.localizedDescription }
     }
     func removeSelected() {
-        let paths = selectedFiles.compactMap { try? GuestFile.path(folder, $0.name) }
-        guard !paths.isEmpty else { return }
-        perform("Deleting…") { for path in paths { try await self.service.change("remove", path: path) } }
+        let items = selectedFiles.compactMap { file in (try? GuestFile.path(folder, file.name)).map { (file, $0) } }
+        guard !items.isEmpty else { return }
+        perform("Deleting…") {
+            // Check every folder first so a refused one does not leave the batch half deleted.
+            for (file, path) in items where file.directory {
+                if try await !self.service.list(path).isEmpty { throw ComputerError("“\(file.displayName)” is not empty. Nonempty folders cannot be deleted here.") }
+            }
+            for (_, path) in items { try await self.service.change("remove", path: path) }
+        }
     }
     func duplicateSelected() {
         do {

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Files can select several items at once, as in Finder: Shift-click or Command-click, Select All, or drag across icons. Delete, Duplicate, Export, and dragging work on the whole selection.
+- Files can select several items at once, as in Finder: Shift-click or Command-click, Select All, or drag across icons. Delete, Duplicate, Export, and dragging work on the whole selection. Right-clicking an item outside the selection acts on that item, and deleting several items removes nothing if one of the folders is not empty.
 
 ## [0.21.2] - 2026-10-03
 
