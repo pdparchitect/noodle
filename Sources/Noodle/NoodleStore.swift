@@ -58,7 +58,7 @@ final class NoodleStore {
         }
     }
     private(set) var pinnedConversationIDs: [UUID] = []
-    /// The joined Hub whose space the sidebar shows, by its folder's name; nil shows All.
+    /// The joined Hub whose space the sidebar shows, by its key, so it is kept when the Hub is left and joined again; nil shows All.
     private(set) var spaceHub: String? = UserDefaults.standard.string(forKey: NoodleStore.spaceKey)
     static let spaceKey = "Noodle.space"
     private(set) var unreadConversationIDs: Set<UUID> = [] {
@@ -275,6 +275,7 @@ final class NoodleStore {
         thisMac.onBackgroundChanged = { [weak self] in self?.reloadBackground(of: $0) }
         // A device changed this Mac's tools, computers or browsers, in the files these controllers keep.
         thisMac.onToolsEdited = { [weak self] in self?.reloadToolsEditedElsewhere() }
+        thisMac.onPinsEdited = { [weak self] in self?.reloadPins() }
         self.runtime.onSignInRequired = { [weak self] id in
             guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
             NoodleNotifications.postSignInRequired(for: agent)
@@ -325,11 +326,11 @@ final class NoodleStore {
 
     /// The Hub whose space is shown, while it is still joined; nil for All.
     var spaceMirror: HubMirror? {
-        spaceHub.flatMap { name in hubMirrors.first { $0.pairing.directory.lastPathComponent == name } }
+        spaceHub.flatMap { key in hubMirrors.first { $0.pairing.hub?.key.x963.base64EncodedString() == key } }
     }
 
     func showSpace(_ mirror: HubMirror?) {
-        spaceHub = mirror?.pairing.directory.lastPathComponent
+        spaceHub = mirror?.pairing.hub?.key.x963.base64EncodedString()
         UserDefaults.standard.set(spaceHub, forKey: Self.spaceKey)
     }
 
@@ -388,9 +389,16 @@ final class NoodleStore {
         do {
             try repository.savePinnedConversationIDs(updated)
             pinnedConversationIDs = updated
+            thisMac.hub?.pinsChanged()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// The owner pinned on another of their devices, through This Mac as a Hub.
+    private func reloadPins() {
+        let known = Set(conversations.map(\.id))
+        pinnedConversationIDs = ((try? repository.loadPinnedConversationIDs()) ?? []).filter(known.contains)
     }
 
     func reload() {
@@ -447,6 +455,7 @@ final class NoodleStore {
             pinnedConversationIDs = storedPinnedIDs.filter(knownConversationIDs.contains)
             if pinnedConversationIDs != storedPinnedIDs {
                 try repository.savePinnedConversationIDs(pinnedConversationIDs)
+                thisMac.hub?.pinsChanged()
             }
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()
             unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)

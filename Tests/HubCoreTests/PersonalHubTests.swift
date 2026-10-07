@@ -291,6 +291,34 @@ import XCTest
         XCTAssertEqual(read?.upTo, evening.createdAt)
     }
 
+    /// The Mac's own pins are the phone's: pinning on the phone pins on the Mac, and pinning on the Mac reaches the phone, in order.
+    func testPinsAreTheMacsOwn() async throws {
+        let (f, made) = try await fixture(bots: ["Eli", "Ada"])
+        let conversations = try f.repository.loadConversations()
+        let eli = try XCTUnwrap(conversations.first { $0.participantIDs == [made[0].id] })
+        let ada = try XCTUnwrap(conversations.first { $0.participantIDs == [made[1].id] })
+        var edited = 0
+        f.personal.onPinsEdited = { edited += 1 }
+
+        _ = try await f.device.request(.pin(LinkPin(conversationID: eli.id, pinned: true)))
+        XCTAssertEqual(try f.repository.loadPinnedConversationIDs(), [eli.id])
+        XCTAssertEqual(edited, 1)
+
+        let events = try await f.device.subscribe()
+        // Once the Hub answers, it has the subscription.
+        _ = try await f.device.request(.bots)
+        try f.repository.savePinnedConversationIDs([ada.id, eli.id])
+        f.personal.pinsChanged()
+        var heard: Set<UUID> = []
+        for try await event in events {
+            if case .pinChanged(let id, _) = event { heard.insert(id) }
+            if heard.contains(ada.id) { break }
+        }
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        let pinned = bots.filter { $0.pinnedAt != nil }.sorted { $0.pinnedAt! < $1.pinnedAt! }.map(\.conversationID)
+        XCTAssertEqual(pinned, [ada.id, eli.id])
+    }
+
     /// A long conversation, well past what one answer may carry, arrives newest first and page by
     /// page as the person scrolls back; a device reading onward gets the rest the same way.
     func testALongConversationArrivesPageByPage() async throws {

@@ -53,13 +53,16 @@ import NoodleRuntime
     /// How far each conversation's owner has read it, so all their devices agree.
     private let readMarksURL: URL
     private lazy var readMarks: [UUID: Date] = (try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: readMarksURL))) ?? [:]
-    /// When each conversation's owner pinned it, so all their devices show the same pins.
-    private let pinsURL: URL
-    private lazy var pins: [UUID: Date] = (try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: pinsURL))) ?? [:]
+    /// When each conversation's owner pinned it, so all their devices show the same pins. Nil for This Mac
+    /// as a Hub, whose pins are Noodle's own, in the order they were pinned.
+    private let pinsURL: URL?
+    private lazy var pins: [UUID: Date] = loadPins()
+    /// Runs when a device changed pins kept in Noodle's own file, so Noodle reads them again.
+    public var onPinsEdited: (() -> Void)?
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
                 connections: HubConnections, computers: HubComputers, browsers: HubBrowsers,
-                applets: AppletController, uploads: URL, readMarks: URL, pins: URL) {
+                applets: AppletController, uploads: URL, readMarks: URL, pins: URL?) {
         self.uploads = uploads
         readMarksURL = readMarks
         pinsURL = pins
@@ -860,12 +863,39 @@ import NoodleRuntime
     public func setPinned(_ pinned: Bool, conversation id: UUID, for user: HubUser) throws {
         _ = try ownedConversation(id, by: user)
         guard (pins[id] != nil) != pinned else { return }
+        guard pinsURL != nil else {
+            var ids = try repository.loadPinnedConversationIDs().filter { $0 != id }
+            if pinned { ids.append(id) }
+            try repository.savePinnedConversationIDs(ids)
+            pinsChanged(for: user)
+            onPinsEdited?()
+            return
+        }
         pins[id] = pinned ? Date() : nil
         try savePins()
         onChange?(user.id, .pinChanged(conversationID: id, pinnedAt: pins[id]))
     }
 
+    /// Noodle's own pins changed: tells the user's devices each pin that came, went or moved.
+    public func pinsChanged(for user: HubUser) {
+        let before = pins
+        pins = loadPins()
+        for id in Set(before.keys).union(pins.keys) where before[id] != pins[id] {
+            onChange?(user.id, .pinChanged(conversationID: id, pinnedAt: pins[id]))
+        }
+    }
+
+    private func loadPins() -> [UUID: Date] {
+        guard let pinsURL else {
+            // Their order, as the dates devices sort pins by.
+            let ids = (try? repository.loadPinnedConversationIDs()) ?? []
+            return Dictionary(ids.enumerated().map { ($1, Date(timeIntervalSinceReferenceDate: Double($0))) }) { first, _ in first }
+        }
+        return (try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: pinsURL))) ?? [:]
+    }
+
     private func savePins() throws {
+        guard let pinsURL else { return }
         try FileManager.default.createDirectory(at: pinsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(pins).write(to: pinsURL, options: .atomic)
     }
@@ -876,7 +906,8 @@ import NoodleRuntime
             conversations.forEach { readMarks[$0] = nil }
             try? saveReadMarks()
         }
-        if conversations.contains(where: { pins[$0] != nil }) {
+        // Noodle drops its own pins of conversations that are gone.
+        if pinsURL != nil, conversations.contains(where: { pins[$0] != nil }) {
             conversations.forEach { pins[$0] = nil }
             try? savePins()
         }

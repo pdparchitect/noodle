@@ -14,6 +14,8 @@
 
 - Join two Hubs: both Hubs' bots and groups show in one list, each marked with its Hub. In ••• > Hubs, tapping a Hub opens its details, and there is no Show All Hubs Together.
 - Tap the title and choose a Hub: only its bots and groups show, without the Hub's name on each row. Pin one there: it shows pinned in that Hub's space in Noodle on the Mac too, but not in All. Unpin it on the Mac: it unpins on the phone. Pins made in All stay on the phone only. Quit and reopen the app: it opens on the same space with its pins.
+- Pin two bots in a Hub's space: they keep the order you pinned them in, on the phone and on the Mac, whichever has the newer message. Leave the Hub and join it again: the space and its pins come back.
+- Join a Mac through its Settings → Hub and choose its space: the Mac's pins show, and pinning or unpinning on either side shows on the other.
 
 ## [0.22.0] - 2026-10-06
 

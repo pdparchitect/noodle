@@ -55,4 +55,7 @@ private struct NotificationKey: Equatable {
 /// A joined Hub, named on the phone by its folder.
 @MainActor enum CurrentHub {
     static func name(of pairing: HubPairing) -> String { pairing.directory.lastPathComponent }
+
+    /// Its space, by the Hub's key, so the choice is kept when the Hub is left and joined again.
+    static func space(of pairing: HubPairing) -> String { pairing.hub?.key.x963.base64EncodedString() ?? name(of: pairing) }
 }

@@ -399,6 +399,20 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(!chats.isPinned(scout, onHub: true))
     }
 
+    /// A Hub's pins keep the order they were pinned in, as on the Mac, however recent their conversations.
+    @Test func pinsInAHubsSpaceKeepTheirOrder() async throws {
+        let (chats, server) = try await paired(to: FakeHub())
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        let atlas = try await chats.create(LinkBotDraft(name: "Atlas", provider: "codex"))
+        try await chats.apply(.pinChanged(conversationID: atlas.conversationID, pinnedAt: Date(timeIntervalSinceReferenceDate: 2)))
+        try await chats.apply(.pinChanged(conversationID: scout.conversationID, pinnedAt: Date(timeIntervalSinceReferenceDate: 1)))
+
+        let threads = chats.listedThreads.map { (chats, $0) }
+        #expect(HubChats.sorted(threads, onHub: true).map(\.1.id) == [scout.id, atlas.id])
+    }
+
     /// As in the Mac sidebar: by name, description or what was said, ignoring case and accents.
     @Test func searchFindsAgentsByNameDescriptionAndMessages() async throws {
         let hub = FakeHub()

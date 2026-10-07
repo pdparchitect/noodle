@@ -19,6 +19,8 @@ import Observation
     @ObservationIgnored var onRead: ((_ conversationID: UUID, _ upTo: Date) -> Void)?
     /// Runs when a device changed a conversation's background.
     @ObservationIgnored var onBackgroundChanged: ((_ conversationID: UUID) -> Void)?
+    /// Runs when the owner pinned or unpinned on one of their devices.
+    @ObservationIgnored var onPinsEdited: (() -> Void)?
 
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let runtime: AgentRuntimeCoordinator
@@ -60,6 +62,7 @@ import Observation
             hub.onRead = { [weak self] in self?.onRead?($0, $1) }
             hub.bots.onBackgroundChanged = { [weak self] in self?.onBackgroundChanged?($0) }
             hub.onToolsEdited = { [weak self] in self?.onToolsEdited?() }
+            hub.onPinsEdited = { [weak self] in self?.onPinsEdited?() }
             self.hub = hub
             await hub.start()
             awake = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled],

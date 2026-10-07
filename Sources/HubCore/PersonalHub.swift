@@ -48,7 +48,7 @@ import NoodleRuntime
                                call: browser ?? BrowserToolProvider.liveTransport())
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
                        browsers: browsers, applets: applets, uploads: directory.appendingPathComponent("Uploads", isDirectory: true),
-                       readMarks: directory.appendingPathComponent("read.json"), pins: directory.appendingPathComponent("pins.json"))
+                       readMarks: directory.appendingPathComponent("read.json"), pins: nil)
         link = HubLinkService(hubName: name, directory: directory.appendingPathComponent("Link", isDirectory: true),
                               access: access, profiles: profiles, bots: bots, connections: connections, computers: computers,
                               browsers: browsers, port: port, router: router, localEndpoints: localEndpoints,
@@ -74,6 +74,17 @@ import NoodleRuntime
         guard let latest = try? repository.loadMessages(conversationID: id).last else { return }
         // Not a conversation devices see, such as one with several bots: nothing to tell them.
         try? bots.markRead(LinkReadMark(conversationID: id, messageID: latest.id), for: owner)
+    }
+
+    /// Runs when the owner pinned or unpinned on one of their devices, so the Mac reads its pins again.
+    public var onPinsEdited: (() -> Void)? {
+        get { bots.onPinsEdited }
+        set { bots.onPinsEdited = newValue }
+    }
+
+    /// The owner changed pins on the Mac; their devices show the same.
+    public func pinsChanged() {
+        bots.pinsChanged(for: owner)
     }
 
     public func start() async {

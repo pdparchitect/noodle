@@ -303,11 +303,16 @@ enum HubThread: HubConversation {
 
     var sortedThreads: [HubThread] { Self.sorted(threads.map { (self, $0) }).map(\.1) }
 
-    /// Pinned first, then newest conversation first, as in Messages, across however many Hubs.
+    /// Pinned first, then newest conversation first, as in Messages, across however many Hubs. A Hub's
+    /// pins keep the order they were pinned in, as on the Mac.
     static func sorted(_ threads: [(HubChats, HubThread)], onHub: Bool = false) -> [(HubChats, HubThread)] {
         threads.sorted { lhs, rhs in
             let (left, right) = (lhs.0.isPinned(lhs.1, onHub: onHub), rhs.0.isPinned(rhs.1, onHub: onHub))
             if left != right { return left }
+            if onHub, left, let first = lhs.0.hubPin(of: lhs.1.conversationID), let second = rhs.0.hubPin(of: rhs.1.conversationID),
+               first != second {
+                return first < second
+            }
             return lhs.0.recency(of: lhs.1) > rhs.0.recency(of: rhs.1)
         }
     }
@@ -343,7 +348,7 @@ enum HubThread: HubConversation {
         }
     }
 
-    private func hubPin(of conversationID: UUID) -> Date? {
+    func hubPin(of conversationID: UUID) -> Date? {
         agents.first { $0.conversationID == conversationID }?.pinnedAt ?? groups.first { $0.id == conversationID }?.pinnedAt
     }
 
@@ -880,7 +885,7 @@ struct AgentsView: View {
     @State private var path: [ChatLink] = []
     /// Kept per Hub, so what each Hub loaded stays while others join or leave.
     @State private var chats: [HubChats] = []
-    /// The Hub whose space is shown, by its folder's name; empty for All.
+    /// The Hub whose space is shown, by `CurrentHub.space`; empty for All.
     @AppStorage("space") private var space = ""
     @State private var showingMore = false
     /// What was picked in the … sheet; it opens once that sheet has gone.
@@ -899,7 +904,7 @@ struct AgentsView: View {
     }
 
     /// The Hub whose bots and groups alone are shown, with the pins it keeps; nil shows All, with this phone's pins.
-    private var spaceChats: HubChats? { chats.first { CurrentHub.name(of: $0.pairing) == space } }
+    private var spaceChats: HubChats? { chats.first { CurrentHub.space(of: $0.pairing) == space } }
 
     private var rows: [Row] {
         let shown = spaceChats.map { [$0] } ?? chats
@@ -1022,7 +1027,7 @@ struct AgentsView: View {
             Picker("Space", selection: $space) {
                 Text("All").tag("")
                 ForEach(chats, id: \.pairing.directory) { hub in
-                    Text(hub.pairing.hubName).tag(CurrentHub.name(of: hub.pairing))
+                    Text(hub.pairing.hubName).tag(CurrentHub.space(of: hub.pairing))
                 }
             }
         } label: {

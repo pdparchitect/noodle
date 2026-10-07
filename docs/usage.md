@@ -166,8 +166,9 @@ and a space for each Hub with only that Hub's. Press ⌘1 for All, and ⌘2 onwa
 Hubs in the order the menu lists them. Noodle opens on the space you last chose.
 
 Pins belong to the space you pin in. Pins in a Hub's space are kept on the Hub, so they
-are the same in Noodle on your other Macs and on your iPhone; pins in All stay on this
-Mac.
+are the same, in the same order, in Noodle on your other Macs and on your iPhone. Pins in
+All stay on this Mac, and when your devices use this Mac as a Hub, they share these pins
+in its space.
 
 ## Manage a Noodle Hub's users
 
