@@ -56,80 +56,20 @@ struct AgentProfileSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(maxHeight: 120)
-            HStack(spacing: 8) {
-                if let reply {
-                    Button(action: reply) {
-                        actionLabel("Reply", systemImage: "arrowshape.turn.up.left")
+            VStack(spacing: 8) {
+                ForEach(Self.rows(actions), id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(row, id: \.self) { action in
+                            if action != row.first { Divider().frame(height: 32).accessibilityHidden(true) }
+                            button(for: action)
+                        }
                     }
-                    .help("Reply in Group")
-                    .accessibilityLabel("Reply in Group")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                if let directMessage {
-                    Button(action: directMessage) {
-                        actionLabel("Message", systemImage: "bubble.left")
-                    }
-                    .disabled(!canOpenDirectMessage)
-                    .help("Direct Message")
-                    .accessibilityLabel("Direct Message")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                if let callable = callableConversation {
-                    Button {
-                        store.startVoiceCall(in: callable)
-                        // The call's controls are in its conversation, so show it.
-                        if let directMessage { directMessage() } else { dismiss() }
-                    } label: {
-                        actionLabel("Call", systemImage: "phone")
-                    }
-                    .help("Call \(agent.displayName)")
-                    .accessibilityLabel("Call \(agent.displayName)")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                let computers = store.computers.assigned(to: agent)
-                if !computers.isEmpty {
-                    CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
-                        items: computers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state,
-                            symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
-                        label: actionLabel) { id in
-                        try await store.computers.open(ComputerLink.url(computer: id, terminal: nil, view: nil))
-                    }
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                let browsers = store.browsers.assigned(to: agent)
-                if !browsers.isEmpty {
-                    CompanionOpenButton(title: "Browser", systemImage: "globe",
-                        items: browsers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready",
-                            symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
-                        label: actionLabel) { id in
-                        try await store.browsers.open(BrowserLink.url(browser: id, tab: nil))
-                    }
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                // A bot someone shared is only talked with.
-                if !isShared {
-                    Button(action: edit) {
-                        actionLabel("Edit", systemImage: "pencil")
-                    }
-                    .help("Edit Bot")
-                    .accessibilityLabel("Edit Bot")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                    Button {
-                        store.usage.agentFilter = agent.id
-                        openWindow(id: UsageView.windowID)
-                        dismiss()
-                    } label: {
-                        actionLabel("Usage", systemImage: "chart.bar")
-                    }
-                    .help("Show Usage")
-                    .accessibilityLabel("Show Usage")
                 }
             }
             .buttonStyle(.plain)
         }
         .padding(20)
-        // Four actions fit the usual width; each companion button adds room so labels stay whole.
-        .frame(width: max(320, 40 + CGFloat(actionCount) * 70))
+        .frame(width: 320)
         .background(ProfileOutsideClickDismissal { dismiss() })
     }
 
@@ -143,9 +83,92 @@ struct AgentProfileSheet: View {
         return direct
     }
 
-    private var actionCount: Int {
-        [reply != nil, directMessage != nil, callableConversation != nil, !store.computers.assigned(to: agent).isEmpty,
-         !store.browsers.assigned(to: agent).isEmpty].filter { $0 }.count + (isShared ? 0 : 2)
+    private enum Action: Hashable {
+        case reply, message, call, computer, browser, edit, usage
+    }
+
+    private var actions: [Action] {
+        var actions: [Action] = []
+        if reply != nil { actions.append(.reply) }
+        if directMessage != nil { actions.append(.message) }
+        if callableConversation != nil { actions.append(.call) }
+        if !store.computers.assigned(to: agent).isEmpty { actions.append(.computer) }
+        if !store.browsers.assigned(to: agent).isEmpty { actions.append(.browser) }
+        // A bot someone shared is only talked with.
+        if !isShared { actions += [.edit, .usage] }
+        return actions
+    }
+
+    /// Up to four actions a row, as evenly as they split, so the profile keeps its width.
+    static func rows<Item>(_ items: [Item]) -> [[Item]] {
+        guard !items.isEmpty else { return [] }
+        let rowCount = (items.count + 3) / 4
+        let perRow = (items.count + rowCount - 1) / rowCount
+        return stride(from: 0, to: items.count, by: perRow).map { Array(items[$0..<min($0 + perRow, items.count)]) }
+    }
+
+    @ViewBuilder private func button(for action: Action) -> some View {
+        switch action {
+        case .reply:
+            if let reply {
+                Button(action: reply) {
+                    actionLabel("Reply", systemImage: "arrowshape.turn.up.left")
+                }
+                .help("Reply in Group")
+                .accessibilityLabel("Reply in Group")
+            }
+        case .message:
+            if let directMessage {
+                Button(action: directMessage) {
+                    actionLabel("Message", systemImage: "bubble.left")
+                }
+                .disabled(!canOpenDirectMessage)
+                .help("Direct Message")
+                .accessibilityLabel("Direct Message")
+            }
+        case .call:
+            if let callable = callableConversation {
+                Button {
+                    store.startVoiceCall(in: callable)
+                    // The call's controls are in its conversation, so show it.
+                    if let directMessage { directMessage() } else { dismiss() }
+                } label: {
+                    actionLabel("Call", systemImage: "phone")
+                }
+                .help("Call \(agent.displayName)")
+                .accessibilityLabel("Call \(agent.displayName)")
+            }
+        case .computer:
+            CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
+                items: store.computers.assigned(to: agent).map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state,
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
+                label: actionLabel) { id in
+                try await store.computers.open(ComputerLink.url(computer: id, terminal: nil, view: nil))
+            }
+        case .browser:
+            CompanionOpenButton(title: "Browser", systemImage: "globe",
+                items: store.browsers.assigned(to: agent).map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready",
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
+                label: actionLabel) { id in
+                try await store.browsers.open(BrowserLink.url(browser: id, tab: nil))
+            }
+        case .edit:
+            Button(action: edit) {
+                actionLabel("Edit", systemImage: "pencil")
+            }
+            .help("Edit Bot")
+            .accessibilityLabel("Edit Bot")
+        case .usage:
+            Button {
+                store.usage.agentFilter = agent.id
+                openWindow(id: UsageView.windowID)
+                dismiss()
+            } label: {
+                actionLabel("Usage", systemImage: "chart.bar")
+            }
+            .help("Show Usage")
+            .accessibilityLabel("Show Usage")
+        }
     }
 
     private func actionLabel(_ title: String, systemImage: String) -> some View {
