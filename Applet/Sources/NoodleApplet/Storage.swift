@@ -48,7 +48,7 @@ import WebKit
     guard let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
     else { return nil }
     let webKit = library.appendingPathComponent("WebKit")
-    let candidates = [Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName, nil].map {
+    let candidates = [nil, Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName].map {
       ($0.map { webKit.appendingPathComponent($0) } ?? webKit).appendingPathComponent("WebsiteDataStore")
     }
     return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
