@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-07
+
 ### Added
 
 - Coinbase can be added as a tool.

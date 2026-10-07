@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-07
+
 ### Added
 
 - Coinbase can be added as a tool.
