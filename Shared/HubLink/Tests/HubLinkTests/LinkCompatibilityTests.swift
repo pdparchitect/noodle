@@ -90,6 +90,26 @@ final class LinkCompatibilityTests: XCTestCase {
                        .hostedBots([bot]))
     }
 
+    /// What a phone sends its owner's Mac to share a bot there through the Hubs the Mac joined.
+    func testSharingThroughTheMacsHubsReadsAsSent() throws {
+        let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let expected: [(String, LinkRequest)] = [
+            (#"{"hubSharing":{"botID":"\#(a)"}}"#, .hubSharing(botID: a)),
+            (#"{"shareOnHub":{"botID":"\#(a)","hub":"Studio key","people":["\#(b)"]}}"#,
+             .shareOnHub(botID: a, hub: "Studio key", people: [b])),
+        ]
+        for (json, request) in expected {
+            XCTAssertEqual(try decode(LinkRequest.self, json), request, json)
+            XCTAssertEqual(try LinkProtocol.decode(try LinkProtocol.encode(request)).get(), request, json)
+        }
+        let sharing = LinkHubSharing(id: "Studio key", name: "Studio", people: [LinkPerson(id: b, name: "Grace")], sharedWith: [b])
+        XCTAssertEqual(try LinkProtocol.decodeResponse(LinkProtocol.encode(.hubSharing([sharing]))), .hubSharing([sharing]))
+        XCTAssertEqual(try decode(LinkResponse.self,
+            #"{"hubSharing":{"_0":[{"id":"Studio key","name":"Studio","people":[{"id":"\#(b)","name":"Grace"}],"sharedWith":["\#(b)"]}]}}"#),
+                       .hubSharing([sharing]))
+    }
+
     func testArchivingReadsAcrossAppVersions() throws {
         let id = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, conversation = UUID()
         let bot = try decode(LinkBot.self,

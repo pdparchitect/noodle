@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- When your devices use this Mac as a Hub, they can share this Mac's bots with people on the Noodle Hubs it joined, as Edit Bot does here.
+
 ### Fixed
 
 - Noodlets bots share now show their preview instead of a plain icon: bots are told to present a noodlet rather than just attach it, and a bot that attaches one with no preview is told to present it.

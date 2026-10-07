@@ -196,7 +196,61 @@ import Observation
 
     /// The other people on the Hub, to share a bot with.
     public func people() async throws -> [LinkPerson] {
-        try await pairing.people()
+        try await fetchPeople()
+    }
+
+    /// How long the people on the Hub are kept before they are fetched again, in the background.
+    nonisolated public static let peopleKeptFor: TimeInterval = 60
+    /// How long the owner's phone waits for the people on a Hub not asked before, before leaving it out.
+    nonisolated public static let peopleWait: Duration = .seconds(3)
+    /// When it is, for keeping the people; tests pass their own.
+    @ObservationIgnored public var now: () -> Date = Date.init
+    /// The people on the Hub, as last fetched, and when.
+    @ObservationIgnored private var keptPeople: (people: [LinkPerson], at: Date)?
+    /// The fetch under way, which everyone asking meanwhile waits for.
+    @ObservationIgnored private var fetchingPeople: Task<[LinkPerson], Error>?
+
+    /// Fetches the people on the Hub once however many ask at the same time, and keeps them and their names.
+    private func fetchPeople() async throws -> [LinkPerson] {
+        if let fetchingPeople { return try await fetchingPeople.value }
+        let fetch = Task { try await pairing.people() }
+        fetchingPeople = fetch
+        defer { if fetchingPeople == fetch { fetchingPeople = nil } }
+        let people = try await fetch.value
+        keptPeople = (people, now())
+        peopleNames = Dictionary(people.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        return people
+    }
+
+    /// The people on the Hub at once when kept, fetching newer ones in the background once they are a while
+    /// old; otherwise fetched, waiting at most `wait`. A fetch that takes longer is kept for next time.
+    private func knownPeople(within wait: Duration) async -> [LinkPerson]? {
+        if let kept = keptPeople {
+            if now().timeIntervalSince(kept.at) > Self.peopleKeptFor, fetchingPeople == nil {
+                Task { _ = try? await fetchPeople() }
+            }
+            return kept.people
+        }
+        // Whichever comes first: a task group would wait out the fetch, which goes on to be kept.
+        let fetch = Task { try? await fetchPeople() }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<[LinkPerson]?, Never>) in
+            let race = FirstAnswer(continuation)
+            Task { @MainActor in race.answer(await fetch.value) }
+            Task { @MainActor in
+                try? await Task.sleep(for: wait)
+                race.answer(nil)
+            }
+        }
+    }
+
+    /// What this Hub is known by to this Mac's own devices, which share its bots through it.
+    public var sharingID: String { pairing.hub?.key.x963.base64EncodedString() ?? pairing.directory.lastPathComponent }
+
+    /// A bot on this Mac's sharing on this Hub, for its owner's phone.
+    public func sharing(of agent: UUID, within wait: Duration = HubMirror.peopleWait) async throws -> LinkHubSharing {
+        guard let people = await knownPeople(within: wait) else { throw LinkError("\(pairing.hub?.name ?? "The Hub") did not answer.") }
+        return LinkHubSharing(id: sharingID, name: pairing.hub?.name ?? "Noodle Hub", people: people,
+                              sharedWith: hosting.sharedWith(agent: agent))
     }
 
     /// Shares one of this Mac's user's bots on the Hub with exactly `people`.
@@ -212,8 +266,8 @@ import Observation
 
     /// Learns the names of the people the bots here are shared with. A Hub that does not answer keeps the last names.
     private func listPeople() async {
-        guard entries.contains(where: { !($0.sharedWith ?? []).isEmpty }), let people = try? await pairing.people() else { return }
-        peopleNames = Dictionary(people.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        guard entries.contains(where: { !($0.sharedWith ?? []).isEmpty }) else { return }
+        _ = try? await fetchPeople()
     }
 
     /// Whom a bot of this Mac's user is shared with on the Hub.
@@ -918,6 +972,39 @@ import Observation
     private func save() {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? JSONEncoder().encode(entries).write(to: url, options: .atomic)
+    }
+}
+
+@MainActor extension Array where Element == HubMirror {
+    /// A bot on this Mac's sharing on each of these Hubs, asked of all at once, in their order. A Hub that does
+    /// not answer in time, and whose people are not kept here, is left out.
+    public func sharing(of agent: UUID) async -> [LinkHubSharing] {
+        await withTaskGroup(of: (Int, LinkHubSharing?).self) { group in
+            for (index, hub) in enumerated() {
+                group.addTask { (index, try? await hub.sharing(of: agent)) }
+            }
+            var found: [(Int, LinkHubSharing)] = []
+            for await (index, sharing) in group { if let sharing { found.append((index, sharing)) } }
+            return found.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    /// Shares a bot on this Mac with exactly `people` on the one of these Hubs that goes by `id` for this Mac's devices.
+    public func share(_ agent: AgentRecord, onHub id: String, with people: [UUID]) async throws {
+        guard let hub = first(where: { $0.sharingID == id }) else { throw LinkError("That Hub is not one this Mac can share the bot on.") }
+        try await hub.hosting.share(agent, with: people)
+    }
+}
+
+/// Resumes once, with whichever answer comes first.
+@MainActor private final class FirstAnswer<Value: Sendable> {
+    private var continuation: CheckedContinuation<Value, Never>?
+
+    init(_ continuation: CheckedContinuation<Value, Never>) { self.continuation = continuation }
+
+    func answer(_ value: Value) {
+        continuation?.resume(returning: value)
+        continuation = nil
     }
 }
 

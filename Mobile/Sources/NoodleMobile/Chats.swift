@@ -421,6 +421,24 @@ enum HubThread: HubConversation {
         saveCache()
     }
 
+    /// On the owner's own Mac: the Noodle Hubs it joined that one of its bots can be shared on, with who is on each.
+    /// None from a Noodle Hub, which shares its bots itself, or from a Mac that cannot.
+    func hubSharing(_ agent: LinkBot) async -> [LinkHubSharing] {
+        guard pairing.status?.canShareBots != true,
+              case .hubSharing(let sharing)? = try? await pairing.request(.hubSharing(botID: agent.id)) else { return [] }
+        return sharing
+    }
+
+    /// Shares a bot on the owner's own Mac with someone on one of the Hubs it joined, or stops sharing it with them.
+    func toggleSharing(_ agent: LinkBot, with person: UUID, on hub: LinkHubSharing) async throws -> [LinkHubSharing] {
+        var people = Set(hub.sharedWith)
+        if people.remove(person) == nil { people.insert(person) }
+        guard case .hubSharing(let sharing) = try await pairing.request(.shareOnHub(botID: agent.id, hub: hub.id, people: Array(people))) else {
+            throw LinkError("This Mac sent an unexpected answer.")
+        }
+        return sharing
+    }
+
     /// Deletes the bot and its conversation on the Hub, for every device.
     func delete(_ agent: LinkBot) async throws {
         guard case .done = try await pairing.request(.deleteBot(id: agent.id)) else {
@@ -2091,6 +2109,8 @@ struct AgentEditor: View {
     @State private var kickConfirmation: LinkKickConfirmation?
     @State private var confirmingNewSession = false
     @State private var problem: String?
+    /// On the owner's own Mac: the Hubs it joined that the bot can be shared on.
+    @State private var hubSharing: [LinkHubSharing] = []
 
     init(chats: HubChats, agent: LinkBot?, hubs: [HubChats] = [], created: @escaping (HubChats, LinkBot) -> Void = { _, _ in }) {
         _chats = State(initialValue: chats)
@@ -2236,12 +2256,20 @@ struct AgentEditor: View {
                         NavigationLink("Computers") { HubToolsScreen(chats: chats, agent: agent, kind: .computer) }
                         NavigationLink("Browsers") { HubToolsScreen(chats: chats, agent: agent, kind: .browser) }
                     }
-                    // Not on someone's own Mac, which is only theirs.
+                    // Someone's own Mac is only theirs; its bots are shared through the Hubs it joined.
                     if chats.pairing.status?.canShareBots == true {
                         Section {
                             NavigationLink { BotSharingScreen(chats: chats, agent: agent) } label: {
-                                let count = (chats.agent(agent.id)?.sharedWith ?? agent.sharedWith).count
-                                LabeledContent("Sharing", value: count == 0 ? "Only You" : count == 1 ? "1 Person" : "\(count) People")
+                                LabeledContent("Sharing", value: Self.sharing((chats.agent(agent.id)?.sharedWith ?? agent.sharedWith).count))
+                            }
+                        }
+                    } else if !hubSharing.isEmpty {
+                        Section {
+                            ForEach(hubSharing) { hub in
+                                NavigationLink { BotSharingScreen(chats: chats, agent: agent, hub: hub.id) } label: {
+                                    LabeledContent(hubSharing.count > 1 ? "Sharing on \(hub.name)" : "Sharing",
+                                                   value: Self.sharing(hub.sharedWith.count))
+                                }
                             }
                         }
                     }
@@ -2299,8 +2327,15 @@ struct AgentEditor: View {
             .task(id: CurrentHub.name(of: chats.pairing)) {
                 if chats.pairing.status == nil { await chats.pairing.refresh(quietly: true) }
             }
+            // Again on coming back from a Hub's sharing, so its count follows.
+            .onAppear {
+                guard let agent else { return }
+                Task { hubSharing = await chats.hubSharing(agent) }
+            }
         }
     }
+
+    private static func sharing(_ count: Int) -> String { count == 0 ? "Only You" : count == 1 ? "1 Person" : "\(count) People" }
 
     /// Asks the Hub for something, showing what went wrong in the editor.
     private func run(thenClose: Bool = false, _ request: @escaping () async throws -> Void) {

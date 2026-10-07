@@ -206,10 +206,21 @@ private actor FakeHub {
             bot.pinnedAt = pin.pinned ? Date() : nil
             pins.append(pin)
             return .done
+        case .success(.hubSharing(let id)) where id == bot.id:
+            return .hubSharing(hubSharing)
+        case .success(.shareOnHub(let id, let hub, let people)) where id == bot.id:
+            guard let index = hubSharing.firstIndex(where: { $0.id == hub }) else { return .failure("No such Hub.") }
+            hubSharing[index].sharedWith = people
+            return .hubSharing(hubSharing)
         default:
             return .failure("Not in this test.")
         }
     }
+
+    /// As the owner's Mac answers: the Hubs it joined, whose people its bot can be shared with.
+    var hubSharing: [LinkHubSharing] = []
+
+    func setHubSharing(_ sharing: [LinkHubSharing]) { hubSharing = sharing }
 
     /// Pins as the phone sent them.
     var pins: [LinkPin] = []
@@ -252,6 +263,24 @@ private actor RecordedSubscriptions: PushSubscriptions {
         await pairing.join(invitation.url().absoluteString)
         try #require(pairing.hub != nil)
         return (HubChats(pairing: pairing), server)
+    }
+
+    /// On the owner's own Mac, a bot there is shared through the Hubs the Mac joined, one at a time, a person at a time.
+    @Test func aBotOnTheOwnersMacIsSharedThroughTheHubsItJoined() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        let scout = await hub.bot, grace = LinkPerson(id: UUID(), name: "Grace"), bea = LinkPerson(id: UUID(), name: "Bea")
+        #expect(await chats.hubSharing(scout) == [])
+        await hub.setHubSharing([LinkHubSharing(id: "studio", name: "Studio", people: [grace, bea], sharedWith: [bea.id]),
+                                 LinkHubSharing(id: "office", name: "Office", people: [grace], sharedWith: [])])
+        let listed = await chats.hubSharing(scout)
+        #expect(listed.map(\.name) == ["Studio", "Office"])
+        let shared = try await chats.toggleSharing(scout, with: grace.id, on: try #require(listed.first))
+        #expect(Set(shared.first { $0.id == "studio" }?.sharedWith ?? []) == [bea.id, grace.id])
+        #expect(shared.first { $0.id == "office" }?.sharedWith == [])
+        let unshared = try await chats.toggleSharing(scout, with: bea.id, on: try #require(shared.first { $0.id == "studio" }))
+        #expect(unshared.first { $0.id == "studio" }?.sharedWith == [grace.id])
     }
 
     /// Kick restarts at once or brings back the Hub's question, whose answer names it; New Session goes straight through.

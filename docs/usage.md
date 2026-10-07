@@ -178,8 +178,9 @@ in its space.
 A bot that runs on this Mac can be shared with people on any Noodle Hub you joined. In
 **Edit Bot**, pick them under **Sharing**, with a section for each Hub, and save. They find the bot on the Hub with
 their other bots and talk to it there, each in a conversation of their own, which you do
-not see. The bot runs here as always, with its folders, tools and sign-ins, and knows each
-person by name.
+not see. You can also do this from your phone, when it is joined to this Mac through
+**Settings → Hub**: edit the bot there and tap **Sharing**. The bot runs here as always,
+with its folders, tools and sign-ins, and knows each person by name.
 
 They see it online while this Mac is awake and connected to the Hub. What they write
 meanwhile waits on the Hub, and the bot reads it and answers once this Mac is back. Links

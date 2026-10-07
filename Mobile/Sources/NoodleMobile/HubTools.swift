@@ -296,15 +296,17 @@ struct HubToolsScreen: View {
 }
 
 /// The other people on the Hub, each tapped to share one of this user's bots with them or stop. It
-/// applies at once, on the Hub.
+/// applies at once, on the Hub. With `hub`, a bot on the owner's own Mac and the people on that Hub the Mac joined.
 struct BotSharingScreen: View {
     let chats: HubChats
     let agent: LinkBot
+    var hub: String? = nil
     @State private var people: [LinkPerson]?
+    @State private var shared: LinkHubSharing?
     @State private var busy: UUID?
     @State private var problem: String?
 
-    private var sharedWith: [UUID] { chats.agent(agent.id)?.sharedWith ?? agent.sharedWith }
+    private var sharedWith: [UUID] { hub == nil ? chats.agent(agent.id)?.sharedWith ?? agent.sharedWith : shared?.sharedWith ?? [] }
 
     var body: some View {
         List {
@@ -328,10 +330,15 @@ struct BotSharingScreen: View {
                 Text(problem).foregroundStyle(.red)
             }
         }
-        .navigationTitle("Sharing")
+        .navigationTitle(shared?.name ?? "Sharing")
         .sensoryFeedback(.selection, trigger: sharedWith)
         .task {
-            do { people = try await chats.people() } catch { problem = error.localizedDescription }
+            guard let hub else {
+                do { people = try await chats.people() } catch { problem = error.localizedDescription }
+                return
+            }
+            shared = await chats.hubSharing(agent).first { $0.id == hub }
+            if let shared { people = shared.people } else { problem = "Your Mac cannot reach this Hub right now." }
         }
     }
 
@@ -342,7 +349,13 @@ struct BotSharingScreen: View {
             problem = nil
             Task {
                 defer { busy = nil }
-                do { try await chats.toggleSharing(agent, with: person.id) } catch { problem = error.localizedDescription }
+                do {
+                    if let hub, let current = shared {
+                        shared = try await chats.toggleSharing(agent, with: person.id, on: current).first { $0.id == hub }
+                    } else {
+                        try await chats.toggleSharing(agent, with: person.id)
+                    }
+                } catch { problem = error.localizedDescription }
             }
         } label: {
             VStack(spacing: 6) {

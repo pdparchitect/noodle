@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- When your phone is joined to your Mac, you can share the Mac's bots with people on the Noodle Hubs the Mac joined. Edit the bot and tap Sharing, or Sharing on a Hub's name when the Mac joined several.
+
+### What to Test
+
+- With your phone joined to your Mac (Settings → Hub → This Mac on the Mac), and the Mac joined to a Noodle Hub with other people on it, edit one of the Mac's bots on the phone: Sharing shows. Tap it, tap a person: the bot shows for them on that Hub, and in Edit Bot on the Mac.
+- With the Mac joined to two Hubs, Edit Bot on the phone shows Sharing on each Hub's name, each with that Hub's people.
+- Bots kept on a Noodle Hub show Sharing as before.
+
 ## [0.24.0] - 2026-10-07
 
 ### Added

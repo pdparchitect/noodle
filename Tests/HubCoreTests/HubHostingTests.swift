@@ -296,10 +296,17 @@ import XCTest
         try await until("offline") { try await self.bots(of: f.gracesPhone).first?.phase == .offline }
     }
 
-    /// One bot is shared through every Hub this Mac joined, with people on each, who each reach it
-    /// through their own Hub; stopping on one leaves the others.
-    func testOneBotIsSharedThroughSeveralHubs() async throws {
-        let f = try await fixture()
+    /// A second Hub, Studio, that this Mac joined too, with Bea on it.
+    private struct SecondHub {
+        let hub: Hub
+        let link: HubLinkService
+        let mac: HubPairing
+        let folder: URL
+        let bea: HubUser
+        let beasPhone: HubPairing
+    }
+
+    private func secondHub(_ f: Fixture) async throws -> SecondHub {
         let root = f.folder.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let other = Hub(root: root.appendingPathComponent("Other"), messenger: nil)
         try other.repository.prepare()
@@ -309,15 +316,23 @@ import XCTest
         await link.start()
         addTeardownBlock { await MainActor.run { link.stop() } }
         guard case .listening = link.state else { throw XCTSkip("Could not listen: \(link.state)") }
-        let otherFolder = root.appendingPathComponent("Noodle/Hubs/two")
-        let mac = HubPairing(directory: otherFolder, deviceName: "Mac")
+        let folder = root.appendingPathComponent("Noodle/Hubs/two")
+        let mac = HubPairing(directory: folder, deviceName: "Mac")
         await mac.join(link.invite(try other.access.addUser(named: "Ada")).url().absoluteString)
         let bea = try other.access.addUser(named: "Bea")
         let beasPhone = HubPairing(directory: root.appendingPathComponent("Bea"), deviceName: "Bea")
         await beasPhone.join(link.invite(bea).url().absoluteString)
         XCTAssertNil(beasPhone.error)
+        return SecondHub(hub: other, link: link, mac: mac, folder: folder, bea: bea, beasPhone: beasPhone)
+    }
 
-        let one = f.hosting(), two = HubHosting(pairing: mac, repository: f.local, directory: otherFolder)
+    /// One bot is shared through every Hub this Mac joined, with people on each, who each reach it
+    /// through their own Hub; stopping on one leaves the others.
+    func testOneBotIsSharedThroughSeveralHubs() async throws {
+        let f = try await fixture()
+        let studio = try await secondHub(f)
+        let bea = studio.bea, beasPhone = studio.beasPhone
+        let one = f.hosting(), two = HubHosting(pairing: studio.mac, repository: f.local, directory: studio.folder)
         try await one.share(f.alfred, with: [f.grace.id])
         try await two.share(f.alfred, with: [bea.id])
         await one.sync()
@@ -349,6 +364,89 @@ import XCTest
         XCTAssertEqual(beasAfter.map(\.id), [f.alfred.id])
         XCTAssertEqual(try f.local.loadConversations().compactMap(\.guest?.name), ["Bea"])
         XCTAssertNil(two.error)
+    }
+
+    /// What the owner's phone is shown of a bot's sharing on a Hub the Mac joined: the Hub, everyone on it, and whom it is shared with.
+    func testAHubDescribesABotsSharingForTheOwnersPhone() async throws {
+        let f = try await fixture()
+        let mirror = HubMirror(pairing: f.mac, repository: f.local, directory: f.folder)
+        let before = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(before.name, "Mac mini")
+        XCTAssertEqual(before.id, f.mac.hub?.key.x963.base64EncodedString())
+        XCTAssertEqual(before.people.map(\.name), ["Grace"])
+        XCTAssertEqual(before.sharedWith, [])
+        try await mirror.hosting.share(f.alfred, with: [f.grace.id])
+        let after = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(after.sharedWith, [f.grace.id])
+    }
+
+    /// What the owner's phone asks the Mac reaches every Hub the Mac joined, each by its own ID: listed
+    /// together, and a change goes to that Hub alone.
+    func testThePhonesSharingReachesTheRightHub() async throws {
+        let f = try await fixture()
+        let studio = try await secondHub(f)
+        let hubs = [HubMirror(pairing: f.mac, repository: f.local, directory: f.folder),
+                    HubMirror(pairing: studio.mac, repository: f.local, directory: studio.folder)]
+        let listed = await hubs.sharing(of: f.alfred.id)
+        XCTAssertEqual(listed.map(\.name), ["Mac mini", "Studio"], "In the order the Mac lists its Hubs")
+        XCTAssertEqual(listed.map { $0.people.map(\.name) }, [["Grace"], ["Bea"]])
+        XCTAssertEqual(listed.map(\.id), hubs.map(\.sharingID))
+
+        try await hubs.share(f.alfred, onHub: hubs[1].sharingID, with: [studio.bea.id])
+        let beas = try await bots(of: studio.beasPhone)
+        let graces = try await bots(of: f.gracesPhone)
+        XCTAssertEqual(beas.map(\.id), [f.alfred.id])
+        XCTAssertEqual(graces, [], "The other Hub is left alone")
+        let after = await hubs.sharing(of: f.alfred.id)
+        XCTAssertEqual(after.map(\.sharedWith), [[], [studio.bea.id]])
+        do {
+            try await hubs.share(f.alfred, onHub: "not one of them", with: [studio.bea.id])
+            XCTFail("Shared on a Hub this Mac did not join")
+        } catch {}
+    }
+
+    /// A Hub out of reach is left out, without holding up the others, unless its people are already known here.
+    func testAHubOutOfReachIsLeftOutUnlessItsPeopleAreKnown() async throws {
+        let f = try await fixture()
+        let studio = try await secondHub(f)
+        let hubs = [HubMirror(pairing: f.mac, repository: f.local, directory: f.folder),
+                    HubMirror(pairing: studio.mac, repository: f.local, directory: studio.folder)]
+        studio.link.stop()
+        let asked = ContinuousClock.now
+        let listed = await hubs.sharing(of: f.alfred.id)
+        XCTAssertEqual(listed.map(\.name), ["Mac mini"])
+        // Generous for CI: a Hub that does not answer holds the list only briefly, not until its connection gives up.
+        XCTAssertLessThan(ContinuousClock.now - asked, .seconds(10))
+
+        _ = try await hubs[0].sharing(of: f.alfred.id)
+        f.link.stop()
+        let known = await hubs.sharing(of: f.alfred.id)
+        XCTAssertEqual(known.map(\.name), ["Mac mini"], "Known people are shown while the Hub is away")
+        XCTAssertEqual(known.first?.people.map(\.name), ["Grace"])
+    }
+
+    /// People are fetched once and kept: asked again they come at once, and once they are a while old,
+    /// still at once while newer ones are fetched for next time.
+    func testPeopleAreKeptAndRefreshedInTheBackground() async throws {
+        let f = try await fixture()
+        let mirror = HubMirror(pairing: f.mac, repository: f.local, directory: f.folder)
+        var now = Date(timeIntervalSince1970: 1_000_000)
+        mirror.now = { now }
+        let first = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(first.people.map(\.name), ["Grace"])
+        _ = try f.hub.access.addUser(named: "Bea")
+        let kept = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(kept.people.map(\.name), ["Grace"], "Kept, not fetched again")
+
+        now += HubMirror.peopleKeptFor + 1
+        let stale = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(stale.people.map(\.name), ["Grace"], "What is kept comes at once")
+        for _ in 0..<100 {
+            if try await mirror.sharing(of: f.alfred.id).people.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let fresh = try await mirror.sharing(of: f.alfred.id)
+        XCTAssertEqual(Set(fresh.people.map(\.name)), ["Grace", "Bea"], "Fetched again for next time")
     }
 
     /// The Mac's copy of its Hub never takes a bot it hosts for one of the Hub's own.

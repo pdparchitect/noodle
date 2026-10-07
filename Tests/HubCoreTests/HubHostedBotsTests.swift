@@ -182,6 +182,18 @@ import XCTest
         XCTAssertEqual(try f.hub.repository.loadAgents().first { $0.id == hubBot.id }?.harnessIdentifier, "claude-code")
     }
 
+    /// Sharing through other Hubs is for the owner's own Mac; a Noodle Hub shares its bots itself.
+    func testANoodleHubSharesNothingThroughOtherHubs() async throws {
+        let f = try await fixture()
+        let id = try await host(f)
+        for request in [LinkRequest.hubSharing(botID: id), .shareOnHub(botID: id, hub: "other", people: [])] {
+            do {
+                _ = try await f.mac.request(request)
+                XCTFail("A Noodle Hub shared through other Hubs: \(request)")
+            } catch {}
+        }
+    }
+
     /// The Hub runs nothing of a hosted bot and manages it only as far as sharing, archiving and deleting.
     func testAHostedBotIsNotRunOrEditedOnTheHub() async throws {
         let f = try await fixture()

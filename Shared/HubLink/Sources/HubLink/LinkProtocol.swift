@@ -229,6 +229,28 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case backgroundMedia(LinkBackgroundFetch)
     /// For a bot that runs on this device, which the people its owner shares it with talk to through the Hub.
     case host(LinkHostRequest)
+    /// On the owner's own Mac: the Noodle Hubs it joined that one of its bots can be shared on, with who is on
+    /// each. Answered with `hubSharing`.
+    case hubSharing(botID: UUID)
+    /// On the owner's own Mac: shares one of its bots with exactly `people` on one of those Hubs, by its ID
+    /// there. Answered with `hubSharing`.
+    case shareOnHub(botID: UUID, hub: String, people: [UUID])
+}
+
+/// A Noodle Hub the owner's Mac joined, whose people one of the Mac's bots can be shared with.
+public struct LinkHubSharing: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    /// Everyone else on that Hub.
+    public var people: [LinkPerson]
+    public var sharedWith: [UUID]
+
+    public init(id: String, name: String, people: [LinkPerson], sharedWith: [UUID]) {
+        self.id = id
+        self.name = name
+        self.people = people
+        self.sharedWith = sharedWith
+    }
 }
 
 /// What a device asks of the Hub for the bots it runs itself. The Hub keeps their conversations with
@@ -571,6 +593,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case background(LinkBackground)
     case hostedBots([LinkHostedBot])
     case hostedBot(LinkHostedBot)
+    case hubSharing([LinkHubSharing])
     case done
     case failure(String)
 }

@@ -63,6 +63,10 @@ import os
         }
     }
 
+    /// On the owner's own Mac: the Noodle Hubs it joined that one of its bots can be shared on. Noodle keeps that sharing.
+    @ObservationIgnored public var hubSharing: ((UUID) async throws -> [LinkHubSharing])?
+    /// On the owner's own Mac: shares one of its bots with exactly these people on one of those Hubs.
+    @ObservationIgnored public var shareOnHub: ((UUID, String, [UUID]) async throws -> [LinkHubSharing])?
     @ObservationIgnored private let identity: LinkIdentity
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let access: HubAccess
@@ -779,6 +783,10 @@ import os
             return try await hubNoodlets().call(piece, for: try user(key).id).map(LinkResponse.noodletAnswer) ?? .done
         case .host(let request):
             return try host(request, from: key)
+        case .hubSharing(let botID):
+            return .hubSharing(try await sharingThroughHubs(botID, from: key).list(botID))
+        case .shareOnHub(let botID, let hub, let people):
+            return .hubSharing(try await sharingThroughHubs(botID, from: key).share(botID, hub, people))
         }
     }
 
@@ -808,6 +816,15 @@ import os
             try bots.setHostedPhase(phase, of: botID, on: device)
             return .done
         }
+    }
+
+    /// Sharing one of the owner's own bots on the Mac through the Hubs the Mac joined; never a copy of a bot kept on one.
+    private func sharingThroughHubs(_ bot: UUID, from key: LinkPublicKey) throws
+        -> (list: (UUID) async throws -> [LinkHubSharing], share: (UUID, String, [UUID]) async throws -> [LinkHubSharing]) {
+        _ = try user(key)
+        guard access.isPersonal, let hubSharing, let shareOnHub else { throw LinkError("This Noodle Hub shares its bots itself.") }
+        guard try hubBots().name(ofBot: bot) != nil else { throw LinkError("There is no such bot.") }
+        return (hubSharing, shareOnHub)
     }
 
     private func hubNoodlets() throws -> HubNoodlets {

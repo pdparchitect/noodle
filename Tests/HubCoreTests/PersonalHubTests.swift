@@ -100,6 +100,41 @@ import XCTest
         } catch {}
     }
 
+    /// The phone shares a bot on the Mac with people on the Hubs the Mac joined, through Noodle, which
+    /// keeps that sharing; only the Mac's own bots, never copies of bots kept on a Hub.
+    func testThePhoneSharesABotThroughTheHubsTheMacJoined() async throws {
+        let (runtime, _) = try fakeRuntime()
+        let (f, made) = try await fixture(bots: ["Kai", "Eli"], runtime: runtime)
+        let kai = made[0], eli = made[1], grace = UUID()
+        // Eli is this Mac's copy of a bot kept on a Hub, hidden as This Mac as a Hub hides it in Noodle.
+        runtime.remoteAgentIDs = [eli.id]
+        f.personal.bots.isHidden = { [runtime] in runtime.remoteAgentIDs.contains($0) }
+        var asked: [String] = []
+        var studio = LinkHubSharing(id: "studio", name: "Studio", people: [LinkPerson(id: grace, name: "Grace")], sharedWith: [])
+        f.personal.link.hubSharing = { id in
+            asked.append("list \(id == kai.id ? "Kai" : "other")")
+            return [studio]
+        }
+        f.personal.link.shareOnHub = { id, hub, people in
+            asked.append("share \(id == kai.id ? "Kai" : "other") on \(hub) with \(people.count)")
+            studio.sharedWith = people
+            return [studio]
+        }
+        let listed = try await f.device.request(.hubSharing(botID: kai.id))
+        XCTAssertEqual(listed, .hubSharing([studio]))
+        let shared = try await f.device.request(.shareOnHub(botID: kai.id, hub: "studio", people: [grace]))
+        XCTAssertEqual(shared, .hubSharing([LinkHubSharing(id: "studio", name: "Studio", people: [LinkPerson(id: grace, name: "Grace")],
+                                                           sharedWith: [grace])]))
+        for request in [LinkRequest.hubSharing(botID: eli.id), .shareOnHub(botID: eli.id, hub: "studio", people: []),
+                        .hubSharing(botID: UUID())] {
+            do {
+                _ = try await f.device.request(request)
+                XCTFail("Shared what is not the Mac's own bot: \(request)")
+            } catch {}
+        }
+        XCTAssertEqual(asked, ["list Kai", "share Kai on studio with 1"])
+    }
+
     func testAPhoneSeesTheBotsAlreadyOnTheMacAndTalksToThem() async throws {
         let (f, made) = try await fixture(bots: ["Kai", "Eli"])
         guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }

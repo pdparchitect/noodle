@@ -291,6 +291,13 @@ final class NoodleStore {
         // A device changed this Mac's tools, computers or browsers, in the files these controllers keep.
         thisMac.onToolsEdited = { [weak self] in self?.reloadToolsEditedElsewhere() }
         thisMac.onPinsEdited = { [weak self] in self?.reloadPins() }
+        // The owner's phone shares this Mac's bots through the Hubs it joined.
+        thisMac.hubSharing = { [weak self] id in await self?.hubSharing(ofAgent: id) ?? [] }
+        thisMac.shareOnHub = { [weak self] id, hub, people in
+            guard let self else { return [] }
+            try await self.share(agentID: id, onHub: hub, with: people)
+            return await self.hubSharing(ofAgent: id)
+        }
         self.runtime.onSignInRequired = { [weak self] id in
             guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
             NoodleNotifications.postSignInRequired(for: agent)
@@ -790,6 +797,17 @@ final class NoodleStore {
             (hubMirror(forAgent: id).map { $0.owner(ofAgent: id) == nil ? $0.sharedNames(agent: id) : [] } ?? [])
                 + hubMirrors.flatMap { $0.hosting.sharedNames(agent: id) }
         }
+    }
+
+    /// A bot here's sharing on each Hub it can be shared through, for its owner's phone.
+    func hubSharing(ofAgent id: AgentRecord.ID) async -> [LinkHubSharing] {
+        await sharingHubs(forLocalAgent: id).sharing(of: id)
+    }
+
+    /// Shares a bot here with exactly `people` on one of the Hubs it can be shared through, by its ID for this Mac's devices.
+    func share(agentID id: AgentRecord.ID, onHub hubID: String, with people: [UUID]) async throws {
+        guard let agent = agents.first(where: { $0.id == id }) else { throw LinkError("There is no such bot.") }
+        try await sharingHubs(forLocalAgent: id).share(agent, onHub: hubID, with: people)
     }
 
     /// The joined Hubs a bot on this Mac can be shared through: each it is shared on, and each whose people may share bots.
