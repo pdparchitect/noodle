@@ -19,7 +19,7 @@ for each game: it opens right from the conversation.
 - **Made to measure.** Don't like something? Say so while you play, and the bot
   changes it.
 
-A game is a noodlet, one of the small apps your bots build with
+A game is a noodlet, one of the apps your bots build with
 [Noodle Applet](../Applet/README.md).
 
 ## On your Mac or on a Hub

@@ -1,7 +1,7 @@
 # Noodle Applet
 
-Noodle Applet is a macOS companion to Noodle for little tools, websites,
-experiments and games. Each one is a noodlet: a small creation your bots write
+Noodle Applet is a macOS companion to Noodle for tools, websites,
+experiments and games. Each one is a noodlet: software your bots write
 and you open like an app. In Finder a noodlet looks like a single document.
 
 ## Get it
