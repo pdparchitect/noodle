@@ -61,29 +61,7 @@ public struct BrowserToolProvider: ToolProvider {
             "file": file("read", "UTF-8 script in your workspace, instead of --text."),
             "args-file": file("read", "UTF-8 JSON arguments in your workspace, instead of --args."),
             "source": file("read", "Workspace file to upload."), "output": file("write", "New workspace file to create.")]
-        let names: [String]
-        switch operation {
-        case .webMCPList: names = ["frame"]
-        case .webMCPCall: names = ["tool", "args", "args-file", "frame"]
-        case .history, .bookmarks: names = ["query", "limit", "offset"]
-        case .bookmarkAdd: names = ["url", "title"]
-        case .bookmarkUpdate: names = ["bookmark", "url", "title"]
-        case .bookmarkRemove: names = ["bookmark"]
-        case .open, .navigate: names = ["url"]
-        case .inspect: names = ["frame"]
-        case .eval: names = ["text", "file", "frame"]
-        case .click: names = ["target", "x", "y", "frame", "count"]
-        case .move, .scroll: names = ["target", "x", "y", "frame"]
-        case .fill: names = ["target", "text", "frame"]
-        case .key: names = ["text"]
-        case .screenshot: names = ["output"]
-        case .upload: names = ["source", "target", "frame"]
-        case .download: names = ["download", "output"]
-        case .dialog: names = ["accept", "text"]
-        case .present: names = ["conversation", "message"]
-        default: names = []
-        }
-        for name in names { properties[name] = options[name] }
+        for name in operation.options { properties[name] = options[name] }
         if operation.isFileTransfer { required.append(operation == .upload ? "source" : "output") }
         if operation == .present { required.append("conversation") }
         var tool: [String: Any] = [

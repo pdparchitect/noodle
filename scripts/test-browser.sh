@@ -56,6 +56,41 @@ if [[ -n "${NOODLE_BROWSER_TEST_NOODLE_APP:-}" ]]; then
     cat "$artifacts/broker.log"
     kill "$browser_pid"; wait "$browser_pid" 2>/dev/null || true; browser_pid=''
 fi
+# An app outside Noodle, through the signed noodle-browser tool and its MCP server. A development hook
+# answers the person's questions, so this needs the Dev bundle.
+if [[ "${NOODLE_BROWSER_TEST_EXTERNAL:-0}" == 1 ]]; then
+    [[ "$identity" == com.pdparchitect.noodle.browser.local ]] || { print -u2 'Use the Dev bundle for the external tools check.'; exit 1; }
+    tool="$app/Contents/MacOS/noodle-browser"
+    "$executable" "${fixture_args[@]}" --serve-external > "$artifacts/external.log" 2>&1 &
+    browser_pid=$!
+    for _ in {1..100}; do if grep -qx BROWSER_EXTERNAL_SERVER_READY "$artifacts/external.log"; then break; fi; sleep 0.1; done
+    grep -qx BROWSER_EXTERNAL_SERVER_READY "$artifacts/external.log" || { cat "$artifacts/external.log"; exit 1; }
+    json() { python3 -I -c "import json,sys; v=json.load(sys.stdin); print($1)"; }
+    # The fixture's browsers were never lent, so the tool sees none of them.
+    [[ "$("$tool" list | json 'len(v["browsers"])')" == 0 ]] || { print -u2 'The external tool saw browsers it was not lent.'; exit 1; }
+    made="$("$tool" browser-create --name 'External check' | json 'v["browser"]["id"]')"
+    "$tool" open --browser "$made" --url "http://127.0.0.1:$port/" > /dev/null
+    for _ in {1..50}; do [[ "$("$tool" inspect --browser "$made" | json 'v["value"]["title"]')" == 'Browser verification' ]] && break; sleep 0.2; done
+    [[ "$("$tool" inspect --browser "$made" | json 'v["value"]["title"]')" == 'Browser verification' ]] || { print -u2 'The external tool did not load the page.'; exit 1; }
+    "$tool" screenshot --browser "$made" --output "$artifacts/external.png" > /dev/null
+    [[ "$(file -b "$artifacts/external.png")" == PNG* ]] || { print -u2 'The external screenshot is not a PNG.'; exit 1; }
+    print -r -- '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"tabs","arguments":{"browser":"External check"}}}' |
+        "$tool" mcp > "$artifacts/external-mcp.jsonl"
+    python3 -I - "$artifacts/external-mcp.jsonl" <<'PY'
+import json, sys
+answers = {m["id"]: m for m in map(json.loads, open(sys.argv[1]))}
+assert answers[1]["result"]["serverInfo"]["name"] == "noodle-browser"
+names = {tool["name"] for tool in answers[2]["result"]["tools"]}
+assert "browser-create" in names and "present" not in names and "browser-set-owner" not in names
+assert not answers[3]["result"]["isError"] and len(answers[3]["result"]["structuredContent"]["tabs"]) == 1
+PY
+    "$tool" browser-delete --browser "$made" > /dev/null
+    grep -q '^BROWSER_EXTERNAL_APPROVED ' "$artifacts/external.log" || { print -u2 'The caller was never asked about.'; exit 1; }
+    kill "$browser_pid"; wait "$browser_pid" 2>/dev/null || true; browser_pid=''
+    print 'PASS external tool: sees only its own browsers, drives a page, transfers a screenshot and serves MCP'
+fi
 "$executable" "${fixture_args[@]}" --restore > "$artifacts/restart.log" 2>&1 || { cat "$artifacts/restart.log"; exit 1; }
 cat "$artifacts/restart.log"
 "$executable" --smoke-test --cleanup --smoke-id "$smoke_id" --smoke-port "$port" > "$artifacts/cleanup.log" 2>&1 || { cat "$artifacts/cleanup.log"; exit 1; }

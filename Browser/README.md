@@ -101,6 +101,20 @@ Clicking the card opens that page in the same browser, in its original tab if it
 is still there. The card does not carry your sign-ins, and the screenshot is a
 picture, not a live page. A deleted browser cannot be brought back from a card.
 
+## Use it from Claude Code, Codex and other agents
+
+Agents outside Noodle can use Noodle Browser too. Turn on **Allow external
+tools** in Settings > External Tools, then copy the command shown there for
+Claude Code or Codex. Other agents can run the `noodle-browser` command shown
+there, or add it as an MCP server with `mcp` after it.
+
+The first time an app connects, Noodle Browser asks whether to allow it. Once an
+app has created 10 browsers, it also asks before each new one. An app
+sees only the browsers it created and any you lend it: when it asks to borrow
+one, you choose which, or decline. It can change or delete only the browsers it
+created. In Settings you can see each app, switch its access to any browser on
+or off, and remove it. Bots in Noodle cannot use this.
+
 ## Limits
 
 This is a built-in web browser, not Safari. It does not share Safari or Chrome

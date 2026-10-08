@@ -4,6 +4,8 @@
 
 ### Added
 
+- Agents outside Noodle, such as Claude Code and Codex, can use Noodle Computer through the `noodle-computer` command or as an MCP server. It is off until you turn on Settings > External Tools. You are asked before each app is first allowed in, before it creates a computer and before it borrows one of yours. Each app sees only the computers it created or you lent it, and you can change that in Settings. Computers these apps create are listed under External Tools in the sidebar. You are warned when an app is not from an identified developer, or when it runs whatever it is given, such as Terminal. Switching a computer off for an app closes its terminals there. Bots in Noodle cannot use it.
+
 - Files can select several items at once, as in Finder: Shift-click or Command-click, Select All, or drag across icons. Delete, Duplicate, Export, and dragging work on the whole selection. Right-clicking an item outside the selection acts on that item, and deleting several items removes nothing if one of the folders is not empty.
 
 ## [0.21.2] - 2026-10-03

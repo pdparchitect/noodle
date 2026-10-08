@@ -26,7 +26,10 @@ default: fatalError("Unknown Computer identity")
 }
 let group = "\(team).com.pdparchitect.noodle.computers" + suffix
 precondition(info["NoodleComputerGroup"] as? String == group)
-precondition(entitlements["com.apple.security.application-groups"] as? [String] == [group])
+// The external socket's group belongs to the app and its command-line tool alone: Noodle and the Hub must not hold it.
+let external = "\(team).com.pdparchitect.noodle.external-computers" + suffix
+precondition(info["NoodleComputerExternalGroup"] as? String == external)
+precondition(entitlements["com.apple.security.application-groups"] as? [String] == [group, external])
 if suffix == ".local" { precondition(info["NoodleUpdatesEnabled"] as? Bool == false) }
 let contents = URL(fileURLWithPath: CommandLine.arguments[1]).deletingLastPathComponent()
 let setup = contents.appendingPathComponent("Helpers/LocalMacSetup.app/Contents")

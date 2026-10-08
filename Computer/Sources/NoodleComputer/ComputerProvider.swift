@@ -36,7 +36,8 @@ import LocalMacCore
         do { return try await handle(request, peer: peer, surface: surface) }
         catch { return .init(error: error.localizedDescription) }
     }
-    func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil) async throws -> ComputerResponse {
+    /// `stagingRoot` is where file transfers wait, when not beside the companion socket.
+    func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil, stagingRoot: URL? = nil) async throws -> ComputerResponse {
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
         let owner = ComputerBuildIdentity.principal(for: peer) + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
@@ -128,7 +129,7 @@ import LocalMacCore
             if let failure { throw ComputerBridgeError(failure) }
             return .init()
         }
-        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
+        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner, stagingRoot: stagingRoot) }
         if request.operation == .revoke {
             let ids = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }.map(\.key)
             for id in ids { await terminals.removeValue(forKey: id)?.close() }
@@ -158,7 +159,7 @@ import LocalMacCore
             guard let id = request.transferID, let path = request.path else {
                 throw ComputerBridgeError("Missing broker file-transfer reference.")
             }
-            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let staging = try ComputerTransferFiles.staging(root: stagingRoot ?? transferRoot, id: id, create: false)
             let files = GuestFiles(runtime: runtime)
             var response = ComputerResponse()
             response.path = try GuestFile.normalize(path)
@@ -290,7 +291,7 @@ import LocalMacCore
             hasWebDisplay: session.display != nil || session.computer.kind == .localMac,
             owner: session.computer.hubOwner.map { ComputerOwner(id: $0.id, name: $0.name) })
     }
-    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
+    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String, stagingRoot: URL?) async throws -> ComputerResponse {
         localTerminals = localTerminals.filter { _, value in
             store.sessions.contains { $0.id == value.computer && $0.localMac === value.runtime && $0.phase == .running }
         }
@@ -316,7 +317,7 @@ import LocalMacCore
         }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else { throw ComputerBridgeError("Missing broker file-transfer reference.") }
-            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let staging = try ComputerTransferFiles.staging(root: stagingRoot ?? transferRoot, id: id, create: false)
             var reply = ComputerResponse(); reply.path = path
             if request.operation == .fileUpload {
                 let fd = try ComputerTransferFiles.openSource(staging); Darwin.close(fd)

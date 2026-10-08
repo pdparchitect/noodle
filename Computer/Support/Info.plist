@@ -41,6 +41,8 @@
 	<true/>
 	<key>NoodleComputerGroup</key>
 	<string>$(DEVELOPMENT_TEAM).$(COMPUTER_GROUP_SUFFIX)</string>
+	<key>NoodleComputerExternalGroup</key>
+	<string>$(DEVELOPMENT_TEAM).$(COMPUTER_EXTERNAL_GROUP_SUFFIX)</string>
 	<key>NoodleSigningTeam</key>
 	<string>$(DEVELOPMENT_TEAM)</string>
 	<key>NoodleUpdatesEnabled</key>

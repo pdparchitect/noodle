@@ -46,6 +46,14 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
     public var groupSuffix: String {
         "com.pdparchitect.noodle.computers" + (self == .production ? "" : self == .development ? ".local" : ".tests")
     }
+    /// The command-line tool inside the app, for apps outside Noodle. It never uses the
+    /// companion socket.
+    public var cliID: String { providerID + ".cli" }
+    /// The app group only the app and its command-line tool hold, where the external socket is.
+    /// Noodle and Noodle Hub must never hold it.
+    public var externalGroupSuffix: String {
+        "com.pdparchitect.noodle.external-computers" + (self == .production ? "" : self == .development ? ".local" : ".tests")
+    }
     /// Computer links, as Noodle shares them: noodlecomputer://COMPUTER.
     public var urlScheme: String {
         "noodlecomputer" + (self == .production ? "" : self == .development ? "-dev" : "-tests")

@@ -10,8 +10,11 @@ let package = Package(
     name: "NoodleComputer",
     platforms: [.macOS("26.0")],
     products: [.executable(name: "NoodleComputer", targets: ["NoodleComputer"]),
-        .library(name: "ComputerCore", targets: ["ComputerCore"])],
+        .executable(name: "noodle-computer", targets: ["NoodleComputerCLI"]),
+        .library(name: "ComputerCore", targets: ["ComputerCore"]),
+        .library(name: "ComputerExternal", targets: ["ComputerExternal"])],
     dependencies: [
+        .package(path: "../Shared/ExternalTools"),
         .package(path: "../Shared/LaunchChecks"),
         .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/Wallpaper"),
@@ -23,8 +26,14 @@ let package = Package(
     ],
     targets: [
         .target(name: "ComputerCore", dependencies: [.product(name: "NoodleWallpaperCore", package: "Wallpaper")], resources: [.process("Resources")]),
+        // What the app and its command-line tool share to serve apps outside Noodle.
+        .target(name: "ComputerExternal", dependencies: [.product(name: "ComputerBridge", package: "Bridge"),
+            .product(name: "NoodleExternalTools", package: "ExternalTools")]),
+        .executableTarget(name: "NoodleComputerCLI", dependencies: ["ComputerExternal"]),
         .executableTarget(name: "NoodleComputer", dependencies: [
             "ComputerCore",
+            "ComputerExternal",
+            .product(name: "NoodleExternalToolsUI", package: "ExternalTools"),
             .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),
             .product(name: "NoodleSettingsUI", package: "SettingsUI"),
             .product(name: "NoodleWallpaper", package: "Wallpaper"),
@@ -38,7 +47,8 @@ let package = Package(
             .product(name: "ContainerizationOCI", package: "containerization")
         ], swiftSettings: appSettings),
         .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"]),
-        .testTarget(name: "ComputerStorageTests", dependencies: ["NoodleComputer"])
+        .testTarget(name: "ComputerExternalTests", dependencies: ["ComputerExternal"]),
+        .testTarget(name: "ComputerStorageTests", dependencies: ["NoodleComputer", "ComputerExternal"])
     ],
     swiftLanguageModes: [.v5]
 )

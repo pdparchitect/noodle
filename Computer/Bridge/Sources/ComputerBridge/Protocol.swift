@@ -47,7 +47,43 @@ public enum ComputerOperation: String, Codable, Sendable {
     case surfaceStream
     /// Noodle Hub saying whom a computer is kept for, or nobody.
     case setOwner
+    /// An app outside Noodle asking the person to lend it one of their computers.
+    case borrow
     public var isFileTransfer: Bool { self == .fileUpload || self == .fileDownload }
+    /// What bots call, in the order they are listed.
+    public static let agentCases: [Self] = [.list, .start, .terminalOpen, .terminalRead, .terminalWrite, .terminalResize, .terminalClose,
+                                            .preview, .fileUpload, .fileDownload]
+    /// What apps outside Noodle may call: what bots may, apart from posting into a conversation,
+    /// and making, borrowing, changing and deleting computers.
+    public static let externalCases: [Self] = agentCases.filter { $0 != .preview } + [.templates, .create, .borrow, .update, .delete]
+    /// The name bots and the command-line tool call it by.
+    public var command: String {
+        switch self {
+        case .terminalOpen: "open"
+        case .terminalRead: "read"
+        case .terminalWrite: "write"
+        case .terminalResize: "resize"
+        case .terminalClose: "close"
+        case .preview: "present"
+        case .fileUpload: "upload"
+        case .fileDownload: "download"
+        default: rawValue
+        }
+    }
+    /// The options it takes besides the computer, by their command-line names.
+    public var options: [String] {
+        switch self {
+        case .terminalRead: ["terminal", "offset"]
+        case .terminalWrite: ["terminal", "text", "base64"]
+        case .terminalResize: ["terminal", "columns", "rows"]
+        case .terminalClose: ["terminal"]
+        case .preview: ["terminal", "conversation", "message", "view"]
+        case .fileUpload, .fileDownload: ["source", "destination"]
+        case .create: ["template", "name", "description"]
+        case .update: ["name", "description"]
+        default: []
+        }
+    }
     /// A new computer may first download its image.
     public var timeout: Int { self == .create ? 1800 : isFileTransfer ? 600 : (self == .start ? 180 : 120) }
 }
@@ -113,7 +149,7 @@ public struct ComputerRequest: Codable, Sendable {
         if operation == .preview {
             guard computerID != nil || terminalID != nil else { throw ComputerBridgeError("Specify --computer or --terminal.") }
             guard view == nil || ["terminal", "web"].contains(view!) else { throw ComputerBridgeError("Invalid preview view.") }
-        } else if ![.list, .terminalResolve, .templates, .create].contains(operation), computerID == nil {
+        } else if ![.list, .terminalResolve, .templates, .create, .borrow].contains(operation), computerID == nil {
             throw ComputerBridgeError("Specify a computer.")
         }
         if [.terminalRead, .terminalWrite, .terminalResize, .terminalClose, .terminalResolve].contains(operation), terminalID == nil {

@@ -42,6 +42,8 @@
 	<true/>
 	<key>NoodleBrowserGroup</key>
 	<string>$(DEVELOPMENT_TEAM).$(BROWSER_GROUP_SUFFIX)</string>
+	<key>NoodleBrowserExternalGroup</key>
+	<string>$(DEVELOPMENT_TEAM).$(BROWSER_EXTERNAL_GROUP_SUFFIX)</string>
 	<key>NoodleSigningTeam</key>
 	<string>$(DEVELOPMENT_TEAM)</string>
 	<key>NoodleUpdatesEnabled</key>

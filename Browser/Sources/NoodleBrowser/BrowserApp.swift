@@ -1,6 +1,8 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import BrowserExternal
+import NoodleExternalToolsUI
 import SwiftUI
 import NoodleLaunchChecks
 import NoodleSettingsUI
@@ -18,6 +20,7 @@ enum BrowserLaunchCheck {
     static let cleanupUI = "b2d659d99d371e6058b2c204b2ddc6c2427786b23444ae61a445df8e11bbfd21"  // --cleanup-ui
     #if NOODLE_DEV_HOOKS
     static let serveSmoke = "c9b403b994c0e9d7b5dbf474828f96652ec5eb519afee0406dfd507b007520b8"  // --serve-smoke
+    static let serveExternal = "c891377b9b5fe523cdec9e269b4ec8174a18eb50bd015afd44851c9f4f03f2ae"  // --serve-external
     static let pointerOnly = "0df638dd046d3d7cf588fdef105209d3416cf68aa66d195c603de43a3e393301"  // --pointer-only
     static let webMCPDemos = "6710ff36cd45763a3a7719185dd316b603fc3da83bc499df8605db0c66232e93"  // --webmcp-demos
     static let webMCPOnly = "5fadc42340cf84b4331123681e94dffa1e71fa644d48b6dbaeaffca366a28f3d"  // --webmcp-only
@@ -68,7 +71,7 @@ struct NoodleBrowserApp: App {
             }
             BrowserCommands(delegate: delegate, presentation: delegate.presentation)
         }
-        Settings { BrowserSettingsView() }
+        Settings { BrowserSettingsView(library: delegate.library, runtime: delegate.runtime) }
             .windowResizability(.contentSize)
             .handlesExternalEvents(matching: [])
         MenuBarExtra(isInserted: $visibility.showMenuBar) {
@@ -95,7 +98,11 @@ struct NoodleBrowserApp: App {
         } else { library = BrowserLibrary() }
         super.init()
     }
-    lazy var runtime = BrowserRuntime(library: library)
+    /// Which apps outside Noodle may use which browsers. The verification runs keep none.
+    lazy var external: ExternalGate? = BrowserLaunchCheck.smoke || BrowserLaunchCheck.ui ? nil
+        : ExternalGate(url: BrowserExternal.grantsURL(library: library.root), prompter: prompter)
+    private let prompter = ExternalPrompter(appName: BrowserBuildIdentity.current.appName, noun: "browser")
+    lazy var runtime = BrowserRuntime(library: library, external: external)
     lazy var presentation = BrowserPresentation(library: library, runtime: runtime,
         defaults: BrowserLaunchCheck.ui ? nil : .standard)
     let libraryWindow = BrowserLibraryWindow()
@@ -127,6 +134,7 @@ struct NoodleBrowserApp: App {
             Task { await BrowserUITest.runAndExit(delegate: self) }; return
         }
         runtime.startServer()
+        runtime.startExternalServer()
         runtime.startTabExpiry()
         if notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true, !externalLaunch {
             DispatchQueue.main.async { if !self.externalLaunch { self.reopenLibrary() } }
