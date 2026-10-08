@@ -502,7 +502,7 @@ struct RootView: View {
             case .group:
                 NewGroupSheet()
                     .environment(store)
-                    .noodleSheetSizing()
+                    .noodleSheetSizing(animated: true)
             }
         }
         .sheet(item: $store.agentBeingEdited) { agent in

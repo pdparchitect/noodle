@@ -18,6 +18,7 @@ All notable changes to Noodle are documented here, following
 
 - The Add Browsers and Add Computers lists in Edit Bot now end with short New and Open App buttons with icons, instead of long names that were cut off.
 - A chat effect a bot sends now waits until you open its conversation, for up to a day, instead of being dropped when you are not looking. It plays once, on whichever of your devices shows the conversation first.
+- The New Group window now resizes smoothly as its contents change, like New Bot.
 
 ### Fixed
 
