@@ -1539,10 +1539,13 @@ public struct LinkCardInfo: Codable, Equatable, Sendable {
     public var colour: Int?
     public var icon: Data?
     public var capturedAt: Date?
+    /// Whether a noodlet is a game, as its manifest says; absent from Hubs that do not tell.
+    public var isGame: Bool?
 
     public init(title: String, detail: String? = nil, image: Data? = nil, symbol: String? = nil, colour: Int? = nil,
-                icon: Data? = nil, capturedAt: Date? = nil) {
+                icon: Data? = nil, capturedAt: Date? = nil, isGame: Bool? = nil) {
         self.title = title
+        self.isGame = isGame
         self.detail = detail
         self.image = image
         self.symbol = symbol

@@ -5,6 +5,7 @@
 ### Added
 
 - A noodlet that is still starting, or too busy to respond, says so in the top right corner of its window, and to anyone watching it live from a phone or another Mac.
+- Noodle and Noodle Hub can tell a phone which noodlets are games, so Play shows them under Games before they are opened.
 
 ### Changed
 

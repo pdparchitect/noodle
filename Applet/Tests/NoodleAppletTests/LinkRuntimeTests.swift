@@ -189,6 +189,24 @@ import XCTest
         let refused = await runtime.handle(open, identity: AppletBuildIdentity.current.hubID)
         XCTAssertEqual(refused.errorCode, "session-unavailable")
     }
+    /// A Hub's devices sort noodlets into games by this, before they ever fetch the files.
+    func testInfoSaysTheNoodletsCategory() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "NoodletLinkTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        let runtime = AppletRuntime(library: botLibrary(root: root, defaults: defaults), defaults: defaults)
+        var files = try htmlNoodlet("Racer")
+        files["noodlet.json"] = Data(#"{"version":1,"title":"Racer","runtime":"html","entry":"index.html","category":"games"}"#.utf8)
+        var validate = AppletRequest(.validate)
+        validate.path = try botNoodlet(files, named: "Racer", owner: "author", root: root)
+        validate.owner = "author"
+        var info = AppletRequest(.info)
+        info.noodletID = try await runtime.handle(validate, identity: AppletBuildIdentity.current.hubID).checked().noodletID
+        info.owner = "author"
+        let resolved = try await runtime.handle(info, identity: AppletBuildIdentity.current.hubID).checked()
+        XCTAssertEqual(resolved.category, "games")
+    }
     func testValidateRegistersWithoutRunningAndInfoEnforcesOwnership() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "NoodletLinkTests." + UUID().uuidString

@@ -198,6 +198,8 @@ public struct AppletResponse: Codable, Sendable {
     public var permissions: [String: String]?
     /// The controls the manifest declares, for a viewer to show as a controller.
     public var controls: Gamepad?
+    /// The manifest's category, on `info`.
+    public var category: String?
     /// The noodlet's manifest and the revision of its files, with an `archive`.
     public var manifest: NoodletManifest?
     public var revision: String?

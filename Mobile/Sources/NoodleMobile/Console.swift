@@ -153,7 +153,7 @@ enum ConsolePad {
             return hub.listedThreads.flatMap { thread in
                 ((history?.conversations[thread.conversationID]?.shares ?? []) + Self.shares(in: hub.messages(of: thread))).map {
                     ConsoleTitle(hub: hub, thread: thread, attachment: $0.attachment, sharedAt: $0.sharedAt,
-                                 isGame: isGame($0.attachment, in: hub))
+                                 isGame: isGame($0.attachment, card: cards[$0.attachment.id]?.card, in: hub))
                 }
             }
         }
@@ -180,7 +180,12 @@ enum ConsolePad {
     /// The noodlet a link points at, by the ID its files are kept under.
     nonisolated static func noodlet(of attachment: LinkAttachment) -> String? { attachment.url.flatMap { $0.host?.lowercased() } }
 
-    /// Whether a noodlet is a game, which only its files say: known once it has been opened on this phone.
+    /// Whether a noodlet is a game: as its card from the Hub says, or else as its files on this phone do.
+    static func isGame(_ attachment: LinkAttachment, card: LinkCardInfo?, cache: URL) -> Bool {
+        card?.isGame ?? isGame(attachment, cache: cache)
+    }
+
+    /// Whether a noodlet is a game by its files: known once it has been opened on this phone.
     static func isGame(_ attachment: LinkAttachment, cache: URL) -> Bool {
         guard let id = noodlet(of: attachment) else { return false }
         let folder = cache.appendingPathComponent(id)
@@ -192,7 +197,8 @@ enum ConsolePad {
         return false
     }
 
-    private func isGame(_ attachment: LinkAttachment, in hub: HubChats) -> Bool {
+    private func isGame(_ attachment: LinkAttachment, card: LinkCardInfo?, in hub: HubChats) -> Bool {
+        if let known = card?.isGame { return known }
         let key = "\(hub.pairing.directory.path):\(Self.noodlet(of: attachment) ?? "")"
         if let known = games[key] { return known }
         let known = Self.isGame(attachment, cache: hub.noodletCache)
@@ -205,7 +211,16 @@ enum ConsolePad {
 
     func fetchCard(_ title: ConsoleTitle) async {
         guard cards[title.id] == nil else { return }
-        cards[title.id] = await title.hub.sharedAttachment(title.attachment, in: title.thread)
+        let card = await title.hub.sharedAttachment(title.attachment, in: title.thread)
+        // The card may move its noodlet to the other shelf; the one chosen stays chosen.
+        let chosen = selected
+        cards[title.id] = card
+        if let chosen { select(chosen) }
+    }
+
+    /// Every card, so each noodlet is on its shelf before the stack reaches it.
+    func fetchCards() async {
+        for title in titles { await fetchCard(title) }
     }
 
     /// Looks through each conversation's messages before those this phone keeps, newest first, once.
@@ -329,6 +344,7 @@ struct ConsoleView: View {
         .task {
             console.show(hubs)
             await console.scan()
+            await console.fetchCards()
         }
     }
 

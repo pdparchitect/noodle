@@ -501,6 +501,7 @@ import NoodletRuntime
     response.runtime = package.manifest.runtime
     response.permissions = AppletPermissions.status(package, defaults: defaults)
     response.controls = package.manifest.controls
+    response.category = package.manifest.category
     response.state = "available"
     return response
   }

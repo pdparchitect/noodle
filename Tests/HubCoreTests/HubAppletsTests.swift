@@ -15,6 +15,8 @@ import XCTest
         private let lock = NSLock()
         let session = UUID()
         var controls: Gamepad?
+        /// Each noodlet's manifest category.
+        var categories: [UUID: String] = [:]
         private(set) var opened: [UUID] = []
         /// The folder each noodlet came from.
         var sources: [UUID: String] = [:]
@@ -57,6 +59,8 @@ import XCTest
                     response.title = "Counter"
                     response.sourcePath = request.noodletID.flatMap { sources[$0] }
                     response.permissions = request.noodletID.flatMap { permissions[$0] }
+                    response.category = request.noodletID.flatMap { categories[$0] }
+                    response.controls = controls
                     if request.includePreview == true { response.data = Data("picture".utf8); response.mediaType = "image/png" }
                 default:
                     break
@@ -329,6 +333,14 @@ import XCTest
         XCTAssertEqual(card?.title, "Counter")
         XCTAssertEqual(card?.image, Data("picture".utf8))
         XCTAssertTrue(applet.opened.isEmpty)
+        XCTAssertEqual(card?.isGame, false)
+        applet.categories[noodlet] = "games"
+        let categorised = try await hub.bots.card(of: attachment, in: bot.conversationID, for: user)
+        XCTAssertEqual(categorised?.isGame, true)
+        applet.categories[noodlet] = nil
+        applet.controls = Gamepad(buttons: [Gamepad.Button(key: "space")])
+        let controlled = try await hub.bots.card(of: attachment, in: bot.conversationID, for: user)
+        XCTAssertEqual(controlled?.isGame, true)
         applet.sources[noodlet] = root.appendingPathComponent("SomeoneElse/Counter.noodlet").path
         do {
             _ = try await hub.bots.card(of: attachment, in: bot.conversationID, for: user)

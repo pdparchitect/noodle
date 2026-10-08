@@ -5,6 +5,7 @@
 ### Added
 
 - Devices watching a noodlet live hear when it is still starting or too busy to respond, even on a slow link.
+- Play on a phone shows every game bots shared under Games, including ones never opened on the phone.
 
 - Reactions travel both ways between people and a bot that runs on its owner's Mac.
 - Chat effects bots send wait on the Hub until one of the person's devices shows the conversation, for up to a day, and play there once.

@@ -56,6 +56,17 @@ import Testing
         #expect(!Console.isGame(noodlet("Never Opened"), cache: studio.noodletCache))
     }
 
+    /// The Hub's card says whether a noodlet is a game before its files are ever on this phone.
+    @Test func aNoodletIsAGameByItsCard() {
+        let studio = hub()
+        var racer = noodlet("Racer")
+        #expect(!Console.isGame(racer, card: nil, cache: studio.noodletCache))
+        racer.card = LinkCardInfo(title: "Racer", isGame: true)
+        #expect(Console.isGame(racer, card: racer.card, cache: studio.noodletCache))
+        racer.card?.isGame = false
+        #expect(!Console.isGame(racer, card: racer.card, cache: studio.noodletCache))
+    }
+
     @Test func theSelectionMovesAlongAShelfAndBetweenShelves() {
         let counts = [3, 2]
         var selection = ConsoleSelection()

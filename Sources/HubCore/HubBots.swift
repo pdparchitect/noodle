@@ -1250,7 +1250,7 @@ import NoodleRuntime
             let response = try await applets.companion(info)
             guard let title = response.title else { return nil }
             return LinkCardInfo(title: title, image: response.mediaType == "image/png" ? response.data : nil,
-                                symbol: "square.grid.2x2")
+                                symbol: "square.grid.2x2", isGame: response.controls != nil || response.category == "games")
         }
         guard let card = try attachments(in: conversationID)[attachmentID]?.card else { return nil }
         return LinkCardInfo(title: card.title, detail: card.detail, image: card.image, symbol: card.symbol,
