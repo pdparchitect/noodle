@@ -77,6 +77,13 @@ struct ConsoleSelection: Equatable {
         return next
     }
 
+    /// A shelf's tab tapped: its first card, or the card already chosen on it.
+    func showing(shelf: Int, counts: [Int]) -> Self {
+        guard !counts.isEmpty else { return Self() }
+        let shelf = min(max(shelf, 0), counts.count - 1)
+        return shelf == self.shelf ? clamped(counts) : Self(shelf: shelf, item: 0)
+    }
+
     /// The same card, or the nearest one left after the shelves changed.
     func clamped(_ counts: [Int]) -> Self {
         guard !counts.isEmpty else { return Self() }
@@ -233,6 +240,10 @@ enum ConsolePad {
 
     func move(_ input: HardwareGamepad.MenuInput) {
         selection = selection.moved(input, counts: shelves.map(\.titles.count))
+    }
+
+    func show(shelf: Int) {
+        selection = selection.showing(shelf: shelf, counts: shelves.map(\.titles.count))
     }
 
     func select(_ title: ConsoleTitle) {
@@ -393,7 +404,7 @@ private struct ConsoleHome: View {
             ZStack(alignment: .top) {
                 ConsoleBackdrop(image: console.selected.flatMap { console.shown($0).card?.image })
                 VStack(spacing: 0) {
-                    ConsoleTopBar(onTV: onTV, shelves: shelves.map(\.name), shelf: at.shelf, exit: exit)
+                    ConsoleTopBar(onTV: onTV, shelves: shelves.map(\.name), shelf: at.shelf, exit: exit) { console.show(shelf: $0) }
                     Spacer(minLength: 0)
                     if shelves.indices.contains(at.shelf) {
                         let titles = shelves[at.shelf].titles
@@ -652,6 +663,7 @@ private struct ConsoleTopBar: View {
     let shelves: [String]
     let shelf: Int
     var exit: (() -> Void)?
+    var choose: (Int) -> Void = { _ in }
     /// Bumped as controllers come and go.
     @State private var changes = 0
 
@@ -661,9 +673,16 @@ private struct ConsoleTopBar: View {
                 Button("Done", action: exit).buttonStyle(.glass)
             }
             ForEach(Array(shelves.enumerated()), id: \.offset) { index, name in
-                Text(name)
-                    .font(onTV ? .title2.weight(.bold) : .headline)
-                    .foregroundStyle(.white.opacity(index == shelf ? 1 : 0.45))
+                Button { choose(index) } label: {
+                    Text(name)
+                        .font(onTV ? .title2.weight(.bold) : .headline)
+                        .foregroundStyle(.white.opacity(index == shelf ? 1 : 0.45))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // On the TV only a controller steers.
+                .allowsHitTesting(!onTV)
+                .accessibilityAddTraits(index == shelf ? .isSelected : [])
             }
             Spacer()
             let _ = changes

@@ -21,7 +21,7 @@
 - With Reduce Motion on (Settings → Accessibility → Motion), the effect shows as a still 🎉 or 🎆 instead.
 - Bots kept on a Noodle Hub show Sharing as before.
 - Tap … and choose Play: the Noodle wordmark writes on, then the noodlets your bots shared show as cards, newest first, including ones shared long ago. The cards are stacked, the chosen one in front and the rest turned away to each side. Tap a side card to bring it to the front, tap the front one to play. Swipe through the stack. Done closes it.
-- Open a game noodlet once, then return to the console: it moves to Games. Games and Noodlets switch with up and down on a controller.
+- Open a game noodlet once, then return to the console: it moves to Games. Tap Games or Noodlets at the top to switch between them; up and down on a controller switch them too.
 - With Screen Mirroring to a TV on, choose Play: the console shows on the TV and the phone shows a d-pad and an A button to move and play. Start a game: it plays on the TV with the phone as its controller. Close it from the controller's View button menu, or Done: you are back at the console, still on the TV.
 - With a game controller connected, steer the console with the d-pad or left stick and play with A, on the phone or the TV. While a noodlet started from Play is open, the controller's View button shows the same stack over it, ending with Home: choose another to switch, Home to go back, View or B to carry on. Opened from a conversation, the View button shows its usual menu.
 - The phone stays awake and sideways while the console is open, and turns freely again after Done.

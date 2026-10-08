@@ -70,6 +70,13 @@ import Testing
         #expect(ConsoleSelection(shelf: 4, item: 9).clamped(counts) == ConsoleSelection(shelf: 1, item: 1))
     }
 
+    @Test func aTappedShelfOpensAtItsFirstCard() {
+        let counts = [3, 2]
+        #expect(ConsoleSelection(shelf: 0, item: 2).showing(shelf: 1, counts: counts) == ConsoleSelection(shelf: 1, item: 0))
+        #expect(ConsoleSelection(shelf: 1, item: 1).showing(shelf: 1, counts: counts) == ConsoleSelection(shelf: 1, item: 1))
+        #expect(ConsoleSelection().showing(shelf: 5, counts: counts) == ConsoleSelection(shelf: 1, item: 0))
+    }
+
     /// The front card sits in the middle, whole and facing; the others fan out to each side, smaller and turned away.
     @Test func theStackFansOutFromTheFrontCard() {
         let front = ConsoleStack.placement(offset: 0, cardWidth: 100)
