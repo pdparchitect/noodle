@@ -498,22 +498,22 @@ struct RootView: View {
             case .bot:
                 NewBotSheet()
                     .environment(store)
-                    .noodleSheetSizing(animated: true)
+                    .noodleSheetSizing()
             case .group:
                 NewGroupSheet()
                     .environment(store)
-                    .noodleSheetSizing(animated: true)
+                    .noodleSheetSizing()
             }
         }
         .sheet(item: $store.agentBeingEdited) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
         }
         .sheet(item: $store.groupBeingEdited) { conversation in
             GroupInfoSheet(conversation: conversation)
                 .environment(store)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
         }
         .sheet(item: $store.backgroundBeingEdited) { conversation in
             ConversationBackgroundSheet(conversation: conversation)

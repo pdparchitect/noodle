@@ -368,7 +368,7 @@ public struct HarnessInstallationRow: View {
                         .buttonStyle(.link)
                         .sheet(isPresented: $showsProfiles) {
                             HarnessProfilesView(store: store, installation: liveInstallation ?? installation)
-                                .noodleSheetSizing(animated: true)
+                                .noodleSheetSizing()
                         }
                 }
                 if updateAvailable {
@@ -400,10 +400,10 @@ public struct HarnessInstallationRow: View {
                 if id == .apple {
                     Button("Local Models") { showsLocalModels = true }
                         .buttonStyle(.link)
-                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView(store: store).noodleSheetSizing(animated: true) }
+                        .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView(store: store).noodleSheetSizing() }
                     Button("Remote Models") { showsRemoteModels = true }
                         .buttonStyle(.link)
-                        .sheet(isPresented: $showsRemoteModels) { AppleRemoteModelsView(store: store).noodleSheetSizing(animated: true) }
+                        .sheet(isPresented: $showsRemoteModels) { AppleRemoteModelsView(store: store).noodleSheetSizing() }
                 }
                 if needsSignIn {
                     Button("Sign In") {

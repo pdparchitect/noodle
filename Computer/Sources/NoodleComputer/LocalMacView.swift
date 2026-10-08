@@ -68,7 +68,7 @@ struct NewLocalMacView: View {
                 ComputerAppearanceRow(appearance: $appearance)
                 if let failure { Text(failure).foregroundStyle(.red).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
             }.padding(20).disabled(creating)
-        }.frame(width: 520).noodleSheetSizing(animated: true)
+        }.frame(width: 520).noodleSheetSizing()
             .interactiveDismissDisabled(creating)
             .task { registration = await LocalMacSetup.registrationStatus() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

@@ -42,7 +42,7 @@ struct AgentProfileButton: View {
         .sheet(item: $editingAgent) { agent in
             EditBotSheet(agent: agent)
                 .environment(store)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
                 .modifier(ConversationErrorAlert())
         }
     }
@@ -99,7 +99,7 @@ struct GroupProfileButton: View {
         .sheet(item: $editingGroup) { group in
             GroupInfoSheet(conversation: group)
                 .environment(store)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
                 .modifier(ConversationErrorAlert())
         }
     }

@@ -1211,7 +1211,7 @@ struct NewComputerView: View {
         .frame(width: 580)
       }
     }
-    .noodleSheetSizing(animated: true)
+    .noodleSheetSizing()
     .interactiveDismissDisabled(creating)
     .onChange(of: template) { oldValue, value in
       failure = nil
@@ -1315,7 +1315,7 @@ struct NewWindowsView: View {
         .frame(width: 580)
       }
     }
-    .noodleSheetSizing(animated: true)
+    .noodleSheetSizing()
     .interactiveDismissDisabled(creating)
   }
 }

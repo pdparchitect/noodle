@@ -96,7 +96,7 @@ public struct AppleRemoteModelsView: View {
             returnToAccountID = nil
         }) { agent in
             store.botRuntimeEditor(agent)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
         }
         .alert("Remove Account?", isPresented: Binding(
             get: { accountPendingRemoval != nil },

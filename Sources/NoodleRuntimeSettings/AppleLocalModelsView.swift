@@ -97,7 +97,7 @@ public struct AppleLocalModelsView: View {
             returnToModelID = nil
         }) { agent in
             store.botRuntimeEditor(agent)
-                .noodleSheetSizing(animated: true)
+                .noodleSheetSizing()
         }
         .alert("Remove Model?", isPresented: Binding(
             get: { modelPendingRemoval != nil },

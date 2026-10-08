@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- New Bot, Edit Bot, New Group, Group Info, profile and model windows now change size at once as their contents change, instead of animating.
+
 ## [0.51.0] - 2026-10-08
 
 ### Added
