@@ -56,6 +56,7 @@ struct BrowserLibraryView: View {
                 .contextMenu {
                     Button("Edit Browser…", systemImage: "slider.horizontal.3") { presentation.editing = profile }
                     Button("Change Background…", systemImage: "photo") { presentation.backgroundEditing = profile }
+                    Divider()
                     Button(profile.paused ? "Resume Agents" : "Pause Agents", systemImage: profile.paused ? "play.fill" : "pause.fill") {
                         do { try runtime.setPaused(!profile.paused, browserID: profile.id) } catch { runtime.failure = error.localizedDescription }
                     }
