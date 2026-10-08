@@ -168,6 +168,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: true
+      - name: Prepare Metal tools
+        run: xcodebuild -downloadComponent MetalToolchain
       - name: Test Computer
         run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
       - name: Test Local Mac account boundaries and update recovery

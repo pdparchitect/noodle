@@ -152,9 +152,14 @@ class WorkflowTests(unittest.TestCase):
             job = self.jobs['test-' + product]
             self.assertNotIn('if', job)
             self.assertEqual(job['needs'], ['versions'])
-            # The phone app uses iOS 27 APIs, which only the Xcode 27 image's SDK has.
-            self.assertEqual(job['runs-on'], 'xcode-27' if product == 'mobile' else 'macos-26')
+            # The phone app uses iOS 27 APIs and Windows computers use macOS 27's custom Virtio
+            # devices, which only the Xcode 27 image's SDK has.
+            self.assertEqual(job['runs-on'], 'xcode-27' if product in ['mobile', 'computer'] else 'macos-26')
         self.assertEqual(workflow('mobile-release.yml')['jobs']['release']['runs-on'], 'xcode-27')
+        # The Xcode 27 image ships without the Metal toolchain that Computer's SwiftTerm shaders need.
+        for job in [self.jobs['test-computer'], workflow('computer-release.yml')['jobs']['release']]:
+            self.assertEqual(job['runs-on'], 'xcode-27')
+            self.assertIn('xcodebuild -downloadComponent MetalToolchain', json.dumps(job['steps']))
         self.assertNotIn('test-computer', self.jobs['prepare-noodle']['needs'])
         self.assertEqual(self.jobs['prepare-images']['needs'], ['versions', 'checks'])
         self.assertNotIn('swift test', json.dumps(self.jobs['checks']))

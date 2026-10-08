@@ -16,12 +16,13 @@ jobs:
         with:
           lfs: true
 
-      - name: Require the macOS 27 SDK
+      - name: Require the macOS 27 SDK and prepare Metal tools
         shell: zsh {0}
         run: |
           set -euo pipefail
           sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
           [[ "${sdk_version%%.*}" -ge 27 ]] || { print -u2 "Computer releases require SDK 27 or later; found $sdk_version"; exit 1; }
+          xcodebuild -downloadComponent MetalToolchain
 
       - name: Set up Go for the guest file helper
         uses: actions/setup-go@v7
