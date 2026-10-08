@@ -68,9 +68,25 @@ enum ComputerDisplayMode: String {
         // A failed Local Mac connection does not prove that its account logged
         // out. The lifecycle service stops and verifies it before removal.
         if computer.kind == .localMac { return !phase.busy }
-        return phase == .stopped && virtual == nil && container == nil && localMac == nil
+        return phase == .stopped && virtual == nil && container == nil && localMac == nil && windowsRuntime == nil
     }
     var virtual: VirtualComputer?
+    /// A WindowsComputer, which needs macOS 27; see `windows`.
+    var windowsRuntime: AnyObject? {
+        didSet {
+            guard oldValue !== windowsRuntime else { return }
+            fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
+            windowsTerminal?.close(); windowsTerminal = nil
+            if computer.kind == .windows {
+                terminal = nil; showingTerminal = false; showingFiles = false
+                waitingForWindows = windowsRuntime != nil
+            }
+        }
+    }
+    @available(macOS 27, *) var windows: WindowsComputer? { windowsRuntime as? WindowsComputer }
+    /// Windows is running but its agent, which Terminal and Files need, is not there yet.
+    @Published var waitingForWindows = false
+    var windowsTerminal: WindowsTerminalConnection?
     @Published var localMac: LocalMacComputer? {
         didSet {
             guard oldValue !== localMac else { return }
@@ -94,6 +110,13 @@ enum ComputerDisplayMode: String {
     func filesModel(for runtime: LocalMacComputer) -> ComputerFilesModel {
         if let fileBrowser { return fileBrowser }
         let model = ComputerFilesModel(service: LocalMacFileService(runtime: runtime), computerID: id)
+        fileBrowser = model
+        return model
+    }
+    @available(macOS 27, *)
+    func filesModel(for runtime: WindowsComputer) -> ComputerFilesModel {
+        if let fileBrowser { return fileBrowser }
+        let model = ComputerFilesModel(service: WindowsFileService { [weak runtime] in runtime?.agent }, computerID: id, workspace: nil)
         fileBrowser = model
         return model
     }
@@ -279,6 +302,15 @@ enum ComputerDisplayMode: String {
                     }
                 }
                 computer.installationComplete = true
+            } else if computer.kind == .windows {
+                guard #available(macOS 27, *) else { throw ComputerError("Windows computers need macOS 27 or later.") }
+                // The first start finishes setting Windows up, so the computer is not complete until then.
+                try await WindowsInstallation.prepare(computer: computer, directory: directory, cache: cache) {
+                    [weak self] status, fraction, detail in
+                    guard let self, self.creationID == requested.id, !self.creationCancelling else { return }
+                    self.setCreationStage(status, progress: fraction)
+                    self.creationDetail = detail
+                }
             } else {
                 if computer.kind == .macOS {
                     let restore: URL
@@ -467,6 +499,31 @@ enum ComputerDisplayMode: String {
                 }
                 try await runtime.start(id: computer.id)
                 guard runtime.isConnected else { throw ComputerError("The desktop connection closed during startup.") }
+            } else if computer.kind == .windows {
+                guard #available(macOS 27, *) else { throw ComputerError("Windows computers need macOS 27 or later.") }
+                if let previous = session.windows, let machine = previous.machine, machine.state != .stopped {
+                    throw ComputerError("Windows has not stopped yet. Use Force Stop before starting it again.")
+                }
+                let runtime = WindowsComputer(computer: computer, directory: directory)
+                session.windowsRuntime = runtime
+                runtime.onSetUp = { [weak self, weak session] in
+                    guard let self, let session else { return }
+                    var saved = session.computer
+                    saved.installationComplete = true
+                    do { session.computer = try self.library.save(saved) } catch { self.error = error.localizedDescription }
+                }
+                runtime.onAgentChange = { [weak session] ready in
+                    guard let session else { return }
+                    session.waitingForWindows = !ready
+                    // Terminal and Files go with the agent, as when Windows restarts.
+                    if !ready { session.showingTerminal = false; session.showingFiles = false }
+                }
+                runtime.onStop = { [weak session, weak runtime] error in
+                    guard let session, let runtime, session.windowsRuntime === runtime else { return }
+                    session.windowsRuntime = nil
+                    session.phase = error.map { .failed($0.localizedDescription) } ?? .stopped
+                }
+                try await runtime.start()
             } else if computer.kind == .container {
                 let runtime = session.container ?? ContainerComputer()
                 session.container = runtime
@@ -512,6 +569,7 @@ enum ComputerDisplayMode: String {
                 session.display = nil
             }
             if session.virtual?.machine.state == .stopped { session.virtual = nil }
+            if session.computer.kind == .windows { session.windowsRuntime = nil }
             session.recordStartupFailure(error)
         }
     }
@@ -523,6 +581,16 @@ enum ComputerDisplayMode: String {
 
     func stopComputer(_ session: ComputerSession, force: Bool = false) async {
         guard !session.phase.busy else { return }
+        if #available(macOS 27, *), let windows = session.windows {
+            // Windows' own runtime reports the stop, which leaves the session stopped.
+            session.phase = .stopping
+            if force { try? await windows.forceStop() } else { await windows.shutDown() }
+            if session.windowsRuntime === windows {
+                session.windowsRuntime = nil
+                session.phase = .stopped
+            }
+            return
+        }
         if let virtual = session.virtual, !force, virtual.machine.canRequestStop {
             do {
                 try await Self.shutDownGuest(
@@ -598,6 +666,21 @@ enum ComputerDisplayMode: String {
             } catch {
                 if session.localMac === runtime, session.phase == .running { self.error = error.localizedDescription }
             }
+            return
+        }
+        if #available(macOS 27, *), let windows = session.windows, session.phase == .running {
+            guard session.availableDisplayModes.contains(mode) else { return }
+            guard mode == .desktop || windows.agentConnected else { return }
+            if mode == .terminal, session.windowsTerminal == nil || session.windowsTerminal?.ended == true {
+                session.windowsTerminal?.close()
+                let terminal = GuestTerminal()
+                let connection = WindowsTerminalConnection(agent: windows.agent, terminal: terminal)
+                connection.start()
+                session.windowsTerminal = connection
+                session.terminal = terminal
+            }
+            session.showingFiles = mode == .files
+            session.showingTerminal = mode == .terminal
             return
         }
         guard session.computer.kind == .container, session.phase == .running,
@@ -729,7 +812,7 @@ enum ComputerDisplayMode: String {
     /// What a stopped computer runs with; it takes effect at the next start.
     func changeResources(_ session: ComputerSession, cpus: Int, memoryGiB: Int, networkEnabled: Bool) throws {
         guard session.computer.kind != .localMac, session.phase == .stopped,
-              session.virtual == nil, session.container == nil else {
+              session.virtual == nil, session.container == nil, session.windowsRuntime == nil else {
             throw ComputerError("Stop the computer before changing its resources.")
         }
         var computer = session.computer
@@ -802,7 +885,14 @@ enum ComputerDisplayMode: String {
         for task in imageUpdateTasks.values { task.cancel() }
         for task in Array(imageUpdateTasks.values) { await task.value }
         _ = await creationTask?.value
-        for session in sessions where session.phase == .running || session.container != nil || session.virtual != nil || session.localMac != nil {
+        // Windows is asked to shut down, all at once: cut off, it may boot into a repair it cannot show.
+        await withTaskGroup(of: Void.self) { group in
+            for session in sessions where session.windowsRuntime != nil {
+                group.addTask { await self.stop(session) }
+            }
+        }
+        for session in sessions where session.phase == .running || session.container != nil || session.virtual != nil
+            || session.localMac != nil || session.windowsRuntime != nil {
             await stop(session, force: true)
         }
     }

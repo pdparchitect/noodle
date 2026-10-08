@@ -8,7 +8,7 @@ public struct HubOwner: Codable, Hashable, Sendable {
 }
 
 public enum ComputerKind: String, Codable, CaseIterable, Sendable {
-    case macOS, linux, container, localMac
+    case macOS, linux, container, localMac, windows
 
     public var title: String {
         switch self {
@@ -16,6 +16,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "Linux"
         case .container: "Linux Container"
         case .localMac: "Local Mac"
+        case .windows: "Windows"
         }
     }
 
@@ -25,6 +26,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "terminal"
         case .container: "shippingbox"
         case .localMac: "person.crop.rectangle"
+        case .windows: "pc"
         }
     }
 
@@ -34,6 +36,7 @@ public enum ComputerKind: String, Codable, CaseIterable, Sendable {
         case .linux: "An Alpine Linux virtual machine with a command-line console. Automatically downloads the ARM64 installer; no graphical desktop included."
         case .container: ContainerRegistry.bundled.defaultTemplate.description
         case .localMac: "A separate standard account on this Mac, with its own desktop and files. Shares this Mac’s operating system and resources. One-time administrator setup is required."
+        case .windows: "A Windows 11 virtual machine with its own desktop. Downloads Windows 11 for Arm from Microsoft (about 5 GB) and installs it once; later Windows computers reuse it."
         }
     }
 }
@@ -48,7 +51,7 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public static var desktopImage: String { ComputerTemplate.desktop.imageReference }
     public static var shellImage: String { ComputerTemplate.shell.imageReference }
     public var hasDesktop: Bool { template?.type == .desktop }
-    public var hasDisplay: Bool { hasDesktop || kind == .localMac }
+    public var hasDisplay: Bool { hasDesktop || kind == .localMac || kind == .windows }
     public var usesVirtualMachine: Bool { kind == .macOS || kind == .linux }
     public var template: ComputerTemplate? {
         ContainerRegistry.bundled.template(for: self)
@@ -110,6 +113,9 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
         }
         if kind == .macOS, memoryGiB < 4 || diskGiB < 64 || cpuCount < 2 {
             throw ComputerError("macOS needs at least 2 CPUs, 4 GB memory, and a 64 GB disk.")
+        }
+        if kind == .windows, memoryGiB < 4 || diskGiB < 64 || cpuCount < 2 {
+            throw ComputerError("Windows needs at least 2 CPUs, 4 GB memory, and a 64 GB disk.")
         }
         if kind == .container, imageReference.trimmingCharacters(in: .whitespaces).isEmpty {
             throw ComputerError("A container image is required.")

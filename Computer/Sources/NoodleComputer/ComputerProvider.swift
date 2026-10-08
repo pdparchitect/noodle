@@ -11,6 +11,7 @@ import LocalMacCore
     private var server: ComputerConnectionServer?
     private var terminals: [UUID: ProviderTerminal] = [:]
     private var localTerminals: [UUID: (computer: UUID, owner: String, runtime: LocalMacComputer)] = [:]
+    private var windowsTerminals: [UUID: WindowsProviderTerminal] = [:]
     /// Where a person watching remotely types and clicks, one per desktop view.
     /// Live views of displays and terminals. While one is watched, bots are kept off its computer.
     private var surfaces: [String: (computer: UUID, streamer: SurfaceStreamer)] = [:]
@@ -40,6 +41,9 @@ import LocalMacCore
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
         let owner = ComputerBuildIdentity.principal(for: peer) + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
+            if let id = request.terminalID, let terminal = windowsTerminals[id], terminal.owner == owner {
+                var response = ComputerResponse(); response.computerID = terminal.computerID; return response
+            }
             if let id = request.terminalID, let terminal = localTerminals[id], terminal.owner == owner,
                store.sessions.contains(where: { $0.id == terminal.computer && $0.localMac === terminal.runtime && $0.phase == .running }) {
                 var response = ComputerResponse(); response.computerID = terminal.computer; return response
@@ -57,7 +61,7 @@ import LocalMacCore
                 response.capabilities = ComputerCapabilities()
                 return response
             }
-            var response = ComputerResponse(computers: store.sessions.filter { $0.computer.kind == .container || $0.computer.kind == .localMac }.map(Self.remote))
+            var response = ComputerResponse(computers: store.sessions.filter { Self.served($0.computer.kind) }.map(Self.remote))
             response.capabilities = ComputerCapabilities()
             return response
         }
@@ -91,8 +95,7 @@ import LocalMacCore
             store.note(session, usedBy: peer)
             return ComputerResponse(computers: [Self.remote(session)])
         }
-        guard let session = store.sessions.first(where: { $0.id == request.computerID }),
-              session.computer.kind == .container || session.computer.kind == .localMac else {
+        guard let session = store.sessions.first(where: { $0.id == request.computerID }), Self.served(session.computer.kind) else {
             throw ComputerBridgeError("This computer no longer exists or is not supported by this provider version.")
         }
         store.note(session, usedBy: peer)
@@ -129,6 +132,7 @@ import LocalMacCore
             return .init()
         }
         if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
+        if session.computer.kind == .windows { return try await handleWindows(request, session: session, store: store, owner: owner) }
         if request.operation == .revoke {
             let ids = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }.map(\.key)
             for id in ids { await terminals.removeValue(forKey: id)?.close() }
@@ -281,6 +285,12 @@ import LocalMacCore
         surfaces.values.contains { $0.computer == computer && $0.streamer.isWatched }
     }
 
+    /// Windows needs macOS 27; on older systems its computers are not offered to clients.
+    private static func served(_ kind: ComputerKind) -> Bool {
+        if kind == .windows, #unavailable(macOS 27) { return false }
+        return kind == .container || kind == .localMac || kind == .windows
+    }
+
     private static func remote(_ session: ComputerSession) -> RemoteComputer {
         let appearance = session.computer.appearance
         let icon = appearance?.iconImage
@@ -290,6 +300,87 @@ import LocalMacCore
             hasWebDisplay: session.display != nil || session.computer.kind == .localMac,
             owner: session.computer.hubOwner.map { ComputerOwner(id: $0.id, name: $0.name) })
     }
+    /// Terminals are PowerShell consoles through the Windows agent; files go through the same service as the
+    /// Files view. Clients see the screen in previews but do not control the desktop.
+    private func handleWindows(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
+        guard #available(macOS 27, *) else { throw ComputerBridgeError("Windows computers need macOS 27.") }
+        windowsTerminals = windowsTerminals.filter { _, terminal in
+            store.sessions.contains { $0.id == terminal.computerID && $0.windows?.agent === terminal.agent && $0.phase == .running }
+        }
+        if request.operation == .delete { throw ComputerBridgeError("Remove this computer in \(ComputerAppIdentity.name).") }
+        if request.operation == .revoke {
+            for (id, terminal) in windowsTerminals where terminal.owner == owner && terminal.computerID == session.id {
+                windowsTerminals.removeValue(forKey: id)?.close()
+            }
+            return .init()
+        }
+        if request.operation == .start {
+            if session.phase.canStart { await store.start(session) }
+            guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
+            return .init()
+        }
+        guard session.phase == .running, let windows = session.windows else {
+            throw ComputerBridgeError("Computer is stopped. Start it in \(ComputerAppIdentity.name) or with computer start --computer \(session.id.uuidString).")
+        }
+        guard windows.agentConnected else { throw ComputerBridgeError("Windows is still starting. Try again in a minute.") }
+        if request.operation.isFileTransfer {
+            guard let id = request.transferID, let path = request.path else { throw ComputerBridgeError("Missing broker file-transfer reference.") }
+            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let files = WindowsFileService { [weak windows] in windows?.agent }
+            var reply = ComputerResponse(); reply.path = try GuestFile.normalize(path)
+            if request.operation == .fileUpload {
+                let fd = try ComputerTransferFiles.openSource(staging)
+                let count: Int64
+                do { count = try ComputerTransferFiles.size(fd) } catch { Darwin.close(fd); throw error }
+                Darwin.close(fd)
+                try await files.upload(staging, to: reply.path!, progress: { _ in })
+                reply.byteCount = count
+            } else { reply.byteCount = try await files.download(reply.path!, to: staging) }
+            return reply
+        }
+        if request.operation == .terminalOpen {
+            guard windowsTerminals.count < 64, windowsTerminals.values.filter({ $0.computerID == session.id }).count < 16 else {
+                throw ComputerBridgeError("Too many terminal sessions. Close an unused session first.")
+            }
+            let id = UUID()
+            windowsTerminals[id] = WindowsProviderTerminal(computerID: session.id, owner: owner, agent: windows.agent)
+            return .init(terminalID: id, offset: 0, exited: false)
+        }
+        if request.operation == .preview {
+            let view = request.view ?? (request.terminalID == nil ? "web" : "terminal")
+            var reply = ComputerResponse(); reply.computerID = session.id; reply.view = view
+            if view == "terminal" {
+                let id = try ComputerPresentation.terminal(explicit: request.terminalID,
+                    active: windowsTerminals.filter { $0.value.owner == owner && $0.value.computerID == session.id && !$0.value.exited }.map(\.key))
+                guard let terminal = windowsTerminals[id], terminal.owner == owner else { throw ComputerBridgeError("Terminal session is unavailable.") }
+                reply = terminal.replay.read(from: max(0, terminal.replay.end - 8000))
+                reply.terminalID = id; reply.exited = terminal.exited; reply.computerID = session.id; reply.view = view
+            } else {
+                reply.previewImage = await ComputerPreviewSnapshot.capture(valid: { session.windows === windows && session.phase == .running }) {
+                    guard let frame = windows.lastFrame else { throw ComputerBridgeError("Windows has not drawn its screen yet.") }
+                    return frame
+                }
+            }
+            return reply
+        }
+        guard let id = request.terminalID, let terminal = windowsTerminals[id], terminal.owner == owner, terminal.computerID == session.id else {
+            throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
+        }
+        switch request.operation {
+        case .terminalRead:
+            var reply = terminal.replay.read(from: request.offset ?? 0)
+            reply.terminalID = id; reply.exited = terminal.exited
+            return reply
+        case .terminalWrite:
+            guard !terminal.exited else { throw ComputerBridgeError("This shell has exited. Open a new terminal session.") }
+            terminal.write(request.data ?? Data())
+        case .terminalResize: terminal.resize(columns: request.columns ?? 120, rows: request.rows ?? 30)
+        case .terminalClose: windowsTerminals.removeValue(forKey: id)?.close()
+        default: throw ComputerBridgeError("Unsupported computer operation.")
+        }
+        return .init()
+    }
+
     private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
         localTerminals = localTerminals.filter { _, value in
             store.sessions.contains { $0.id == value.computer && $0.localMac === value.runtime && $0.phase == .running }
@@ -361,6 +452,46 @@ import LocalMacCore
         let result = try await runtime.call(command)
         if operation == .terminalClose { localTerminals.removeValue(forKey: id) }
         return .init(terminalID: id, data: result.data, offset: result.offset, exited: result.exited)
+    }
+}
+
+/// A client's PowerShell console in Windows, with its output kept for reading back.
+@MainActor private final class WindowsProviderTerminal {
+    let computerID: UUID
+    let owner: String
+    let agent: WindowsAgent
+    private let channel: UInt32
+    var replay = TerminalReplay()
+    var exited = false
+    init(computerID: UUID, owner: String, agent: WindowsAgent) {
+        self.computerID = computerID; self.owner = owner; self.agent = agent
+        var opened: UInt32 = 0
+        weak var weakSelf: WindowsProviderTerminal?
+        opened = agent.open { frame in
+            Task { @MainActor in
+                switch frame.type {
+                case 101: weakSelf?.replay.append(frame.payload)
+                case 102, 111: weakSelf?.exited = true
+                default: break
+                }
+            }
+        }
+        channel = opened
+        weakSelf = self
+        let request: [String: Any] = ["cmd": "powershell.exe -NoLogo", "pty": true, "cols": 120, "rows": 30]
+        agent.send(1, channel: channel, payload: (try? JSONSerialization.data(withJSONObject: request)) ?? Data())
+    }
+    func write(_ data: Data) { agent.send(2, channel: channel, payload: data) }
+    func resize(columns: Int, rows: Int) {
+        var size = Data()
+        withUnsafeBytes(of: Int16(clamping: columns).littleEndian) { size.append(contentsOf: $0) }
+        withUnsafeBytes(of: Int16(clamping: rows).littleEndian) { size.append(contentsOf: $0) }
+        agent.send(3, channel: channel, payload: size)
+    }
+    func close() {
+        exited = true
+        agent.send(5, channel: channel)
+        agent.close(channel)
     }
 }
 

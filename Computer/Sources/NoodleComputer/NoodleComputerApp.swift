@@ -68,6 +68,10 @@ struct NoodleComputerApp: App {
       Button("New Linux Container") { NotificationCenter.default.post(name: .newComputer, object: nil) }
         .keyboardShortcut("n")
       Button("New Local Mac") { NotificationCenter.default.post(name: .newLocalMac, object: nil) }
+      if #available(macOS 27, *) {
+        Divider()
+        Button("New Windows") { NotificationCenter.default.post(name: .newWindows, object: nil) }
+      }
     }
   }
 }
@@ -75,6 +79,7 @@ struct NoodleComputerApp: App {
 extension Notification.Name {
   static let newComputer = Self("NoodleComputer.New")
   static let newLocalMac = Self("NoodleComputer.NewLocalMac")
+  static let newWindows = Self("NoodleComputer.NewWindows")
 }
 
 /// Launch checks, matched by digest so a built app never names them. Only the first ships in a release;
@@ -100,17 +105,18 @@ enum ComputerLaunchCheck {
   static let overlay = "093126f40abeca909f38764a45026f341ab650542637529e04ac147aa8ad39b3"  // --overlay-test
   static let selfTest = "eaf0760032ad43d55e3bbcf4d5153069c67652bdeb968530d47be859a94ef5df"  // --self-test
   static let offline = "aff7d00b56394f5a96dca22be6856e0950b37524abb5b2ef434d27981a0586f1"  // --offline
+  static let windows = "c562e5dea2f17ee2f2ee86b14c618a6cc35bcd5e86c1a1a00c7c875c1b8bd4b1"  // --windows-test
   /// A failure of any of these ends the process with an error instead of showing it in the window.
   static let exitOnFailure = [
     updaterUI, emptyLibrary, libraryLayout, providerIntegration, creationForm,
-    localMacCreationPreview, desktopSmoke, selfTest, overlay, latestImages, configuration, downloadProgress
+    localMacCreationPreview, desktopSmoke, selfTest, overlay, latestImages, configuration, downloadProgress, windows
   ]
   static var keepsTestWindow: Bool { requested(keepTestWindow) }
   /// Every check that runs in place of the app; the rest only modify one of these.
   private static let verificationRuns = [
     updaterUI, files, providerIntegration, providerSnapshot, libraryLayout, emptyLibrary,
     appearancePreview, localMacCreationPreview, creationForm, desktopSmoke, downloadProgress,
-    linuxBoot, configuration, overlayUI, latestImages, overlay, selfTest
+    linuxBoot, configuration, overlayUI, latestImages, overlay, selfTest, windows
   ]
   #else
   static let exitOnFailure = [updaterUI]
@@ -263,8 +269,10 @@ enum ComputerLaunchCheck {
       await store.shutdown()
       reply()
     }
+    // Windows takes a while to shut down, and is worse off cut short.
+    let running = store.sessions.contains { $0.windowsRuntime != nil }
     Task {
-      try? await Task.sleep(for: .seconds(10))
+      try? await Task.sleep(for: .seconds(running ? 30 : 10))
       reply()
     }
     return .terminateLater
@@ -361,6 +369,14 @@ struct ComputerRootView: View {
           ComputerAppDelegate.store = model
           return
         }
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.windows) {
+          guard #available(macOS 27, *) else { throw ComputerError("Windows computers need macOS 27.") }
+          let model = try WindowsCheck.fixture()
+          store = model
+          ComputerAppDelegate.store = model
+          WindowsCheck.start(model)
+          return
+        }
         if ComputerLaunchCheck.requested(ComputerLaunchCheck.configuration) {
           try await ComputerSmokeTest.checkMacConfiguration()
           NSApplication.shared.terminate(nil)
@@ -407,6 +423,7 @@ struct ComputerLibraryView: View {
   @ObservedObject var store: ComputerStore
   @State private var showingNew = false
   @State private var showingLocalMac = false
+  @State private var showingWindows = false
   @State private var searchText = ""
   @State private var columnVisibility = NavigationSplitViewVisibility.all
   @AppStorage("ComputerSidebarVisible") private var sidebarVisible = true
@@ -434,6 +451,10 @@ struct ComputerLibraryView: View {
       Button("New Linux Container", systemImage: "desktopcomputer") { showingNew = true }
         .keyboardShortcut("n", modifiers: .command)
       Button("New Local Mac", systemImage: "person.crop.rectangle") { showingLocalMac = true }
+      if #available(macOS 27, *) {
+        Divider()
+        Button("New Windows", systemImage: ComputerKind.windows.symbol) { showingWindows = true }
+      }
     } label: {
       Label("Create", systemImage: "plus")
     }.help("Create Computer")
@@ -514,8 +535,14 @@ struct ComputerLibraryView: View {
     .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
     .sheet(isPresented: $showingNew) { NewComputerView(store: store) }
     .sheet(isPresented: $showingLocalMac) { NewLocalMacView(store: store) }
+    .sheet(isPresented: $showingWindows) {
+      if #available(macOS 27, *) { NewWindowsView(store: store) }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .newComputer)) { _ in showingNew = true }
     .onReceive(NotificationCenter.default.publisher(for: .newLocalMac)) { _ in showingLocalMac = true }
+    .onReceive(NotificationCenter.default.publisher(for: .newWindows)) { _ in
+      if #available(macOS 27, *) { showingWindows = true }
+    }
     .onChange(of: store.selection) { _, id in
       UserDefaults.standard.set(id?.uuidString, forKey: "SelectedComputer")
     }
@@ -661,6 +688,21 @@ struct ComputerDetailView: View {
         // Restart polling, native surfaces and the file view's StateObject when
         // Start replaces a failed Local Mac connection for the same computer.
         .id(ObjectIdentifier(local))
+      } else if let runtime = session.windowsRuntime {
+        if #available(macOS 27, *), let windows = runtime as? WindowsComputer {
+          ZStack {
+            WindowsDisplay(computer: windows)
+              .opacity(session.displayMode == .desktop ? 1 : 0)
+              .allowsHitTesting(session.displayMode == .desktop)
+              .accessibilityHidden(session.displayMode != .desktop)
+            if session.showingFiles {
+              ComputerFilesView(model: session.filesModel(for: windows), appearance: session.computer.appearance ?? .init()).id(session.id)
+            } else if session.showingTerminal, let terminal = session.terminal {
+              ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+            }
+          }
+          .id(ObjectIdentifier(windows))
+        }
       } else if let virtual = session.virtual {
         VirtualMachineDisplay(machine: virtual.machine).ignoresSafeArea(edges: .top)
       } else if let machine = session.display?.machine {
@@ -737,7 +779,7 @@ struct ComputerDetailView: View {
           .help(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
           .accessibilityLabel(session.phase.busy ? session.phase.label : session.phase == .running ? "Stop" : "Start")
       }
-      if session.computer.kind == .container || session.computer.kind == .localMac {
+      if [.container, .localMac, .windows].contains(session.computer.kind) {
         ToolbarItem(id: "computer-display", placement: .primaryAction) {
           Picker("Computer View", selection: Binding(
             get: { session.displayMode },
@@ -749,7 +791,8 @@ struct ComputerDetailView: View {
             }
           }
           .pickerStyle(.segmented).labelsHidden().fixedSize()
-          .disabled(session.phase != .running || session.openingTerminal)
+          .disabled(session.phase != .running || session.openingTerminal || session.waitingForWindows)
+          .help(session.waitingForWindows ? "Terminal and Files open once Windows has signed in" : "")
           .accessibilityValue(session.displayMode.rawValue)
         }
       }
@@ -779,6 +822,7 @@ struct ComputerDetailView: View {
     guard session.showingFiles, session.phase != .updating else { return false }
     if case .setupRequired = session.phase { return false }
     if session.localMac != nil { return true }
+    if session.windowsRuntime != nil { return session.phase == .running }
     return session.virtual == nil && session.phase == .running && session.container != nil
   }
 }
@@ -817,7 +861,7 @@ struct EditComputerView: View {
   @State private var cpus = 0
   @State private var memory = 0
   @State private var network = true
-  private var stopLabel: String { session.computer.usesVirtualMachine ? "Force Stop" : "Stop" }
+  private var stopLabel: String { session.computer.usesVirtualMachine || session.computer.kind == .windows ? "Force Stop" : "Stop" }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -925,7 +969,7 @@ struct EditComputerView: View {
           if session.computer.kind == .container {
             ComputerImageUpdateButton(session: session) { updating = true }
           }
-          if session.virtual != nil || session.container != nil || session.localMac != nil {
+          if session.virtual != nil || session.container != nil || session.localMac != nil || session.windowsRuntime != nil {
             Button(stopLabel) { forceStopping = true }.disabled(session.phase.busy)
           }
         }
@@ -950,7 +994,8 @@ struct EditComputerView: View {
       Text(session.computer.kind == .localMac ? "This permanently deletes the managed account and its home directory. Stop preserves them; Delete removes them." : "The computer and its disks will be moved to the Trash.")
     }
     .computerStopConfirmation(isPresented: $forceStopping, name: session.computer.name, actionTitle: stopLabel) {
-      guard !session.phase.busy, session.virtual != nil || session.container != nil || session.localMac != nil else { return }
+      guard !session.phase.busy, session.virtual != nil || session.container != nil || session.localMac != nil
+        || session.windowsRuntime != nil else { return }
       Task { await store.stop(session, force: true) }
     }
   }
@@ -1169,6 +1214,103 @@ struct NewComputerView: View {
       disk = value.defaultDiskGiB
       memory = value.defaultMemoryGiB
     }
+  }
+}
+
+/// A Windows 11 computer. The first one downloads and installs Windows; later ones start from that install.
+@available(macOS 27, *)
+struct NewWindowsView: View {
+  @ObservedObject var store: ComputerStore
+  @Environment(\.dismiss) private var dismiss
+  @AppStorage("StartNewComputersAutomatically") private var startNewComputersAutomatically = true
+  @State private var name = "Windows"
+  @State private var cpus = min(4, max(2, ProcessInfo.processInfo.processorCount))
+  @State private var memory = ProcessInfo.processInfo.physicalMemory >= 16 << 30 ? 8 : 4
+  @State private var disk = 64
+  @State private var network = true
+  @State private var advanced = false
+  @State private var failure: String?
+  @State private var appearance = ComputerAppearance()
+  private var draft: Computer {
+    var computer = Computer(name: name, kind: .windows, cpuCount: cpus, memoryGiB: memory, diskGiB: disk, networkEnabled: network)
+    computer.appearance = appearance
+    return computer
+  }
+  private var creating: Bool { store.creationStatus != nil }
+  private var canCreate: Bool { !creating && (try? draft.validate()) != nil }
+  var body: some View {
+    Group {
+      if creating {
+        ComputerCreationProgressView(store: store)
+      } else {
+        VStack(spacing: 0) {
+          HStack {
+            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+              .buttonStyle(.plain).foregroundStyle(.blue)
+            Spacer()
+            Text("New Windows").font(.headline)
+            Spacer()
+            Button("Create") {
+              Task {
+                let computer = draft
+                if await store.create(computer, source: nil) {
+                  dismiss()
+                  if startNewComputersAutomatically, let session = store.sessions.first(where: { $0.id == computer.id }) {
+                    await store.start(session)
+                  }
+                } else {
+                  failure = store.creationWasCancelled ? nil : store.error
+                  store.error = nil
+                }
+              }
+            }.buttonStyle(.plain).foregroundStyle(canCreate ? Color.blue : .secondary)
+              .keyboardShortcut(.defaultAction).disabled(!canCreate)
+          }.padding(20)
+          Divider()
+          VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+              Image(systemName: ComputerKind.windows.symbol).font(.system(size: 20)).foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+              Text(ComputerKind.windows.detail).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
+            HStack {
+              ComputerIconButton(appearance: $appearance, symbol: ComputerKind.windows.symbol)
+              TextField("Name", text: $name).autocorrectionDisabled().textFieldStyle(.roundedBorder).lineLimit(1)
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 12) {
+              DisclosureGroup("Advanced Options", isExpanded: $advanced) {
+                VStack(alignment: .leading, spacing: 12) {
+                  ComputerResourceRow("CPUs", value: $cpus, range: 2...max(2, min(32, ProcessInfo.processInfo.processorCount)))
+                  Divider()
+                  ComputerResourceRow("Memory", value: $memory, unit: "GB", range: 4...64)
+                  Divider()
+                  ComputerResourceRow("Disk capacity", value: $disk, unit: "GB", range: 64...512, step: 4)
+                  Text("Disk space grows as the computer uses it, up to this capacity.").font(.caption).foregroundStyle(.secondary)
+                  Divider()
+                  Toggle("Networking", isOn: $network).toggleStyle(.switch).controlSize(.small).fixedSize()
+                  Text("Allows this computer to connect to the internet and your local network.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(.top, 12)
+              }.disclosureGroupStyle(ComputerDisclosureStyle())
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
+            if let failure {
+              Text(failure).foregroundStyle(.red).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+          }.padding(20)
+        }
+        .frame(width: 580)
+      }
+    }
+    .noodleSheetSizing(animated: true)
+    .interactiveDismissDisabled(creating)
   }
 }
 

@@ -42,6 +42,36 @@ let buildGuestFiles: TargetScript = .post(script: """
 /// built unsigned and signed here, inside out, so none of them gains an entitlement it does not
 /// declare. macOS shows a helper's localized name only when its base name matches the bundle's
 /// file name, so the build-specific names go in InfoPlist.strings.
+// Windows computers turn Microsoft's installation image into install media with libwim (LGPL), built here
+// from its pinned source and loaded at run time, so the sandboxed app needs no helper executable.
+let buildWimlib: TargetScript = .post(script: """
+    set -euo pipefail
+    version=1.14.5
+    tarball="$SRCROOT/Vendor/wimlib-$version.tar.gz"
+    [ "$(shasum -a 256 "$tarball" | awk '{print $1}')" = 84221a3abd5b91228f15f8e6065c335a336237b5738197b75bf419eea561a194 ] || {
+        echo "error: Vendor/wimlib-$version.tar.gz does not match its pinned checksum (git lfs pull)." >&2; exit 1
+    }
+    build="$DERIVED_FILE_DIR/wimlib-$version"
+    library="$build/out/lib/libwim.15.dylib"
+    if [ ! -f "$library" ]; then
+        rm -rf "$build"; mkdir -p "$build/stub"
+        tar -xzf "$tarball" -C "$build" --strip-components 1
+        # Only libntfs-3g and FUSE support ask pkg-config, and both stay out of this build.
+        printf '#!/bin/sh\\n[ "$1" = --version ] && echo 0.29.2\\nexit 0\\n' > "$build/stub/pkg-config"
+        chmod +x "$build/stub/pkg-config"
+        (cd "$build" && PATH="$build/stub:/usr/bin:/bin" CFLAGS="-O2 -arch arm64 -mmacosx-version-min=26.0" \\
+            LDFLAGS="-arch arm64 -mmacosx-version-min=26.0" ./configure --without-fuse --without-ntfs-3g \\
+            --disable-static --enable-shared --prefix="$build/out" >/dev/null && make -j"$(sysctl -n hw.ncpu)" >/dev/null \\
+            && make install >/dev/null)
+    fi
+    frameworks="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+    mkdir -p "$frameworks"
+    cp -f "$library" "$frameworks/libwim.15.dylib"
+    install_name_tool -id @rpath/libwim.15.dylib "$frameworks/libwim.15.dylib"
+    codesign --force --options runtime "$COMPUTER_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$frameworks/libwim.15.dylib"
+    cp -f "$build/COPYING.LGPL" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/wimlib-COPYING.LGPL.txt"
+    """, name: "Build wimlib", basedOnDependencyAnalysis: false)
+
 let embedHelpers: TargetScript = .post(script: """
     set -euo pipefail
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
@@ -181,13 +211,14 @@ let project = Project(
             sources: ["Sources/NoodleComputer/**"],
             resources: [
                 .folderReference(path: "Resources/Runtime"),
+                .folderReference(path: "Resources/Windows"),
                 "Support/Assets.xcassets",
                 "Support/AppSymbol.svg",
                 "Support/KERNEL-NOTICE.txt",
                 "Support/STUDIO-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Computer.entitlements"),
-            scripts: [checkKernel, buildGuestFiles, embedHelpers, trimSparkle],
+            scripts: [checkKernel, buildGuestFiles, buildWimlib, embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "ComputerCore"),
                 .package(product: "NoodleLaunchChecks"),

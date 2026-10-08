@@ -30,6 +30,32 @@ import XCTest
         XCTAssertFalse(model.loading || model.busy)
     }
 
+    func testFilesWithoutAWorkspaceOpenAtHome() async throws {
+        let service = RecordingService(files: [], folders: ["/workspace": [file("x")], "/C/Users/noodle": [file("Desktop", kind: "directory")]])
+        let windows = ComputerFilesModel(service: HomeService(base: service), computerID: UUID(), workspace: nil)
+        windows.appear(); try await idle(windows)
+        XCTAssertEqual(windows.folder, "/C/Users/noodle")
+        XCTAssertNil(windows.error)
+        XCTAssertEqual(windows.files.map(\.name), ["Desktop"])
+        // Coming back keeps the folder it was in.
+        windows.navigate("/C"); try await idle(windows)
+        windows.appear(); try await idle(windows)
+        XCTAssertEqual(windows.folder, "/C")
+
+        let linux = ComputerFilesModel(service: service, computerID: UUID())
+        linux.appear(); try await idle(linux)
+        XCTAssertEqual(linux.folder, "/workspace")
+    }
+    private struct HomeService: ComputerFileService {
+        let base: RecordingService
+        func homeDirectory() async throws -> String { "/C/Users/noodle" }
+        func change(_ operation: String, path: String, extra: [String]) async throws {}
+        func list(_ path: String) async throws -> [GuestFile] { try await base.list(path) }
+        func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool, progress: @escaping @Sendable (Int64) -> Void) async throws {}
+        func createImportDirectory(_ path: String) async throws {}
+        func upload(_ source: URL, to path: String, progress: @escaping @Sendable (Int64) async -> Void) async throws {}
+    }
+
     func testActionsApplyToEveryChosenItem() async throws {
         let service = RecordingService(files: [file("a.txt"), file("b.txt"), file("Folder", kind: "directory"), file("c.txt")])
         let model = try await loaded(service)

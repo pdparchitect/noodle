@@ -5,7 +5,9 @@ import Foundation
 @MainActor final class ComputerFilesModel: ObservableObject {
     let service: any ComputerFileService
     let computerID: UUID
-    @Published var folder = "/workspace"
+    /// Where the browser first opens; nil opens the home folder, for computers without a workspace.
+    let workspace: String?
+    @Published var folder: String
     @Published var files: [GuestFile] = []
     @Published var selection: Set<String> = []
     @Published var loading = false
@@ -30,9 +32,17 @@ import Foundation
     private var previewID = UUID()
     private var transferID = UUID()
     private var queuedExports: [(start: () -> Void, cancel: () -> Void)] = []
+    private var appeared = false
 
-    init(service: any ComputerFileService, computerID: UUID) {
-        self.service = service; self.computerID = computerID
+    init(service: any ComputerFileService, computerID: UUID, workspace: String? = "/workspace") {
+        self.service = service; self.computerID = computerID; self.workspace = workspace
+        folder = workspace ?? "/"
+    }
+
+    /// The browser is shown: its first folder the first time, else where it was.
+    func appear() {
+        if appeared || workspace != nil { navigate(folder, record: false) } else { goHome() }
+        appeared = true
     }
     convenience init(runtime: ContainerComputer, computerID: UUID) { self.init(service: GuestFiles(runtime: runtime), computerID: computerID) }
     /// Only what is shown counts, so a search or hiding dotfiles cannot leave unseen items to be deleted.
@@ -60,7 +70,7 @@ import Foundation
         do { destination = try GuestFile.normalize(path) } catch { self.error = error.localizedDescription; return }
         navigate(resolving: { destination }, record: record, selecting: selecting, clearStatus: clearStatus)
     }
-    func goHome() { navigate(resolving: { [service] in try await service.homeDirectory() }) }
+    func goHome() { navigate(resolving: { [service] in try await service.homeDirectory() }, record: appeared) }
     private func navigate(resolving destination: @escaping () async throws -> String,
                           record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         listing?.cancel()

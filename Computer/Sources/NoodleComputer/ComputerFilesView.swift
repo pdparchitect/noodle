@@ -129,7 +129,7 @@ struct ComputerFilesView: View {
             if quickLookRequested, status != "Loading preview…", model.previewURL == nil { previewNotice = status; quickLookRequested = false }
         }
         .onChange(of: model.selection) { _, _ in quickLookRequested = false }
-        .task { model.navigate(model.folder, record: false) }
+        .task { model.appear() }
         .onDisappear { panelURL = nil; model.disappear() }
     }
     @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
@@ -171,7 +171,7 @@ struct ComputerFilesView: View {
                     Divider()
                     Button("Go to Folder…") { path = model.folder; enteringPath = true }
                     Button("Enclosing Folder") { model.navigate(model.parent) }.disabled(model.folder == "/")
-                    Button("Workspace") { model.navigate("/workspace") }
+                    if let workspace = model.workspace { Button("Workspace") { model.navigate(workspace) } }
                     Button("Home") { model.goHome() }
                     Button("Filesystem") { model.navigate("/") }
                     Divider()

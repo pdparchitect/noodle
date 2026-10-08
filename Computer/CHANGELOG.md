@@ -4,6 +4,7 @@
 
 ### Added
 
+- Windows computers, on macOS 27 or later. New Windows downloads Windows 11 for Arm from Microsoft, installs it while showing its progress, and keeps the installation, so later Windows computers are ready after a few minutes of setup. The desktop takes the Mac's keyboard and mouse, and Terminal (PowerShell) and Files work as on the other computers. Windows stays unactivated until you enter your own product key.
 - Files can select several items at once, as in Finder: Shift-click or Command-click, Select All, or drag across icons. Delete, Duplicate, Export, and dragging work on the whole selection. Right-clicking an item outside the selection acts on that item, and deleting several items removes nothing if one of the folders is not empty.
 
 ## [0.21.2] - 2026-10-03

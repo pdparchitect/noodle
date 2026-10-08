@@ -1,5 +1,12 @@
 import Foundation
 
+enum ComputerCoreResources {
+    /// SwiftPM's generated accessor checks beside the executable's main bundle.
+    /// Signed macOS apps keep resource bundles inside Contents/Resources instead.
+    static let bundle = Bundle.main.url(forResource: "NoodleComputer_ComputerCore", withExtension: "bundle")
+        .flatMap { Bundle(url: $0) } ?? Bundle.module
+}
+
 /// The bundled catalogue is the single source for creation choices and image recognition.
 public struct ContainerRegistry: Decodable, Sendable {
     public let schemaVersion: Int
@@ -8,11 +15,7 @@ public struct ContainerRegistry: Decodable, Sendable {
 
     public static let bundled: ContainerRegistry = {
         do {
-            // SwiftPM's generated accessor checks beside the executable's main bundle.
-            // Signed macOS apps keep resource bundles inside Contents/Resources instead.
-            let resourceBundle = Bundle.main.url(forResource: "NoodleComputer_ComputerCore", withExtension: "bundle")
-                .flatMap { Bundle(url: $0) } ?? Bundle.module
-            guard let url = resourceBundle.url(forResource: "container-registry", withExtension: "json") else {
+            guard let url = ComputerCoreResources.bundle.url(forResource: "container-registry", withExtension: "json") else {
                 throw ComputerError("The container registry is missing from the app bundle.")
             }
             return try ContainerRegistry(data: Data(contentsOf: url))

@@ -142,6 +142,27 @@ permission in that account the usual macOS way.
 Agents can use the terminal and files and show the desktop in a conversation, but
 cannot yet click or type on the desktop.
 
+## Windows (experimental)
+
+**New Windows**, in the same menus, makes a Windows 11 for Arm computer. It needs
+macOS 27 or later.
+
+The first Windows computer downloads Windows from Microsoft (about 5 GB) and
+installs it, which takes about half an hour while it shows its progress. Computer
+keeps that installation, so each later Windows computer needs only a few minutes of
+setup the first time it starts. Windows sets itself up without a network, then
+restarts with one.
+
+- Click the desktop to give Windows your keyboard and mouse.
+- **Terminal** opens PowerShell, and **Files** starts in your Windows home folder,
+  with every drive one level up. Both open once Windows has signed in.
+- The desktop is 1024 × 768 for now.
+- **Stop** shuts Windows down; **Force Stop** turns it off.
+- Windows is not activated. To activate it, enter your own product key in
+  Windows' Settings.
+- Agents can use the terminal and files and show the desktop in a conversation,
+  but cannot click or type on it.
+
 ## Access and storage
 
 Each Linux computer runs in its own virtual machine. Host folders and clipboard are not

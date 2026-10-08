@@ -58,7 +58,12 @@ precondition(daemon["BundleProgram"] as? String == "Contents/Library/LaunchServi
 precondition(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String] == ["\(bundle)-spks", "\(bundle)-spki"])
 precondition(info["CFBundleShortVersionString"] as? String == version && info["CFBundleVersion"] as? String == version)
 precondition(info["LSMinimumSystemVersion"] as? String == "26.0")
-precondition(info["NSLocalNetworkUsageDescription"] == nil && info["NSAppTransportSecurity"] == nil)
+precondition(info["NSLocalNetworkUsageDescription"] == nil)
+// Only Microsoft's delivery network, which serves Windows images over http alone; their SHA-1 comes over https.
+let transport = info["NSAppTransportSecurity"] as? [String: Any]
+let domains = transport?["NSExceptionDomains"] as? [String: [String: Any]]
+precondition(transport?.count == 1 && domains?.count == 1 && domains?["dl.delivery.mp.microsoft.com"]?.count == 1
+    && domains?["dl.delivery.mp.microsoft.com"]?["NSExceptionAllowsInsecureHTTPLoads"] as? Bool == true)
 precondition(info["SUAllowsAutomaticUpdates"] as? Bool == true)
 precondition(info["SUAutomaticallyUpdate"] as? Bool == false)
 print("Computer version, six-key sandbox policy and opt-in automatic-install update policy verified")
