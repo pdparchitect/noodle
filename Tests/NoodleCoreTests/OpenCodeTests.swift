@@ -267,3 +267,48 @@ final class OpenCodeTests: XCTestCase {
         guard sqlite3_exec(db, query, nil, nil, nil) == SQLITE_OK else { throw HarnessSetupError("Fixture SQL failed") }
     }
 }
+
+/// A bot's own opencode.json adds its custom providers to the shared model list.
+final class OpenCodeConfiguredModelTests: XCTestCase {
+    private let shared = [HarnessModel(id: "opencode/alpha", displayName: "opencode/Alpha", description: "Available through OpenCode.",
+                                       supportedEfforts: [], defaultEffort: "", isDefault: true),
+                          HarnessModel(id: "openai/gpt", displayName: "openai/GPT", description: "Available through OpenCode.",
+                                       supportedEfforts: [], defaultEffort: "", isDefault: false)]
+
+    func testCustomProviderModelsJoinTheSharedListDespiteCommentsAndTrailingCommas() {
+        let config = Data("""
+            {
+              // OpenCodeX on this Mac
+              "$schema": "https://opencode.ai/config.json",
+              "provider": {
+                "ollama-cloud-ocx": {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "options": { "baseURL": "http://127.0.0.1:10100/v1" },
+                  "models": {
+                    "deepseek-v4.1-flash": { "id": "ollama-cloud/deepseek-v4.1-flash", "name": "deepseek-v4.1-flash", "tool_call": true },
+                    "no-tools": { "tool_call": false },
+                    /* no name */ "glm-5.3": {},
+                  },
+                },
+                "openai": { "models": { "gpt": { "name": "Duplicate" } } },
+              },
+            }
+            """.utf8)
+        let models = OpenCodeProtocol.models(shared, configuration: config)
+        XCTAssertEqual(models.map(\.id), ["opencode/alpha", "openai/gpt", "ollama-cloud-ocx/deepseek-v4.1-flash", "ollama-cloud-ocx/glm-5.3"])
+        XCTAssertEqual(models.map(\.displayName).suffix(2), ["ollama-cloud-ocx/deepseek-v4.1-flash", "ollama-cloud-ocx/glm-5.3"])
+        XCTAssertEqual(models.filter(\.isDefault).map(\.id), ["opencode/alpha"])
+    }
+
+    func testDisabledAndEnabledProvidersLimitTheWholeList() {
+        let disabled = Data(#"{"disabled_providers":["opencode"],"provider":{"local":{"models":{"m":{}}}}}"#.utf8)
+        XCTAssertEqual(OpenCodeProtocol.models(shared, configuration: disabled).map(\.id), ["openai/gpt", "local/m"])
+        let enabled = Data(#"{"enabled_providers":["local"],"provider":{"local":{"models":{"m":{}}}}}"#.utf8)
+        XCTAssertEqual(OpenCodeProtocol.models(shared, configuration: enabled).map(\.id), ["local/m"])
+    }
+
+    func testAMissingOrUnreadableConfigurationLeavesTheSharedList() {
+        XCTAssertEqual(OpenCodeProtocol.models(shared, configuration: nil).map(\.id), shared.map(\.id))
+        XCTAssertEqual(OpenCodeProtocol.models(shared, configuration: Data("{ not json".utf8)).map(\.id), shared.map(\.id))
+    }
+}

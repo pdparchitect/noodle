@@ -12,6 +12,8 @@ struct AgentConfigurationFields: View {
     @Binding var selectedProfileID: UUID?
     /// Empty leaves the voice to the harness.
     @Binding var selectedVoice: String
+    /// The bot being edited; a new bot has no workspace yet.
+    var workspace: URL? = nil
     @State private var choosingHarness = false
     @State private var choosingVoice = false
     @State private var voicePreview = VoicePreviewPlayer()
@@ -54,7 +56,13 @@ struct AgentConfigurationFields: View {
     }
 
     private var models: [HarnessModel] {
-        guard hubChoice != nil else { return store.runtime.models(for: selectedHarnessIdentifier) }
+        guard hubChoice != nil else {
+            let shared = store.runtime.models(for: selectedHarnessIdentifier)
+            guard selectedProvider == .openCode, let workspace else { return shared }
+            // Read on demand: the file is small and the bot or a person may edit it at any time.
+            let configuration = try? WorkspaceMailbox(workspace: workspace, path: "").read("opencode.json", limit: 1_048_576)
+            return OpenCodeProtocol.models(shared, configuration: configuration)
+        }
         return (lentHarness?.models ?? []).map {
             HarnessModel(id: $0.id, displayName: $0.name, description: "", supportedEfforts: [], defaultEffort: "", isDefault: false)
         }
@@ -77,7 +85,7 @@ struct AgentConfigurationFields: View {
 
     private var modelName: String {
         if let selectedModel { return selectedModel.displayName }
-        if hubChoice != nil, !selectedModelIdentifier.isEmpty { return selectedModelIdentifier }
+        if !selectedModelIdentifier.isEmpty { return selectedModelIdentifier }
         if let selectedProvider { return "\(selectedProvider.displayName) default" }
         return "Harness default"
     }

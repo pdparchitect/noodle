@@ -97,9 +97,10 @@ installed through package managers are not supported. Choose a model as
 
 A restricted OpenCode bot uses the API keys and accounts you signed in with, but
 not your global OpenCode settings, plugins, MCP servers or conversations. Put
-custom provider settings in `opencode.json` in the bot's workspace. Keys set only
-in your shell environment are not available to restricted bots. Models that need
-no provider sign-in also work.
+custom provider settings in `opencode.json` in the bot's workspace; their models
+appear in **Edit Bot → Harness → Model**. Keys set only in your shell environment
+are not available to restricted bots. Models that need no provider sign-in also
+work.
 
 ## Antigravity
 
