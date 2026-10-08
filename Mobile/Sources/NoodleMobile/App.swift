@@ -8,6 +8,8 @@ struct NoodleMobileApp: App {
     @Environment(\.scenePhase) private var phase
     @State private var notifications = HubNotifications()
     @State private var hubs: HubMemberships
+    /// The first Hub joined, until its welcome is done.
+    @State private var welcoming: HubPairing?
 
     init() {
         let shared = AppGroup.hubs ?? URL.applicationSupportDirectory.appendingPathComponent("Hubs", isDirectory: true)
@@ -21,11 +23,20 @@ struct NoodleMobileApp: App {
             Group {
                 if hubs.hubs.isEmpty {
                     JoinView()
+                } else if let welcoming {
+                    HubWelcomeView(pairing: welcoming) { group in
+                        if let group { delegate.opening = NotificationRoute(topic: PushTopic.topic(for: welcoming), conversation: group.id) }
+                        self.welcoming = nil
+                    }
                 } else {
                     AgentsView(pairings: hubs.hubs, opening: Binding(get: { delegate.opening }, set: { delegate.opening = $0 }))
                 }
             }
             .environment(hubs)
+            // Only a phone with no other Hub is welcomed; the welcome makes the team only for someone with no bots there.
+            .onChange(of: hubs.hubs.count) { before, after in
+                if before == 0, after == 1 { welcoming = hubs.hubs.first }
+            }
             // An invitation link opened from Messages, Mail or a QR code in the Camera app.
             .onOpenURL { url in hubs.offer(url.absoluteString) }
             .alert("Join this Hub?", isPresented: Binding(get: { hubs.offered != nil }, set: { if !$0 { hubs.declineOffered() } }),

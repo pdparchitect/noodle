@@ -2,6 +2,7 @@
 import AppKit
 import CryptoKit
 import Darwin
+import NoodleBrand
 import NoodleCore
 import NoodleLaunchChecks
 import SwiftUI

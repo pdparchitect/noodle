@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import NoodleBrand
 @testable import NoodleCore
 @testable import Noodle
 

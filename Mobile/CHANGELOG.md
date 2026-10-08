@@ -6,6 +6,7 @@
 
 - When your phone is joined to your Mac, you can share the Mac's bots with people on the Noodle Hubs the Mac joined. Edit the bot and tap Sharing, or Sharing on a Hub's name when the Mac joined several.
 - Chat effects: confetti or fireworks a bot sends play when you open its conversation, within a day, on whichever of your devices shows it first.
+- Joining your first Hub welcomes you with a team of three bots, as Noodle does on the Mac: a personal assistant, a developer and a researcher, with their own group. They use what your plan on the Hub lends, so there is nothing to set up, and Continue says hello to them in their group.
 
 ### What to Test
 
@@ -14,6 +15,10 @@
 - Ask a bot on a Hub to celebrate with confetti while the app is closed, then open its conversation: the confetti plays once. Open the same conversation on your Mac or iPad afterwards: it does not play again. Ask for fireworks with the conversation already open: they play straight away.
 - With Reduce Motion on (Settings → Accessibility → Motion), the effect shows as a still 🎉 or 🎆 instead.
 - Bots kept on a Noodle Hub show Sharing as before.
+- On a phone with no Hub, pair with a Hub where you have no bots: the wordmark rises, three bots come in one by one with their names and roles, then Continue opens their Team group with your hello, and they answer.
+- Pair with a Hub where you already have bots, or pair a second Hub: there is no welcome and no new bots.
+- On a Hub whose plan lends no harnesses, the welcome says so, and Not Now shows the list.
+- Turn on Airplane Mode while the team is being made, then off again: Try Again finishes the same team without making any bot twice.
 
 ## [0.24.0] - 2026-10-07
 

@@ -3,6 +3,7 @@ import ImageIO
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+import NoodleBrand
 import NoodleCore
 import HubLink
 import NoodleHubClient

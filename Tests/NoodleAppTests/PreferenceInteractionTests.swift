@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import NoodleBrand
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntime

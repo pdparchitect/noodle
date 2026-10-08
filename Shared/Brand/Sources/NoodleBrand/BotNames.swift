@@ -1,14 +1,15 @@
 import Foundation
 
-enum BotNameStyle: String, CaseIterable, Identifiable {
+/// How new bots are named: a person's first name, or a playful pair of words.
+public enum BotNameStyle: String, CaseIterable, Identifiable, Sendable {
     case real
     case playful
 
-    static let defaultsKey = "BotNameStyle"
+    public static let defaultsKey = "BotNameStyle"
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .real: "Real"
         case .playful: "Playful"
@@ -16,7 +17,7 @@ enum BotNameStyle: String, CaseIterable, Identifiable {
     }
 }
 
-enum BotNameGenerator {
+public enum BotNameGenerator {
     private static let realNames = [
         "Ada", "Adrian", "Aisha", "Alex", "Alice", "Amara", "Amelia", "Amir",
         "Ana", "Andre", "Anika", "Anna", "Ari", "Arthur", "Ava", "Ben",
@@ -48,7 +49,7 @@ enum BotNameGenerator {
         "Starling", "Thistle", "Tiger", "Willow", "Wren", "Yak", "Zinnia", "Zuzu"
     ]
 
-    static func random(style: BotNameStyle, excluding current: String? = nil) -> String {
+    public static func random(style: BotNameStyle, excluding current: String? = nil) -> String {
         let current = current?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         for _ in 0..<8 {

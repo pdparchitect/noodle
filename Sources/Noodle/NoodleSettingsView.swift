@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import NoodleBrand
 import NoodleCore
 import NoodleSettingsUI
 import NoodleRuntime
