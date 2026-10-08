@@ -368,11 +368,11 @@ struct EditBotSheet: View {
                 case .general:
                     BotPublicDescriptionEditor(publicDescription: $publicDescription)
                     BotBackstoryEditor(backstory: $backstory)
-                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
-                        FoldersSettingsRow(folders: $folders, owner: .bot)
-                    }
                     if let conversation = directConversation {
                         ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
+                    }
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        FoldersSettingsRow(folders: $folders, owner: .bot)
                     }
                     if let sharingHub {
                         BotSharingPicker(mirror: sharingHub, bot: name, selectedIDs: $sharedWith)
@@ -546,36 +546,86 @@ struct EditBotSheet: View {
     }
 }
 
-/// Whom a bot kept on a Noodle Hub is shared with: everyone else on the Hub, picked by tapping them,
-/// and saved with the bot.
+/// Whom a bot kept on a Noodle Hub is shared with: a row opening a sheet where everyone else on the Hub
+/// is picked by tapping them; the enclosing editor saves the choice with the bot.
 struct BotSharingPicker: View {
     let mirror: HubMirror
     let bot: String
     @Binding var selectedIDs: Set<UUID>
     var title = "Sharing"
+    @State private var editing = false
+
+    var body: some View {
+        Button { editing = true } label: {
+            HStack {
+                Label(title, systemImage: "person.2")
+                Spacer()
+                Text(selectedIDs.isEmpty ? "None" : "\(selectedIDs.count)").foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+            }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $editing) {
+            BotSharingSheet(mirror: mirror, bot: bot, selectedIDs: $selectedIDs, title: title).noodleSheetSizing()
+        }
+    }
+}
+
+private struct BotSharingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let mirror: HubMirror
+    let bot: String
+    @Binding var selectedIDs: Set<UUID>
+    let title: String
+    @State private var draft: Set<UUID>
     @State private var people: [LinkPerson]?
     @State private var failure: String?
 
+    init(mirror: HubMirror, bot: String, selectedIDs: Binding<Set<UUID>>, title: String) {
+        self.mirror = mirror
+        self.bot = bot
+        _selectedIDs = selectedIDs
+        self.title = title
+        _draft = State(initialValue: selectedIDs.wrappedValue)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-            if let people, people.isEmpty {
-                Text("Nobody else is on this Hub").font(.caption).foregroundStyle(.secondary)
-            } else if let people {
-                BotSharingPeople(people: people, bot: bot, selectedIDs: $selectedIDs)
-            } else if let failure {
-                Text(failure).font(.caption).foregroundStyle(.red)
-            } else {
-                ProgressView().controlSize(.small)
+        VStack(spacing: 20) {
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text(title).font(.headline)
+                Spacer()
+                Button("Apply") {
+                    selectedIDs = draft
+                    dismiss()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                .disabled(draft == selectedIDs)
+                .keyboardShortcut(.defaultAction)
             }
+            Group {
+                if let people, people.isEmpty {
+                    Text("Nobody else is on this Hub").font(.caption).foregroundStyle(.secondary)
+                } else if let people {
+                    BotSharingPeople(people: people, bot: bot, selectedIDs: $draft)
+                } else if let failure {
+                    Text(failure).font(.caption).foregroundStyle(.red)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .frame(width: 480)
         .task {
             do { people = try await mirror.people() } catch { failure = error.localizedDescription }
         }
     }
-
 }
 
 /// Everyone else on the Hub, each tapped to share the bot with them or stop, and who that lets talk to it.

@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - New Bot, Edit Bot, New Group, Group Info, profile and model windows now change size at once as their contents change, instead of animating.
+- Edit Bot shows Sharing as a row under Conversation Background and Folders; the people to share with are picked in its own sheet.
 
 ## [0.51.0] - 2026-10-08
 
