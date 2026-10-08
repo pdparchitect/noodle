@@ -40,7 +40,7 @@ final class LibraryTests: XCTestCase {
             XCTAssertFalse(Thread.isMainThread)
             return AppletLibrary.discover(in: [], botFolders: [bots], thumbnails: root)
         }.value
-        XCTAssertEqual(found.values.map(\.title), ["Late"])
+        XCTAssertEqual(found.entries.values.map(\.title), ["Late"])
         await library.refresh()
         XCTAssertTrue(library.entries.contains { $0.title == "Late" })
     }
@@ -378,5 +378,53 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(Array(secrets.names().keys), ["\(package.key).user"])
         XCTAssertEqual(Array(AppletPermissions.grants(defaults: defaults).keys), [package.key])
         XCTAssertEqual(Array(AppletStorage.sizes(root: root).keys), [package.key])
+    }
+
+    /// Data left by a noodlet that was deleted or moved outside Applet goes at launch, found and
+    /// deleted off the main thread; listed and running noodlets keep theirs.
+    @MainActor func testLaunchRemovesDataOfNoodletsNoLongerListed() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        let library = botLibrary(root: root, defaults: defaults)
+        let kept = try NoodletPackage(url: URL(fileURLWithPath:
+            try botNoodlet(htmlNoodlet("Kept"), named: "Kept", owner: "kai", root: root))).key
+        for key in [kept, "busy", "gone"] {
+            let folder = root.appendingPathComponent("Data/\(key)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data([1]).write(to: folder.appendingPathComponent("file"))
+            defaults.set(UUID().uuidString, forKey: "store.\(key).user")
+        }
+        let walk = library.walk
+        library.walk = { XCTAssertFalse(Thread.isMainThread); return walk($0, $1, $2) }
+
+        await library.removeOrphanedData { ["busy"] }
+
+        XCTAssertEqual(Set(AppletStorage.sizes(root: root).keys), [kept, "busy"])
+        XCTAssertEqual(Set(AppletStorage.stores(defaults: defaults).keys), [kept, "busy"])
+    }
+
+    /// A bot folder that cannot be read may hold noodlets, so nothing is deleted.
+    @MainActor func testOrphanedDataStaysWhenTheLibraryCannotLookEverywhere() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        let hub = root.appendingPathComponent("Hub Bots")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hub.path)
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = botLibrary(root: root, defaults: defaults)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Data/hidden"), withIntermediateDirectories: true)
+        try Data([1]).write(to: root.appendingPathComponent("Data/hidden/file"))
+        try FileManager.default.createDirectory(at: hub, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: hub.path)
+
+        await library.removeOrphanedData { [] }
+
+        XCTAssertEqual(Array(AppletStorage.sizes(root: root).keys), ["hidden"])
     }
 }

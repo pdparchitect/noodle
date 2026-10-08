@@ -54,7 +54,9 @@ import WebKit
     return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
   }
   static func remove(_ key: String, root: URL, defaults: UserDefaults) async {
-    try? FileManager.default.removeItem(at: root.appendingPathComponent("Data/\(key)"))
+    // A large folder takes long to delete, so it goes off the main thread.
+    let data = root.appendingPathComponent("Data/\(key)")
+    await Task.detached { try? FileManager.default.removeItem(at: data) }.value
     // WebKit crashes when removing a store is the first thing a process asks of it, as launch
     // does for a noodlet that is gone. A web view with no website data sets WebKit up first.
     let configuration = WKWebViewConfiguration()

@@ -85,7 +85,7 @@ struct HubPerson: Hashable, Identifiable, Decodable {
   private var timer: Timer?
   private var refreshing = false
   /// Finds the noodlets in places and bots' folders. Replaced in tests.
-  var walk: @Sendable (_ places: [URL], _ botFolders: [URL], _ thumbnails: URL) -> [String: LibraryEntry] = AppletLibrary.discover
+  var walk: @Sendable (_ places: [URL], _ botFolders: [URL], _ thumbnails: URL) -> Discovery = AppletLibrary.discover
   private var links: NoodletRegistry?
   /// Where noodlets keep their secrets, whichever device their page runs on.
   let secrets: AppletSecrets
@@ -197,7 +197,7 @@ struct HubPerson: Hashable, Identifiable, Decodable {
   }
   func scan() {
     let places = forget()
-    apply(walk(places, botFolders.map(\.url), root.appendingPathComponent("Thumbnails", isDirectory: true)))
+    apply(walk(places, botFolders.map(\.url), root.appendingPathComponent("Thumbnails", isDirectory: true)).entries)
   }
   /// What the watch timer runs. Walking bots' workspaces takes a tenth of a second or more, and
   /// recordings and live views capture on the main thread, so the walk happens off it.
@@ -207,7 +207,23 @@ struct HubPerson: Hashable, Identifiable, Decodable {
     defer { refreshing = false }
     let places = forget(), folders = botFolders.map(\.url), walk = walk
     let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
-    apply(await Task.detached { walk(places, folders, thumbnails) }.value)
+    apply(await Task.detached { walk(places, folders, thumbnails) }.value.entries)
+  }
+  /// Deletes what noodlets no longer anywhere Applet looks saved, as when one was deleted or moved
+  /// outside Applet. Nothing goes when the walk could not look everywhere, nor for noodlets `inUse`.
+  func removeOrphanedData(keeping inUse: () -> Set<String>) async {
+    let places = forget(), folders = botFolders.map(\.url), walk = walk, root = root
+    let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
+    let found = await Task.detached { walk(places, folders, thumbnails) }.value
+    apply(found.entries)
+    guard found.complete else { return }
+    let data = root.appendingPathComponent("Data")
+    let saved = await Task.detached { (try? FileManager.default.contentsOfDirectory(atPath: data.path)) ?? [] }.value
+    // Checked again before each one: a noodlet opened meanwhile keeps its data.
+    for key in Set(saved).union(AppletStorage.stores(defaults: defaults).keys).sorted()
+    where !entries.contains(where: { $0.id == key }) && !inUse().contains(key) {
+      await AppletStorage.remove(key, root: root, defaults: defaults)
+    }
   }
   /// Drops what was deleted and returns where to look for noodlets.
   private func forget() -> [URL] {
@@ -230,11 +246,23 @@ struct HubPerson: Hashable, Identifiable, Decodable {
     }
     return [documents] + registrations.map(\.url)
   }
+  /// What a walk found, and whether it looked everywhere: an unreadable folder or a walk cut
+  /// short may hide noodlets.
+  struct Discovery: Sendable {
+    var entries: [String: LibraryEntry] = [:]
+    var complete = true
+  }
   /// Every noodlet in `places` and in the workspaces of the bots in `botFolders`.
-  nonisolated static func discover(in places: [URL], botFolders: [URL], thumbnails: URL) -> [String: LibraryEntry] {
+  nonisolated static func discover(in places: [URL], botFolders: [URL], thumbnails: URL) -> Discovery {
+    final class Flag: @unchecked Sendable { var complete = true }
+    let flag = Flag()
     let workspaces = botFolders.flatMap { folder in
-      ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
-        .map { $0.appendingPathComponent("workspace", isDirectory: true) }
+      guard FileManager.default.fileExists(atPath: folder.path) else { return [URL]() }
+      guard let bots = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+        flag.complete = false
+        return []
+      }
+      return bots.map { $0.appendingPathComponent("workspace", isDirectory: true) }
         .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
     var found: [String: LibraryEntry] = [:]
@@ -249,12 +277,12 @@ struct HubPerson: Hashable, Identifiable, Decodable {
       guard
         let walker = FileManager.default.enumerator(
           at: directory, includingPropertiesForKeys: [.isSymbolicLinkKey],
-          options: [.skipsHiddenFiles])
-      else { continue }
+          options: [.skipsHiddenFiles], errorHandler: { _, _ in flag.complete = false; return true })
+      else { flag.complete = false; continue }
       var count = 0
       for case let url as URL in walker {
         count += 1
-        if count > 10000 { break }
+        if count > 10000 { flag.complete = false; break }
         if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
           walker.skipDescendants()
           continue
@@ -270,7 +298,7 @@ struct HubPerson: Hashable, Identifiable, Decodable {
         }
       }
     }
-    return found
+    return Discovery(entries: found, complete: flag.complete)
   }
   private func apply(_ found: [String: LibraryEntry]) {
     let next = found.values.sorted {

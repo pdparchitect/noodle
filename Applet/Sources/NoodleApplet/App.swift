@@ -180,6 +180,9 @@ private struct AppletMenu: View {
       }
     } else {
       runtime.startServer()
+      Task { [library, runtime] in
+        await library.removeOrphanedData { Set(runtime.sessions.values.map(\.package.key)) }
+      }
       if !CommandLine.arguments.contains("--noodle-background"),
         notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
         DispatchQueue.main.async { [weak self] in
