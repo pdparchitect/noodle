@@ -7,6 +7,10 @@
 - Settings > External Tools is now Settings > Agents, and the sidebar section for what agents create is called Agents.
 - Settings > Agents shows each setup command in full in a box with a copy button, as Noodle's Settings shows installation commands.
 
+### Fixed
+
+- Settings > Storage no longer counts space twice when computers are copies of each other or of the Windows installation. Each row shows only the space its files hold alone, and space the copies share is listed once, as Shared between copies.
+
 ## [0.22.0] - 2026-10-08
 
 ### Added

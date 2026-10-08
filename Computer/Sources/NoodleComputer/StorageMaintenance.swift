@@ -10,6 +10,7 @@ struct StorageReport: Sendable {
     let cacheBytes: Int64
     let runtimeBytes: Int64
     let computerBytes: Int64
+    let sharedBytes: Int64
     let orphanedBytes: UInt64
     let obsoleteImages: [String]
     let obsoleteFiles: [String]
@@ -60,6 +61,73 @@ enum StorageMaintenance {
         var files: [String: FileStamp] = [:]
         try visit(root, relative: "", into: &files)
         return files
+    }
+
+    /// Bytes each file alone holds, plus blocks shared between APFS clones counted once. Allocated
+    /// sizes count a clone's shared blocks in every copy, so duplicated disks would be counted twice.
+    static func footprint(at root: URL, files: [String: FileStamp]) -> (unique: [String: Int64], shared: Int64) {
+        var unique: [String: Int64] = [:]
+        var ranges: [(start: Int64, end: Int64)] = []
+        var sharedPrivate: Int64 = 0
+        var unmapped: Int64 = 0
+        for (name, stamp) in files {
+            let path = root.appendingPathComponent(name).path
+            let own = min(privateSize(path) ?? stamp.allocated, stamp.allocated)
+            unique[name] = own
+            guard own < stamp.allocated else { continue }
+            if let extents = physicalExtents(path) {
+                ranges += extents
+                sharedPrivate += own
+            } else { unmapped += stamp.allocated - own }
+        }
+        ranges.sort { $0.start < $1.start }
+        var union: Int64 = 0
+        var end = Int64.min
+        for range in ranges where range.end > end {
+            union += range.end - max(range.start, end)
+            end = range.end
+        }
+        return (unique, max(0, union - sharedPrivate) + unmapped)
+    }
+
+    /// APFS's count of the blocks no clone of this file shares; nil on volumes without it.
+    private static func privateSize(_ path: String) -> Int64? {
+        var request = attrlist(bitmapcount: u_short(ATTR_BIT_MAP_COUNT), reserved: 0,
+            commonattr: attrgroup_t(ATTR_CMN_RETURNED_ATTRS), volattr: 0, dirattr: 0, fileattr: 0,
+            forkattr: attrgroup_t(ATTR_CMNEXT_PRIVATESIZE))
+        var buffer = [UInt8](repeating: 0, count: 64)
+        guard getattrlist(path, &request, &buffer, buffer.count, UInt32(FSOPT_ATTR_CMN_EXTENDED)) == 0 else { return nil }
+        return buffer.withUnsafeBytes { bytes in
+            let returned = bytes.loadUnaligned(fromByteOffset: 4, as: attribute_set_t.self)
+            guard returned.forkattr & attrgroup_t(ATTR_CMNEXT_PRIVATESIZE) != 0 else { return nil }
+            return Int64(bytes.loadUnaligned(fromByteOffset: 4 + MemoryLayout<attribute_set_t>.size, as: UInt64.self))
+        }
+    }
+
+    /// Device ranges holding the file's data, skipping holes in sparse disks.
+    private static func physicalExtents(_ path: String) -> [(start: Int64, end: Int64)]? {
+        let descriptor = open(path, O_RDONLY)
+        guard descriptor >= 0 else { return nil }
+        defer { close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { return nil }
+        var extents: [(start: Int64, end: Int64)] = []
+        var offset: Int64 = 0
+        while offset < info.st_size {
+            let data = lseek(descriptor, offset, SEEK_DATA)
+            if data < 0 { break }
+            let hole = lseek(descriptor, data, SEEK_HOLE)
+            guard hole > data else { return nil }
+            var position = data
+            while position < hole {
+                var mapping = log2phys(l2p_flags: 0, l2p_contigbytes: hole - position, l2p_devoffset: position)
+                guard fcntl(descriptor, F_LOG2PHYS_EXT, &mapping) == 0, mapping.l2p_contigbytes > 0 else { return nil }
+                extents.append((mapping.l2p_devoffset, mapping.l2p_devoffset + mapping.l2p_contigbytes))
+                position += mapping.l2p_contigbytes
+            }
+            offset = hole
+        }
+        return extents
     }
 
     static func normalized(_ reference: String) throws -> String {
@@ -115,9 +183,11 @@ enum StorageMaintenance {
         }
         // ImageStore can initialize bookkeeping. Capture the preview after opening it.
         let files = try snapshot(at: runtime)
-        let cacheBytes = files.filter { name, _ in
-            name.hasPrefix("Images/") || name.hasPrefix("Restore Images/") || name.hasPrefix("Linux Images/")
-        }.values.reduce(Int64(0)) { $0 + $1.allocated }
+        let footprint = footprint(at: library.root, files: allFiles)
+        func bytes(under prefixes: [String]) -> Int64 {
+            footprint.unique.filter { name, _ in prefixes.contains { name.hasPrefix($0) } }.values.reduce(0, +)
+        }
+        let cacheBytes = bytes(under: ["Runtime/Images/", "Runtime/Restore Images/", "Runtime/Linux Images/"])
         let capacity = try library.root.resourceValues(forKeys: [.volumeAvailableCapacityKey])
         let filesystem = try FileManager.default.attributesOfFileSystem(forPath: library.root.path)
         guard let freeBytes = capacity.volumeAvailableCapacity.map(Int64.init)
@@ -126,9 +196,9 @@ enum StorageMaintenance {
         }
         return StorageReport(freeBytes: freeBytes,
             cacheBytes: cacheBytes,
-            runtimeBytes: files.values.reduce(Int64(0)) { $0 + $1.allocated } - cacheBytes,
-            computerBytes: allFiles.filter { $0.key.hasPrefix("Computers/") || $0.key.hasPrefix("Staging/") }
-                .values.reduce(Int64(0)) { $0 + $1.allocated },
+            runtimeBytes: bytes(under: ["Runtime/"]) - cacheBytes,
+            computerBytes: bytes(under: ["Computers/", "Staging/"]),
+            sharedBytes: footprint.shared,
             orphanedBytes: orphaned, obsoleteImages: obsolete, obsoleteFiles: removableFiles(in: files),
             runtimeSnapshot: files, protectedImages: keep)
     }

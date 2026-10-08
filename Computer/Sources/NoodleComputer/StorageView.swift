@@ -44,6 +44,9 @@ struct StorageView: View {
                     LabeledContent("Image and installer caches", value: size(report.cacheBytes))
                     LabeledContent("Runtime startup files", value: size(report.runtimeBytes))
                     LabeledContent("Computer disks and backups", value: size(report.computerBytes))
+                    if report.sharedBytes > 0 {
+                        LabeledContent("Shared between copies", value: size(report.sharedBytes))
+                    }
                 }
                 Section {
                     Text("\(report.removableCount) cached items can be removed.")

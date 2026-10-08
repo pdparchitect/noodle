@@ -41,6 +41,29 @@ final class StorageMaintenanceTests: XCTestCase {
         XCTAssertFalse(after.canClean)
     }
 
+    func testClonedDisksAreCountedOnce() async throws {
+        let library = try fixture()
+        defer { try? FileManager.default.removeItem(at: library.root) }
+        let original = library.root.appendingPathComponent("Computers/a/Disk.img")
+        let copy = library.root.appendingPathComponent("Computers/b/Disk.img")
+        let unrelated = library.root.appendingPathComponent("Computers/c/Disk.img")
+        for file in [original, copy, unrelated] {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        let megabyte = 1_048_576
+        try Data((0..<8 * megabyte).map { _ in UInt8.random(in: 0...255) }).write(to: original)
+        try Data((0..<megabyte).map { _ in UInt8.random(in: 0...255) }).write(to: unrelated)
+        guard clonefile(original.path, copy.path, 0) == 0 else { throw XCTSkip("The temporary volume cannot clone files.") }
+        // A booted copy diverges: 2 MB of its own, 6 MB still shared with the original.
+        let handle = try FileHandle(forWritingTo: copy)
+        try handle.write(contentsOf: Data((0..<2 * megabyte).map { _ in UInt8.random(in: 0...255) }))
+        try handle.close()
+        let report = try await StorageMaintenance.inspect(library: library)
+        let slack = Int64(megabyte / 4)
+        XCTAssertEqual(report.computerBytes, Int64(5 * megabyte), accuracy: slack, "2 MB each copy owns plus the unrelated 1 MB")
+        XCTAssertEqual(report.sharedBytes, Int64(6 * megabyte), accuracy: slack)
+    }
+
     func testStalePreviewRefusesDeletion() async throws {
         let library = try fixture()
         defer { try? FileManager.default.removeItem(at: library.root) }
