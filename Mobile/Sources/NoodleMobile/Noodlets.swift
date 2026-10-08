@@ -239,6 +239,8 @@ struct NoodletDeviceScreen: View {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
                 }
             }
+            // The whole screen even while loading, so the buttons over it start in its corners.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Under the buttons that float over the top corners of a full-screen page.
             .overlay(alignment: .topTrailing) { SurfaceNoticeView(onTV ? nil : page?.activity.notice).padding(.top, fullScreen ? 44 : 0) }
             .overlay(alignment: .top) {

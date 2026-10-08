@@ -17,6 +17,10 @@
 - Games can read game controllers directly, as they do in Safari: analog sticks, every button, and several controllers for several players. Such a game no longer gets each press twice, as a key as well.
 - Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
 
+### Fixed
+
+- While a full-screen game loads, Done and the buttons beside it stay in the top corners instead of starting in the middle and jumping out.
+
 ### What to Test
 
 - Open a large game noodlet: "Starting…" shows in the top right corner until it first draws. If it then freezes while it loads, "Not responding" shows until it moves again. Watched live from a Hub, the same notices show.
@@ -37,6 +41,7 @@
 - Open a heavy 3D game noodlet: it runs smoother than before and still fills the screen. Show it on a TV: it fills the TV and stays smooth. Text and buttons outside the game look as sharp as before.
 - With a game controller connected, open a game that supports controllers, such as one made for several players: press a button: one player joins, not two. Connect a second controller: a second player can join. Show the game on a TV: the controllers keep working.
 - A game played only with keys still plays with a controller as before.
+- Open a full-screen game: while it loads, Done and the buttons are already in the top corners and stay there.
 
 ## [0.24.0] - 2026-10-07
 
