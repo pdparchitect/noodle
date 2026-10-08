@@ -47,7 +47,7 @@ public enum ExternalConnection {
         defer { Darwin.close(fd) }
         configure(fd, seconds: seconds)
         guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
-            throw ExternalToolsError("The app is not accepting external tools.")
+            throw ExternalToolsError("The app is not accepting agents.")
         }
         try verify(fd)
         try send(data, fd)
@@ -138,7 +138,7 @@ public final class ExternalConnectionServer: @unchecked Sendable {
         guard (try? ExternalConnection.withAddress(url, { Darwin.bind(fd, $0, $1) })) == 0,
               chmod(url.path, 0o600) == 0, Darwin.listen(fd, 16) == 0 else {
             Darwin.close(fd)
-            throw ExternalToolsError("Cannot listen for external tools (\(errno)).")
+            throw ExternalToolsError("Cannot listen for agents (\(errno)).")
         }
         _ = fcntl(fd, F_SETFL, O_NONBLOCK)
         let permits = DispatchSemaphore(value: limit)

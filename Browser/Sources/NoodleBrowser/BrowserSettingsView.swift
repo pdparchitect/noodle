@@ -28,7 +28,7 @@ struct BrowserSettingsView: View {
                     server: BrowserBuildIdentity.current == .development ? "noodle-browser-dev" : "noodle-browser",
                     delete: { ids in Task { for id in ids { try? await runtime.removeBrowser(id) } } })
                     .frame(width: 580).fixedSize(horizontal: false, vertical: true)
-                    .tabItem { Label("External Tools", systemImage: "point.3.connected.trianglepath.dotted") }.tag(BrowserSettingsTab.external)
+                    .tabItem { Label("Agents", systemImage: "point.3.connected.trianglepath.dotted") }.tag(BrowserSettingsTab.external)
             }
             BrowserUpdatesSettingsView()
                 .frame(width: 580).fixedSize(horizontal: false, vertical: true)

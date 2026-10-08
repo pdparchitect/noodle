@@ -69,7 +69,7 @@ struct BrowserLibraryView: View {
             List(selection: $presentation.selection) {
                 let sections = Self.sections(filtered, created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
                 Section("Browsers") { rows(sections.own) }
-                if !sections.external.isEmpty { Section("External Tools") { rows(sections.external) } }
+                if !sections.external.isEmpty { Section("Agents") { rows(sections.external) } }
                 let hub = BrowserLibrary.hubGroups(sections.hub)
                 if !hub.people.isEmpty || !hub.unowned.isEmpty {
                     Section("Hub") {

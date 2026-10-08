@@ -128,7 +128,7 @@ import SwiftUI
     }
 }
 
-/// Settings > External Tools.
+/// Settings > Agents.
 struct ComputerExternalSettingsView: View {
     @State private var store: ComputerStore?
     var body: some View {

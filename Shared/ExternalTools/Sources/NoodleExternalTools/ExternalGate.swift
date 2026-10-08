@@ -7,7 +7,7 @@ public struct ExternalResource: Codable, Hashable, Sendable {
     public var created: Bool
 }
 
-/// An app a person allowed to use external tools, and what it may use.
+/// An app a person allowed in through Settings > Agents, and what it may use.
 public struct ExternalCaller: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var launcher: ExternalLauncher
@@ -61,11 +61,11 @@ public struct ExternalItem: Identifiable, Hashable, Sendable {
         do {
             let data = try Data(contentsOf: url)
             let grants = try JSONDecoder().decode(ExternalGrants.self, from: data)
-            guard grants.version == 1 else { throw ExternalToolsError("Unsupported external tools file.") }
+            guard grants.version == 1 else { throw ExternalToolsError("Unsupported agents file.") }
             self.grants = grants
         } catch {
             readable = false
-            failure = "Could not read the external tools settings, so external tools are off. Existing data was not changed."
+            failure = "Could not read the Agents settings, so agents are not allowed. Existing data was not changed."
         }
     }
 
@@ -94,7 +94,7 @@ public struct ExternalItem: Identifiable, Hashable, Sendable {
     /// The remembered caller, asking the person the first time. Calls that arrive while the
     /// question is open wait for the same answer.
     public func admit(_ launcher: ExternalLauncher) async throws -> ExternalCaller {
-        guard enabled else { throw ExternalToolsError("External tools are turned off in Settings.") }
+        guard enabled else { throw ExternalToolsError("Agents are turned off in Settings.") }
         if let index = grants.callers.firstIndex(where: { $0.launcher.key == launcher.key }) {
             if grants.callers[index].launcher != launcher { update { $0.callers[index].launcher = launcher } }
             return grants.callers[index]
@@ -204,7 +204,7 @@ public struct ExternalItem: Identifiable, Hashable, Sendable {
             do {
                 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try JSONEncoder().encode(next).write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
-            } catch { failure = "Could not save the external tools settings. \(error.localizedDescription)"; return }
+            } catch { failure = "Could not save the Agents settings. \(error.localizedDescription)"; return }
         }
         grants = next
     }

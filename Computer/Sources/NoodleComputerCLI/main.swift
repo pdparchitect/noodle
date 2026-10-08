@@ -26,7 +26,7 @@ func connect(_ url: URL) async throws {
         if FileManager.default.fileExists(atPath: url.path) { return }
         try await Task.sleep(for: .milliseconds(100))
     }
-    throw ComputerBridgeError("\(build.appName) is not accepting external tools. Turn on “Allow external tools” in its Settings, under External Tools.")
+    throw ComputerBridgeError("\(build.appName) is not accepting agents. Turn on “Allow agents” in its Settings, under Agents.")
 }
 
 func client() throws -> ComputerExternalClient {

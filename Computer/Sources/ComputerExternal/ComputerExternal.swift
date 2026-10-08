@@ -13,7 +13,7 @@ public enum ComputerExternal {
             throw ComputerBridgeError("External tools are not configured in this build of \(build.appName).")
         }
         guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-            throw ComputerBridgeError("The external tools folder is unavailable.")
+            throw ComputerBridgeError("The agents folder is unavailable.")
         }
         return root
     }

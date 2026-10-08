@@ -13,7 +13,7 @@ public enum BrowserExternal {
             throw BrowserError("External tools are not configured in this build of \(build.appName).")
         }
         guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-            throw BrowserError("The external tools folder is unavailable.")
+            throw BrowserError("The agents folder is unavailable.")
         }
         return root
     }

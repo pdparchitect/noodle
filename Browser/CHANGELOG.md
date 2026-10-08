@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Settings > External Tools is now Settings > Agents, and the sidebar section for what agents create is called Agents.
+- Settings > Agents shows each setup command in full in a box with a copy button, as Noodle's Settings shows installation commands.
+
 ## [0.12.0] - 2026-10-08
 
 ### Added

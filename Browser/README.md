@@ -103,8 +103,8 @@ picture, not a live page. A deleted browser cannot be brought back from a card.
 
 ## Use it from Claude Code, Codex and other agents
 
-Agents outside Noodle can use Noodle Browser too. Turn on **Allow external
-tools** in Settings > External Tools, then copy the command shown there for
+Agents outside Noodle can use Noodle Browser too. Turn on **Allow agents** in
+Settings > Agents, then copy the command shown there for
 Claude Code or Codex. Other agents can run the `noodle-browser` command shown
 there, or add it as an MCP server with `mcp` after it.
 

@@ -469,7 +469,7 @@ struct ComputerLibraryView: View {
         let sections = ComputerExternalService.sections(filteredSessions,
           created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
         Section("Computers") { rows(sections.own) }
-        if !sections.external.isEmpty { Section("External Tools") { rows(sections.external) } }
+        if !sections.external.isEmpty { Section("Agents") { rows(sections.external) } }
         let hub = ComputerStore.hubGroups(sections.hub)
         if !hub.people.isEmpty || !hub.unowned.isEmpty {
           Section("Hub") {

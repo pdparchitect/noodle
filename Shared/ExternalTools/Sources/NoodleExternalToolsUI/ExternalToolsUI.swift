@@ -102,7 +102,7 @@ struct ExternalQuestion: View {
     }
 }
 
-/// Settings > External Tools: the master switch, how to add the tool to an agent, and one
+/// Settings > Agents: the master switch, how to add the tool to an agent, and one
 /// section for each allowed app with a switch for every item it may use.
 public struct ExternalToolsSettingsView: View {
     @ObservedObject var gate: ExternalGate
@@ -123,7 +123,7 @@ public struct ExternalToolsSettingsView: View {
     public var body: some View {
         Form {
             Section {
-                Toggle("Allow external tools", isOn: Binding(get: { gate.enabled }, set: { gate.enabled = $0 }))
+                Toggle("Allow agents", isOn: Binding(get: { gate.enabled }, set: { gate.enabled = $0 }))
                 if let failure = gate.failure { Text(failure).foregroundStyle(.red) }
             }
             Section("Set Up") {
@@ -168,15 +168,28 @@ public struct ExternalToolsSettingsView: View {
         }
     }
 
+    /// Set out like the installation and update commands in Noodle's Settings.
     private func commandRow(_ title: String, _ text: String) -> some View {
-        LabeledContent(title) {
-            HStack {
-                Text(text).font(.callout.monospaced()).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
-                Button("Copy") {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: "terminal").foregroundStyle(.secondary).accessibilityHidden(true)
+                Text(text)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Copy Command", systemImage: "doc.on.doc") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
-                }.buttonStyle(.link)
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .help("Copy command")
             }
+            .padding(10)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.1), lineWidth: 1) }
         }
     }
 }

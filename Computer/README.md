@@ -39,8 +39,8 @@ agent's own session. Closing the window leaves the computer running.
 
 ## Use it from Claude Code, Codex and other agents
 
-Agents outside Noodle can use Noodle Computer too. Turn on **Allow external
-tools** in Settings > External Tools, then copy the command shown there for
+Agents outside Noodle can use Noodle Computer too. Turn on **Allow agents** in
+Settings > Agents, then copy the command shown there for
 Claude Code or Codex. Other agents can run the `noodle-computer` command shown
 there, or add it as an MCP server with `mcp` after it.
 

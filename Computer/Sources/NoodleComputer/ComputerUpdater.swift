@@ -74,7 +74,7 @@ struct ComputerSettingsView: View {
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
                 .tag(ComputerSettingsTab.storage)
             ComputerExternalSettingsView()
-                .tabItem { Label("External Tools", systemImage: "point.3.connected.trianglepath.dotted") }
+                .tabItem { Label("Agents", systemImage: "point.3.connected.trianglepath.dotted") }
                 .tag(ComputerSettingsTab.external)
             ComputerUpdatesSettingsView()
                 .frame(width: 580)
