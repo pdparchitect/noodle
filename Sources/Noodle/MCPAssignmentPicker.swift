@@ -156,12 +156,12 @@ struct MCPConnectionChooser: View {
                         }.buttonStyle(.plain)
                     }
                     if controller.registry.connections.isEmpty {
-                        Text("No saved connections. Choose New Tool to add one.").foregroundStyle(.secondary).padding()
+                        Text("No saved connections. Choose New to add one.").foregroundStyle(.secondary).padding()
                     }
                 }
             }
             HStack {
-                Button("New Tool…", action: onNewTool)
+                Button(action: onNewTool) { Label("New", systemImage: "plus") }.help("New Tool").accessibilityLabel("New Tool")
                 Spacer()
             }
         }.padding(16).frame(width: 330, height: 260)
@@ -273,7 +273,7 @@ struct HubConnectionPicker: View {
                 }
             }
             HStack {
-                Button("New Tool…") { wantsNewTool = true; showingAdd = false }
+                Button { wantsNewTool = true; showingAdd = false } label: { Label("New", systemImage: "plus") }.help("New Tool").accessibilityLabel("New Tool")
                 Spacer()
             }
         }.padding(16).frame(width: 330, height: 260)

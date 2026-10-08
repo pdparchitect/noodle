@@ -6,7 +6,7 @@
 3. Complete sign-in in your browser.
 4. Add the connection under **Tools** when creating or editing a bot, then save.
 
-**New Tool…** in the bot's tool picker opens the same flow. Connections are saved
+**New** in the bot's tool picker opens the same flow. Connections are saved
 separately; cancelling the bot editor leaves the connection unassigned.
 
 ## Accounts and permissions

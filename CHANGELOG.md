@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- The bot tool picker now has a **New** button like Computers and Browsers, replacing New Tool….
 - Games bots make can read game controllers directly on iPhone and iPad too, with analog sticks and one controller per player.
 - Games bots make keep themselves smooth on phones and TVs, lowering their resolution while they run slowly.
 - New Bot, Edit Bot, New Group, Group Info, profile and model windows now change size at once as their contents change, instead of animating.

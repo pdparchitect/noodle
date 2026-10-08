@@ -183,8 +183,8 @@ import NoodleCore
         var newTool = 0
         let chooser = host(MCPConnectionChooser(controller: f.controller, selectedIDs: selection.idsBinding,
             search: selection.searchBinding, onNewTool: { newTool += 1 }))
-        _ = try await control("No saved connections. Choose New Tool to add one.", in: chooser)
-        press(try await control("New Tool…", in: chooser)); XCTAssertEqual(newTool, 1)
+        _ = try await control("No saved connections. Choose New to add one.", in: chooser)
+        press(try await control("New Tool", in: chooser)); XCTAssertEqual(newTool, 1)
         let picker = host(MCPAssignmentPicker(controller: f.controller, selectedIDs: selection.idsBinding,
             calendars: eventKit(f, kind: .calendar), reminders: eventKit(f, kind: .reminderList),
             calendarIDs: .constant([]), reminderIDs: .constant([]), builtIn: .constant([])))
