@@ -97,7 +97,7 @@ figure { margin: 0; }
 /* ---------- Stages ----------
    Product shots sit on the launch-pad photo, the way the apps' own film frames them.
    Every stage keeps one shape, so the page has an even rhythm whatever the window sizes. */
-.stage { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.jpg) center / cover; }
+.stage { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.avif) center / cover; }
 .stage img { position: absolute; height: auto; filter: drop-shadow(0 24px 36px rgba(0,0,0,.45)) drop-shadow(0 4px 10px rgba(0,0,0,.25)); }
 .stage .win { border-radius: 12px; }
 /* A single window, centred and never taller than the stage allows. */
@@ -223,7 +223,7 @@ figure { margin: 0; }
 @media (prefers-color-scheme: dark) { .term { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 30px 60px -24px rgba(0,0,0,.8); } }
 
 /* The access prompt, drawn as a macOS alert on the launch-pad photo. */
-.alerts { display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.jpg) center / cover; }
+.alerts { display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.avif) center / cover; }
 .alert { width: min(300px, 80%); padding: 22px 18px 16px; border-radius: 16px; text-align: center; background: rgba(246,246,248,.92); color: #1c1e22; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 24px 48px -12px rgba(0,0,0,.55); }
 .alert img { margin: 0 auto 12px; }
 .alert b { display: block; font-size: 14px; line-height: 1.3; }
@@ -261,6 +261,19 @@ figure { margin: 0; }
 .mini-accounts .blk { top: 34%; }
 .mini-accounts .blk.short { top: 54%; }
 
+/* Applet page: a photo in place of a staged window, and a mosaic of games. */
+.photo { aspect-ratio: 16 / 10; overflow: hidden; border-radius: 28px; }
+.photo img { width: 100%; height: 100%; object-fit: cover; }
+.game-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 56px; }
+.game-grid figure { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 16px; background: #111; }
+.game-grid .big { grid-column: span 2; grid-row: span 2; aspect-ratio: auto; }
+.game-grid img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+.game-grid figure:hover img { transform: scale(1.04); }
+.game-grid figcaption { position: absolute; inset: auto 0 0; padding: 28px 14px 10px; font-size: 14px; line-height: 1.28577; font-weight: 600; letter-spacing: -0.016em; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
+/* Two phones beside text. */
+.stage-phones.duo img { width: 23%; }
+.stage-phones.duo img:nth-child(2) { transform: translateY(-5%); }
+
 /* ---------- Responsive (breakpoints match apple.com) ---------- */
 @media (max-width: 1068px) {
   .feature h2, .privacy h2, .download h2, .headline { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
@@ -270,6 +283,8 @@ figure { margin: 0; }
   .nav nav { display: none; }
   .facts-grid, .priv-grid, .dl-grid { grid-template-columns: 1fr 1fr; }
   .os-grid { grid-template-columns: 1fr; max-width: 520px; margin-inline: auto; }
+  .game-grid { grid-template-columns: 1fr 1fr; }
+  .game-grid .big { grid-row: auto; aspect-ratio: 16 / 10; }
   .split-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 734px) {
@@ -284,6 +299,9 @@ figure { margin: 0; }
   .stage .win { border-radius: 6px; }
   .stage-phones { gap: 2%; }
   .stage-phones img { width: 23%; }
+  .photo { border-radius: 16px; }
+  .game-grid { gap: 8px; }
+  .game-grid figure { border-radius: 10px; }
   .foot-in { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
