@@ -666,6 +666,7 @@ struct LiveSurfaceScreen: View {
     @State private var failure: String?
     /// The keys a game declared: shown as a controller in place of the keyboard.
     @State private var controls: Gamepad?
+    @State private var notice: SurfaceNotice?
     @State private var showsControls = true
     @State private var hardware = HardwareGamepad()
     /// A game brought back from the TV to the phone.
@@ -728,6 +729,8 @@ struct LiveSurfaceScreen: View {
                 }
             }
             .background(.black)
+            // Under the buttons that float over the top corners of a full-screen view.
+            .overlay(alignment: .topTrailing) { SurfaceNoticeView(showing && !onTV ? notice : nil).padding(.top, fullScreen ? 44 : 0) }
             .overlay(alignment: .top) {
                 if fullScreen {
                     HStack {
@@ -785,6 +788,7 @@ struct LiveSurfaceScreen: View {
                 case .controls(let gamepad)?:
                     controls = gamepad
                     hardware.attach(gamepad, onKey: hold)
+                case .notice(let next)?: notice = next
                 default: break
                 }
             }

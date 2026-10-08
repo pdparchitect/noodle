@@ -302,6 +302,11 @@ public extension SurfaceSocket {
         // Key frames never say whether the companion can recover, so the last other frame does.
         var recoverable = false
         for await frame in frames {
+            // Few and small, a status always goes through, whatever the video is doing.
+            if SurfaceStatus(frame) != nil {
+                send(frame)
+                continue
+            }
             let packets = SurfacePacket.decode(frame)
             let now = delivery.now
             // A viewer can go on from a recovery frame as from a key frame.

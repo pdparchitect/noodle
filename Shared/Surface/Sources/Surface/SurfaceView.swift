@@ -300,3 +300,30 @@ final class SurfaceUIView: UIView, UIKeyInput {
     func toggleKeyboard() { if isFirstResponder { resignFirstResponder() } else { becomeFirstResponder() } }
 }
 #endif
+
+/// A small notice for the top trailing corner of a surface while it is starting or not responding.
+/// It only says so; clicks go through to whatever is under it.
+public struct SurfaceNoticeView: View {
+    private let notice: SurfaceNotice?
+
+    public init(_ notice: SurfaceNotice?) { self.notice = notice }
+
+    public var body: some View {
+        ZStack {
+            if let notice {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(notice.title)
+                }
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .padding(12)
+                .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+        .allowsHitTesting(false)
+    }
+}

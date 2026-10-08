@@ -60,6 +60,15 @@ import Foundation
     /// Someone is watching, which keeps bots off the surface until they leave.
     public var isWatched: Bool { !viewers.isEmpty }
 
+    /// Why the surface shows nothing new, which viewers are told as they arrive and as it changes.
+    public var notice: SurfaceNotice? {
+        didSet {
+            guard notice != oldValue else { return }
+            let status = SurfaceStatus(notice: notice).encoded
+            viewers.values.forEach { $0.socket.send(status) }
+        }
+    }
+
     /// Told when the first viewer arrives and when the last one leaves.
     public var watchingChanged: (@MainActor (Bool) -> Void)?
 
@@ -68,6 +77,7 @@ import Foundation
         let id = ObjectIdentifier(socket)
         let first = viewers.isEmpty
         viewers[id] = Viewer(socket: socket)
+        if notice != nil { socket.send(SurfaceStatus(notice: notice).encoded) }
         wantsKeyFrame = true
         wake()
         if first { watchingChanged?(true) }

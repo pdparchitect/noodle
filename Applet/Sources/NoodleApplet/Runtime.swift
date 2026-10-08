@@ -6,7 +6,9 @@ import NoodletRuntime
 @MainActor final class AppletSession {
   let id = UUID(), package: NoodletPackage, owner: String, log: AppletLog, dataRoot: URL
   var lock: InstanceLock?
-  var state = "starting", mode: String, revision: String
+  var state = "starting", mode: String
+  /// Read from every file off the main thread, so a big noodlet's window comes up at once.
+  let revision: Task<String, Never>
   var failure: String?
   let createdAt = Date()
   let testClock: Bool
@@ -24,13 +26,13 @@ import NoodletRuntime
   /// Set when Noodle opened it from a conversation, which its annotations go to.
   var annotation: AppletAnnotation?
   init(package: NoodletPackage, owner: String, mode: String, size: CGSize, root: URL,
-       testClock: Bool = false) throws {
+       testClock: Bool = false, revision: @escaping @Sendable (NoodletPackage) -> String = { $0.revision }) throws {
     self.package = package
     self.owner = owner
     self.mode = mode
     self.testClock = testClock
     self.size = size
-    revision = package.revision
+    self.revision = Task.detached { revision(package) }
     dataRoot = try Self.dataRoot(of: package, test: mode == "headless", root: root)
     log = AppletLog(url: root.appendingPathComponent("Logs/\(id.uuidString).jsonl"))
     lock = try InstanceLock(
@@ -93,6 +95,12 @@ import NoodletRuntime
   /// Returns why a noodlet may not use the permissions it declares. Replaced in tests.
   lazy var authorize: (NoodletPackage) async -> String? = { [defaults] in
     await AppletPermissions.authorize($0, defaults: defaults)
+  }
+  /// Reads every file of a noodlet for its revision. Replaced in tests.
+  var revision: @Sendable (NoodletPackage) -> String = { $0.revision }
+  private func revision(of package: NoodletPackage) async -> String {
+    let read = revision
+    return await Task.detached { read(package) }.value
   }
   /// The Hub only reaches noodlets of its own bots, so one it opens was made by them.
   private func fromHub(_ identity: String, path: String?) -> Bool {
@@ -287,7 +295,8 @@ import NoodletRuntime
         let package = try NoodletPackage(url: canonical)
         if fromHub(identity, path: canonical.path) { library.markHub(package.key) }
         _ = try library.linkID(for: package)
-        library.scan()
+        // A noodlet opened comes up first; the library takes it in off the main thread.
+        if request.operation == .open { Task { await library.refresh() } } else { library.scan() }
         if request.operation == .validate {
           var response = try packageInfo(package)
           response.state = "valid"
@@ -306,7 +315,7 @@ import NoodletRuntime
           if request.mode == "foreground" { try await show(existing) }
           if let annotation = request.annotation { existing.annotation = annotation }
           var response = status(existing)
-          if existing.revision != package.revision {
+          if await existing.revision.value != revision(of: package) {
             response.text =
               "Source changed. Use restart to rebuild and reload the live instance."
           }
@@ -360,6 +369,10 @@ import NoodletRuntime
           try await self.deliver(input, to: session)
         })
         streamer.watchingChanged = { [weak session] watched in session?.web?.watched = watched }
+        if let activity = session.web?.page.activity {
+          streamer.notice = activity.notice
+          activity.noticeChanged = { [weak streamer] in streamer?.notice = $0 }
+        }
         session.streamer = streamer
         streamer.attach(socket)
         return status(session)
@@ -545,7 +558,7 @@ import NoodletRuntime
       package: package, owner: owner, mode: request.mode ?? "background",
       size: (package.manifest.window ?? NoodletWindowOptions()).size(
         width: request.width, height: request.height),
-      root: library.root, testClock: request.testClock ?? false)
+      root: library.root, testClock: request.testClock ?? false, revision: revision)
     sessions[session.id] = session
     session.annotation = request.annotation
     session.log.append(

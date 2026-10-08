@@ -249,4 +249,70 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(granted, true)
     }
     #endif
+
+    private func until(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        for _ in 0..<200 where !condition() { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(condition(), "Timed out", file: file, line: line)
+    }
+
+    /// Before its first frame a page is starting; once drawn it is not responding only while it
+    /// leaves the app's question unanswered.
+    nonisolated func testAPageIsStartingUntilItDrawsAndNotRespondingWhileItLeavesAQuestionUnanswered() {
+        let start = ContinuousClock.now
+        var state = NoodletResponsiveness()
+        XCTAssertNil(state.notice(at: start))
+        state.began = start
+        XCTAssertNil(state.notice(at: start + .milliseconds(500)))
+        XCTAssertEqual(state.notice(at: start + .seconds(1)), .starting)
+        state.asked = start + .seconds(1)
+        XCTAssertEqual(state.notice(at: start + .seconds(5)), .starting)
+        state.drawn = true
+        XCTAssertNil(state.notice(at: start + .milliseconds(2500)))
+        XCTAssertEqual(state.notice(at: start + .seconds(3)), .notResponding)
+        state.asked = nil
+        XCTAssertNil(state.notice(at: start + .seconds(9)))
+    }
+
+    /// A page busy in its own script is seen as not responding, and as itself again once it is done.
+    func testAPageBusyInItsScriptIsNotRespondingUntilItIsDone() async throws {
+        let (page, _, _) = try page(files: ["index.html": """
+            <script>addEventListener('load', () => setTimeout(() => {
+              const end = Date.now() + 3000; while (Date.now() < end) {}
+            }, 200))</script>
+            """])
+        page.responsiveness.unansweredFor = .milliseconds(500)
+        page.beat = .milliseconds(100)
+        try await page.load()
+        try await until { page.activity.notice == .notResponding }
+        try await until { page.activity.notice == nil }
+    }
+
+    #if os(macOS)
+    /// A page shows what is behind it until it first draws. An opaque one then paints its own
+    /// background, as on the web; a clear one never does. One loaded out of sight counts as drawn.
+    func testAPageShowsWhatIsBehindItUntilItFirstDraws() async throws {
+        let (opaque, _, _) = try page(files: ["index.html": "<p>Hello</p>"])
+        XCTAssertEqual(opaque.web.value(forKey: "drawsBackground") as? Bool, false)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 320, height: 240), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = opaque.web
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        try await opaque.load()
+        XCTAssertFalse(opaque.activity.drawn)
+        // A test run gets no animation frames, so the report the page makes after its first two is sent here.
+        _ = try await opaque.web.evaluateJavaScript("webkit.messageHandlers.noodleDrawn.postMessage(0); 0", in: nil, in: .defaultClient)
+        try await until { opaque.activity.drawn }
+        XCTAssertEqual(opaque.web.value(forKey: "drawsBackground") as? Bool, true)
+
+        let (clear, _, _) = try page(files: ["index.html": "<p>Hello</p>"])
+        clear.opaque = false
+        try await clear.load()
+        XCTAssertTrue(clear.activity.drawn)
+        XCTAssertEqual(clear.web.value(forKey: "drawsBackground") as? Bool, false)
+    }
+    #endif
+
+
 }

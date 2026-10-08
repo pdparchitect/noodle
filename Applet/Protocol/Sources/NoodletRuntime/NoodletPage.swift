@@ -52,6 +52,16 @@ public typealias NoodletColor = UIColor
     /// What the page downloads, on its way to where the person chooses.
     private lazy var downloads = NoodletDownloads(web: web, log: log)
     public private(set) var stopped = false
+    /// Whether the page is starting or not responding, for the app to show.
+    public let activity = NoodletActivity()
+    /// Whether the page paints its own background once it has drawn, as on the web; until then
+    /// what is behind it shows.
+    public var opaque = true
+    var responsiveness = NoodletResponsiveness()
+    /// How often the page is asked whether it is still answering.
+    var beat = Duration.seconds(1)
+    private var watching: Task<Void, Never>?
+    private let drawnHandler = NoodletDrawnHandler()
 
     /// `configure` adds the app's own scripts ahead of the bridge. `localNetwork` is whether the
     /// person allowed the noodlet this device and the network it is on, as it declared.
@@ -72,6 +82,12 @@ public typealias NoodletColor = UIColor
         super.init()
         web.navigationDelegate = self
         web.uiDelegate = self
+        // Until the page draws, what is behind it shows rather than a blank white page.
+        #if canImport(AppKit)
+        if web.responds(to: NSSelectorFromString("_setDrawsBackground:")) { web.setValue(false, forKey: "drawsBackground") }
+        #else
+        web.isOpaque = false
+        #endif
         // The page sees the look its manifest asks for, else the device's.
         let background = manifest.backgroundColor.flatMap(Self.colour)
         #if canImport(AppKit)
@@ -98,6 +114,10 @@ public typealias NoodletColor = UIColor
                 source: presentation, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "noodle")
+        drawnHandler.page = self
+        configuration.userContentController.add(drawnHandler, contentWorld: .defaultClient, name: NoodletDrawnHandler.name)
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: NoodletDrawnHandler.script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .defaultClient))
         let listed = (try? JSONSerialization.data(withJSONObject: self.features)).map { String(decoding: $0, as: UTF8.self) } ?? "[]"
         configuration.userContentController.addUserScript(WKUserScript(
             source: "(() => { const features = \(listed);\n\(Self.bridge)\n})();",
@@ -158,6 +178,10 @@ public typealias NoodletColor = UIColor
 
     /// Loads the entry page, returning once it has.
     public func load() async throws {
+        if responsiveness.began == nil {
+            responsiveness.began = .now
+            watch()
+        }
         if !localNetwork {
             let list = try await WKContentRuleListStore.default().compileContentRuleList(
                 forIdentifier: "noodlet-local-network-v1", encodedContentRuleList: NoodletManifest.localNetworkRules)
@@ -183,10 +207,13 @@ public typealias NoodletColor = UIColor
         cancellations.removeAll()
         for cancel in pending { cancel() }
         finishLoad(AppletError("Noodlet stopped."))
+        watching?.cancel()
+        watching = nil
         downloads.cancelAll()
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)
         web.configuration.userContentController.removeScriptMessageHandler(forName: "noodle", contentWorld: .page)
+        web.configuration.userContentController.removeScriptMessageHandler(forName: NoodletDrawnHandler.name, contentWorld: .defaultClient)
         web.navigationDelegate = nil
         web.uiDelegate = nil
     }
@@ -199,7 +226,67 @@ public typealias NoodletColor = UIColor
         if let error { continuation.resume(throwing: error) } else { continuation.resume() }
     }
 
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finishLoad() }
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if loadContinuation != nil, let began = responsiveness.began { log("lifecycle", "Loaded \((.now - began).spoken) after loading began.") }
+        finishLoad()
+        // Out of sight a page never draws; it counts as drawn once it has loaded.
+        if !onScreen { drew() }
+    }
+
+    private var onScreen: Bool {
+        #if canImport(AppKit)
+        web.window?.isVisible == true
+        #else
+        web.window != nil
+        #endif
+    }
+
+    /// Asks the page a question on every beat, in a world of the app's own. A page busy in its
+    /// script answers only once it is done.
+    private func watch() {
+        // Holds the page only for each beat, so a closed one goes at once.
+        watching = Task { [weak self] in
+            while !Task.isCancelled, let beat = self?.ask() { try? await Task.sleep(for: beat) }
+        }
+    }
+
+    /// Asks unless a question is still unanswered, and returns how long until the next beat.
+    private func ask() -> Duration {
+        if responsiveness.asked == nil {
+            responsiveness.asked = .now
+            web.evaluateJavaScript("0", in: nil, in: .defaultClient) { [weak self] _ in
+                self?.responsiveness.asked = nil
+                self?.noticeMayChange()
+            }
+        }
+        noticeMayChange()
+        return beat
+    }
+
+    /// The page's first frame is on screen.
+    func drew() {
+        guard !activity.drawn, !stopped else { return }
+        activity.drawn = true
+        responsiveness.drawn = true
+        if let began = responsiveness.began { log("rendering", "First frame \((.now - began).spoken) after loading began.") }
+        if opaque {
+            #if canImport(AppKit)
+            if web.responds(to: NSSelectorFromString("_setDrawsBackground:")) { web.setValue(true, forKey: "drawsBackground") }
+            #else
+            if manifest.backgroundColor.flatMap(Self.colour) == nil { web.isOpaque = true }
+            #endif
+        }
+        noticeMayChange()
+    }
+
+    private func noticeMayChange() {
+        let notice = stopped ? nil : responsiveness.notice(at: .now)
+        guard notice != activity.notice else { return }
+        if notice == .notResponding { log("lifecycle", "Not responding.") }
+        else if activity.notice == .notResponding { log("lifecycle", "Responding again.") }
+        activity.notice = notice
+        activity.noticeChanged?(notice)
+    }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         log("navigation", error.localizedDescription)

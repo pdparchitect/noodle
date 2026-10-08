@@ -8,6 +8,8 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- A noodlet from a Noodle Hub, run on this Mac or watched live, says in its top right corner when it is still starting or too busy to respond.
+
 - When your devices use this Mac as a Hub, they can share this Mac's bots with people on the Noodle Hubs it joined, as Edit Bot does here.
 - Reactions now travel both ways with people a bot on this Mac is shared with through a Noodle Hub: theirs reach the bot, and the bot's reach them.
 - Chat effects from bots kept on a Noodle Hub now play here, and those from bots on this Mac reach the people they are shared with.

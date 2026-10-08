@@ -197,6 +197,8 @@ struct NoodletDeviceScreen: View {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
                 }
             }
+            // Under the buttons that float over the top corners of a full-screen page.
+            .overlay(alignment: .topTrailing) { SurfaceNoticeView(onTV ? nil : page?.activity.notice).padding(.top, fullScreen ? 44 : 0) }
             .overlay(alignment: .top) {
                 if fullScreen {
                     HStack {

@@ -111,6 +111,7 @@ struct HubSurfaceWindow: View {
     @State private var failure: String?
     /// The keys a game declared, for a controller in hand to play.
     @State private var controls: Gamepad?
+    @State private var notice: SurfaceNotice?
 
     var body: some View {
         ZStack {
@@ -120,6 +121,7 @@ struct HubSurfaceWindow: View {
                 else { ProgressView() }
             }
         }
+        .overlay(alignment: .topTrailing) { SurfaceNoticeView(showing ? notice : nil) }
         .background(.black)
         .background(ControllerInput(controls: controls) { change in
             channel?.send(LinkSurface.control(.input(.hold(key: change.key, pressed: change.pressed))))
@@ -143,6 +145,7 @@ struct HubSurfaceWindow: View {
                 case .packets(let packets)?: feed.receive(packets)
                 case .failed(let reason)?: failure = reason; showing = false
                 case .controls(let gamepad)?: controls = gamepad
+                case .notice(let next)?: notice = next
                 default: break
                 }
             }
@@ -260,6 +263,7 @@ struct HubNoodletPage: View {
                 if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
             }
         }
+        .overlay(alignment: .topTrailing) { SurfaceNoticeView(page?.activity.notice) }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(manifestBackground ?? .black)
         .background(ControllerInput(controls: controls, onKey: press))

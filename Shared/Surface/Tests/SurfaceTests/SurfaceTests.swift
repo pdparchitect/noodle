@@ -193,6 +193,36 @@ final class SurfaceTests: XCTestCase {
         XCTAssertFalse(streamer.isWatched, "the view stayed watched after its viewer left")
     }
 
+    /// Viewers hear why the surface shows nothing new as they arrive and whenever that changes, and
+    /// nothing else reads the status as one.
+    @MainActor func testViewersHearWhyTheSurfaceShowsNothingNew() async throws {
+        let picture = image(width: 800, height: 500, gray: 0.5)
+        let streamer = SurfaceStreamer(fps: 60, maxPixelSize: 800, capture: { (picture, CGSize(width: 800, height: 500)) }, apply: { _ in })
+        defer { streamer.stop() }
+        streamer.notice = .starting
+        let (companion, hub) = try pair()
+        streamer.attach(companion)
+        var heard: [SurfaceNotice?] = []
+        let listening = Task {
+            for await frame in hub.frames {
+                if let status = SurfaceStatus(frame) { heard.append(status.notice) }
+                if heard.count == 3 { break }
+            }
+        }
+        for _ in 0..<100 where heard.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        streamer.notice = .notResponding
+        streamer.notice = nil
+        let timeout = Task { try await Task.sleep(for: .seconds(10)); listening.cancel() }
+        await listening.value
+        timeout.cancel()
+        XCTAssertEqual(heard, [.starting, .notResponding, nil])
+
+        XCTAssertEqual(SurfaceStatus(SurfaceStatus(notice: nil).encoded), SurfaceStatus(notice: nil))
+        XCTAssertNil(SurfaceStatus(Data("{}".utf8)))
+        XCTAssertNil(SurfaceStatus(Data(#"{"surfaceOpened":{"sessionID":"00000000-0000-0000-0000-000000000000"}}"#.utf8)))
+        XCTAssertNil(SurfaceStatus(SurfaceControl.keyFrame.encoded))
+    }
+
     /// A surface that stops changing settles in a few frames and then sends nothing, until it
     /// changes again or a viewer asks for a key frame.
     @MainActor func testAStillSurfaceStopsSendingUntilItChanges() async throws {

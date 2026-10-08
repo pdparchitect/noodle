@@ -29,6 +29,32 @@ final class LinkSurfaceTests: XCTestCase {
         XCTAssertEqual(heard, [.shown(sequence: 5), .input(.key(.enter))])
     }
 
+    /// The device hears why the surface shows nothing new, through the Hub, whatever the video is doing.
+    func testTheDeviceHearsWhyTheSurfaceShowsNothingNew() async throws {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let companion = SurfaceSocket(fd: fds[0]), hubEnd = SurfaceSocket(fd: fds[1])
+        let hub = LinkIdentity()
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
+            .stream { LinkSurface.relay(hubEnd, to: $0) }
+        })
+        try await server.start()
+        defer { companion.close(); server.stop() }
+        let channel = try await LinkClient.channel(Data("{}".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+        defer { channel.cancel() }
+        companion.send(SurfaceStatus(notice: .notResponding).encoded)
+        companion.send(SurfaceStatus(notice: nil).encoded)
+        let deadline = Task { try await Task.sleep(for: .seconds(10)); channel.cancel() }
+        defer { deadline.cancel() }
+        var heard: [LinkSurface.Message] = []
+        for try await frame in channel.frames {
+            if let message = LinkSurface.message(frame) { heard.append(message) }
+            if heard.count == 2 { break }
+        }
+        XCTAssertEqual(heard, [.notice(.notResponding), .notice(nil)])
+    }
+
     /// How late each frame reached a device that says what it has shown, over `seconds` of a live
     /// view through a link of `bitsPerSecond`, from a companion that can send up to `ceiling`.
     private func watch(for seconds: Double, bitsPerSecond: Double, ceiling: Double) async throws

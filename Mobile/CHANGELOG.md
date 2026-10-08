@@ -4,12 +4,16 @@
 
 ### Added
 
+- A noodlet, run on the phone or watched live from a Hub, says in its top right corner when it is still starting or too busy to respond.
+
 - When your phone is joined to your Mac, you can share the Mac's bots with people on the Noodle Hubs the Mac joined. Edit the bot and tap Sharing, or Sharing on a Hub's name when the Mac joined several.
 - Chat effects: confetti or fireworks a bot sends play when you open its conversation, within a day, on whichever of your devices shows it first.
 - Play: tap … and choose Play to turn the phone into a games console. It shows every noodlet your bots shared, on all your Hubs, with games first. With a TV connected by Screen Mirroring or a cable, the console shows on the TV and the phone becomes its controller; a game controller steers it too.
 - Joining your first Hub welcomes you with a team of three bots, as Noodle does on the Mac: a personal assistant, a developer and a researcher, with their own group. They use what your plan on the Hub lends, so there is nothing to set up, and Continue says hello to them in their group.
 
 ### What to Test
+
+- Open a large game noodlet: "Starting…" shows in the top right corner until it first draws. If it then freezes while it loads, "Not responding" shows until it moves again. Watched live from a Hub, the same notices show.
 
 - With your phone joined to your Mac (Settings → Hub → This Mac on the Mac), and the Mac joined to a Noodle Hub with other people on it, edit one of the Mac's bots on the phone: Sharing shows. Tap it, tap a person: the bot shows for them on that Hub, and in Edit Bot on the Mac.
 - With the Mac joined to two Hubs, Edit Bot on the phone shows Sharing on each Hub's name, each with that Hub's people.

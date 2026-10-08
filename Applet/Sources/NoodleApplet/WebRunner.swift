@@ -3,6 +3,7 @@ import AppletBridge
 import AppletCore
 import NoodletRuntime
 import ObjectiveC
+import SwiftUI
 import WebKit
 
 /// A noodlet's page in its own window on this Mac: the shared runtime's page, with what only
@@ -81,16 +82,21 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
     window.delegate = self
     if options.background != .opaque {
       web.underPageBackgroundColor = .clear
+      page.opaque = false
       // macOS WebKit still exposes page-background drawing through this guarded
       // SPI; underPageBackgroundColor alone only changes overscroll regions.
-      if web.responds(to: NSSelectorFromString("_setDrawsBackground:")) {
-        web.setValue(false, forKey: "drawsBackground")
-      } else {
+      if !web.responds(to: NSSelectorFromString("_setDrawsBackground:")) {
         log.append("window", "This WebKit build does not support transparent page backgrounds.")
       }
     }
     WindowPresentation.apply(
       options, to: window, content: web, size: size, key: package.key, remember: rememberFrame)
+    let notice = NoticeHost(rootView: PageNotice(activity: page.activity))
+    notice.translatesAutoresizingMaskIntoConstraints = false
+    web.addSubview(notice)
+    NSLayoutConstraint.activate([
+      notice.topAnchor.constraint(equalTo: web.topAnchor), notice.trailingAnchor.constraint(equalTo: web.trailingAnchor),
+    ])
     dragMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
       if event.window === self?.window { self?.dragEvent = event }
       return event
@@ -141,6 +147,7 @@ final class WebRunner: NSObject, NoodletPageHost, NSWindowDelegate {
       window.setFrame(place.frame, display: false)
       window.order(.below, relativeTo: place.window)
     } else if foreground { show() }
+    if foreground { log.append("lifecycle", "Window shown.") }
     try await page.load()
     if foreground, let place { WindowPresentation.present(window, in: place) }
   }
@@ -343,4 +350,15 @@ extension AppletAnnotation.Shortcut {
     }
     return typed?.lowercased() == key
   }
+}
+
+/// The page's notice, over the top trailing corner of its window.
+private struct PageNotice: View {
+  let activity: NoodletActivity
+  var body: some View { SurfaceNoticeView(activity.notice) }
+}
+
+/// Shows the notice without taking the clicks meant for the page under it.
+private final class NoticeHost: NSHostingView<PageNotice> {
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

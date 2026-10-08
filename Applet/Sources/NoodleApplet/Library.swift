@@ -83,6 +83,8 @@ struct HubPerson: Hashable, Identifiable, Decodable {
   private var registrations: [Registration] = []
   private var timer: Timer?
   private var refreshing = false
+  /// Finds the noodlets in places and bots' folders. Replaced in tests.
+  var walk: @Sendable (_ places: [URL], _ botFolders: [URL], _ thumbnails: URL) -> [String: LibraryEntry] = AppletLibrary.discover
   private var links: NoodletRegistry?
   /// Where noodlets keep their secrets, whichever device their page runs on.
   let secrets: AppletSecrets
@@ -194,7 +196,7 @@ struct HubPerson: Hashable, Identifiable, Decodable {
   }
   func scan() {
     let places = forget()
-    apply(Self.discover(in: places, botFolders: botFolders.map(\.url), thumbnails: root.appendingPathComponent("Thumbnails", isDirectory: true)))
+    apply(walk(places, botFolders.map(\.url), root.appendingPathComponent("Thumbnails", isDirectory: true)))
   }
   /// What the watch timer runs. Walking bots' workspaces takes a tenth of a second or more, and
   /// recordings and live views capture on the main thread, so the walk happens off it.
@@ -202,9 +204,9 @@ struct HubPerson: Hashable, Identifiable, Decodable {
     guard !refreshing else { return }
     refreshing = true
     defer { refreshing = false }
-    let places = forget(), folders = botFolders.map(\.url)
+    let places = forget(), folders = botFolders.map(\.url), walk = walk
     let thumbnails = root.appendingPathComponent("Thumbnails", isDirectory: true)
-    apply(await Task.detached { Self.discover(in: places, botFolders: folders, thumbnails: thumbnails) }.value)
+    apply(await Task.detached { walk(places, folders, thumbnails) }.value)
   }
   /// Drops what was deleted and returns where to look for noodlets.
   private func forget() -> [URL] {
@@ -307,7 +309,10 @@ struct HubPerson: Hashable, Identifiable, Decodable {
     recent.insert(package.key, at: 0)
     recent = Array(recent.prefix(30))
     defaults.set(recent, forKey: "recent")
-    scan()
+    // Only it can be new here, so the workspaces are not walked again on the main thread.
+    guard !entries.contains(where: { $0.id == package.key }) else { return }
+    let entry = LibraryEntry(package: package, thumbnails: root.appendingPathComponent("Thumbnails", isDirectory: true))
+    apply(Dictionary(entries.map { ($0.id, $0) } + [(entry.id, entry)], uniquingKeysWith: { $1 }))
   }
   /// Pinned noodlets for the menu bar, in pin order.
   var menuPinned: [LibraryEntry] {

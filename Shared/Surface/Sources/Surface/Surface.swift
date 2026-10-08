@@ -128,3 +128,46 @@ struct SurfaceTouches {
         CGSize(width: view.width * screen * scale, height: view.height * screen * scale)
     }
 }
+
+/// Why a surface shows nothing new: its page has not drawn yet, or is too busy to answer.
+public enum SurfaceNotice: String, Codable, Equatable, Sendable {
+    case starting, notResponding
+
+    public var title: String {
+        switch self {
+        case .starting: "Starting…"
+        case .notResponding: "Not responding"
+        }
+    }
+}
+
+/// What a companion says down a live view besides video, as JSON: why its surface shows nothing
+/// new, or nil once it does again.
+public struct SurfaceStatus: Codable, Equatable, Sendable {
+    public var notice: SurfaceNotice?
+
+    public init(notice: SurfaceNotice?) { self.notice = notice }
+
+    /// The key is always there, null for no notice, so no other JSON on the channel reads as a status.
+    private enum CodingKeys: String, CodingKey { case notice = "surfaceNotice" }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.contains(.notice) else {
+            throw DecodingError.keyNotFound(CodingKeys.notice, .init(codingPath: [], debugDescription: "Not a status."))
+        }
+        notice = try container.decodeIfPresent(SurfaceNotice.self, forKey: .notice)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(notice, forKey: .notice)
+    }
+
+    public init?(_ data: Data) {
+        guard data.first == UInt8(ascii: "{"), let status = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        self = status
+    }
+
+    public var encoded: Data { (try? JSONEncoder().encode(self)) ?? Data() }
+}
