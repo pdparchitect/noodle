@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-08
+
 ### Changed
 
 - Games bots make can read game controllers directly on iPhone and iPad too, with analog sticks and one controller per player.

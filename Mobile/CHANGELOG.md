@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-08
+
+### Changed
+
+- Games can read game controllers directly, as they do in Safari: analog sticks, every button, and several controllers for several players. Such a game no longer gets each press twice, as a key as well.
+- Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
+
+### Fixed
+
+- While a full-screen game loads, Done and the buttons beside it stay in the top corners instead of starting in the middle and jumping out.
+
+### What to Test
+
+- Open a heavy 3D game noodlet: it runs smoother than before and still fills the screen. Show it on a TV: it fills the TV and stays smooth. Text and buttons outside the game look as sharp as before.
+- With a game controller connected, open a game that supports controllers, such as one made for several players: press a button: one player joins, not two. Connect a second controller: a second player can join. Show the game on a TV: the controllers keep working.
+- A game played only with keys still plays with a controller as before.
+- Open a full-screen game: while it loads, Done and the buttons are already in the top corners and stay there.
+
 ## [0.25.0] - 2026-10-08
 
 ### Added
@@ -12,14 +30,6 @@
 - Play: tap … and choose Play to turn the phone into a games console. It shows every noodlet your bots shared, on all your Hubs, with games first. With a TV connected by Screen Mirroring or a cable, the console shows on the TV and the phone becomes its controller; a game controller steers it too.
 - Joining your first Hub welcomes you with a team of three bots, as Noodle does on the Mac: a personal assistant, a developer and a researcher, with their own group. They use what your plan on the Hub lends, so there is nothing to set up, and Continue says hello to them in their group.
 
-### Changed
-
-- Games can read game controllers directly, as they do in Safari: analog sticks, every button, and several controllers for several players. Such a game no longer gets each press twice, as a key as well.
-- Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
-
-### Fixed
-
-- While a full-screen game loads, Done and the buttons beside it stay in the top corners instead of starting in the middle and jumping out.
 
 ### What to Test
 
@@ -38,10 +48,6 @@
 - Pair with a Hub where you already have bots, or pair a second Hub: there is no welcome and no new bots.
 - On a Hub whose plan lends no harnesses, the welcome says so, and Not Now shows the list.
 - Turn on Airplane Mode while the team is being made, then off again: Try Again finishes the same team without making any bot twice.
-- Open a heavy 3D game noodlet: it runs smoother than before and still fills the screen. Show it on a TV: it fills the TV and stays smooth. Text and buttons outside the game look as sharp as before.
-- With a game controller connected, open a game that supports controllers, such as one made for several players: press a button: one player joins, not two. Connect a second controller: a second player can join. Show the game on a TV: the controllers keep working.
-- A game played only with keys still plays with a controller as before.
-- Open a full-screen game: while it loads, Done and the buttons are already in the top corners and stay there.
 
 ## [0.24.0] - 2026-10-07
 

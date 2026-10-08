@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-08
+
 ### Changed
 
 - Noodle Hub's computers are in their own space instead of under Hub in the sidebar. Switch with the Spaces menu: Personal (⌘1) for your own, Hub (⌘2) for the Hub's, with a section for each person they are kept for. The menu shows once the Hub keeps computers on this Mac.
