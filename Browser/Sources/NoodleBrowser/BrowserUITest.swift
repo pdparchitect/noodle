@@ -2,6 +2,7 @@ import AppKit
 import BrowserBridge
 import BrowserCore
 import NoodleLaunchChecks
+import NoodleSettingsUI
 import SwiftUI
 
 /// Opt-in signed fixture. Never loads user profiles or starts the provider.
@@ -163,20 +164,31 @@ import SwiftUI
         }
         guard presentation.profile?.selectedTabID == original.id else { throw BrowserError("Closing another tab changed the selected tab.") }
     }
-    /// The person a Hub keeps browsers for heads their group; clicking them selects nothing.
+    /// In the Hub's space the person a Hub keeps browsers for heads their section; clicking them selects nothing.
     private static func verifyPersonRow(_ presentation: BrowserPresentation, window: NSWindow) async throws {
-        guard let content = window.contentView, let selected = presentation.selection else { throw BrowserError("Missing sidebar fixture.") }
+        guard let content = window.contentView, let original = presentation.selection else { throw BrowserError("Missing sidebar fixture.") }
         let runtime = presentation.runtime, hubID = BrowserBuildIdentity.current.hubID
         var create = BrowserRequest(.create); create.profile = BrowserDraft(name: "Kept")
         let kept = try await runtime.perform(create, caller: hubID).browser!
         var owner = BrowserRequest(.setOwner, browserID: kept.id); owner.owner = BrowserOwner(id: UUID(), name: "Ada")
         _ = try await runtime.perform(owner, caller: hubID)
+        var loose = BrowserRequest(.create); loose.profile = BrowserDraft(name: "Loose")
+        let unowned = try await runtime.perform(loose, caller: hubID).browser!
+        let defaults = UserDefaults.standard, space = defaults.string(forKey: CompanionSpace.key)
+        defaults.set(CompanionSpace.hub.rawValue, forKey: CompanionSpace.key)
+        defer { defaults.set(space, forKey: CompanionSpace.key) }
+        // Entering the Hub's space selects its first browser.
+        try await BrowserSmokeTest.eventually("Hub space selection") { presentation.selection == kept.id }
+        let selected = kept.id
         try await BrowserSmokeTest.eventually("person row key window") { NSApp.isActive && window.isKeyWindow }
+        func isAda(_ node: NSObject) -> Bool {
+            [NSAccessibility.Attribute.title, .description, .value].contains { attribute(node, $0) as? String == "Ada" }
+        }
         try await BrowserSmokeTest.eventually("person row layout") {
             content.layoutSubtreeIfNeeded()
-            return elements(content).contains { attribute($0, .title) as? String == "Ada" || attribute($0, .description) as? String == "Ada" }
+            return elements(content).contains(where: isAda)
         }
-        guard let row = elements(content).first(where: { attribute($0, .title) as? String == "Ada" || attribute($0, .description) as? String == "Ada" }),
+        guard let row = elements(content).first(where: isAda),
               let frame = (row.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue, !frame.isEmpty else {
             throw BrowserError("Missing accessible person row.")
         }
@@ -185,7 +197,7 @@ import SwiftUI
         guard presentation.selection == selected, runtime.failure == nil else {
             throw BrowserError("Clicking a person selected them as a browser: \(runtime.failure ?? "no alert").")
         }
-        // Arrow keys walk past the person too, down to the browser kept for them and back.
+        // Arrow keys walk past section headings, between the Hub's browsers and back.
         guard let list = elements(content).compactMap({ $0 as? NSTableView }).first else { throw BrowserError("Missing sidebar list.") }
         window.makeFirstResponder(list)
         var visited: Set<UUID> = []
@@ -201,8 +213,8 @@ import SwiftUI
             }
             visited.insert(id)
         }
-        guard visited.contains(kept.id) else { throw BrowserError("Arrow keys did not reach the browser kept for a person.") }
-        presentation.selection = selected
+        guard visited == [kept.id, unowned.id] else { throw BrowserError("Arrow keys did not walk the Hub's browsers across sections.") }
+        presentation.selection = original
     }
     /// Posts `count` consecutive clicks; events stay in this process.
     private static func click(_ point: NSPoint, in window: NSWindow, count: Int = 1) throws {
