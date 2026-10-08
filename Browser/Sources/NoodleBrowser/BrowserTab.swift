@@ -13,6 +13,11 @@ import WebKit
     weak var runtime: BrowserRuntime?
     @Published var info: BrowserTabInfo
     @Published var dialog: BrowserDialog?
+    /// The page's own icon, kept while the tab stays on the same site.
+    private(set) var favicon: NSImage? { willSet { runtime?.objectWillChange.send() } }
+    private var faviconURL: URL?
+    private var faviconSite: String?
+    private var faviconTask: Task<Void, Never>?
     private var replyToDialog: ((Bool, String?) -> Void)?
     private var observations: [NSKeyValueObservation] = []
     private(set) var frames: [String: WKFrameInfo] = [:]
@@ -147,6 +152,7 @@ import WebKit
     func stop() {
         resetPointer()
         stopped = true
+        faviconTask?.cancel()
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor); self.inputMonitor = nil }
         let pending = operations.values; operations.removeAll(); pending.forEach { $0() }
         finishUpload(.failure(BrowserError("Tab closed during upload.")))
@@ -167,7 +173,22 @@ import WebKit
         frames.removeAll(); info.error = nil; update()
         if dialog != nil { answerDialog(accept: false, text: nil) }
     }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finishedDocument = true; update() }
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if webView.url?.host != faviconSite { favicon = nil; faviconURL = nil; faviconSite = nil }
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finishedDocument = true; update(); findFavicon() }
+    private func findFavicon() {
+        guard let page = web.url else { return }
+        faviconTask?.cancel()
+        faviconTask = Task { [weak self] in
+            guard let self else { return }
+            let links = (try? await web.callAsyncJavaScript(BrowserFavicon.script, contentWorld: Self.controlWorld)) as? [[String: String]]
+            guard let url = BrowserFavicon.choose(links ?? [], page: page), url != faviconURL else { return }
+            let image = await BrowserFavicon.load(url)
+            guard !Task.isCancelled, !stopped, web.url?.host == page.host else { return }
+            favicon = image; faviconURL = url; faviconSite = page.host
+        }
+    }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
     private func failed(_ error: Error) {
@@ -391,4 +412,47 @@ import WebKit
     private var continuation: CheckedContinuation<T, Error>?
     init(_ continuation: CheckedContinuation<T, Error>) { self.continuation = continuation }
     func finish(_ result: Result<T, Error>) { let value = continuation; continuation = nil; value?.resume(with: result) }
+}
+
+/// Finds and fetches the icon a page names for itself.
+enum BrowserFavicon {
+    /// The page's `<link>` elements, as `choose` reads them.
+    static let script = """
+        return [...document.querySelectorAll('link[rel][href]')].slice(0, 200)
+            .map(l => ({rel: l.rel, href: l.href, sizes: l.getAttribute('sizes') || '', type: l.type || ''}))
+        """
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false; configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCache = nil; configuration.timeoutIntervalForRequest = 10
+        return URLSession(configuration: configuration)
+    }()
+
+    /// The icon that suits a tab best: a scalable one, then the smallest of at least 32 pixels, then
+    /// any other, an Apple touch icon only when nothing else, and the site's favicon.ico without any.
+    static func choose(_ links: [[String: String]], page: URL) -> URL? {
+        guard ["http", "https"].contains(page.scheme?.lowercased() ?? ""), page.host != nil else { return nil }
+        func rank(_ link: [String: String]) -> (url: URL, rank: [Int])? {
+            let rel = Set((link["rel"] ?? "").lowercased().split(separator: " "))
+            let touch = rel.contains("apple-touch-icon") || rel.contains("apple-touch-icon-precomposed")
+            guard rel.contains("icon") || touch, let url = URL(string: link["href"] ?? "", relativeTo: page)?.absoluteURL,
+                  ["http", "https", "data"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+            let sizes = (link["sizes"] ?? "").lowercased()
+            if sizes == "any" || link["type"]?.lowercased() == "image/svg+xml" { return (url, [touch ? 1 : 0, 0, 0]) }
+            let side = sizes.split(separator: " ").compactMap { $0.split(separator: "x").first.flatMap { Int($0) } }.max()
+            guard let side else { return (url, [touch ? 1 : 0, 2, 0]) }
+            return (url, side >= 32 ? [touch ? 1 : 0, 1, side] : [touch ? 1 : 0, 3, -side])
+        }
+        if let best = links.compactMap(rank).min(by: { $0.rank.lexicographicallyPrecedes($1.rank) }) { return best.url }
+        var site = URLComponents(); site.scheme = page.scheme; site.host = page.host; site.port = page.port; site.path = "/favicon.ico"
+        return site.url
+    }
+
+    /// The image at `url`, if it is one of at most a megabyte. No cookies are sent or kept.
+    static func load(_ url: URL) async -> NSImage? {
+        guard let (data, response) = try? await session.data(from: url), data.count <= 1 << 20,
+              ((response as? HTTPURLResponse)?.statusCode ?? 200) < 300,
+              let image = NSImage(data: data), image.isValid else { return nil }
+        return image
+    }
 }

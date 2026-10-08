@@ -37,6 +37,29 @@ import XCTest
         XCTAssertNil(strip.target(at: CGPoint(x: 10, y: BrowserLiveChrome.height + 5)), "a point on the page hit the chrome")
     }
 
+    /// A tab is as wide whatever its title, so a page naming itself never moves the tabs around it.
+    func testATabIsAsWideWhateverItsTitle() async throws {
+        let first = BrowserTabInfo(title: "A"), second = BrowserTabInfo(title: "B")
+        var named = second; named.title = "A much longer title that the page only sets once it has loaded"
+        let short = try await extent(of: second.id, in: [first, second])
+        let long = try await extent(of: second.id, in: [first, named])
+        XCTAssertEqual(short, long, "the tab changed size with its title")
+        let other = try await extent(of: first.id, in: [first, second])
+        XCTAssertEqual(other.count, short.count, "tabs differ in width")
+    }
+
+    /// The points across the middle of the strip that land on a tab or its close button.
+    private func extent(of id: UUID, in tabs: [BrowserTabInfo]) async throws -> ClosedRange<Int> {
+        let strip = BrowserTabStripPicture(), middle = BrowserTabStrip.height / 2
+        for _ in 0..<50 {
+            _ = strip.render(tabs: tabs, selected: tabs.last?.id, address: "", editing: false, width: 800, scale: 1)
+            let hits = (0..<800).filter { [.tab(id), .close(id)].contains(strip.target(at: CGPoint(x: Double($0), y: middle))) }
+            if let low = hits.first, let high = hits.last, strip.target(at: CGPoint(x: 790, y: middle)) != nil { return low...high }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        throw XCTSkip("the strip never laid out")
+    }
+
     /// Typing in a live view's address bar replaces the address, as selecting it first would;
     /// Return goes there and Escape leaves it as it was.
     func testTheAddressBarTakesTypingAndGoesOnReturn() {

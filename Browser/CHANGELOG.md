@@ -6,6 +6,8 @@
 
 - Settings > External Tools is now Settings > Agents, and the sidebar section for what agents create is called Agents.
 - Settings > Agents shows each setup command in full in a box with a copy button, as Noodle's Settings shows installation commands.
+- Tabs share the tab bar evenly and keep their width when a page changes its title. After you close a tab, the others keep their size until the pointer leaves the tab bar, so you can close the next one without moving the pointer.
+- Tabs show the page's icon, and a spinner while the page loads.
 
 ## [0.12.0] - 2026-10-08
 

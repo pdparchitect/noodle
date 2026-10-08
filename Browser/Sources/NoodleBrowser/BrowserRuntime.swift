@@ -10,6 +10,8 @@ import WebKit
     let library: BrowserLibrary
     @Published var failure: String?
     @Published private(set) var tabs: [UUID: BrowserTab] = [:]
+    /// The icons of the open tabs' pages; a tab sends `objectWillChange` when its icon changes.
+    var favicons: [UUID: NSImage] { tabs.compactMapValues(\.favicon) }
     var showBrowser: ((UUID) -> Void)?
     var willRemoveBrowser: ((UUID) -> Void)?
     private var server: BrowserConnectionServer?

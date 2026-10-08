@@ -262,8 +262,18 @@ private struct BrowserDetailView: View {
     }
 
     private var tabStrip: some View {
-        BrowserTabStrip(tabs: profile.tabs, selectedTabID: profile.selectedTabID, select: presentation.selectTab, close: { id in
-            do { try presentation.runtime.closeTab(browserID: profile.id, tabID: id) } catch { presentation.runtime.failure = error.localizedDescription }
+        BrowserWindowTabStrip(runtime: presentation.runtime, profile: profile, presentation: presentation)
+    }
+}
+
+/// The window's tab strip, redrawn when a tab's icon arrives.
+private struct BrowserWindowTabStrip: View {
+    @ObservedObject var runtime: BrowserRuntime
+    let profile: BrowserProfile
+    let presentation: BrowserPresentation
+    var body: some View {
+        BrowserTabStrip(tabs: profile.tabs, icons: runtime.favicons, selectedTabID: profile.selectedTabID, select: presentation.selectTab, close: { id in
+            do { try runtime.closeTab(browserID: profile.id, tabID: id) } catch { runtime.failure = error.localizedDescription }
         }, newTab: presentation.newTab)
     }
 }
@@ -278,15 +288,27 @@ enum BrowserTabStripTarget: Hashable {
 /// `layout` hears where each target sits, for a strip drawn somewhere nobody clicks it directly.
 struct BrowserTabStrip: View {
     static let height: CGFloat = 32 + 2 * browserTabInset
+    /// Tabs share the strip evenly within these widths, whatever their titles, and scroll past the narrowest.
+    static let tabWidths: ClosedRange<CGFloat> = 120...230
 
     let tabs: [BrowserTabInfo]
+    var icons: [UUID: NSImage] = [:]
     let selectedTabID: UUID?
     let select: (UUID) -> Void
     let close: (UUID) -> Void
     let newTab: () -> Void
     var layout: (([BrowserTabStripTarget: CGRect]) -> Void)?
     @State private var width: CGFloat = 0
+    /// After a click closes a tab, the rest keep their width until the pointer leaves the strip,
+    /// so the next close button comes under it.
+    @State private var closingWidth: CGFloat?
     @State private var targets: [BrowserTabStripTarget: CGRect] = [:]
+
+    private var tabWidth: CGFloat {
+        let shared = (width - 3 * CGFloat(tabs.count)) / CGFloat(max(1, tabs.count))
+        return closingWidth.map { min($0, Self.tabWidths.upperBound) }
+            ?? min(Self.tabWidths.upperBound, max(Self.tabWidths.lowerBound, shared))
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -296,16 +318,16 @@ struct BrowserTabStrip: View {
                         ZStack(alignment: .trailing) {
                             Button { select(tab.id) } label: {
                                 HStack(spacing: 7) {
-                                    Image(systemName: "globe").font(.caption).foregroundStyle(.secondary)
+                                    BrowserTabIcon(image: icons[tab.id], loading: tab.loading)
                                     Text(tab.title).font(.system(size: 12.5)).lineLimit(1)
-                                        .frame(minWidth: 60, maxWidth: 170, alignment: .leading)
+                                    Spacer(minLength: 0)
                                 }
-                                .padding(.leading, 10).padding(.trailing, 30).frame(height: 32)
+                                .padding(.leading, 10).padding(.trailing, 30).frame(width: tabWidth, height: 32)
                                 .contentShape(Rectangle())
                             }
                             .accessibilityIdentifier("browser.tab.\(tab.id)")
                             .located(.tab(tab.id), in: $targets)
-                            Button { close(tab.id) } label: {
+                            Button { closingWidth = tabWidth; close(tab.id) } label: {
                                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
                                     .frame(width: 24, height: 32).contentShape(Rectangle())
                             }.padding(.trailing, 4).help("Close Tab")
@@ -314,21 +336,34 @@ struct BrowserTabStrip: View {
                         }.buttonStyle(.plain)
                             .background(selectedTabID == tab.id ? Color.primary.opacity(0.10) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: browserTabCornerRadius, style: .continuous))
-                            .fixedSize()
                     }
                     // Only the space after the last tab opens a tab; the tabs are
                     // siblings, so double-clicking one never reaches this gesture.
                     Color.clear.frame(height: 32).contentShape(Rectangle())
-                        .onTapGesture(count: 2) { newTab() }
+                        .onTapGesture(count: 2) { closingWidth = nil; newTab() }
                         .accessibilityHidden(true)
                 }.frame(minWidth: width, alignment: .leading)
             }.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            Button { newTab() } label: { Image(systemName: "plus") }.buttonStyle(.borderless).help("New Tab").padding(.horizontal, 8)
+            Button { closingWidth = nil; newTab() } label: { Image(systemName: "plus") }.buttonStyle(.borderless).help("New Tab").padding(.horizontal, 8)
                 .accessibilityIdentifier("browser.tab.new")
                 .located(.newTab, in: $targets)
         }.padding(browserTabInset)
+            .onHover { if !$0 { closingWidth = nil } }
             .coordinateSpace(.named(BrowserTabStripSpace.name))
             .onChange(of: targets) { layout?(targets) }
+    }
+}
+
+/// A spinner while the tab loads, then the page's icon, or a globe for a page without one.
+private struct BrowserTabIcon: View {
+    let image: NSImage?
+    let loading: Bool
+    var body: some View {
+        Group {
+            if loading { ProgressView().controlSize(.small) }
+            else if let image { Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit) }
+            else { Image(systemName: "globe").font(.caption).foregroundStyle(.secondary) }
+        }.frame(width: 16, height: 16)
     }
 }
 

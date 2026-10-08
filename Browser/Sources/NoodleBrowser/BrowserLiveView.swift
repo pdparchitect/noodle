@@ -9,6 +9,7 @@ struct BrowserLiveChrome: View {
     static let height = BrowserTabStrip.height + 36
 
     let tabs: [BrowserTabInfo]
+    var icons: [UUID: NSImage] = [:]
     let selectedTabID: UUID?
     let address: String
     let editing: Bool
@@ -18,7 +19,7 @@ struct BrowserLiveChrome: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            BrowserTabStrip(tabs: tabs, selectedTabID: selectedTabID, select: { _ in }, close: { _ in }, newTab: {},
+            BrowserTabStrip(tabs: tabs, icons: icons, selectedTabID: selectedTabID, select: { _ in }, close: { _ in }, newTab: {},
                             layout: { tabTargets = $0; layout($0.merging(navigation) { $1 }) })
             HStack(spacing: 4) {
                 ForEach([(BrowserTabStripTarget.back, "chevron.left"), (.forward, "chevron.right"), (.reload, "arrow.clockwise")],
@@ -91,8 +92,9 @@ struct BrowserAddressDraft: Equatable {
     }
 
     /// The chrome at `width` points, `scale` pixels to a point.
-    func render(tabs: [BrowserTabInfo], selected: UUID?, address: String, editing: Bool, width: CGFloat, scale: CGFloat) -> CGImage? {
-        host.rootView = AnyView(BrowserLiveChrome(tabs: tabs, selectedTabID: selected, address: address, editing: editing,
+    func render(tabs: [BrowserTabInfo], icons: [UUID: NSImage] = [:], selected: UUID?, address: String, editing: Bool, width: CGFloat,
+                scale: CGFloat) -> CGImage? {
+        host.rootView = AnyView(BrowserLiveChrome(tabs: tabs, icons: icons, selectedTabID: selected, address: address, editing: editing,
                                                   layout: { [weak self] in self?.targets = $0 })
             .frame(width: width, height: BrowserLiveChrome.height)
             .background(Color(nsColor: .windowBackgroundColor)))
@@ -140,7 +142,8 @@ struct BrowserAddressDraft: Equatable {
         let scale = CGFloat(page.image.width) / max(1, page.size.width)
         let stripHeight = Int((BrowserLiveChrome.height * scale).rounded())
         let address = draft?.text ?? profile.tabs.first { $0.id == profile.selectedTabID }.map { $0.url == "about:blank" ? "" : $0.url } ?? ""
-        guard let tabs = strip.render(tabs: profile.tabs, selected: profile.selectedTabID, address: address, editing: draft != nil,
+        guard let tabs = strip.render(tabs: profile.tabs, icons: runtime?.favicons ?? [:], selected: profile.selectedTabID,
+                                      address: address, editing: draft != nil,
                                       width: page.size.width, scale: scale),
               let context = CGContext(data: nil, width: page.image.width, height: page.image.height + stripHeight, bitsPerComponent: 8,
                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
