@@ -8,7 +8,7 @@ Plain HTML, CSS and a few lines of JavaScript. There's no build step. Copy the f
 - `applet/index.html`: the Noodle Applet page, led by games, linked from the Applet section
 - `styles.css`: all styles, including dark mode and phone layouts
 - `app.js`: fades the nav logo and Download button in once you scroll past the hero buttons
-- `assets/`: the app symbols, AI harness logos, favicon, the screenshots, `stage-launch.avif`, the photo every screenshot is staged on, and `social-card.jpg`, the link preview for X, Slack and others. Screenshots and photos are AVIF; the link preview stays JPEG and `favicon.png` stays PNG, because `oauth/client.json` points sign-in services at it. Give each AVIF even width and height: Chrome shows nothing for a large one with an odd side
+- `assets/`: the app symbols, AI harness logos, favicon, the screenshots, `stage-launch.avif`, the photo every screenshot is staged on, `social-card.jpg`, the link preview for X, Slack and others, and `social-card-computer.jpg`, `social-card-browser.jpg` and `social-card-applet.jpg`, the previews for the three app pages. Screenshots and photos are AVIF; the link previews stay JPEG and `favicon.png` stays PNG, because `oauth/client.json` points sign-in services at it. Give each AVIF even width and height: Chrome shows nothing for a large one with an odd side
 
 ## Screenshots still to add
 
