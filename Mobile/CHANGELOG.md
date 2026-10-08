@@ -12,6 +12,10 @@
 - Play: tap … and choose Play to turn the phone into a games console. It shows every noodlet your bots shared, on all your Hubs, with games first. With a TV connected by Screen Mirroring or a cable, the console shows on the TV and the phone becomes its controller; a game controller steers it too.
 - Joining your first Hub welcomes you with a team of three bots, as Noodle does on the Mac: a personal assistant, a developer and a researcher, with their own group. They use what your plan on the Hub lends, so there is nothing to set up, and Continue says hello to them in their group.
 
+### Changed
+
+- Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
+
 ### What to Test
 
 - Open a large game noodlet: "Starting…" shows in the top right corner until it first draws. If it then freezes while it loads, "Not responding" shows until it moves again. Watched live from a Hub, the same notices show.
@@ -29,6 +33,7 @@
 - Pair with a Hub where you already have bots, or pair a second Hub: there is no welcome and no new bots.
 - On a Hub whose plan lends no harnesses, the welcome says so, and Not Now shows the list.
 - Turn on Airplane Mode while the team is being made, then off again: Try Again finishes the same team without making any bot twice.
+- Open a heavy 3D game noodlet: it runs smoother than before and still fills the screen. Show it on a TV: it fills the TV and stays smooth. Text and buttons outside the game look as sharp as before.
 
 ## [0.24.0] - 2026-10-07
 

@@ -161,6 +161,42 @@ struct NoodletDeviceScreen: View {
         configuration.userContentController.addUserScript(WKUserScript(
             source: "if (navigator.audioSession) navigator.audioSession.type = 'playback';",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if manifest.controls != nil {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: renderScript(consoleSize(onTV: false)), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+    }
+
+    /// The most pixels a game draws, as a games console does: handheld on a phone, docked on an
+    /// iPad or a TV. The view scales it up to fill, as a TV does a console's.
+    static func consoleSize(onTV: Bool) -> (long: Int, short: Int) {
+        onTV || UIDevice.current.userInterfaceIdiom == .pad ? (1920, 1080) : (1280, 720)
+    }
+
+    /// Tells the page the size it may draw at now that it moved to or from the TV.
+    static func renderSize(onTV: Bool) -> String {
+        let size = consoleSize(onTV: onTV)
+        return "window.__noodleRenderSize?.(\(size.long), \(size.short));"
+    }
+
+    /// A game sizes its canvas by devicePixelRatio, which on a phone's screen is more than its GPU
+    /// keeps up with in 3D; the ratio it reads keeps the page within the console's size.
+    private static func renderScript(_ size: (long: Int, short: Int)) -> String {
+        """
+        (() => {
+          const own = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio') ?? Object.getOwnPropertyDescriptor(Window.prototype, 'devicePixelRatio');
+          const screenRatio = () => own.get.call(window);
+          let most = [\(size.long), \(size.short)];
+          Object.defineProperty(window, 'devicePixelRatio', { configurable: true, enumerable: true, get: () => {
+            const long = Math.max(innerWidth, innerHeight), short = Math.min(innerWidth, innerHeight);
+            return long && short ? Math.min(screenRatio(), most[0] / long, most[1] / short) : screenRatio();
+          } });
+          Object.defineProperty(window, '__noodleRenderSize', { value: (long, short) => {
+            most = [long, short];
+            dispatchEvent(new Event('resize'));
+          } });
+        })();
+        """
     }
 
     private var screenControls: Gamepad? {
@@ -234,6 +270,7 @@ struct NoodletDeviceScreen: View {
         // The phone turns sideways as a controller does.
         .onChange(of: onTV, initial: true) {
             ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
+            if let page { Task { _ = try? await page.evaluate(Self.renderSize(onTV: onTV)) } }
         }
         .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
             KeepAwake.set(awake)
@@ -276,6 +313,10 @@ struct NoodletDeviceScreen: View {
                 Self.configure($0, for: manifest)
             }
             page.declaredCapture = .grant
+            #if DEBUG
+            // Safari's Web Inspector on the Mac reaches a development build's noodlets, to profile them.
+            page.web.isInspectable = true
+            #endif
             host = NoodletDeviceHost(page)
             page.failed = { failure = $0; self.page = nil }
             self.page = page

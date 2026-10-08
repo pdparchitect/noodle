@@ -199,6 +199,17 @@ public enum AppletGuidance {
         A game may still read the Gamepad API where it has one, for analog sticks or several
         players, but keep the keys working alongside it.
 
+        A game runs on Macs, phones and TVs of very different power, and on a phone or a
+        TV the phone's own graphics chip draws it, so keep it smooth by its own measure: time
+        frames with requestAnimationFrame and, while they stay under about 30 a second, lower
+        the drawing resolution (a 3D renderer's pixel ratio) a step at a time, down to about
+        640 by 360, raising it again only with plenty of headroom. The number of pixels costs
+        a phone more than anything else, so start modestly on touch devices
+        (navigator.maxTouchPoints > 0): a pixel ratio of 1 at most, no antialiasing, smaller
+        shadow maps and fewer effects. Noodle on iPhone and iPad keeps devicePixelRatio within
+        a games console's size, 720p on an iPhone and 1080p on an iPad or a TV, and it changes
+        when the game moves to a TV, so read it again on each resize.
+
         Optional manifest window object:
         {"type":"floating","background":"translucent","titlebar":false,"width":320,"height":350,"minWidth":260,"minHeight":300,"maxWidth":480,"maxHeight":520,"resizable":true,"rememberFrame":true}
         type is standard (default), floating (stays above ordinary windows), or preview

@@ -25,6 +25,14 @@ final class AppletAccessTests: XCTestCase {
         }
     }
 
+    /// A game keeps itself smooth on a phone or TV by lowering its own resolution, and reads
+    /// devicePixelRatio again on resize, since it changes when the game moves to a TV.
+    func testGamesAreToldToReadThePixelRatioAgainOnResize() {
+        let skill = AppletGuidance.instructions(for: .production)
+        XCTAssertTrue(skill.contains("devicePixelRatio"))
+        XCTAssertTrue(skill.contains("resize"))
+    }
+
     /// Every command a bot can run is described; what Noodle and Noodle Hub ask for people is not a bot's.
     func testEveryToolCommandIsDescribed() {
         for command in AppletGuidance.toolOperations {
