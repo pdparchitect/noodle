@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131519" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="Noodle Computer gives your AI agents real Linux, Mac and Windows computers that run privately on your Mac. Use it yourself, with Noodle, or from Claude Code, Codex and any MCP client." />
+  <title>Noodle Computer - Real computers for your agents.</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Noodle" />
+  <meta property="og:url" content="https://usenoodle.app/computer/" />
+  <meta property="og:title" content="Noodle Computer - Real computers for your agents." />
+  <meta property="og:description" content="Noodle Computer gives your AI agents real Linux, Mac and Windows computers that run privately on your Mac. Use it yourself, with Noodle, or from Claude Code, Codex and any MCP client." />
+  <meta property="og:image" content="https://usenoodle.app/assets/social-card.png" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1260" />
+  <meta property="og:image:alt" content="The Noodle wordmark above “Meet your AI team.” and Noodle on a Mac with Chloe's morning brief, with Noodle Mobile on an iPhone in front of it." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" href="../assets/favicon.png" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="logo" href="../" aria-label="Noodle home"><img src="../assets/symbol-noodle.svg" alt="Noodle" width="22" height="22" /></a>
+      <nav aria-label="Primary">
+        <a href="../#teams">Teams</a>
+        <a href="../#mobile">Mobile</a>
+        <a href="./" aria-current="page">Computer</a>
+        <a href="../#browser">Browser</a>
+        <a href="../#applet">Applet</a>
+        <a href="../#hub">Hub</a>
+        <a href="../#privacy">Privacy</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Docs</a>
+      </nav>
+      <a class="nav-dl" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro" id="top">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="../assets/symbol-computer.svg" alt="" width="48" height="48" />
+        <p class="app-name">Noodle Computer</p>
+        <h1 class="headline">Real computers for your agents.</h1>
+        <p class="what">Linux, Mac and Windows computers that run privately on your Mac. Use them yourself, give them to agents in Noodle, or connect Claude Code, Codex and any MCP client.</p>
+        <div class="ctas">
+          <a class="btn" href="https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg">Download Noodle Computer</a>
+          <a class="link" href="#agents">Use it with your agent <span aria-hidden="true">›</span></a>
+        </div>
+        <p class="req">Free and open source. Needs an Apple silicon Mac with macOS 26 or later.</p>
+      </div>
+      <div class="wrap">
+        <figure class="hero-shot stage stage-one"><img class="win" src="../assets/screenshot-computer.png" width="1539" height="1038" alt="Noodle Computer showing an agent's own macOS desktop." /></figure>
+      </div>
+    </section>
+    <section class="facts">
+      <div class="wrap facts-grid">
+        <div><h3>Its own machine</h3><p>Each computer has its own disk, terminal and desktop, apart from your files and your apps.</p></div>
+        <div><h3>Still there tomorrow</h3><p>Files and installed software stay with the computer across restarts and upgrades.</p></div>
+        <div><h3>Yours to open</h3><p>Open any computer to see what your agent has been doing, or to take over.</p></div>
+      </div>
+    </section>
+    <section class="feature alt" id="systems">
+      <div class="wrap narrow">
+        <h2>Linux, Mac or Windows.</h2>
+        <p class="lead">Pick the system the job needs. Each one gets a desktop, a terminal and a file browser in the same window.</p>
+      </div>
+      <div class="wrap os-grid">
+        <article class="os-card">
+          <div class="mini mini-linux" aria-hidden="true">
+            <span class="panel"></span>
+            <span class="mini-win term-win"><i></i><i></i><i></i><b class="ln"></b><b class="ln short"></b><b class="ln"></b><b class="ln tiny"></b></span>
+          </div>
+          <h3>Linux</h3>
+          <p>A desktop with a browser, terminal and file manager, or a lightweight shell for code and services. No Docker needed.</p>
+        </article>
+        <article class="os-card">
+          <div class="mini mini-mac" aria-hidden="true">
+            <span class="menubar"></span>
+            <span class="mini-win"><i></i><i></i><i></i></span>
+            <span class="dock"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+          <h3>Mac <span class="tag">Experimental</span></h3>
+          <p>A separate macOS account on this Mac, signed in in the background with its own desktop and files.</p>
+        </article>
+        <article class="os-card">
+          <div class="mini mini-windows" aria-hidden="true">
+            <span class="mini-win"><i></i><i></i><i></i></span>
+            <span class="taskbar"><i></i><i></i><i></i><i></i></span>
+          </div>
+          <h3>Windows <span class="tag">Experimental</span></h3>
+          <p>Windows 11 for Arm, downloaded from Microsoft and set up for you. Terminal opens PowerShell. Needs macOS 27.</p>
+        </article>
+      </div>
+    </section>
+    <section class="feature split" id="agents">
+      <div class="wrap split-grid">
+        <div>
+          <h2>Made for agents. Any agent.</h2>
+          <p class="lead">Noodle Computer comes with a command-line tool and an MCP server. Add it to Claude Code or Codex with one line, and your agent can create computers, run commands and move files.</p>
+          <ul class="providers">
+            <li><img src="../assets/harness-claude.svg" alt="" />Claude Code</li><li><img src="../assets/harness-codex.svg" alt="" />Codex</li><li>Any MCP client</li><li>Scripts and shells</li>
+          </ul>
+        </div>
+        <figure class="term" aria-label="An agent using Noodle Computer from the terminal">
+          <div class="term-bar"><i></i><i></i><i></i><span>Terminal</span></div>
+<pre><span class="p">$</span> claude mcp add noodle-computer -- noodle-computer mcp
+<span class="dim">Added stdio MCP server noodle-computer</span>
+
+<span class="p">$</span> noodle-computer list
+<span class="dim">Build box   Linux Shell     running
+Office      Windows 11      stopped</span>
+
+<span class="p">$</span> noodle-computer upload --computer "Build box" \
+    --source report.csv --destination /workspace/report.csv
+
+<span class="p">$</span> noodle-computer open --computer "Build box"
+<span class="dim">{ "terminal": "t1" }</span>
+<span class="p">$</span> noodle-computer write --terminal t1 --text "make test"</pre>
+        </figure>
+      </div>
+    </section>
+    <section class="feature alt split" id="control">
+      <div class="wrap split-grid">
+        <figure class="alerts" aria-label="Noodle Computer asking before an app may use it">
+          <div class="alert">
+            <img src="../assets/symbol-computer.svg" alt="" width="40" height="40" />
+            <b>Allow “Claude Code” to use Noodle Computer?</b>
+            <p>It can create computers and use the ones you lend it.</p>
+            <div class="alert-buttons"><span>Don’t Allow</span><span class="default">Allow</span></div>
+          </div>
+        </figure>
+        <div>
+          <h2>You decide what it touches.</h2>
+          <p class="lead">Outside access is off until you turn it on, and Noodle Computer asks before any app connects.</p>
+          <ul class="checks">
+            <li>It asks every time an app wants to create a computer.</li>
+            <li>An app sees only the computers it created and the ones you lend it.</li>
+            <li>It can change or delete only its own computers.</li>
+            <li>Turn any app's access off in Settings, one computer at a time.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="feature" id="noodle">
+      <div class="wrap narrow">
+        <h2>Even better with Noodle.</h2>
+        <p class="lead">Add a computer to a bot in <a class="link" href="../">Noodle</a> and it starts when the bot needs it. The window can stay closed while the work goes on.</p>
+      </div>
+      <div class="wrap facts-grid kinds">
+        <div><h3>Share it between agents</h3><p>Give the same computer to several agents working on the same files. Each gets its own terminal.</p></div>
+        <div><h3>See what they see</h3><p>An agent can show you its terminal or desktop in the conversation. Click it to open that computer.</p></div>
+        <div><h3>Signed in once</h3><p>Sign in to a website in the desktop's browser, and agents can work in those pages from then on.</p></div>
+      </div>
+    </section>
+    <section class="feature alt" id="files">
+      <div class="wrap narrow">
+        <h2>Files go in and out on your terms.</h2>
+        <p class="lead">Drag files and folders between Finder and a computer, preview them with Space, and search, rename and move them in Files.</p>
+      </div>
+      <div class="wrap facts-grid kinds">
+        <div><h3>Up to 8 GB a file</h3><p>Large imports and exports show their progress and can be cancelled.</p></div>
+        <div><h3>Make it yours</h3><p>Give each computer a name, an icon, a background and terminal colours.</p></div>
+        <div><h3>Upgrades keep your work</h3><p>Fetch the latest image while keeping your files and installed software.</p></div>
+      </div>
+    </section>
+    <section class="feature" id="privacy">
+      <div class="wrap narrow">
+        <h2>Private by design.</h2>
+        <p class="lead">Linux and Windows computers each run in their own virtual machine. They cannot see your folders or your clipboard, and nothing crosses over unless you or an agent copies it.</p>
+      </div>
+      <div class="wrap priv-grid">
+        <div><h3>Runs on your Mac</h3><p>No cloud machines and no account. Your computers are stored on your disk.</p></div>
+        <div><h3>Nothing shared by default</h3><p>Host folders and the clipboard stay out of reach.</p></div>
+        <div><h3>Offline if you like</h3><p>Turn off networking for a Shell computer.</p></div>
+        <div><h3>Open source</h3><p>Every line of code is public under the Apache 2.0 licence.</p></div>
+      </div>
+    </section>
+    <section class="download alt" id="download">
+      <div class="wrap narrow">
+        <h2>Download Noodle Computer.</h2>
+        <p class="lead">Use it on its own, from your favourite agent, or with Noodle.</p>
+      </div>
+      <div class="wrap suite-row">
+        <a class="btn" href="https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg">Download Noodle Computer</a>
+        <p><a class="link" href="https://github.com/pdparchitect/noodle/blob/main/Computer/README.md">Read the guide <span aria-hidden="true">›</span></a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <p>Noodle is free and open source under the Apache 2.0 licence.</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/pdparchitect/noodle">GitHub</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Documentation</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/security.md">Security</a>
+        <a href="https://github.com/pdparchitect/noodle/releases">Releases</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="../app.js"></script>
+</body>
+</html>

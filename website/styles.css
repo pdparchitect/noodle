@@ -119,15 +119,15 @@ figure { margin: 0; }
 /* ---------- Three facts and the privacy row ---------- */
 .facts { padding: 96px 0 100px; }
 .facts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; }
-.facts h3, .priv-grid h3 { font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; }
-.facts p, .priv-grid p { margin-top: 8px; font-size: 17px; color: var(--gray); text-wrap: balance; }
+.facts h3, .priv-grid h3, .kinds h3 { font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; }
+.facts p, .priv-grid p, .kinds p { margin-top: 8px; font-size: 17px; color: var(--gray); text-wrap: balance; }
 .priv-grid p { max-width: 30ch; }
 
 /* ---------- Feature sections ---------- */
 .feature { padding-top: 110px; }
 .feature > .wrap:last-child { padding-bottom: 110px; }
-.feature.alt { background: var(--bg-alt); }
-.feature h2, .privacy h2, .download h2 { font-size: 48px; line-height: 1.08349; font-weight: 600; letter-spacing: -0.003em; }
+.feature.alt, .download.alt { background: var(--bg-alt); }
+.feature h2, .privacy h2, .download h2, .headline { font-size: 48px; line-height: 1.08349; font-weight: 600; letter-spacing: -0.003em; }
 .lead { margin-top: 16px; font-family: var(--display); font-size: 21px; line-height: 1.381; font-weight: 600; letter-spacing: .011em; color: var(--gray); text-wrap: balance; }
 .feat-icon { width: 48px; height: 48px; margin: 0 auto 18px; }
 .app-name { margin-bottom: 8px; font-family: var(--display); font-size: 17px; line-height: 1.23536; font-weight: 600; letter-spacing: -0.022em; color: var(--gray); }
@@ -135,6 +135,11 @@ figure { margin: 0; }
 .meta a { color: var(--blue); }
 .meta a:hover { text-decoration: underline; }
 .shot { margin-top: 56px; }
+.meta a + a { margin-left: 20px; }
+/* The Computer page's title and its rows of short facts under a section heading. */
+.headline { margin-top: 0; }
+.kinds { margin-top: 56px; }
+.nav nav a[aria-current] { color: var(--ink); }
 
 /* "Bring the AI you already use": text beside a screenshot */
 .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
@@ -167,20 +172,85 @@ figure { margin: 0; }
 .foot nav a:hover { color: var(--ink); text-decoration: underline; }
 @media (prefers-color-scheme: dark) { .foot { border-top-color: rgba(255,255,255,.08); } }
 
+/* ---------- Computer page ---------- */
+/* Three systems, each with a small drawn desktop. */
+.os-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 56px; }
+.os-card { background: var(--bg); border-radius: 22px; padding: 14px 14px 26px; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 12px 32px -18px rgba(0,0,0,.25); }
+.os-card h3 { margin: 22px 12px 0; font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; display: flex; align-items: center; gap: 8px; }
+.os-card p { margin: 8px 12px 0; color: var(--gray); }
+.tag { font-family: var(--text); font-size: 11px; line-height: 1; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); padding: 4px 7px; border-radius: 999px; }
+.mini { position: relative; display: block; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; }
+.mini > span { position: absolute; display: block; }
+.mini-win { left: 16%; top: 20%; width: 64%; height: 52%; border-radius: 6px; background: rgba(255,255,255,.88); box-shadow: 0 10px 24px -8px rgba(0,0,0,.45); }
+.mini-win i { display: inline-block; width: 6px; height: 6px; margin: 6px 0 0 4px; border-radius: 50%; background: #ff5f57; }
+.mini-win i:nth-child(2) { background: #febc2e; }
+.mini-win i:nth-child(3) { background: #28c840; }
+.mini-linux { background: radial-gradient(120% 90% at 20% 10%, #f28c38 0%, transparent 55%), radial-gradient(100% 100% at 90% 90%, #7b2f8f 0%, transparent 60%), #3a1f4f; }
+.mini-linux .panel { inset: 0 0 auto; height: 9%; background: rgba(20,12,28,.75); }
+.mini-linux .term-win { background: #17131c; }
+.mini-linux .ln { position: absolute; display: block; left: 7%; height: 6%; width: 60%; border-radius: 3px; background: #6bd28a; opacity: .85; }
+.mini-linux .ln:nth-of-type(1) { top: 30%; }
+.mini-linux .ln:nth-of-type(2) { top: 46%; width: 38%; background: #e8e1f0; opacity: .5; }
+.mini-linux .ln:nth-of-type(3) { top: 62%; width: 52%; background: #e8e1f0; opacity: .5; }
+.mini-linux .ln:nth-of-type(4) { top: 78%; width: 10%; }
+.mini-mac { background: radial-gradient(110% 90% at 80% 0%, #6fc3ff 0%, transparent 55%), radial-gradient(120% 100% at 0% 100%, #2a3fb8 0%, transparent 60%), #3b67d6; }
+.mini-mac .menubar { inset: 0 0 auto; height: 7%; background: rgba(255,255,255,.35); }
+.mini-mac .dock { left: 50%; bottom: 5%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px 6px; border-radius: 8px; background: rgba(255,255,255,.4); }
+.mini-mac .dock i { width: 12px; height: 12px; border-radius: 3px; background: #fff; opacity: .9; }
+.mini-mac .dock i:nth-child(2) { background: #ffcf4a; }
+.mini-mac .dock i:nth-child(3) { background: #3fd07a; }
+.mini-mac .dock i:nth-child(4) { background: #ff6b6b; }
+.mini-windows { background: radial-gradient(60% 70% at 55% 55%, #5ab4ff 0%, #1f6fe0 35%, transparent 70%), linear-gradient(160deg, #0b2a6b, #0a1a40); }
+.mini-windows .mini-win { top: 16%; }
+.mini-windows .taskbar { inset: auto 0 0; height: 11%; display: flex; justify-content: center; align-items: center; gap: 5px; background: rgba(240,244,255,.72); }
+.mini-windows .taskbar i { width: 9px; height: 9px; border-radius: 2px; background: #2b6be6; }
+.mini-windows .taskbar i:first-child { background: conic-gradient(#3aa0ff 0 25%, #2b6be6 0 50%, #3aa0ff 0 75%, #2b6be6 0); }
+@media (prefers-color-scheme: dark) {
+  .os-card { background: var(--raised); box-shadow: none; }
+  .mini-win { background: rgba(40,44,52,.92); }
+}
+
+/* The command-line tool, shown in a terminal window. */
+.term { margin: 0; border-radius: 14px; overflow: hidden; background: #15171c; color: #e6e8ec; box-shadow: 0 0 0 1px rgba(0,0,0,.1), 0 30px 60px -24px rgba(0,0,0,.5); }
+.term-bar { display: flex; align-items: center; gap: 7px; padding: 12px 14px; background: #22252c; }
+.term-bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.term-bar i:nth-child(2) { background: #febc2e; }
+.term-bar i:nth-child(3) { background: #28c840; }
+.term-bar span { margin-left: auto; margin-right: auto; padding-right: 57px; font-size: 12px; color: #8b9099; }
+.term pre { margin: 0; padding: 20px 22px 24px; overflow-x: auto; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0; }
+.term .p { color: #6bd28a; }
+.term .dim { color: #8b9099; }
+@media (prefers-color-scheme: dark) { .term { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 30px 60px -24px rgba(0,0,0,.8); } }
+
+/* The access prompt, drawn as a macOS alert on the launch-pad photo. */
+.alerts { display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 28px; background: #3b4a63 url(assets/stage-launch.jpg) center / cover; }
+.alert { width: min(300px, 80%); padding: 22px 18px 16px; border-radius: 16px; text-align: center; background: rgba(246,246,248,.92); color: #1c1e22; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 24px 48px -12px rgba(0,0,0,.55); }
+.alert img { margin: 0 auto 12px; }
+.alert b { display: block; font-size: 14px; line-height: 1.3; }
+.alert p { margin-top: 6px; font-size: 12px; line-height: 1.4; color: #4a4e56; }
+.alert-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; font-size: 13px; }
+.alert-buttons span { padding: 5px 0; border-radius: 7px; background: rgba(0,0,0,.08); }
+.alert-buttons .default { background: var(--blue); color: #fff; }
+.checks { margin-top: 24px; display: grid; gap: 12px; }
+.checks li { position: relative; padding-left: 30px; color: var(--gray); }
+.checks li::before { content: ""; position: absolute; left: 0; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5 9.5l2.6 2.5L13 6.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+.lead .link { font-size: inherit; line-height: inherit; letter-spacing: inherit; }
+
 /* ---------- Responsive (breakpoints match apple.com) ---------- */
 @media (max-width: 1068px) {
-  .feature h2, .privacy h2, .download h2 { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
+  .feature h2, .privacy h2, .download h2, .headline { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
   .what { font-size: 24px; line-height: 1.16667; letter-spacing: .009em; }
 }
 @media (max-width: 900px) {
   .nav nav { display: none; }
   .facts-grid, .priv-grid, .dl-grid { grid-template-columns: 1fr 1fr; }
+  .os-grid { grid-template-columns: 1fr; max-width: 520px; margin-inline: auto; }
   .split-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 734px) {
   .intro { padding-top: 48px; }
   .wordmark svg { height: 60px; }
-  .feature h2, .privacy h2, .download h2 { font-size: 32px; line-height: 1.125; letter-spacing: .004em; }
+  .feature h2, .privacy h2, .download h2, .headline { font-size: 32px; line-height: 1.125; letter-spacing: .004em; }
   .what { font-size: 21px; line-height: 1.19048; letter-spacing: .011em; }
   .lead { font-size: 19px; line-height: 1.4211; letter-spacing: .012em; }
   .facts-grid, .priv-grid, .dl-grid { grid-template-columns: 1fr; gap: 28px; }
