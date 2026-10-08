@@ -513,7 +513,7 @@ struct RootView: View {
         .sheet(item: $store.groupBeingEdited) { conversation in
             GroupInfoSheet(conversation: conversation)
                 .environment(store)
-                .noodleSheetSizing()
+                .noodleSheetSizing(animated: true)
         }
         .sheet(item: $store.backgroundBeingEdited) { conversation in
             ConversationBackgroundSheet(conversation: conversation)

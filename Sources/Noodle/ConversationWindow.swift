@@ -109,7 +109,7 @@ struct ConversationWindowView: View {
             EditBotSheet(agent: agent).environment(store).noodleSheetSizing(animated: true)
         }
         .sheet(item: $groupBeingEdited) { conversation in
-            GroupInfoSheet(conversation: conversation).environment(store).noodleSheetSizing()
+            GroupInfoSheet(conversation: conversation).environment(store).noodleSheetSizing(animated: true)
         }
         .sheet(item: $backgroundBeingEdited) { conversation in
             ConversationBackgroundSheet(conversation: conversation).environment(store).noodleSheetSizing()
