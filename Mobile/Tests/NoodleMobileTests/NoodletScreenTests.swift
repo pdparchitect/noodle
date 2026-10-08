@@ -70,6 +70,23 @@ import XCTest
         XCTAssertEqual(ratio, Double(UIScreen.main.scale))
     }
 
+    /// A game that asks for controllers through the Gamepad API reads them itself, from the first
+    /// press, so the controller's buttons stop also pressing its keys; one that never asks is not told apart.
+    func testAGameAskingForControllersIsNoticed() async throws {
+        var reads = 0
+        let configuration = WKWebViewConfiguration()
+        NoodletDeviceScreen.configure(configuration, for: NoodletManifest(title: "Game")) { reads += 1 }
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+        web.loadHTMLString("<body></body>", baseURL: nil)
+        for _ in 0..<100 where web.isLoading || web.url == nil { try await Task.sleep(for: .milliseconds(50)) }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(reads, 0)
+
+        _ = try await web.evaluateJavaScript("navigator.getGamepads(); navigator.getGamepads(); 1")
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(reads, 1)
+    }
+
     private var windows: [UIWindow] = []
 
     private func page(for manifest: NoodletManifest, size: CGSize) async throws -> WKWebView {

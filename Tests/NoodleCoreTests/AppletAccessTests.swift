@@ -33,6 +33,13 @@ final class AppletAccessTests: XCTestCase {
         XCTAssertTrue(skill.contains("resize"))
     }
 
+    /// Phones pass controllers to the Gamepad API, so games are not told to do without it there.
+    func testGamesMayReadControllersOnPhones() {
+        let skill = AppletGuidance.instructions(for: .production)
+        XCTAssertFalse(skill.contains("finds none there"))
+        XCTAssertTrue(skill.contains("navigator.getGamepads()"))
+    }
+
     /// Every command a bot can run is described; what Noodle and Noodle Hub ask for people is not a bot's.
     func testEveryToolCommandIsDescribed() {
         for command in AppletGuidance.toolOperations {

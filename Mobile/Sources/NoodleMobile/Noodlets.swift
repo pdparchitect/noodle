@@ -129,6 +129,8 @@ struct NoodletDeviceScreen: View {
     @State private var hardware = HardwareGamepad()
     /// A game brought back from the TV to the phone.
     @State private var onPhone = false
+    /// A game reading controllers through the Gamepad API, whose buttons then no longer press its keys too.
+    @State private var readsControllers = false
     @State private var tvAvailable = false
     @State private var connectingTV = false
     @State private var gameMenu = GameMenu()
@@ -151,7 +153,8 @@ struct NoodletDeviceScreen: View {
         (manifest.layout ?? .desktop) == .desktop && manifest.display?.fitsView != true ? .desktop : .mobile
     }
 
-    static func configure(_ configuration: WKWebViewConfiguration, for manifest: NoodletManifest) {
+    /// `readsControllers` is called once the page asks for controllers through the Gamepad API.
+    static func configure(_ configuration: WKWebViewConfiguration, for manifest: NoodletManifest, readsControllers: @escaping () -> Void = {}) {
         configuration.defaultWebpagePreferences.preferredContentMode = contentMode(for: manifest)
         // A game played from the on-screen controls never has its page tapped, which iOS otherwise
         // waits for before letting it make a sound.
@@ -165,6 +168,9 @@ struct NoodletDeviceScreen: View {
             configuration.userContentController.addUserScript(WKUserScript(
                 source: renderScript(consoleSize(onTV: false)), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
+        configuration.userContentController.add(ControllerReader(found: readsControllers), contentWorld: .page, name: ControllerReader.name)
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: ControllerReader.script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
 
     /// The most pixels a game draws, as a games console does: handheld on a phone, docked on an
@@ -270,7 +276,13 @@ struct NoodletDeviceScreen: View {
         // The phone turns sideways as a controller does.
         .onChange(of: onTV, initial: true) {
             ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
-            if let page { Task { _ = try? await page.evaluate(Self.renderSize(onTV: onTV)) } }
+            if let page {
+                Task {
+                    _ = try? await page.evaluate(Self.renderSize(onTV: onTV))
+                    // Moving to the other screen takes the first responder from it.
+                    page.web.becomeFirstResponder()
+                }
+            }
         }
         .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
             KeepAwake.set(awake)
@@ -310,7 +322,7 @@ struct NoodletDeviceScreen: View {
             let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                    features: NoodletDeviceHost.features,
                                    localNetwork: manifest.permissions?.contains("local-network") == true, log: { Self.log.notice("\($0, privacy: .public): \($1, privacy: .private)") }) {
-                Self.configure($0, for: manifest)
+                Self.configure($0, for: manifest) { readsControllers = true }
             }
             page.declaredCapture = .grant
             #if DEBUG
@@ -322,8 +334,10 @@ struct NoodletDeviceScreen: View {
             self.page = page
             NoodletSound.start()
             // A noodlet with no keys still gets the View button's menu; its other buttons stay its own.
-            hardware.attach(manifest.controls ?? Gamepad(), onKey: press)
+            hardware.attach(manifest.controls ?? Gamepad(), onKey: { if !readsControllers { press($0) } })
             try await page.load()
+            // WebKit gives the Gamepad API controllers only while its view is the first responder.
+            page.web.becomeFirstResponder()
         } catch {
             page?.stop()
             page = nil
@@ -336,6 +350,29 @@ struct NoodletDeviceScreen: View {
         guard let page, let script = PageKeys.script(for: .hold(key: change.key, pressed: change.pressed)) else { return }
         Task { _ = try? await page.evaluate(script) }
     }
+}
+
+/// Tells the app once a page asks for controllers through the Gamepad API: a game that does reads
+/// them itself from the first press, which would otherwise reach it as a key as well.
+final class ControllerReader: NSObject, WKScriptMessageHandler {
+    static let name = "noodleControllers"
+    static let script = """
+        (() => {
+          let asked = false;
+          navigator.getGamepads = function () {
+            if (!asked) {
+              asked = true;
+              window.webkit.messageHandlers.\(name).postMessage(true);
+            }
+            return Navigator.prototype.getGamepads.call(navigator);
+          };
+        })();
+        """
+    private let found: () -> Void
+
+    init(found: @escaping () -> Void) { self.found = found }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) { found() }
 }
 
 /// A noodlet's sound, heard while it is open even with the ring switch set to silent, as a game

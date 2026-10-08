@@ -123,9 +123,8 @@ them.
   the bot for a game that saves each move and checks for the others', such as a
   board game or a shared world you build in turns.
 - **Side by side** (Mac or Hub). Play on one Mac or one TV. Ask the bot for a
-  game where two players share the keyboard. A game controller plays one player;
-  a game can read further controllers on a Mac if you ask the bot for that, but
-  not on iPhone or iPad.
+  game where two players share the keyboard, or where each player picks up a
+  game controller, on a Mac, iPhone or iPad.
 
 Games that use the camera, microphone or devices on your local network always
 run on each person's own device, so they cannot be watched live from the Hub.

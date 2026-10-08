@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Games bots make can read game controllers directly on iPhone and iPad too, with analog sticks and one controller per player.
 - Games bots make keep themselves smooth on phones and TVs, lowering their resolution while they run slowly.
 
 ## [0.23.0] - 2026-10-08

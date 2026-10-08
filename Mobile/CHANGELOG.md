@@ -14,6 +14,7 @@
 
 ### Changed
 
+- Games can read game controllers directly, as they do in Safari: analog sticks, every button, and several controllers for several players. Such a game no longer gets each press twice, as a key as well.
 - Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
 
 ### What to Test
@@ -34,6 +35,8 @@
 - On a Hub whose plan lends no harnesses, the welcome says so, and Not Now shows the list.
 - Turn on Airplane Mode while the team is being made, then off again: Try Again finishes the same team without making any bot twice.
 - Open a heavy 3D game noodlet: it runs smoother than before and still fills the screen. Show it on a TV: it fills the TV and stays smooth. Text and buttons outside the game look as sharp as before.
+- With a game controller connected, open a game that supports controllers, such as one made for several players: press a button: one player joins, not two. Connect a second controller: a second player can join. Show the game on a TV: the controllers keep working.
+- A game played only with keys still plays with a controller as before.
 
 ## [0.24.0] - 2026-10-07
 
