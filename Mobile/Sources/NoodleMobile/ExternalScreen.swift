@@ -162,6 +162,8 @@ struct NoodletMenu {
 
     var choices: [LinkAttachment] = []
     var current: UUID?
+    /// Opened from Play, whose stack of cards it shows.
+    var fromPlay = false
     var open: (LinkAttachment) -> Void = { _ in }
 
     var items: [Item] { choices.map(Item.noodlet) + [.closeGame] }
@@ -186,6 +188,8 @@ struct NoodletMenu {
 
 extension EnvironmentValues {
     @Entry var noodletMenu = NoodletMenu()
+    /// Closes a noodlet opened somewhere other than a conversation, in place of dismissing its screen.
+    @Entry var closeNoodlet: (() -> Void)?
 }
 
 /// The menu over the game on the TV: a row of cards, the chosen one raised.
@@ -289,6 +293,8 @@ struct GameMenuOverlay: View {
     let menu: NoodletMenu
 
     var body: some View {
-        if let selected = gameMenu.selected { NoodletMenuView(menu: menu, selected: selected) }
+        if let selected = gameMenu.selected {
+            if menu.fromPlay { ConsoleMenuView(menu: menu, selected: selected) } else { NoodletMenuView(menu: menu, selected: selected) }
+        }
     }
 }

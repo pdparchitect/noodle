@@ -22,6 +22,7 @@ private actor FakeHub {
     /// Where the phone asked to hear of unread replies, in order.
     var pushTopics: [String?] = []
     var messages: [LinkMessage] = []
+    var pageRequests = 0
     /// Where it listens, which it tells the phone when pairing, as the real Hub does.
     var endpoints: [LinkEndpoint] = []
 
@@ -67,6 +68,15 @@ private actor FakeHub {
     func botSays(_ body: String) {
         messages.append(LinkMessage(id: UUID(), conversationID: bot.conversationID, author: .bot(bot.id), body: body,
                                     createdAt: Date(), delivered: true))
+    }
+
+    /// A noodlet the bot shares, as a link.
+    func botSharesNoodlet(_ name: String) -> LinkAttachment {
+        let attachment = LinkAttachment(id: UUID(), filename: "\(name).noodlet", mediaType: "application/x-noodlet", byteCount: 0,
+                                        url: URL(string: "noodlet://\(UUID().uuidString)"))
+        messages.append(LinkMessage(id: UUID(), conversationID: bot.conversationID, author: .bot(bot.id), body: "Play this",
+                                    createdAt: Date(), delivered: true, attachments: [attachment]))
+        return attachment
     }
 
     /// A message from the bot carrying a file.
@@ -129,6 +139,7 @@ private actor FakeHub {
             let messages = messages.filter { $0.conversationID == conversationID }
             return .messages(LinkMessages(messages: Array(messages.dropFirst(after)), count: messages.count))
         case .success(.messagePage(let page)):
+            pageRequests += 1
             let messages = messages.filter { $0.conversationID == page.conversationID }
             if let after = page.after {
                 let start = min(after, messages.count)
@@ -366,6 +377,32 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(chats.hasEarlier(scout))
         while chats.hasEarlier(scout) { try await chats.loadEarlier(scout) }
         #expect(chats.messages(of: scout).map(\.body) == ["Hello"] + (1..<120).map { "Message \($0)" })
+    }
+
+    /// The console finds a noodlet shared long before the newest page, and looks through that history once.
+    @Test func theConsoleFindsNoodletsSharedLongAgoOnce() async throws {
+        let hub = FakeHub()
+        let racer = await hub.botSharesNoodlet("Racer")
+        for index in 1..<120 { await hub.botSays("Message \(index)") }
+        let recent = await hub.botSharesNoodlet("Notes")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let (chats, server) = try await paired(to: hub, directory: directory)
+        defer { server.stop() }
+        try await chats.reload()
+
+        let console = Console()
+        console.show([chats])
+        #expect(console.titles.map(\.attachment.id) == [recent.id])
+        await console.scan()
+        #expect(console.titles.map(\.attachment.id) == [recent.id, racer.id])
+
+        // Again, even after a relaunch, nothing already looked through is asked for.
+        let asked = await hub.pageRequests
+        let again = Console()
+        again.show([chats])
+        await again.scan()
+        #expect(await hub.pageRequests == asked)
+        #expect(again.titles.map(\.attachment.id) == [recent.id, racer.id])
     }
 
     /// A message sent before the conversation has loaded still lands after what was already said.

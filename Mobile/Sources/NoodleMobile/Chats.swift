@@ -909,6 +909,16 @@ enum HubThread: HubConversation {
         saveCache()
     }
 
+    /// Where the earliest message this phone has sits in a conversation; nil until it first loads.
+    func loadedStart(of conversation: some HubConversation) -> Int? {
+        conversations[conversation.conversationID] == nil ? nil : start[conversation.conversationID] ?? 0
+    }
+
+    /// A page of messages before position `before`, leaving what the conversation shows alone.
+    func messages(of conversation: some HubConversation, before: Int) async throws -> LinkMessages {
+        try await page(LinkMessagePage(conversationID: conversation.conversationID, before: before, limit: Self.pageSize))
+    }
+
     private func page(_ request: LinkMessagePage) async throws -> LinkMessages {
         guard case .messages(let page) = try await pairing.request(.messagePage(request)) else {
             throw LinkError("The Hub sent an unexpected answer.")
@@ -961,6 +971,7 @@ struct AgentsView: View {
     @State private var chosen: MoreChoice?
     @State private var showingProfile = false
     @State private var showingSettings = false
+    @State private var showingConsole = false
     @State private var creating = false
     @State private var creatingGroup = false
     @State private var search = ""
@@ -1087,6 +1098,7 @@ struct AgentsView: View {
             }
             .sheet(isPresented: $showingProfile) { HubsView(chats: chats) }
             .sheet(isPresented: $showingSettings) { SettingsView() }
+            .fullScreenCover(isPresented: $showingConsole) { ConsoleView(hubs: chats) }
             // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
                 if let hub = spaceChats ?? chats.first { AgentEditor(chats: hub, agent: nil, hubs: chats, created: joinShownSpace) }
@@ -1280,6 +1292,7 @@ struct AgentsView: View {
         case .createGroup: creatingGroup = true
         case .profiles: showingProfile = true
         case .settings: showingSettings = true
+        case .console: showingConsole = true
         case nil: break
         }
         chosen = nil
@@ -1297,7 +1310,7 @@ struct ChatLink: Hashable {
     let thread: UUID
 }
 
-enum MoreChoice { case createBot, createGroup, profiles, settings }
+enum MoreChoice { case createBot, createGroup, console, profiles, settings }
 
 /// The rarely used actions, in a short sheet from the bottom.
 struct MoreSheet: View {
@@ -1307,13 +1320,14 @@ struct MoreSheet: View {
         VStack(spacing: 12) {
             option("New Bot", systemImage: "person.badge.plus", .createBot)
             option("New Group", systemImage: "person.2", .createGroup)
+            option("Play", systemImage: "gamecontroller", .console)
             option("Hubs", systemImage: "server.rack", .profiles)
             option("Settings", systemImage: "gear", .settings)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
         .padding(24)
-        .presentationDetents([.height(292)])
+        .presentationDetents([.height(356)])
         .presentationDragIndicator(.visible)
     }
 

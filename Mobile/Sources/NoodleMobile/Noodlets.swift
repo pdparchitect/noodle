@@ -56,6 +56,7 @@ struct NoodletScreen: View {
     var requested: NoodletManifest.Placement?
     var places = NoodletPlaces()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeNoodlet) private var closeNoodlet
     @State private var readied: (session: LinkNoodletSession, noodlet: LinkNoodlet, manifest: NoodletManifest)?
     @State private var place: NoodletManifest.Placement?
     @State private var failure: String?
@@ -77,11 +78,14 @@ struct NoodletScreen: View {
                     if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: close) } }
             }
             .task { await ready() }
         }
     }
+
+    /// Back to where it was opened from: the conversation, or the console's shelves.
+    private func close() { if let closeNoodlet { closeNoodlet() } else { dismiss() } }
 
     private func ready() async {
         do {
@@ -115,6 +119,7 @@ struct NoodletDeviceScreen: View {
     /// For a noodlet the Hub may stream, switches to watching it there.
     let runOnHub: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeNoodlet) private var closeNoodlet
     @Environment(\.verticalSizeClass) private var verticalSize
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var page: NoodletPage?
@@ -195,7 +200,7 @@ struct NoodletDeviceScreen: View {
             .overlay(alignment: .top) {
                 if fullScreen {
                     HStack {
-                        Button("Done") { dismiss() }
+                        Button("Done", action: close)
                         Spacer()
                         buttons.labelStyle(.iconOnly)
                     }
@@ -207,7 +212,7 @@ struct NoodletDeviceScreen: View {
             .toolbar(fullScreen ? .hidden : .visible, for: .navigationBar)
             .statusBarHidden(fullScreen)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Done", action: close) }
                 ToolbarItemGroup(placement: .primaryAction) { buttons }
             }
         }
@@ -223,19 +228,22 @@ struct NoodletDeviceScreen: View {
         }
         .tvConnectionAlert(isPresented: $connectingTV)
         .task { await start() }
-        .onAppear { gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: { dismiss() }) }
+        .onAppear { gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: close) }
         // The phone turns sideways as a controller does.
         .onChange(of: onTV, initial: true) {
             ScreenOrientation.hold(onTV ? .landscape : manifest.orientation)
         }
         .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
-            UIApplication.shared.isIdleTimerDisabled = awake
+            KeepAwake.set(awake)
         }
         .onDisappear {
             answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil)
-            UIApplication.shared.isIdleTimerDisabled = false
+            KeepAwake.set(false)
         }
     }
+
+    /// Back to where it was opened from: the conversation, or the console's shelves.
+    private func close() { if let closeNoodlet { closeNoodlet() } else { dismiss() } }
 
     private func answer(_ allowed: Bool) {
         let pending = asking
@@ -307,6 +315,8 @@ struct NoodletDeviceScreen: View {
 /// Which ways the phone may turn: any, except while a noodlet that asks for one way is open.
 @MainActor enum ScreenOrientation {
     static private(set) var allowed: UIInterfaceOrientationMask = .all
+    /// The way it turns once no noodlet holds it, such as sideways while the console is open.
+    static var resting: NoodletManifest.Orientation?
 
     static func mask(for orientation: NoodletManifest.Orientation?) -> UIInterfaceOrientationMask {
         switch orientation {
@@ -317,12 +327,19 @@ struct NoodletDeviceScreen: View {
     }
 
     static func hold(_ orientation: NoodletManifest.Orientation?) {
-        allowed = mask(for: orientation)
+        allowed = mask(for: orientation ?? resting)
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             scene.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: allowed))
         }
     }
+}
+
+/// Keeps the phone from dimming and locking, while a noodlet needs it or the console is open.
+@MainActor enum KeepAwake {
+    static var resting = false
+
+    static func set(_ awake: Bool) { UIApplication.shared.isIdleTimerDisabled = awake || resting }
 }
 
 extension AppDelegate {

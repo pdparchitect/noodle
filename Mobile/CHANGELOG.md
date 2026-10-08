@@ -6,6 +6,7 @@
 
 - When your phone is joined to your Mac, you can share the Mac's bots with people on the Noodle Hubs the Mac joined. Edit the bot and tap Sharing, or Sharing on a Hub's name when the Mac joined several.
 - Chat effects: confetti or fireworks a bot sends play when you open its conversation, within a day, on whichever of your devices shows it first.
+- Play: tap … and choose Play to turn the phone into a games console. It shows every noodlet your bots shared, on all your Hubs, with games first. With a TV connected by Screen Mirroring or a cable, the console shows on the TV and the phone becomes its controller; a game controller steers it too.
 - Joining your first Hub welcomes you with a team of three bots, as Noodle does on the Mac: a personal assistant, a developer and a researcher, with their own group. They use what your plan on the Hub lends, so there is nothing to set up, and Continue says hello to them in their group.
 
 ### What to Test
@@ -15,6 +16,11 @@
 - Ask a bot on a Hub to celebrate with confetti while the app is closed, then open its conversation: the confetti plays once. Open the same conversation on your Mac or iPad afterwards: it does not play again. Ask for fireworks with the conversation already open: they play straight away.
 - With Reduce Motion on (Settings → Accessibility → Motion), the effect shows as a still 🎉 or 🎆 instead.
 - Bots kept on a Noodle Hub show Sharing as before.
+- Tap … and choose Play: the Noodle wordmark writes on, then the noodlets your bots shared show as cards, newest first, including ones shared long ago. The cards are stacked, the chosen one in front and the rest turned away to each side. Tap a side card to bring it to the front, tap the front one to play. Swipe through the stack. Done closes it.
+- Open a game noodlet once, then return to the console: it moves to Games. Games and Noodlets switch with up and down on a controller.
+- With Screen Mirroring to a TV on, choose Play: the console shows on the TV and the phone shows a d-pad and an A button to move and play. Start a game: it plays on the TV with the phone as its controller. Close it from the controller's View button menu, or Done: you are back at the console, still on the TV.
+- With a game controller connected, steer the console with the d-pad or left stick and play with A, on the phone or the TV. While a noodlet started from Play is open, the controller's View button shows the same stack over it, ending with Home: choose another to switch, Home to go back, View or B to carry on. Opened from a conversation, the View button shows its usual menu.
+- The phone stays awake and sideways while the console is open, and turns freely again after Done.
 - On a phone with no Hub, pair with a Hub where you have no bots: the wordmark rises, three bots come in one by one with their names and roles, then Continue opens their Team group with your hello, and they answer.
 - Pair with a Hub where you already have bots, or pair a second Hub: there is no welcome and no new bots.
 - On a Hub whose plan lends no harnesses, the welcome says so, and Not Now shows the list.

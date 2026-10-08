@@ -658,6 +658,7 @@ struct LiveSurfaceScreen: View {
     /// For a noodlet this phone can run itself, switches to running it here.
     var runHere: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeNoodlet) private var closeNoodlet
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var feed = SurfaceFeed()
     @State private var channel: LinkChannel?
@@ -687,6 +688,9 @@ struct LiveSurfaceScreen: View {
         guard let controller = hardware.controller else { return controls }
         return controls.onScreen(with: controller)
     }
+
+    /// Back to where it was opened from: the conversation, or the console's shelves.
+    private func close() { if let closeNoodlet { closeNoodlet() } else { dismiss() } }
 
     private func hold(_ change: GamepadKeyChange) {
         channel?.send(LinkSurface.control(.input(.hold(key: change.key, pressed: change.pressed))))
@@ -727,7 +731,7 @@ struct LiveSurfaceScreen: View {
             .overlay(alignment: .top) {
                 if fullScreen {
                     HStack {
-                        Button("Done") { dismiss() }
+                        Button("Done", action: close)
                         Spacer()
                         inputButtons.labelStyle(.iconOnly)
                     }
@@ -739,7 +743,7 @@ struct LiveSurfaceScreen: View {
             .toolbar(fullScreen ? .hidden : .visible, for: .navigationBar)
             .statusBarHidden(fullScreen)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Done", action: close) }
                 ToolbarItemGroup(placement: .primaryAction) { inputButtons }
             }
         }
@@ -755,11 +759,11 @@ struct LiveSurfaceScreen: View {
             ScreenOrientation.hold(onTV ? .landscape : nil)
         }
         .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
-            UIApplication.shared.isIdleTimerDisabled = awake
+            KeepAwake.set(awake)
         }
         .onDisappear {
             hardware.detach(); channel?.cancel(); ScreenOrientation.hold(nil)
-            UIApplication.shared.isIdleTimerDisabled = false
+            KeepAwake.set(false)
         }
     }
 
@@ -772,7 +776,7 @@ struct LiveSurfaceScreen: View {
             // A noodlet with no keys still gets the View button's menu.
             if attachment.liveKind == .noodlet {
                 hardware.attach(Gamepad(), onKey: hold)
-                gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: { dismiss() })
+                gameMenu.follow(hardware: hardware, menu: { noodletMenu }, close: close)
             }
             for try await frame in channel.frames {
                 switch LinkSurface.message(frame) {
