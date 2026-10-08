@@ -63,6 +63,22 @@ import Testing
         let full = try render(settings(), "settings")
         #expect(full.height > empty.height + 150)
     }
+
+    /// Each app is one row however many items there are; its switches are in a sheet.
+    @Test func manyItemsKeepEachAppToOneRow() async throws {
+        let answers = Yes(), gate = ExternalGate(url: nil, prompter: answers)
+        gate.enabled = true
+        let few = (1...2).map { ExternalItem(id: UUID(), name: "Computer \($0)", symbol: "terminal") }
+        let many = (1...12).map { ExternalItem(id: UUID(), name: "Computer \($0)", symbol: "terminal") }
+        let claude = try await gate.admit(ExternalLauncher(key: "team:Q6L2SF6YDW:com.anthropic.claude-code", name: "Claude Code", path: "/c"))
+        let settings = { (items: [ExternalItem]) in ExternalToolsSettingsView(gate: gate, noun: "computer", items: items,
+            command: "/c", server: "noodle-computer", delete: { _ in }).frame(width: 580) }
+        let short = try render(settings(few), "settings-few"), long = try render(settings(many), "settings-many")
+        #expect(long.height == short.height)
+        let sheet = { (items: [ExternalItem]) in ExternalCallerSheet(gate: gate, caller: claude, noun: "computer", items: items,
+            remove: {}, done: {}) }
+        #expect(try render(sheet(many), "caller-sheet").height > render(sheet(few), "caller-sheet-few").height + 200)
+    }
 }
 
 @MainActor private final class Yes: ExternalPrompting {

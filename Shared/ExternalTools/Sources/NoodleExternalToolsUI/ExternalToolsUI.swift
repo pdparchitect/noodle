@@ -102,8 +102,8 @@ struct ExternalQuestion: View {
     }
 }
 
-/// Settings > Agents: the master switch, how to add the tool to an agent, and one
-/// section for each allowed app with a switch for every item it may use.
+/// Settings > Agents: the master switch, how to add the tool to an agent, and a row for each
+/// allowed app that opens a sheet with a switch for every item it may use.
 public struct ExternalToolsSettingsView: View {
     @ObservedObject var gate: ExternalGate
     let noun: String
@@ -112,6 +112,7 @@ public struct ExternalToolsSettingsView: View {
     let server: String
     let delete: ([UUID]) -> Void
     @State private var removing: ExternalCaller?
+    @State private var editing: UUID?
 
     /// `command` is the tool's path; `server` the name agents know it by; `delete` removes items
     /// an app made when the person removes the app and its items.
@@ -131,41 +132,46 @@ public struct ExternalToolsSettingsView: View {
                 commandRow("Claude Code", "claude mcp add --scope user \(server) -- \"\(command)\" mcp")
                 commandRow("Codex", "codex mcp add \(server) -- \"\(command)\" mcp")
             }
-            ForEach(gate.grants.callers) { caller in
-                Section {
-                    if let caution = caller.launcher.caution {
-                        Label(caution, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
-                    }
-                    ForEach(items) { item in
-                        Toggle(isOn: Binding(get: { gate.allows(caller.id, item.id) },
-                                             set: { gate.setAccess($0, to: item.id, for: caller.id) })) {
-                            Label {
-                                Text(item.name)
-                                if gate.created(caller.id, item.id) { Text("Created by \(caller.launcher.name)") }
-                            } icon: { Image(systemName: item.symbol) }
-                        }
-                    }
-                    Button("Remove \(caller.launcher.name)", role: .destructive) { removing = caller }.buttonStyle(.link)
-                } header: {
-                    Text(caller.launcher.name).help(caller.launcher.path)
+            if !gate.grants.callers.isEmpty {
+                Section("Allowed") {
+                    ForEach(gate.grants.callers) { caller in callerRow(caller) }
                 }
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Remove \(removing?.launcher.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-                            presenting: removing) { caller in
-            let made = caller.resources.filter(\.created).map(\.id).filter { id in items.contains { $0.id == id } }
-            if made.isEmpty {
-                Button("Remove", role: .destructive) { gate.remove(caller.id) }
-            } else {
-                Button("Remove and Delete \(made.count) \(made.count == 1 ? noun.capitalized : noun.capitalized + "s")", role: .destructive) {
-                    gate.remove(caller.id); delete(made)
-                }
-                Button("Remove and Keep \(made.count == 1 ? noun.capitalized : noun.capitalized + "s")") { gate.remove(caller.id) }
-            }
-        } message: { caller in
-            Text("\(caller.launcher.name) will be asked about again before it can connect.")
+        // Looked up afresh so the sheet closes once its app is removed.
+        .sheet(item: Binding(get: { gate.grants.callers.first { $0.id == editing } }, set: { editing = $0?.id })) { caller in
+            ExternalCallerSheet(gate: gate, caller: caller, noun: noun, items: items,
+                                remove: { removing = caller }, done: { editing = nil })
+                .removeDialog($removing, gate: gate, noun: noun, items: items, delete: delete)
         }
+        .removeDialog($removing, gate: gate, noun: noun, items: items, delete: delete)
+    }
+
+    private func callerRow(_ caller: ExternalCaller) -> some View {
+        let allowed = items.filter { gate.allows(caller.id, $0.id) }.count
+        return HStack(spacing: 10) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: caller.launcher.path)).resizable().frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(caller.launcher.name)
+                    if caller.launcher.caution != nil {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).help(caller.launcher.caution ?? "")
+                    }
+                }
+                Text(allowed == 0 ? "No \(noun)s" : "\(allowed) \(allowed == 1 ? noun : noun + "s")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Menu {
+                Button("Remove", role: .destructive) { removing = caller }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
+        }
+        .contentShape(.rect)
+        .onTapGesture { editing = caller.id }
+        .help(caller.launcher.path)
     }
 
     /// Set out like the installation and update commands in Noodle's Settings.
@@ -190,6 +196,77 @@ public struct ExternalToolsSettingsView: View {
             .padding(10)
             .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.1), lineWidth: 1) }
+        }
+    }
+}
+
+/// The switches for one allowed app.
+struct ExternalCallerSheet: View {
+    @ObservedObject var gate: ExternalGate
+    let caller: ExternalCaller
+    let noun: String
+    let items: [ExternalItem]
+    let remove: () -> Void
+    let done: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: caller.launcher.path)).resizable().frame(width: 32, height: 32)
+                Text(caller.launcher.name).font(.headline).help(caller.launcher.path)
+                Spacer()
+            }
+            .padding([.horizontal, .top], 20)
+            Form {
+                if let caution = caller.launcher.caution {
+                    Label(caution, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
+                }
+                Section {
+                    if items.isEmpty { Text("No \(noun)s").foregroundStyle(.secondary) }
+                    ForEach(items) { item in
+                        Toggle(isOn: Binding(get: { gate.allows(caller.id, item.id) },
+                                             set: { gate.setAccess($0, to: item.id, for: caller.id) })) {
+                            Label {
+                                Text(item.name)
+                                if gate.created(caller.id, item.id) { Text("Created by \(caller.launcher.name)") }
+                            } icon: { Image(systemName: item.symbol) }
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(minHeight: 120, idealHeight: min(CGFloat(max(items.count, 1)) * 44 + 40, 420))
+            .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Remove", role: .destructive, action: remove)
+                Spacer()
+                Button("Done", action: done).keyboardShortcut(.defaultAction)
+            }
+            .padding([.horizontal, .bottom], 20)
+        }
+        .frame(width: 440)
+    }
+}
+
+private extension View {
+    /// Asks before removing an app, offering to delete the items it made.
+    func removeDialog(_ removing: Binding<ExternalCaller?>, gate: ExternalGate, noun: String, items: [ExternalItem],
+                      delete: @escaping ([UUID]) -> Void) -> some View {
+        confirmationDialog("Remove \(removing.wrappedValue?.launcher.name ?? "")?",
+                           isPresented: Binding(get: { removing.wrappedValue != nil }, set: { if !$0 { removing.wrappedValue = nil } }),
+                           presenting: removing.wrappedValue) { caller in
+            let made = caller.resources.filter(\.created).map(\.id).filter { id in items.contains { $0.id == id } }
+            if made.isEmpty {
+                Button("Remove", role: .destructive) { gate.remove(caller.id) }
+            } else {
+                Button("Remove and Delete \(made.count) \(made.count == 1 ? noun.capitalized : noun.capitalized + "s")", role: .destructive) {
+                    gate.remove(caller.id); delete(made)
+                }
+                Button("Remove and Keep \(made.count == 1 ? noun.capitalized : noun.capitalized + "s")") { gate.remove(caller.id) }
+            }
+        } message: { caller in
+            Text("\(caller.launcher.name) will be asked about again before it can connect.")
         }
     }
 }
