@@ -1,6 +1,7 @@
 import ComputerBridge
 import ComputerCore
 import ComputerExternal
+import NoodleSettingsUI
 import XCTest
 @testable import NoodleComputer
 
@@ -123,14 +124,27 @@ private let codex = ExternalLauncher(key: "team:2DC432GLL2:com.openai.codex", na
         }
     }
 
-    /// Computers an outside app made are listed apart; ones it borrowed stay the person's own.
+    /// Computers an outside app made are listed apart; ones it borrowed stay the person's own. The Hub's are in its own space.
     func testComputersOutsideAppsMadeAreListedUnderExternalTools() {
         let own = ComputerSession(Computer(name: "Own", kind: .container)), made = ComputerSession(Computer(name: "Made", kind: .container))
         var hubComputer = Computer(name: "Hub's", kind: .container); hubComputer.hub = true
-        let sections = ComputerExternalService.sections([own, made, ComputerSession(hubComputer)], created: [made.id])
-        XCTAssertEqual(sections.own.map(\.computer.name), ["Own"])
-        XCTAssertEqual(sections.external.map(\.computer.name), ["Made"])
-        XCTAssertEqual(sections.hub.map(\.computer.name), ["Hub's"])
+        let sections = ComputerExternalService.sidebar([own, made, ComputerSession(hubComputer)], created: [made.id], space: .personal)
+        XCTAssertEqual(sections.map(\.title), ["Computers", "Agents"])
+        XCTAssertEqual(sections.map { $0.sessions.map(\.computer.name) }, [["Own"], ["Made"]])
+        XCTAssertEqual(ComputerExternalService.sidebar([own], created: [], space: .personal).map(\.title), ["Computers"])
+    }
+
+    /// The Hub's space has a section for each person, then the computers kept for no one.
+    func testTheHubsSpaceListsItsComputersByPerson() {
+        let ada = HubOwner(id: UUID(), name: "Ada")
+        func session(_ name: String, _ owner: HubOwner?) -> ComputerSession {
+            var computer = Computer(name: name, kind: .container); computer.hub = true; computer.hubOwner = owner
+            return ComputerSession(computer)
+        }
+        let sections = ComputerExternalService.sidebar([ComputerSession(Computer(name: "Own", kind: .container)), session("Shell", ada), session("Loose", nil)],
+                                                       created: [], space: .hub)
+        XCTAssertEqual(sections.map(\.title), ["Ada", "Other"])
+        XCTAssertEqual(sections.map { $0.sessions.map(\.computer.name) }, [["Shell"], ["Loose"]])
     }
 
     /// Switching a computer off for an app, or removing the app, closes the terminals it opened there.

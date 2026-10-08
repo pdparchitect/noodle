@@ -46,6 +46,7 @@ struct NoodleComputerApp: App {
         }
       }
       ComputerFileCommands(delegate: delegate)
+      ComputerSpaceCommands()
     }
     Settings {
       ComputerSettingsView()
@@ -74,6 +75,17 @@ struct NoodleComputerApp: App {
         Button("New Windows") { NotificationCenter.default.post(name: .newWindows, object: nil) }
       }
     }
+  }
+}
+
+@MainActor private struct ComputerSpaceCommands: Commands {
+  @ObservedObject private var library = ComputerLibraryState.shared
+  var body: some Commands {
+    if let store = library.store { Spaces(store: store) }
+  }
+  private struct Spaces: Commands {
+    @ObservedObject var store: ComputerStore
+    var body: some Commands { CompanionSpaceCommands(hasHub: store.sessions.contains { $0.computer.hub == true }) }
   }
 }
 
@@ -429,20 +441,21 @@ struct ComputerLibraryView: View {
   @State private var searchText = ""
   @State private var columnVisibility = NavigationSplitViewVisibility.all
   @AppStorage("ComputerSidebarVisible") private var sidebarVisible = true
-  /// People under Hub whose computers are folded away.
-  @State private var foldedPeople: Set<UUID> = []
+  @AppStorage(CompanionSpace.key) private var chosenSpace = CompanionSpace.personal
   @Environment(\.colorScheme) private var colorScheme
   @ObservedObject private var external = ComputerExternalService.shared?.gate ?? ExternalGate(url: nil, prompter: nil)
 
+  private var space: CompanionSpace { chosenSpace.shown(hasHub: store.sessions.contains { $0.computer.hub == true }) }
+  private var shownSessions: [ComputerSession] { store.sessions.filter { ($0.computer.hub == true) == (space == .hub) } }
+
   private var filteredSessions: [ComputerSession] {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    return store.sessions.filter {
+    return shownSessions.filter {
       query.isEmpty || $0.computer.name.localizedCaseInsensitiveContains(query)
         || $0.computer.displayType.localizedCaseInsensitiveContains(query)
     }
   }
 
-  /// Computers Noodle Hub keeps for its bots are listed apart from this Mac's own.
   private func rows(_ sessions: [ComputerSession]) -> some View {
     ForEach(sessions) { session in
       ComputerRow(store: store, session: session).tag(session.id)
@@ -466,21 +479,9 @@ struct ComputerLibraryView: View {
   var body: some View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
       List(selection: $store.selection) {
-        let sections = ComputerExternalService.sections(filteredSessions,
-          created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
-        Section("Computers") { rows(sections.own) }
-        if !sections.external.isEmpty { Section("Agents") { rows(sections.external) } }
-        let hub = ComputerStore.hubGroups(sections.hub)
-        if !hub.people.isEmpty || !hub.unowned.isEmpty {
-          Section("Hub") {
-            ForEach(hub.people, id: \.owner.id) { group in
-              DisclosureGroup(isExpanded: Binding(
-                get: { !foldedPeople.contains(group.owner.id) },
-                set: { if $0 { foldedPeople.remove(group.owner.id) } else { foldedPeople.insert(group.owner.id) } })
-              ) { rows(group.sessions) } label: { Label(group.owner.name, systemImage: "person") }
-            }
-            rows(hub.unowned)
-          }
+        let created = Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) })
+        ForEach(Array(ComputerExternalService.sidebar(filteredSessions, created: created, space: space).enumerated()), id: \.offset) { _, section in
+          Section(section.title) { rows(section.sessions) }
         }
       }
       .listStyle(.sidebar)
@@ -549,8 +550,15 @@ struct ComputerLibraryView: View {
     .onReceive(NotificationCenter.default.publisher(for: .newWindows)) { _ in
       if #available(macOS 27, *) { showingWindows = true }
     }
-    .onChange(of: store.selection) { _, id in
+    .onChange(of: store.selection, initial: true) { _, id in
       UserDefaults.standard.set(id?.uuidString, forKey: "SelectedComputer")
+      // A computer opened from elsewhere brings its space along.
+      if let session = store.selected, (session.computer.hub == true) != (space == .hub) {
+        chosenSpace = session.computer.hub == true ? .hub : .personal
+      }
+    }
+    .onChange(of: shownSessions.map(\.id)) { _, ids in
+      if !ids.contains(store.selection ?? UUID()) { store.selection = ids.first }
     }
     .task {
       while !Task.isCancelled {

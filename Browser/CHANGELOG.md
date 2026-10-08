@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Noodle Hub's browsers are in their own space instead of under Hub in the sidebar. Switch with the Spaces menu: Personal (⌘1) for your own, Hub (⌘2) for the Hub's, with a section for each person they are kept for. The menu shows once the Hub keeps browsers on this Mac.
 - Settings > External Tools is now Settings > Agents, and the sidebar section for what agents create is called Agents.
 - Settings > Agents shows each setup command in full in a box with a copy button, as Noodle's Settings shows installation commands.
 - Settings > Agents lists each allowed app as one row with the number of browsers it may use; click it for its switches, or remove it from its `…` menu or the sheet.

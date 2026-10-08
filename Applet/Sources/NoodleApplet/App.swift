@@ -54,6 +54,7 @@ struct NoodleAppletApp: App {
         Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }
       }
       AppletFileCommands(delegate: delegate, runtime: delegate.runtime)
+      AppletSpaceCommands(library: delegate.library)
     }
     Settings {
       AppletSettingsView(background: delegate.background, library: delegate.library, runtime: delegate.runtime)
@@ -258,7 +259,6 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
   case pinned = "Pinned"
   case running = "Running"
   case hidden = "Hidden"
-  case hub = "Hub"
   var id: Self { self }
   var symbol: String {
     switch self {
@@ -267,7 +267,6 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
     case .pinned: "pin"
     case .running: "play.circle"
     case .hidden: "eye.slash"
-    case .hub: "server.rack"
     }
   }
 }
@@ -299,12 +298,15 @@ private struct LibraryView: View {
   @State private var trashing: LibraryEntry?
   @AppStorage("AppletSidebarVisible") private var sidebarVisible = true
   @AppStorage("AppletCategoriesExpanded") private var categoriesExpanded = true
-  @AppStorage("AppletHubExpanded") private var hubExpanded = true
+  @AppStorage("AppletPeopleExpanded") private var peopleExpanded = true
+  @AppStorage(CompanionSpace.key) private var chosenSpace = CompanionSpace.personal
+  private var space: CompanionSpace { chosenSpace.shown(hasHub: library.hasHub) }
+  private var categories: [String] { library.categories(in: space) }
 
   private var section: LibrarySection? {
     switch selection {
     case .section(let section): section
-    case .hubPerson: .hub
+    case .hubPerson: .all
     default: nil
     }
   }
@@ -318,11 +320,10 @@ private struct LibraryView: View {
 
   private var entries: [LibraryEntry] {
     let matches = library.entries.filter {
-      (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
-        // Running lists every noodlet that is up, hidden or from Noodle Hub, so each can be stopped.
+      library.hub.contains($0.id) == (space == .hub)
+        && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
+        // Running lists every noodlet that is up, even hidden, so each can be stopped.
         && (section == .running || (section == .hidden) == library.hidden.contains($0.id))
-        // Noodle Hub's bots' noodlets are listed apart, unless pinned or hidden.
-        && ([.hidden, .pinned, .running].contains(section) || (section == .hub) == library.hub.contains($0.id))
         && (section != .pinned || library.pinned.contains($0.id))
         && (section != .running || runtime.isRunning($0.id))
         && (section != .recent || library.recent.contains($0.id))
@@ -341,22 +342,22 @@ private struct LibraryView: View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
       List(selection: $selection) {
         Section("Library") {
-          ForEach(LibrarySection.allCases.filter { $0 != .hub }) { section in
+          ForEach(LibrarySection.allCases) { section in
             Label(section.rawValue, systemImage: section.symbol).tag(LibraryFilter.section(section))
           }
         }
-        if !library.hubPeople.isEmpty {
-          Section(LibrarySection.hub.rawValue, isExpanded: $hubExpanded) {
-            ForEach(library.hubPeople) { person in
-              Label(person.name, systemImage: "person").tag(LibraryFilter.hubPerson(person.id))
+        if !categories.isEmpty {
+          Section("Categories", isExpanded: $categoriesExpanded) {
+            ForEach(categories, id: \.self) { category in
+              Label(category.capitalized, systemImage: LibraryFilter.categorySymbols[category] ?? "tag")
+                .tag(LibraryFilter.category(category))
             }
           }
         }
-        if !library.categories.isEmpty {
-          Section("Categories", isExpanded: $categoriesExpanded) {
-            ForEach(library.categories, id: \.self) { category in
-              Label(category.capitalized, systemImage: LibraryFilter.categorySymbols[category] ?? "tag")
-                .tag(LibraryFilter.category(category))
+        if space == .hub && !library.hubPeople.isEmpty {
+          Section("People", isExpanded: $peopleExpanded) {
+            ForEach(library.hubPeople) { person in
+              Label(person.name, systemImage: "person").tag(LibraryFilter.hubPerson(person.id))
             }
           }
         }
@@ -407,7 +408,7 @@ private struct LibraryView: View {
         .ignoresSafeArea()
     }
     .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-    .onChange(of: library.categories) { _, categories in
+    .onChange(of: categories) { _, categories in
       if let category, !categories.contains(category) { selection = .section(.all) }
     }
     .onChange(of: library.hubPeople) { _, people in
@@ -415,6 +416,7 @@ private struct LibraryView: View {
         selection = .section(.all)
       }
     }
+    .onChange(of: space) { if person != nil { selection = .section(.all) } }
     .onChange(of: searching) { _, active in if !active { searchFocused = false } }
     .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
     .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
@@ -604,6 +606,11 @@ private struct LibraryView: View {
       Button("Move to Trash") { trashing = entry }.disabled(running)
     }
   }
+}
+
+@MainActor private struct AppletSpaceCommands: Commands {
+  @ObservedObject var library: AppletLibrary
+  var body: some Commands { CompanionSpaceCommands(hasHub: library.hasHub) }
 }
 
 @MainActor private struct AppletFileCommands: Commands {

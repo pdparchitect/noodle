@@ -69,7 +69,7 @@ struct NoodleBrowserApp: App {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
             }
-            BrowserCommands(delegate: delegate, presentation: delegate.presentation)
+            BrowserCommands(delegate: delegate, presentation: delegate.presentation, library: delegate.library)
         }
         Settings { BrowserSettingsView(library: delegate.library, runtime: delegate.runtime) }
             .windowResizability(.contentSize)
@@ -183,6 +183,7 @@ struct NoodleBrowserApp: App {
 @MainActor private struct BrowserCommands: Commands {
     let delegate: BrowserAppDelegate
     @ObservedObject var presentation: BrowserPresentation
+    @ObservedObject var library: BrowserLibrary
     @Environment(\.openWindow) private var openWindow
     var body: some Commands {
         let action = openWindow
@@ -205,5 +206,6 @@ struct NoodleBrowserApp: App {
             Button("Add Bookmark…") { delegate.reopenLibrary(); delegate.presentation.bookmarkCurrentPage() }.keyboardShortcut("d")
             Button("Downloads") { delegate.reopenLibrary(); delegate.presentation.mode = .downloads }
         }
+        CompanionSpaceCommands(hasHub: library.profiles.contains { $0.hub == true })
     }
 }

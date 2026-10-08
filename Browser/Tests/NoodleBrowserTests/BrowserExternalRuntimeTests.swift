@@ -1,6 +1,7 @@
 import BrowserBridge
 import BrowserCore
 import BrowserExternal
+import NoodleSettingsUI
 @testable import NoodleBrowser
 import XCTest
 
@@ -154,13 +155,25 @@ final class BrowserExternalRuntimeTests: XCTestCase {
 }
 
 final class BrowserSidebarSectionTests: XCTestCase {
-    /// Browsers an outside app made are listed apart; ones it borrowed stay the person's own.
+    /// Browsers an outside app made are listed apart; ones it borrowed stay the person's own. The Hub's are in its own space.
     @MainActor func testBrowsersOutsideAppsMadeAreListedUnderExternalTools() {
         let own = BrowserProfile(name: "Own"), made = BrowserProfile(name: "Made"), lent = BrowserProfile(name: "Lent")
         var hub = BrowserProfile(name: "Hub's"); hub.hub = true
-        let sections = BrowserLibraryView.sections([own, made, lent, hub], created: [made.id])
-        XCTAssertEqual(sections.own.map(\.name), ["Own", "Lent"])
-        XCTAssertEqual(sections.external.map(\.name), ["Made"])
-        XCTAssertEqual(sections.hub.map(\.name), ["Hub's"])
+        let sections = BrowserLibraryView.sidebar([own, made, lent, hub], created: [made.id], space: .personal)
+        XCTAssertEqual(sections.map(\.title), ["Browsers", "Agents"])
+        XCTAssertEqual(sections.map { $0.profiles.map(\.name) }, [["Own", "Lent"], ["Made"]])
+        XCTAssertEqual(BrowserLibraryView.sidebar([own], created: [], space: .personal).map(\.title), ["Browsers"])
+    }
+
+    /// The Hub's space has a section for each person, then the browsers kept for no one.
+    @MainActor func testTheHubsSpaceListsItsBrowsersByPerson() {
+        let ada = BrowserOwner(id: UUID(), name: "Ada")
+        func profile(_ name: String, _ owner: BrowserOwner?) -> BrowserProfile {
+            var profile = BrowserProfile(name: name); profile.hub = true; profile.hubOwner = owner
+            return profile
+        }
+        let sections = BrowserLibraryView.sidebar([BrowserProfile(name: "Own"), profile("Work", ada), profile("Loose", nil)], created: [], space: .hub)
+        XCTAssertEqual(sections.map(\.title), ["Ada", "Other"])
+        XCTAssertEqual(sections.map { $0.profiles.map(\.name) }, [["Work"], ["Loose"]])
     }
 }

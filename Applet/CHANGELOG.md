@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Noodlets made by Noodle Hub's bots are in their own space instead of under Hub in the sidebar. Switch with the Spaces menu: Personal (⌘1) for your own, Hub (⌘2) for the Hub's, where All, Recent, Pinned, Running, Hidden and the categories list only the Hub's noodlets, and People, after the categories, lists whose bots made them. The menu shows once a Hub bot has made a noodlet.
+
 ## [0.27.0] - 2026-10-08
 
 ### Added

@@ -2,6 +2,7 @@ import AppKit
 import AppletCore
 import AppletBridge
 import Foundation
+import NoodleSettingsUI
 import UniformTypeIdentifiers
 
 struct LibraryEntry: Identifiable, Equatable {
@@ -324,12 +325,14 @@ struct HubPerson: Hashable, Identifiable, Decodable {
       recent.filter { !pinned.contains($0) && !hidden.contains($0) && !hub.contains($0) }
         .compactMap { key in entries.first { $0.id == key } }.prefix(8))
   }
-  /// Categories holding at least one of this Mac's own noodlets that is not hidden, in the
-  /// fixed category order.
-  var categories: [String] {
-    let used = Set(entries.filter { !hidden.contains($0.id) && !hub.contains($0.id) }.compactMap(\.package.manifest.category))
+  /// Categories holding at least one of the space's noodlets that is not hidden, in the fixed category order.
+  func categories(in space: CompanionSpace) -> [String] {
+    let used = Set(entries.filter { !hidden.contains($0.id) && hub.contains($0.id) == (space == .hub) }
+      .compactMap(\.package.manifest.category))
     return NoodletManifest.knownCategories.filter(used.contains)
   }
+  /// Whether Noodle Hub's bots made any of the noodlets, giving the library a Hub space.
+  var hasHub: Bool { entries.contains { hub.contains($0.id) } }
   /// People with noodlets under Hub that are not hidden, by name.
   var hubPeople: [HubPerson] {
     let people = Set(hubOwners.filter { !hidden.contains($0.key) }.values)

@@ -35,20 +35,24 @@ struct BrowserLibraryView: View {
         self.presentation = presentation; library = presentation.library; runtime = presentation.runtime
         external = presentation.runtime.external ?? ExternalGate(url: nil, prompter: nil)
     }
-    /// This Mac's own browsers, including any lent to an outside app; those an outside app made;
-    /// and the Hub's.
-    static func sections(_ profiles: [BrowserProfile], created: Set<UUID>) -> (own: [BrowserProfile], external: [BrowserProfile], hub: [BrowserProfile]) {
-        let local = profiles.filter { $0.hub != true }
-        return (local.filter { !created.contains($0.id) }, local.filter { created.contains($0.id) }, profiles.filter { $0.hub == true })
+    /// This Mac's own browsers, including any lent to an outside app, then those an outside app made. The Hub's
+    /// space lists the browsers it keeps for each person, then those it keeps for no one.
+    static func sidebar(_ profiles: [BrowserProfile], created: Set<UUID>, space: CompanionSpace) -> [(title: String, profiles: [BrowserProfile])] {
+        guard space == .personal else {
+            let hub = BrowserLibrary.hubGroups(profiles.filter { $0.hub == true })
+            return hub.people.map { ($0.owner.name, $0.profiles) } + (hub.unowned.isEmpty ? [] : [("Other", hub.unowned)])
+        }
+        let local = profiles.filter { $0.hub != true }, made = local.filter { created.contains($0.id) }
+        return [("Browsers", local.filter { !created.contains($0.id) })] + (made.isEmpty ? [] : [("Agents", made)])
     }
-    /// People under Hub whose browsers are folded away.
-    @State private var foldedPeople: Set<UUID> = []
+    @AppStorage(CompanionSpace.key) private var chosenSpace = CompanionSpace.personal
+    private var space: CompanionSpace { chosenSpace.shown(hasHub: library.profiles.contains { $0.hub == true }) }
+    private var shown: [BrowserProfile] { library.profiles.filter { ($0.hub == true) == (space == .hub) } }
     private var filtered: [BrowserProfile] {
-        library.profiles.filter {
+        shown.filter {
             search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.description?.localizedCaseInsensitiveContains(search) == true
         }
     }
-    /// Browsers Noodle Hub keeps for its bots are listed apart from this Mac's own.
     private func rows(_ profiles: [BrowserProfile]) -> some View {
         ForEach(profiles) { profile in
             BrowserSidebarRow(profile: profile)
@@ -68,23 +72,9 @@ struct BrowserLibraryView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $presentation.selection) {
-                let sections = Self.sections(filtered, created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
-                Section("Browsers") { rows(sections.own) }
-                if !sections.external.isEmpty { Section("Agents") { rows(sections.external) } }
-                let hub = BrowserLibrary.hubGroups(sections.hub)
-                if !hub.people.isEmpty || !hub.unowned.isEmpty {
-                    Section("Hub") {
-                        ForEach(hub.people, id: \.owner.id) { group in
-                            DisclosureGroup(isExpanded: Binding(
-                                get: { !foldedPeople.contains(group.owner.id) },
-                                set: { if $0 { foldedPeople.remove(group.owner.id) } else { foldedPeople.insert(group.owner.id) } })
-                            ) { rows(group.profiles) } label: {
-                                // ForEach tags the row with the person's ID, which the list would select as a browser.
-                                Label(group.owner.name, systemImage: "person").selectionDisabled()
-                            }
-                        }
-                        rows(hub.unowned)
-                    }
+                let created = Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) })
+                ForEach(Array(Self.sidebar(filtered, created: created, space: space).enumerated()), id: \.offset) { _, section in
+                    Section(section.title) { rows(section.profiles) }
                 }
             }
             .listStyle(.sidebar)
@@ -136,8 +126,14 @@ struct BrowserLibraryView: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onAppear { columnVisibility = sidebarVisible ? .all : .detailOnly }
         .onChange(of: columnVisibility) { _, value in sidebarVisible = value != .detailOnly }
-        .onChange(of: library.profiles.map(\.id)) { _, ids in
+        .onChange(of: shown.map(\.id)) { _, ids in
             if !ids.contains(presentation.selection ?? UUID()) { presentation.selection = ids.first }
+        }
+        // A browser opened from elsewhere brings its space along.
+        .onChange(of: presentation.selection, initial: true) {
+            if let profile = presentation.profile, (profile.hub == true) != (space == .hub) {
+                chosenSpace = profile.hub == true ? .hub : .personal
+            }
         }
         .task(id: presentation.selection) {
             guard let id = presentation.selection else { return }

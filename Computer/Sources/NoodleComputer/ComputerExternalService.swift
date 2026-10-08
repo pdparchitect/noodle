@@ -3,6 +3,7 @@ import ComputerCore
 import ComputerExternal
 import Foundation
 import NoodleExternalToolsUI
+import NoodleSettingsUI
 import SwiftUI
 
 /// Serves apps outside Noodle through noodle-computer while Settings allows them. Each sees only
@@ -69,12 +70,16 @@ import SwiftUI
         return (try? JSONEncoder().encode(response)) ?? ExternalConnection.failure("Could not answer.")
     }
 
-    /// The sidebar's sections: this Mac's own computers, including any lent to an outside app;
-    /// those an outside app made; and the Hub's.
-    static func sections(_ sessions: [ComputerSession], created: Set<UUID>)
-        -> (own: [ComputerSession], external: [ComputerSession], hub: [ComputerSession]) {
-        let local = sessions.filter { $0.computer.hub != true }
-        return (local.filter { !created.contains($0.id) }, local.filter { created.contains($0.id) }, sessions.filter { $0.computer.hub == true })
+    /// The sidebar's sections: this Mac's own computers, including any lent to an outside app, then those an
+    /// outside app made. The Hub's space lists the computers it keeps for each person, then those it keeps for no one.
+    static func sidebar(_ sessions: [ComputerSession], created: Set<UUID>, space: CompanionSpace)
+        -> [(title: String, sessions: [ComputerSession])] {
+        guard space == .personal else {
+            let hub = ComputerStore.hubGroups(sessions.filter { $0.computer.hub == true })
+            return hub.people.map { ($0.owner.name, $0.sessions) } + (hub.unowned.isEmpty ? [] : [("Other", hub.unowned)])
+        }
+        let local = sessions.filter { $0.computer.hub != true }, made = local.filter { created.contains($0.id) }
+        return [("Computers", local.filter { !created.contains($0.id) })] + (made.isEmpty ? [] : [("Agents", made)])
     }
 
     /// Computers a person may lend: their own, not the Hub's.

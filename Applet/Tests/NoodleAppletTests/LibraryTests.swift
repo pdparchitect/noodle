@@ -1,6 +1,7 @@
 import AppletBridge
 import AppletCore
 import Combine
+import NoodleSettingsUI
 import XCTest
 
 @testable import NoodleApplet
@@ -264,13 +265,37 @@ final class LibraryTests: XCTestCase {
         }
         for package in packages { library.remember(package) }
         library.scan()
-        XCTAssertEqual(library.categories, ["games", "productivity", "writing"])
+        XCTAssertEqual(library.categories(in: .personal), ["games", "productivity", "writing"])
 
         library.hide(packages[1].key)
-        XCTAssertEqual(library.categories, ["games", "productivity"], "A category holding only hidden noodlets is listed.")
+        XCTAssertEqual(library.categories(in: .personal), ["games", "productivity"], "A category holding only hidden noodlets is listed.")
 
         for package in [packages[0], packages[2]] { library.hide(package.key) }
-        XCTAssertEqual(library.categories, [])
+        XCTAssertEqual(library.categories(in: .personal), [])
+    }
+
+    /// Each space lists the categories of its own noodlets: this Mac's, or those Noodle Hub's bots made.
+    @MainActor func testEachSpaceListsTheCategoriesOfItsNoodlets() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "AppletLibraryTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let library = botLibrary(root: root, defaults: defaults)
+        func noodlet(_ title: String, _ category: String) -> [String: Data] {
+            ["noodlet.json": Data(#"{"version":1,"title":"\#(title)","runtime":"html","entry":"index.html","category":"\#(category)"}"#.utf8),
+             "index.html": Data("<title>Test</title>".utf8)]
+        }
+        _ = try botNoodlet(noodlet("Chess", "games"), named: "Chess", owner: "local", root: root)
+        library.scan()
+        XCTAssertFalse(library.hasHub)
+        _ = try botNoodlet(noodlet("Notes", "writing"), named: "Notes", owner: "alfred", root: root, hub: true)
+        library.scan()
+        XCTAssertTrue(library.hasHub)
+        XCTAssertEqual(library.categories(in: .personal), ["games"])
+        XCTAssertEqual(library.categories(in: .hub), ["writing"])
     }
 
     @MainActor func testTrashingANoodletRemovesItAndEverythingItKept() async throws {
