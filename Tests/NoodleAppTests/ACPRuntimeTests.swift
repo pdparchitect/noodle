@@ -104,6 +104,42 @@ import XCTest
         XCTAssertFalse(f.recovery(.fx).hasUnfinishedTurn)
     }
 
+    private func promptText(_ wire: HarnessWire) throws -> String {
+        try XCTUnwrap(((wire.last("session/prompt")["params"] as? [String: Any])?["prompt"] as? [[String: String]])?.first?["text"])
+    }
+
+    /// Skill discovery inside a harness is best effort: a session opened
+    /// after the workspace skills stopped changing never learns the
+    /// Messenger skill, so the first wake of every session routes to it.
+    func testFirstWakeOfEachSessionCarriesMessengerRoutingOnce() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire)
+        p.start(); try await f.openACP(wire); p.notify()
+        try await f.wait { wire.count("session/prompt") == 1 }
+        let first = try promptText(wire)
+        XCTAssertTrue(first.contains(AgentWakeReason.inboxChanged.eventText))
+        XCTAssertTrue(first.contains(MessengerDocumentation.bootstrapInstructions))
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn"])
+        try await f.wait { p.canReceiveHeartbeat }
+
+        p.notify()
+        try await f.wait { wire.count("session/prompt") == 2 }
+        let second = try promptText(wire)
+        XCTAssertTrue(second.contains(AgentWakeReason.inboxChanged.eventText))
+        XCTAssertFalse(second.contains(MessengerDocumentation.bootstrapInstructions))
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn"])
+        try await f.wait { p.canReceiveHeartbeat }
+        p.stop { _ in }
+
+        let next = HarnessWire(), resumed = f.acp(next)
+        resumed.start(); try await f.openACP(next, resuming: true)
+        resumed.notify()
+        try await f.wait { next.count("session/prompt") == 1 }
+        XCTAssertFalse(try promptText(next).contains(MessengerDocumentation.bootstrapInstructions))
+        try next.reply("session/prompt", result: ["stopReason": "end_turn"])
+        try await f.wait { resumed.canReceiveHeartbeat }
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
     func testPermissionRepliesAreSessionScopedOnceOnlyAndCancelledDuringInterrupt() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, extended: false)
         p.start(); try await f.openACP(wire); p.notify()

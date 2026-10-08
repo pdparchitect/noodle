@@ -242,8 +242,8 @@ import XCTest
         for (ending, update) in shapes {
             let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .grokBuild)
             p.start(); try await f.openACP(wire, provider: .grokBuild)
-            let state = try Data(contentsOf: f.state(.grokBuild))
             p.notify(); try await f.wait { wire.count("session/prompt") == 1 && p.snapshot.phase == .working }
+            let state = try Data(contentsOf: f.state(.grokBuild))
             wire.emit(["method": "_x.ai/session/update", "params": ["sessionId": "fixture-session", "update": update]])
             try await barrier(f, wire)
             switch ending {
@@ -265,7 +265,8 @@ import XCTest
             XCTAssertEqual(p.snapshot, paused, ending)
             XCTAssertEqual(wire.count("session/prompt"), 1); XCTAssertEqual(wire.launches.count, 1)
             XCTAssertTrue(f.failures.isEmpty)
-            XCTAssertEqual(try Data(contentsOf: f.state(.grokBuild)), state)
+            let pausedState = try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: f.state(.grokBuild)))
+            XCTAssertEqual(pausedState, try JSONDecoder().decode(ACPSessionState.self, from: state))
             p.stop { _ in }
 
             let next = HarnessWire(), restarted = f.acp(next, provider: .grokBuild)

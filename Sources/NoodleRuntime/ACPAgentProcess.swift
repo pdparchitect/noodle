@@ -219,7 +219,17 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         reviewHeld = false
         usageLimitDetail = nil
         trace.begin(reason: reason)
-        let prompt = reason.eventText + (state.needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
+        // A session that never surfaces the workspace skill catalogue (a
+        // Grok session opened after the skills folder stopped changing) stays
+        // deaf to every wake event, so the routing text rides the first wake
+        // of each session instead of relying on harness skill discovery.
+        let prompt = reason.eventText
+            + (state.bootstrappedSessionID != sessionID ? "\n\n" + MessengerDocumentation.bootstrapInstructions : "")
+            + (state.needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
+        if state.bootstrappedSessionID != sessionID {
+            state.bootstrappedSessionID = sessionID
+            try? state.save(to: stateURL)
+        }
         request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": prompt]]])
         guard running else { return }
         trace.record(.wakeSubmitted)

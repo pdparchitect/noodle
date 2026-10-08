@@ -46,4 +46,19 @@ final class ACPSessionStateTests: XCTestCase {
         state.recoveryBlocked = false
         XCTAssertEqual(retried, state)
     }
+
+    func testBootstrapMarkerDecodesFromLegacySavesAndRoundTrips() throws {
+        let url = try stateFile()
+        let legacy = try JSONSerialization.data(withJSONObject: ["sessionID": UUID().uuidString])
+        try legacy.write(to: url)
+        XCTAssertNil(try JSONDecoder().decode(ACPSessionState.self, from: legacy).bootstrappedSessionID)
+
+        var state = ACPSessionState(sessionID: UUID().uuidString)
+        state.bootstrappedSessionID = state.sessionID
+        try state.save(to: url)
+        XCTAssertEqual(try JSONDecoder().decode(ACPSessionState.self, from: Data(contentsOf: url)), state)
+
+        let invalid = try JSONSerialization.data(withJSONObject: ["sessionID": UUID().uuidString, "bootstrappedSessionID": "-not-valid"])
+        XCTAssertThrowsError(try JSONDecoder().decode(ACPSessionState.self, from: invalid))
+    }
 }

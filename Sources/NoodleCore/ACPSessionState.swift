@@ -7,16 +7,20 @@ public struct ACPSessionState: Codable, Equatable {
     public var previousSessionIDs: [String]
     public var needsHistoryRecovery: Bool
     public var recoveryBlocked: Bool
+    /// The session whose first wake already carried the Messenger routing
+    /// text, so later wakes and relaunches do not repeat it.
+    public var bootstrappedSessionID: String?
 
     public init(sessionID: String? = nil) {
         self.sessionID = sessionID
         previousSessionIDs = []
         needsHistoryRecovery = false
         recoveryBlocked = false
+        bootstrappedSessionID = nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sessionID, previousSessionIDs, needsHistoryRecovery, recoveryBlocked
+        case sessionID, previousSessionIDs, needsHistoryRecovery, recoveryBlocked, bootstrappedSessionID
     }
 
     public init(from decoder: Decoder) throws {
@@ -25,11 +29,14 @@ public struct ACPSessionState: Codable, Equatable {
         previousSessionIDs = try values.decodeIfPresent([String].self, forKey: .previousSessionIDs) ?? []
         needsHistoryRecovery = try values.decodeIfPresent(Bool.self, forKey: .needsHistoryRecovery) ?? false
         recoveryBlocked = try values.decodeIfPresent(Bool.self, forKey: .recoveryBlocked) ?? false
+        bootstrappedSessionID = try values.decodeIfPresent(String.self, forKey: .bootstrappedSessionID)
         guard sessionID.map(FxProtocol.validIdentifier) ?? needsHistoryRecovery,
-              previousSessionIDs.allSatisfy(FxProtocol.validIdentifier) else {
+              previousSessionIDs.allSatisfy(FxProtocol.validIdentifier),
+              bootstrappedSessionID.map(FxProtocol.validIdentifier) ?? true else {
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid ACP session state"))
         }
     }
+
 
     public func save(to url: URL) throws {
         try JSONEncoder().encode(self).write(to: url, options: .atomic)
@@ -44,6 +51,7 @@ public struct ACPSessionState: Codable, Equatable {
         }
         state.previousSessionIDs.append(expectedSessionID)
         state.sessionID = nil
+        state.bootstrappedSessionID = nil
         state.needsHistoryRecovery = true
         state.recoveryBlocked = false
         try state.save(to: url)
