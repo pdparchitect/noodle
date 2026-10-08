@@ -737,9 +737,15 @@ public final class AgentRuntimeCoordinator {
                 lifecycleID: lifecycleID, extendedAccess: accessConfiguration.isExtended(for: agent))
         }
         restart(agent: agent, repository: repository,
-            sessionRecovery: snapshot(for: agent.id).failure == .recoveryFailed ? .retry : nil,
+            sessionRecovery: snapshot(for: agent.id).failure == .recoveryFailed ? sessionRecovery(.retry, for: agent) : nil,
             retryFailedStop: true)
         return nil
+    }
+
+    /// Only harnesses with a saved ACP session have recovery to prepare; the rest simply restart.
+    private func sessionRecovery(_ recovery: SessionRecovery, for agent: AgentRecord) -> SessionRecovery? {
+        let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))
+        return provider == .grokBuild || provider == .openCode ? recovery : nil
     }
 
     public func confirmKick(_ request: AgentKickRequest, repository: WorkspaceRepository) {
@@ -757,7 +763,7 @@ public final class AgentRuntimeCoordinator {
             restart(agent: agent, repository: repository, sessionRecovery: nil, retryFailedStop: true)
             return
         }
-        restart(agent: agent, repository: repository, sessionRecovery: recovery)
+        restart(agent: agent, repository: repository, sessionRecovery: sessionRecovery(recovery, for: agent))
     }
 
     /// Replaces the bot's harness session with a fresh one, keeping its workspace, memory and messages.

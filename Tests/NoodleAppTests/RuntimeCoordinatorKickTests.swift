@@ -208,6 +208,21 @@ import XCTest
         XCTAssertFalse(saved.recoveryBlocked)
         XCTAssertEqual(f.factory.processes.count, 2)
     }
+    func testKickAfterSignInRestartsHarnessesWithoutSessionRecovery() throws {
+        for provider in [HarnessProvider.claudeCode, .codex] {
+            let f = try fixture(), agent = try f.agent(harness: provider), process = try f.start(agent)
+            process.transition(.failed, failure: .authenticationRequired)
+            let request = try XCTUnwrap(f.runtime.kick(agent: agent, repository: f.repository))
+            f.runtime.confirmKick(request, repository: f.repository)
+            XCTAssertEqual(f.factory.processes.count, 2, "\(provider)")
+            XCTAssertNotEqual(f.runtime.snapshot(for: agent.id).failure, .recoveryFailed, "\(provider)")
+
+            f.factory.processes.last!.transition(.failed, failure: .recoveryFailed)
+            XCTAssertNil(f.runtime.kick(agent: agent, repository: f.repository))
+            XCTAssertEqual(f.factory.processes.count, 3, "A plain Kick must leave a failed recovery behind for \(provider)")
+        }
+    }
+
     func testBotWaitingOnAnAccountFailureIsNotRestartedWhenItsHarnessExits() throws {
         let failures: [AgentRuntimeFailure] = [.authenticationRequired, .usageLimit, .safetyStop, .recoveryFailed, .missingSession("s")]
         for failure in failures {
