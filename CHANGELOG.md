@@ -6,11 +6,12 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-08
+
 ### Added
 
 - A noodlet from a Noodle Hub, run on this Mac or watched live, says in its top right corner when it is still starting or too busy to respond.
 - Play on your phone shows every game this Mac's bots shared under Games, including ones never opened on the phone.
-
 - When your devices use this Mac as a Hub, they can share this Mac's bots with people on the Noodle Hubs it joined, as Edit Bot does here.
 - Reactions now travel both ways with people a bot on this Mac is shared with through a Noodle Hub: theirs reach the bot, and the bot's reach them.
 - Chat effects from bots kept on a Noodle Hub now play here, and those from bots on this Mac reach the people they are shared with.

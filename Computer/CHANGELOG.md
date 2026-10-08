@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-08
+
 ### Added
 
 - Windows computers, on macOS 27 or later. New Windows downloads Windows 11 for Arm from Microsoft, installs it while showing its progress, and keeps the installation, so later Windows computers are ready after a few minutes of setup. The desktop takes the Mac's keyboard and mouse, and Terminal (PowerShell) and Files work as on the other computers. Windows stays unactivated until you enter your own product key.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-08
+
 ### Added
 
 - A noodlet that is still starting, or too busy to respond, says so in the top right corner of its window, and to anyone watching it live from a phone or another Mac.
@@ -15,7 +17,6 @@
 
 - A large noodlet's window opens straight away. Before, nothing showed until all of its files had been read.
 - A starting noodlet no longer shows a blank white page. Until its page first draws, the window shows its own background, or the frosted glass of a translucent noodlet.
-
 - The Storage and Secrets settings no longer freeze the app with a large library. Storage shows the last sizes at once and measures again in the background.
 - Storage settings count what noodlets save in their web pages, such as local storage, and list only noodlets that have saved something.
 

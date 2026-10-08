@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-08
+
 ### Added
 
 - Agents outside Noodle, such as Claude Code and Codex, can use Noodle Browser through the `noodle-browser` command or as an MCP server. It is off until you turn on Settings > External Tools. You are asked before each app is first allowed in, before it borrows one of your browsers, and before each new browser once it has created 10. Each app sees only the browsers it created or you lent it, and you can change that in Settings. Browsers these apps create are listed under External Tools in the sidebar. You are warned when an app is not from an identified developer, or when it runs whatever it is given, such as Terminal. Bots in Noodle cannot use it.
