@@ -127,6 +127,8 @@ jobs:
         run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
       - name: Test the wordmark
         run: swift test --disable-sandbox --package-path Shared/Brand --scratch-path .build/brand
+      - name: Test external tools access
+        run: swift test --disable-sandbox --package-path Shared/ExternalTools --scratch-path .build/external-tools
 
   test-noodle-macos27:
     needs: [versions]

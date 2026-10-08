@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import BrowserExternal
 import NoodleLaunchChecks
 import WebKit
 import SwiftUI
@@ -8,6 +9,14 @@ import SwiftUI
 /// Runs only when explicitly requested. Uses UUID-isolated profiles and fake
 /// loopback authentication; never reads or operates a user's browser profiles.
 @MainActor enum BrowserSmokeTest {
+    #if NOODLE_DEV_HOOKS
+    private final class Yes: ExternalPrompting {
+        func approve(_ launcher: ExternalLauncher) async -> Bool { print("BROWSER_EXTERNAL_APPROVED \(launcher.name) \(launcher.key)"); return true }
+        func pick(_ launcher: ExternalLauncher, from items: [ExternalItem]) async -> UUID? { items.first?.id }
+        func confirm(_ launcher: ExternalLauncher, message: String, action: String) async -> Bool { true }
+    }
+    private static let externalAnswers = Yes()
+    #endif
     static func require(_ value: Bool, _ message: String) throws { if !value { throw BrowserError(message) } }
     static func eventually(_ label: String, _ check: () async throws -> Bool) async throws {
         let deadline = Date().addingTimeInterval(15)
@@ -33,11 +42,24 @@ import SwiftUI
             try FileManager.default.createDirectory(at: transfers, withIntermediateDirectories: true)
             #if NOODLE_DEV_HOOKS
             let serve = checks.contains(BrowserLaunchCheck.serveSmoke)
+            let serveExternal = checks.contains(BrowserLaunchCheck.serveExternal)
+            // Answers every question with yes, so the signed command-line tool can be driven
+            // without a person; its grants live in this fixture's own folder.
+            let external = serveExternal ? ExternalGate(url: root.appendingPathComponent("external-tools.json"), prompter: externalAnswers) : nil
+            external?.enabled = true
             #else
-            let serve = false
+            let serve = false, serveExternal = false, external: ExternalGate? = nil
             #endif
-            let runtime = BrowserRuntime(library: library, transferRoot: serve ? nil : transfers)
+            let runtime = BrowserRuntime(library: library, transferRoot: serve || serveExternal ? nil : transfers, external: external)
             #if NOODLE_DEV_HOOKS
+            if serveExternal {
+                try require(library.profiles.count == 2, "Run the smoke fixture before serving it")
+                runtime.startExternalServer()
+                try require(runtime.failure == nil, runtime.failure ?? "Server error")
+                print("BROWSER_EXTERNAL_SERVER_READY")
+                for _ in 0..<900 { try await Task.sleep(for: .seconds(1)) }
+                runtime.shutdown(); exit(0)
+            }
             if serve {
                 try require(library.profiles.count == 2, "Run the smoke fixture before serving it")
                 let socket = try BrowserConnection.socketURL().deletingLastPathComponent().appendingPathComponent("t.sock")

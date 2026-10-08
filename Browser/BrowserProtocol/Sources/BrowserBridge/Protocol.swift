@@ -22,12 +22,42 @@ public enum BrowserOperation: String, Codable, CaseIterable, Sendable {
     case surfaceStream = "surface-stream"
     /// Noodle Hub saying whom a browser is kept for, or nobody.
     case setOwner = "browser-set-owner"
+    /// An app outside Noodle asking the person to lend it one of their browsers.
+    case borrow = "browser-borrow"
     public var timeout: Int { isFileTransfer ? 600 : 60 }
     public var isFileTransfer: Bool { self == .upload || self == .download || self == .screenshot }
-    public var isManagement: Bool { [.create, .update, .delete, .surfaceStream, .setOwner].contains(self) }
-    public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove, .create, .update, .delete, .setOwner].contains(self) }
+    public var isManagement: Bool { [.create, .update, .delete, .surfaceStream, .setOwner, .borrow].contains(self) }
+    public var needsTab: Bool { ![.list, .status, .tabs, .open, .downloads, .download, .show, .history, .bookmarks, .bookmarkAdd, .bookmarkUpdate, .bookmarkRemove, .create, .update, .delete, .setOwner, .borrow].contains(self) }
     /// What bots may call.
     public static var agentCases: [Self] { allCases.filter { !$0.isManagement } }
+    /// What apps outside Noodle may call: what bots may, apart from posting into a conversation,
+    /// and making, borrowing, changing and deleting browsers.
+    public static var externalCases: [Self] { agentCases.filter { $0 != .present } + [.create, .borrow, .update, .delete] }
+    /// The options each operation takes besides the browser and tab, by their command-line names.
+    public var options: [String] {
+        switch self {
+        case .webMCPList: ["frame"]
+        case .webMCPCall: ["tool", "args", "args-file", "frame"]
+        case .history, .bookmarks: ["query", "limit", "offset"]
+        case .bookmarkAdd: ["url", "title"]
+        case .bookmarkUpdate: ["bookmark", "url", "title"]
+        case .bookmarkRemove: ["bookmark"]
+        case .open, .navigate: ["url"]
+        case .inspect: ["frame"]
+        case .eval: ["text", "file", "frame"]
+        case .click: ["target", "x", "y", "frame", "count"]
+        case .move, .scroll: ["target", "x", "y", "frame"]
+        case .fill: ["target", "text", "frame"]
+        case .key: ["text"]
+        case .screenshot: ["output"]
+        case .upload: ["source", "target", "frame"]
+        case .download: ["download", "output"]
+        case .dialog: ["accept", "text"]
+        case .present: ["conversation", "message"]
+        case .create, .update: ["name", "description"]
+        default: []
+        }
+    }
 }
 
 /// What a client sets on a browser it makes or edits. Nil fields stay as they are.
@@ -173,7 +203,7 @@ public struct BrowserRequest: Codable, Sendable {
     public func validate() throws {
         try validateWebMCP()
         guard version == 1 else { throw BrowserError("Update Noodle and Noodle Browser to compatible versions.") }
-        guard operation == .list || operation == .create || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
+        guard [.list, .create, .borrow].contains(operation) || browserID != nil else { throw BrowserError("Specify --browser UUID.") }
         if [.create, .update].contains(operation) {
             let name = profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !name.isEmpty, name.count <= 120 else { throw BrowserError("Enter a browser name of 1–120 characters.") }

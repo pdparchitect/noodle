@@ -14,6 +14,18 @@ entitlements="$(mktemp /tmp/computer-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
 swift "$project_root/Computer/Tests/VerifyRelease.swift" "$info" "$entitlements" "$project_root/Computer/VERSION"
+# The command-line tool: the app's own identity, hardened, holding the external group and nothing else.
+tool="$app/Contents/MacOS/noodle-computer"
+codesign --verify --strict "$tool"
+signature="$(codesign -dv --verbose=4 "$tool" 2>&1)"
+team="$(/usr/libexec/PlistBuddy -c 'Print :NoodleSigningTeam' "$info")"
+[[ "$signature" == *$'\n'"Identifier=$bundle.cli"$'\n'* && "$signature" == *$'\n'"TeamIdentifier=$team"$'\n'* && "$signature" == *'(runtime)'* ]]
+codesign -d --entitlements :- "$tool" 2>/dev/null | plutil -convert json -o - - |
+    python3 -I -c 'import json,sys; e=json.load(sys.stdin); g=sys.argv[1]; assert e=={"com.apple.security.application-groups":[g]}, e' \
+    "$(/usr/libexec/PlistBuddy -c 'Print :NoodleComputerExternalGroup' "$info")"
+if grep -q 'external-' "$project_root/Support/Noodle.entitlements" "$project_root/Hub/Support/Hub.entitlements"; then
+    print -u2 'Noodle and Noodle Hub must not hold the external tools group.'; exit 1
+fi
 # Computers are shared as links; the app ships no Quick Look extensions.
 [[ ! -e "$app/Contents/PlugIns" ]] || [[ -z "$(ls "$app/Contents/PlugIns")" ]]
 cmp "$project_root/Computer/Images/shared/noodle-welcome" "$app/Contents/Helpers/LocalMacDesktop.app/Contents/Resources/noodle-welcome"

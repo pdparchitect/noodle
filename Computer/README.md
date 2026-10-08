@@ -37,6 +37,20 @@ picture of what it showed. Click the link to select and start that computer in
 Noodle Computer. You get the computer's normal desktop or terminal, not the
 agent's own session. Closing the window leaves the computer running.
 
+## Use it from Claude Code, Codex and other agents
+
+Agents outside Noodle can use Noodle Computer too. Turn on **Allow external
+tools** in Settings > External Tools, then copy the command shown there for
+Claude Code or Codex. Other agents can run the `noodle-computer` command shown
+there, or add it as an MCP server with `mcp` after it.
+
+The first time an app connects, Noodle Computer asks whether to allow it. It also
+asks every time an app wants to create a computer. An app sees only the computers
+it created and any you lend it: when it asks to borrow one, you choose which, or
+decline. It can change or delete only the computers it created. In Settings you
+can see each app, switch its access to any computer on or off, and remove it.
+Bots in Noodle cannot use this.
+
 ## Use the terminal
 
 Shell and Desktop images use the non-root `agent` account, with passwordless

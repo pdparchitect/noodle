@@ -37,7 +37,8 @@ import LocalMacCore
         do { return try await handle(request, peer: peer, surface: surface) }
         catch { return .init(error: error.localizedDescription) }
     }
-    func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil) async throws -> ComputerResponse {
+    /// `stagingRoot` is where file transfers wait, when not beside the companion socket.
+    func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil, stagingRoot: URL? = nil) async throws -> ComputerResponse {
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
         let owner = ComputerBuildIdentity.principal(for: peer) + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
@@ -131,8 +132,8 @@ import LocalMacCore
             if let failure { throw ComputerBridgeError(failure) }
             return .init()
         }
-        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner) }
-        if session.computer.kind == .windows { return try await handleWindows(request, session: session, store: store, owner: owner) }
+        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner, stagingRoot: stagingRoot) }
+        if session.computer.kind == .windows { return try await handleWindows(request, session: session, store: store, owner: owner, stagingRoot: stagingRoot) }
         if request.operation == .revoke {
             let ids = terminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }.map(\.key)
             for id in ids { await terminals.removeValue(forKey: id)?.close() }
@@ -162,7 +163,7 @@ import LocalMacCore
             guard let id = request.transferID, let path = request.path else {
                 throw ComputerBridgeError("Missing broker file-transfer reference.")
             }
-            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let staging = try ComputerTransferFiles.staging(root: stagingRoot ?? transferRoot, id: id, create: false)
             let files = GuestFiles(runtime: runtime)
             var response = ComputerResponse()
             response.path = try GuestFile.normalize(path)
@@ -286,7 +287,7 @@ import LocalMacCore
     }
 
     /// Windows needs macOS 27; on older systems its computers are not offered to clients.
-    private static func served(_ kind: ComputerKind) -> Bool {
+    static func served(_ kind: ComputerKind) -> Bool {
         if kind == .windows, #unavailable(macOS 27) { return false }
         return kind == .container || kind == .localMac || kind == .windows
     }
@@ -302,7 +303,7 @@ import LocalMacCore
     }
     /// Terminals are PowerShell consoles through the Windows agent; files go through the same service as the
     /// Files view. Clients see the screen in previews but do not control the desktop.
-    private func handleWindows(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
+    private func handleWindows(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String, stagingRoot: URL?) async throws -> ComputerResponse {
         guard #available(macOS 27, *) else { throw ComputerBridgeError("Windows computers need macOS 27.") }
         windowsTerminals = windowsTerminals.filter { _, terminal in
             store.sessions.contains { $0.id == terminal.computerID && $0.windows?.agent === terminal.agent && $0.phase == .running }
@@ -325,7 +326,7 @@ import LocalMacCore
         guard windows.agentConnected else { throw ComputerBridgeError("Windows is still starting. Try again in a minute.") }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else { throw ComputerBridgeError("Missing broker file-transfer reference.") }
-            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let staging = try ComputerTransferFiles.staging(root: stagingRoot ?? transferRoot, id: id, create: false)
             let files = WindowsFileService { [weak windows] in windows?.agent }
             var reply = ComputerResponse(); reply.path = try GuestFile.normalize(path)
             if request.operation == .fileUpload {
@@ -381,7 +382,7 @@ import LocalMacCore
         return .init()
     }
 
-    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String) async throws -> ComputerResponse {
+    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String, stagingRoot: URL?) async throws -> ComputerResponse {
         localTerminals = localTerminals.filter { _, value in
             store.sessions.contains { $0.id == value.computer && $0.localMac === value.runtime && $0.phase == .running }
         }
@@ -407,7 +408,7 @@ import LocalMacCore
         }
         if request.operation.isFileTransfer {
             guard let id = request.transferID, let path = request.path else { throw ComputerBridgeError("Missing broker file-transfer reference.") }
-            let staging = try ComputerTransferFiles.staging(root: transferRoot, id: id, create: false)
+            let staging = try ComputerTransferFiles.staging(root: stagingRoot ?? transferRoot, id: id, create: false)
             var reply = ComputerResponse(); reply.path = path
             if request.operation == .fileUpload {
                 let fd = try ComputerTransferFiles.openSource(staging); Darwin.close(fd)

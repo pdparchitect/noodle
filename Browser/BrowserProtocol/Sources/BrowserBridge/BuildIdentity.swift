@@ -13,13 +13,19 @@ public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
     /// Noodle Hub, which runs the browsers of the bots people keep on it.
     public var hubID: String { "com.pdparchitect.noodle.hub" + suffix }
     public var clientIDs: [String] { [noodleID, toolExtensionID, hubID] }
+    /// The command-line tool inside the app, for apps outside Noodle. It never uses the
+    /// companion socket.
+    public var cliID: String { providerID + ".cli" }
     public var groupSuffix: String { "com.pdparchitect.noodle.browsers" + suffix }
+    /// The app group only the app and its command-line tool hold, where the external socket is.
+    /// Noodle and Noodle Hub must never hold it.
+    public var externalGroupSuffix: String { "com.pdparchitect.noodle.external-browsers" + suffix }
     public var appName: String { "Noodle Browser" + (self == .development ? " Dev" : "") }
     public var urlScheme: String { self == .development ? "noodlebrowser-dev" : "noodlebrowser" }
     private var suffix: String { self == .development ? ".local" : "" }
 
     public static func identify(_ identifier: String?) -> Self? {
-        allCases.first { [$0.providerID, $0.noodleID, $0.toolExtensionID, $0.hubID].contains(identifier ?? "") }
+        allCases.first { [$0.providerID, $0.noodleID, $0.toolExtensionID, $0.hubID, $0.cliID].contains(identifier ?? "") }
     }
     public static let processIdentity: Self? = {
         // Paths and request flags cannot select another environment.

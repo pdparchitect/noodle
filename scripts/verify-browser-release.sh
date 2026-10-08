@@ -12,7 +12,7 @@ cmp "$project_root/Browser/Support/AppSymbol.svg" "$app/Contents/Resources/AppSy
 entitlements="$(mktemp /tmp/noodle-browser-entitlements.XXXXXX)"
 trap 'rm -f "$entitlements"' EXIT
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
-python3 - "$app" "$entitlements" "$project_root/Browser/VERSION" <<'PY'
+python3 - "$app" "$entitlements" "$project_root/Browser/VERSION" "$project_root" <<'PY'
 import pathlib, plistlib, sys, subprocess, re
 app=pathlib.Path(sys.argv[1])
 info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
@@ -28,13 +28,23 @@ sdk=re.search(r'\bsdk (\d+)\.', build_version)
 assert sdk and int(sdk.group(1))>=26, 'Legacy SDK metadata disables the suite native sidebar and toolbar'
 expected={'com.apple.security.app-sandbox':True, 'com.apple.security.network.client':True,
  'com.apple.security.files.user-selected.read-write':True,
- 'com.apple.security.application-groups':[info['NoodleBrowserGroup']],
+ 'com.apple.security.application-groups':[info['NoodleBrowserGroup'],info['NoodleBrowserExternalGroup']],
  'com.apple.security.temporary-exception.mach-lookup.global-name':[identifier+'-spks',identifier+'-spki'],
  # Read-only, and only the folder holding system wallpapers the user has downloaded.
  'com.apple.security.temporary-exception.files.home-relative-path.read-only':['/Library/Application Support/com.apple.mobileAssetDesktop/','/Library/Application Support/com.apple.wallpaper/aerials/']}
 assert entitlements==expected, 'Unexpected Browser entitlements'
 suffix='.local' if identifier.endswith('.local') else ''
 assert info['NoodleBrowserGroup']==info['NoodleSigningTeam']+'.com.pdparchitect.noodle.browsers'+suffix
+# The external socket's group belongs to the app and its command-line tool alone: Noodle and the Hub must not hold it.
+assert info['NoodleBrowserExternalGroup']==info['NoodleSigningTeam']+'.com.pdparchitect.noodle.external-browsers'+suffix
+tool=app/'Contents/MacOS/noodle-browser'
+subprocess.run(['codesign','--verify','--strict',str(tool)],check=True)
+signature=subprocess.run(['codesign','-dv','--verbose=4',str(tool)],capture_output=True,text=True,check=True).stderr
+assert 'Identifier='+identifier+'.cli\n' in signature and 'TeamIdentifier='+info['NoodleSigningTeam'] in signature and 'runtime' in signature
+tool_entitlements=plistlib.loads(subprocess.run(['codesign','-d','--entitlements',':-',str(tool)],capture_output=True,check=True).stdout)
+assert tool_entitlements=={'com.apple.security.application-groups':[info['NoodleBrowserExternalGroup']]}, 'Unexpected noodle-browser entitlements'
+for other in [pathlib.Path(sys.argv[4])/'Support/Noodle.entitlements', pathlib.Path(sys.argv[4])/'Hub/Support/Hub.entitlements']:
+ assert 'external-browsers' not in other.read_text(), f'{other} must not hold the external tools group'
 assert info['CFBundleURLTypes'][0]['CFBundleURLSchemes']==['noodlebrowser-dev' if suffix else 'noodlebrowser']
 # Browsers are shared as links; the app opens no documents.
 assert 'CFBundleDocumentTypes' not in info and 'UTExportedTypeDeclarations' not in info

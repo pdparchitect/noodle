@@ -24,7 +24,7 @@ final class BrowserLaunchCheckTests: XCTestCase {
             }
         }
         XCTAssertEqual(names.sorted(), ["--browser-ui-id", "--browser-ui-test", "--cleanup", "--cleanup-ui", "--pointer-only", "--restore",
-            "--serve-smoke", "--smoke-id", "--smoke-port", "--smoke-test", "--webmcp-demos", "--webmcp-only"])
+            "--serve-external", "--serve-smoke", "--smoke-id", "--smoke-port", "--smoke-test", "--webmcp-demos", "--webmcp-only"])
     }
 
     func testSourcesSpellNoLaunchArgument() throws {

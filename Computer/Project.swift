@@ -128,6 +128,21 @@ let trimSparkle: TargetScript = .post(script: """
     done
     """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 
+/// Xcode does not embed command-line tools, so the app copies noodle-computer beside its own executable,
+/// where the app's bundle is the tool's main bundle too, and signs it as the app's own tool holding only
+/// the external app group. The app checks that signature on every external connection.
+let embedCommandLineTool: TargetScript = .post(script: """
+    set -euo pipefail
+    tool="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/noodle-computer"
+    ditto "$BUILT_PRODUCTS_DIR/noodle-computer" "$tool"
+    entitlements="$DERIVED_FILE_DIR/noodle-computer.entitlements"
+    rm -f "$entitlements"
+    /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups array" \\
+        -c "Add :com.apple.security.application-groups:0 string $DEVELOPMENT_TEAM.$COMPUTER_EXTERNAL_GROUP_SUFFIX" "$entitlements"
+    codesign --force --options runtime "$COMPUTER_CODESIGN_TIMESTAMP" --identifier "$PRODUCT_BUNDLE_IDENTIFIER.cli" \\
+        --entitlements "$entitlements" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$tool"
+    """, name: "Embed Command-Line Tool", basedOnDependencyAnalysis: false)
+
 /// A Local Mac helper, built unsigned; embedHelpers signs it where it ships.
 func localMac(_ name: String, product: Product, infoPlist: InfoPlist? = nil, resources: ResourceFileElements? = nil) -> Target {
     .target(
@@ -157,6 +172,7 @@ let project = Project(
         .local(path: "../Shared/SettingsUI"),
         .local(path: "../Shared/LaunchChecks"),
         .local(path: "../Shared/Wallpaper"),
+        .local(path: "../Shared/ExternalTools"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
         .remote(url: "https://github.com/apple/containerization.git", requirement: .exact("0.43.0")),
         .remote(url: "https://github.com/migueldeicaza/SwiftTerm.git", requirement: .exact("1.20.0")),
@@ -179,6 +195,7 @@ let project = Project(
                 "COMPUTER_APP_BUNDLE_ID": "com.pdparchitect.noodle.computer.local",
                 "COMPUTER_APP_NAME": "Noodle Computer Dev",
                 "COMPUTER_GROUP_SUFFIX": "com.pdparchitect.noodle.computers.local",
+                "COMPUTER_EXTERNAL_GROUP_SUFFIX": "com.pdparchitect.noodle.external-computers.local",
                 "COMPUTER_DOCUMENT_SUFFIX": "-dev",
                 "COMPUTER_DESKTOP_NAME": "Noodle Local Mac Desktop Dev",
             ]),
@@ -186,6 +203,7 @@ let project = Project(
                 "COMPUTER_APP_BUNDLE_ID": "com.pdparchitect.noodle.computer",
                 "COMPUTER_APP_NAME": "Noodle Computer",
                 "COMPUTER_GROUP_SUFFIX": "com.pdparchitect.noodle.computers",
+                "COMPUTER_EXTERNAL_GROUP_SUFFIX": "com.pdparchitect.noodle.external-computers",
                 "COMPUTER_DOCUMENT_SUFFIX": "",
                 // Signing adds get-task-allow for the debugger; a release carries only its own entitlements.
                 "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
@@ -194,6 +212,7 @@ let project = Project(
                 "COMPUTER_APP_BUNDLE_ID": "com.pdparchitect.noodle.computer.tests",
                 "COMPUTER_APP_NAME": "Noodle Computer Tests",
                 "COMPUTER_GROUP_SUFFIX": "com.pdparchitect.noodle.computers.tests",
+                "COMPUTER_EXTERNAL_GROUP_SUFFIX": "com.pdparchitect.noodle.external-computers.tests",
                 "COMPUTER_DOCUMENT_SUFFIX": "-tests",
                 "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
             ]),
@@ -218,7 +237,7 @@ let project = Project(
                 "Support/STUDIO-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Computer.entitlements"),
-            scripts: [checkKernel, buildGuestFiles, buildWimlib, embedHelpers, trimSparkle],
+            scripts: [checkKernel, buildGuestFiles, buildWimlib, embedHelpers, embedCommandLineTool, trimSparkle],
             dependencies: [
                 .package(product: "ComputerCore"),
                 .package(product: "NoodleLaunchChecks"),
@@ -226,6 +245,8 @@ let project = Project(
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .package(product: "ComputerBridge"),
+                .package(product: "ComputerExternal"),
+                .package(product: "NoodleExternalToolsUI"),
                 .package(product: "LocalMacCore"),
                 .package(product: "SwiftTerm"),
                 .package(product: "Containerization"),
@@ -235,6 +256,7 @@ let project = Project(
                 .target(name: "LocalMacSetup"),
                 .target(name: "LocalMacService"),
                 .target(name: "LocalMacDesktop"),
+                .target(name: "noodle-computer"),
             ],
             settings: .settings(
                 base: signing.merging([
@@ -262,5 +284,20 @@ let project = Project(
         localMac("LocalMacDesktop", product: .app, infoPlist: .file(path: "Support/LocalMacDesktop-Info.plist"),
                  resources: ["Images/shared/noodle-welcome"]),
         localMac("LocalMacService", product: .commandLineTool),
+        // Built unsigned; the app embeds and signs it.
+        .target(
+            name: "noodle-computer",
+            destinations: .macOS,
+            product: .commandLineTool,
+            bundleId: "com.pdparchitect.noodle.computer.cli",
+            deploymentTargets: .macOS("26.0"),
+            sources: ["Sources/NoodleComputerCLI/**"],
+            dependencies: [.package(product: "ComputerExternal")],
+            settings: .settings(base: [
+                "PRODUCT_NAME": "noodle-computer",
+                "CODE_SIGNING_ALLOWED": "NO",
+                "ENABLE_DEBUG_DYLIB": "NO",
+            ])
+        ),
     ]
 )

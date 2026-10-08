@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import BrowserExternal
 import Darwin
 import ImageIO
 import WebKit
@@ -18,7 +19,14 @@ import WebKit
     /// Live views, by browser. While one is watched, bots are kept off that browser.
     private var surfaces: [UUID: SurfaceStreamer] = [:]
     private let transferRoot: URL?
-    init(library: BrowserLibrary, transferRoot: URL? = nil) { self.library = library; self.transferRoot = transferRoot; super.init() }
+    /// What apps outside Noodle may use, when the person allows them.
+    let external: ExternalGate?
+    private var externalServer: ExternalConnectionServer?
+    /// How many browsers an outside app makes before the person is asked about each one.
+    static let externalCreationLimit = 10
+    init(library: BrowserLibrary, transferRoot: URL? = nil, external: ExternalGate? = nil) {
+        self.library = library; self.transferRoot = transferRoot; self.external = external; super.init()
+    }
     func startServer(socket: URL? = nil) {
         do {
             server = try BrowserConnectionServer(socket: socket ?? BrowserConnection.socketURL(), team: BrowserConnection.signingTeam(),
@@ -32,6 +40,81 @@ import WebKit
                 catch { return .init(error: error.localizedDescription) }
             })
         } catch { failure = error.localizedDescription }
+    }
+    /// Listens for apps outside Noodle while Settings allows them.
+    func startExternalServer() {
+        guard let external else { return }
+        external.enabledChanged = { [weak self] _ in self?.updateExternalServer() }
+        if library.failure == nil { external.prune(keeping: Set(library.profiles.map(\.id))) }
+        updateExternalServer()
+    }
+    private func updateExternalServer() {
+        guard external?.enabled == true else { externalServer = nil; return }
+        guard externalServer == nil else { return }
+        do {
+            let build = BrowserBuildIdentity.current, team = try BrowserConnection.signingTeam()
+            externalServer = try ExternalConnectionServer(socket: BrowserExternal.socketURL(), verify: { fd in
+                // Only this app's own command-line tool, which names the app that runs it.
+                try ExternalConnection.requireSigned(fd, identifier: build.cliID, team: team)
+            }, handler: { [weak self] data in
+                await self?.answerExternal(data) ?? ExternalConnection.failure("Browser stopped.")
+            })
+        } catch { failure = error.localizedDescription }
+    }
+    private func answerExternal(_ data: Data) async -> Data {
+        var response: BrowserResponse
+        do {
+            let envelope: ExternalEnvelope<BrowserRequest>
+            do { envelope = try JSONDecoder().decode(ExternalEnvelope<BrowserRequest>.self, from: data) }
+            catch { throw BrowserError("This needs a newer \(BrowserBuildIdentity.current.appName). Update it.") }
+            response = try await performExternal(envelope.request, launcher: envelope.launcher)
+        } catch { response = BrowserResponse(error: error.localizedDescription) }
+        return (try? JSONEncoder().encode(response)) ?? ExternalConnection.failure("Could not answer.")
+    }
+    /// A call from an app outside Noodle. It sees only browsers it made or the person lent it,
+    /// never the Hub's, and changes or deletes only those it made.
+    func performExternal(_ input: BrowserRequest, launcher: ExternalLauncher) async throws -> BrowserResponse {
+        guard let external else { throw BrowserError("External tools are unavailable.") }
+        guard BrowserOperation.externalCases.contains(input.operation) else { throw BrowserError("Apps outside Noodle cannot do that.") }
+        let caller = try await external.admit(launcher).id
+        var request = input
+        let lendable = { [library] in library.profiles.filter { $0.hub != true } }
+        switch request.operation {
+        case .list:
+            guard library.failure == nil else { throw BrowserError(library.failure!) }
+            var response = BrowserResponse()
+            response.browsers = lendable().filter { external.allows(caller, $0.id) }.map(\.remote)
+            return response
+        case .create:
+            let made = external.createdCount(caller)
+            if made >= Self.externalCreationLimit {
+                try await external.confirm(for: caller, message: "“\(launcher.name)” wants to create another browser. It has already created \(made).", action: "Create")
+            }
+            let response = try await perform(request)
+            if let browser = response.browser { external.recordCreated(browser.id, by: caller) }
+            return response
+        case .borrow:
+            let picked = try await external.borrow(for: caller, from: lendable().map { ExternalItem(id: $0.id, name: $0.name, symbol: $0.symbol) })
+            var response = BrowserResponse()
+            response.browser = try library.profile(picked).remote
+            return response
+        default:
+            guard let id = request.browserID else { throw BrowserError("Specify --browser.") }
+            try external.require(caller, id)
+            let profile = try library.profile(id)
+            guard profile.hub != true else { throw BrowserError("This browser belongs to Noodle Hub.") }
+            if [.update, .delete].contains(request.operation), !external.created(caller, id) {
+                throw BrowserError("Only browsers \(launcher.name) created can be changed or deleted.")
+            }
+            if request.operation.needsTab, request.tabID == nil {
+                guard let tab = profile.selectedTabID ?? profile.tabs.first?.id else { throw BrowserError("This browser has no tabs. Use open first.") }
+                request.tabID = tab
+            }
+            let staging = request.operation.isFileTransfer ? try transferRoot ?? BrowserExternal.root() : nil
+            let response = try await perform(request, stagingRoot: staging)
+            if request.operation == .delete { external.forget(id) }
+            return response
+        }
     }
     func saveTab(_ tab: BrowserTab) {
         do {
@@ -164,6 +247,7 @@ import WebKit
         }
         try await Self.removeWebsiteDataStore(id)
         try library.remove(id)
+        external?.forget(id)
         let root = library.root.appendingPathComponent(id.uuidString.lowercased())
         if FileManager.default.fileExists(atPath: root.path) { try FileManager.default.removeItem(at: root) }
     }
@@ -188,12 +272,14 @@ import WebKit
     }
     func shutdown() {
         server = nil
+        externalServer = nil
         expiry?.cancel(); expiry = nil
         for tab in tabs.values { tab.stop() }
         tabs.removeAll()
     }
     /// `caller` is the signed app asking, when it came over the connection.
-    func perform(_ request: BrowserRequest, caller: String? = nil, surface: SurfaceSocket? = nil) async throws -> BrowserResponse {
+    /// `stagingRoot` is where file transfers wait, when not beside the companion socket.
+    func perform(_ request: BrowserRequest, caller: String? = nil, surface: SurfaceSocket? = nil, stagingRoot: URL? = nil) async throws -> BrowserResponse {
         try request.validate()
         var response = BrowserResponse()
         if request.operation == .list {
@@ -208,7 +294,8 @@ import WebKit
             response.browser = made.remote
             return response
         }
-        let id = request.browserID!
+        // Borrowing is asked over the external connection alone, where performExternal answers it.
+        guard request.operation != .borrow, let id = request.browserID else { throw BrowserError("Specify --browser UUID.") }
         var profile = try library.profile(id)
         // The Hub only reaches browsers it made, so one it uses that says otherwise was
         // made before browsers recorded it.
@@ -291,7 +378,7 @@ import WebKit
         if request.operation == .download {
             guard let record = profile.downloads.first(where: { $0.id == request.fileID }), record.state == "complete" else { throw BrowserError("Download is not complete or does not belong to this browser.") }
             let source = try downloadURL(browserID: id, record: record)
-            let destination = try staging(request)
+            let destination = try staging(request, root: stagingRoot)
             response.byteCount = try await Self.copyFile(source, to: destination)
             response.filename = record.filename; return response
         }
@@ -327,7 +414,7 @@ import WebKit
             _ = try await tab.evaluate("const e=target?document.querySelector(target):window; if(!e) throw Error('Element not found'); e.scrollBy(x,y); return true;", arguments: ["target": request.target ?? "", "x": request.x ?? 0, "y": request.y ?? 600], frame: request.frame)
         case .screenshot:
             let data = try await tab.snapshot()
-            let url = try staging(request)
+            let url = try staging(request, root: stagingRoot)
             guard !FileManager.default.fileExists(atPath: url.path) else { throw BrowserError("Screenshot destination already exists.") }
             try data.write(to: url, options: .withoutOverwriting)
             response.byteCount = Int64(data.count); response.filename = "screenshot.png"
@@ -347,7 +434,7 @@ import WebKit
             response.reference = BrowserReference(browser: profile.remote, tabID: tab.id, url: url,
                 title: String(decoding: tab.info.title.utf8.prefix(1800), as: UTF8.self), previewImage: preview)
         case .upload:
-            let source = try staging(request)
+            let source = try staging(request, root: stagingRoot)
             let folder = try library.directory(id, category: "Uploads").appendingPathComponent(UUID().uuidString.lowercased())
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             let destination = folder.appendingPathComponent(BrowserLibrary.safeFilename(request.filename ?? "upload"))
@@ -360,10 +447,10 @@ import WebKit
         response.dialog = tab.dialog
         return response
     }
-    private func staging(_ request: BrowserRequest) throws -> URL {
+    private func staging(_ request: BrowserRequest, root: URL?) throws -> URL {
         guard let id = request.transferID else { throw BrowserError("This operation needs a broker-owned file transfer.") }
-        let root = try transferRoot ?? BrowserConnection.socketURL().deletingLastPathComponent()
-        return try BrowserTransferFiles.staging(root: root, id: id, create: false)
+        let folder = try root ?? transferRoot ?? BrowserConnection.socketURL().deletingLastPathComponent()
+        return try BrowserTransferFiles.staging(root: folder, id: id, create: false)
     }
     nonisolated static func copyFile(_ sourceURL: URL, to destinationURL: URL) async throws -> Int64 {
         try await Task.detached {

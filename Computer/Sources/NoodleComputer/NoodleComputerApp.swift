@@ -1,6 +1,7 @@
 import AppKit
 import ComputerBridge
 import ComputerCore
+import ComputerExternal
 import NoodleLaunchChecks
 import NoodleWallpaper
 import SwiftUI
@@ -252,6 +253,7 @@ enum ComputerLaunchCheck {
     let model = try ComputerStore()
     model.provider = try ComputerProvider(store: model)
     store = model
+    ComputerExternalService.start(store: model)
     model.wakeLocalMacService()
     return model
   }
@@ -430,6 +432,7 @@ struct ComputerLibraryView: View {
   /// People under Hub whose computers are folded away.
   @State private var foldedPeople: Set<UUID> = []
   @Environment(\.colorScheme) private var colorScheme
+  @ObservedObject private var external = ComputerExternalService.shared?.gate ?? ExternalGate(url: nil, prompter: nil)
 
   private var filteredSessions: [ComputerSession] {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -463,8 +466,11 @@ struct ComputerLibraryView: View {
   var body: some View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
       List(selection: $store.selection) {
-        Section("Computers") { rows(filteredSessions.filter { $0.computer.hub != true }) }
-        let hub = ComputerStore.hubGroups(filteredSessions.filter { $0.computer.hub == true })
+        let sections = ComputerExternalService.sections(filteredSessions,
+          created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
+        Section("Computers") { rows(sections.own) }
+        if !sections.external.isEmpty { Section("External Tools") { rows(sections.external) } }
+        let hub = ComputerStore.hubGroups(sections.hub)
         if !hub.people.isEmpty || !hub.unowned.isEmpty {
           Section("Hub") {
             ForEach(hub.people, id: \.owner.id) { group in

@@ -58,7 +58,7 @@ struct ComputerCheckForUpdatesButton: View {
     }
 }
 
-enum ComputerSettingsTab: Hashable { case general, storage, updates }
+enum ComputerSettingsTab: Hashable { case general, storage, external, updates }
 
 struct ComputerSettingsView: View {
     @State private var selection: ComputerSettingsTab = .general
@@ -73,6 +73,9 @@ struct ComputerSettingsView: View {
             StorageSettingsView()
                 .tabItem { Label("Storage", systemImage: "internaldrive") }
                 .tag(ComputerSettingsTab.storage)
+            ComputerExternalSettingsView()
+                .tabItem { Label("External Tools", systemImage: "point.3.connected.trianglepath.dotted") }
+                .tag(ComputerSettingsTab.external)
             ComputerUpdatesSettingsView()
                 .frame(width: 580)
                 .fixedSize(horizontal: false, vertical: true)

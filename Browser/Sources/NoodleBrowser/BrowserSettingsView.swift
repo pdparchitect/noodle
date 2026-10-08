@@ -1,18 +1,35 @@
 import AppKit
+import BrowserBridge
+import BrowserCore
+import BrowserExternal
+import NoodleExternalToolsUI
 import NoodleSettingsUI
 import SwiftUI
 
-enum BrowserSettingsTab: Hashable { case general, updates }
+enum BrowserSettingsTab: Hashable { case general, external, updates }
 
 struct BrowserSettingsView: View {
     @State private var selection: BrowserSettingsTab
     @ObservedObject private var updater = BrowserUpdater.shared
-    init(selection: BrowserSettingsTab = .general) { _selection = State(initialValue: selection) }
+    @ObservedObject private var library: BrowserLibrary
+    private let runtime: BrowserRuntime
+    init(library: BrowserLibrary, runtime: BrowserRuntime, selection: BrowserSettingsTab = .general) {
+        self.library = library; self.runtime = runtime; _selection = State(initialValue: selection)
+    }
     var body: some View {
         TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
             BrowserGeneralSettingsView()
                 .frame(width: 580).fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("General", systemImage: "gearshape") }.tag(BrowserSettingsTab.general)
+            if let external = runtime.external {
+                ExternalToolsSettingsView(gate: external, noun: "browser",
+                    items: library.profiles.filter { $0.hub != true }.map { ExternalItem(id: $0.id, name: $0.name, symbol: $0.symbol) },
+                    command: Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/noodle-browser").path,
+                    server: BrowserBuildIdentity.current == .development ? "noodle-browser-dev" : "noodle-browser",
+                    delete: { ids in Task { for id in ids { try? await runtime.removeBrowser(id) } } })
+                    .frame(width: 580).fixedSize(horizontal: false, vertical: true)
+                    .tabItem { Label("External Tools", systemImage: "point.3.connected.trianglepath.dotted") }.tag(BrowserSettingsTab.external)
+            }
             BrowserUpdatesSettingsView()
                 .frame(width: 580).fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }.tag(BrowserSettingsTab.updates)

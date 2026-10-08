@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import BrowserCore
+import BrowserExternal
 import NoodleSettingsUI
 import NoodleWallpaper
 import SwiftUI
@@ -28,8 +29,17 @@ struct BrowserLibraryView: View {
     @State private var dismissedLibraryFailure = false
     @Environment(\.colorScheme) private var colorScheme
 
+    @ObservedObject private var external: ExternalGate
+
     init(presentation: BrowserPresentation) {
         self.presentation = presentation; library = presentation.library; runtime = presentation.runtime
+        external = presentation.runtime.external ?? ExternalGate(url: nil, prompter: nil)
+    }
+    /// This Mac's own browsers, including any lent to an outside app; those an outside app made;
+    /// and the Hub's.
+    static func sections(_ profiles: [BrowserProfile], created: Set<UUID>) -> (own: [BrowserProfile], external: [BrowserProfile], hub: [BrowserProfile]) {
+        let local = profiles.filter { $0.hub != true }
+        return (local.filter { !created.contains($0.id) }, local.filter { created.contains($0.id) }, profiles.filter { $0.hub == true })
     }
     /// People under Hub whose browsers are folded away.
     @State private var foldedPeople: Set<UUID> = []
@@ -57,8 +67,10 @@ struct BrowserLibraryView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $presentation.selection) {
-                Section("Browsers") { rows(filtered.filter { $0.hub != true }) }
-                let hub = BrowserLibrary.hubGroups(filtered.filter { $0.hub == true })
+                let sections = Self.sections(filtered, created: Set(external.grants.callers.flatMap { $0.resources.filter(\.created).map(\.id) }))
+                Section("Browsers") { rows(sections.own) }
+                if !sections.external.isEmpty { Section("External Tools") { rows(sections.external) } }
+                let hub = BrowserLibrary.hubGroups(sections.hub)
                 if !hub.people.isEmpty || !hub.unowned.isEmpty {
                     Section("Hub") {
                         ForEach(hub.people, id: \.owner.id) { group in

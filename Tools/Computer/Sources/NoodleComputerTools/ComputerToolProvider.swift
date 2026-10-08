@@ -22,12 +22,8 @@ public struct ComputerToolProvider: ToolProvider {
     // MARK: Tool list
 
     /// revoke, display and terminalResolve are for Noodle and the person using it, never bots.
-    static let operations: [(name: String, operation: ComputerOperation, options: [String])] = [
-        ("list", .list, []), ("start", .start, []), ("open", .terminalOpen, []),
-        ("read", .terminalRead, ["terminal", "offset"]), ("write", .terminalWrite, ["terminal", "text", "base64"]),
-        ("resize", .terminalResize, ["terminal", "columns", "rows"]), ("close", .terminalClose, ["terminal"]),
-        ("present", .preview, ["terminal", "conversation", "message", "view"]),
-        ("upload", .fileUpload, ["source", "destination"]), ("download", .fileDownload, ["source", "destination"])]
+    static let operations: [(name: String, operation: ComputerOperation, options: [String])] =
+        ComputerOperation.agentCases.map { ($0.command, $0, $0.options) }
 
     public func tools(context: ToolCallContext) async throws -> Data {
         try JSONSerialization.data(withJSONObject: ["tools": Self.operations.map(Self.tool)], options: [.sortedKeys])
