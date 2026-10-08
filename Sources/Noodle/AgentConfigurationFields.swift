@@ -85,7 +85,8 @@ struct AgentConfigurationFields: View {
 
     private var modelName: String {
         if let selectedModel { return selectedModel.displayName }
-        if !selectedModelIdentifier.isEmpty { return selectedModelIdentifier }
+        // Hub and OpenCode models can come from outside the list; elsewhere an unlisted model was removed.
+        if hubChoice != nil || selectedProvider == .openCode, !selectedModelIdentifier.isEmpty { return selectedModelIdentifier }
         if let selectedProvider { return "\(selectedProvider.displayName) default" }
         return "Harness default"
     }
