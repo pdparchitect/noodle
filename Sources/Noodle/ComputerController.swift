@@ -243,7 +243,7 @@ struct ComputerAssignmentPicker: View {
             items: controller.registry.computers.map {
                 CompanionAssignmentItem(id: $0.id, name: $0.name, state: controller.available ? $0.state : "Unavailable",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
-            }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
+            }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton(compact: true),
             notice: updateNotice, failure: controller.failure,
             onNew: controller.installed ? { creating = true } : nil,
             onDelete: { item in
@@ -278,7 +278,7 @@ struct ComputerAssignmentPicker: View {
                 Text("In Noodle Computer, choose Check for Updates from the app menu.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                openLibraryButton
+                openLibraryButton()
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -295,7 +295,7 @@ struct ComputerAssignmentPicker: View {
             Text(controller.installed ? "Open Noodle Computer to create one, then return here to add it." :
                     "Install Noodle Computer to create your first computer.")
                 .font(.caption).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            if controller.installed { openLibraryButton }
+            if controller.installed { openLibraryButton() }
             else {
                 Button("Get Noodle Computer") { NSWorkspace.shared.open(CompanionApp.computer.installURL) }
                 Text("Apple silicon · macOS 26 or later").font(.caption2)
@@ -304,15 +304,21 @@ struct ComputerAssignmentPicker: View {
         .foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.horizontal, 12)
     }
 
-    private var openLibraryButton: some View {
-        Button(openingLibrary ? "Opening…" : "Open Noodle Computer") {
+    /// The compact form fits the chooser footer beside New.
+    private func openLibraryButton(compact: Bool = false) -> some View {
+        let title = openingLibrary ? "Opening…" : compact ? "Open App" : "Open Noodle Computer"
+        return Button {
             openingLibrary = true
             Task {
                 defer { openingLibrary = false }
                 do { try await controller.openLibrary() }
                 catch { openError = error.localizedDescription }
             }
-        }.disabled(openingLibrary)
+        } label: {
+            if compact { Label(title, systemImage: "arrow.up.forward.app") } else { Text(title) }
+        }
+        .help("Open Noodle Computer").accessibilityLabel(openingLibrary ? "Opening…" : "Open Noodle Computer")
+        .disabled(openingLibrary)
     }
 }
 

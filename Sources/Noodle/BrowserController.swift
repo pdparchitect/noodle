@@ -137,7 +137,7 @@ struct BrowserAssignmentPicker: View {
                 CompanionAssignmentItem(id: $0.id, name: $0.name,
                     state: controller.available ? ($0.paused ? "Paused" : "Ready") : "Unavailable",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon, detail: $0.description)
-            }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
+            }, selectedIDs: $selectedIDs, createPrompt: createPrompt, openLibraryButton: openLibraryButton(compact: true),
             notice: EmptyView(), failure: controller.failure,
             onNew: controller.installed ? { creating = true } : nil,
             onDelete: { item in
@@ -164,21 +164,27 @@ struct BrowserAssignmentPicker: View {
         VStack(spacing: 10) {
             Image(systemName: "globe").font(.largeTitle)
             Text(controller.available ? "No browsers yet" : "No browsers available")
-            if controller.installed { openLibraryButton }
+            if controller.installed { openLibraryButton() }
             else {
                 Button("Get Noodle Browser") { NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!) }
             }
         }.foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.horizontal, 12)
     }
-    private var openLibraryButton: some View {
-        Button(openingLibrary ? "Opening…" : "Open Noodle Browser") {
+    /// The compact form fits the chooser footer beside New.
+    private func openLibraryButton(compact: Bool = false) -> some View {
+        let title = openingLibrary ? "Opening…" : compact ? "Open App" : "Open Noodle Browser"
+        return Button {
             openingLibrary = true
             Task {
                 defer { openingLibrary = false }
                 do { try await controller.openLibrary() }
                 catch { openError = error.localizedDescription }
             }
-        }.disabled(openingLibrary)
+        } label: {
+            if compact { Label(title, systemImage: "arrow.up.forward.app") } else { Text(title) }
+        }
+        .help("Open Noodle Browser").accessibilityLabel(openingLibrary ? "Opening…" : "Open Noodle Browser")
+        .disabled(openingLibrary)
     }
 }
 

@@ -60,7 +60,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
                     CompanionAssignmentChooser(title: title, items: items, selectedIDs: $selectedIDs,
                         search: $search, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-                        newTitle: onNew == nil ? nil : "New \(noun.capitalized)…",
+                        newTitle: onNew == nil ? nil : "New \(noun.capitalized)",
                         onNew: { wantsNew = true; showingAdd = false },
                         deleteTitle: onDelete == nil ? nil : "Delete \(noun.capitalized)",
                         onDelete: { deleting = $0; showingAdd = false })
@@ -183,7 +183,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                 }
             }
             HStack {
-                if let newTitle { Button(newTitle, action: onNew) }
+                if let newTitle { Button(action: onNew) { Label("New", systemImage: "plus") }.help(newTitle).accessibilityLabel(newTitle) }
                 if !items.isEmpty { openLibraryButton }
                 Spacer()
             }
