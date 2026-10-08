@@ -645,7 +645,8 @@ final class SurfaceTests: XCTestCase {
         delivery.shown(2)
         // The device stops saying what it shows, as when its link stalls.
         companion.send(frame(3, bytes: 1_000_000))
-        try await Task.sleep(for: .milliseconds(150))
+        // Until the relay takes it as overdue, which on a busy machine is later than the round trip seemed.
+        for _ in 0..<250 where delivery.late(at: delivery.now) == 0 { try await Task.sleep(for: .milliseconds(20)) }
         companion.send(frame(4, bytes: 2_000))
         var controls: [SurfaceControl] = []
         let deadline = Task { try await Task.sleep(for: .seconds(5)); companion.close() }
