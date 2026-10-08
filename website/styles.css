@@ -236,6 +236,31 @@ figure { margin: 0; }
 .checks li::before { content: ""; position: absolute; left: 0; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5 9.5l2.6 2.5L13 6.5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
 .lead .link { font-size: inherit; line-height: inherit; letter-spacing: inherit; }
 
+/* Browser page: small drawn browser windows on the same cards. */
+.mini-web { background: radial-gradient(110% 90% at 15% 0%, #7fe0d8 0%, transparent 55%), radial-gradient(110% 100% at 100% 100%, #2c7be0 0%, transparent 60%), #2a5fb0; }
+.mini-web .mini-win { left: 10%; top: 14%; width: 80%; height: 86%; border-radius: 6px 6px 0 0; }
+.mini-web b { position: absolute; display: block; }
+.mini-web .addr { top: 5px; left: 32%; width: 42%; height: 8px; border-radius: 4px; background: rgba(127,127,127,.22); }
+.mini-web .blk { left: 8%; top: 24%; width: 62%; height: 9%; border-radius: 3px; background: rgba(127,127,127,.22); }
+.mini-web .blk.short { top: 38%; width: 40%; }
+.mini-web .blk + .blk.short + .blk { top: 52%; width: 54%; }
+.mini-watch .button { left: 8%; top: 70%; width: 26%; height: 13%; border-radius: 5px; background: var(--blue); }
+.mini-watch .target { left: calc(21% - 13px); top: calc(76.5% - 13px); width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid #2fe0ff; box-shadow: 0 0 0 4px rgba(47,224,255,.25), 0 0 12px rgba(47,224,255,.8); }
+.mini-tools .tool { left: 8%; width: auto; padding: 3px 7px; border-radius: 5px; font: 600 9px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0; color: #fff; background: #6f5bd8; }
+.mini-tools .tool:nth-of-type(4) { top: 56%; }
+.mini-tools .tool:nth-of-type(5) { top: 74%; background: #2f9e6a; }
+/* Three browsers for three accounts, stacked. */
+.mini-accounts .mini-win { width: 62%; height: 62%; border-radius: 6px; }
+.mini-accounts .mini-win:nth-child(1) { left: 8%; top: 10%; }
+.mini-accounts .mini-win:nth-child(2) { left: 19%; top: 22%; }
+.mini-accounts .mini-win:nth-child(3) { left: 30%; top: 34%; }
+.mini-accounts .addr { left: 34%; width: 36%; }
+.mini-accounts .avatar { top: 3px; right: 6px; width: 12px; height: 12px; border-radius: 50%; background: #ff8a3d; }
+.mini-accounts .mini-win:nth-child(2) .avatar { background: #3fd07a; }
+.mini-accounts .mini-win:nth-child(3) .avatar { background: #b36bff; }
+.mini-accounts .blk { top: 34%; }
+.mini-accounts .blk.short { top: 54%; }
+
 /* ---------- Responsive (breakpoints match apple.com) ---------- */
 @media (max-width: 1068px) {
   .feature h2, .privacy h2, .download h2, .headline { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
