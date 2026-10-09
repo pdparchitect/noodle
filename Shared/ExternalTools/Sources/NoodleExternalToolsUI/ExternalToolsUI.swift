@@ -113,6 +113,7 @@ public struct ExternalToolsSettingsView: View {
     let delete: ([UUID]) -> Void
     @State private var removing: ExternalCaller?
     @State private var editing: UUID?
+    @State private var shownCommands: Set<String> = []
 
     /// `command` is the tool's path; `server` the name agents know it by; `delete` removes items
     /// an app made when the person removes the app and its items.
@@ -127,10 +128,12 @@ public struct ExternalToolsSettingsView: View {
                 Toggle("Allow agents", isOn: Binding(get: { gate.enabled }, set: { gate.enabled = $0 }))
                 if let failure = gate.failure { Text(failure).foregroundStyle(.red) }
             }
-            Section("Set Up") {
-                commandRow("Command", "\"\(command)\"")
-                commandRow("Claude Code", "claude mcp add --scope user \(server) -- \"\(command)\" mcp")
-                commandRow("Codex", "codex mcp add \(server) -- \"\(command)\" mcp")
+            if gate.enabled {
+                Section("Set Up") {
+                    commandRow("Command", "\"\(command)\"")
+                    commandRow("Claude Code", "claude mcp add --scope user \(server) -- \"\(command)\" mcp")
+                    commandRow("Codex", "codex mcp add \(server) -- \"\(command)\" mcp")
+                }
             }
             if !gate.grants.callers.isEmpty {
                 Section("Allowed") {
@@ -174,29 +177,41 @@ public struct ExternalToolsSettingsView: View {
         .help(caller.launcher.path)
     }
 
-    /// Set out like the installation and update commands in Noodle's Settings.
+    /// Set out like the installation and update commands in Noodle's Settings: the command
+    /// shows only once asked for.
     private func commandRow(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "terminal").foregroundStyle(.secondary).accessibilityHidden(true)
-                Text(text)
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Copy Command", systemImage: "doc.on.doc") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+            HStack {
+                Text(title)
+                Spacer()
+                Button("Instructions") {
+                    if shownCommands.remove(title) == nil { shownCommands.insert(title) }
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .help("Copy command")
+                .buttonStyle(.link)
             }
-            .padding(10)
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-            .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.1), lineWidth: 1) }
+            if shownCommands.contains(title) { commandBox(text) }
         }
+    }
+
+    private func commandBox(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "terminal").foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(text)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Copy Command", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help("Copy command")
+        }
+        .padding(10)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.1), lineWidth: 1) }
     }
 }
 

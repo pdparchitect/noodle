@@ -9,6 +9,7 @@
 ### Changed
 
 - Desktop and Windows computers follow their window's size unless Resize desktop with window is turned off, which keeps the computer's own resolution.
+- Settings > Agents shows its setup commands only while Allow agents is on, each behind an Instructions button.
 
 ### Fixed
 
