@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-09
+
 ### Changed
 
 - Settings > Agents shows its setup commands only while Allow agents is on, each behind an Instructions button.

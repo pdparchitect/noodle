@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-09
+
 ### Added
 
 - Windows computers use the Mac's graphics processor with the original signed Windows driver. Multiple Windows computers can run at the same time.
