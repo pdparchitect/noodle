@@ -1,0 +1,485 @@
+--- a/src/virgl_context.h
++++ b/src/virgl_context.h
+@@ -38,6 +38,7 @@
+ struct pipe_resource;
+ 
+ struct virgl_context_blob {
++   void *arena; /* Optional caller-owned storage; thread-mode Neptune only. */
+    /* valid fd or pipe resource */
+    enum virgl_resource_fd_type type;
+    union {
+--- a/src/virgl_resource.h
++++ b/src/virgl_resource.h
+@@ -101,6 +101,7 @@
+ 
+    uint64_t map_size;
+    void *mapped;
++   void *arena; /* Borrowed for the resource lifetime; never munmap. */
+    bool mapped_from_pipe_resource;
+ 
+    struct virgl_resource_vulkan_info vulkan_info;
+--- a/src/virglrenderer.c
++++ b/src/virglrenderer.c
+@@ -1178,12 +1178,12 @@
+    }
+ }
+ 
+-int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_create_blob_args *args)
++static int resource_create_blob(const struct virgl_renderer_resource_create_blob_args *args, void *arena)
+ {
+    TRACE_FUNC();
+    struct virgl_resource *res;
+    struct virgl_context *ctx;
+-   struct virgl_context_blob blob;
++   struct virgl_context_blob blob = { .arena = arena };
+    bool has_host_storage;
+    bool has_guest_storage;
+    int ret;
+@@ -1269,8 +1269,28 @@
+ 
+    res->map_info = blob.map_info;
+    res->map_size = args->size;
++   res->arena = arena;
+ 
+    return 0;
++}
++
++int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_create_blob_args *args)
++{
++   return resource_create_blob(args, NULL);
++}
++
++int virgl_renderer_resource_create_blob_at(const struct virgl_renderer_resource_create_blob_args *args, void *arena)
++{
++#if defined(ENABLE_NEPTUNE) && defined(ENABLE_RENDER_SERVER_WORKER_THREAD)
++   struct virgl_context *ctx = virgl_context_lookup(args->ctx_id);
++   if (!arena || ((uintptr_t)arena & 3) || !ctx || ctx->capset_id != VIRTGPU_DRM_CAPSET_NEPTUNE ||
++       args->blob_id || args->blob_mem != VIRGL_RENDERER_BLOB_MEM_HOST3D ||
++       !(args->blob_flags & VIRGL_RENDERER_BLOB_FLAG_USE_MAPPABLE))
++      return -EINVAL;
++   return resource_create_blob(args, arena);
++#else
++   return -EOPNOTSUPP;
++#endif
+ }
+ 
+ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *out_size)
+@@ -1283,6 +1303,12 @@
+    struct virgl_resource *res = virgl_resource_lookup(res_handle);
+    if (!res || res->mapped)
+       return -EINVAL;
++   if (res->arena) {
++      res->mapped = res->arena;
++      *out_map = res->arena;
++      *out_size = res->map_size;
++      return 0;
++   }
+ 
+    if (res->pipe_resource) {
+       ret = vrend_renderer_resource_map(res->pipe_resource, &map, &map_size);
+@@ -1347,6 +1373,8 @@
+ 
+    if (!res)
+       return -EINVAL;
++   if (res->arena)
++      return -EOPNOTSUPP;
+ 
+    enum virgl_resource_fd_type fd_type = res->fd_type;
+    enum virgl_resource_fd_type export_fd_type = res->fd_type;
+@@ -1400,6 +1428,10 @@
+    struct virgl_resource *res = virgl_resource_lookup(res_handle);
+    if (!res || !res->mapped)
+       return -EINVAL;
++   if (res->arena) {
++      res->mapped = NULL;
++      return 0;
++   }
+ 
+    if (res->mapped_from_pipe_resource) {
+       assert(res->pipe_resource);
+@@ -1450,6 +1482,9 @@
+    struct virgl_resource *res = virgl_resource_lookup(res_id);
+    if (!res)
+       return -EINVAL;
++
++   if (res->arena)
++      return -EOPNOTSUPP;
+ 
+    switch (virgl_resource_export_fd(res, fd)) {
+    case VIRGL_RESOURCE_FD_DMABUF:
+--- a/src/virglrenderer.h
++++ b/src/virglrenderer.h
+@@ -446,6 +446,9 @@
+ VIRGL_EXPORT int
+ virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_create_blob_args *args);
+ 
++/* Host-only extension. Storage remains caller-owned until every attached context
++ * and the resource are destroyed. The worker must run in this process. */
++VIRGL_EXPORT int virgl_renderer_resource_create_blob_at(const struct virgl_renderer_resource_create_blob_args *args, void *arena);
+ VIRGL_EXPORT int virgl_renderer_resource_map(uint32_t res_handle, void **map, uint64_t *out_size);
+ 
+ VIRGL_EXPORT int virgl_renderer_resource_unmap(uint32_t res_handle);
+--- a/src/proxy/proxy_context.c
++++ b/src/proxy/proxy_context.c
+@@ -460,6 +460,7 @@
+       .blob_id = blob_id,
+       .blob_size = blob_size,
+       .blob_flags = blob_flags,
++      .arena_address = (uintptr_t)blob->arena,
+    };
+    if (!proxy_socket_send_request(&ctx->socket, &req, sizeof(req))) {
+       proxy_log("failed to get blob %" PRIu64, blob_id);
+@@ -543,10 +544,16 @@
+    const struct render_context_op_destroy_resource_request req = {
+       .header.op = RENDER_CONTEXT_OP_DESTROY_RESOURCE,
+       .res_id = res_id,
++      .wait = res->arena != NULL,
+    };
+    if (!proxy_socket_send_request(&ctx->socket, &req, sizeof(req)))
+       proxy_log("failed to detach res %d", res_id);
+ 
++   if (req.wait) {
++      bool done;
++      if (!proxy_socket_receive_reply(&ctx->socket, &done, sizeof(done)))
++         proxy_log("failed to wait for arena resource %u", res_id);
++   }
+    proxy_context_resource_remove(ctx, res_id);
+ }
+ 
+@@ -601,6 +608,7 @@
+       .res_id = res_id,
+       .fd_type = res_fd_type,
+       .size = res_size,
++      .arena_address = (uintptr_t)res->arena,
+    };
+    if (!proxy_socket_send_request_with_fds(&ctx->socket, &req, sizeof(req), &res_fd, 1))
+       proxy_log("failed to attach res %d", res_id);
+@@ -615,6 +623,19 @@
+ proxy_context_destroy(struct virgl_context *base)
+ {
+    struct proxy_context *ctx = (struct proxy_context *)base;
++
++   /* Drain borrowed resources while the worker socket is alive. Context
++    * destruction itself is asynchronous, but no worker may retain our arena. */
++   for (;;) {
++      struct virgl_resource *borrowed = NULL;
++      hash_table_foreach(ctx->resource_table, entry) {
++         const uint32_t id = (uintptr_t)entry->key;
++         struct virgl_resource *res = virgl_resource_lookup(id);
++         if (res && res->arena) { borrowed = res; break; }
++      }
++      if (!borrowed) break;
++      proxy_context_detach_resource(base, borrowed);
++   }
+ 
+    /* ask the server process to terminate the context process */
+    if (!proxy_client_destroy_context(ctx->client, ctx->base.ctx_id))
+--- a/server/render_protocol.h
++++ b/server/render_protocol.h
+@@ -148,6 +148,7 @@
+    uint64_t blob_id;
+    uint64_t blob_size;
+    uint32_t blob_flags; /* VIRGL_RENDERER_BLOB_FLAG_* */
++   uint64_t arena_address; /* Trusted host pointer, accepted only by thread workers. */
+ };
+ 
+ struct render_context_op_create_resource_reply {
+@@ -174,6 +175,7 @@
+    uint32_t res_id;
+    enum virgl_resource_fd_type fd_type;
+    uint64_t size;
++   uint64_t arena_address;
+    /* followed by 1 fd */
+ };
+ 
+@@ -185,6 +187,7 @@
+ struct render_context_op_destroy_resource_request {
+    struct render_context_op_header header;
+    uint32_t res_id;
++   bool wait; /* Borrowed storage cannot be reused until the worker releases it. */
+ };
+ 
+ /* Submit a small command stream to the context.
+--- a/server/render_context.c
++++ b/server/render_context.c
+@@ -167,7 +167,8 @@
+                                          UNUSED int fd_count)
+ {
+    render_state_destroy_resource(ctx->ctx_id, req->destroy_resource.res_id);
+-   return true;
++   const bool done = true;
++   return !req->destroy_resource.wait || render_socket_send_reply(&ctx->socket, &done, sizeof(done));
+ }
+ 
+ static bool
+@@ -185,7 +186,7 @@
+    const struct render_context_op_import_resource_request *req =
+       &request->import_resource;
+    return render_state_import_resource(ctx->ctx_id, req->res_id, req->fd_type, fds[0],
+-                                       req->size);
++                                       req->size, (void *)(uintptr_t)req->arena_address);
+ }
+ 
+ static bool
+@@ -203,7 +204,7 @@
+    bool ok = render_state_create_resource(ctx->ctx_id, req->res_id, req->blob_id,
+                                           req->blob_size, req->blob_flags, &reply.fd_type,
+                                           &res_fd, &reply.map_info, &reply.vulkan_info,
+-                                          &reply.export_format);
++                                          &reply.export_format, (void *)(uintptr_t)req->arena_address);
+    if (!ok)
+       return render_socket_send_reply(&ctx->socket, &reply, sizeof(reply));
+ 
+--- a/server/render_state.c
++++ b/server/render_state.c
+@@ -364,7 +364,7 @@
+                              int *out_res_fd,
+                              uint32_t *out_map_info,
+                              struct virgl_resource_vulkan_info *out_vulkan_info,
+-                             uint32_t *out_export_format)
++                             uint32_t *out_export_format, void *arena)
+ {
+    struct render_context *ctx = render_state_lookup_context(ctx_id);
+    if (!ctx)
+@@ -382,7 +382,7 @@
+    case RENDER_BACKEND_NEPTUNE:
+       return npt_renderer_create_resource(ctx_id, res_id, blob_id, blob_size,
+                                           blob_flags, out_fd_type, out_res_fd,
+-                                          out_map_info, out_export_format);
++                                          out_map_info, out_export_format, arena);
+ #endif
+    default:
+       return false;
+@@ -394,7 +394,7 @@
+                              uint32_t res_id,
+                              enum virgl_resource_fd_type fd_type,
+                              int fd,
+-                             uint64_t size)
++                             uint64_t size, void *arena)
+ {
+    struct render_context *ctx = render_state_lookup_context(ctx_id);
+    if (!ctx)
+@@ -408,7 +408,7 @@
+ #endif
+ #ifdef ENABLE_NEPTUNE
+    case RENDER_BACKEND_NEPTUNE:
+-      return npt_renderer_import_resource(ctx_id, res_id, fd_type, fd, size);
++      return npt_renderer_import_resource(ctx_id, res_id, fd_type, fd, size, arena);
+ #endif
+    default:
+       return false;
+--- a/server/render_state.h
++++ b/server/render_state.h
+@@ -42,14 +42,14 @@
+                              int *out_res_fd,
+                              uint32_t *out_map_info,
+                              struct virgl_resource_vulkan_info *out_vulkan_info,
+-                             uint32_t *out_export_format);
++                             uint32_t *out_export_format, void *arena);
+ 
+ bool
+ render_state_import_resource(uint32_t ctx_id,
+                              uint32_t res_id,
+                              enum virgl_resource_fd_type fd_type,
+                              int fd,
+-                             uint64_t size);
++                             uint64_t size, void *arena);
+ 
+ void
+ render_state_destroy_resource(uint32_t ctx_id, uint32_t res_id);
+--- a/src/neptune/npt_renderer.c
++++ b/src/neptune/npt_renderer.c
+@@ -266,14 +266,14 @@
+                              enum virgl_resource_fd_type *out_fd_type,
+                              int *out_res_fd,
+                              uint32_t *out_map_info,
+-                             uint32_t *out_export_format)
++                             uint32_t *out_export_format, void *arena)
+ {
+    struct npt_context *ctx = npt_renderer_lookup_context(ctx_id);
+    if (!ctx)
+       return false;
+ 
+    struct virgl_context_blob blob;
+-   if (!npt_context_create_resource(ctx, res_id, blob_id, blob_size, blob_flags, &blob))
++   if (!npt_context_create_resource(ctx, res_id, blob_id, blob_size, blob_flags, &blob, arena))
+       return false;
+ 
+    *out_fd_type = blob.type;
+@@ -289,13 +289,13 @@
+                              uint32_t res_id,
+                              enum virgl_resource_fd_type fd_type,
+                              int fd,
+-                             uint64_t size)
+-{
+-   struct npt_context *ctx = npt_renderer_lookup_context(ctx_id);
+-   if (!ctx)
+-      return false;
+-
+-   return npt_context_import_resource(ctx, res_id, fd_type, fd, size);
++                             uint64_t size, void *arena)
++{
++   struct npt_context *ctx = npt_renderer_lookup_context(ctx_id);
++   if (!ctx)
++      return false;
++
++   return npt_context_import_resource(ctx, res_id, fd_type, fd, size, arena);
+ }
+ 
+ void
+--- a/src/neptune/npt_renderer.h
++++ b/src/neptune/npt_renderer.h
+@@ -71,14 +71,14 @@
+                              enum virgl_resource_fd_type *out_fd_type,
+                              int *out_res_fd,
+                              uint32_t *out_map_info,
+-                             uint32_t *out_export_format);
++                             uint32_t *out_export_format, void *arena);
+ 
+ bool
+ npt_renderer_import_resource(uint32_t ctx_id,
+                              uint32_t res_id,
+                              enum virgl_resource_fd_type fd_type,
+                              int fd,
+-                             uint64_t size);
++                             uint64_t size, void *arena);
+ 
+ void
+ npt_renderer_destroy_resource(uint32_t ctx_id, uint32_t res_id);
+--- a/src/neptune/npt_context.c
++++ b/src/neptune/npt_context.c
+@@ -1206,15 +1206,19 @@
+                             uint64_t blob_id,
+                             uint64_t blob_size,
+                             UNUSED uint32_t blob_flags,
+-                            struct virgl_context_blob *out_blob)
+-{
++                            struct virgl_context_blob *out_blob, void *arena)
++{
++   if (arena && (!ctx->on_worker_thread || blob_id != 0 || ((uintptr_t)arena & 3)))
++      return false;
+    if (blob_id == 0) {
+       /* SHM resource (ring buffer or generic shared memory). */
+       int fd = os_create_anonymous_file(blob_size, "npt-shmem");
+       if (fd < 0)
+          return false;
+ 
+-      void *data = mmap(NULL, blob_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
++      /* The fd is an internal proxy token for borrowed storage. Import messages
++       * carry the same pointer; it must never be exported as actual blob data. */
++      void *data = arena ? arena : mmap(NULL, blob_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+       if (data == MAP_FAILED) {
+          close(fd);
+          return false;
+@@ -1222,7 +1226,7 @@
+ 
+       struct npt_resource *res = calloc(1, sizeof(*res));
+       if (!res) {
+-         munmap(data, blob_size);
++         if (!arena) munmap(data, blob_size);
+          close(fd);
+          return false;
+       }
+@@ -1231,6 +1235,7 @@
+       res->fd_type = VIRGL_RESOURCE_FD_SHM;
+       res->size = blob_size;
+       res->u.data = data;
++      res->iov_owned = arena != NULL;
+ 
+ #ifdef __linux__
+       /* Seal against shrink so the memfd can back a udmabuf for a D3D12
+@@ -1244,8 +1249,8 @@
+ 
+       /* Ownership of the original fd leaves via out_blob, so keep a dup
+        * for a later heap import to wrap. */
+-      res->u.fd = dup(fd);
+-      if (res->u.fd < 0)
++      res->u.fd = arena ? -1 : dup(fd);
++      if (!arena && res->u.fd < 0)
+          npt_log("create_resource: dup(fd) for res %u failed (errno %d); "
+                  "heap imports will fall back", res_id, errno);
+ 
+@@ -1253,7 +1258,7 @@
+       if (_mesa_hash_table_search(ctx->resource_table, &res->res_id)) {
+          mtx_unlock(&ctx->resource_mutex);
+          npt_log("create_resource: duplicate res_id %u", res_id);
+-         munmap(data, blob_size);
++         if (!arena) munmap(data, blob_size);
+          if (res->u.fd >= 0)
+             close(res->u.fd);
+          close(fd);
+@@ -1297,7 +1302,7 @@
+          int table_fd = dup(pb->fd);
+          if (table_fd >= 0 &&
+              !npt_context_import_resource(ctx, res_id, pb->fd_type,
+-                                          table_fd, pb->size))
++                                          table_fd, pb->size, NULL))
+             close(table_fd);
+       }
+ 
+@@ -1343,8 +1348,10 @@
+                             uint32_t res_id,
+                             enum virgl_resource_fd_type fd_type,
+                             int fd,
+-                            uint64_t size)
+-{
++                            uint64_t size, void *arena)
++{
++   if (arena && (!ctx->on_worker_thread || fd_type != VIRGL_RESOURCE_FD_SHM || ((uintptr_t)arena & 3)))
++      return false;
+    struct npt_resource *res = calloc(1, sizeof(*res));
+    if (!res)
+       return false;
+@@ -1352,12 +1359,13 @@
+    res->res_id = res_id;
+    res->fd_type = fd_type;
+    res->size = size;
++   res->iov_owned = arena != NULL;
+ 
+    /* Defer fd ownership until the hash-table insert succeeds: on
+     * duplicate-id rejection the caller still owns the original fd. */
+    switch (fd_type) {
+    case VIRGL_RESOURCE_FD_SHM:
+-      res->u.data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
++      res->u.data = arena ? arena : mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+       if (res->u.data == MAP_FAILED) {
+          free(res);
+          return false;
+@@ -1375,7 +1383,7 @@
+    if (_mesa_hash_table_search(ctx->resource_table, &res->res_id)) {
+       mtx_unlock(&ctx->resource_mutex);
+       npt_log("import_resource: duplicate res_id %u", res_id);
+-      if (fd_type == VIRGL_RESOURCE_FD_SHM && res->u.data && res->u.data != MAP_FAILED)
++      if (!arena && fd_type == VIRGL_RESOURCE_FD_SHM && res->u.data && res->u.data != MAP_FAILED)
+          munmap(res->u.data, size);
+       free(res);
+       return false;
+@@ -1384,7 +1392,8 @@
+    /* Take fd ownership.  For shm the mapping serves the data windows,
+     * but the fd is kept as well: on hosts where shared textures ride
+     * shm, SHARED_OPEN_RES re-exports it to the D3D library. */
+-   res->u.fd = fd;
++   res->u.fd = arena ? -1 : fd;
++   if (arena) close(fd);
+    _mesa_hash_table_insert(ctx->resource_table, &res->res_id, res);
+    mtx_unlock(&ctx->resource_mutex);
+ 
+--- a/src/neptune/npt_context.h
++++ b/src/neptune/npt_context.h
+@@ -270,14 +270,14 @@
+                             uint64_t blob_id,
+                             uint64_t blob_size,
+                             uint32_t blob_flags,
+-                            struct virgl_context_blob *out_blob);
++                            struct virgl_context_blob *out_blob, void *arena);
+ 
+ bool
+ npt_context_import_resource(struct npt_context *ctx,
+                             uint32_t res_id,
+                             enum virgl_resource_fd_type fd_type,
+                             int fd,
+-                            uint64_t size);
++                            uint64_t size, void *arena);
+ 
+ void
+ npt_context_destroy_resource(struct npt_context *ctx, uint32_t res_id);

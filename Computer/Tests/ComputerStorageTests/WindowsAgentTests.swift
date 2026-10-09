@@ -3,6 +3,27 @@ import XCTest
 @testable import NoodleComputer
 
 final class WindowsAgentTests: XCTestCase {
+    func testAcceptedRestartInvalidatesTheOldGreeting() async throws {
+        let agent = WindowsAgent()
+        let greeting = Data(#"{"agent":"7","computer":"test","user":"test","home":"C:\\Users\\test"}"#.utf8)
+        try agent.guest.write(contentsOf: WindowsAgentFrame(type: 100, channel: 0, payload: greeting).encoded)
+        _ = try await agent.waitForHello()
+        XCTAssertNotNil(agent.hello)
+        let guest = Task.detached {
+            var decoder = WindowsAgentFrame.Decoder()
+            while true {
+                for frame in try decoder.append(agent.guest.availableData) {
+                    XCTAssertEqual(frame.type, 24)
+                    try agent.guest.write(contentsOf: WindowsAgentFrame(type: 110, channel: frame.channel, payload: Data()).encoded)
+                    return
+                }
+            }
+        }
+        try await agent.restart()
+        try await guest.value
+        XCTAssertNil(agent.hello, "A successful restart request must stop advertising the previous Windows session.")
+    }
+
     /// Uploads, terminal input and requests are sent from different threads; a frame larger than the socket's
     /// buffer is written in pieces, and the pieces of two frames must not interleave on the way to Windows.
     func testFramesSentFromManyThreadsArriveWhole() throws {

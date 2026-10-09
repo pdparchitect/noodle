@@ -53,7 +53,7 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public var hasDesktop: Bool { template?.type == .desktop }
     public var hasDisplay: Bool { hasDesktop || kind == .localMac || kind == .windows }
     /// Its screen can follow the window's size.
-    public var resizesWithWindow: Bool { hasDesktop || kind == .windows }
+    public var resizesWithWindow: Bool { hasDesktop }
     public var usesVirtualMachine: Bool { kind == .macOS || kind == .linux }
     public var template: ComputerTemplate? {
         ContainerRegistry.bundled.template(for: self)

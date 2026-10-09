@@ -9,7 +9,9 @@ if Context.environment["NOODLE_DEV_HOOKS"] == "1" { appSettings.append(.define("
 let package = Package(
     name: "NoodleComputer",
     platforms: [.macOS("26.0")],
-    products: [.executable(name: "NoodleComputer", targets: ["NoodleComputer"]),
+    products: [.library(name: "NeptuneTransport", targets: ["NeptuneTransport"]),
+        .executable(name: "NoodleWindowsRenderer", targets: ["NoodleWindowsRenderer"]),
+        .executable(name: "NoodleComputer", targets: ["NoodleComputer"]),
         .executable(name: "noodle-computer", targets: ["NoodleComputerCLI"]),
         .library(name: "ComputerCore", targets: ["ComputerCore"]),
         .library(name: "ComputerExternal", targets: ["ComputerExternal"])],
@@ -25,12 +27,16 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.20.0")
     ],
     targets: [
+        .target(name: "NeptunePOSIX"),
+        .target(name: "NeptuneTransport", dependencies: ["NeptunePOSIX"]),
+        .executableTarget(name: "NoodleWindowsRenderer", dependencies: ["NeptuneTransport"]),
         .target(name: "ComputerCore", dependencies: [.product(name: "NoodleWallpaperCore", package: "Wallpaper")], resources: [.process("Resources")]),
         // What the app and its command-line tool share to serve apps outside Noodle.
         .target(name: "ComputerExternal", dependencies: [.product(name: "ComputerBridge", package: "Bridge"),
             .product(name: "NoodleExternalTools", package: "ExternalTools")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["ComputerExternal"]),
         .executableTarget(name: "NoodleComputer", dependencies: [
+            "NeptuneTransport",
             "ComputerCore",
             "ComputerExternal",
             .product(name: "NoodleExternalToolsUI", package: "ExternalTools"),
@@ -46,6 +52,7 @@ let package = Package(
             .product(name: "ContainerizationExtras", package: "containerization"),
             .product(name: "ContainerizationOCI", package: "containerization")
         ], swiftSettings: appSettings),
+        .testTarget(name: "NeptuneTransportTests", dependencies: ["NeptuneTransport"]),
         .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"]),
         .testTarget(name: "ComputerExternalTests", dependencies: ["ComputerExternal"]),
         .testTarget(name: "ComputerStorageTests", dependencies: ["NoodleComputer", "ComputerExternal"])

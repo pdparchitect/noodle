@@ -2,6 +2,11 @@ import XCTest
 @testable import ComputerCore
 
 final class ComputerTests: XCTestCase {
+    func testOnlyLinuxDesktopsOfferWindowResizing() {
+        XCTAssertFalse(Computer(name: "Windows", kind: .windows).resizesWithWindow)
+        XCTAssertTrue(ComputerTemplate.desktop.makeComputer().resizesWithWindow)
+    }
+
     func testDesktopResizesWithWindowUnlessTurnedOff() throws {
         var computer = ComputerTemplate.desktop.makeComputer()
         XCTAssertTrue(computer.resizesDesktop)

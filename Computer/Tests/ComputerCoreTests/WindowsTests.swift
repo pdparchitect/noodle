@@ -167,6 +167,24 @@ final class WindowsTests: XCTestCase {
         XCTAssertEqual(detector.driverReady(at: start + 301.02), .init(firmware: true, guestRebooted: false))
     }
 
+    func test3DDriverResetBurstsStillAllowTheNextFirmwareReboot() {
+        var detector = FirmwareSessionDetector()
+        let start = Date(timeIntervalSinceReferenceDate: 1000)
+        for offset in [0.0, 0.05, 0.1] { detector.reset(at: start + offset) }
+        XCTAssertEqual(detector.driverReady(at: start + 0.2), .init(firmware: true, guestRebooted: false))
+        // viogpu3d negotiates VIRGL, RESOURCE_BLOB and CONTEXT_INIT (25), even
+        // when it resets repeatedly during start-up or a display reconfiguration.
+        for time in [40.0, 80.0] {
+            for offset in [0.0, 0.01, 0.02] { detector.reset(at: start + time + offset) }
+            XCTAssertEqual(detector.driverReady(at: start + time + 0.05, negotiatedFeatures: 25),
+                           .init(firmware: false, guestRebooted: false))
+        }
+        for offset in [300.0, 300.01] { detector.reset(at: start + offset) }
+        XCTAssertEqual(detector.driverReady(at: start + 300.05), .init(firmware: true, guestRebooted: true))
+        for offset in [301.0, 301.01] { detector.reset(at: start + offset) }
+        XCTAssertEqual(detector.driverReady(at: start + 301.05), .init(firmware: true, guestRebooted: false))
+    }
+
     func testInstallProgressLines() {
         XCTAssertEqual(WindowsInstallProgress.parse("step: Copying Windows"), .step("Copying Windows"))
         XCTAssertEqual(WindowsInstallProgress.parse("[=======   47.0%    ]"), .fraction(0.47))

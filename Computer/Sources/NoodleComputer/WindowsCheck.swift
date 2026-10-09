@@ -10,8 +10,65 @@ import os
 @available(macOS 27, *)
 @MainActor enum WindowsCheck {
     static func fixture() throws -> ComputerStore {
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneMultiCheck") {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            let source = try ComputerStore(root: support.appendingPathComponent("Noodle Windows 3D Installation Verification"))
+            guard let original = source.sessions.first(where: { $0.computer.installationComplete }) else {
+                throw ComputerError("The stopped Windows installation fixture is missing.")
+            }
+            let target = try ComputerStore(root: support.appendingPathComponent("Noodle Windows Multiple Verification"))
+            if target.sessions.isEmpty {
+                for index in 1...2 {
+                    var copy = original.computer
+                    copy.id = UUID(); copy.name = "Windows Concurrent \(index)"
+                    copy.memoryGiB = 4; copy.cpuCount = 2; copy.networkEnabled = false
+                    copy.resizesDesktopWithWindow = false
+                    let from = source.library.directory(for: original.id)
+                    let to = target.library.stagingDirectory(for: copy.id)
+                    guard clonefile(from.path, to.path, 0) == 0 else { throw ComputerError("Cloning the stopped Windows fixture failed.") }
+                    try target.library.commit(copy)
+                    target.sessions.append(ComputerSession(copy))
+                }
+            }
+            withExtendedLifetime(source) {}
+            return target
+        }
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneReliabilityCheck") {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            let source = support.appendingPathComponent("Noodle Windows Arena Verification")
+            let root = support.appendingPathComponent("Noodle Windows Reliability Verification")
+            // Hold the source library's exclusive lease throughout the copy: never clone a live disk.
+            let stopped = try ComputerStore(root: source)
+            _ = stopped
+            let target = root.appendingPathComponent("Computers")
+            if !FileManager.default.fileExists(atPath: target.path) {
+                let staging = root.appendingPathComponent(UUID().uuidString)
+                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                defer { try? FileManager.default.removeItem(at: staging) }
+                // APFS clones keep this independent without duplicating the disk's allocated blocks.
+                guard clonefile(source.appendingPathComponent("Computers").path, staging.path, 0) == 0 else {
+                    throw ComputerError("Cloning the stopped Windows fixture failed: \(String(cString: strerror(errno)))")
+                }
+                try FileManager.default.moveItem(at: staging, to: target)
+            }
+            withExtendedLifetime(stopped) {}
+            return try ComputerStore(root: root)
+        }
+        let fresh = UserDefaults.standard.bool(forKey: "WindowsNeptuneFreshCheck")
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Noodle Windows Verification", isDirectory: true)
+            .appendingPathComponent(fresh ? "Noodle Windows 3D Installation Verification" : (UserDefaults.standard.bool(forKey: "WindowsNeptuneArenaCheck") ? "Noodle Windows Arena Verification" : "Noodle Windows Verification"), isDirectory: true)
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneArenaCheck") {
+            let source = root.deletingLastPathComponent().appendingPathComponent("Noodle Windows Verification/Runtime/Windows")
+            let target = root.appendingPathComponent("Runtime/Windows")
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            // Only clone the cached base, never the old verification computer.
+            for name in ["Base.img", "Base.json"] {
+                let from = source.appendingPathComponent(name), to = target.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: from.path), !FileManager.default.fileExists(atPath: to.path) {
+                    if clonefile(from.path, to.path, 0) != 0 { try FileManager.default.copyItem(at: from, to: to) }
+                }
+            }
+        }
         let store = try ComputerStore(root: root)
         // A fresh computer every run, unless `-WindowsCheckReuse YES` asks to keep the last one; the base image
         // under Runtime is kept either way.
@@ -36,7 +93,7 @@ import os
         }
         defer { monitor.cancel() }
         let session: ComputerSession
-        if let kept = store.sessions.first(where: { $0.computer.kind == .windows && $0.computer.installationComplete }) {
+        if let kept = store.sessions.first(where: { $0.computer.kind == .windows && ($0.computer.installationComplete || UserDefaults.standard.bool(forKey: "WindowsNeptuneArenaCheck")) }) {
             session = kept
             say("reusing \(kept.computer.name)")
         } else {
@@ -48,19 +105,34 @@ import os
             session = made
         }
         store.selection = session.id
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneConsoleCheck") {
+            try store.changeResources(session, cpus: 4, memoryGiB: 8, networkEnabled: session.computer.networkEnabled)
+        }
         // A fixed resolution until the check turns resizing on itself.
         store.rename(session, name: session.computer.name, resizesDesktop: false)
         say("created in \(Int(Date().timeIntervalSince(started)))s")
         await store.start(session)
-        guard session.phase == .running, let windows = session.windows else {
+        guard session.phase == .running, let initialWindows = session.windows else {
             throw ComputerError("Windows did not start: \(session.phase.label)")
         }
-
-        func wait(_ what: String, minutes: Double, until condition: () -> Bool) async throws {
+        let windows = initialWindows
+        func wait(_ what: String, minutes: Double, running: Bool = true, until condition: () -> Bool) async throws {
             let deadline = Date().addingTimeInterval(minutes * 60)
+            var nextReport = Date().addingTimeInterval(30)
+            var captured = false
             while !condition() {
+                if UserDefaults.standard.bool(forKey: "WindowsNeptuneArenaCheck"), Date() >= nextReport {
+                    say("waiting for \(what); status \(windows.status ?? "none"), screen \(windows.lastFrame.map { "\($0.width)x\($0.height)" } ?? "none")")
+                    if !captured, let frame = windows.lastFrame,
+                       let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:]) {
+                        print("WINDOWS ARENA FRAME \(png.base64EncodedString())")
+                        captured = true
+                    }
+                    nextReport = Date().addingTimeInterval(30)
+                }
                 guard Date() < deadline else { throw ComputerError("Timed out waiting for \(what).") }
-                guard session.phase == .running else { throw ComputerError("Windows stopped while waiting for \(what): \(session.phase.label)") }
+                if case .failed(let reason) = session.phase { throw ComputerError("Windows failed while waiting for \(what): \(reason)") }
+                guard !running || session.phase == .running else { throw ComputerError("Windows stopped while waiting for \(what): \(session.phase)") }
                 try await Task.sleep(for: .seconds(2))
             }
         }
@@ -68,27 +140,92 @@ import os
         say("set up and signed in after \(Int(Date().timeIntervalSince(started)))s")
         try await wait("the screen", minutes: 5) { (windows.lastFrame?.width ?? 0) >= 640 }
         say("screen \(windows.lastFrame!.width)x\(windows.lastFrame!.height)")
-        // The screen follows the window: the size the view reports, and back to 1920 by 1080 when it stops.
-        for (width, height) in [(1280, 800), (1600, 1000)] {
-            windows.showScreen(at: CGSize(width: width, height: height))
-            try await wait("Windows to take \(width)x\(height)", minutes: 1) {
-                windows.lastFrame?.width == width && windows.lastFrame?.height == height
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneMultiCheck") {
+            guard let second = store.sessions.first(where: { $0.id != session.id }) else { throw ComputerError("Second Windows fixture missing.") }
+            await store.start(second)
+            guard let other = second.windows else { throw ComputerError("Second Windows VM did not start: \(second.phase)") }
+            try await wait("both Windows desktops", minutes: 10) { other.agentConnected && other.lastFrame != nil }
+            say("both Windows VMs are signed in and rendering")
+            func probe(_ vm: WindowsComputer) async throws {
+                guard let source = Bundle.main.resourceURL?.appendingPathComponent("neptune-probe/Direct3DProbe.cs") else { throw ComputerError("Probe missing.") }
+                let files = WindowsFileService { vm.agent }
+                try await files.upload(source, to: "/C/noodle/Direct3DProbe.cs", progress: { _ in })
+                let result = try await vm.agent.run(#"C:\Windows\Microsoft.NET\FrameworkArm64\v4.0.30319\csc.exe /nologo /optimize+ /out:C:\noodle\Direct3DProbe.exe C:\noodle\Direct3DProbe.cs && C:\noodle\Direct3DProbe.exe"#)
+                say("concurrent Direct3D probe \(result.status):\n\(result.output)")
+                guard result.status == 0 else { throw ComputerError("Concurrent Direct3D rendering failed.") }
             }
-            say("resized to \(width)x\(height)")
+            try await probe(windows)
+            try await probe(other)
+            try await windows.restart()
+            try await wait("first VM restart", minutes: 10) { windows.agentConnected }
+            guard other.agentConnected else { throw ComputerError("Restarting the first VM disconnected the second.") }
+            try await probe(windows)
+            await store.stop(session)
+            try await wait("first VM shutdown", minutes: 3, running: false) { session.phase == .stopped }
+            try await probe(other)
+            await store.stop(second)
+            try await wait("second VM shutdown", minutes: 3, running: false) { second.phase == .stopped }
+            say("simultaneous Windows graphics, isolated restart and shutdown passed")
+            return
         }
-        windows.showScreen(at: nil)
-        try await wait("Windows to return to 1920x1080", minutes: 1) { windows.lastFrame?.width == 1920 && windows.lastFrame?.height == 1080 }
-        say("screen back to 1920x1080")
-        // Through the window: with the setting on, Windows takes the library view's size.
-        store.rename(session, name: session.computer.name, resizesDesktop: true)
-        try await wait("Windows to follow its window", minutes: 1) {
-            windows.lastFrame.map { $0.width != 1920 || $0.height != 1080 } ?? false
+        // Interactive diagnostics over inherited stdin, so a display experiment
+        // does not need a new app build and guest boot for every command.
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneConsoleCheck") {
+            say("console ready; guest commands, :frame, :quit")
+            while let command = await Task.detached(operation: { readLine() }).value {
+                if command == ":quit" { break }
+                if command == ":frame" {
+                    if let frame = windows.lastFrame, let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:]) {
+                        print("WINDOWS ARENA FRAME \(png.base64EncodedString())")
+                    }
+                } else if command == ":size" {
+                    say("screen \(windows.lastFrame.map { "\($0.width)x\($0.height)" } ?? "none")")
+                } else {
+                    let result = try await windows.agent.run(command)
+                    say("result \(result.status):\n\(result.output)")
+                }
+            }
+            await store.stop(session)
+            try await wait("console shutdown", minutes: 3, running: false) { session.phase == .stopped }
+            return
         }
-        say("follows its window at \(windows.lastFrame!.width)x\(windows.lastFrame!.height)")
-        store.rename(session, name: session.computer.name, resizesDesktop: false)
-        try await wait("Windows to keep 1920x1080 again", minutes: 1) { windows.lastFrame?.width == 1920 && windows.lastFrame?.height == 1080 }
-
-        do { try await exercise(store, session, windows, say: say, wait: wait) } catch {
+        // Normal startup installs and verifies graphics; the check must not repair a missing driver itself.
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneFreshCheck") {
+            let verified = try await windows.agent.run(WindowsNeptuneSetup.query)
+            guard verified.status == 0 else { throw ComputerError("The signed 3D driver did not become active: \(verified.output)") }
+            say("fresh installation uses the signed 3D driver")
+        }
+        if UserDefaults.standard.bool(forKey: "WindowsNeptuneReliabilityCheck") || UserDefaults.standard.bool(forKey: "WindowsNeptuneFreshCheck") {
+            if UserDefaults.standard.bool(forKey: "WindowsNeptuneBenchmark"),
+               let source = Bundle.main.resourceURL?.appendingPathComponent("neptune-probe/Direct3DProbe.cs") {
+                let files = WindowsFileService { windows.agent }
+                try await files.upload(source, to: "/C/noodle/Direct3DProbe.cs", progress: { _ in })
+                let probe = try await windows.agent.run(#"C:\Windows\Microsoft.NET\FrameworkArm64\v4.0.30319\csc.exe /nologo /optimize+ /out:C:\noodle\Direct3DProbe.exe C:\noodle\Direct3DProbe.cs && C:\noodle\Direct3DProbe.exe"#)
+                say("Direct3D probe (\(probe.status)):\n\(probe.output)")
+                guard probe.status == 0 else { throw ComputerError("The Direct3D probe failed.") }
+            }
+            let cycles = UserDefaults.standard.bool(forKey: "WindowsNeptuneFreshCheck") ? 1 : 3
+            for cycle in 1...cycles {
+                let oldFrame = windows.lastFrame
+                let before = try await windows.agent.run("powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToFileTimeUtc()\"")
+                try await windows.restart()
+                try await wait("restart \(cycle) to disconnect", minutes: 3) { !windows.agentConnected }
+                try await wait("restart \(cycle) to sign in", minutes: 10) { windows.agentConnected }
+                try await wait("restart \(cycle) to render a new frame", minutes: 2) { windows.lastFrame != nil && windows.lastFrame !== oldFrame }
+                let after = try await windows.agent.run("powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToFileTimeUtc()\"")
+                guard before.status == 0, after.status == 0, before.output != after.output else {
+                    throw ComputerError("Windows did not report a new boot after restart \(cycle).")
+                }
+                say("restart \(cycle) signed in with a new boot time")
+            }
+            await store.stop(session)
+            try await wait("shutdown", minutes: 3, running: false) { session.phase == .stopped }
+            say("repeated restarts and shutdown passed")
+            return
+        }
+        do { try await exercise(store, session, windows, say: say, wait: { what, minutes, condition in
+            try await wait(what, minutes: minutes, until: condition)
+        }) } catch {
             // The agent's own log says why it went away, once it is back.
             for _ in 0..<90 where !windows.agentConnected { try? await Task.sleep(for: .seconds(2)) }
             if windows.agentConnected, let log = try? await windows.agent.run("type C:\\noodle\\agent.log") {
@@ -165,6 +302,15 @@ import os
 
     /// Runs the check, says how it went and ends the process unless the window is kept.
     static func start(_ store: ComputerStore) {
+        // Leave the existing fixture running for manual use, without executing the check's
+        // driver operations, restart or shutdown. Pair with WindowsCheckReuse.
+        if UserDefaults.standard.bool(forKey: "WindowsCheckInteractive") {
+            if let session = store.sessions.first(where: { $0.computer.kind == .windows }) {
+                store.selection = session.id
+                Task { @MainActor in await store.start(session) }
+            }
+            return
+        }
         Task { @MainActor in
             do {
                 try await run(store)

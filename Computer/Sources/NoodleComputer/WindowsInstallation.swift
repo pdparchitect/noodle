@@ -276,7 +276,7 @@ private func copyScript(_ source: URL, to destination: URL) throws {
         #if NOODLE_DEV_HOOKS
         // `-WindowsInstallScreen YES`: the install's screen, every 20 seconds, as base64 PNG lines on stdout.
         if UserDefaults.standard.bool(forKey: "WindowsInstallScreen") {
-            let screen = WindowsGPU()
+            let screen = WindowsGPU(accelerated: false)
             screen.servesFirmware = true
             let last = LastFrameTime()
             screen.onFrame = { image in

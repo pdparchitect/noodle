@@ -128,6 +128,11 @@ let buildVirglrenderer: TargetScript = .post(script: """
     cp -f "$build/libepoxy/COPYING" "$resources/libepoxy-COPYING.txt"
     """, name: "Build virglrenderer", basedOnDependencyAnalysis: false)
 
+// Each Windows VM owns a sandbox-inheriting renderer process and its native graphics state.
+let buildWindowsRenderer: TargetScript = .post(script: """
+    bash "$SRCROOT/Support/Neptune/embed.sh"
+    """, name: "Build Windows Renderer", basedOnDependencyAnalysis: false)
+
 let embedHelpers: TargetScript = .post(script: """
     set -euo pipefail
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
@@ -293,9 +298,10 @@ let project = Project(
                 "Support/STUDIO-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Computer.entitlements"),
-            scripts: [checkKernel, buildGuestFiles, buildWimlib, buildVirglrenderer, embedHelpers, embedCommandLineTool, trimSparkle],
+            scripts: [checkKernel, buildGuestFiles, buildWimlib, buildVirglrenderer, buildWindowsRenderer, embedHelpers, embedCommandLineTool, trimSparkle],
             dependencies: [
                 .package(product: "ComputerCore"),
+                .package(product: "NeptuneTransport"),
                 .package(product: "NoodleLaunchChecks"),
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "NoodleWallpaper"),
@@ -313,6 +319,7 @@ let project = Project(
                 .target(name: "LocalMacService"),
                 .target(name: "LocalMacDesktop"),
                 .target(name: "noodle-computer"),
+                .target(name: "noodle-windows-renderer"),
             ],
             settings: .settings(
                 base: signing.merging([
@@ -340,6 +347,23 @@ let project = Project(
         localMac("LocalMacDesktop", product: .app, infoPlist: .file(path: "Support/LocalMacDesktop-Info.plist"),
                  resources: ["Images/shared/noodle-welcome"]),
         localMac("LocalMacService", product: .commandLineTool),
+        .target(
+            name: "noodle-windows-renderer",
+            destinations: .macOS,
+            product: .commandLineTool,
+            bundleId: "com.pdparchitect.noodle.computer.renderer",
+            deploymentTargets: .macOS("26.0"),
+            infoPlist: .dictionary(["LSBackgroundOnly": .boolean(true)]),
+            sources: ["Sources/NoodleWindowsRenderer/**"],
+            dependencies: [.package(product: "NeptuneTransport")],
+            settings: .settings(base: [
+                "PRODUCT_NAME": "noodle-windows-renderer",
+                "CODE_SIGNING_ALLOWED": "NO",
+                "ENABLE_DEBUG_DYLIB": "NO",
+                "CREATE_INFOPLIST_SECTION_IN_BINARY": "YES",
+                "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/../Frameworks/neptune",
+            ])
+        ),
         // Built unsigned; the app embeds and signs it.
         .target(
             name: "noodle-computer",

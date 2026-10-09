@@ -4,6 +4,35 @@ import XCTest
 @testable import NoodleComputer
 
 final class ComputerDisplayModeTests: XCTestCase {
+    @MainActor func testWindowsUsesOnlyTheGuestPointerInsideItsDisplayedFrame() throws {
+        guard #available(macOS 27, *) else { throw XCTSkip("Windows requires macOS 27") }
+        let computer = WindowsComputer(computer: Computer(name: "Test", kind: .windows), directory: URL(fileURLWithPath: "/unused"))
+        let view = CursorRecordingWindowsView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        view.attach(computer)
+        view.resetCursorRects()
+        XCTAssertTrue(view.cursors.isEmpty, "Keep the Mac pointer while there is no guest image")
+        let context = try XCTUnwrap(CGContext(data: nil, width: 200, height: 100, bitsPerComponent: 8,
+            bytesPerRow: 800, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        computer.onFrame?(try XCTUnwrap(context.makeImage()))
+        view.resetCursorRects()
+        XCTAssertEqual(view.cursors.count, 1, "The frame already contains Windows' pointer; suppress the second pointer")
+        if let (rect, cursor) = view.cursors.first {
+            XCTAssertEqual(rect, NSRect(x: 0, y: 25, width: 100, height: 50), "Keep the Mac pointer in the letterbox margins")
+            XCTAssertEqual(cursor.image.size, NSSize(width: 1, height: 1))
+            XCTAssertFalse(cursor === NSCursor.arrow)
+        }
+        view.cursors = []
+        view.setFrameSize(NSSize(width: 200, height: 100))
+        view.resetCursorRects()
+        XCTAssertEqual(view.cursors.first?.0, NSRect(x: 0, y: 0, width: 200, height: 100))
+        let next = WindowsComputer(computer: Computer(name: "Next", kind: .windows), directory: URL(fileURLWithPath: "/unused"))
+        view.cursors = []
+        view.attach(next)
+        view.resetCursorRects()
+        XCTAssertTrue(view.cursors.isEmpty, "A replacement VM without a frame must restore the Mac pointer")
+        XCTAssertNil(view.layer?.contents, "Do not leave the previous VM's image visible")
+    }
+
     @MainActor func testDesktopCanSelectAnyViewWithoutReplacingSessions() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -48,4 +77,10 @@ final class ComputerDisplayModeTests: XCTestCase {
         await store.selectDisplay(.terminal, in: session)
         XCTAssertEqual(session.displayMode, .terminal)
     }
+}
+
+@available(macOS 27, *)
+@MainActor private final class CursorRecordingWindowsView: WindowsScreenView {
+    var cursors: [(NSRect, NSCursor)] = []
+    override func addCursorRect(_ rect: NSRect, cursor: NSCursor) { cursors.append((rect, cursor)) }
 }

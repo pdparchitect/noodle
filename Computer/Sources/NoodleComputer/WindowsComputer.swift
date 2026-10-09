@@ -24,8 +24,6 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
         didSet {
             guard agentConnected != oldValue else { return }
             onAgentChange?(agentConnected)
-            // Windows starts at its last mode; the window may want another.
-            if agentConnected { Task { await applyScreen() } }
         }
     }
     /// Whether the agent, which Terminal and Files need, is there.
@@ -33,39 +31,12 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
     private(set) var machine: VZVirtualMachine?
     private(set) var agent = WindowsAgent()
     private let gpu = WindowsGPU()
-    /// The screen size Windows should have, in pixels: the window's while it resizes with it, else 1920 by 1080.
-    private var wantedScreen = WindowsGPU.screen
-    private var screenChange: Task<Void, Never>?
-
-    /// Makes Windows follow `pixels`, or keep 1920 by 1080 when nil, once the window has settled.
-    func showScreen(at pixels: CGSize?) {
-        let size = pixels.map { WindowsDisplayMode.fit(width: Int($0.width), height: Int($0.height)) } ?? WindowsGPU.screen
-        guard size != wantedScreen else { return }
-        wantedScreen = size
-        screenChange?.cancel()
-        screenChange = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            await self?.applyScreen()
-        }
-    }
-
-    /// The display reports the size, and the agent asks Windows to switch to it; Windows keeps its mode otherwise.
-    private func applyScreen() async {
-        let size = wantedScreen
-        gpu.resize(width: size.width, height: size.height)
-        guard agentConnected, lastFrame.map({ ($0.width, $0.height) != size }) ?? true else { return }
-        // The driver offers the new mode once it has read the display again.
-        try? await Task.sleep(for: .seconds(1))
-        guard wantedScreen == size, agentConnected else { return }
-        let result = try? await agent.run(WindowsDisplayMode.switchCommand(width: size.width, height: size.height))
-        if result?.status != 0 { log.error("screen switch to \(size.width)x\(size.height) ended with \(result.map { String($0.status) } ?? "no answer", privacy: .public)") }
-    }
     private var setUp: Bool
     private var settingUp = false
+    private let graphicsStartup = WindowsGraphicsStartup()
     /// The agent was sent an update this run; it is not sent again, so a failed update cannot loop.
     private var agentUpdateSent = false
-    private var cycling = false
+    private let powerCycleState = WindowsPowerCycle()
     /// Times Windows stopped by itself before setup finished; it is started again a few times.
     private var setupStops = 0
     var onStop: ((Error?) -> Void)?
@@ -85,6 +56,13 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
                 self.lastFrame = image
                 self.status = nil
                 self.onFrame?(image)
+            }
+        }
+        gpu.onFailure = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                try? await self.machine?.stop()
+                self.finish(ComputerError("Windows graphics stopped. Start this computer again."))
             }
         }
         gpu.onGuestReboot = { [weak self] in Task { @MainActor in await self?.powerCycle() } }
@@ -126,7 +104,30 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
         agent.onHello = { [weak self, weak agent] hello in
             Task { @MainActor in
                 guard let self, let agent, self.agent === agent else { return }
-                // The first hello finishes setup, which restarts Windows; the agent is there after that.
+                do {
+                    let action = try await self.graphicsStartup.check { mayStage in
+                        guard let resources = Bundle.main.resourceURL else { throw ComputerError("Windows graphics are missing. Reinstall Computer and try again.") }
+                        let files = WindowsFileService { agent }
+                        return try await WindowsNeptuneSetup.prepare(resources: resources, mayStage: mayStage,
+                            run: { try await agent.run($0) },
+                            upload: { try await files.upload($0, to: $1, progress: { _ in }) })
+                    }
+                    guard self.agent === agent else { return }
+                    switch action {
+                    case .busy: return
+                    case .restart:
+                        self.settingUp = true
+                        self.status = "Setting up Windows graphics…"
+                        _ = try await agent.call(20)
+                        return
+                    case .ready: break
+                    }
+                } catch {
+                    guard self.agent === agent else { return }
+                    try? await self.machine?.stop()
+                    self.finish(error)
+                    return
+                }
                 guard self.setUp else { self.helloArrived(); return }
                 if hello.agent != Self.agentVersion, !self.agentUpdateSent {
                     self.agentConnected = false
@@ -165,7 +166,9 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
 
     func restart() async throws {
         guard agentConnected else { throw ComputerError("Windows is still starting.") }
-        _ = try await agent.call(24)
+        try await agent.restart()
+        agentConnected = false
+        status = "Restarting Windows…"
     }
 
     private func helloArrived() {
@@ -180,21 +183,18 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
 
     /// VZ restarts a guest in place, and Windows then hangs in the firmware; a fresh start does not.
     private func powerCycle() async {
-        guard let machine, !cycling, machine.state == .running else { return }
+        guard let machine, !powerCycleState.running, machine.state == .running else { return }
         log.info("guest restarted; power-cycling")
-        cycling = true
-        defer { cycling = false }
         status = "Restarting Windows…"
         agentConnected = false
         agent.disconnected("Windows restarted.")
         do {
-            try await machine.stop()
-            try await machine.start()
+            try await powerCycleState.run(stop: { try await machine.stop() }, start: { try await machine.start() })
         } catch { finish(error) }
     }
 
     private func finish(_ error: Error?) {
-        log.info("stopped\(error.map { ": \($0.localizedDescription)" } ?? "")")
+        log.info("stopped\(error.map { ": \($0.localizedDescription)" } ?? "", privacy: .public)")
         agentConnected = false
         agent.disconnected("Windows stopped.")
         status = nil
@@ -204,7 +204,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
 
     nonisolated func guestDidStop(_ virtualMachine: VZVirtualMachine) {
         Task { @MainActor in
-            guard virtualMachine === self.machine else { return }
+            guard virtualMachine === self.machine, self.powerCycleState.handlesGuestStop(machineStopped: virtualMachine.state == .stopped) else { return }
             if self.settingUp || (!self.setUp && self.setupStops < 3) {
                 // Setup finished and now needs the network, or Windows stopped itself during setup.
                 if !self.settingUp { self.setupStops += 1 }
@@ -255,7 +255,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
             device.attachment = VZNATNetworkDeviceAttachment()
             config.networkDevices = [device]
         }
-        if let gpu { config.customVirtioDevices = [gpu.configuration()] }
+        if let gpu { config.customVirtioDevices = [try gpu.configuration()] }
         config.consoleDevices = consoles
         config.usbControllers = [VZXHCIControllerConfiguration()]
         config.keyboards = [VZUSBKeyboardConfiguration()]
@@ -339,7 +339,7 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         var backing: [VZGuestMemoryMapping] = []
     }
     private let queue = DispatchQueue(label: "com.pdparchitect.noodle.computer.windows-gpu")
-    private var device: VZCustomVirtioDevice?
+    private weak var device: VZCustomVirtioDevice?
     private var resources: [UInt32: Resource] = [:]
     private var scanout: UInt32 = 0
     private var detector = FirmwareSessionDetector()
@@ -352,8 +352,14 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
     var servesFirmware = false
     var onFrame: (@Sendable (CGImage) -> Void)?
     var onGuestReboot: (@Sendable () -> Void)?
+    /// How many capsets the config space offers: none without 3D.
+    private var capsetCount: UInt32 = 0
+    private var neptune: WindowsNeptune?
+    private let accelerated: Bool
+    var onFailure: (() -> Void)?
+    init(accelerated: Bool = true) { self.accelerated = accelerated; super.init() }
 
-    func configuration() -> VZCustomVirtioDeviceConfiguration {
+    func configuration() throws -> VZCustomVirtioDeviceConfiguration {
         let configuration = VZCustomVirtioDeviceConfiguration()
         configuration.deviceID = 16
         configuration.pciClassID = 0x03
@@ -361,8 +367,23 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         configuration.virtioQueueCount = 2
         // VIRTIO_GPU_F_EDID: Windows' driver takes its resolution from the screen's EDID, and 1024 by 768 without one.
         configuration.optionalFeatures.subset0 = 1 << 1
+        if accelerated {
+            guard let neptune = WindowsNeptune() else { throw ComputerError("Windows graphics are missing. Reinstall Computer and try again.") }
+            self.neptune = neptune
+            neptune.deviceQueue = queue
+            neptune.onFailure = { [weak self] in self?.onFailure?() }
+            neptune.onFrame = { [weak self] image in self?.onFrame?(image) }
+            neptune.complete = { element, reply in
+                try? element.write(reply)
+                element.returnToQueue()
+            }
+            // VIRGL, RESOURCE_BLOB and CONTEXT_INIT, and the host-visible region blobs are mapped into.
+            configuration.optionalFeatures.subset0 |= 1 << 0 | 1 << 3 | 1 << 4
+            capsetCount = UInt32(WindowsNeptune.capsets.count)
+            configuration.sharedMemoryRegions = [VZVirtioSharedMemoryRegionConfiguration(regionID: 1, size: WindowsNeptune.sharedMemorySize)]
+        }
         // struct virtio_gpu_config: events_read, events_clear, num_scanouts, num_capsets.
-        configuration.deviceSpecificConfiguration = VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, 0))
+        configuration.deviceSpecificConfiguration = VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, capsetCount))
         configuration.provider = VZCustomVirtioDeviceDelegateProvider(deviceQueue: queue, delegate: self)
         return configuration
     }
@@ -382,25 +403,50 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
             guard size != (width, height) else { return }
             size = (width, height)
             displayChanged = true
-            device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(1, 0, 1, 0))) { _ in }
+            device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(1, 0, 1, capsetCount))) { _ in }
         }
     }
 
     func customVirtioDeviceDidAcceptDriverOk(_ device: VZCustomVirtioDevice) {
-        let session = detector.driverReady(at: Date())
-        log.info("display driver up: \(session.firmware ? "firmware, refused" : "Windows")\(session.guestRebooted ? ", guest restarted" : "")")
+        let session = detector.driverReady(at: Date(), negotiatedFeatures: device.negotiatedFeatures?.subset0 ?? 0)
+        log.info("display driver up: \(session.firmware ? "firmware, refused" : "Windows", privacy: .public)\(session.guestRebooted ? ", guest restarted" : "", privacy: .public), features \(device.negotiatedFeatures?.subset0 ?? 0, privacy: .public)")
         firmware = session.firmware
         if session.guestRebooted { onGuestReboot?() }
+        // The region can be filled only while the machine runs.
+        if let region = device.sharedMemoryRegions.first { neptune?.fill(region) }
+        if !firmware, let neptune, !neptune.start() { onFailure?() }
     }
 
     func customVirtioDeviceWillReset(_ device: VZCustomVirtioDevice) {
         detector.reset(at: Date())
         releaseResources()
+        neptune?.reset()
+        // A driver may touch the host-visible region before DRIVER_OK; it has to be backed from the reset on.
+        if let region = device.sharedMemoryRegions.first {
+            queue.async { [weak self] in self?.neptune?.fill(region) }
+        }
+    }
+
+    func customVirtioDeviceWillStop(_ device: VZCustomVirtioDevice) {
+        releaseResources()
+        neptune?.stop()
     }
 
     func customVirtioDevice(_ device: VZCustomVirtioDevice, didReceiveNotificationFor queue: VZVirtioQueue) {
         while let element = queue.nextElement() {
-            if queue.queueIndex == 0 { control(element) }
+            guard queue.queueIndex == 0,
+                  let request = try? element.readBytes(withExactLength: element.readBuffersAvailableByteCount), request.count >= 24 else {
+                element.returnToQueue()
+                continue
+            }
+            if !firmware, let neptune, let outcome = neptune.handle(request, element: element, device: self.device) {
+                if case .reply(let type, let body) = outcome {
+                    try? element.write(WindowsNeptune.header(type, request) + body)
+                    element.returnToQueue()
+                }
+                continue
+            }
+                    control(element, request: request)
             element.returnToQueue()
         }
     }
@@ -411,8 +457,7 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         scanout = 0
     }
 
-    private func control(_ element: VZVirtioQueueElement) {
-        guard let request = try? element.readBytes(withExactLength: element.readBuffersAvailableByteCount), request.count >= 24 else { return }
+    private func control(_ element: VZVirtioQueueElement, request: Data) {
         func u32(_ offset: Int) -> UInt32 { request.count >= offset + 4 ? request.subdata(in: offset..<offset + 4).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) } : 0 }
         func u64(_ offset: Int) -> UInt64 { request.count >= offset + 8 ? request.subdata(in: offset..<offset + 8).withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) } : 0 }
         var body = Data()
@@ -424,7 +469,7 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
             body = Self.words(0, 0, UInt32(size.width), UInt32(size.height), 1, 0) + Data(count: 15 * 24)
             if displayChanged {
                 displayChanged = false
-                device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, 0))) { _ in }
+                device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, capsetCount))) { _ in }
             }
         case 0x0101: // RESOURCE_CREATE_2D: id, format, width, height
             let id = u32(24), width = Int(u32(32)), height = Int(u32(36))
@@ -510,44 +555,24 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
 @available(macOS 27, *)
 struct WindowsDisplay: NSViewRepresentable {
     @ObservedObject var computer: WindowsComputer
-    var resizes = false
     func makeNSView(context: Context) -> WindowsScreenView {
         let view = WindowsScreenView()
         view.attach(computer)
-        view.resizes = resizes
         return view
     }
     func updateNSView(_ view: WindowsScreenView, context: Context) {
         if view.computer !== computer { view.attach(computer) }
-        view.resizes = resizes
         view.setStatus(computer.status)
     }
 }
 
 @available(macOS 27, *)
-final class WindowsScreenView: NSView {
+class WindowsScreenView: NSView {
     private(set) weak var computer: WindowsComputer?
     private let label = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
     private var imageSize = CGSize(width: 1024, height: 768)
     private var buttons: UInt = 0
-    var resizes = false { didSet { if resizes != oldValue { applySize() } } }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        applySize()
-    }
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        applySize()
-    }
-    /// Windows takes the view's size in pixels while the setting is on.
-    private func applySize() {
-        guard window != nil, bounds.width >= 1, bounds.height >= 1 else { return }
-        let scale = window?.backingScaleFactor ?? 1
-        computer?.showScreen(at: resizes ? CGSize(width: bounds.width * scale, height: bounds.height * scale) : nil)
-    }
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -569,8 +594,10 @@ final class WindowsScreenView: NSView {
     required init?(coder: NSCoder) { nil }
 
     func attach(_ computer: WindowsComputer) {
+        self.computer?.onFrame = nil
         self.computer = computer
-        defer { applySize() }
+        layer?.contents = nil
+        window?.invalidateCursorRects(for: self)
         computer.onFrame = { [weak self] image in self?.show(image) }
         if let frame = computer.lastFrame { show(frame) }
         setStatus(computer.status)
@@ -581,12 +608,29 @@ final class WindowsScreenView: NSView {
         label.isHidden = text == nil
         spinner.isHidden = text == nil
         if text == nil { spinner.stopAnimation(nil) } else { spinner.startAnimation(nil) }
-        if text != nil, computer?.lastFrame == nil { layer?.contents = nil }
+        if text != nil, computer?.lastFrame == nil {
+            layer?.contents = nil
+            window?.invalidateCursorRects(for: self)
+        }
     }
 
     private func show(_ image: CGImage) {
+        let changesCursorRect = layer?.contents == nil || imageSize != CGSize(width: image.width, height: image.height)
         imageSize = CGSize(width: image.width, height: image.height)
         layer?.contents = image
+        if changesCursorRect { window?.invalidateCursorRects(for: self) }
+    }
+
+    // Windows draws its pointer into the frame. As with the Linux view's guest
+    // cursor, AppKit owns entry/exit so the Mac pointer returns over app controls.
+    // Keep it in the letterbox margins and while there is no guest image.
+    private let guestCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
+    override func resetCursorRects() {
+        guard layer?.contents != nil else { return }
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        guard scale > 0 else { return }
+        let width = imageSize.width * scale, height = imageSize.height * scale
+        addCursorRect(NSRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height), cursor: guestCursor)
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -732,6 +776,13 @@ final class WindowsAgent: @unchecked Sendable {
     func send(_ type: UInt8, channel: UInt32, payload: Data = Data()) {
         let frame = WindowsAgentFrame(type: type, channel: channel, payload: payload).encoded
         writing.withLock { host.write(frame) }
+    }
+
+    func restart() async throws {
+        _ = try await call(24)
+        // The console transport can stay open throughout a guest reboot. Invalidate the
+        // old session after the acknowledgement, then wait for the next agent's hello.
+        disconnected("Windows is restarting.")
     }
 
     /// Opens a channel whose frames go to `handler`, on a background queue.

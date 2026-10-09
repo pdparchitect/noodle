@@ -206,7 +206,8 @@ public enum WindowsPath {
 
 /// VZ's firmware drives any virtio-gpu it finds, at power-on and after every guest restart, and the VM process
 /// crashes when the firmware tears that display down as it hands over to Windows. The firmware brings the device
-/// up after a burst of resets; Windows' display driver after a single one. Telling them apart lets the device
+/// up after a burst of resets; Windows' 2D driver after a single one. The 3D driver can also reset in a burst,
+/// but negotiates VIRGL, which the firmware never uses. Telling them apart lets the device
 /// refuse the firmware, and a firmware session after Windows' own means the guest restarted in place.
 public struct FirmwareSessionDetector: Sendable {
     public struct Session: Equatable, Sendable {
@@ -222,8 +223,8 @@ public struct FirmwareSessionDetector: Sendable {
         resets = resets.filter { date.timeIntervalSince($0) < 5 } + [date]
     }
 
-    public mutating func driverReady(at date: Date) -> Session {
-        let firmware = resets.filter { date.timeIntervalSince($0) < 1 }.count >= 2
+    public mutating func driverReady(at date: Date, negotiatedFeatures: UInt32 = 0) -> Session {
+        let firmware = negotiatedFeatures & 1 == 0 && resets.filter { date.timeIntervalSince($0) < 1 }.count >= 2
         defer { systemSeen = !firmware }
         return Session(firmware: firmware, guestRebooted: firmware && systemSeen)
     }

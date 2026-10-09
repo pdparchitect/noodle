@@ -1,0 +1,25 @@
+{
+  "angle": {
+    "distribution": "https://github.com/utmapp/UTM/releases/download/v5.0.6/UTM.dmg",
+    "distributionSHA256": "6a722486a660e0ab2cf5826bbeaee0f5963999029366709f5a3048d73b1d7cb1",
+    "source": "https://github.com/utmapp/WebKit/tree/ed78ab6e1a37f4f11583a0bd038f22ec91f3ff10/Source/ThirdParty/ANGLE"
+  },
+  "dxmt": {
+    "source": "https://github.com/utmapp/dxmt/tree/70aa109c50aa5b13914cc629032299dab67bd6be",
+    "directxHeaders": "https://github.com/misyltoad/mingw-directx-headers/tree/9df86f2341616ef1888ae59919feaa6d4fad693d",
+    "llvm": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-15.0.7",
+    "build": [
+      "meson setup build --buildtype=release -Dnative_llvm_path=<llvm-15-install> -Denable_tests=true -Denable_nvapi=false",
+      "ninja -C build src/dxmt-native/libdxmt-native.dylib"
+    ]
+  },
+  "guest": {
+    "distribution": "https://getutm.app/downloads/utm-guest-tools-latest.iso",
+    "distributionSHA256": "65b6a69b392ee01dd314c10f3dad9ebbf9c4160be43f5f0dd6bb715944d9095b",
+    "driverVersion": "100.6.101.58000",
+    "checksums": "guest.sha256",
+    "mesaSource": "https://gitlab.freedesktop.org/osy/mesa/-/tree/eed3e1d9bff9eb38890e0f241e87846cdd729fdf"
+  },
+  "libepoxy": "https://github.com/utmapp/libepoxy/tree/bf98587477fe68d07b93319ece7b40a7d0e2eabe",
+  "virglrenderer": "https://github.com/utmapp/virglrenderer/tree/5d26f605f50f8e22002ec6db5fb775e1992d4e96"
+}

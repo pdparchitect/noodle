@@ -6,6 +6,8 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
+		<!-- POSIX shared-memory names have a 31-byte limit, including the group. -->
+		<string>$(TeamIdentifierPrefix)noodle.gpu</string>
 		<string>$(TeamIdentifierPrefix)$(COMPUTER_GROUP_SUFFIX)</string>
 		<string>$(TeamIdentifierPrefix)$(COMPUTER_EXTERNAL_GROUP_SUFFIX)</string>
 	</array>

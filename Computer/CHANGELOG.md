@@ -4,15 +4,18 @@
 
 ### Added
 
+- Windows computers use the Mac's graphics processor with the original signed Windows driver. Multiple Windows computers can run at the same time.
 - On macOS 27 or later, Desktop computers draw with this Mac's graphics processor. The desktop and apps that use OpenGL run faster and leave the Mac's processor freer; the browser still draws without it.
 
 ### Changed
 
-- Desktop and Windows computers follow their window's size unless Resize desktop with window is turned off, which keeps the computer's own resolution.
+- Desktop computers follow their window's size unless Resize desktop with window is turned off. Windows computers keep a fixed 1920 × 1080 display.
 - Settings > Agents shows its setup commands only while Allow agents is on, each behind an Instructions button.
 
 ### Fixed
 
+- Windows screens show one pointer, restoring the Mac pointer over the window controls and margins.
+- Windows computers reconnect after restarting, including when 3D graphics is active.
 - Windows computers scroll in the same direction as the Mac when natural scrolling is on, instead of the opposite one.
 - Windows computers show their desktop at 1920 × 1080 instead of 1024 × 768.
 

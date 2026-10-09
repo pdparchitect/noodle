@@ -1,0 +1,30 @@
+diff --git a/src/vrend/vrend_renderer.c b/src/vrend/vrend_renderer.c
+index e6ae0074..909db202 100644
+--- a/src/vrend/vrend_renderer.c
++++ b/src/vrend/vrend_renderer.c
+@@ -5036,8 +5036,9 @@ void vrend_clear_surface(struct vrend_context *ctx, uint32_t surf_handle,
+    surf = vrend_object_lookup(sub_ctx->object_hash, surf_handle,
+                               VIRGL_OBJECT_SURFACE);
+    if (!surf) {
+-      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_SURFACE,
+-                                 surf_handle);
++      /* Mesa 25.2 sends clears for surfaces it never created (handle 0); poisoning the context for that
++       * stops every later draw, so skip the clear. */
++      virgl_warn("%s: clear of unknown surface %u skipped\n", ctx->debug_name, surf_handle);
+       return;
+    }
+ 
+diff --git a/src/vrend/vrend_shader.c b/src/vrend/vrend_shader.c
+index 39895cec..c316aee5 100644
+--- a/src/vrend/vrend_shader.c
++++ b/src/vrend/vrend_shader.c
+@@ -7273,6 +7273,9 @@ static void emit_ios_vs(const struct dump_ctx *ctx,
+       }
+ 
+       emit_hdr(glsl_strbufs, "vec4 clip_dist_temp[2];\n");      
++   } else if (ctx->num_out_clip_dist) {
++      /* Without cull distances the clip distance moves still go through the temporary. */
++      emit_hdr(glsl_strbufs, "vec4 clip_dist_temp[2];\n");
+    }
+ 
+    const char *psize_buf = ctx->has_pointsize_output ? "out float gl_PointSize;\n" : "";

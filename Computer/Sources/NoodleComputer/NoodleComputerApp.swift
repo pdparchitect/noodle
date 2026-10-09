@@ -717,7 +717,7 @@ struct ComputerDetailView: View {
       } else if let runtime = session.windowsRuntime {
         if #available(macOS 27, *), let windows = runtime as? WindowsComputer {
           ZStack {
-            WindowsDisplay(computer: windows, resizes: session.computer.resizesDesktop)
+            WindowsDisplay(computer: windows)
               .opacity(session.displayMode == .desktop ? 1 : 0)
               .allowsHitTesting(session.displayMode == .desktop)
               .accessibilityHidden(session.displayMode != .desktop)

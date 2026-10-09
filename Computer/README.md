@@ -104,7 +104,7 @@ The optional description (up to 500 characters) says what the computer is for,
 such as which project it builds. Assigned bots see it with the name and use it to
 choose the right computer. It is not shown on preview cards in conversations.
 
-Desktop and Windows computers follow their window's size. Turn off **Resize
+Desktop computers follow their window's size. Turn off **Resize
 desktop with window**, when creating the computer or in its editor, to keep its
 own screen resolution instead, scaled to fit the window.
 
@@ -171,10 +171,13 @@ keeps that installation, so each later Windows computer needs only a few minutes
 setup the first time it starts. Windows sets itself up without a network, then
 restarts with one.
 
+Windows uses the Mac's graphics processor for Direct3D 10 and 11 apps. Multiple
+Windows computers can run at the same time, alongside Linux computers. The Windows
+desktop stays at 1920 × 1080 and scales to fit its window.
+
 - Click the desktop to give Windows your keyboard and mouse.
 - **Terminal** opens PowerShell, and **Files** starts in your Windows home folder,
   with every drive one level up. Both open once Windows has signed in.
-- The desktop is 1024 × 768 for now.
 - **Stop** shuts Windows down; **Force Stop** turns it off.
 - Windows is not activated. To activate it, enter your own product key in
   Windows' Settings.

@@ -1,0 +1,18 @@
+diff --git a/src/dispatch_common.c b/src/dispatch_common.c
+index 6fb7f02..83e3140 100644
+--- a/src/dispatch_common.c
++++ b/src/dispatch_common.c
+@@ -177,10 +177,10 @@
+ #include <TargetConditionals.h>
+ #if TARGET_OS_OSX
+ #define GLX_LIB "/opt/X11/lib/libGL.1.dylib"
+-#define EGL_LIB "EGL.framework/Versions/Current/EGL"
++#define EGL_LIB "@rpath/EGL.framework/EGL"
+ #define OPENGL_LIB "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL"
+-#define GLES1_LIB "GLESv1_CM.framework/Versions/Current/GLESv1_CM"
+-#define GLES2_LIB "GLESv2.framework/Versions/Current/GLESv2"
++#define GLES1_LIB "@rpath/GLESv1_CM.framework/GLESv1_CM"
++#define GLES2_LIB "@rpath/GLESv2.framework/GLESv2"
+ #elif TARGET_OS_IPHONE
+ #define GLX_LIB "/opt/X11/lib/libGL.1.dylib"
+ #define EGL_LIB "EGL.framework/EGL"
