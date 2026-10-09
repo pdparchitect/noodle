@@ -40,15 +40,18 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertFalse(try repository.loadMessages(conversationID: privateConversation.id).contains { $0.body == "forged" })
     }
 
-    func testAttachingNoodletWithoutPreviewTellsBotToPresent() throws {
+    func testAttachingNoodletWithoutPreviewFailsAndTellsBotToPresent() throws {
         let bare = NoodletLink.url(for: UUID()), shown = NoodletLink.url(for: UUID())
         broker.noodletHasPreview = { $0 == shown }
-        let sent = try call(.send(conversationID: conversation.id, body: "Two", attachmentURLs: [bare, shown]))
+        let refused = try call(.send(conversationID: conversation.id, body: "Two", attachmentURLs: [bare, shown]))
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains(bare.absoluteString), refused.standardError)
+        XCTAssertTrue(refused.standardError.contains("present"), refused.standardError)
+        XCTAssertFalse(refused.standardError.contains(shown.absoluteString), refused.standardError)
+        XCTAssertFalse(try repository.loadMessages(conversationID: conversation.id).contains { $0.body == "Two" })
+        let sent = try call(.send(conversationID: conversation.id, body: "One", attachmentURLs: [shown]))
         XCTAssertEqual(sent.exitCode, 0, sent.standardError)
-        XCTAssertTrue(sent.standardError.contains(bare.absoluteString), sent.standardError)
-        XCTAssertTrue(sent.standardError.contains("present"), sent.standardError)
-        XCTAssertFalse(sent.standardError.contains(shown.absoluteString), sent.standardError)
-        XCTAssertEqual(try call(.send(conversationID: conversation.id, body: "One", attachmentURLs: [shown])).standardError, "")
+        XCTAssertEqual(sent.standardError, "")
     }
 
     func testMissingBridgeDoesNotFallBackToRepositoryFiles() throws {

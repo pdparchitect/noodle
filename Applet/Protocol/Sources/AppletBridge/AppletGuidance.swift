@@ -100,9 +100,10 @@ public enum AppletGuidance {
 
         For delivery, open the noodlet and present it to the conversation once it shows
         something worth seeing: present sets the noodlet's preview and attaches its
-        noodlet:// URL. Only a noodlet that cannot run should be attached with
-        Messenger --attach "noodlet://UUID"; it then has no preview. HTML needs no build
-        step. Validation returns the persistent noodletID and url. Never invent IDs
+        noodlet:// URL. Messenger refuses to attach a noodlet that has no preview yet,
+        so present it first; after that its link can also be attached again with
+        Messenger --attach "noodlet://UUID". HTML needs no build step. Validation
+        returns the persistent noodletID and url. Never invent IDs
         or add them to noodlet.json. Use info --path PACKAGE or list to recover URLs.
         Clicking the attachment opens the live creation in Noodle Applet, or brings its
         existing window forward, with full interaction and saved data.
