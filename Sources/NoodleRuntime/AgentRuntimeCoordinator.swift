@@ -175,6 +175,7 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
     private var discovery: HarnessDiscovery
+    public let harnesses: HarnessSelection
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
     @ObservationIgnored private let makeProcess: @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess
@@ -196,7 +197,7 @@ public final class AgentRuntimeCoordinator {
     #endif
 
     private func refreshAppleCapabilities() async {
-        guard discovery.discover(.apple).isAvailable else {
+        guard harnesses.isOn(.apple), discovery.discover(.apple).isAvailable else {
             modelsByProvider[.apple] = []
             return
         }
@@ -219,18 +220,23 @@ public final class AgentRuntimeCoordinator {
     }
 
     private func discoveredInstallations() -> [HarnessInstallation] {
-        discovery.discover().map { hostInstallations[$0.provider] ?? $0 }
+        discovery.discover().map { offered(hostInstallations[$0.provider] ?? $0) }
+    }
+
+    /// A harness turned off is shown as missing, so nothing offers or starts it.
+    private func offered(_ installation: HarnessInstallation) -> HarnessInstallation {
+        harnesses.isOn(installation.provider) ? installation : HarnessInstallation(provider: installation.provider, executablePath: nil)
     }
 
     private func refreshHostCapabilities(_ provider: HarnessProvider) async {
-        guard discovery.allowsHostDiscovery(for: provider) else { return }
+        guard harnesses.isOn(provider), discovery.allowsHostDiscovery(for: provider) else { return }
         do {
             let result = try await inspectHost(provider)
             guard !Task.isCancelled else { return }
             let installation = HarnessInstallation(provider: provider, executablePath: result.executablePath)
             hostInstallations[provider] = installation
             installationErrors[provider] = nil
-            installations = installations.map { $0.provider == provider ? installation : $0 }
+            installations = installations.map { $0.provider == provider ? offered(installation) : $0 }
             modelsByProvider[provider] = result.models
             capabilityErrors[provider] = result.capabilityError
         } catch {
@@ -241,6 +247,7 @@ public final class AgentRuntimeCoordinator {
     }
 
     public init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
+         harnesses: HarnessSelection? = nil,
          makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
          inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) },
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -251,6 +258,7 @@ public final class AgentRuntimeCoordinator {
         self.inspectHost = inspectHost
         self.discovery = discovery
         self.defaults = defaults
+        self.harnesses = harnesses ?? HarnessSelection()
         preventIdleSleepWhileWorking = defaults.bool(forKey: Self.preventIdleSleepDefaultsKey)
         accessConfiguration = AgentAccessConfiguration.load(from: defaults)
         let configuration = AgentHeartbeatConfiguration.load(from: defaults)
@@ -262,7 +270,8 @@ public final class AgentRuntimeCoordinator {
         lastHeartbeatDates = Self.loadLastHeartbeatDates(from: defaults)
         sessionStartDates = Self.loadDates(from: defaults, key: Self.sessionStartDatesKey)
         lastInteractionDates = Self.loadDates(from: defaults, key: Self.lastInteractionDatesKey)
-        installations = discovery.discover()
+        let selection = self.harnesses
+        installations = discovery.discover().map { selection.isOn($0.provider) ? $0 : HarnessInstallation(provider: $0.provider, executablePath: nil) }
     }
 
     public func configurePreventIdleSleepWhileWorking(_ enabled: Bool) {
@@ -468,7 +477,7 @@ public final class AgentRuntimeCoordinator {
             detected = await Task.detached(priority: .utility) { discovery.discover() }.value
             guard !Task.isCancelled else { return }
         } while changes != installationChanges
-        let complete = detected.map { hostInstallations[$0.provider] ?? $0 }
+        let complete = detected.map { offered(hostInstallations[$0.provider] ?? $0) }
         if installations != complete { installations = complete }
     }
 
@@ -479,9 +488,27 @@ public final class AgentRuntimeCoordinator {
         installationChanges += 1
         // What the Agent Host last reported for this harness is now out of date.
         hostInstallations[provider] = nil
-        let installation = discovery.discover(provider)
+        let installation = offered(discovery.discover(provider))
         installations = installations.map { $0.provider == provider ? installation : $0 }
         return installation
+    }
+
+    /// Turning a harness on looks for it again and asks for its models; its bots start when next started.
+    public func setHarness(_ provider: HarnessProvider, on: Bool) {
+        guard harnesses.isOn(provider) != on else { return }
+        harnesses.set(provider, on: on)
+        installationChanges += 1
+        installations = installations.map { $0.provider == provider ? offered(hostInstallations[provider] ?? discovery.discover(provider)) : $0 }
+        if on { refreshCapabilities() }
+    }
+
+    private func unstartableDetail(_ agent: AgentRecord) -> String {
+        guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) else {
+            return agent.harnessIdentifier == nil ? "Choose a harness in Edit Bot" : "The configured harness is not installed"
+        }
+        return harnesses.isOn(provider)
+            ? "The configured harness is not installed"
+            : "\(provider.displayName) is turned off. Turn it on in Settings → Harness."
     }
 
     func installation(for agent: AgentRecord) -> HarnessInstallation? {
@@ -553,7 +580,7 @@ public final class AgentRuntimeCoordinator {
                 snapshots[agent.id] = AgentRuntimeSnapshot(
                     agentID: agent.id,
                     phase: .failed,
-                    detail: "The configured harness is not installed"
+                    detail: unstartableDetail(agent)
                 )
             }
         }
@@ -678,9 +705,7 @@ public final class AgentRuntimeCoordinator {
             snapshots[agent.id] = AgentRuntimeSnapshot(
                 agentID: agent.id,
                 phase: .failed,
-                detail: agent.harnessIdentifier == nil
-                    ? "Choose a harness in Edit Bot"
-                    : "The configured harness is not installed"
+                detail: unstartableDetail(agent)
             )
             return
         }

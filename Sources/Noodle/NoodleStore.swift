@@ -209,7 +209,7 @@ final class NoodleStore {
             let discovery = HarnessDiscovery(managedHarnesses: repository == nil ? self.repository.managedHarnesses : nil,
                                              environment: environment)
             discovery.removeSupersededManagedHarnesses()
-            self.runtime = AgentRuntimeCoordinator(discovery: discovery)
+            self.runtime = AgentRuntimeCoordinator(discovery: discovery, harnesses: HarnessSelection(defaults: .standard))
         }
         self.runtime.remoteModels = RemoteModelAccountStore(repository: self.repository.rootURL)
         usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))

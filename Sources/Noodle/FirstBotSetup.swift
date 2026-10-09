@@ -14,7 +14,7 @@ final class FirstBotSetup {
     static let dismissedKey = "Noodle.firstBotSetup.dismissed"
 
     /// The accounts offered for a quick start; every other harness is set up in Settings.
-    static let featured: [HarnessProvider] = [.codex, .claudeCode, .muse, .grokBuild]
+    static let featured = HarnessProvider.allCases.filter(\.isOnByDefault)
 
     /// A tile names the product by its short name, with its maker beneath.
     static func accountName(_ provider: HarnessProvider) -> String? {

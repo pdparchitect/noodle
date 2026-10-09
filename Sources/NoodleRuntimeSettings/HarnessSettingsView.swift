@@ -8,6 +8,7 @@ public struct HarnessesSettingsView: View {
     let store: any BotSettingsHost
     let setup: HarnessSetupController
     @State private var showRefreshProgress = false
+    @State private var choosesHarnesses = false
 
     public init(store: any BotSettingsHost, setup: HarnessSetupController) {
         self.store = store
@@ -18,11 +19,18 @@ public struct HarnessesSettingsView: View {
         setup.refreshingAll || store.runtime.isRefreshingInstallations || !setup.checking.isEmpty || setup.checkingVersions
     }
 
+    private var installations: [HarnessInstallation] {
+        setup.displayedInstallations.filter { store.runtime.harnesses.isOn($0.provider) }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    ForEach(setup.displayedInstallations) { installation in
+                    if installations.isEmpty {
+                        Text("No harnesses turned on").foregroundStyle(.secondary)
+                    }
+                    ForEach(installations) { installation in
                         HarnessInstallationRow(store: store, installation: installation,
                             liveInstallation: store.runtime.installations.first { $0.provider == installation.provider },
                             isRefreshing: isRefreshing, setup: setup) {
@@ -35,7 +43,7 @@ public struct HarnessesSettingsView: View {
                         }
                     }
                 }
-                if setup.displayedInstallations.contains(where: setup.isManaged) {
+                if installations.contains(where: setup.isManaged) {
                     Section {
                         @Bindable var setup = setup
                         Toggle("Update harnesses installed by Noodle automatically", isOn: $setup.automaticUpdates)
@@ -46,6 +54,7 @@ public struct HarnessesSettingsView: View {
 
             Divider()
             HStack {
+                Button("Choose Harnesses…") { choosesHarnesses = true }
                 Spacer()
                 ProgressView()
                     .controlSize(.small)
@@ -60,6 +69,9 @@ public struct HarnessesSettingsView: View {
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
         .task { await refresh() }
+        .sheet(isPresented: $choosesHarnesses, onDismiss: { Task { await refresh() } }) {
+            HarnessSelectionView(runtime: store.runtime).noodleSheetSizing()
+        }
         .task(id: isRefreshing) {
             showRefreshProgress = false
             guard isRefreshing else { return }

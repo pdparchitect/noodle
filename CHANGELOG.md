@@ -8,6 +8,10 @@ All notable changes to Noodle are documented here, following
 
 ## [0.53.0] - 2026-10-09
 
+### Added
+
+- **Settings → Harness → Choose Harnesses…** turns harnesses on and off. A harness that is off is left out of Settings and every harness list, and its bots do not start. New installs start with Codex, Claude Code, Muse Code and Grok Build; Macs that already ran Noodle keep every harness on.
+
 ### Changed
 
 - Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.

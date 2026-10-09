@@ -947,7 +947,8 @@ import os
                     + profiles.profiles(for: provider).map { HubHarness(provider: provider, profile: $0.id) }
             }
         } else {
-            lent = Array(plan?.harnesses ?? [])
+            // A harness turned off on the Hub is lent to no one, whatever the plan says.
+            lent = Array(plan?.harnesses ?? []).filter { bots?.isOn($0.provider) ?? true }
         }
         let harnesses = lent.compactMap { harness -> LinkHarness? in
             var profileName: String?

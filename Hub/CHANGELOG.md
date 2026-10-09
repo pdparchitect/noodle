@@ -4,6 +4,10 @@
 
 ## [0.25.0] - 2026-10-09
 
+### Added
+
+- **Settings → Harness → Choose Harnesses…** turns harnesses on and off. A harness that is off is not lent to anyone, whatever their plan, and its bots do not start. New Hubs start with Codex, Claude Code, Muse Code and Grok Build; Hubs that already ran keep every harness on.
+
 ### Changed
 
 - Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.

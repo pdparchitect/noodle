@@ -20,10 +20,10 @@ struct NoodleSettingsView: View {
 
     private var harnessesNeedingAttention: Int {
         HarnessProvider.allCases.filter { id in
-            harnessSetup.needsAttention(id) || store.agents.contains {
+            store.runtime.harnesses.isOn(id) && (harnessSetup.needsAttention(id) || store.agents.contains {
                 let snapshot = store.runtime.snapshot(for: $0.id)
                 return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
-            }
+            })
         }.count
     }
 

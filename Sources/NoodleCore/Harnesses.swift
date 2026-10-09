@@ -15,6 +15,9 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
 
     public var isExperimental: Bool { self == .apple }
 
+    /// On for a new install, and offered by the welcome; the rest wait to be turned on in Settings.
+    public var isOnByDefault: Bool { self == .codex || self == .claudeCode || self == .muse || self == .grokBuild }
+
     public var supportsAccountApps: Bool { self == .codex || self == .claudeCode }
 
     /// Whether the Agent Host can apply a separate restricted runtime policy.

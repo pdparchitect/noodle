@@ -40,7 +40,7 @@ import NoodleRuntime
         } else {
             let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
             discovery.removeSupersededManagedHarnesses()
-            self.runtime = AgentRuntimeCoordinator(discovery: discovery)
+            self.runtime = AgentRuntimeCoordinator(discovery: discovery, harnesses: HarnessSelection(defaults: .standard))
         }
         self.runtime.remoteModels = RemoteModelAccountStore(repository: root)
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)

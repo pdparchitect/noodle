@@ -18,6 +18,12 @@ the welcome only sets up the account you choose and returns you to your
 conversations. Everything it does is also available in Settings, as described
 below.
 
+Settings lists only the harnesses that are turned on. A new install starts
+with the four the welcome offers. To change them, open **Settings → Harness**
+and choose **Choose Harnesses…**. A harness that is off is left out of every
+harness list, and its bots do not start until it is turned on again. On a
+Noodle Hub, a harness that is off is not lent to anyone.
+
 To let Noodle install a harness:
 
 1. Open **Settings → Harness**.

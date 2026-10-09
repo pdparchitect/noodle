@@ -75,10 +75,10 @@ struct HubSettingsView: View {
 
     private var harnessesNeedingAttention: Int {
         HarnessProvider.allCases.filter { id in
-            host.setup.needsAttention(id) || host.agents.contains {
+            host.runtime.harnesses.isOn(id) && (host.setup.needsAttention(id) || host.agents.contains {
                 let snapshot = host.runtime.snapshot(for: $0.id)
                 return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
-            }
+            })
         }.count
     }
 
