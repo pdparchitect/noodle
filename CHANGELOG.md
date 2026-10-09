@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - The Sharing sheet in Edit Bot no longer shows a line saying who can talk to the bot.
+- Remote Models: Custom sits apart from the named providers in the Add Account menu.
 
 ## [0.52.0] - 2026-10-08
 

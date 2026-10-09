@@ -67,6 +67,7 @@ public struct AppleRemoteModelsView: View {
             HStack {
                 Menu("Add Account") {
                     ForEach(RemoteProviders.all, id: \.id) { provider in
+                        if provider.id == CustomProvider.id { Divider() }
                         Button("\(provider.displayName)…") { form = .add(provider) }
                     }
                 }
