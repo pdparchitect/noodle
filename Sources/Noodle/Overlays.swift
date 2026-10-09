@@ -375,10 +375,10 @@ struct EditBotSheet: View {
                         FoldersSettingsRow(folders: $folders, owner: .bot)
                     }
                     if let sharingHub {
-                        BotSharingPicker(mirror: sharingHub, bot: name, selectedIDs: $sharedWith)
+                        BotSharingPicker(mirror: sharingHub, selectedIDs: $sharedWith)
                     }
                     ForEach(localSharingHubs, id: \.pairing.directory) { hub in
-                        BotSharingPicker(mirror: hub, bot: name, selectedIDs: Binding(
+                        BotSharingPicker(mirror: hub, selectedIDs: Binding(
                             get: { sharedOnHubs[hub.pairing.directory] ?? [] },
                             set: { sharedOnHubs[hub.pairing.directory] = $0 }),
                             title: localSharingHubs.count > 1 ? "Sharing on \(hub.pairing.hub?.name ?? "Noodle Hub")" : "Sharing")
@@ -550,7 +550,6 @@ struct EditBotSheet: View {
 /// is picked by tapping them; the enclosing editor saves the choice with the bot.
 struct BotSharingPicker: View {
     let mirror: HubMirror
-    let bot: String
     @Binding var selectedIDs: Set<UUID>
     var title = "Sharing"
     @State private var editing = false
@@ -566,7 +565,7 @@ struct BotSharingPicker: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $editing) {
-            BotSharingSheet(mirror: mirror, bot: bot, selectedIDs: $selectedIDs, title: title).noodleSheetSizing()
+            BotSharingSheet(mirror: mirror, selectedIDs: $selectedIDs, title: title).noodleSheetSizing()
         }
     }
 }
@@ -574,16 +573,14 @@ struct BotSharingPicker: View {
 private struct BotSharingSheet: View {
     @Environment(\.dismiss) private var dismiss
     let mirror: HubMirror
-    let bot: String
     @Binding var selectedIDs: Set<UUID>
     let title: String
     @State private var draft: Set<UUID>
     @State private var people: [LinkPerson]?
     @State private var failure: String?
 
-    init(mirror: HubMirror, bot: String, selectedIDs: Binding<Set<UUID>>, title: String) {
+    init(mirror: HubMirror, selectedIDs: Binding<Set<UUID>>, title: String) {
         self.mirror = mirror
-        self.bot = bot
         _selectedIDs = selectedIDs
         self.title = title
         _draft = State(initialValue: selectedIDs.wrappedValue)
@@ -611,7 +608,7 @@ private struct BotSharingSheet: View {
                 if let people, people.isEmpty {
                     Text("Nobody else is on this Hub").font(.caption).foregroundStyle(.secondary)
                 } else if let people {
-                    BotSharingPeople(people: people, bot: bot, selectedIDs: $draft)
+                    BotSharingPeople(people: people, selectedIDs: $draft)
                 } else if let failure {
                     Text(failure).font(.caption).foregroundStyle(.red)
                 } else {
@@ -628,21 +625,14 @@ private struct BotSharingSheet: View {
     }
 }
 
-/// Everyone else on the Hub, each tapped to share the bot with them or stop, and who that lets talk to it.
+/// Everyone else on the Hub, each tapped to share the bot with them or stop.
 struct BotSharingPeople: View {
     let people: [LinkPerson]
-    let bot: String
     @Binding var selectedIDs: Set<UUID>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 10) {
-                ForEach(people) { person($0) }
-            }
-            Text(LinkPerson.sharingSummary(bot: bot, people: people.filter { selectedIDs.contains($0.id) }.map(\.name)))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], alignment: .leading, spacing: 10) {
+            ForEach(people) { person($0) }
         }
     }
 

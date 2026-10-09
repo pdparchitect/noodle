@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- The Sharing sheet in Edit Bot no longer shows a line saying who can talk to the bot.
+
 ## [0.52.0] - 2026-10-08
 
 ### Changed
