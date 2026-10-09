@@ -331,11 +331,14 @@ import Observation
     }
 
     /// Opens a channel to the Hub for a request it answers with a stream, such as `openSurface`:
-    /// frames come down it, and this side sends its own up it.
+    /// frames come down it, and this side sends its own up it. Video takes a connection of its
+    /// own, since it can fill the link and answers on the shared one would queue behind it.
     public func channel(_ request: LinkRequest) async throws -> LinkChannel {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
+        var video = false
+        if case .openSurface = request { video = true }
         let channel = try await LinkClient.channel(try LinkProtocol.encode(request), identity: try identity(),
-                                                   hubKey: hub.key, endpoints: hub.endpoints)
+                                                   hubKey: hub.key, endpoints: hub.endpoints, ownConnection: video)
         return channel
     }
 

@@ -16,7 +16,7 @@ final class LinkSurfaceTests: XCTestCase {
         try await server.start()
         defer { companion.close(); server.stop() }
         let channel = try await LinkClient.channel(Data("{}".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
-                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))], ownConnection: true)
         defer { channel.cancel() }
         channel.send(SurfaceControl.shown(sequence: 5).encoded)
         channel.send(SurfaceControl.input(.key(.enter)).encoded)
@@ -41,7 +41,7 @@ final class LinkSurfaceTests: XCTestCase {
         try await server.start()
         defer { companion.close(); server.stop() }
         let channel = try await LinkClient.channel(Data("{}".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
-                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))])
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))], ownConnection: true)
         defer { channel.cancel() }
         companion.send(SurfaceStatus(notice: .notResponding).encoded)
         companion.send(SurfaceStatus(notice: nil).encoded)
@@ -72,7 +72,7 @@ final class LinkSurfaceTests: XCTestCase {
         defer { video.stop(); companion.close(); link.stop(); server.stop() }
 
         let channel = try await LinkClient.channel(Data("{}".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
-                                                   endpoints: [LinkEndpoint(host: "::1", port: link.port)])
+                                                   endpoints: [LinkEndpoint(host: "::1", port: link.port)], ownConnection: true)
         defer { channel.cancel() }
         // As a viewer does once its channel opens.
         channel.send(SurfaceControl.shown(sequence: 0).encoded)

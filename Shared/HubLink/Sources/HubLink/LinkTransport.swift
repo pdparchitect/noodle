@@ -23,11 +23,15 @@ enum LinkQUIC {
     /// carrying photo avatars or a video key frame, can be far larger than any request.
     static let answerLimit = 64 << 20
     static let queue = DispatchQueue(label: "HubLink")
+    /// Streams a device may open on one connection in its life: QUIC lets a peer open only as many
+    /// as the other side allows, and Network.framework never raises what it allowed at first.
+    static let streamLimit = 1 << 20
 
     /// Both sides present their key. `verify` decides whether the peer's key is acceptable.
     static func parameters(identity: LinkIdentity, verify: @escaping @Sendable (LinkPublicKey) -> Bool) throws -> NWParameters {
         let options = NWProtocolQUIC.Options(alpn: [alpn])
         options.idleTimeout = 30_000
+        options.initialMaxStreamsBidirectional = streamLimit
         let security = options.securityProtocolOptions
         sec_protocol_options_set_local_identity(security, try identity.secIdentity())
         sec_protocol_options_set_peer_authentication_required(security, true)
@@ -73,7 +77,10 @@ enum LinkQUIC {
                     if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (chunk, complete)) }
                 }
             }
-            if let chunk { data.append(chunk) }
+            if let chunk {
+                data.append(chunk)
+                LinkSessions.heard(on: connection)
+            }
             guard data.count <= limit else { throw LinkError("The message is too large.") }
             if complete || chunk == nil { return data }
         }
@@ -90,7 +97,10 @@ enum LinkQUIC {
                     else if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (chunk, complete)) }
                 }
             }
-            if let chunk { data.append(chunk) }
+            if let chunk {
+                data.append(chunk)
+                LinkSessions.heard(on: connection)
+            }
             if complete && data.count < count {
                 if data.isEmpty { return nil }
                 throw LinkError("The Hub closed the stream mid-message.")
@@ -404,12 +414,17 @@ public enum LinkClient {
         guard request.count <= LinkQUIC.requestLimit else { throw LinkError("This is too large to send to the Hub.") }
     }
 
-    /// Opens a channel: the request goes as a frame, and the stream stays open both ways.
+    /// Opens a channel: the request goes as a frame, and the stream stays open both ways. One that
+    /// can fill the link, as video does, takes `ownConnection`, so answers on the shared one do not
+    /// queue behind it.
     public static func channel(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
-                               endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkChannel {
+                               endpoints: [LinkEndpoint], timeout: Duration = .seconds(10),
+                               ownConnection: Bool = false) async throws -> LinkChannel {
         try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
-        let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+        let (connection, endpoint) = ownConnection
+            ? try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+            : try await LinkSessions.stream(identity: identity, hubKey: hubKey, endpoints: endpoints, timeout: timeout)
         let channel = LinkChannel(connection: connection, endpoint: endpoint)
         channel.send(request)
         return channel
@@ -420,7 +435,7 @@ public enum LinkClient {
                                  endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {
         try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
-        let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+        let (connection, endpoint) = try await LinkSessions.stream(identity: identity, hubKey: hubKey, endpoints: endpoints, timeout: timeout)
         do {
             try await LinkQUIC.send(request, on: connection)
         } catch {
@@ -434,7 +449,7 @@ public enum LinkClient {
                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> (response: Data, endpoint: LinkEndpoint) {
         try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
-        let (connection, endpoint) = try await firstReady(endpoints, identity: identity, hubKey: hubKey, timeout: timeout)
+        let (connection, endpoint) = try await LinkSessions.stream(identity: identity, hubKey: hubKey, endpoints: endpoints, timeout: timeout)
         defer { connection.cancel() }
         try await LinkQUIC.send(request, on: connection)
         return (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit), endpoint)
@@ -443,7 +458,7 @@ public enum LinkClient {
     /// Left to itself, Network.framework can reuse a local port from an earlier connection with
     /// the same address, even one another listener on this Mac holds by now. The handshake then
     /// waits on "address in use" until it times out, and trying again keeps the same port.
-    private static func anyLocalPort(_ parameters: NWParameters, for host: NWEndpoint.Host) -> NWParameters {
+    static func anyLocalPort(_ parameters: NWParameters, for host: NWEndpoint.Host) -> NWParameters {
         let any: NWEndpoint.Host
         switch host {
         case .ipv4: any = .ipv4(.any)
@@ -504,6 +519,87 @@ public enum LinkClient {
     }
 
     /// The first endpoint whose handshake completes wins; the rest are cancelled.
+    /// A connection that opens streams, to the first endpoint whose handshake completes.
+    static func firstReadyGroup(_ endpoints: [LinkEndpoint], identity: LinkIdentity, hubKey: LinkPublicKey,
+                                timeout: Duration) async throws -> (NWConnectionGroup, LinkEndpoint) {
+        let parameters = try LinkQUIC.parameters(identity: identity) { $0 == hubKey }
+        let deadline = ContinuousClock.now + timeout
+        return try await withThrowingTaskGroup(of: (NWConnectionGroup, LinkEndpoint)?.self) { attempts in
+            for endpoint in endpoints {
+                attempts.addTask {
+                    do { return try await group(to: endpoint, using: parameters, until: deadline).map { ($0, endpoint) } }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { return nil }
+                }
+            }
+            var timedOut = false
+            while let attempt = try await attempts.next() {
+                if let winner = attempt {
+                    attempts.cancelAll()
+                    // A later winner of the race still connected; only the first is kept.
+                    while let other = try? await attempts.next() { other?.0.cancel() }
+                    return winner
+                }
+                timedOut = timedOut || ContinuousClock.now >= deadline
+            }
+            try Task.checkCancellation()
+            if timedOut { throw LinkError("The Hub did not answer in time.", isUnreachable: true) }
+            throw LinkError("The Hub could not be reached.", isUnreachable: true)
+        }
+    }
+
+    /// Connects to one endpoint, or nil if it refuses the handshake or `deadline` passes. An
+    /// attempt where nothing listens yet, as while a Hub relaunches, never says so, so a fresh
+    /// one starts every second while the earlier ones keep trying; the first to connect wins.
+    private static func group(to endpoint: LinkEndpoint, using parameters: NWParameters,
+                              until deadline: ContinuousClock.Instant) async throws -> NWConnectionGroup? {
+        guard let port = NWEndpoint.Port(rawValue: endpoint.port) else { return nil }
+        let host = NWEndpoint.Host(endpoint.host)
+        let attempts = GroupAttempts()
+        let group = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<NWConnectionGroup?, Never>) in
+                @Sendable func finish(_ winner: NWConnectionGroup?) {
+                    for other in attempts.finish() where other !== winner { other.cancel() }
+                    continuation.resume(returning: winner)
+                }
+                @Sendable func attempt() {
+                    if attempts.isCancelled { return finish(nil) }
+                    let group = NWConnectionGroup(with: NWMultiplexGroup(to: .hostPort(host: host, port: port)),
+                                                  using: anyLocalPort(parameters, for: host))
+                    guard attempts.add(group) else { return group.cancel() }
+                    // The Hub opens no streams of its own, and a group without this never starts.
+                    group.newConnectionHandler = { $0.cancel() }
+                    group.stateUpdateHandler = { state in
+                        switch state {
+                        case .ready:
+                            group.stateUpdateHandler = nil
+                            if attempts.isOpen { finish(group) }
+                        case .waiting(let error) where error.isTLS, .failed(let error) where error.isTLS:
+                            if attempts.isOpen { finish(nil) }
+                        case .cancelled:
+                            if attempts.isCancelled, attempts.isOpen { finish(nil) }
+                        default: break
+                        }
+                    }
+                    group.start(queue: LinkQUIC.queue)
+                    LinkQUIC.queue.asyncAfter(deadline: .now() + 1) {
+                        if attempts.isOpen, ContinuousClock.now < deadline { attempt() }
+                    }
+                }
+                LinkQUIC.queue.async { attempt() }
+                let left = deadline - ContinuousClock.now
+                LinkQUIC.queue.asyncAfter(deadline: .now() + Double(left.components.seconds) + Double(left.components.attoseconds) / 1e18) {
+                    if attempts.isOpen { finish(nil) }
+                }
+            }
+        } onCancel: {
+            // An attempt not started yet sees the flag instead.
+            LinkQUIC.queue.async { attempts.cancel().forEach { $0.cancel() } }
+        }
+        if group == nil { try Task.checkCancellation() }
+        return group
+    }
+
     private static func firstReady(_ endpoints: [LinkEndpoint], identity: LinkIdentity, hubKey: LinkPublicKey,
                                    timeout: Duration) async throws -> (NWConnection, LinkEndpoint) {
         let parameters = try LinkQUIC.parameters(identity: identity) { $0 == hubKey }
@@ -556,6 +652,195 @@ public enum LinkClient {
             LinkQUIC.queue.asyncAfter(deadline: .now() + .milliseconds(Int(timeout.components.seconds * 1000))) {
                 finish(.failure(LinkError("The Hub did not answer in time.", isUnreachable: true)))
             }
+        }
+    }
+}
+
+/// One QUIC connection from a device to its Hub, kept open while the Hub is heard from: each
+/// request, subscription and channel is a stream of it, so only the first waits for a handshake.
+final class LinkSession: @unchecked Sendable {
+    /// How long a connection is trusted without a word from the Hub. Its subscription hears a
+    /// keep-alive every ten seconds; past this the Hub may be gone, as after a relaunch, and a
+    /// request on the old connection would wait for QUIC to give up on it.
+    static let trust: TimeInterval = LinkStream.keepAliveInterval * 1.5
+
+    let group: NWConnectionGroup
+    let endpoint: LinkEndpoint
+    private let lock = NSLock()
+    private var lastHeard = Date()
+    private var opened = 0
+    private var open = 0
+    private var ended = false
+    private var retired = false
+
+    init(group: NWConnectionGroup, endpoint: LinkEndpoint) {
+        self.group = group
+        self.endpoint = endpoint
+    }
+
+    var isTrusted: Bool {
+        lock.withLock { !ended && !retired && opened < LinkQUIC.streamLimit && Date().timeIntervalSince(lastHeard) < Self.trust }
+    }
+
+    func heard() { lock.withLock { lastHeard = Date() } }
+
+    /// The connection ended: nothing more opens on it.
+    func end() { lock.withLock { ended = true } }
+
+    /// Replaced by a newer connection: it keeps the streams it has, and closes after the last.
+    func retire() {
+        let idle = lock.withLock { () -> Bool in
+            retired = true
+            return open == 0
+        }
+        if idle { group.cancel() }
+    }
+
+    /// A new stream, ready to send on, or nil once the connection can open no more.
+    func stream() async -> NWConnection? {
+        guard let stream = NWConnection(from: group) else { return nil }
+        lock.withLock { opened += 1 }
+        let ready = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let once = Once()
+            stream.stateUpdateHandler = { state in
+                switch state {
+                case .ready: once.run { continuation.resume(returning: true) }
+                case .failed, .cancelled: once.run { continuation.resume(returning: false) }
+                default: break
+                }
+            }
+            stream.start(queue: LinkQUIC.queue)
+            // A stream opens without a word on the network; one that does not has nowhere to go.
+            LinkQUIC.queue.asyncAfter(deadline: .now() + 2) { once.run { continuation.resume(returning: false) } }
+        }
+        guard ready else {
+            stream.cancel()
+            return nil
+        }
+        lock.withLock { open += 1 }
+        LinkSessions.track(stream, in: self)
+        stream.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed, .cancelled: self?.close(stream)
+            default: break
+            }
+        }
+        return stream
+    }
+
+    private func close(_ stream: NWConnection) {
+        LinkSessions.untrack(stream)
+        let last = lock.withLock { () -> Bool in
+            open -= 1
+            return retired && open == 0
+        }
+        if last { group.cancel() }
+    }
+}
+
+/// The connection each device keeps to each Hub it talks to.
+enum LinkSessions {
+    private struct Key: Hashable {
+        let device: LinkPublicKey
+        let hub: LinkPublicKey
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var sessions: [Key: LinkSession] = [:]
+    nonisolated(unsafe) private static var streams: [ObjectIdentifier: LinkSession] = [:]
+    nonisolated(unsafe) private static var connected: [LinkPublicKey: Int] = [:]
+
+    /// How many connections have been made to `hub`, each costing a handshake.
+    static func handshakes(to hub: LinkPublicKey) -> Int { lock.withLock { connected[hub] ?? 0 } }
+
+    /// A stream to the Hub on the connection kept to it, connecting first if there is none it
+    /// trusts. A connection that can no longer open one is replaced once: nothing was sent on
+    /// it yet, so nothing can arrive twice.
+    static func stream(identity: LinkIdentity, hubKey: LinkPublicKey, endpoints: [LinkEndpoint],
+                       timeout: Duration) async throws -> (NWConnection, LinkEndpoint) {
+        let key = Key(device: identity.publicKey, hub: hubKey)
+        for _ in 0..<2 {
+            let session = try await session(for: key, identity: identity, endpoints: endpoints, timeout: timeout)
+            if let stream = await session.stream() { return (stream, session.endpoint) }
+            session.end()
+            replace(session, for: key, with: nil)
+        }
+        throw LinkError("The Hub could not be reached.", isUnreachable: true)
+    }
+
+    static func heard(on stream: NWConnection) {
+        lock.withLock { streams[ObjectIdentifier(stream)] }?.heard()
+    }
+
+    static func track(_ stream: NWConnection, in session: LinkSession) {
+        lock.withLock { streams[ObjectIdentifier(stream)] = session }
+    }
+
+    static func untrack(_ stream: NWConnection) {
+        lock.withLock { _ = streams.removeValue(forKey: ObjectIdentifier(stream)) }
+    }
+
+    private static func session(for key: Key, identity: LinkIdentity, endpoints: [LinkEndpoint],
+                                timeout: Duration) async throws -> LinkSession {
+        if let kept = lock.withLock({ sessions[key] }), kept.isTrusted, endpoints.contains(kept.endpoint) { return kept }
+        let (group, endpoint) = try await LinkClient.firstReadyGroup(endpoints, identity: identity, hubKey: key.hub, timeout: timeout)
+        let session = LinkSession(group: group, endpoint: endpoint)
+        group.stateUpdateHandler = { state in
+            switch state {
+            case .failed, .cancelled:
+                session.end()
+                replace(session, for: key, with: nil)
+            default: break
+            }
+        }
+        lock.withLock { connected[key.hub, default: 0] += 1 }
+        replace(lock.withLock { sessions[key] }, for: key, with: session)
+        return session
+    }
+
+    /// Puts `next` in place of `old`, unless another connection already took its place.
+    private static func replace(_ old: LinkSession?, for key: Key, with next: LinkSession?) {
+        let replaced = lock.withLock { () -> Bool in
+            guard sessions[key] === old else { return false }
+            sessions[key] = next
+            return true
+        }
+        if replaced { old?.retire() }
+    }
+}
+
+/// The connections tried at once to one endpoint. Touched only on LinkQUIC.queue, except to finish.
+private final class GroupAttempts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var groups: [NWConnectionGroup] = []
+    private var open = true
+    private var cancelled = false
+
+    var isOpen: Bool { lock.withLock { open } }
+    var isCancelled: Bool { lock.withLock { cancelled } }
+
+    func add(_ group: NWConnectionGroup) -> Bool {
+        lock.withLock {
+            if open { groups.append(group) }
+            return open
+        }
+    }
+
+    /// Closes the race, returning every attempt; only the first caller gets them.
+    func finish() -> [NWConnectionGroup] {
+        lock.withLock {
+            guard open else { return [] }
+            open = false
+            defer { groups = [] }
+            return groups
+        }
+    }
+
+    /// Ends every attempt without picking one; the waiting side finishes as they report it.
+    func cancel() -> [NWConnectionGroup] {
+        lock.withLock {
+            cancelled = true
+            return groups
         }
     }
 }

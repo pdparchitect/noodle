@@ -483,3 +483,119 @@ final class FrameBox: @unchecked Sendable {
         XCTAssertEqual(users.error, unknown)
     }
 }
+
+/// A device keeps one connection to its Hub and opens a stream on it for each request, so only
+/// the first request waits for a handshake.
+final class LinkSessionTests: XCTestCase {
+    private func echo(_ hub: LinkIdentity, port: UInt16 = 0) async throws -> LinkServer {
+        let server = try LinkServer(identity: hub, port: port, admits: { _ in true }) { _, request in
+            request == Data("subscribe".utf8) ? .stream { _ in } : .response(request)
+        }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        return server
+    }
+
+    /// QUIC lets a peer open only as many streams as the other side allows, and Network.framework
+    /// never raises the first allowance, which let a connection carry seven.
+    func testTheHubTakesManyStreamsOnOneConnection() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let server = try await echo(hub)
+        let port = try XCTUnwrap(NWEndpoint.Port(rawValue: try XCTUnwrap(server.port)))
+        let group = NWConnectionGroup(with: NWMultiplexGroup(to: .hostPort(host: "::1", port: port)),
+                                      using: try LinkQUIC.parameters(identity: device) { $0 == hub.publicKey })
+        group.newConnectionHandler = { $0.cancel() }
+        defer { group.cancel() }
+        try await within(.seconds(5)) {
+            await withCheckedContinuation { (ready: CheckedContinuation<Void, Never>) in
+                let once = Once()
+                group.stateUpdateHandler = { if case .ready = $0 { once.run { ready.resume() } } }
+                group.start(queue: LinkQUIC.queue)
+            }
+        }
+        for n in 0..<20 {
+            let stream = try XCTUnwrap(NWConnection(from: group))
+            try await within(.seconds(3)) {
+                await withCheckedContinuation { (ready: CheckedContinuation<Void, Never>) in
+                    let once = Once()
+                    stream.stateUpdateHandler = { if case .ready = $0 { once.run { ready.resume() } } }
+                    stream.start(queue: LinkQUIC.queue)
+                }
+            }
+            try await LinkQUIC.send(Data("request \(n)".utf8), on: stream)
+            let answer = try await LinkQUIC.receive(stream, limit: 1 << 10)
+            XCTAssertEqual(answer, Data("request \(n)".utf8))
+            stream.cancel()
+        }
+    }
+
+    /// Requests, a subscription and a channel all ride the one connection.
+    func testRequestsShareOneConnection() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let server = try await echo(hub)
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        for n in 0..<20 {
+            let (answer, _) = try await LinkClient.exchange(Data("request \(n)".utf8), identity: device, hubKey: hub.publicKey,
+                                                            endpoints: [endpoint])
+            XCTAssertEqual(answer, Data("request \(n)".utf8))
+        }
+        let events = try await LinkClient.subscribe(Data("subscribe".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        defer { events.cancel() }
+        let channel = try await LinkClient.channel(Data("subscribe".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        defer { channel.cancel() }
+        XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 1)
+    }
+
+    /// Video can fill the link, and answers queued behind it on the same connection would wait,
+    /// so a channel that asks for it gets a connection of its own.
+    func testAChannelOfItsOwnGetsItsOwnConnection() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let server = try await echo(hub)
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        _ = try await LinkClient.exchange(Data("status".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        let video = try await LinkClient.channel(Data("subscribe".utf8), identity: device, hubKey: hub.publicKey,
+                                                 endpoints: [endpoint], ownConnection: true)
+        defer { video.cancel() }
+        _ = try await LinkClient.exchange(Data("status".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 1)
+    }
+
+    /// A Hub that relaunched has forgotten the connection; the device notices it stopped hearing
+    /// from it and connects again instead of waiting on a connection that is gone.
+    func testRequestsReachAHubThatRelaunched() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let first = try await echo(hub)
+        let port = try XCTUnwrap(first.port)
+        let endpoint = LinkEndpoint(host: "::1", port: port)
+        _ = try await LinkClient.exchange(Data("before".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        first.stop()
+        try await Task.sleep(for: .seconds(LinkSession.trust + 1))
+        _ = try await echo(hub, port: port)
+        let answer = try await within(.seconds(10)) {
+            try await LinkClient.exchange(Data("after".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint]).response
+        }
+        XCTAssertEqual(answer, Data("after".utf8))
+        XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 2)
+    }
+}
+
+/// Fails instead of waiting past `limit`, leaving `body` to itself, since a wait on the network
+/// may not end when cancelled.
+func within<T: Sendable>(_ limit: Duration, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        let once = Once()
+        let work = Task {
+            do {
+                let value = try await body()
+                once.run { continuation.resume(returning: value) }
+            } catch {
+                once.run { continuation.resume(throwing: error) }
+            }
+        }
+        Task {
+            try? await Task.sleep(for: limit)
+            once.run { continuation.resume(throwing: LinkError("Still waiting after \(limit).")) }
+            work.cancel()
+        }
+    }
+}

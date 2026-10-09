@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.
 - The Sharing sheet in Edit Bot no longer shows a line saying who can talk to the bot.
 - Bots can no longer share a noodlet that has no preview; they are told to present it first, so its card shows a picture instead of a plain icon.
 - Remote Models: Custom sits apart from the named providers in the Add Account menu.

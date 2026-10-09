@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.
 - Games can read game controllers directly, as they do in Safari: analog sticks, every button, and several controllers for several players. Such a game no longer gets each press twice, as a key as well.
 - Games run faster on the phone and on a TV: they draw at most what a games console does, 720p on an iPhone and 1080p on an iPad or a TV, scaled up to fill the screen.
 
@@ -23,6 +24,7 @@
 - With a game controller connected, open a game that supports controllers, such as one made for several players: press a button: one player joins, not two. Connect a second controller: a second player can join. Show the game on a TV: the controllers keep working.
 - A game played only with keys still plays with a controller as before.
 - Open a full-screen game: while it loads, Done and the buttons are already in the top corners and stay there.
+- With the latest Noodle Hub, open several conversations one after another: each opens quicker than before. Leave the app for a minute, come back and open another: it still opens. Restart the Hub, wait a moment, and open a conversation: it opens without hanging.
 
 ## [0.25.0] - 2026-10-08
 
