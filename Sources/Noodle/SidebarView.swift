@@ -79,6 +79,7 @@ struct SidebarView: View {
         // How a window is opened decides its mode, so this also docks a floating one.
         Button("Open in New Window") { store.dockConversation(conversation.id) }
         Button("Float on Top") { store.floatConversation(conversation.id) }
+        Divider()
         if store.isPinned(conversation.id) {
             Button("Unpin") { store.setPinned(false, conversationID: conversation.id) }
         } else {
