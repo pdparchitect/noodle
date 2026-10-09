@@ -79,6 +79,22 @@ import NoodleCore
         XCTAssertFalse(elements(view).contains { labels($0).contains { $0.hasPrefix("Sort by") } })
     }
 
+    func testALinkCardInANarrowWindowKeepsTheAvatarInPlace() async throws {
+        let f = try fixture()
+        func avatarX(_ body: String) async throws -> CGFloat {
+            let message = ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id), body: body, delivery: .delivered)
+            let view = host(MessageBubble(message: message, hasConversationBackground: false,
+                selectedAttachmentID: .constant(nil), previewAttachment: { _, _ in }, showAgentProfile: { _ in })
+                .frame(width: 380).environment(f.store))
+            let avatar = try await control("Show \(f.a.displayName)'s profile", in: view)
+            return try XCTUnwrap((avatar.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue).minX
+                - view.window!.frame.minX
+        }
+        let plain = try await avatarX("Done.")
+        let card = try await avatarX("Done. https://mail.google.com/mail/u/0/#drafts")
+        XCTAssertEqual(card, plain, accuracy: 0.5)
+    }
+
     func testNotificationsAndPreviewsLeaveTablesOut() throws {
         let f = try fixture()
         let body = "Here you go:\n\n| Day | Messages |\n|---|---|\n| Sep 1 | 4 |\n\nAll **quiet**."

@@ -312,6 +312,9 @@ struct MessageBubble: View {
 
             if !isUser { Spacer(minLength: 120) }
         }
+        // A fixed-width card can make the row wider than a narrow window. Keep the avatar side
+        // in place and let the overflow eat into the spacer's side, rather than centring.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .onScrollVisibilityChange(threshold: 0.01) { visible in
             isVisible = visible
         }
