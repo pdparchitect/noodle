@@ -191,9 +191,6 @@ public struct HarnessInstallationRow: View {
                         Task { await setup.refresh([liveInstallation ?? installation]) }
                     }
                 }
-                if installation.isAvailable {
-                    updateGuide
-                }
                 if let activity = setup.activity[id] {
                     HStack {
                         if let fraction = setup.installProgress[id] {
@@ -391,6 +388,8 @@ public struct HarnessInstallationRow: View {
                     } else {
                         Button("Update Instructions") { showsUpdateGuide.toggle() }
                             .buttonStyle(.link)
+                            // A popover keeps the row, and so the Settings window, from resizing.
+                            .popover(isPresented: $showsUpdateGuide, arrowEdge: .bottom) { updateGuide }
                     }
                 }
                 if managed {
@@ -430,10 +429,9 @@ public struct HarnessInstallationRow: View {
         }
     }
 
-    @ViewBuilder private var updateGuide: some View {
-        let version = setup.snapshots[id]?.version
-        if version?.updateAvailable == true, showsUpdateGuide, !setup.isManaged(installation) {
-            let guide = HarnessVersionPolicy.updateGuide(for: installation)
+    private var updateGuide: some View {
+        let guide = HarnessVersionPolicy.updateGuide(for: installation)
+        return VStack(alignment: .leading, spacing: 8) {
             Text(guide.instructions).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let command = guide.command {
                 HarnessCommandView(command: command)
@@ -448,6 +446,8 @@ public struct HarnessInstallationRow: View {
             }
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }
+        .padding(20)
+        .frame(width: 440, alignment: .leading)
     }
 
     private var statusText: String {

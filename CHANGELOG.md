@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - **Choose Harnesses** applies its choices when it closes, so the Settings window no longer resizes and moves it while harnesses are turned on and off.
+- **Update Instructions** in Settings → Harness opens in a popover with the command to copy, instead of expanding the row and resizing the Settings window.
 
 ## [0.53.0] - 2026-10-09
 

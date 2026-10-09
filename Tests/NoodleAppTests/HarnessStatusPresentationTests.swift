@@ -39,6 +39,28 @@ import NoodleCore
         XCTAssertFalse(hasControl("Checking for updates…", in: view))
     }
 
+    func testUpdateInstructionsOpenInAPopoverWithoutGrowingTheRow() async throws {
+        let f = try fixture()
+        let installation = HarnessInstallation(provider: .codex, executablePath: "/fixtures/codex")
+        HarnessPresentationCache.save([.codex: .init(installation: installation, authentication: .authenticated,
+            version: .init(installedVersion: "0.153.4", latestVersion: "0.154.0"))], to: f.runtime.defaults)
+        let setup = HarnessSetupController(providers: [:], defaults: f.runtime.defaults)
+        let view = host(HarnessInstallationRow(store: f.store, installation: installation, liveInstallation: installation,
+            isRefreshing: false, setup: setup, install: {}).environment(f.store))
+        // Popovers only present from a window that is ordered in (still offscreen).
+        let window = try XCTUnwrap(view.window)
+        window.orderFront(nil)
+        press(try await control("Update Instructions", in: view))
+        var popover: NSView?
+        try await wait {
+            popover = NSApp.windows.filter { $0.isVisible && $0 !== window && $0.sheetParent == nil }
+                .compactMap(\.contentView).first { self.hasControl("Official Update Guide", in: $0) }
+            return popover != nil
+        }
+        XCTAssertFalse(hasControl("Official Update Guide", in: view), "The guide must not expand the row")
+        window.close()
+    }
+
     func testAppleRowNeverOffersAnInstall() async throws {
         let f = try fixture()
         let missing = HarnessInstallation(provider: .apple, executablePath: nil)
