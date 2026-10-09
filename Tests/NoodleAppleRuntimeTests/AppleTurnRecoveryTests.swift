@@ -167,6 +167,43 @@ final class AppleTurnRecoveryTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
     }
 
+    func testInboxWakeWithToollessEmptyReplyIsRecheckedOnce() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = RecoveryFixture([.text("", false), .text("", false)])
+        let control = AppleTurnControl()
+        let current = session(state, control: control, toggleableReasoning: true)
+        let activity = ActivityEvents()
+        let reply = try await AppleResponseRecovery.respond(session: current, prompt: Prompt("Quiet event."),
+            responseTokens: 256, control: control, allowsEmptyReply: true,
+            uncheckedInboxRetry: Prompt(AppleResponseRecovery.uncheckedInboxPrompt),
+            onEvent: { await activity.append($0) })
+        XCTAssertEqual(reply, "", "A still-empty recheck stays quiet")
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[1].contextOptions.reasoningLevel, .custom("no_think"))
+        let prompts = requests[1].transcript.filter { if case .prompt = $0 { return true }; return false }
+        XCTAssertEqual(prompts.count, 1, "The recheck keeps the original wake as the current prompt")
+        XCTAssertTrue(prompts[0].description.contains("Quiet event."))
+        XCTAssertTrue(requests[1].transcript.map(\.description).joined(separator: "\n").contains("Check Messenger once"),
+            "The nudge must reach the model as runtime guidance")
+        let statuses = await activity.values.compactMap { event -> String? in
+            if case .status(let title) = event { return title }; return nil
+        }
+        XCTAssertEqual(statuses, ["Generating response", "Retrying an unchecked inbox notification (1/1)", "Generating response"])
+    }
+
+    func testQuietFinishAfterToolUseIsNotRechecked() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = RecoveryFixture([.call("check inbox"), .text("", false)])
+        let control = AppleTurnControl()
+        let reply = try await AppleResponseRecovery.respond(session: session(state, control: control),
+            prompt: Prompt("Quiet event."), responseTokens: 256, control: control, allowsEmptyReply: true,
+            uncheckedInboxRetry: Prompt(AppleResponseRecovery.uncheckedInboxPrompt))
+        XCTAssertEqual(reply, "")
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 2, "A tool-using quiet finish already did its work")
+    }
+
     func testThrownErrorAndCancellationAreNeverRetried() async throws {
         guard #available(macOS 27, *) else { return }
         for step in [RecoveryFixture.Step.failure, .cancel] {
