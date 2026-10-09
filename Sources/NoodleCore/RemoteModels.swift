@@ -314,9 +314,17 @@ public final class CustomProvider: RemoteProvider, @unchecked Sendable {
         let data = Data(body.joined(separator: "\n").utf8)
         guard response.status == 200 else { throw ChatCompletionsAPI().error(status: response.status, body: data, headers: response.headers) }
         let listed = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["data"] as? [[String: Any]] ?? []
-        return listed.compactMap { $0["id"] as? String }
-            .filter { RemoteModelID("remote/\(id)/\(UUID().uuidString.lowercased())/\($0)") != nil }
-            .map { RemoteModelInfo.custom(id: $0) }
+        return listed.compactMap { row -> RemoteModelInfo? in
+            guard let id = row["id"] as? String,
+                  RemoteModelID("remote/\(id)/\(UUID().uuidString.lowercased())/\(id)") != nil else { return nil }
+            // vLLM reports max_model_len; TensorFold and other servers
+            // context_length. Without either, details stay at the defaults
+            // a person adjusts by hand.
+            guard let context = (row["context_length"] ?? row["max_model_len"]) as? Int, context > 0 else {
+                return RemoteModelInfo.custom(id: id)
+            }
+            return RemoteModelInfo.custom(id: id, contextSize: context, maximumOutputTokens: min(context / 4, 8_192))
+        }
     }
 
     /// A server without a model list is let through; only a refused key stops the account.

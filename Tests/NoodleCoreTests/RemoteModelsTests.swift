@@ -229,6 +229,17 @@ final class RemoteModelsTests: XCTestCase {
         XCTAssertNil(RemoteProviders.provider(id: "custom", baseURL: nil), "A custom account cannot be reached without its address")
     }
 
+    func testCustomServersTakeTheContextTheyReport() async throws {
+        let lab = try XCTUnwrap(RemoteProviders.provider(id: "custom", baseURL: URL(string: "http://lab.local:8000/v1")))
+        let listed = StubTransport(responses: [(200,
+            #"{"data":[{"id":"a","max_model_len":1048576},{"id":"b","context_length":32768},{"id":"c","context_length":8192},{"id":"d"}]}"#)])
+        let suggested = try await lab.findModels(transport: listed)
+        XCTAssertEqual(suggested[0], .custom(id: "a", contextSize: 1_048_576, maximumOutputTokens: 8_192), "vLLM's max_model_len")
+        XCTAssertEqual(suggested[1], .custom(id: "b", contextSize: 32_768, maximumOutputTokens: 8_192))
+        XCTAssertEqual(suggested[2], .custom(id: "c", contextSize: 8_192, maximumOutputTokens: 2_048), "Output stays inside the context")
+        XCTAssertEqual(suggested[3], .custom(id: "d"), "Servers that report no context keep the defaults")
+    }
+
     func testCustomAccountsKeepTheirAddressKeyAndDescribedModels() throws {
         let url = try XCTUnwrap(URL(string: "https://llm.example.com/v1"))
         for invalid in ["", "llm.example.com", "ftp://llm.example.com", "https://"] {
