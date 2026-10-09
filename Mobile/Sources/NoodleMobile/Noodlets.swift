@@ -134,6 +134,7 @@ struct NoodletDeviceScreen: View {
     @State private var tvAvailable = false
     @State private var connectingTV = false
     @State private var gameMenu = GameMenu()
+    @State private var lender = GamepadLender()
     @Environment(\.noodletMenu) private var noodletMenu
     /// What the noodlet declares, while the person is asked about it.
     @State private var asking: (manifest: NoodletManifest, answer: CheckedContinuation<Bool, Never>)?
@@ -284,13 +285,14 @@ struct NoodletDeviceScreen: View {
                     // Moving to the other screen takes the first responder from it.
                     page.web.becomeFirstResponder()
                 }
+                if onTV { lender.lend(to: page.web) { [gameMenu] in gameMenu.selected == nil } } else { lender.stop() }
             }
         }
         .onChange(of: NoodletPlayer.keepsAwake(onTV: onTV, controllerConnected: hardware.hasController), initial: true) { _, awake in
             KeepAwake.set(awake)
         }
         .onDisappear {
-            answer(false); hardware.detach(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil)
+            answer(false); hardware.detach(); lender.stop(); page?.stop(); NoodletSound.stop(); ScreenOrientation.hold(nil)
             KeepAwake.set(false)
         }
     }
@@ -355,19 +357,53 @@ struct NoodletDeviceScreen: View {
 }
 
 /// Tells the app once a page asks for controllers through the Gamepad API: a game that does reads
-/// them itself from the first press, which would otherwise reach it as a key as well.
+/// them itself from the first press, which would otherwise reach it as a key as well. Also lets the
+/// app lend the page pads of its own, as `LentGamepads` describes.
 final class ControllerReader: NSObject, WKScriptMessageHandler {
     static let name = "noodleControllers"
     static let script = """
         (() => {
           let asked = false;
+          let lent = null;
+          // Built on WebKit's own prototypes, so a game checking what it was given is satisfied.
+          const make = (type, fields) => {
+            const object = Object.create(type ? type.prototype : Object.prototype);
+            for (const [key, value] of Object.entries(fields)) {
+              Object.defineProperty(object, key, { value, writable: true, enumerable: true });
+            }
+            return object;
+          };
+          const announce = (type, gamepad) => {
+            const event = new Event(type);
+            Object.defineProperty(event, 'gamepad', { value: gamepad });
+            dispatchEvent(event);
+          };
           navigator.getGamepads = function () {
             if (!asked) {
               asked = true;
               window.webkit.messageHandlers.\(name).postMessage(true);
             }
-            return Navigator.prototype.getGamepads.call(navigator);
+            return lent ? lent.slice() : Navigator.prototype.getGamepads.call(navigator);
           };
+          // A pad stays the same object while lent, as WebKit's do, so one kept from its event keeps up.
+          Object.defineProperty(window, '__noodleLendPads', { value: (pads) => {
+            const before = lent || [];
+            lent = pads && pads.map((pad, index) => {
+              const gamepad = before[index] || make(window.Gamepad, {
+                id: '', index, connected: true, mapping: 'standard', timestamp: 0, axes: [], buttons: [], vibrationActuator: null,
+              });
+              gamepad.id = pad.id;
+              gamepad.axes = pad.axes;
+              // Pressed as Chrome counts a trigger: past an eighth of the way.
+              gamepad.buttons = pad.buttons.map((value) => make(window.GamepadButton, { value, pressed: value > 0.12, touched: value > 0 }));
+              gamepad.timestamp = performance.now();
+              return gamepad;
+            });
+            before.forEach((gamepad, index) => {
+              if (!lent || !lent[index]) { gamepad.connected = false; announce('gamepaddisconnected', gamepad); }
+            });
+            (lent || []).forEach((gamepad, index) => { if (!before[index]) announce('gamepadconnected', gamepad); });
+          } });
         })();
         """
     private let found: () -> Void

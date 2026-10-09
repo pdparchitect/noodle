@@ -1,6 +1,9 @@
 import GameController
 import HubLink
+import NoodletRuntime
+import Surface
 import UIKit
+import WebKit
 import XCTest
 
 @testable import NoodleMobile
@@ -123,5 +126,74 @@ import XCTest
         XCTAssertFalse(NoodletPlayer.keepsAwake(onTV: false, controllerConnected: false))
         XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: true, controllerConnected: false))
         XCTAssertTrue(NoodletPlayer.keepsAwake(onTV: false, controllerConnected: true))
+    }
+}
+
+/// WebKit gives a page controllers only while it is the first responder, which a page on the TV
+/// never is, so the phone lends it the controllers in hand as Gamepad API pads.
+@MainActor final class LentGamepadTests: XCTestCase {
+    /// A controller reads as a standard pad: sticks with down positive, every button by position,
+    /// except View, which opens Noodle's menu.
+    func testAControllerReadsAsAStandardPad() throws {
+        let controller = GCController.withExtendedGamepad()
+        let full = try XCTUnwrap(controller.extendedGamepad)
+        full.buttonA.setValue(1)
+        full.rightTrigger.setValue(0.5)
+        full.dpad.setValueForXAxis(-1, yAxis: 0)
+        full.leftThumbstick.setValueForXAxis(0.25, yAxis: 1)
+        full.buttonOptions?.setValue(1)
+
+        let pads = LentGamepads.pads([controller, GCController.withMicroGamepad()], playing: true)
+        XCTAssertEqual(pads.count, 1)
+        let pad = pads[0]
+        XCTAssertEqual(pad.buttons.count, 17)
+        XCTAssertEqual(pad.buttons[0], 1)
+        XCTAssertEqual(pad.buttons[7], 0.5)
+        XCTAssertEqual(pad.buttons[14], 1)
+        XCTAssertEqual(pad.buttons[8], 0)
+        XCTAssertEqual(pad.axes, [0.25, -1, 0, 0])
+
+        // While Noodle's menu is open the pad stays, let go.
+        let paused = LentGamepads.pads([controller], playing: false)
+        XCTAssertEqual(paused.count, 1)
+        XCTAssertEqual(paused[0].buttons, Array(repeating: 0, count: 17))
+        XCTAssertEqual(paused[0].axes, [0, 0, 0, 0])
+    }
+
+    /// A page lent pads reads them from `getGamepads()` as real ones and hears them come and go;
+    /// a pad it kept from the event follows the controller.
+    func testAPageReadsTheLentPads() async throws {
+        let configuration = WKWebViewConfiguration()
+        NoodletDeviceScreen.configure(configuration, for: NoodletManifest(title: "Game"))
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+        web.loadHTMLString("""
+            <script>
+            var heard = [], kept = null;
+            addEventListener('gamepadconnected', e => { heard.push('+' + e.gamepad.index); kept = e.gamepad; });
+            addEventListener('gamepaddisconnected', e => heard.push('-' + e.gamepad.index));
+            </script>
+            """, baseURL: nil)
+        for _ in 0..<100 where web.isLoading || web.url == nil { try await Task.sleep(for: .milliseconds(50)) }
+        try await Task.sleep(for: .milliseconds(200))
+
+        var pad = LentGamepads.Pad(id: "Xbox Wireless Controller", buttons: Array(repeating: 0, count: 17), axes: [0, 0, 0, 0])
+        pad.buttons[0] = 1
+        _ = try await web.evaluateJavaScript(LentGamepads.script([pad]))
+        let read = try await web.evaluateJavaScript("""
+            (() => { const p = navigator.getGamepads().filter(Boolean);
+              return [p.length, p[0].id, p[0].mapping, p[0].connected, p[0].buttons[0].pressed, p[0].buttons[1].pressed,
+                      p[0] instanceof Gamepad, p[0].buttons[0] instanceof GamepadButton, p[0] === kept].join(); })()
+            """) as? String
+        XCTAssertEqual(read, "1,Xbox Wireless Controller,standard,true,true,false,true,true,true")
+
+        pad.buttons[0] = 0
+        pad.axes[0] = 1
+        _ = try await web.evaluateJavaScript(LentGamepads.script([pad]))
+        let kept = try await web.evaluateJavaScript("[kept.buttons[0].pressed, kept.axes[0]].join()") as? String
+        XCTAssertEqual(kept, "false,1")
+
+        _ = try await web.evaluateJavaScript(LentGamepads.script(nil))
+        let gone = try await web.evaluateJavaScript("[navigator.getGamepads().filter(Boolean).length, heard.join(' ')].join()") as? String
+        XCTAssertEqual(gone, "0,+0 -0")
     }
 }

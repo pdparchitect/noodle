@@ -6,6 +6,14 @@
 
 - Edit Spaces… in the title menu puts your spaces in any order by dragging, renames them and deletes them, replacing Rename Space… and Delete Space. The order follows you to your other devices.
 
+### Fixed
+
+- Games that read game controllers directly work on a TV: the controllers no longer stop when the game moves from the phone to the TV.
+
+### What to Test
+
+- With a game controller connected, open a game that supports controllers and show it on a TV: the controller plays the game there, sticks and all, and a second controller adds a second player. Press View: the menu opens and the game doesn't react. Bring the game back to the phone: the controllers keep working, one player per controller.
+
 ## [0.26.0] - 2026-10-08
 
 ### Changed

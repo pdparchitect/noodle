@@ -2,6 +2,7 @@ import GameController
 import HubLink
 import SwiftUI
 import UIKit
+import WebKit
 
 /// A TV the phone reaches by Screen Mirroring or a cable: an open game plays there while the
 /// phone becomes its controller, and otherwise the TV mirrors the phone.
@@ -296,5 +297,73 @@ struct GameMenuOverlay: View {
         if let selected = gameMenu.selected {
             if menu.fromPlay { ConsoleMenuView(menu: menu, selected: selected) } else { NoodletMenuView(menu: menu, selected: selected) }
         }
+    }
+}
+
+/// The controllers in hand as Gamepad API pads, lent to a game on the TV: WebKit gives a page
+/// controllers only while it is the first responder, which a page in the TV's window, never the
+/// key one, cannot be.
+enum LentGamepads {
+    struct Pad: Codable, Equatable {
+        var id: String
+        /// In the standard layout: A, B, X, Y, bumpers, triggers, View, Menu, stick presses, d-pad, home.
+        var buttons: [Float]
+        /// Each stick across and then down.
+        var axes: [Float]
+    }
+
+    /// One pad for each game controller; while the game is not `playing`, as with Noodle's menu
+    /// open over it, they stay but are let go.
+    static func pads(_ controllers: [GCController], playing: Bool) -> [Pad] {
+        controllers.compactMap { controller in
+            guard let full = controller.extendedGamepad else { return nil }
+            // View opens Noodle's menu and the system takes home, so the game sees neither.
+            let buttons = [full.buttonA, full.buttonB, full.buttonX, full.buttonY, full.leftShoulder, full.rightShoulder,
+                           full.leftTrigger, full.rightTrigger, nil, full.buttonMenu, full.leftThumbstickButton,
+                           full.rightThumbstickButton, full.dpad.up, full.dpad.down, full.dpad.left, full.dpad.right, nil]
+            let axes = [full.leftThumbstick.xAxis.value, -full.leftThumbstick.yAxis.value,
+                        full.rightThumbstick.xAxis.value, -full.rightThumbstick.yAxis.value]
+            return Pad(id: controller.vendorName ?? controller.productCategory,
+                       buttons: buttons.map { playing ? $0?.value ?? 0 : 0 }, axes: playing ? axes : [0, 0, 0, 0])
+        }
+    }
+
+    /// Gives the page `pads` in place of WebKit's, or nil to give it WebKit's back.
+    static func script(_ pads: [Pad]?) -> String {
+        let json = pads.flatMap { try? JSONEncoder().encode($0) }.flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+        return "window.__noodleLendPads && window.__noodleLendPads(\(json)); 0"
+    }
+}
+
+/// Lends a game on the TV the controllers in hand, reading them every frame and telling the page
+/// only what changed.
+@MainActor final class GamepadLender: NSObject {
+    private var web: WKWebView?
+    private var playing: () -> Bool = { true }
+    private var link: CADisplayLink?
+    private var lent: [LentGamepads.Pad]?
+
+    func lend(to web: WKWebView, playing: @escaping () -> Bool) {
+        self.web = web
+        self.playing = playing
+        guard link == nil else { return }
+        link = CADisplayLink(target: self, selector: #selector(read))
+        link?.add(to: .main, forMode: .common)
+    }
+
+    /// Gives the page WebKit's controllers back.
+    func stop() {
+        link?.invalidate()
+        link = nil
+        if lent != nil { web?.evaluateJavaScript(LentGamepads.script(nil)) }
+        lent = nil
+        web = nil
+    }
+
+    @objc private func read() {
+        let pads = LentGamepads.pads(GCController.controllers(), playing: playing())
+        guard pads != lent else { return }
+        lent = pads
+        web?.evaluateJavaScript(LentGamepads.script(pads))
     }
 }
