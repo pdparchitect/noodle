@@ -414,6 +414,8 @@ import os
     private func register(_ stream: LinkStream) {
         let id = ObjectIdentifier(stream)
         streams[id] = stream
+        // The device waits for a first word, so it hears whatever is pushed from here on.
+        stream.send(Data())
         // The bots a device hosts are online while it follows the Hub.
         bots?.hostsChanged()
         stream.onClose { [weak self] in

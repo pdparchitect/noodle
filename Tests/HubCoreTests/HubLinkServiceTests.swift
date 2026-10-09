@@ -194,6 +194,18 @@ import XCTest
         await fulfillment(of: [ended], timeout: 5)
     }
 
+    /// Events pushed the moment a subscription returns reach it, rather than going out before the
+    /// Hub has taken the stream on.
+    func testASubscriptionIsHeardFromTheMomentItReturns() async throws {
+        let (hub, link, device) = try await fixture()
+        let pairing = HubPairing(directory: device, deviceName: "Mac")
+        await pairing.join(link.invite(try hub.access.addUser(named: "Ada")).url().absoluteString)
+        let paired = try XCTUnwrap(hub.access.devices.first)
+        clock = clock.addingTimeInterval(HubLinkService.presenceWindow + 1)
+        _ = try await pairing.subscribe()
+        XCTAssertTrue(link.isConnected(paired))
+    }
+
     func testInvitationsCarryTheManualAddressAndTheKey() async throws {
         let (hub, link, _) = try await fixture()
         link.manualAddress = "hub.example.com:4000"

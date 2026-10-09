@@ -23,6 +23,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Changes made just as the app connects to a Noodle Hub, such as a conversation pinned on another device, are no longer missed.
 - Bots no longer miss new messages because their app never showed them how to read Messenger: each wake-up now points them at the Messenger guide. Thanks to Brad Hallett for finding this.
 - In a narrow window, a bot's picture beside a link card no longer slides out to the window's edge.
 

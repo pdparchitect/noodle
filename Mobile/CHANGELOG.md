@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Changes made just as the app connects to a Noodle Hub, such as a conversation pinned on another device, are no longer missed.
 - Games that read game controllers directly work on a TV: the controllers no longer stop when the game moves from the phone to the TV.
 
 ### What to Test

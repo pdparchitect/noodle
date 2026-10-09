@@ -320,7 +320,19 @@ public final class LinkServer: @unchecked Sendable {
     }
 
     private func serve(_ stream: NWConnection) async {
-        guard let key = LinkQUIC.peerKey(of: stream), let request = try? await LinkQUIC.receiveRequest(stream) ?? nil else {
+        guard let key = LinkQUIC.peerKey(of: stream) else {
+            stream.cancel()
+            return
+        }
+        // A connection outlives the handshake that let it in, so each stream is checked again: a
+        // removed device or a used invitation reaches nothing on the connection it already has.
+        // Resetting the stream, rather than finishing it, fails the read on the device's side.
+        guard admits(key) else {
+            (stream.metadata(definition: NWProtocolQUIC.definition) as? NWProtocolQUIC.Metadata)?.streamApplicationErrorCode = 1
+            stream.cancel()
+            return
+        }
+        guard let request = try? await LinkQUIC.receiveRequest(stream) ?? nil else {
             stream.cancel()
             return
         }
@@ -348,14 +360,16 @@ public final class LinkSubscription: Sendable {
     public let frames: AsyncThrowingStream<Data, Error>
     public let endpoint: LinkEndpoint
     private let connection: NWConnection
+    private let firstWord = FirstWord()
 
     init(connection: NWConnection, endpoint: LinkEndpoint) {
         self.connection = connection
         self.endpoint = endpoint
-        frames = AsyncThrowingStream { continuation in
+        frames = AsyncThrowingStream { [firstWord] continuation in
             let reader = Task {
                 do {
                     while let header = try await LinkQUIC.read(4, from: connection) {
+                        firstWord.resolve(.success(()))
                         // A Hub that refuses answers once, in JSON, instead of opening the stream.
                         if header.first == UInt8(ascii: "{") {
                             let response = try LinkProtocol.decodeResponse(header + (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit)))
@@ -369,8 +383,10 @@ public final class LinkSubscription: Sendable {
                         guard let payload = try await LinkQUIC.read(length, from: connection) else { break }
                         continuation.yield(payload)
                     }
+                    firstWord.resolve(.failure(LinkError("The Hub ended the stream.")))
                     continuation.finish()
                 } catch {
+                    firstWord.resolve(.failure(error))
                     continuation.finish(throwing: error)
                 }
             }
@@ -381,7 +397,45 @@ public final class LinkSubscription: Sendable {
         }
     }
 
+    /// Returns once the Hub first writes down the stream, even only to keep it alive, and throws
+    /// if it refuses or the stream ends first. A Hub writes as soon as it has taken the stream on,
+    /// so what it pushes from then on arrives.
+    public func heard() async throws {
+        try await withTaskCancellationHandler {
+            try await firstWord.wait()
+        } onCancel: { [connection] in
+            connection.cancel()
+        }
+    }
+
     public func cancel() { connection.cancel() }
+}
+
+/// The outcome of a subscription's first read, kept for whoever waits on it.
+private final class FirstWord: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<Void, Error>?
+    private var waiting: [CheckedContinuation<Void, Error>] = []
+
+    func resolve(_ outcome: Result<Void, Error>) {
+        let resumed = lock.withLock { () -> [CheckedContinuation<Void, Error>] in
+            guard result == nil else { return [] }
+            result = outcome
+            defer { waiting = [] }
+            return waiting
+        }
+        resumed.forEach { $0.resume(with: outcome) }
+    }
+
+    func wait() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let known = lock.withLock { () -> Result<Void, Error>? in
+                if result == nil { waiting.append(continuation) }
+                return result
+            }
+            if let known { continuation.resume(with: known) }
+        }
+    }
 }
 
 /// A stream both ways: the Hub pushes frames, and this side sends its own on the same stream,

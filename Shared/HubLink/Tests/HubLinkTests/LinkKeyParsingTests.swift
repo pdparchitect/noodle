@@ -51,12 +51,15 @@ final class LinkKeyParsingTests: XCTestCase {
         // The same path with the real key gets in, so a refusal below is the key's doing.
         let genuine = try await send(Data("genuine".utf8), as: try paired.secIdentity(), to: port)
         XCTAssertEqual(genuine, Data("genuine".utf8))
+        // The gate is asked at the handshake and again for each stream.
+        XCTAssertEqual(Set(presented.frames), [paired.publicKey.x963])
+        let checked = presented.frames.count
 
         let forged = try identity(of: thief, alsoPresenting: paired.publicKey)
         let stolen = try await send(Data("stolen".utf8), as: forged, to: port)
         XCTAssertNil(stolen)
         XCTAssertEqual(requests.frames, [Data("genuine".utf8)])
-        XCTAssertEqual(presented.frames, [paired.publicKey.x963, thief.publicKey.x963])
+        XCTAssertEqual(Set(presented.frames.dropFirst(checked)), [thief.publicKey.x963])
     }
 
     private func certificate(_ key: some SigningKey) throws -> SecCertificate {

@@ -342,11 +342,18 @@ import Observation
         return channel
     }
 
-    /// Opens a stream for a request the Hub answers with a stream.
+    /// Opens a stream for a request the Hub answers with a stream, returning once the Hub has taken
+    /// it on.
     public func stream(_ request: LinkRequest) async throws -> AsyncThrowingStream<LinkEvent, Error> {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
         let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(request), identity: try identity(),
                                                           hubKey: hub.key, endpoints: hub.endpoints)
+        do {
+            try await subscription.heard()
+        } catch {
+            subscription.cancel()
+            throw error
+        }
         endpoint = subscription.endpoint
         return AsyncThrowingStream { continuation in
             let reader = Task {
