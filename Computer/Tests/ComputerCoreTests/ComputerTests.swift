@@ -2,14 +2,14 @@ import XCTest
 @testable import ComputerCore
 
 final class ComputerTests: XCTestCase {
-    func testDesktopResizesWithWindowOnlyWhenChosen() throws {
+    func testDesktopResizesWithWindowUnlessTurnedOff() throws {
         var computer = ComputerTemplate.desktop.makeComputer()
-        XCTAssertFalse(computer.resizesDesktop)
+        XCTAssertTrue(computer.resizesDesktop)
         let saved = try JSONEncoder().encode(computer)
         XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("resizesDesktopWithWindow"))
-        XCTAssertFalse(try JSONDecoder().decode(Computer.self, from: saved).resizesDesktop)
-        computer.resizesDesktopWithWindow = true
-        XCTAssertTrue(try JSONDecoder().decode(Computer.self, from: JSONEncoder().encode(computer)).resizesDesktop)
+        XCTAssertTrue(try JSONDecoder().decode(Computer.self, from: saved).resizesDesktop)
+        computer.resizesDesktopWithWindow = false
+        XCTAssertFalse(try JSONDecoder().decode(Computer.self, from: JSONEncoder().encode(computer)).resizesDesktop)
     }
 
     func testAppearanceRoundTripAndBounds() throws {

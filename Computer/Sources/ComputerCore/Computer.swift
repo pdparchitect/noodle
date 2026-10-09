@@ -79,9 +79,9 @@ public struct Computer: Codable, Identifiable, Equatable, Sendable {
     public var hub: Bool?
     /// Whom Noodle Hub keeps it for, as the Hub last said; listed under them.
     public var hubOwner: HubOwner?
-    /// A Linux desktop follows its window's size instead of keeping its own resolution.
+    /// A Linux desktop follows its window's size unless this is turned off; then it keeps its own resolution.
     public var resizesDesktopWithWindow: Bool?
-    public var resizesDesktop: Bool { resizesDesktopWithWindow ?? false }
+    public var resizesDesktop: Bool { resizesDesktopWithWindow ?? true }
 
     public init(id: UUID = UUID(), name: String, kind: ComputerKind, cpuCount: Int = 4,
                 memoryGiB: Int = 4, diskGiB: Int = 64, networkEnabled: Bool = true,

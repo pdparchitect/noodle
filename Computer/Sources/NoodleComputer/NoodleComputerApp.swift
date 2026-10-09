@@ -119,17 +119,18 @@ enum ComputerLaunchCheck {
   static let selfTest = "eaf0760032ad43d55e3bbcf4d5153069c67652bdeb968530d47be859a94ef5df"  // --self-test
   static let offline = "aff7d00b56394f5a96dca22be6856e0950b37524abb5b2ef434d27981a0586f1"  // --offline
   static let windows = "c562e5dea2f17ee2f2ee86b14c618a6cc35bcd5e86c1a1a00c7c875c1b8bd4b1"  // --windows-test
+  static let virgl = "ffbd426929bff23cd83980b77dc29a3ebbda84f9990726ab2cd4c6f20c869db8"  // --virgl-test
   /// A failure of any of these ends the process with an error instead of showing it in the window.
   static let exitOnFailure = [
     updaterUI, emptyLibrary, libraryLayout, providerIntegration, creationForm,
-    localMacCreationPreview, desktopSmoke, selfTest, overlay, latestImages, configuration, downloadProgress, windows
+    localMacCreationPreview, desktopSmoke, selfTest, overlay, latestImages, configuration, downloadProgress, windows, virgl
   ]
   static var keepsTestWindow: Bool { requested(keepTestWindow) }
   /// Every check that runs in place of the app; the rest only modify one of these.
   private static let verificationRuns = [
     updaterUI, files, providerIntegration, providerSnapshot, libraryLayout, emptyLibrary,
     appearancePreview, localMacCreationPreview, creationForm, desktopSmoke, downloadProgress,
-    linuxBoot, configuration, overlayUI, latestImages, overlay, selfTest, windows
+    linuxBoot, configuration, overlayUI, latestImages, overlay, selfTest, windows, virgl
   ]
   #else
   static let exitOnFailure = [updaterUI]
@@ -369,6 +370,17 @@ struct ComputerRootView: View {
         }
         if ComputerLaunchCheck.requested(ComputerLaunchCheck.desktopSmoke) {
           try await ComputerSmokeTest.checkDesktop()
+          NSApplication.shared.terminate(nil)
+          return
+        }
+        if ComputerLaunchCheck.requested(ComputerLaunchCheck.virgl) {
+          if VirglCheck.isInteractive {
+            let model = try await VirglCheck.interactive()
+            store = model
+            ComputerAppDelegate.store = model
+            return
+          }
+          try await VirglCheck.run()
           NSApplication.shared.terminate(nil)
           return
         }
@@ -726,7 +738,11 @@ struct ComputerDetailView: View {
           // The VM runs without its view, and a hidden view would still set the pointer
           // for the Terminal or Files shown above it, so show it only for Desktop.
           if session.displayMode == .desktop {
-            VirtualMachineDisplay(machine: machine, resizes: session.computer.resizesDesktop, native: session.display)
+            if #available(macOS 27, *), let gpu = session.display?.virgl, let queue = session.display?.machineQueue {
+              VirglDisplay(gpu: gpu, machine: machine, queue: queue, resizes: session.computer.resizesDesktop, native: session.display)
+            } else {
+              VirtualMachineDisplay(machine: machine, resizes: session.computer.resizesDesktop, native: session.display)
+            }
           }
           if session.showingFiles, session.phase == .running, let runtime = session.container {
             ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
@@ -1051,12 +1067,22 @@ struct VirtualMachineDisplay: NSViewRepresentable {
   }
 }
 
+/// The view that shows a Linux desktop: VZ's own, or the one for the app's 3D GPU.
+@MainActor protocol DesktopDisplayView: NSView {
+  var displayedMachine: VZVirtualMachine? { get }
+  var followsWindowSize: Bool { get }
+  /// Where ⌘C and ⌘V copy to and paste from.
+  var pasteboard: NSPasteboard { get set }
+}
+
 /// The desktop's own view, which turns ⌘C and ⌘V, and Copy and Paste in the Edit menu,
 /// into copy and paste between the Mac and the guest. The guest sees the Mac clipboard
 /// only when someone pastes it.
-final class DesktopMachineView: VZVirtualMachineView {
+final class DesktopMachineView: VZVirtualMachineView, DesktopDisplayView {
   var native: NativeDisplay?
   var pasteboard = NSPasteboard.general
+  var displayedMachine: VZVirtualMachine? { virtualMachine }
+  var followsWindowSize: Bool { automaticallyReconfiguresDisplay }
 
   // The Edit menu, and its ⌘C and ⌘V, reach the focused view as these actions.
   @objc func copy(_ sender: Any?) { transfer(copying: true) }
@@ -1110,7 +1136,7 @@ struct NewComputerView: View {
   @State private var disk: Int
   @State private var advanced = false
   @State private var network = true
-  @State private var resizesDesktop = false
+  @State private var resizesDesktop = true
   @State private var failure: String?
   @State private var appearance = ComputerAppearance()
   init(store: ComputerStore) {

@@ -104,9 +104,13 @@ The optional description (up to 500 characters) says what the computer is for,
 such as which project it builds. Assigned bots see it with the name and use it to
 choose the right computer. It is not shown on preview cards in conversations.
 
-A Desktop computer keeps its own screen resolution and scales to fit its window.
-Turn on **Resize desktop with window**, when creating the computer or in its editor,
-to make the desktop follow the window's size instead.
+A Desktop computer follows its window's size. Turn off **Resize desktop with
+window**, when creating the computer or in its editor, to keep its own screen
+resolution instead, scaled to fit the window.
+
+On macOS 27 or later, a Desktop computer draws with this Mac's graphics processor:
+the desktop and apps that use OpenGL run faster and leave the Mac's processor
+freer. The browser still draws without it.
 
 Choose **Upgrade** from the computer's context menu or editor to fetch its latest
 image; the list shows **Upgrade available** when there is one. The computer stops

@@ -42,3 +42,6 @@ Computer/Resources/Windows/drivers/**/*.exe filter=lfs diff=lfs merge=lfs -text
 Computer/Resources/Windows/drivers/**/*.dll filter=lfs diff=lfs merge=lfs -text
 # Byte for byte: the signed catalogues above hash these, line endings included
 Computer/Resources/Windows/drivers/**/*.inf -text
+
+# Noodle Computer's vendored build tools (Python wheels)
+Computer/Vendor/*.whl filter=lfs diff=lfs merge=lfs -text

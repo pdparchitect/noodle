@@ -6,21 +6,27 @@ import Foundation
 import Surface
 import Virtualization
 
-/// Gives a Linux desktop's VM a virtio GPU with USB keyboard and pointer. The Mac shows
-/// the GPU in a VZVirtualMachineView; agents and remote viewers use `surface` instead,
-/// because that view cannot be captured.
+/// Gives a Linux desktop's VM a virtio GPU with USB keyboard and pointer. On macOS 27 that is the app's own 3D GPU,
+/// shown by VirglDisplay; before it, VZ's 2D GPU in a VZVirtualMachineView. Agents and remote viewers use `surface`
+/// either way, because neither view can be captured.
 final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
     static let fixedSize = CGSize(width: 1920, height: 1200)
     let surface: DesktopSurface
     private let lock = NSLock()
     private var created: (machine: VZVirtualMachine, queue: DispatchQueue)?
     var machine: VZVirtualMachine? { lock.withLock { created?.machine } }
+    /// The queue every call to `machine` must run on.
+    var machineQueue: DispatchQueue? { lock.withLock { created?.queue } }
 
     /// Brings the display to the size the setting asks for now, rather than at the
     /// view's next resize: the view's size while resizing, else the fixed size. The VM
     /// takes calls only on its own queue.
     func apply(resizes: Bool, viewPixels: CGSize) {
         let size = resizes ? viewPixels : Self.fixedSize
+        if #available(macOS 27, *), let virgl {
+            if size.width >= 1, size.height >= 1 { virgl.resize(width: Int(size.width), height: Int(size.height)) }
+            return
+        }
         guard size.width >= 1, size.height >= 1, let (machine, queue) = lock.withLock({ created }) else { return }
         queue.async {
             guard let display = machine.graphicsDevices.first?.displays.first, display.sizeInPixels != size else { return }
@@ -34,14 +40,24 @@ final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
 
     func configureVZ(_ config: inout VZVirtualMachineConfiguration, allocator: any AddressAllocator<Character>,
                      storageDeviceCount: Int, mountsByID: [String: [Containerization.Mount]]) throws {
+        config.keyboards = [VZUSBKeyboardConfiguration()]
+        config.pointingDevices = [VZUSBScreenCoordinatePointingDeviceConfiguration()]
+        // On macOS 27 the desktop draws with the Mac's GPU, through a virtio-gpu of the app's own.
+        if #available(macOS 27, *), VirglGPU.isAvailable {
+            let gpu = VirglGPU()
+            lock.withLock { renderer = gpu }
+            config.customVirtioDevices = [gpu.configuration()]
+            return
+        }
         let graphics = VZVirtioGraphicsDeviceConfiguration()
         // The desktop keeps this resolution unless it resizes with its window.
         graphics.scanouts = [VZVirtioGraphicsScanoutConfiguration(widthInPixels: Int(Self.fixedSize.width),
                                                                    heightInPixels: Int(Self.fixedSize.height))]
         config.graphicsDevices = [graphics]
-        config.keyboards = [VZUSBKeyboardConfiguration()]
-        config.pointingDevices = [VZUSBScreenCoordinatePointingDeviceConfiguration()]
     }
+    private var renderer: AnyObject?
+    @available(macOS 27, *)
+    var virgl: VirglGPU? { lock.withLock { renderer as? VirglGPU } }
 
     func didCreate(_ instance: VZVirtualMachineInstance) throws {
         lock.withLock { created = (instance.vzVirtualMachine, instance.vmQueue) }

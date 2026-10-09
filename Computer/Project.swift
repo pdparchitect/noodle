@@ -72,6 +72,62 @@ let buildWimlib: TargetScript = .post(script: """
     cp -f "$build/COPYING.LGPL" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/wimlib-COPYING.LGPL.txt"
     """, name: "Build wimlib", basedOnDependencyAnalysis: false)
 
+// Linux desktops render their OpenGL on the Mac's GPU through virglrenderer (MIT) on libepoxy (MIT), both built
+// here from pinned sources with Noodle's patch and loaded at run time. The build tools come vendored too, so the
+// build needs no network: meson and ninja from their wheels, and PyYAML's pure-Python module for one generator.
+let buildVirglrenderer: TargetScript = .post(script: """
+    set -euo pipefail
+    vendor="$SRCROOT/Vendor"
+    while read -r sum file; do
+        [ "$(shasum -a 256 "$vendor/$file" | awk '{print $1}')" = "$sum" ] || {
+            echo "error: Vendor/$file does not match its pinned checksum (git lfs pull)." >&2; exit 1
+        }
+    done <<'PINNED'
+    060cfb4f85713d59c5a28c256beb5e4e3e3738547ba81b6c8c573247afc8dc79 virglrenderer-71a67414013f.tar.gz
+    cd9d47285f2aa2bc582d3c55bb322654e54b6a41e9c84444dc176c0e83a376d4 libepoxy-d1f952c4565c.tar.gz
+    7e4f6e83fec83e3eaac928e058b073c7557b282c35b6a2024cea143a39926a39 meson-1.11.2-py3-none-any.whl
+    fa2a8bfc62e31b08f83127d1613d10821775a0eb334197154c4d6067b7068ff1 ninja-1.13.0-py3-none-macosx_10_9_universal2.whl
+    d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f pyyaml-6.0.3.tar.gz
+    ed009c60fe666e0642fcfb02047ea4631a02150c3d367f51168ca9594fb559ca virglrenderer-noodle.patch
+    PINNED
+    build="$DERIVED_FILE_DIR/virglrenderer-71a67414013f-$(shasum -a 256 "$vendor/virglrenderer-noodle.patch" | cut -c1-12)"
+    out="$build/out"
+    if [ ! -f "$out/lib/libvirglrenderer.1.dylib" ]; then
+        rm -rf "$build"; mkdir -p "$build/tools/bin"
+        unzip -q "$vendor/meson-1.11.2-py3-none-any.whl" -d "$build/tools/python"
+        unzip -q -j "$vendor/ninja-1.13.0-py3-none-macosx_10_9_universal2.whl" 'ninja-1.13.0.data/scripts/ninja' -d "$build/tools/bin"
+        chmod +x "$build/tools/bin/ninja"
+        tar -xzf "$vendor/pyyaml-6.0.3.tar.gz" -C "$build/tools" pyyaml-6.0.3/lib/yaml
+        cp -R "$build/tools/pyyaml-6.0.3/lib/yaml" "$build/tools/python/yaml"
+        printf '#!/bin/sh\\nexec /usr/bin/python3 -m mesonbuild.mesonmain "$@"\\n' > "$build/tools/bin/meson"
+        # Only libepoxy is asked for, and it is the one built here; every other package is absent.
+        printf '#!/bin/sh\\ncase "$*" in\\n--version) echo 0.29.2 ;;\\n*--modversion*epoxy*) echo 1.5.11 ;;\\n*--cflags*epoxy*) echo "-I%s/include" ;;\\n*--libs*epoxy*) echo "-L%s/lib -lepoxy" ;;\\n*epoxy*) exit 0 ;;\\n*) exit 1 ;;\\nesac\\n' \\
+            "$out" "$out" > "$build/tools/bin/pkg-config"
+        chmod +x "$build/tools/bin/meson" "$build/tools/bin/pkg-config"
+        tar -xzf "$vendor/libepoxy-d1f952c4565c.tar.gz" -C "$build"
+        tar -xzf "$vendor/virglrenderer-71a67414013f.tar.gz" -C "$build"
+        patch -s -p1 -d "$build/virglrenderer" < "$vendor/virglrenderer-noodle.patch"
+        export PATH="$build/tools/bin:/usr/bin:/bin" PYTHONPATH="$build/tools/python"
+        export CFLAGS="-arch arm64 -mmacosx-version-min=26.0" LDFLAGS="-arch arm64 -mmacosx-version-min=26.0"
+        (cd "$build/libepoxy" && meson setup build --prefix="$out" --buildtype=release -Degl=no -Dglx=no -Dx11=false -Dtests=false >/dev/null \\
+            && ninja -C build install >/dev/null)
+        (cd "$build/virglrenderer" && LDFLAGS="$LDFLAGS -framework CoreFoundation" meson setup build --prefix="$out" --buildtype=release \\
+            -Dplatforms=auto -Dcheck-gl-errors=false >/dev/null && ninja -C build install >/dev/null)
+    fi
+    frameworks="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+    mkdir -p "$frameworks"
+    cp -f "$out/lib/libvirglrenderer.1.dylib" "$out/lib/libepoxy.0.dylib" "$frameworks/"
+    install_name_tool -id @rpath/libepoxy.0.dylib "$frameworks/libepoxy.0.dylib"
+    install_name_tool -id @rpath/libvirglrenderer.1.dylib -change "$out/lib/libepoxy.0.dylib" @rpath/libepoxy.0.dylib \\
+        "$frameworks/libvirglrenderer.1.dylib"
+    for library in libepoxy.0.dylib libvirglrenderer.1.dylib; do
+        codesign --force --options runtime "$COMPUTER_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$frameworks/$library"
+    done
+    resources="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+    cp -f "$build/virglrenderer/COPYING" "$resources/virglrenderer-COPYING.txt"
+    cp -f "$build/libepoxy/COPYING" "$resources/libepoxy-COPYING.txt"
+    """, name: "Build virglrenderer", basedOnDependencyAnalysis: false)
+
 let embedHelpers: TargetScript = .post(script: """
     set -euo pipefail
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
@@ -237,7 +293,7 @@ let project = Project(
                 "Support/STUDIO-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Computer.entitlements"),
-            scripts: [checkKernel, buildGuestFiles, buildWimlib, embedHelpers, embedCommandLineTool, trimSparkle],
+            scripts: [checkKernel, buildGuestFiles, buildWimlib, buildVirglrenderer, embedHelpers, embedCommandLineTool, trimSparkle],
             dependencies: [
                 .package(product: "ComputerCore"),
                 .package(product: "NoodleLaunchChecks"),

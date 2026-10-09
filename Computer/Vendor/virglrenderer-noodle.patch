@@ -1,0 +1,116 @@
+diff --git a/meson.build b/meson.build
+index 32fed2a..c3834ee 100644
+--- a/meson.build
++++ b/meson.build
+@@ -205,7 +205,7 @@ if cc.has_header('linux/udmabuf.h')
+ endif
+ 
+ metal_dep = dependency('appleframeworks', modules : ['Metal'], required: false)
+-if metal_dep.found()
++if metal_dep.found() and get_option('platforms').contains('egl')
+    conf_data.set('ENABLE_METAL', 1)
+    add_languages('objc', required: true, native: false)
+    objc = meson.get_compiler('objc')
+diff --git a/src/meson.build b/src/meson.build
+index 28120f0..3efc1a7 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -188,7 +188,7 @@ if have_glx
+    virgl_depends += [glx_dep]
+ endif
+ 
+-if metal_dep.found()
++if conf_data.has('ENABLE_METAL')
+    virgl_sources += vrend_metal_sources
+    virgl_depends += [metal_dep]
+ endif
+diff --git a/src/virglrenderer.c b/src/virglrenderer.c
+index 6fd67d1..a7f514b 100644
+--- a/src/virglrenderer.c
++++ b/src/virglrenderer.c
+@@ -945,7 +945,7 @@ int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks
+       state.vrend_initialized = true;
+    }
+ 
+-   if (!state.proxy_initialized) {
++   if (!state.proxy_initialized && (flags & (VIRGL_RENDERER_VENUS | VIRGL_RENDERER_RENDER_SERVER))) {
+       ret = proxy_renderer_init(&proxy_cbs, flags | VIRGL_RENDERER_NO_VIRGL);
+       if (ret) {
+          virgl_error("failed to initialize venus renderer");
+diff --git a/src/vrend/vrend_renderer.c b/src/vrend/vrend_renderer.c
+index b367f0a..1407486 100644
+--- a/src/vrend/vrend_renderer.c
++++ b/src/vrend/vrend_renderer.c
+@@ -4982,8 +4982,9 @@ void vrend_clear_surface(struct vrend_context *ctx, uint32_t surf_handle,
+    surf = vrend_object_lookup(sub_ctx->object_hash, surf_handle,
+                               VIRGL_OBJECT_SURFACE);
+    if (!surf) {
+-      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_SURFACE,
+-                                 surf_handle);
++      /* Mesa 25.2 sends clears for surfaces it never created (handle 0); poisoning the context for that
++       * stops every later draw, so skip the clear. */
++      virgl_warn("%s: clear of unknown surface %u skipped\n", ctx->debug_name, surf_handle);
+       return;
+    }
+ 
+@@ -7637,7 +7638,7 @@ static bool use_integer(void) {
+       return true;
+ 
+    const char * a = (const char *) glGetString(GL_VENDOR);
+-   return a && !(strcmp(a, "ARM") && strcmp(a, "Google Inc. (Apple)"));
++   return a && !(strcmp(a, "ARM") && strcmp(a, "Google Inc. (Apple)") && strcmp(a, "Apple"));
+ }
+ 
+ static bool vrend_use_gbm_layout_feature(UNUSED uint32_t flags)
+@@ -9468,22 +9469,23 @@ static int vrend_renderer_transfer_write_iov(struct vrend_context *ctx,
+    if (has_bit(res->storage_bits, VREND_STORAGE_GL_BUFFER)) {
+       GLuint map_flags = GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_WRITE_BIT;
+       struct virgl_sub_upload_data d;
++      /* Apple's core profile refuses index buffers bound without a vertex array: upload through a neutral target. */
+       d.box = info->box;
+-      d.target = res->target;
++      d.target = GL_COPY_WRITE_BUFFER;
+ 
+       if (!info->synchronized)
+          map_flags |= GL_MAP_UNSYNCHRONIZED_BIT;
+ 
+-      glBindBufferARB(res->target, res->gl_id);
+-      data = glMapBufferRange(res->target, info->box->x, info->box->width, map_flags);
++      glBindBufferARB(GL_COPY_WRITE_BUFFER, res->gl_id);
++      data = glMapBufferRange(GL_COPY_WRITE_BUFFER, info->box->x, info->box->width, map_flags);
+       if (data == NULL) {
+          virgl_error("Map failed for element buffer\n");
+          vrend_read_from_iovec_cb(iov, num_iovs, info->offset, info->box->width, &iov_buffer_upload, &d);
+       } else {
+          vrend_read_from_iovec(iov, num_iovs, info->offset, data, info->box->width);
+-         glUnmapBuffer(res->target);
++         glUnmapBuffer(GL_COPY_WRITE_BUFFER);
+       }
+-      glBindBufferARB(res->target, 0);
++      glBindBufferARB(GL_COPY_WRITE_BUFFER, 0);
+    } else {
+       GLenum glformat;
+       GLenum gltype;
+diff --git a/src/vrend/vrend_shader.c b/src/vrend/vrend_shader.c
+index 1a4e30a..3361aa9 100644
+--- a/src/vrend/vrend_shader.c
++++ b/src/vrend/vrend_shader.c
+@@ -6320,7 +6320,7 @@ static void emit_header(const struct dump_ctx *ctx, struct vrend_glsl_strbufs *g
+       }
+ 
+       for (uint32_t i = 0; i < ARRAY_SIZE(shader_req_table); i++) {
+-         if (shader_req_table[i].key == SHADER_REQ_SAMPLER_RECT && ctx->glsl_ver_required >= 140)
++         if ((shader_req_table[i].key == SHADER_REQ_SAMPLER_RECT || shader_req_table[i].key == SHADER_REQ_INSTANCE_ID) && ctx->glsl_ver_required >= 140)
+             continue;
+ 
+          if (ctx->shader_req_bits & shader_req_table[i].key) {
+@@ -7218,6 +7218,9 @@ static void emit_ios_vs(const struct dump_ctx *ctx,
+       }
+ 
+       emit_hdr(glsl_strbufs, "vec4 clip_dist_temp[2];\n");      
++   } else if (ctx->num_out_clip_dist) {
++      /* Without cull distances (Apple's GL 4.1) the clip distance moves still go through the temporary. */
++      emit_hdr(glsl_strbufs, "vec4 clip_dist_temp[2];\n");
+    }
+ 
+    const char *psize_buf = ctx->has_pointsize_output ? "out float gl_PointSize;\n" : "";

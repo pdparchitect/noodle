@@ -478,7 +478,9 @@ import SwiftUI
             }
         }
         defer { monitor.cancel() }
-        let computer = ComputerTemplate.desktop.makeComputer(name: "Desktop Verification")
+        var computer = ComputerTemplate.desktop.makeComputer(name: "Desktop Verification")
+        // A fixed resolution, so guest coordinates and the frame size below are known.
+        computer.resizesDesktopWithWindow = false
         let created = store.sessions.isEmpty ? await store.create(computer, source: nil) : true
         guard created, let session = store.selected else {
             throw ComputerError(store.error ?? "Desktop creation failed.")
@@ -512,12 +514,12 @@ import SwiftUI
         window.makeKeyAndOrderFront(nil)
         defer { window.close() }
         host.layoutSubtreeIfNeeded()
-        func machineView(in view: NSView) -> VZVirtualMachineView? {
-            if let machine = view as? VZVirtualMachineView { return machine }
+        func machineView(in view: NSView) -> (any DesktopDisplayView)? {
+            if let display = view as? any DesktopDisplayView { return display }
             return view.subviews.compactMap { machineView(in: $0) }.first
         }
         guard let view = machineView(in: host) else { throw await fail("The desktop shows no native display.") }
-        guard !view.automaticallyReconfiguresDisplay else { throw await fail("A new desktop must keep its own resolution.") }
+        guard !view.followsWindowSize else { throw await fail("A desktop set to keep its own resolution follows its window.") }
 
         // Agents and remote viewers: the guest serves frames and takes input.
         let frame: CGImage, size: CGSize
@@ -616,17 +618,16 @@ import SwiftUI
         print("PASS: native display, guest frames, remote and local keyboard and pointer input")
 
         // ⌘V and ⌘C through the view, with a private pasteboard: the person's own clipboard is never touched.
-        guard let desktopView = view as? DesktopMachineView else { throw await fail("The desktop view does not handle copy and paste.") }
         let pasteboard = NSPasteboard(name: .init("NoodleDesktopVerification-\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
-        desktopView.pasteboard = pasteboard
+        view.pasteboard = pasteboard
         // ⌘C and ⌘V are the Edit menu's items: send what each item sends, down the window's
         // responder chain, as the menu does. Posting keys would need this app to be frontmost.
         func menu(_ key: String) async throws {
             guard let item = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items)
                     .first(where: { $0.keyEquivalent == key && $0.keyEquivalentModifierMask == .command }),
                   let action = item.action else { throw await fail("The app has no ⌘\(key.uppercased()) menu item.") }
-            window.makeFirstResponder(desktopView)
+            window.makeFirstResponder(view)
             guard window.firstResponder?.tryToPerform(action, with: item) == true else {
                 throw await fail("\(item.title) did not reach the desktop.")
             }
@@ -669,9 +670,9 @@ import SwiftUI
             try await Task.sleep(for: .milliseconds(500))
             if let (next, _) = try? await display.surface.frame(), next.width != 1920 || next.height != 1200 { resized = true; break }
         }
-        guard view.automaticallyReconfiguresDisplay, resized else {
+        guard view.followsWindowSize, resized else {
             let state = await guest("cat /sys/class/drm/card*-*/modes | head -3; xrandr | head -3; tail -5 /var/log/desktop/resize.log")
-            throw await fail("The desktop did not follow its window's size (view resizes: \(view.automaticallyReconfiguresDisplay), view \(view.bounds.size)):\n\(state)")
+            throw await fail("The desktop did not follow its window's size (view resizes: \(view.followsWindowSize), view \(view.bounds.size)):\n\(state)")
         }
         // Turning it off returns the desktop to its own resolution straight away.
         store.rename(session, name: session.computer.name, resizesDesktop: false)
@@ -724,7 +725,7 @@ import SwiftUI
         _ = await guest("sudo -n pkill -CONT -x Xorg")
         await store.toggleTerminal(session)
         host.layoutSubtreeIfNeeded()
-        guard machineView(in: host)?.virtualMachine === display.machine, session.display === display else {
+        guard machineView(in: host)?.displayedMachine === display.machine, session.display === display else {
             throw await fail("Switching back did not show the same computer's display.")
         }
         // The pointer must still reach the guest after the display was hidden and shown again.

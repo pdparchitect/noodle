@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- On macOS 27 or later, Desktop computers draw with this Mac's graphics processor. The desktop and apps that use OpenGL run faster and leave the Mac's processor freer; the browser still draws without it.
+
+### Changed
+
+- Desktop computers follow their window's size unless Resize desktop with window is turned off, which keeps the desktop's own resolution.
+
+### Fixed
+
+- Windows computers scroll in the same direction as the Mac when natural scrolling is on, instead of the opposite one.
+
 ## [0.23.0] - 2026-10-08
 
 ### Changed
@@ -15,7 +27,6 @@
 ### Fixed
 
 - Settings > Storage no longer counts space twice when computers are copies of each other or of the Windows installation. Each row shows only the space its files hold alone, and space the copies share is listed once, as Shared between copies.
-- Windows computers scroll in the same direction as the Mac when natural scrolling is on, instead of the opposite one.
 
 ## [0.22.0] - 2026-10-08
 
