@@ -15,6 +15,10 @@ All notable changes to Noodle are documented here, following
 - In the sidebar menu, Pin and Spaces sit in their own group below Float on Top.
 - Spaces > Edit Spaces… puts your spaces in any order by dragging, renames them and deletes them, replacing Rename Space… and Delete Space. The order follows you to your other devices and sets the ⌘ shortcuts.
 
+### Fixed
+
+- Bots no longer miss new messages because their app never showed them how to read Messenger: each wake-up now points them at the Messenger guide. Thanks to Brad Hallett for finding this.
+
 ## [0.52.0] - 2026-10-08
 
 ### Changed

@@ -520,8 +520,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             "cwd": workspaceURL.path,
             "approvalPolicy": extendedAccess ? "on-request" : "never",
             "sandbox": "workspace-write",
-            "serviceName": "noodle",
-            "developerInstructions": Self.developerInstructions
+            "serviceName": "noodle"
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
 
@@ -767,8 +766,6 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         if let value = value as? NSNumber { return value.intValue }
         return nil
     }
-
-    private static var developerInstructions: String { MessengerDocumentation.bootstrapInstructions }
 
     private static let runtimeVersion = 9
 }

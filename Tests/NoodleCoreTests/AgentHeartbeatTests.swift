@@ -129,9 +129,9 @@ final class AgentHeartbeatTests: XCTestCase {
     }
 
     func testHeartbeatIsNotMistakenForAnInboxChange() {
-        XCTAssertEqual(AgentWakeReason.heartbeat.eventText, "<noodle-event type=\"heartbeat\" />")
-        XCTAssertEqual(AgentWakeReason.inboxChanged.eventText, "<noodle-event type=\"inbox-changed\" />")
-        XCTAssertEqual(AgentWakeReason.runtimeRecovered.eventText, "<noodle-event type=\"runtime-recovered\" />")
+        XCTAssertEqual(AgentWakeReason.heartbeat.eventText, "<noodle-event type=\"heartbeat\" skill=\".agents/skills/messenger/SKILL.md\" />")
+        XCTAssertEqual(AgentWakeReason.inboxChanged.eventText, "<noodle-event type=\"inbox-changed\" skill=\".agents/skills/messenger/SKILL.md\" />")
+        XCTAssertEqual(AgentWakeReason.runtimeRecovered.eventText, "<noodle-event type=\"runtime-recovered\" skill=\".agents/skills/messenger/SKILL.md\" />")
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("finish silently"))
         XCTAssertTrue(AgentWakeReason.heartbeatInstructions.contains("does not authorize"))
         XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("interrupted task"))

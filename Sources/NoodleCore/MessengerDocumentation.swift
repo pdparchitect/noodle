@@ -47,7 +47,7 @@ extension MessengerDelivery {
 
 extension AgentWakeReason {
     public var reference: MessengerReference {
-        let fields = "A bodyless `<noodle-event type=\"\(rawValue)\" />` notification."
+        let fields = "A bodyless `\(eventText)` notification."
         let recipients = "The one bot being woken."
         let guidance: String
         switch self {

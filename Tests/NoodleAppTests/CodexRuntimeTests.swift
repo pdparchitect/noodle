@@ -43,7 +43,7 @@ import XCTest
             let f = try fixture(), wire = HarnessWire(), p = f.codex(wire, extended: extended)
             p.start(); try await f.openCodex(wire)
             let params = try XCTUnwrap(wire.last("thread/start")["params"] as? [String: Any])
-            XCTAssertEqual(params["developerInstructions"] as? String, MessengerDocumentation.bootstrapInstructions)
+            XCTAssertNil(params["developerInstructions"])
             p.stop()
         }
     }

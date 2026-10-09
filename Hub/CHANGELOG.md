@@ -7,6 +7,10 @@
 - Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.
 - Bots can no longer share a noodlet that has no preview; they are told to present it first, so its card shows a picture instead of a plain icon.
 
+### Fixed
+
+- Bots no longer miss new messages because their app never showed them how to read Messenger: each wake-up now points them at the Messenger guide. Thanks to Brad Hallett for finding this.
+
 ## [0.24.0] - 2026-10-08
 
 ### Changed

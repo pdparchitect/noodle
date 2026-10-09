@@ -90,7 +90,8 @@ public enum AgentWakeReason: String, CaseIterable, Sendable {
     case heartbeat
     case runtimeRecovered = "runtime-recovered"
 
-    public var eventText: String { "<noodle-event type=\"\(rawValue)\" />" }
+    /// Names the Messenger skill so a bot whose harness never surfaced it still knows where to look.
+    public var eventText: String { "<noodle-event type=\"\(rawValue)\" skill=\".agents/skills/messenger/SKILL.md\" />" }
 
     public static var heartbeatInstructions: String { AgentWakeReason.heartbeat.reference.guidance }
 
