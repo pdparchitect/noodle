@@ -173,8 +173,12 @@ import XCTest
             addEventListener('gamepaddisconnected', e => heard.push('-' + e.gamepad.index));
             </script>
             """, baseURL: nil)
-        for _ in 0..<100 where web.isLoading || web.url == nil { try await Task.sleep(for: .milliseconds(50)) }
-        try await Task.sleep(for: .milliseconds(200))
+        // Lending to a page that has not run its script yet does nothing, so wait for the page itself.
+        let ready = "typeof heard === 'object' && typeof window.__noodleLendPads === 'function'"
+        for _ in 0..<200 {
+            if try await web.evaluateJavaScript(ready) as? Bool == true { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
         var pad = LentGamepads.Pad(id: "Xbox Wireless Controller", buttons: Array(repeating: 0, count: 17), axes: [0, 0, 0, 0])
         pad.buttons[0] = 1
