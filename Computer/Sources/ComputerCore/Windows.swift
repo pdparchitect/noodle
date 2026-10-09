@@ -275,3 +275,81 @@ public struct WindowsScroll: Equatable, Sendable {
         return WindowsScroll(deltaX: -deltaX, deltaY: -deltaY, acceleratedDeltaX: -acceleratedDeltaX, acceleratedDeltaY: -acceleratedDeltaY)
     }
 }
+
+/// The EDID of a virtual monitor with one preferred mode, which a guest's display driver reads to choose its
+/// resolution; without one, Windows' virtio-gpu driver falls back to 1024 by 768. The mode uses CVT reduced-blanking
+/// timings at 60 Hz, which any size can have.
+public enum DisplayEDID {
+    public static func bytes(width: Int, height: Int) -> [UInt8] {
+        // CVT-RB: a fixed 160-pixel horizontal blank, and at least 460 µs of vertical blank.
+        let horizontalBlank = 160, horizontalFront = 48, horizontalSync = 32
+        let verticalFront = 3, verticalSync = 6
+        let linePeriod = (1_000_000.0 / 60 - 460) / Double(height)
+        let verticalBlank = max(Int((460 / linePeriod).rounded(.up)), verticalFront + verticalSync + 6)
+        let clock = (width + horizontalBlank) * (height + verticalBlank) * 60 / 10_000 // in 10 kHz units
+        // At 96 dots per inch.
+        let widthMM = width * 254 / 960, heightMM = height * 254 / 960
+
+        var edid: [UInt8] = [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]
+        edid += [0x38, 0x8C] // manufacturer "NDL"
+        edid += [0x01, 0x00, 0, 0, 0, 0] // product 1, no serial number
+        edid += [1, 36] // week 1 of 2026
+        edid += [1, 4] // EDID 1.4
+        edid += [0x80, UInt8(clamping: (widthMM + 5) / 10), UInt8(clamping: (heightMM + 5) / 10), 120]
+        edid += [0x06] // sRGB, and the first detailed timing is the preferred mode
+        edid += [0xEE, 0x91, 0xA3, 0x54, 0x4C, 0x99, 0x26, 0x0F, 0x50, 0x54] // sRGB primaries and white
+        edid += [0, 0, 0] // no established timings
+        edid += Array(repeating: 0x01, count: 16) // no standard timings
+        edid += [
+            UInt8(clock & 0xFF), UInt8(clock >> 8),
+            UInt8(width & 0xFF), UInt8(horizontalBlank & 0xFF), UInt8((width >> 8) << 4 | horizontalBlank >> 8),
+            UInt8(height & 0xFF), UInt8(verticalBlank & 0xFF), UInt8((height >> 8) << 4 | verticalBlank >> 8),
+            UInt8(horizontalFront & 0xFF), UInt8(horizontalSync & 0xFF), UInt8((verticalFront & 0x0F) << 4 | verticalSync & 0x0F),
+            UInt8((horizontalFront >> 8) << 6 | (horizontalSync >> 8) << 4 | (verticalFront >> 4) << 2 | verticalSync >> 4),
+            UInt8(widthMM & 0xFF), UInt8(heightMM & 0xFF), UInt8((widthMM >> 8) << 4 | heightMM >> 8),
+            0, 0, 0x1A, // no borders; digital separate sync, horizontal positive, vertical negative
+        ]
+        edid += [0, 0, 0, 0xFC, 0] + Array("Noodle\n      ".utf8) // monitor name
+        for _ in 0..<2 { edid += [0, 0, 0, 0x10] + Array(repeating: 0, count: 14) } // unused descriptors
+        edid += [0] // no extensions
+        edid.append(UInt8((256 - edid.reduce(0) { ($0 + Int($1)) % 256 }) % 256))
+        return edid
+    }
+}
+
+/// Windows' screen size. The virtio-gpu driver offers a new size once the display reports it, but Windows keeps its
+/// mode until asked; the agent asks through the display settings API.
+public enum WindowsDisplayMode {
+    /// The sizes the driver takes.
+    public static func fit(width: Int, height: Int) -> (width: Int, height: Int) {
+        (min(max(width, 800), 4096), min(max(height, 600), 4096))
+    }
+
+    /// A command for the agent that switches the screen to `width` by `height`, as PowerShell's encoded command.
+    public static func switchCommand(width: Int, height: Int) -> String {
+        let script = #"""
+            Add-Type @"
+            using System; using System.Runtime.InteropServices;
+            public class NoodleDisplay {
+              [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DEVMODE {
+                [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+                public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+                public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+                public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+                [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+                public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+                public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight; }
+              [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool EnumDisplaySettings(string name, int mode, ref DEVMODE devMode);
+              [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
+            }
+            "@
+            $m = New-Object NoodleDisplay+DEVMODE; $m.dmSize = [Runtime.InteropServices.Marshal]::SizeOf($m)
+            [void][NoodleDisplay]::EnumDisplaySettings($null, -1, [ref]$m)
+            $m.dmPelsWidth = WIDTH; $m.dmPelsHeight = HEIGHT; $m.dmFields = 0x180000
+            exit [NoodleDisplay]::ChangeDisplaySettings([ref]$m, 0)
+            """#
+            .replacingOccurrences(of: "WIDTH", with: String(width)).replacingOccurrences(of: "HEIGHT", with: String(height))
+        let encoded = Data(script.utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] }).base64EncodedString()
+        return "powershell -NoProfile -EncodedCommand " + encoded
+    }
+}

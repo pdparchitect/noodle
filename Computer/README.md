@@ -104,9 +104,9 @@ The optional description (up to 500 characters) says what the computer is for,
 such as which project it builds. Assigned bots see it with the name and use it to
 choose the right computer. It is not shown on preview cards in conversations.
 
-A Desktop computer follows its window's size. Turn off **Resize desktop with
-window**, when creating the computer or in its editor, to keep its own screen
-resolution instead, scaled to fit the window.
+Desktop and Windows computers follow their window's size. Turn off **Resize
+desktop with window**, when creating the computer or in its editor, to keep its
+own screen resolution instead, scaled to fit the window.
 
 On macOS 27 or later, a Desktop computer draws with this Mac's graphics processor:
 the desktop and apps that use OpenGL run faster and leave the Mac's processor

@@ -21,13 +21,46 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
     let directory: URL
     @Published private(set) var status: String?
     @Published private(set) var agentConnected = false {
-        didSet { if agentConnected != oldValue { onAgentChange?(agentConnected) } }
+        didSet {
+            guard agentConnected != oldValue else { return }
+            onAgentChange?(agentConnected)
+            // Windows starts at its last mode; the window may want another.
+            if agentConnected { Task { await applyScreen() } }
+        }
     }
     /// Whether the agent, which Terminal and Files need, is there.
     var onAgentChange: ((Bool) -> Void)?
     private(set) var machine: VZVirtualMachine?
     private(set) var agent = WindowsAgent()
     private let gpu = WindowsGPU()
+    /// The screen size Windows should have, in pixels: the window's while it resizes with it, else 1920 by 1080.
+    private var wantedScreen = WindowsGPU.screen
+    private var screenChange: Task<Void, Never>?
+
+    /// Makes Windows follow `pixels`, or keep 1920 by 1080 when nil, once the window has settled.
+    func showScreen(at pixels: CGSize?) {
+        let size = pixels.map { WindowsDisplayMode.fit(width: Int($0.width), height: Int($0.height)) } ?? WindowsGPU.screen
+        guard size != wantedScreen else { return }
+        wantedScreen = size
+        screenChange?.cancel()
+        screenChange = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await self?.applyScreen()
+        }
+    }
+
+    /// The display reports the size, and the agent asks Windows to switch to it; Windows keeps its mode otherwise.
+    private func applyScreen() async {
+        let size = wantedScreen
+        gpu.resize(width: size.width, height: size.height)
+        guard agentConnected, lastFrame.map({ ($0.width, $0.height) != size }) ?? true else { return }
+        // The driver offers the new mode once it has read the display again.
+        try? await Task.sleep(for: .seconds(1))
+        guard wantedScreen == size, agentConnected else { return }
+        let result = try? await agent.run(WindowsDisplayMode.switchCommand(width: size.width, height: size.height))
+        if result?.status != 0 { log.error("screen switch to \(size.width)x\(size.height) ended with \(result.map { String($0.status) } ?? "no answer", privacy: .public)") }
+    }
     private var setUp: Bool
     private var settingUp = false
     /// The agent was sent an update this run; it is not sent again, so a failed update cannot loop.
@@ -311,6 +344,9 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
     private var scanout: UInt32 = 0
     private var detector = FirmwareSessionDetector()
     private var firmware = true
+    private var size = WindowsGPU.screen
+    /// A size change waits in events_read until the driver asks for the display again.
+    private var displayChanged = false
     /// Lets the firmware draw too, for looking at the boot screens while diagnosing an install. VZ may then
     /// crash when Windows takes over, so it is never on otherwise.
     var servesFirmware = false
@@ -323,6 +359,8 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         configuration.pciClassID = 0x03
         configuration.pciSubclassID = 0x80
         configuration.virtioQueueCount = 2
+        // VIRTIO_GPU_F_EDID: Windows' driver takes its resolution from the screen's EDID, and 1024 by 768 without one.
+        configuration.optionalFeatures.subset0 = 1 << 1
         // struct virtio_gpu_config: events_read, events_clear, num_scanouts, num_capsets.
         configuration.deviceSpecificConfiguration = VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, 0))
         configuration.provider = VZCustomVirtioDeviceDelegateProvider(deviceQueue: queue, delegate: self)
@@ -335,6 +373,17 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         detector = FirmwareSessionDetector()
         firmware = true
         releaseResources()
+    }
+
+    /// Offers Windows a new screen size: its display info and EDID change, and VIRTIO_GPU_EVENT_DISPLAY says so.
+    func resize(width: Int, height: Int) {
+        let (width, height) = WindowsDisplayMode.fit(width: width, height: height)
+        queue.async { [self] in
+            guard size != (width, height) else { return }
+            size = (width, height)
+            displayChanged = true
+            device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(1, 0, 1, 0))) { _ in }
+        }
     }
 
     func customVirtioDeviceDidAcceptDriverOk(_ device: VZCustomVirtioDevice) {
@@ -372,7 +421,11 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         switch firmware && !servesFirmware ? 0 : u32(0) {
         case 0x0100: // GET_DISPLAY_INFO
             reply = 0x1101
-            body = Self.words(0, 0, UInt32(Self.screen.width), UInt32(Self.screen.height), 1, 0) + Data(count: 15 * 24)
+            body = Self.words(0, 0, UInt32(size.width), UInt32(size.height), 1, 0) + Data(count: 15 * 24)
+            if displayChanged {
+                displayChanged = false
+                device?.update(VZVirtioDeviceSpecificConfiguration(configurationData: Self.words(0, 0, 1, 0))) { _ in }
+            }
         case 0x0101: // RESOURCE_CREATE_2D: id, format, width, height
             let id = u32(24), width = Int(u32(32)), height = Int(u32(36))
             guard (1...8192).contains(width), (1...8192).contains(height) else { reply = 0x1200; break }
@@ -401,6 +454,10 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
             resources[id]?.backing = mappings
         case 0x0107: // RESOURCE_DETACH_BACKING
             resources[u32(24)]?.backing = []
+        case 0x010a: // GET_EDID: scanout; the reply carries the size and up to 1024 bytes
+            let edid = DisplayEDID.bytes(width: size.width, height: size.height)
+            reply = 0x1104
+            body = Self.words(UInt32(edid.count), 0) + Data(edid) + Data(count: 1024 - edid.count)
         default:
             reply = 0x1200 // ERR_UNSPEC
         }
@@ -453,13 +510,16 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
 @available(macOS 27, *)
 struct WindowsDisplay: NSViewRepresentable {
     @ObservedObject var computer: WindowsComputer
+    var resizes = false
     func makeNSView(context: Context) -> WindowsScreenView {
         let view = WindowsScreenView()
         view.attach(computer)
+        view.resizes = resizes
         return view
     }
     func updateNSView(_ view: WindowsScreenView, context: Context) {
         if view.computer !== computer { view.attach(computer) }
+        view.resizes = resizes
         view.setStatus(computer.status)
     }
 }
@@ -471,6 +531,22 @@ final class WindowsScreenView: NSView {
     private let spinner = NSProgressIndicator()
     private var imageSize = CGSize(width: 1024, height: 768)
     private var buttons: UInt = 0
+    var resizes = false { didSet { if resizes != oldValue { applySize() } } }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        applySize()
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applySize()
+    }
+    /// Windows takes the view's size in pixels while the setting is on.
+    private func applySize() {
+        guard window != nil, bounds.width >= 1, bounds.height >= 1 else { return }
+        let scale = window?.backingScaleFactor ?? 1
+        computer?.showScreen(at: resizes ? CGSize(width: bounds.width * scale, height: bounds.height * scale) : nil)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -494,6 +570,7 @@ final class WindowsScreenView: NSView {
 
     func attach(_ computer: WindowsComputer) {
         self.computer = computer
+        defer { applySize() }
         computer.onFrame = { [weak self] image in self?.show(image) }
         if let frame = computer.lastFrame { show(frame) }
         setStatus(computer.status)

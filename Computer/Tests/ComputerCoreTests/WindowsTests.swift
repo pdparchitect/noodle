@@ -187,6 +187,44 @@ final class WindowsTests: XCTestCase {
         }
     }
 
+    func testDisplayEDIDOffersTheRequestedSizeAsPreferred() {
+        for (width, height) in [(1920, 1080), (2560, 1440), (1333, 977)] {
+            let edid = DisplayEDID.bytes(width: width, height: height)
+            XCTAssertEqual(edid.count, 128)
+            XCTAssertEqual(Array(edid[0..<8]), [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+            XCTAssertEqual(edid.reduce(0) { ($0 + Int($1)) % 256 }, 0, "checksum")
+            XCTAssertEqual(Array(edid[18..<20]), [1, 4], "EDID 1.4")
+            XCTAssertEqual(edid[24] & 0x02, 0x02, "the first detailed timing is the preferred mode")
+            // The first detailed timing descriptor, bytes 54 to 71.
+            let timing = Array(edid[54..<72])
+            XCTAssertEqual(Int(timing[2]) | Int(timing[4] >> 4) << 8, width)
+            XCTAssertEqual(Int(timing[5]) | Int(timing[7] >> 4) << 8, height)
+            let clock = (Int(timing[0]) | Int(timing[1]) << 8) * 10_000
+            let horizontalTotal = width + (Int(timing[3]) | Int(timing[4] & 0x0F) << 8)
+            let verticalTotal = height + (Int(timing[6]) | Int(timing[7] & 0x0F) << 8)
+            XCTAssertEqual(Double(clock) / Double(horizontalTotal * verticalTotal), 60, accuracy: 0.5, "60 Hz")
+        }
+    }
+
+    func testDisplaySwitchCommandAsksWindowsForTheSize() throws {
+        let command = WindowsDisplayMode.switchCommand(width: 1600, height: 1000)
+        let prefix = "powershell -NoProfile -EncodedCommand "
+        XCTAssertTrue(command.hasPrefix(prefix))
+        // PowerShell takes the script as base64 of UTF-16LE.
+        let bytes = try XCTUnwrap(Data(base64Encoded: String(command.dropFirst(prefix.count))))
+        let script = try XCTUnwrap(String(data: bytes, encoding: .utf16LittleEndian))
+        XCTAssertTrue(script.contains("dmPelsWidth = 1600"))
+        XCTAssertTrue(script.contains("dmPelsHeight = 1000"))
+        XCTAssertTrue(script.contains("ChangeDisplaySettings"))
+    }
+
+    func testWindowsScreenSizesStayWithinWhatTheDriverTakes() {
+        XCTAssertEqual(WindowsDisplayMode.fit(width: 1500, height: 900).width, 1500)
+        XCTAssertEqual(WindowsDisplayMode.fit(width: 300, height: 200).width, 800)
+        XCTAssertEqual(WindowsDisplayMode.fit(width: 300, height: 200).height, 600)
+        XCTAssertEqual(WindowsDisplayMode.fit(width: 9000, height: 9000).height, 4096)
+    }
+
     func testNaturalScrollingIsTurnedBackForTheGuest() {
         let scroll = WindowsScroll(deltaX: 2, deltaY: -8, acceleratedDeltaX: 0.2, acceleratedDeltaY: -0.8)
         XCTAssertEqual(scroll.forGuest(directionInvertedFromDevice: false), scroll)

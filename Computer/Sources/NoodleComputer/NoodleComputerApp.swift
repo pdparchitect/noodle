@@ -717,7 +717,7 @@ struct ComputerDetailView: View {
       } else if let runtime = session.windowsRuntime {
         if #available(macOS 27, *), let windows = runtime as? WindowsComputer {
           ZStack {
-            WindowsDisplay(computer: windows)
+            WindowsDisplay(computer: windows, resizes: session.computer.resizesDesktop)
               .opacity(session.displayMode == .desktop ? 1 : 0)
               .allowsHitTesting(session.displayMode == .desktop)
               .accessibilityHidden(session.displayMode != .desktop)
@@ -902,7 +902,7 @@ struct EditComputerView: View {
         Spacer()
         Button("Save") {
           store.rename(session, name: name, description: description, appearance: appearance,
-                       resizesDesktop: session.computer.hasDesktop ? resizesDesktop : nil)
+                       resizesDesktop: session.computer.resizesWithWindow ? resizesDesktop : nil)
           let computer = session.computer
           if computer.kind != .localMac,
              (cpus, memory, network) != (computer.cpuCount, computer.memoryGiB, computer.networkEnabled) {
@@ -968,7 +968,7 @@ struct EditComputerView: View {
               }
             }
           }
-          if session.computer.hasDesktop {
+          if session.computer.resizesWithWindow {
             Divider()
             Toggle("Resize desktop with window", isOn: $resizesDesktop).toggleStyle(.switch)
               .controlSize(.small).fixedSize()

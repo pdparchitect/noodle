@@ -48,6 +48,8 @@ import os
             session = made
         }
         store.selection = session.id
+        // A fixed resolution until the check turns resizing on itself.
+        store.rename(session, name: session.computer.name, resizesDesktop: false)
         say("created in \(Int(Date().timeIntervalSince(started)))s")
         await store.start(session)
         guard session.phase == .running, let windows = session.windows else {
@@ -66,6 +68,25 @@ import os
         say("set up and signed in after \(Int(Date().timeIntervalSince(started)))s")
         try await wait("the screen", minutes: 5) { (windows.lastFrame?.width ?? 0) >= 640 }
         say("screen \(windows.lastFrame!.width)x\(windows.lastFrame!.height)")
+        // The screen follows the window: the size the view reports, and back to 1920 by 1080 when it stops.
+        for (width, height) in [(1280, 800), (1600, 1000)] {
+            windows.showScreen(at: CGSize(width: width, height: height))
+            try await wait("Windows to take \(width)x\(height)", minutes: 1) {
+                windows.lastFrame?.width == width && windows.lastFrame?.height == height
+            }
+            say("resized to \(width)x\(height)")
+        }
+        windows.showScreen(at: nil)
+        try await wait("Windows to return to 1920x1080", minutes: 1) { windows.lastFrame?.width == 1920 && windows.lastFrame?.height == 1080 }
+        say("screen back to 1920x1080")
+        // Through the window: with the setting on, Windows takes the library view's size.
+        store.rename(session, name: session.computer.name, resizesDesktop: true)
+        try await wait("Windows to follow its window", minutes: 1) {
+            windows.lastFrame.map { $0.width != 1920 || $0.height != 1080 } ?? false
+        }
+        say("follows its window at \(windows.lastFrame!.width)x\(windows.lastFrame!.height)")
+        store.rename(session, name: session.computer.name, resizesDesktop: false)
+        try await wait("Windows to keep 1920x1080 again", minutes: 1) { windows.lastFrame?.width == 1920 && windows.lastFrame?.height == 1080 }
 
         do { try await exercise(store, session, windows, say: say, wait: wait) } catch {
             // The agent's own log says why it went away, once it is back.

@@ -8,11 +8,12 @@
 
 ### Changed
 
-- Desktop computers follow their window's size unless Resize desktop with window is turned off, which keeps the desktop's own resolution.
+- Desktop and Windows computers follow their window's size unless Resize desktop with window is turned off, which keeps the computer's own resolution.
 
 ### Fixed
 
 - Windows computers scroll in the same direction as the Mac when natural scrolling is on, instead of the opposite one.
+- Windows computers show their desktop at 1920 × 1080 instead of 1024 × 768.
 
 ## [0.23.0] - 2026-10-08
 
