@@ -6,6 +6,9 @@ set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo '/init must run as root' >&2; exit 1; }
 . /usr/local/lib/desktop-environment
 [[ "$DISPLAY" =~ ^:[0-9]{1,3}$ ]]
+# A VM stopped while accounts were changing leaves shadow's lock files on the
+# kept disk. Nothing else changes accounts while the desktop starts.
+rm -f /etc/{passwd,group,shadow,gshadow}.lock
 # A writable layer kept across image updates can carry an older /etc/group
 # that lacks the device groups the desktop user needs.
 for group in video input; do
@@ -83,7 +86,9 @@ else
         printf 'Section "Screen"\n    Identifier "screen"\n    Device "gpu"\n    DefaultDepth 24\nEndSection\n'
         printf 'Section "ServerLayout"\n    Identifier "layout"\n    Screen "screen"\n'
         printf '    InputDevice "keyboard" "CoreKeyboard"\n    InputDevice "pointer" "CorePointer"\nEndSection\n'
-        printf 'Section "InputDevice"\n    Identifier "keyboard"\n    Driver "evdev"\n    Option "Device" "/dev/input/%s"\nEndSection\n' "$keyboard"
+        # The server owns the keyboard alone: keys reaching tty1 too would make Ctrl+C stop the server, which
+        # is the console's foreground process.
+        printf 'Section "InputDevice"\n    Identifier "keyboard"\n    Driver "evdev"\n    Option "Device" "/dev/input/%s"\n    Option "GrabDevice" "on"\nEndSection\n' "$keyboard"
         printf 'Section "InputDevice"\n    Identifier "pointer"\n    Driver "evdev"\n    Option "Device" "/dev/input/%s"\nEndSection\n' "$pointer"
     } > /run/desktop/xorg.conf
 fi

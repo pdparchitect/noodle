@@ -15,6 +15,7 @@
 ### Fixed
 
 - Settings > Storage no longer counts space twice when computers are copies of each other or of the Windows installation. Each row shows only the space its files hold alone, and space the copies share is listed once, as Shared between copies.
+- Windows computers scroll in the same direction as the Mac when natural scrolling is on, instead of the opposite one.
 
 ## [0.22.0] - 2026-10-08
 

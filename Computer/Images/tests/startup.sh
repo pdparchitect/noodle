@@ -1,6 +1,9 @@
 #!/bin/bash
 # Run as root in a disposable guest without networking or host mounts.
 set -euo pipefail
+# A VM stopped while /init changed accounts leaves shadow's lock files on the
+# kept disk, naming a PID that is alive again on the next boot.
+for file in passwd group shadow gshadow; do printf '%s' "$$" > "/etc/$file.lock"; done
 # Without the Mac's virtual GPU, the desktop must refuse to start and say why.
 if /init >/tmp/noodle-no-gpu.log 2>&1; then
     echo 'Desktop unexpectedly started without a GPU' >&2; exit 1

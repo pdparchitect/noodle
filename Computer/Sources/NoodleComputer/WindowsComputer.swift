@@ -266,8 +266,24 @@ enum WindowsPrivateVirtualization {
         devices(machine, "_pointingDevices").first?.perform(NSSelectorFromString("sendPointerEvents:"), with: [event])
     }
 
+    private typealias InitScroll = @convention(c) (AnyObject, Selector, Double, Double, Double, Double, UInt, UInt) -> AnyObject
+
     static func scroll(_ machine: VZVirtualMachine, _ event: NSEvent) {
-        guard let scroll = make("_VZScrollWheelEvent", with: event) else { return }
+        guard var scroll = make("_VZScrollWheelEvent", with: event) as? NSObject else { return }
+        let selector = NSSelectorFromString("initWithScrollingDeltaX:scrollingDeltaY:acceleratedScrollingDeltaX:acceleratedScrollingDeltaY:scrollPhase:momentumPhase:")
+        if event.isDirectionInvertedFromDevice, let type = NSClassFromString("_VZScrollWheelEvent") as? NSObject.Type,
+           type.instancesRespond(to: selector) {
+            func value<T>(_ key: String, _ fallback: T) -> T { scroll.value(forKey: key) as? T ?? fallback }
+            let deltas = WindowsScroll(deltaX: value("scrollingDeltaX", 0.0), deltaY: value("scrollingDeltaY", 0.0),
+                                       acceleratedDeltaX: value("acceleratedScrollingDeltaX", 0.0),
+                                       acceleratedDeltaY: value("acceleratedScrollingDeltaY", 0.0))
+                .forGuest(directionInvertedFromDevice: true)
+            let object = type.perform(NSSelectorFromString("alloc")).takeUnretainedValue()
+            let initialise = unsafeBitCast(class_getMethodImplementation(type, selector), to: InitScroll.self)
+            guard let reversed = initialise(object, selector, deltas.deltaX, deltas.deltaY, deltas.acceleratedDeltaX,
+                                            deltas.acceleratedDeltaY, value("scrollPhase", UInt(0)), value("momentumPhase", UInt(0))) as? NSObject else { return }
+            scroll = reversed
+        }
         devices(machine, "_pointingDevices").first?.perform(NSSelectorFromString("sendScrollWheelEvents:"), with: [scroll])
     }
 

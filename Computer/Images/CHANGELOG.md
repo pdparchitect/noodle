@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Start Desktop again after its computer was stopped while starting, instead of failing with “usermod: cannot lock /etc/passwd; try again later.”
+- Keep the desktop running when Control-C is pressed in it. The keys also reached the hidden text console, which stopped the display server.
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

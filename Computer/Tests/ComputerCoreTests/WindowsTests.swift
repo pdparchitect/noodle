@@ -186,6 +186,13 @@ final class WindowsTests: XCTestCase {
                            "Installing Windows needs about 30 GB of free disk space, and this Mac has 8 GB free. Free some space and try again.")
         }
     }
+
+    func testNaturalScrollingIsTurnedBackForTheGuest() {
+        let scroll = WindowsScroll(deltaX: 2, deltaY: -8, acceleratedDeltaX: 0.2, acceleratedDeltaY: -0.8)
+        XCTAssertEqual(scroll.forGuest(directionInvertedFromDevice: false), scroll)
+        XCTAssertEqual(scroll.forGuest(directionInvertedFromDevice: true),
+                       WindowsScroll(deltaX: -2, deltaY: 8, acceleratedDeltaX: -0.2, acceleratedDeltaY: 0.8))
+    }
 }
 
 /// An independent FAT32 reader: MBR, BPB, cluster chains and long names, as the spec describes them.

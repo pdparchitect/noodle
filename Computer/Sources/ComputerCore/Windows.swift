@@ -259,3 +259,19 @@ public enum WindowsInstallSpace {
         throw ComputerError("Installing Windows needs about \(needed / gigabyte) GB of free disk space, and this Mac has \(available / gigabyte) GB free. Free some space and try again.")
     }
 }
+
+/// The deltas of a scroll for VZ's pointing device. Windows applies its own scroll direction, so a scroll macOS has
+/// already turned around for natural scrolling is turned back, or the guest would reverse it a second time.
+public struct WindowsScroll: Equatable, Sendable {
+    public var deltaX, deltaY, acceleratedDeltaX, acceleratedDeltaY: Double
+
+    public init(deltaX: Double, deltaY: Double, acceleratedDeltaX: Double, acceleratedDeltaY: Double) {
+        self.deltaX = deltaX; self.deltaY = deltaY
+        self.acceleratedDeltaX = acceleratedDeltaX; self.acceleratedDeltaY = acceleratedDeltaY
+    }
+
+    public func forGuest(directionInvertedFromDevice: Bool) -> WindowsScroll {
+        guard directionInvertedFromDevice else { return self }
+        return WindowsScroll(deltaX: -deltaX, deltaY: -deltaY, acceleratedDeltaX: -acceleratedDeltaX, acceleratedDeltaY: -acceleratedDeltaY)
+    }
+}
