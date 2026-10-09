@@ -24,6 +24,6 @@ final class ComputerLaunchCheckTests: XCTestCase {
             XCTAssertFalse(source.contains("hasSuffix(\"-test\")") || source.contains("hasSuffix(\"-preview\")"),
                            "\(file.lastPathComponent) matches launch arguments by suffix")
         }
-        XCTAssertEqual(names.count, 20)
+        XCTAssertEqual(names.count, 21)
     }
 }
