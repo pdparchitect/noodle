@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import HubLink
 import NoodleCore
 
 /// Published by the visible composer so menu commands follow the key chat
@@ -160,10 +161,9 @@ struct SpaceCommands: Commands {
                         .keyboardShortcut(Self.shortcut((store.hubMirrors.isEmpty ? 0 : store.hubMirrors.count + 1) + index))
                 }
                 Divider()
-                Button("New Space…") { store.spaceNaming = .new(adding: nil) }
-                if let space = store.shownCustomSpace {
-                    Button("Rename Space…") { store.spaceNaming = .rename(space) }
-                    Button("Delete Space") { store.spaceBeingDeleted = space }
+                Button("New Space…") { store.spaceNaming = .init() }
+                if !store.customSpaces.isEmpty {
+                    Button("Edit Spaces…") { store.editsSpaces = true }
                 }
             }
         }
@@ -175,47 +175,90 @@ struct SpaceCommands: Commands {
     }
 }
 
-/// Naming and deleting the spaces the person made, in the main window.
+/// Naming a new space, in the main window.
 struct SpaceAlerts: ViewModifier {
     @Environment(NoodleStore.self) private var store
     @State private var name = ""
 
     func body(content: Content) -> some View {
         content
-            .alert(isRenaming ? "Rename Space" : "New Space",
-                   isPresented: Binding(get: { store.spaceNaming != nil }, set: { if !$0 { store.spaceNaming = nil } })) {
+            .alert("New Space", isPresented: Binding(get: { store.spaceNaming != nil }, set: { if !$0 { store.spaceNaming = nil } })) {
                 TextField("Name", text: $name)
                 Button("Cancel", role: .cancel) {}
-                Button(isRenaming ? "Rename" : "Create") { save(store.spaceNaming) }
+                Button("Create") { save(store.spaceNaming) }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .onChange(of: store.spaceNaming) { _, naming in
-                if case .rename(let space) = naming { name = space.name } else { name = "" }
-            }
-            .alert("Delete \(store.spaceBeingDeleted?.name ?? "Space")?",
-                   isPresented: Binding(get: { store.spaceBeingDeleted != nil }, set: { if !$0 { store.spaceBeingDeleted = nil } }),
-                   presenting: store.spaceBeingDeleted) { space in
-                Button("Delete", role: .destructive) { store.deleteSpace(space.id) }
-                Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
-            } message: { _ in
-                Text("Its bots and groups stay in All.")
-            }
-    }
-
-    private var isRenaming: Bool {
-        if case .rename = store.spaceNaming { true } else { false }
+            .onChange(of: store.spaceNaming) { name = "" }
     }
 
     private func save(_ naming: NoodleStore.SpaceNaming?) {
-        switch naming {
-        case .new(let conversationID):
-            guard let space = store.addSpace(named: name), let conversationID else { return }
-            store.setMember(true, of: space.id, conversationID: conversationID)
-        case .rename(let space):
-            store.renameSpace(space.id, to: name)
-        case nil:
-            break
+        guard let naming, let space = store.addSpace(named: name), let conversationID = naming.adding else { return }
+        store.setMember(true, of: space.id, conversationID: conversationID)
+    }
+}
+
+/// The spaces the person made, to put in order, rename and delete.
+struct SpaceEditorSheet: View {
+    @Environment(NoodleStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Edit Spaces").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+
+            Divider()
+
+            List {
+                ForEach(store.customSpaces) { space in
+                    SpaceEditorRow(space: space)
+                }
+                .onMove(perform: store.moveSpaces)
+            }
+            .frame(minHeight: 160, idealHeight: 260)
         }
+        .frame(width: 360)
+        .onChange(of: store.customSpaces.isEmpty) { _, isEmpty in
+            if isEmpty { dismiss() }
+        }
+    }
+}
+
+private struct SpaceEditorRow: View {
+    @Environment(NoodleStore.self) private var store
+    let space: CustomSpace
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack {
+            Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
+            TextField("Name", text: $name)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onSubmit(save)
+            Button("Delete", systemImage: "minus.circle.fill") { store.deleteSpace(space.id) }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.red)
+                .help("Delete \(space.name)")
+        }
+        .onAppear { name = space.name }
+        .onChange(of: space.name) { _, renamed in if !focused { name = renamed } }
+        .onChange(of: focused) { _, isFocused in if !isFocused { save() } }
+        .onDisappear(perform: save)
+    }
+
+    /// An empty name puts the old one back.
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return name = space.name }
+        if trimmed != space.name { store.renameSpace(space.id, to: trimmed) }
     }
 }
 

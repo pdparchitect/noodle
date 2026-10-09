@@ -963,9 +963,10 @@ struct AgentsView: View {
     @State private var spaceList = SpaceList(file: URL.applicationSupportDirectory.appendingPathComponent("spaces.json"))
     /// Carries them to the person's other devices through iCloud.
     @State private var spaceSync: SpaceCloudSync?
+    /// A new space, starting with the bot or group it was made from, if any.
     @State private var naming: SpaceNaming?
     @State private var spaceName = ""
-    @State private var deletingSpace: CustomSpace?
+    @State private var editingSpaces = false
     @State private var showingMore = false
     /// What was picked in the … sheet; it opens once that sheet has gone.
     @State private var chosen: MoreChoice?
@@ -983,17 +984,8 @@ struct AgentsView: View {
         let id: ChatLink
     }
 
-    /// A new space, starting with the bot or group it was made from, or a new name for one.
-    private enum SpaceNaming: Identifiable {
-        case new(adding: Row?)
-        case rename(CustomSpace)
-
-        var id: String {
-            switch self {
-            case .new(let row): "new-\(row.map { "\($0.id)" } ?? "")"
-            case .rename(let space): "rename-\(space.id)"
-            }
-        }
+    private struct SpaceNaming {
+        var adding: Row?
     }
 
     /// The space the person made that is shown; nil for All and the Hubs' spaces.
@@ -1106,21 +1098,13 @@ struct AgentsView: View {
             .sheet(isPresented: $creatingGroup) {
                 if let hub = spaceChats ?? chats.first { GroupEditor(chats: hub, group: nil, hubs: chats, created: joinShownSpace) }
             }
-            .alert(isRenamingSpace ? "Rename Space" : "New Space",
-                   isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            .alert("New Space", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
                 TextField("Name", text: $spaceName)
                 Button("Cancel", role: .cancel) {}
-                Button(isRenamingSpace ? "Rename" : "Create") { saveSpace() }
+                Button("Create") { saveSpace() }
                     .disabled(spaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .alert("Delete \(deletingSpace?.name ?? "Space")?",
-                   isPresented: Binding(get: { deletingSpace != nil }, set: { if !$0 { deletingSpace = nil } }),
-                   presenting: deletingSpace) { deleted in
-                Button("Delete", role: .destructive) { changeSpaces { try spaceList.delete(deleted.id) } }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("Its bots and groups stay in All.")
-            }
+            .sheet(isPresented: $editingSpaces) { SpaceEditor(list: spaceList, change: { changeSpaces($0) }) }
             .sheet(item: $editing) { row in ThreadEditor(chats: row.chats, thread: row.thread) }
         }
         .onChange(of: opening, initial: true, open)
@@ -1158,10 +1142,9 @@ struct AgentsView: View {
                 }
             }
             Divider()
-            Button { name(.new(adding: nil)) } label: { Label("New Space…", systemImage: "plus") }
-            if let customSpace {
-                Button { name(.rename(customSpace)) } label: { Label("Rename Space…", systemImage: "pencil") }
-                Button(role: .destructive) { deletingSpace = customSpace } label: { Label("Delete Space", systemImage: "trash") }
+            Button { name(SpaceNaming(adding: nil)) } label: { Label("New Space…", systemImage: "plus") }
+            if !spaceList.spaces.isEmpty {
+                Button { editingSpaces = true } label: { Label("Edit Spaces…", systemImage: "pencil") }
             }
         } label: {
             HStack(spacing: 4) {
@@ -1186,27 +1169,16 @@ struct AgentsView: View {
 
     private var spaceTitle: String { customSpace?.name ?? spaceChats?.pairing.hubName ?? "All" }
 
-    private var isRenamingSpace: Bool {
-        if case .rename = naming { true } else { false }
-    }
-
     private func name(_ naming: SpaceNaming) {
-        if case .rename(let space) = naming { spaceName = space.name } else { spaceName = "" }
+        spaceName = ""
         self.naming = naming
     }
 
     /// A new space is shown at once, holding the bot or group it was made from.
     private func saveSpace() {
-        switch naming {
-        case .new(let row):
-            guard let made = changeSpaces({ try spaceList.add(named: spaceName) }) else { return }
-            if let row { changeSpaces { try spaceList.setMember(true, row.chats.spaceMember(of: row.thread), of: made.id) } }
-            space = made.id.uuidString
-        case .rename(let renamed):
-            changeSpaces { try spaceList.rename(renamed.id, to: spaceName) }
-        case nil:
-            break
-        }
+        guard let naming, let made = changeSpaces({ try spaceList.add(named: spaceName) }) else { return }
+        if let row = naming.adding { changeSpaces { try spaceList.setMember(true, row.chats.spaceMember(of: row.thread), of: made.id) } }
+        space = made.id.uuidString
     }
 
     /// A bot or group made while a space the person made is shown joins it, so it shows there.
@@ -1257,7 +1229,7 @@ struct AgentsView: View {
                                                  set: { on in changeSpaces { try spaceList.setMember(on, member, of: space.id) } }))
             }
             if !spaceList.spaces.isEmpty { Divider() }
-            Button { name(.new(adding: row)) } label: { Label("New Space…", systemImage: "plus") }
+            Button { name(SpaceNaming(adding: row)) } label: { Label("New Space…", systemImage: "plus") }
         } label: {
             Label("Spaces", systemImage: "square.stack")
         }
@@ -2759,5 +2731,61 @@ struct AgentAvatar: View {
             }
         }
         .accessibilityHidden(phase == nil)
+    }
+}
+
+/// The spaces the person made, to put in order, rename and delete.
+private struct SpaceEditor: View {
+    let list: SpaceList
+    let change: (() throws -> Void) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(list.spaces) { space in
+                    SpaceEditorRow(space: space) { name in change { try list.rename(space.id, to: name) } }
+                }
+                .onMove { source, destination in change { try list.move(fromOffsets: source, toOffset: destination) } }
+                .onDelete { offsets in
+                    let deleted = offsets.map { list.spaces[$0].id }
+                    change { for id in deleted { try list.delete(id) } }
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Edit Spaces")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .onChange(of: list.spaces.isEmpty) { _, isEmpty in
+            if isEmpty { dismiss() }
+        }
+    }
+}
+
+private struct SpaceEditorRow: View {
+    let space: CustomSpace
+    let rename: (String) -> Void
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Name", text: $name)
+            .focused($focused)
+            .submitLabel(.done)
+            .onSubmit(save)
+            .onAppear { name = space.name }
+            .onChange(of: space.name) { _, renamed in if !focused { name = renamed } }
+            .onChange(of: focused) { _, isFocused in if !isFocused { save() } }
+            .onDisappear(perform: save)
+    }
+
+    /// An empty name puts the old one back.
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return name = space.name }
+        if trimmed != space.name { rename(trimmed) }
     }
 }

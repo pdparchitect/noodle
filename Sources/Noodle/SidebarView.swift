@@ -91,7 +91,7 @@ struct SidebarView: View {
                                                  set: { store.setMember($0, of: space.id, conversationID: conversation.id) }))
             }
             if !store.customSpaces.isEmpty { Divider() }
-            Button("New Space…") { store.spaceNaming = .new(adding: conversation.id) }
+            Button("New Space…") { store.spaceNaming = .init(adding: conversation.id) }
         }
         Divider()
         switch conversation.kind {

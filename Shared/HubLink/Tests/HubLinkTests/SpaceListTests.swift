@@ -39,7 +39,7 @@ import XCTest
         XCTAssertEqual(list.space(work.id)?.pins, [scout])
 
         let again = SpaceList(file: file)
-        XCTAssertEqual(again.spaces, [CustomSpace(id: work.id, name: "Projects", members: [scout], pins: [scout])])
+        XCTAssertEqual(again.spaces, [CustomSpace(id: work.id, name: "Projects", members: [scout], pins: [scout], position: 1)])
         try again.delete(work.id)
         XCTAssertTrue(SpaceList(file: file).spaces.isEmpty)
     }
@@ -77,16 +77,59 @@ import XCTest
         XCTAssertEqual(SpaceList(file: file).spaces, [renamed])
     }
 
+    /// The person's own order, the same on every device: new spaces go last, and a move sends only the space moved.
+    func testSpacesKeepThePersonsOrder() throws {
+        let list = SpaceList(file: file)
+        let work = try list.add(named: "Work")
+        let home = try list.add(named: "Home")
+        let errands = try list.add(named: "Errands")
+        XCTAssertEqual(list.spaces.map(\.name), ["Work", "Home", "Errands"])
+
+        var sent: [[UUID]] = []
+        list.onChange = { saved, _ in sent.append(saved) }
+        try list.move(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+        XCTAssertEqual(list.spaces.map(\.name), ["Errands", "Work", "Home"])
+        try list.move(fromOffsets: IndexSet(integer: 1), toOffset: 3)
+        XCTAssertEqual(list.spaces.map(\.name), ["Errands", "Home", "Work"])
+        XCTAssertEqual(sent, [[errands.id], [work.id]])
+        XCTAssertEqual(SpaceList(file: file).spaces.map(\.id), [errands.id, home.id, work.id])
+
+        // Another device's move arrives as that space's new place.
+        var moved = try XCTUnwrap(list.space(work.id))
+        moved.position = -1
+        list.applyRemote(saved: [moved], deleted: [])
+        XCTAssertEqual(list.spaces.map(\.name), ["Work", "Errands", "Home"])
+    }
+
+    /// Spaces from before there was an order come first, by name, and are all given places once one is moved.
+    func testSpacesWithoutAPlaceAreGivenOneWhenMoved() throws {
+        let list = SpaceList(file: file)
+        let home = CustomSpace(name: "Home")
+        let errands = CustomSpace(name: "errands")
+        list.applyRemote(saved: [home, errands], deleted: [])
+        let work = try list.add(named: "Work")
+        XCTAssertEqual(list.spaces.map(\.name), ["errands", "Home", "Work"])
+
+        var sent: [[UUID]] = []
+        list.onChange = { saved, _ in sent.append(saved) }
+        try list.move(fromOffsets: IndexSet(integer: 2), toOffset: 1)
+        XCTAssertEqual(list.spaces.map(\.name), ["errands", "Work", "Home"])
+        XCTAssertEqual(sent.map(Set.init), [[errands.id, work.id, home.id]])
+        XCTAssertTrue(list.spaces.allSatisfy { $0.position != nil })
+    }
+
     /// One record per space in the private database, its contents encrypted.
     func testASpaceRoundTripsThroughItsRecord() throws {
         let member = CustomSpace.Member(hub: "studio", conversation: UUID())
-        let space = CustomSpace(name: "Work", members: [member, CustomSpace.Member(hub: nil, conversation: UUID())], pins: [member])
+        let space = CustomSpace(name: "Work", members: [member, CustomSpace.Member(hub: nil, conversation: UUID())], pins: [member],
+                                position: 2.5)
         let record = SpaceRecords.record(for: space, systemFields: nil)
         XCTAssertEqual(record.recordID, SpaceRecords.recordID(for: space.id))
         XCTAssertEqual(record.recordID.zoneID, SpaceRecords.zoneID)
         XCTAssertEqual(record.recordType, SpaceRecords.recordType)
         XCTAssertNil(record["name"])
         XCTAssertEqual(SpaceRecords.space(from: record), space)
+        XCTAssertEqual(SpaceRecords.space(from: SpaceRecords.record(for: CustomSpace(name: "Home"), systemFields: nil))?.position, nil)
 
         // Saved again over what iCloud last returned, so it is a change rather than a conflict.
         let fields = SpaceRecords.systemFields(of: record)

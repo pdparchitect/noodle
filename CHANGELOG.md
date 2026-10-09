@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 - Bots can no longer share a noodlet that has no preview; they are told to present it first, so its card shows a picture instead of a plain icon.
 - Remote Models: Custom sits apart from the named providers in the Add Account menu.
 - In the sidebar menu, Pin and Spaces sit in their own group below Float on Top.
+- Spaces > Edit Spaces… puts your spaces in any order by dragging, renames them and deletes them, replacing Rename Space… and Delete Space. The order follows you to your other devices and sets the ⌘ shortcuts.
 
 ## [0.52.0] - 2026-10-08
 

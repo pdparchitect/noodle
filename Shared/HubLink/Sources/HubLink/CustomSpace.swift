@@ -21,16 +21,19 @@ public struct CustomSpace: Identifiable, Codable, Hashable, Sendable {
     public var members: [Member]
     /// In the order they were pinned.
     public var pins: [Member]
+    /// Where the person put it among the others, lowest first; nil for spaces made before they could be moved.
+    public var position: Double?
 
-    public init(id: UUID = UUID(), name: String, members: [Member] = [], pins: [Member] = []) {
+    public init(id: UUID = UUID(), name: String, members: [Member] = [], pins: [Member] = [], position: Double? = nil) {
         self.id = id
         self.name = name
         self.members = members
         self.pins = pins
+        self.position = position
     }
 }
 
-/// The spaces the person made, kept on this device in one file, by name.
+/// The spaces the person made, kept on this device in one file, in the person's order.
 @MainActor @Observable public final class SpaceList {
     public private(set) var spaces: [CustomSpace] = []
     @ObservationIgnored private let file: URL
@@ -61,7 +64,8 @@ public struct CustomSpace: Identifiable, Codable, Hashable, Sendable {
 
     @discardableResult
     public func add(named name: String) throws -> CustomSpace {
-        let space = CustomSpace(name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+        let space = CustomSpace(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                position: (spaces.compactMap(\.position).max() ?? 0) + 1)
         try write(spaces + [space])
         onChange?([space.id], [])
         return space
@@ -75,6 +79,37 @@ public struct CustomSpace: Identifiable, Codable, Hashable, Sendable {
     public func delete(_ id: UUID) throws {
         try write(spaces.filter { $0.id != id })
         onChange?([], [id])
+    }
+
+    /// As a list's drag hands it over. A space dropped between two with places takes the middle, so only it is sent;
+    /// otherwise every space is given a place.
+    public func move(fromOffsets source: IndexSet, toOffset destination: Int) throws {
+        var updated = spaces
+        updated.move(fromOffsets: source, toOffset: destination)
+        guard updated.map(\.id) != spaces.map(\.id) else { return }
+        if source.count == 1, spaces.allSatisfy({ $0.position != nil }),
+           let moved = updated.firstIndex(where: { $0.id == spaces[source.first!].id }),
+           let place = Self.place(after: moved > 0 ? updated[moved - 1].position : nil,
+                                  before: moved < updated.count - 1 ? updated[moved + 1].position : nil) {
+            updated[moved].position = place
+            try write(updated)
+            onChange?([updated[moved].id], [])
+        } else {
+            for index in updated.indices { updated[index].position = Double(index + 1) }
+            try write(updated)
+            onChange?(updated.map(\.id), [])
+        }
+    }
+
+    /// Between two places, or one past either end; nil once they are too close to tell apart.
+    private static func place(after: Double?, before: Double?) -> Double? {
+        let place = switch (after, before) {
+        case let (after?, before?): (after + before) / 2
+        case let (after?, nil): after + 1
+        case let (nil, before?): before - 1
+        case (nil, nil): 1.0
+        }
+        return place != after && place != before ? place : nil
     }
 
     /// Leaving a space also drops the pin there.
@@ -111,9 +146,11 @@ public struct CustomSpace: Identifiable, Codable, Hashable, Sendable {
         spaces = Self.ordered(updated)
     }
 
+    /// Those without a place first, by name, then by place.
     private static func ordered(_ spaces: [CustomSpace]) -> [CustomSpace] {
         spaces.sorted { lhs, rhs in
-            switch lhs.name.localizedStandardCompare(rhs.name) {
+            if lhs.position != rhs.position { return (lhs.position ?? -.infinity) < (rhs.position ?? -.infinity) }
+            return switch lhs.name.localizedStandardCompare(rhs.name) {
             case .orderedAscending: true
             case .orderedDescending: false
             case .orderedSame: lhs.id.uuidString < rhs.id.uuidString

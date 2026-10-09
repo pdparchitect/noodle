@@ -17,13 +17,15 @@ public enum SpaceRecords {
         record.encryptedValues["name"] = space.name
         record.encryptedValues["members"] = try? JSONEncoder().encode(space.members)
         record.encryptedValues["pins"] = try? JSONEncoder().encode(space.pins)
+        record.encryptedValues["position"] = space.position
         return record
     }
 
     public static func space(from record: CKRecord) -> CustomSpace? {
         guard record.recordType == recordType, let id = UUID(uuidString: record.recordID.recordName),
               let name: String = record.encryptedValues["name"] else { return nil }
-        return CustomSpace(id: id, name: name, members: members(record.encryptedValues["members"]), pins: members(record.encryptedValues["pins"]))
+        return CustomSpace(id: id, name: name, members: members(record.encryptedValues["members"]), pins: members(record.encryptedValues["pins"]),
+                           position: record.encryptedValues["position"])
     }
 
     public static func systemFields(of record: CKRecord) -> Data {

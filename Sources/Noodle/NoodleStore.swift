@@ -68,10 +68,9 @@ final class NoodleStore {
     /// Carries them to the person's other devices through iCloud, in builds signed for it.
     @ObservationIgnored private var spaceSync: SpaceCloudSync?
 
-    /// A new space, starting with the bot or group it was made from, or a new name for one.
-    enum SpaceNaming: Equatable {
-        case new(adding: UUID?)
-        case rename(CustomSpace)
+    /// A new space, starting with the bot or group it was made from.
+    struct SpaceNaming: Equatable {
+        var adding: UUID?
     }
     private(set) var unreadConversationIDs: Set<UUID> = [] {
         didSet { updateDockBadge() }
@@ -110,7 +109,7 @@ final class NoodleStore {
     var groupBeingEdited: BotConversation?
     var backgroundBeingEdited: BotConversation?
     var spaceNaming: SpaceNaming?
-    var spaceBeingDeleted: CustomSpace?
+    var editsSpaces = false
     private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
     private(set) var storageReady = false
@@ -401,6 +400,10 @@ final class NoodleStore {
 
     func renameSpace(_ id: UUID, to name: String) {
         changeSpaces { try spaceList.rename(id, to: name) }
+    }
+
+    func moveSpaces(fromOffsets source: IndexSet, toOffset destination: Int) {
+        changeSpaces { try spaceList.move(fromOffsets: source, toOffset: destination) }
     }
 
     /// Only the space goes; its bots and groups stay where they are.

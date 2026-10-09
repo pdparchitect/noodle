@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Edit Spaces… in the title menu puts your spaces in any order by dragging, renames them and deletes them, replacing Rename Space… and Delete Space. The order follows you to your other devices.
+
 ## [0.26.0] - 2026-10-08
 
 ### Changed

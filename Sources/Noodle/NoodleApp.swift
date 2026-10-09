@@ -522,6 +522,10 @@ struct RootView: View {
         }
         .modifier(ConversationErrorAlert())
         .modifier(SpaceAlerts())
+        .sheet(isPresented: $store.editsSpaces) {
+            SpaceEditorSheet()
+                .environment(store)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .newBot)) { _ in
             store.showNewBot()
         }
