@@ -17,7 +17,7 @@ struct BrowserSettingsView: View {
         self.library = library; self.runtime = runtime; _selection = State(initialValue: selection)
     }
     var body: some View {
-        TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
+        SettingsTabView(selection: $selection) {
             BrowserGeneralSettingsView()
                 .frame(width: 580).fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("General", systemImage: "gearshape") }.tag(BrowserSettingsTab.general)
@@ -34,8 +34,6 @@ struct BrowserSettingsView: View {
                 .frame(width: 580).fixedSize(horizontal: false, vertical: true)
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }.tag(BrowserSettingsTab.updates)
         }
-        .windowResizeAnchor(.top)
-        .settingsScrollIndicators(selection: selection)
         .background(SettingsTabBadge(counts: ["Update": updater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tab is badged before it is selected.
         .onAppear { updater.probeForUpdate() }

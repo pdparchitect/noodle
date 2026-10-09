@@ -93,7 +93,7 @@ struct HubSettingsView: View {
     }
 
     var body: some View {
-        TabView(selection: $host.selectedTab.animation(.easeInOut(duration: 0.22))) {
+        SettingsTabView(selection: $host.selectedTab) {
             HubNetworkSettingsView(link: host.hub.link)
                 .hubSettingsSize()
                 .tabItem { Label("Network", systemImage: "network") }
@@ -138,8 +138,6 @@ struct HubSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(HubSettingsTab.updates)
         }
-        .modifier(SettingsWindowResizeAnchor())
-        .settingsScrollIndicators(selection: host.selectedTab)
         .alert("Could Not Archive", isPresented: Binding(get: { host.problem != nil }, set: { if !$0 { host.problem = nil } })) {
             Button("OK") { host.problem = nil }
         } message: {
@@ -159,11 +157,6 @@ struct HubSettingsView: View {
     }
 }
 
-private struct SettingsWindowResizeAnchor: ViewModifier {
-    func body(content: Content) -> some View {
-        content.windowResizeAnchor(.top)
-    }
-}
 
 private extension View {
     /// The same pane width as Noodle's settings.

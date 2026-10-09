@@ -12,7 +12,7 @@ struct AppletSettingsView: View {
     @ObservedObject private var updater = AppletUpdater.shared
 
     var body: some View {
-        TabView(selection: $selection.animation(.easeInOut(duration: 0.22))) {
+        SettingsTabView(selection: $selection) {
             AppletGeneralSettingsView(background: background)
                 .frame(width: 580)
                 .fixedSize(horizontal: false, vertical: true)
@@ -39,8 +39,6 @@ struct AppletSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(AppletSettingsTab.updates)
         }
-        .modifier(AppletSettingsResizeAnchor())
-        .settingsScrollIndicators(selection: selection)
         .background(SettingsTabBadge(counts: ["Update": updater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tab is badged before it is selected.
         .onAppear { updater.probeForUpdate() }
@@ -258,8 +256,3 @@ private struct AppletStorageSettingsView: View {
     }
 }
 
-private struct AppletSettingsResizeAnchor: ViewModifier {
-    @ViewBuilder func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) { content.windowResizeAnchor(.top) } else { content }
-    }
-}

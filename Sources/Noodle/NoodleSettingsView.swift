@@ -38,7 +38,7 @@ struct NoodleSettingsView: View {
     var body: some View {
         @Bindable var store = store
 
-        TabView(selection: $store.selectedSettingsTab.animation(.easeInOut(duration: 0.22))) {
+        SettingsTabView(selection: $store.selectedSettingsTab) {
             GeneralSettingsView()
                 .settingsContentSize(width: Self.width)
                 .tabItem {
@@ -90,8 +90,6 @@ struct NoodleSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
         }
-        .modifier(SettingsWindowResizeAnchor())
-        .settingsScrollIndicators(selection: store.selectedSettingsTab)
         .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
                                               "Tools": toolsNeedingAttention,
                                               "Permissions": permissions.needingAttention,
@@ -212,12 +210,6 @@ struct ChatSettingsView: View {
     }
 }
 
-private struct SettingsWindowResizeAnchor: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        content.windowResizeAnchor(.top)
-    }
-}
 
 extension NoodleStore: BotSettingsHost {
     func showHarnessSettings() { selectedSettingsTab = .harnesses }

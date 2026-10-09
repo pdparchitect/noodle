@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Switching tabs in Settings hides the old tab while the window resizes, then fades in the new one once the window has its size, as in Safari.
+
 ### Fixed
 
 - **Choose Harnesses** applies its choices when it closes, so the Settings window no longer resizes and moves it while harnesses are turned on and off.

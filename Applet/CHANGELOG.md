@@ -9,6 +9,7 @@
 ### Changed
 
 - A noodlet can download up to 1 GiB from the web in one request, up from 16 MiB, and a request may take up to 10 minutes, up from 2.
+- Switching tabs in Settings hides the old tab while the window resizes, then fades in the new one once the window has its size, as in Safari.
 
 ## [0.28.0] - 2026-10-08
 
