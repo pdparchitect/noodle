@@ -4,9 +4,16 @@ import NoodleSettingsUI
 import NoodleRuntime
 
 /// Turns harnesses on and off; one that is off leaves the Harness tab and every picker.
+/// Choices apply when the sheet closes, so the Settings window does not resize under it.
 struct HarnessSelectionView: View {
     let runtime: AgentRuntimeCoordinator
     @Environment(\.dismiss) private var dismiss
+    @State private var turnedOn: Set<HarnessProvider>
+
+    init(runtime: AgentRuntimeCoordinator) {
+        self.runtime = runtime
+        _turnedOn = State(initialValue: Set(HarnessProvider.allCases.filter(runtime.harnesses.isOn)))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,8 +21,8 @@ struct HarnessSelectionView: View {
                 Text("Harnesses").font(.title2.bold())
                 VStack(spacing: 12) {
                     ForEach(HarnessProvider.allCases) { provider in
-                        Toggle(isOn: Binding(get: { runtime.harnesses.isOn(provider) },
-                                             set: { runtime.setHarness(provider, on: $0) })) {
+                        Toggle(isOn: Binding(get: { turnedOn.contains(provider) },
+                                             set: { if $0 { turnedOn.insert(provider) } else { turnedOn.remove(provider) } })) {
                             HStack(spacing: 10) {
                                 HarnessProviderIcon(provider: provider)
                                     .foregroundStyle(.secondary)
@@ -43,5 +50,8 @@ struct HarnessSelectionView: View {
         }
         .frame(width: 360)
         .fixedSize(horizontal: false, vertical: true)
+        .onDisappear {
+            for provider in HarnessProvider.allCases { runtime.setHarness(provider, on: turnedOn.contains(provider)) }
+        }
     }
 }
