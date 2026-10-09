@@ -303,7 +303,6 @@ public struct WorkspaceRepository: Sendable {
         try workspaceFiles.writeData(Data((Self.renderedAgentInstructions(backstory: backstory, owner: configuration.owner) + folderInstructions + ToolProviderSkills.instructions(workspace: directory)).utf8), named: "AGENTS.md")
         workspaceFiles.remove("instructions.md")
         try workspaceFiles.symlink("CLAUDE.md", destination: "AGENTS.md")
-        Self.removeAppletCommand(workspace: directory)
         try AgentTips.synchronize(workspace: directory)
         _ = try synchronizeClaudeSkillLinks(in: directory)
 
@@ -311,25 +310,6 @@ public struct WorkspaceRepository: Sendable {
         if let launcherExecutableURL {
             try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
-    }
-
-    // TODO(0.42.0, Hub 0.15.0): remove with its call in synchronizeAgentWorkspace and
-    // RepositoryTests.testTheNoodletCommandAndItsMailboxLeaveEveryWorkspace. Milestone: 0.41.0, Hub 0.14.0.
-    /// Bots reach Noodle Applet through the applet tool now. Removes the `noodlet` command, its
-    /// skill unless the tool has taken the name over, and its mailbox.
-    static func removeAppletCommand(workspace: URL) {
-        if let skill = try? WorkspaceMailbox(workspace: workspace, path: ".agents/skills/applet") {
-            if skill.contains(ToolProviderSkills.marker) {
-                if skill.linkDestination("noodlet") != nil { skill.remove("noodlet") }
-            } else {
-                try? WorkspaceMailbox.synchronizeSkill(workspace: workspace, name: "applet", enabled: false, instructions: "", command: "noodlet", executable: nil)
-            }
-        }
-        guard let bridge = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/applet-bridge") else { return }
-        for name in (try? bridge.names()) ?? [] where name == "session.json" || name.hasSuffix(".request") || name.hasSuffix(".response") || name.hasPrefix(".request-") {
-            bridge.remove(name)
-        }
-        (try? WorkspaceMailbox(workspace: workspace, path: ".noodle"))?.removeEmptyDirectory("applet-bridge")
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
