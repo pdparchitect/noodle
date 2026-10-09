@@ -51,8 +51,8 @@
       const reply = await send({operation:'fetch', id, url:request.url, method:request.method,
         headers:Object.fromEntries(request.headers), body:encoded, redirect:request.redirect});
       if (request.signal.aborted) throw new DOMException('Request aborted', 'AbortError');
-      const data = Uint8Array.from(atob(reply.body), c=>c.charCodeAt(0));
-      const response = new Response(request.method === 'HEAD' || [204,205,304].includes(reply.status) ? null : data,
+      const body = (await browserFetch(reply.body)).body;
+      const response = new Response(request.method === 'HEAD' || [204,205,304].includes(reply.status) ? null : body,
         {status:reply.status, headers:reply.headers});
       Object.defineProperties(response, {url:{value:reply.url},redirected:{value:reply.redirected}});
       return response;

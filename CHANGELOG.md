@@ -15,6 +15,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Noodlets can download up to 1 GiB from the web in one request, up from 16 MiB.
 - Talking to a Noodle Hub is quicker: the app keeps one connection open and sends everything over it, instead of connecting again for every request. Live views keep a connection of their own.
 - The Sharing sheet in Edit Bot no longer shows a line saying who can talk to the bot.
 - Bots can no longer share a noodlet that has no preview; they are told to present it first, so its card shows a picture instead of a plain icon.
@@ -24,6 +25,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Opening a large noodlet from a Noodle Hub on a phone or another Mac no longer fails when the Hub takes longer than 30 seconds to prepare it.
 - Changes made just as the app connects to a Noodle Hub, such as a conversation pinned on another device, are no longer missed.
 - Bots no longer miss new messages because their app never showed them how to read Messenger: each wake-up now points them at the Messenger guide. Thanks to Brad Hallett for finding this.
 - In a narrow window, a bot's picture beside a link card no longer slides out to the window's edge.

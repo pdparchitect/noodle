@@ -134,6 +134,8 @@ public enum AppletConnection {
             }
         }
     }
+    /// How long a call waits without hearing from Applet.
+    static func patience(for operation: AppletOperation) -> Int { operation.timeout }
     public static func call(
         _ request: AppletRequest, socket url: URL, team: String,
         providerID: String = providerID
@@ -143,12 +145,7 @@ public enum AppletConnection {
             let fd = socket(AF_UNIX, SOCK_STREAM, 0)
             guard fd >= 0 else { throw AppletError("Cannot open applet connection.") }
             defer { Darwin.close(fd) }
-            configure(
-                fd,
-                seconds: request.operation.isFileTransfer
-                    ? request.operation.timeout
-                    : (request.operation == .open || request.operation == .build
-                        || request.operation == .restart ? 180 : 30))
+            configure(fd, seconds: patience(for: request.operation))
             guard try withAddress(url, { Darwin.connect(fd, $0, $1) }) == 0 else {
                 throw AppletError("Applet is unavailable.", unavailable: true)
             }

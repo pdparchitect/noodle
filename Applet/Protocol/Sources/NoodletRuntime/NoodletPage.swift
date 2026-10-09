@@ -35,6 +35,7 @@ public typealias NoodletColor = UIColor
     public let root: URL
     /// `root` with its links resolved, as the package is served from it.
     private let served: URL
+    private let package: NoodletPackageScheme
     public let manifest: NoodletManifest
     public let web: WKWebView
     /// What `noodle.features` lists for the page to check before it relies on something.
@@ -72,6 +73,7 @@ public typealias NoodletColor = UIColor
                 log: @escaping (String, String) -> Void, configure: (WKWebViewConfiguration) -> Void = { _ in }) {
         self.root = root.standardizedFileURL
         served = root.standardizedFileURL.resolvingSymlinksInPath()
+        package = NoodletPackageScheme(root: served)
         self.manifest = manifest
         self.store = store
         network = WebNetwork(localNetwork: localNetwork)
@@ -80,7 +82,7 @@ public typealias NoodletColor = UIColor
         self.features = Self.commonFeatures + (localNetwork ? ["local-network"] : []) + features
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
-        configuration.setURLSchemeHandler(NoodletPackageScheme(root: served), forURLScheme: NoodletPackageScheme.scheme)
+        configuration.setURLSchemeHandler(package, forURLScheme: NoodletPackageScheme.scheme)
         configure(configuration)
         web = WKWebView(frame: frame, configuration: configuration)
         super.init()
@@ -214,6 +216,7 @@ public typealias NoodletColor = UIColor
         guard !stopped else { return }
         stopped = true
         network.stop()
+        package.discardResponses()
         let pending = cancellations.values
         cancellations.removeAll()
         for cancel in pending { cancel() }
@@ -440,7 +443,12 @@ public typealias NoodletColor = UIColor
         do {
             switch operation {
             case "fetch":
-                return (try await network.fetch(body), nil)
+                // The body waits in a file, for the page to read from the package's own site.
+                var reply = try await network.fetch(body)
+                if let file = reply.removeValue(forKey: "file") as? URL {
+                    if stopped { try? FileManager.default.removeItem(at: file) } else { reply["body"] = package.serve(file).absoluteString }
+                }
+                return (reply, nil)
             case "cancelFetch":
                 if let id = body["id"] as? String { network.cancel(id) }
                 return (true, nil)

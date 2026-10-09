@@ -20,6 +20,8 @@ import WebKit
 
     private let root: URL
     private var running: Set<ObjectIdentifier> = []
+    /// Responses to the page's web requests, each waiting in a file to be read once.
+    private var responses: [String: URL] = [:]
 
     init(root: URL) { self.root = root }
 
@@ -39,13 +41,27 @@ import WebKit
         url.scheme?.lowercased() == scheme && url.host?.lowercased() == host
     }
 
+    /// Where the page reads `file`, a response to one of its web requests, which is gone once read.
+    func serve(_ file: URL) -> URL {
+        let id = UUID().uuidString
+        responses[id] = file
+        return URL(string: "\(Self.scheme)://\(Self.host)/?response=\(id)")!
+    }
+
+    /// Discards the responses the page never read.
+    func discardResponses() {
+        for file in responses.values { try? FileManager.default.removeItem(at: file) }
+        responses.removeAll()
+    }
+
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
         let id = ObjectIdentifier(task)
         running.insert(id)
         let request = task.request
         let root = root
+        let response = request.url.flatMap(Self.response(in:)).flatMap { responses.removeValue(forKey: $0) }
         Task.detached { [weak self] in
-            let reply = Self.reply(to: request, root: root)
+            let reply = response.map { Self.reply(sending: $0, for: request) } ?? Self.reply(to: request, root: root)
             guard await self?.send(reply.response, to: task, id: id) == true else { return }
             if let body = reply.body, await self?.send(body, to: task, id: id) != true { return }
             var left = reply.length
@@ -86,6 +102,25 @@ import WebKit
         /// Or what follows it: `length` bytes of `file` from where it stands.
         var file: FileHandle?
         var length = 0
+    }
+
+    /// The response a URL from `serve` names.
+    private nonisolated static func response(in url: URL) -> String? {
+        guard contains(url), url.path == "/" || url.path.isEmpty else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "response" }?.value
+    }
+
+    /// A response kept in `file`, which goes once it is open: what is read from it stays readable.
+    private nonisolated static func reply(sending file: URL, for request: URLRequest) -> Reply {
+        let url = request.url!
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let handle = try? FileHandle(forReadingFrom: file), let size = try? handle.seekToEnd() else {
+            return Reply(response: HTTPURLResponse(url: url, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: isolation)!)
+        }
+        try? handle.seek(toOffset: 0)
+        let headers = isolation.merging(["Content-Type": "application/octet-stream", "Content-Length": "\(size)"]) { $1 }
+        return Reply(response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!,
+                     file: handle, length: Int(size))
     }
 
     private nonisolated static func reply(to request: URLRequest, root: URL) -> Reply {

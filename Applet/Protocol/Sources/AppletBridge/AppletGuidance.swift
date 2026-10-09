@@ -147,8 +147,8 @@ public enum AppletGuidance {
         the network it is on (a TV, a router, a home server) need the local-network permission
         below. Requests use the native
         host outside browser CORS, return a standard Response, support AbortSignal,
-        methods, headers and binary bodies (16 MiB request/response, eight concurrent,
-        120-second total timeout). Supply API credentials explicitly; browser cookies
+        methods, headers and binary bodies (16 MiB request, 1 GiB response, eight concurrent,
+        10-minute total timeout). Supply API credentials explicitly; browser cookies
         and saved host credentials are not shared. XHR retains normal WebKit behavior.
         The privileged main page stays inside its package.
 

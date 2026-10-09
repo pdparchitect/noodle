@@ -5,7 +5,10 @@ import NoodletFormat
 /// Per-noodlet HTTP requests, independent of browser CORS and browser credentials. The public web
 /// is open to every noodlet; this device and the network it is on only with `localNetwork`.
 @MainActor public final class WebNetwork {
+  /// The largest request body.
   public static let limit = 16 * 1_048_576
+  /// The largest response, which waits in a file until the page reads it.
+  public static let responseLimit = 1 << 30
   private var requests: [String: Task<[String: Any], Error>] = [:]
   private let localNetwork: Bool
   static let localRefusal = "This noodlet reaches only the public web. To reach this device or its network, declare the local-network permission."
@@ -135,37 +138,115 @@ import NoodletFormat
     configuration.httpCookieStorage = nil
     configuration.urlCredentialStorage = nil
     configuration.urlCache = nil
-    configuration.timeoutIntervalForResource = 120
+    configuration.timeoutIntervalForResource = 600
     let session = URLSession(configuration: configuration)
     defer { session.invalidateAndCancel() }
-    let delegate = RedirectPolicy(mode: redirect, localNetwork: localNetwork)
-    let (bytes, response) = try await session.bytes(for: request, delegate: delegate)
-    guard let response = response as? HTTPURLResponse else {
-      throw AppletError("The server did not return an HTTP response.")
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent("NoodletResponse-\(UUID().uuidString)")
+    let download = ResponseFile(file, redirect: RedirectPolicy(mode: redirect, localNetwork: localNetwork))
+    let response: HTTPURLResponse
+    do {
+      response = try await download.run(request, in: session)
+    } catch {
+      try? FileManager.default.removeItem(at: file)
+      throw error
     }
-    if redirect == "error", (300..<400).contains(response.statusCode),
-      response.value(forHTTPHeaderField: "Location") != nil
-    {
-      throw AppletError("The server returned a redirect.")
-    }
-    guard response.expectedContentLength <= limit else {
-      throw AppletError("Response exceeds 16 MiB.")
-    }
-    var data = Data()
-    for try await byte in bytes {
-      guard data.count < limit else { throw AppletError("Response exceeds 16 MiB.") }
-      data.append(byte)
-    }
-    try Task.checkCancellation()
     var headers: [String: String] = [:]
     for (key, value) in response.allHeaderFields {
       headers[String(describing: key)] = String(describing: value)
     }
     return [
       "url": response.url?.absoluteString ?? request.url!.absoluteString,
-      "status": response.statusCode, "headers": headers, "body": data.base64EncodedString(),
+      "status": response.statusCode, "headers": headers, "file": file,
       "redirected": response.url != request.url,
     ]
+  }
+}
+
+/// Writes a response's body to `file` as it arrives, refusing one larger than the limit.
+final class ResponseFile: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+  private let file: URL
+  private let redirect: RedirectPolicy
+  private let lock = NSLock()
+  private var handle: FileHandle?
+  private var written = 0
+  private var response: HTTPURLResponse?
+  private var failure: Error?
+  private var done: CheckedContinuation<HTTPURLResponse, Error>?
+
+  init(_ file: URL, redirect: RedirectPolicy) {
+    self.file = file
+    self.redirect = redirect
+  }
+
+  func run(_ request: URLRequest, in session: URLSession) async throws -> HTTPURLResponse {
+    let task = session.dataTask(with: request)
+    task.delegate = self
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        lock.withLock { done = continuation }
+        task.resume()
+      }
+    } onCancel: { task.cancel() }
+  }
+
+  private func fail(_ message: String) -> URLSession.ResponseDisposition {
+    lock.withLock { failure = AppletError(message) }
+    return .cancel
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                  newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+    redirect.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request,
+                        completionHandler: completionHandler)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                  completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    guard let response = response as? HTTPURLResponse else {
+      return completionHandler(fail("The server did not return an HTTP response."))
+    }
+    if redirect.mode == "error", (300..<400).contains(response.statusCode),
+      response.value(forHTTPHeaderField: "Location") != nil
+    {
+      return completionHandler(fail("The server returned a redirect."))
+    }
+    guard response.expectedContentLength <= WebNetwork.responseLimit else {
+      return completionHandler(fail("Response exceeds 1 GiB."))
+    }
+    guard FileManager.default.createFile(atPath: file.path, contents: nil),
+      let handle = try? FileHandle(forWritingTo: file)
+    else { return completionHandler(fail("The response could not be kept.")) }
+    lock.withLock {
+      self.response = response
+      self.handle = handle
+    }
+    completionHandler(.allow)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    let kept: Bool = lock.withLock {
+      written += data.count
+      guard written <= WebNetwork.responseLimit, (try? handle?.write(contentsOf: data)) != nil else { return false }
+      return true
+    }
+    if !kept {
+      lock.withLock { failure = failure ?? AppletError(written > WebNetwork.responseLimit ? "Response exceeds 1 GiB." : "The response could not be kept.") }
+      dataTask.cancel()
+    }
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    let (continuation, result): (CheckedContinuation<HTTPURLResponse, Error>?, Result<HTTPURLResponse, Error>) = lock.withLock {
+      try? handle?.close()
+      handle = nil
+      let continuation = done
+      done = nil
+      if let failure { return (continuation, .failure(failure)) }
+      if let error { return (continuation, .failure(error)) }
+      guard let response else { return (continuation, .failure(AppletError("The server did not return an HTTP response."))) }
+      return (continuation, .success(response))
+    }
+    continuation?.resume(with: result)
   }
 }
 

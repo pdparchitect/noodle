@@ -6,9 +6,14 @@
 
 - Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads.
 
+### Changed
+
+- A noodlet can download up to 1 GiB from the web in one request, up from 16 MiB.
+
 ### What to Test
 
 - Open a few noodlets you already have, including games, and check they look and play as before.
+- In a noodlet that loads things from the web, check they still load.
 
 ## [0.27.0] - 2026-10-09
 

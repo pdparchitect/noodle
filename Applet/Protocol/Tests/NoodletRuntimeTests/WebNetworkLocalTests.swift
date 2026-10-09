@@ -5,14 +5,15 @@ import XCTest
 /// The public web is open to every noodlet. This device and the network it is on are open only
 /// to one that declares local-network and that the person allowed.
 @MainActor final class WebNetworkLocalTests: XCTestCase {
-    /// Answers every request with "ok" on this Mac's loopback address, to anyone.
-    private func server() async throws -> UInt16 {
+    /// Answers every request with `body`, "ok" unless given, on this Mac's loopback address, to
+    /// anyone. `length` is the size it claims, if not the body's.
+    private func server(body: Data = Data("ok".utf8), length: Int? = nil) async throws -> UInt16 {
         let listener = try NWListener(using: .tcp, on: .any)
         listener.newConnectionHandler = { connection in
             connection.start(queue: .main)
             connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { _, _, _, _ in
-                let reply = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
-                connection.send(content: Data(reply.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                let head = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(length ?? body.count)\r\nConnection: close\r\n\r\n"
+                connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
             }
         }
         let ready = expectation(description: "listening")
@@ -46,7 +47,9 @@ import XCTest
     func testAllowedTheNetworkItIsOnIsOpen() async throws {
         let port = try await server()
         let answer = try await WebNetwork(localNetwork: true).fetch(["id": "local", "url": "http://127.0.0.1:\(port)/"])
-        XCTAssertEqual(answer["body"] as? String, Data("ok".utf8).base64EncodedString())
+        let file = try XCTUnwrap(answer["file"] as? URL)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(try Data(contentsOf: file), Data("ok".utf8))
     }
 
     /// Nothing to declare and nothing to allow for the public web; a name that leads nowhere
@@ -85,6 +88,35 @@ import XCTest
         }
         XCTAssertFalse(follows(localNetwork: false))
         XCTAssertTrue(follows(localNetwork: true))
+    }
+
+    /// A large download, such as a game's assets, reaches the page whole; one that says it is
+    /// larger than the limit is refused before it is downloaded.
+    func testALargeResponseReachesThePageWhole() async throws {
+        let body = Data((0..<20 * 1_048_576).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ $0 >> 16) })
+        let port = try await server(body: body)
+        let tooLarge = try await server(body: Data(count: 4096), length: WebNetwork.responseLimit + 1)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".noodlet")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("<title>Page</title>".utf8).write(to: root.appendingPathComponent("index.html"))
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        var manifest = NoodletManifest(title: "Page")
+        manifest.permissions = ["local-network"]
+        let page = NoodletPage(root: root, manifest: manifest, store: MemoryStore(), dataStore: .nonPersistent(),
+                               frame: CGRect(x: 0, y: 0, width: 320, height: 240), localNetwork: true) { _, _ in }
+        defer { page.stop() }
+        try await page.load()
+        let answer = try await page.evaluate("""
+            const response = await noodle.fetch('http://127.0.0.1:\(port)/game.pck');
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            let sum = 0;
+            for (let i = 0; i < bytes.length; i += 4093) sum = (sum + bytes[i] * (i % 251)) % 1000003;
+            const refused = await fetch('http://127.0.0.1:\(tooLarge)/').then(() => 'fetched', error => error.message);
+            return [response.status, bytes.length, sum, refused];
+            """)
+        var sum = 0
+        for i in stride(from: 0, to: body.count, by: 4093) { sum = (sum + Int(body[i]) * (i % 251)) % 1_000_003 }
+        XCTAssertEqual(answer, #"[200,\#(body.count),\#(sum),"Error: Response exceeds 1 GiB."]"#)
     }
 
     /// What the page loads itself, outside fetch, keeps to the same rule.
