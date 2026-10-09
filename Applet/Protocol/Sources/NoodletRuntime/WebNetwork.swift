@@ -8,7 +8,7 @@ import NoodletFormat
   /// The largest request body.
   public static let limit = 16 * 1_048_576
   /// The largest response, which waits in a file until the page reads it.
-  public static let responseLimit = 1 << 30
+  public nonisolated static let responseLimit = 1 << 30
   private var requests: [String: Task<[String: Any], Error>] = [:]
   private let localNetwork: Bool
   static let localRefusal = "This noodlet reaches only the public web. To reach this device or its network, declare the local-network permission."

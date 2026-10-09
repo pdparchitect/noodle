@@ -5,6 +5,7 @@
 ### Added
 
 - Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads.
+- While a noodlet comes from your Hub, its screen says what is happening: Preparing on Hub, then how much has downloaded, Unpacking and Starting, and fades into the noodlet once it has drawn.
 
 ### Changed
 
@@ -14,6 +15,7 @@
 
 - Open a few noodlets you already have, including games, and check they look and play as before.
 - In a noodlet that loads things from the web, check they still load.
+- Open a large noodlet for the first time, or after it changed, and check the screen shows its download progress.
 
 ## [0.27.0] - 2026-10-09
 

@@ -228,7 +228,7 @@ struct HubNoodletView: View {
             }
         case nil:
             Group {
-                if let failure = run.failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
+                if let failure = run.failure { Text(failure).foregroundStyle(.secondary).padding() } else { NoodletLoadingView(.preparing) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.black)
@@ -246,6 +246,9 @@ struct HubNoodletPage: View {
     @State private var page: NoodletPage?
     @State private var host: NoodletDeviceHost?
     @State private var failure: String?
+    @State private var arrival: NoodletArrival?
+    /// Whether the page has drawn and the loading screen over it has gone.
+    @State private var revealed = false
     @State private var controls: Gamepad?
 
     /// The colour the noodlet asks for until its page paints, from what the Hub sent.
@@ -259,11 +262,20 @@ struct HubNoodletPage: View {
     var body: some View {
         ZStack {
             if let page { NoodletPageView(page) }
-            if page == nil {
-                if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
+            // Over the page until it first draws, then fading away to show it.
+            ZStack {
+                manifestBackground ?? .black
+                if let failure { Text(failure).foregroundStyle(.secondary).padding() } else {
+                    NoodletLoadingView(page != nil ? .starting : arrival.map(NoodletLoadingView.Stage.arriving) ?? .starting)
+                }
             }
+            .opacity(revealed ? 0 : 1)
+            .allowsHitTesting(!revealed)
         }
-        .overlay(alignment: .topTrailing) { SurfaceNoticeView(page?.activity.notice) }
+        .onChange(of: page?.activity.drawn == true) { _, drawn in
+            withAnimation(.easeOut(duration: 0.5)) { revealed = drawn }
+        }
+        .overlay(alignment: .topTrailing) { SurfaceNoticeView(revealed ? page?.activity.notice : nil) }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(manifestBackground ?? .black)
         .background(ControllerInput(controls: controls, onKey: press))
@@ -276,7 +288,8 @@ struct HubNoodletPage: View {
         do {
             let session = session
             let root = try await NoodletCache(root: mirror.noodletCache).package(
-                noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount
+                noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount,
+                progress: { next in Task { @MainActor in arrival = next } }
             ) { try await session.archive(from: $0) }
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))

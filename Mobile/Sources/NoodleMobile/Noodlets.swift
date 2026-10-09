@@ -75,9 +75,11 @@ struct NoodletScreen: View {
         case nil:
             NavigationStack {
                 Group {
-                    if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
+                    if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { NoodletLoadingView(.preparing) }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Centred on the whole screen, where the noodlet's own screen shows the next steps.
+                .ignoresSafeArea()
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: close) } }
             }
             .task { await ready() }
@@ -125,6 +127,9 @@ struct NoodletDeviceScreen: View {
     @State private var page: NoodletPage?
     @State private var host: NoodletDeviceHost?
     @State private var failure: String?
+    @State private var arrival: NoodletArrival?
+    /// Whether the page has drawn and the loading screen over it has gone.
+    @State private var revealed = false
     @State private var showsControls = true
     @State private var hardware = HardwareGamepad()
     /// A game brought back from the TV to the phone.
@@ -206,6 +211,9 @@ struct NoodletDeviceScreen: View {
         """
     }
 
+    /// The colour the noodlet asks for until its page paints its own.
+    private var backdrop: Color { manifest.backgroundColor.flatMap(NoodletPage.colour).map(Color.init) ?? Color(.systemBackground) }
+
     private var screenControls: Gamepad? {
         guard let controls = manifest.controls, showsControls || onTV else { return nil }
         guard let controller = hardware.controller else { return controls }
@@ -236,14 +244,24 @@ struct NoodletDeviceScreen: View {
                 }
                 if let screenControls, page != nil { GamepadOverlay(gamepad: screenControls, haptics: haptics, onKey: press) }
                 if !onTV { GameMenuOverlay(gameMenu: gameMenu, menu: noodletMenu).ignoresSafeArea() }
-                if page == nil {
-                    if let failure { Text(failure).foregroundStyle(.secondary).padding() } else { ProgressView() }
+                // Over the page until it first draws, then fading away to show it.
+                ZStack {
+                    backdrop
+                    if let failure { Text(failure).foregroundStyle(.secondary).padding() } else {
+                        NoodletLoadingView(page != nil ? .starting : arrival.map(NoodletLoadingView.Stage.arriving) ?? .starting)
+                    }
                 }
+                .ignoresSafeArea()
+                .opacity(revealed ? 0 : 1)
+                .allowsHitTesting(!revealed)
+            }
+            .onChange(of: page?.activity.drawn == true) { _, drawn in
+                withAnimation(.easeOut(duration: 0.5)) { revealed = drawn }
             }
             // The whole screen even while loading, so the buttons over it start in its corners.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Under the buttons that float over the top corners of a full-screen page.
-            .overlay(alignment: .topTrailing) { SurfaceNoticeView(onTV ? nil : page?.activity.notice).padding(.top, fullScreen ? 44 : 0) }
+            .overlay(alignment: .topTrailing) { SurfaceNoticeView(onTV || !revealed ? nil : page?.activity.notice).padding(.top, fullScreen ? 44 : 0) }
             .overlay(alignment: .top) {
                 if fullScreen {
                     HStack {
@@ -263,7 +281,7 @@ struct NoodletDeviceScreen: View {
                 ToolbarItemGroup(placement: .primaryAction) { buttons }
             }
         }
-        .background(manifest.backgroundColor.flatMap(NoodletPage.colour).map(Color.init) ?? Color(.systemBackground))
+        .background(backdrop)
         .alert(asking.map { NoodletGrants.question($0.manifest) } ?? "", isPresented: .constant(asking != nil)) {
             Button("Allow") { answer(true) }
             Button("Don’t Allow", role: .cancel) { answer(false) }
@@ -310,7 +328,8 @@ struct NoodletDeviceScreen: View {
         do {
             let session = session
             let root = try await NoodletCache(root: chats.noodletCache).package(
-                noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount
+                noodlet.noodletID, revision: noodlet.revision, byteCount: noodlet.byteCount,
+                progress: { next in Task { @MainActor in arrival = next } }
             ) { try await session.archive(from: $0) }
             // The files it came with say how it runs; the Hub's copy of the manifest only chose where.
             let manifest = try JSONDecoder().decode(NoodletManifest.self, from: Data(contentsOf: root.appendingPathComponent("noodlet.json")))

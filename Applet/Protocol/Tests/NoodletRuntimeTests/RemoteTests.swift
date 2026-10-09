@@ -98,6 +98,31 @@ final class RemoteTests: XCTestCase {
         } catch {}
     }
 
+    private final class Arrivals: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [NoodletArrival] = []
+        var all: [NoodletArrival] { lock.withLock { seen } }
+        func add(_ arrival: NoodletArrival) { lock.withLock { seen.append(arrival) } }
+    }
+
+    /// A noodlet on its way says how much of it has arrived, then that it is unpacking; one this
+    /// device already has arrives at once.
+    func testTheCacheSaysHowFarANoodletHasArrived() async throws {
+        let archive = try folder().appendingPathComponent("a")
+        try NoodletArchive.write(entries: [("noodlet.json", Data("{}".utf8)), ("index.html", Data(repeating: 7, count: 3000))], to: archive)
+        let bytes = try Data(contentsOf: archive)
+        let cache = NoodletCache(root: try folder())
+        let arrivals = Arrivals()
+        let fetch: @Sendable (Int) async throws -> Data = { bytes.subdata(in: $0..<min(bytes.count, $0 + 100)) }
+        let id = UUID()
+        _ = try await cache.package(id, revision: "abc1", byteCount: bytes.count, progress: arrivals.add, fetch: fetch)
+        let seen = arrivals.all
+        let received = stride(from: 0, through: bytes.count, by: 100).map { $0 } + (bytes.count % 100 == 0 ? [] : [bytes.count])
+        XCTAssertEqual(seen, received.map { .downloading(received: $0, total: bytes.count) } + [.unpacking])
+        _ = try await cache.package(id, revision: "abc1", byteCount: bytes.count, progress: arrivals.add, fetch: fetch)
+        XCTAssertEqual(arrivals.all, seen, "a noodlet it had arrived again")
+    }
+
     /// Where the person ran a noodlet last is where it runs next time, for that noodlet alone.
     func testTheChoiceIsRememberedForEachNoodlet() throws {
         let suite = "NoodletPlaces." + UUID().uuidString
