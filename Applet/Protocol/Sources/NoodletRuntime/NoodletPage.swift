@@ -33,6 +33,8 @@ public typealias NoodletColor = UIColor
     public static let commonFeatures = ["storage", "data", "secrets", "network"]
 
     public let root: URL
+    /// `root` with its links resolved, as the package is served from it.
+    private let served: URL
     public let manifest: NoodletManifest
     public let web: WKWebView
     /// What `noodle.features` lists for the page to check before it relies on something.
@@ -69,6 +71,7 @@ public typealias NoodletColor = UIColor
                 frame: CGRect = .zero, features: [String] = [], localNetwork: Bool = false,
                 log: @escaping (String, String) -> Void, configure: (WKWebViewConfiguration) -> Void = { _ in }) {
         self.root = root.standardizedFileURL
+        served = root.standardizedFileURL.resolvingSymlinksInPath()
         self.manifest = manifest
         self.store = store
         network = WebNetwork(localNetwork: localNetwork)
@@ -77,6 +80,7 @@ public typealias NoodletColor = UIColor
         self.features = Self.commonFeatures + (localNetwork ? ["local-network"] : []) + features
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
+        configuration.setURLSchemeHandler(NoodletPackageScheme(root: served), forURLScheme: NoodletPackageScheme.scheme)
         configure(configuration)
         web = WKWebView(frame: frame, configuration: configuration)
         super.init()
@@ -113,11 +117,16 @@ public typealias NoodletColor = UIColor
             configuration.userContentController.addUserScript(WKUserScript(
                 source: presentation, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
+        // The package's scripts get SharedArrayBuffer as they are served; scripts in its pages get it here.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: NoodletPackageScheme.sharedArrayBuffer, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "noodle")
         drawnHandler.page = self
         configuration.userContentController.add(drawnHandler, contentWorld: .defaultClient, name: NoodletDrawnHandler.name)
         configuration.userContentController.addUserScript(WKUserScript(
             source: NoodletDrawnHandler.script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .defaultClient))
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: NoodletDownloads.linkNames, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .defaultClient))
         let listed = (try? JSONSerialization.data(withJSONObject: self.features)).map { String(decoding: $0, as: UTF8.self) } ?? "[]"
         configuration.userContentController.addUserScript(WKUserScript(
             source: "(() => { const features = \(listed);\n\(Self.bridge)\n})();",
@@ -187,7 +196,9 @@ public typealias NoodletColor = UIColor
                 forIdentifier: "noodlet-local-network-v1", encodedContentRuleList: NoodletManifest.localNetworkRules)
             if let list { web.configuration.userContentController.add(list) }
         }
-        let entry = try NoodletPath.child(manifest.entry, in: root)
+        // A missing entry fails here, rather than loading as a page that says so.
+        _ = try NoodletPath.open(manifest.entry, in: served)
+        let entry = try NoodletPackageScheme.url(manifest.entry)
         try await withCheckedThrowingContinuation { continuation in
             loadContinuation = continuation
             loadTimer = Task { [weak self] in
@@ -195,7 +206,7 @@ public typealias NoodletColor = UIColor
                 guard !Task.isCancelled else { return }
                 self?.finishLoad(AppletError("Page did not finish loading within 20 seconds. Inspect logs, then restart."))
             }
-            web.loadFileURL(entry, allowingReadAccessTo: root)
+            web.load(URLRequest(url: entry))
         }
     }
 
@@ -309,10 +320,17 @@ public typealias NoodletColor = UIColor
                         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
         // Keep the privileged page on its package origin. Remote content belongs in a browser.
-        switch NoodletNavigation.decide(url, root: root, shouldPerformDownload: navigationAction.shouldPerformDownload,
+        switch NoodletNavigation.decide(url, shouldPerformDownload: navigationAction.shouldPerformDownload,
                                         linkActivated: navigationAction.navigationType == .linkActivated,
                                         mainFrame: Self.fromMainFrame(navigationAction)) {
         case .allow: decisionHandler(.allow)
+        case .download where NoodletPackageScheme.contains(url):
+            decisionHandler(.cancel)
+            let frame: WKFrameInfo? = navigationAction.sourceFrame
+            Task { [weak self] in
+                guard let self else { return }
+                downloads.save(String(url.path.dropFirst()), in: served, named: await NoodletDownloads.name(of: url, in: frame, of: web))
+            }
         case .download: decisionHandler(.download)
         case .openExternally:
             openExternally(url)
@@ -343,7 +361,7 @@ public typealias NoodletColor = UIColor
                         for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         // WebKit only asks for a window after a click, unless the page may open them itself, which it may not.
         if let url = navigationAction.request.url,
-           NoodletNavigation.decide(url, root: root, shouldPerformDownload: false, linkActivated: true,
+           NoodletNavigation.decide(url, shouldPerformDownload: false, linkActivated: true,
                                     mainFrame: Self.fromMainFrame(navigationAction)) == .openExternally {
             openExternally(url)
         }
@@ -440,15 +458,13 @@ public typealias NoodletColor = UIColor
     }
 
     /// Whether a bridge message really came from the noodlet's own main page.
-    public nonisolated static func isTrustedBridgeSource(isMainFrame: Bool, url: URL?, packagePath: String) -> Bool {
-        guard isMainFrame, let url, url.isFileURL, url.standardizedFileURL.path.hasPrefix(packagePath + "/") else { return false }
-        return true
+    public nonisolated static func isTrustedBridgeSource(isMainFrame: Bool, url: URL?) -> Bool {
+        isMainFrame && url.map(NoodletPackageScheme.contains) == true
     }
 
     public func userContentController(_ userContentController: WKUserContentController,
                                       didReceive message: WKScriptMessage) async -> (Any?, String?) {
-        guard Self.isTrustedBridgeSource(isMainFrame: message.frameInfo.isMainFrame, url: message.frameInfo.request.url,
-                                         packagePath: root.path),
+        guard Self.isTrustedBridgeSource(isMainFrame: message.frameInfo.isMainFrame, url: message.frameInfo.request.url),
               let body = message.body as? [String: Any], let operation = body["operation"] as? String
         else { return (nil, "The bridge is available only to the noodlet's main page.") }
         return await handleBridge(operation: operation, body: body)

@@ -14,10 +14,10 @@ public enum NoodletNavigation: Equatable, Sendable {
     case openExternally
     case cancel
 
-    public static func decide(_ url: URL, root: URL, shouldPerformDownload: Bool, linkActivated: Bool,
+    public static func decide(_ url: URL, shouldPerformDownload: Bool, linkActivated: Bool,
                               mainFrame: Bool) -> NoodletNavigation {
         let scheme = url.scheme?.lowercased() ?? ""
-        let local = url.isFileURL && url.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/")
+        let local = NoodletPackageScheme.contains(url)
         if shouldPerformDownload { return local || scheme == "blob" || scheme == "data" ? .download : .cancel }
         if local || url.absoluteString == "about:blank" { return .allow }
         if scheme == "http" || scheme == "https", linkActivated, mainFrame { return .openExternally }
@@ -42,6 +42,45 @@ public enum NoodletNavigation: Equatable, Sendable {
     init(web: WKWebView, log: @escaping (String, String) -> Void) {
         self.web = web
         self.log = log
+    }
+
+    /// Remembers the name the last link clicked gives what it downloads, for `name(of:in:of:)`.
+    static let linkNames = """
+        addEventListener('click', event => {
+          const link = event.target instanceof Element && event.target.closest('a[download]');
+          if (link) window.noodleDownload = [link.href, link.download];
+        }, true);
+        """
+
+    /// The name the page gives what `url` downloads: its link's, else the file's own.
+    static func name(of url: URL, in frame: WKFrameInfo?, of web: WKWebView) async -> String {
+        let link = try? await web.callAsyncJavaScript(
+            "const link = window.noodleDownload; return link && link[0] === url ? link[1] : ''",
+            arguments: ["url": url.absoluteString], in: frame, contentWorld: .defaultClient) as? String
+        return link.flatMap { $0.isEmpty ? nil : $0 } ?? url.lastPathComponent
+    }
+
+    /// Saves a file of the package where the person chooses. WebKit downloads outside the page,
+    /// where the package is out of reach, so the app copies it.
+    func save(_ relative: String, in root: URL, named name: String) {
+        Task { @MainActor [weak self] in
+            do {
+                let staged = try NoodletFiles.stagingURL(named: name)
+                defer { Self.discard(staged) }
+                let source = try NoodletPath.open(relative, in: root)
+                try (try source.readToEnd() ?? Data()).write(to: staged)
+                #if os(macOS)
+                guard let web = self?.web, let destination = try await NoodletFiles.chooseDestination(named: name, over: web)
+                else { return }
+                try NoodletFiles.export(staged, to: destination)
+                #else
+                guard let web = self?.web, try await NoodletFiles.export(staged, over: web) else { return }
+                #endif
+                self?.log("files", "Saved \(staged.lastPathComponent).")
+            } catch {
+                self?.log("files", "\(name) could not be saved: \(error.localizedDescription)")
+            }
+        }
     }
 
     func receive(_ download: WKDownload) {

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads.
+
+### What to Test
+
+- Open a few noodlets you already have, including games, and check they look and play as before.
+
 ## [0.27.0] - 2026-10-09
 
 ### Changed

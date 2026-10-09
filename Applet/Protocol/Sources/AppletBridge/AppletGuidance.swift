@@ -120,6 +120,12 @@ public enum AppletGuidance {
         Manifest:
         {"version":1,"title":"My creation","runtime":"html","entry":"index.html","summary":"What it does","symbol":"sparkles"}
         HTML can use CSS, JS, Canvas, WebGL and bundled assets. No build system is required.
+        The package is served as a web site of its own: fetch, XHR, ES modules and
+        WebAssembly.instantiateStreaming reach its files by relative URL, with Range requests.
+        Pages are cross-origin isolated, so SharedArrayBuffer and WebAssembly threads work.
+        A game engine's standard web export runs as exported, threaded or not: Godot 4,
+        Unity WebGL, Emscripten (including -pthread) and Rust (wasm-bindgen, Bevy,
+        macroquad). Put its .wasm, .pck and .data files in the package; do not inline them.
         `await noodle.storage.set(key, JSON_value)` / `get(key)` / `list()` persist small values
         and name them. `await noodle.data.write(relativePath, data)` takes a string, Blob,
         ArrayBuffer or typed array; `read(relativePath)` returns a Blob; `list(prefix)` returns

@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Bots can make noodlets from a game engine's standard web export, such as Godot, Unity or Emscripten, including ones that run on several threads, in Noodle Applet, in Hub windows and on iPhone and iPad.
 - **Settings → Harness → Choose Harnesses…** turns harnesses on and off. A harness that is off is left out of Settings and every harness list, and its bots do not start. New installs start with Codex, Claude Code, Muse Code and Grok Build; Macs that already ran Noodle keep every harness on.
 
 ### Changed

@@ -2,6 +2,7 @@ import AppKit
 import AppletBridge
 import AppletCore
 import NoodletRuntime
+import WebKit
 
 @MainActor final class AppletSession {
   let id = UUID(), package: NoodletPackage, owner: String, log: AppletLog, dataRoot: URL
@@ -576,10 +577,22 @@ import NoodletRuntime
       }
       let storeKey =
         "store.\(package.key).\(session.mode == "headless" ? "test" : "user")"
-      let storeID =
-        defaults.string(forKey: storeKey).flatMap(UUID.init(uuidString:))
-        ?? UUID()
+      let earlier = defaults.string(forKey: storeKey).flatMap(UUID.init(uuidString:))
+      let storeID = earlier ?? UUID()
       defaults.set(storeID.uuidString, forKey: storeKey)
+      // TODO(Applet 0.30.0): remove with NoodletPage.moveLocalStorageFromFiles and its test.
+      // Milestone: Applet 0.29.0.
+      let moved = "\(storeKey).localStorageMoved"
+      if earlier == nil {
+        defaults.set(true, forKey: moved)
+      } else if !defaults.bool(forKey: moved) {
+        do {
+          try await NoodletPage.moveLocalStorageFromFiles(in: WKWebsiteDataStore(forIdentifier: storeID))
+          defaults.set(true, forKey: moved)
+        } catch {
+          session.log.append("storage", "Its localStorage could not be moved: \(error.localizedDescription)")
+        }
+      }
       let runner = WebRunner(
         package: package, dataRoot: session.dataRoot, log: session.log,
         size: session.size, storeID: storeID, foreground: session.mode == "foreground",

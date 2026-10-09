@@ -36,7 +36,8 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 
 @MainActor final class PageTests: XCTestCase {
     private func page(localNetwork: Bool = false, theme: NoodletManifest.Theme? = nil, features: [String] = [],
-                      files: [String: String] = [:], shape: (inout NoodletManifest) -> Void = { _ in }) throws -> (NoodletPage, MemoryStore, URL) {
+                      files: [String: String] = [:], log: @escaping (String, String) -> Void = { _, _ in },
+                      shape: (inout NoodletManifest) -> Void = { _ in }) throws -> (NoodletPage, MemoryStore, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".noodlet")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         for (name, text) in files { try Data(text.utf8).write(to: root.appendingPathComponent(name)) }
@@ -47,29 +48,27 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         shape(&manifest)
         let page = NoodletPage(root: root, manifest: manifest, store: store, dataStore: .nonPersistent(),
                                frame: CGRect(x: 0, y: 0, width: 320, height: 240), features: features,
-                               localNetwork: localNetwork) { _, _ in }
+                               localNetwork: localNetwork, log: log)
         addTeardownBlock { await MainActor.run { page.stop() } }
         return (page, store, root)
     }
 
     nonisolated func testThePageStaysOnItsPackageAndLeavesFilesAndLinksToThePerson() {
-        let root = URL(fileURLWithPath: "/tmp/Some.noodlet")
         let decide = { (url: String, download: Bool, link: Bool, main: Bool) in
-            NoodletNavigation.decide(URL(string: url)!, root: root, shouldPerformDownload: download,
-                                     linkActivated: link, mainFrame: main)
+            NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: download, linkActivated: link, mainFrame: main)
         }
 
         // Its own files and a blank page load as before.
-        XCTAssertEqual(decide("file:///tmp/Some.noodlet/index.html", false, false, true), .allow)
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html", false, false, true), .allow)
         XCTAssertEqual(decide("about:blank", false, false, true), .allow)
 
         // <a download> saves a package file, a blob or a data URL where the person chooses.
-        XCTAssertEqual(decide("file:///tmp/Some.noodlet/notes.txt", true, true, true), .download)
-        XCTAssertEqual(decide("blob:file:///4a1c2e0b-0000-4000-8000-000000000000", true, true, true), .download)
+        XCTAssertEqual(decide("noodlet-package://noodlet/notes.txt", true, true, true), .download)
+        XCTAssertEqual(decide("blob:noodlet-package://noodlet/4a1c2e0b-0000-4000-8000-000000000000", true, true, true), .download)
         XCTAssertEqual(decide("data:text/plain;base64,aGk=", true, true, true), .download)
-        // ... but never a file outside the package, nor a blob the page merely navigates to.
-        XCTAssertEqual(decide("file:///tmp/Other/secret.txt", true, true, true), .cancel)
-        XCTAssertEqual(decide("blob:file:///4a1c2e0b-0000-4000-8000-000000000000", false, true, true), .cancel)
+        // ... but never a file from elsewhere, nor a blob the page merely navigates to.
+        XCTAssertEqual(decide("file:///tmp/Some.noodlet/notes.txt", true, true, true), .cancel)
+        XCTAssertEqual(decide("blob:noodlet-package://noodlet/4a1c2e0b-0000-4000-8000-000000000000", false, true, true), .cancel)
 
         // A web link the person follows from the main page opens in their browser.
         XCTAssertEqual(decide("https://example.com/", false, true, true), .openExternally)
@@ -78,9 +77,10 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(decide("https://example.com/", false, false, true), .cancel)
         XCTAssertEqual(decide("https://example.com/", false, true, false), .cancel)
         XCTAssertEqual(decide("file:///etc/hosts", false, true, true), .cancel)
+        XCTAssertEqual(decide("file:///tmp/Some.noodlet/index.html", false, false, true), .cancel)
         XCTAssertEqual(decide("mailto:someone@example.com", false, true, true), .cancel)
-        // A sibling folder that only shares the package's name prefix is not inside it.
-        XCTAssertEqual(decide("file:///tmp/Some.noodlet-other/index.html", false, false, true), .cancel)
+        // The package scheme reaches only the package, under its one host.
+        XCTAssertEqual(decide("noodlet-package://other/index.html", false, false, true), .cancel)
     }
 
     nonisolated func testDownloadNamesStayPlainFileNames() {
@@ -92,27 +92,19 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
     }
 
     nonisolated func testOnlyTheNoodletsOwnMainPageIsTrusted() {
-        let package = "/tmp/Some.noodlet"
-        let inside = URL(fileURLWithPath: package + "/index.html")
+        let inside = URL(string: "noodlet-package://noodlet/index.html")
 
-        XCTAssertTrue(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: inside, packagePath: package))
+        XCTAssertTrue(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: inside))
 
         // Subframes are never trusted, even from inside the package.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: false, url: inside, packagePath: package))
+        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: false, url: inside))
         // A missing URL is not trusted.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: nil, packagePath: package))
-        // Remote origins are never trusted.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(string: "https://example.com/index.html"), packagePath: package))
-        // The package directory itself is not "inside" it.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package), packagePath: package))
-        // A sibling directory sharing the prefix must not pass.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package + "-evil/index.html"), packagePath: package))
-        // Traversal out of the package is rejected after standardizing.
-        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(
-            isMainFrame: true, url: URL(fileURLWithPath: package + "/../other/index.html"), packagePath: package))
+        XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: nil))
+        // Remote origins, files and other hosts of the scheme are never trusted.
+        for url in ["https://example.com/index.html", "file:///tmp/Some.noodlet/index.html", "noodlet-package://other/index.html",
+                    "about:blank"] {
+            XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: URL(string: url)), url)
+        }
     }
 
     func testDataAndSecretsGoToTheStoreAsThePageAsked() async throws {
@@ -174,6 +166,117 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(files, #"["img/a.bin"]"#)
         let gone = try await page.evaluate("return [typeof noodle.files, await noodle.data.read('missing')]")
         XCTAssertEqual(gone, #"["undefined",null]"#)
+    }
+
+    /// A game engine's web export runs from the package as it would from a web server: its files
+    /// load by relative URL, with modules, streamed WebAssembly, ranges and threads.
+    func testAPackageLoadsAsAWebSiteThatMayUseThreads() async throws {
+        let (page, _, root) = try page(files: [
+            "index.html": "<title>Game</title>",
+            "engine.js": "export const answer = 42;",
+            // A classic worker as Emscripten writes it: strict, and naming SharedArrayBuffer.
+            "worker.js": """
+                "use strict";
+                onmessage = ({data}) => postMessage([data.buffer instanceof SharedArrayBuffer, (function () { return this === undefined; })(),
+                                                     Atomics.add(new Int32Array(data.buffer), 0, 1)]);
+                """,
+        ])
+        // The smallest module: no imports or exports.
+        try Data([0, 0x61, 0x73, 0x6D, 1, 0, 0, 0]).write(to: root.appendingPathComponent("game.wasm"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        try Data((0..<10).map(UInt8.init)).write(to: root.appendingPathComponent("assets/game.pck"))
+        try await page.load()
+
+        let site = try await page.evaluate("""
+            const engine = await import('./engine.js');
+            const wasm = await WebAssembly.instantiateStreaming(fetch('game.wasm'));
+            const part = await fetch('assets/game.pck', {headers: {Range: 'bytes=2-4'}});
+            return [isSecureContext, engine.answer, wasm.instance instanceof WebAssembly.Instance,
+                    part.status, [...new Uint8Array(await part.arrayBuffer())],
+                    (await fetch('missing.bin')).status, (await fetch('../../../etc/hosts')).status]
+            """)
+        XCTAssertEqual(site, "[true,42,true,206,[2,3,4],404,404]")
+
+        let threads = try await page.evaluate("""
+            const memory = new WebAssembly.Memory({initial: 1, maximum: 1, shared: true});
+            const worker = new Worker('worker.js');
+            const answer = await new Promise((resolve, reject) => {
+                worker.onmessage = event => resolve(event.data);
+                worker.onerror = event => reject(new Error(event.message));
+                worker.postMessage(memory);
+            });
+            return [crossOriginIsolated, typeof SharedArrayBuffer, ...answer, new Int32Array(memory.buffer)[0]]
+            """)
+        XCTAssertEqual(threads, #"[true,"function",true,true,0,1]"#)
+    }
+
+    #if os(macOS)
+    /// WebKit downloads outside the page, where the package is out of reach, so a package file the
+    /// page downloads goes to the save panel from the app, under the name its link gives.
+    func testAPackageFileThePageDownloadsGoesToBeSaved() async throws {
+        var logged: [String] = []
+        let (page, _, _) = try page(files: [
+            "index.html": #"<a id="save" download="Report.txt" href="notes.txt">Save</a>"#, "notes.txt": "notes",
+        ], log: { logged.append("\($0): \($1)") })
+        try await page.load()
+        _ = try await page.evaluate("document.querySelector('#save').click()")
+        let files = { logged.filter { $0.hasPrefix("files:") } }
+        try await until { !files().isEmpty }
+        // A test has no window, which the save panel needs.
+        XCTAssertEqual(files(), ["files: Report.txt could not be saved: Downloads need the noodlet in the foreground."])
+    }
+    #endif
+
+    // TODO(Applet 0.30.0): remove with NoodletPage.moveLocalStorageFromFiles. Milestone: Applet 0.29.0.
+    /// What a noodlet kept in localStorage when its package loaded from `file://` is still there
+    /// once it loads as its own site.
+    func testWhatAPageKeptInLocalStorageMovesToThePackageSite() async throws {
+        let id = UUID()
+        addTeardownBlock { try? await WKWebsiteDataStore.remove(forIdentifier: id) }
+        let (old, _, root) = try page(files: ["index.html": "<title>Old</title>"])
+        let before = WKWebViewConfiguration()
+        before.websiteDataStore = WKWebsiteDataStore(forIdentifier: id)
+        let web = WKWebView(frame: .zero, configuration: before)
+        web.loadFileURL(root.appendingPathComponent("index.html"), allowingReadAccessTo: root)
+        try await until { !web.isLoading && web.url != nil }
+        _ = try await web.callAsyncJavaScript("localStorage.setItem('best', '42'); localStorage.setItem('name', 'Ada')",
+                                              contentWorld: .page)
+        old.stop()
+
+        try await NoodletPage.moveLocalStorageFromFiles(in: WKWebsiteDataStore(forIdentifier: id))
+
+        let page = NoodletPage(root: root, manifest: NoodletManifest(title: "Page"), store: MemoryStore(),
+                               dataStore: WKWebsiteDataStore(forIdentifier: id)) { _, _ in }
+        defer { page.stop() }
+        try await page.load()
+        let kept = try await page.evaluate("return [localStorage.getItem('best'), localStorage.getItem('name')]")
+        XCTAssertEqual(kept, #"["42","Ada"]"#)
+    }
+
+    /// Each script gets SharedArrayBuffer first, without losing its strictness or moving a line;
+    /// a range asks for bytes the file has, or for none.
+    nonisolated func testPackageScriptsAndRangesAreServedAsAsked() {
+        let shim = NoodletPackageScheme.sharedArrayBuffer
+        let served = { (script: String) in String(decoding: NoodletPackageScheme.withSharedArrayBuffer(Data(script.utf8)), as: UTF8.self) }
+        XCTAssertEqual(served("let a;\nlet b;"), shim + "let a;\nlet b;")
+        XCTAssertEqual(served("\"use strict\";var a;"), "\"use strict\";" + shim + "var a;")
+        XCTAssertEqual(served("'use strict'\nvar a;"), "'use strict';" + shim + "\nvar a;")
+        XCTAssertEqual(served("#!/usr/bin/env node\nrun();"), "#!/usr/bin/env node\n" + shim + "run();")
+        XCTAssertEqual(served("\u{FEFF}\"use strict\";x()"), "\u{FEFF}\"use strict\";" + shim + "x()")
+
+        let range = { NoodletPackageScheme.byteRange($0, size: 10) }
+        XCTAssertEqual(range("bytes=2-4"), 2..<5)
+        XCTAssertEqual(range("bytes=7-"), 7..<10)
+        XCTAssertEqual(range("bytes=-3"), 7..<10)
+        XCTAssertEqual(range("bytes=8-99"), 8..<10)
+        XCTAssertEqual(range("bytes=0-1,4-5"), 0..<10)
+        XCTAssertNil(range("bytes=10-"))
+        XCTAssertNil(range("bytes=5-2"))
+        XCTAssertNil(range("bytes=-0"))
+        XCTAssertEqual(NoodletPackageScheme.mimeType("game.wasm"), "application/wasm")
+        XCTAssertEqual(NoodletPackageScheme.mimeType("lib/engine.mjs"), "text/javascript")
+        XCTAssertEqual(NoodletPackageScheme.mimeType("index.html"), "text/html")
+        XCTAssertEqual(NoodletPackageScheme.mimeType("game.pck"), "application/octet-stream")
     }
 
     /// A noodlet made for one look keeps it whatever the device's appearance; without a theme it
