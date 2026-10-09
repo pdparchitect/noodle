@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Custom model servers that report each model's context in `/v1/models` (`context_length` or `max_model_len`, as vLLM and TensorFold do) now fill it in automatically instead of falling back to the default.
+
 ## [0.52.0] - 2026-10-08
 
 ### Changed
