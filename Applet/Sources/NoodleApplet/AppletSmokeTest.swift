@@ -145,10 +145,13 @@ import WebKit
     session = try await call("restart", "--session", session).sessionID!.uuidString
     try require(try await value("eval", "--session", session, "--text", "return await noodle.storage.get('test');") as? Int == 42,
                 "Stored value lost across restart")
-    try require(
-      try await value("eval", "--session", session, "--text",
-                      "return crossOriginIsolated && typeof SharedArrayBuffer == 'function' && (await fetch('index.html')).ok;") as? Bool == true,
-      "The package is not served as an isolated site of its own")
+    // Each part on its own, so a failure says which one WebKit left out.
+    let site = try await value("eval", "--session", session, "--text", """
+      return JSON.stringify([location.protocol, isSecureContext, crossOriginIsolated, typeof SharedArrayBuffer,
+                             await fetch('index.html').then(r => r.status, e => String(e))]);
+      """) as? String
+    try require(site == #"["noodlet-package:",true,true,"function",200]"#,
+                "The package is not served as an isolated site of its own: \(site ?? "no answer")")
     _ = try await call("terminate", "--session", session)
     try require(try await call("status", "--session", session).state == "stopped", "Terminated session still running")
     print("PASS HTML interaction, logs, persistence, isolated package site, canonical lock, PNG and MP4")
