@@ -58,6 +58,7 @@ public enum WorkspaceError: LocalizedError, Equatable {
 public struct WorkspaceRepository: Sendable {
     public let rootURL: URL
     public let launcherExecutableURL: URL?
+    let agentRecords = AgentRecordCache()
 
     public init(rootURL: URL, launcherExecutableURL: URL? = nil) {
         self.rootURL = AgentStorageLayout.canonicalURL(rootURL)
@@ -439,25 +440,35 @@ public struct WorkspaceRepository: Sendable {
         for (_, staged) in moved { try? FileManager.default.removeItem(at: staged) }
     }
 
+    /// Several loops ask every second, so a package is read in full only when one of its
+    /// entries changed since; anything replaced or redirected is checked again.
     public func loadAgents() throws -> [AgentRecord] {
         try prepare()
-        return try agentPackages().map { layout in
+        let packages = try FileManager.default.contentsOfDirectory(at: agentsURL, includingPropertiesForKeys: nil,
+                                                                   options: [.skipsHiddenFiles])
+        var agents: [AgentRecord] = []
+        for url in packages {
+            let layout = AgentStorageLayout(package: url)
+            let stamp = AgentRecordCache.stamp(
+                directories: [rootURL, agentsURL, layout.package, layout.workspace, layout.runtime],
+                files: [layout.package.appendingPathComponent(AgentStorageLayout.markerName), layout.configuration]
+            )
+            if let stamp, let agent = agentRecords.agent(at: layout.package, stamp: stamp) {
+                agents.append(agent)
+                continue
+            }
+            guard AgentStorageLayout.exists(layout.configuration) else { continue }
+            try AgentStorageLayout.requireDirectory(url)
+            try AgentStorageLayout.requireFile(layout.configuration)
+            agentRecords.read()
             try layout.validate()
             let configuration = try AgentConfiguration.load(from: layout)
             _ = try configuration.requireBackstory()
-            return configuration.agent
-        }.sorted { $0.createdAt < $1.createdAt }
-    }
-
-    private func agentPackages() throws -> [AgentStorageLayout] {
-        try FileManager.default.contentsOfDirectory(at: agentsURL, includingPropertiesForKeys: nil,
-                                                    options: [.skipsHiddenFiles]).compactMap { url in
-            let layout = AgentStorageLayout(package: url)
-            guard AgentStorageLayout.exists(layout.configuration) else { return nil }
-            try AgentStorageLayout.requireDirectory(url)
-            try AgentStorageLayout.requireFile(layout.configuration)
-            return layout
+            if let stamp { agentRecords.store(configuration.agent, at: layout.package, stamp: stamp) }
+            agents.append(configuration.agent)
         }
+        agentRecords.keep(packages.map { AgentStorageLayout(package: $0).package })
+        return agents.sorted { $0.createdAt < $1.createdAt }
     }
 
     private func saveAgentRecord(_ agent: AgentRecord) throws {
@@ -1542,5 +1553,44 @@ private struct ConversationReadState: Codable {
     init(unreadConversationIDs: Set<UUID>) {
         version = 1
         self.unreadConversationIDs = unreadConversationIDs
+    }
+}
+
+/// Bots read from their packages, shared by the copies of one repository.
+final class AgentRecordCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var records: [String: (stamp: [Int64], agent: AgentRecord)] = [:]
+    private var readCount = 0
+
+    /// Packages read in full, for tests.
+    var reads: Int { lock.withLock { readCount } }
+
+    func read() { lock.withLock { readCount += 1 } }
+
+    func agent(at package: URL, stamp: [Int64]) -> AgentRecord? {
+        lock.withLock { records[package.path].flatMap { $0.stamp == stamp ? $0.agent : nil } }
+    }
+
+    func store(_ agent: AgentRecord, at package: URL, stamp: [Int64]) {
+        lock.withLock { records[package.path] = (stamp, agent) }
+    }
+
+    func keep(_ packages: [URL]) {
+        let paths = Set(packages.map(\.path))
+        lock.withLock { records = records.filter { paths.contains($0.key) } }
+    }
+
+    /// The identity and type of each entry, without following links, and for files also
+    /// their size and change time; nil when one is missing. Taken before reading, so a
+    /// change made during a read shows up as a different stamp next time.
+    static func stamp(directories: [URL], files: [URL]) -> [Int64]? {
+        var stamp: [Int64] = []
+        for (url, isFile) in directories.map({ ($0, false) }) + files.map({ ($0, true) }) {
+            var info = stat()
+            guard lstat(url.path, &info) == 0 else { return nil }
+            stamp += [Int64(info.st_dev), Int64(bitPattern: info.st_ino), Int64(info.st_mode)]
+            if isFile { stamp += [info.st_size, Int64(info.st_ctimespec.tv_sec), Int64(info.st_ctimespec.tv_nsec)] }
+        }
+        return stamp
     }
 }

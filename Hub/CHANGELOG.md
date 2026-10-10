@@ -9,6 +9,7 @@
 ### Fixed
 
 - **Choose Harnesses** applies its choices when it closes, so the Settings window no longer resizes and moves it while harnesses are turned on and off.
+- Noodle Hub no longer reads every bot from disk every second, which kept it busy while idle.
 
 ## [0.25.0] - 2026-10-09
 

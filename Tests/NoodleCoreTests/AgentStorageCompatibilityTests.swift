@@ -83,6 +83,38 @@ final class AgentStorageCompatibilityTests: XCTestCase {
         XCTAssertThrowsError(try repository.loadAgents())
     }
 
+    /// Several loops ask for the bots every second; an unchanged package is not read again,
+    /// but an edit or a redirect made since is still seen.
+    func testUnchangedPackagesAreNotReadAgainButChangesAreSeen() throws {
+        let created = try repository.createAgent(named: "Steady")
+        let layout = repository.storage(for: created.agent.id)
+        XCTAssertEqual(try repository.loadAgents().map(\.displayName), ["Steady"])
+        let reads = repository.agentRecords.reads
+        _ = try repository.loadAgents()
+        _ = try repository.loadAgents()
+        XCTAssertEqual(repository.agentRecords.reads, reads)
+
+        // Rewritten in place at the same size, as an edit from outside Noodle may be.
+        let original = try Data(contentsOf: layout.configuration)
+        let edited = try XCTUnwrap(String(data: original, encoding: .utf8)).replacingOccurrences(of: "Steady", with: "Sturdy")
+        try Data(edited.utf8).write(to: layout.configuration)
+        XCTAssertEqual(try repository.loadAgents().map(\.displayName), ["Sturdy"])
+
+        _ = try repository.updateAgent(created.agent, displayName: "Renamed", harnessIdentifier: created.agent.harnessIdentifier,
+                                       modelIdentifier: nil, reasoningEffort: nil)
+        XCTAssertEqual(try repository.loadAgents().map(\.displayName), ["Renamed"])
+
+        try FileManager.default.removeItem(at: layout.workspace)
+        try FileManager.default.createSymbolicLink(at: layout.workspace, withDestinationURL: root)
+        XCTAssertThrowsError(try repository.loadAgents())
+        try FileManager.default.removeItem(at: layout.workspace)
+        try FileManager.default.createDirectory(at: layout.workspace, withIntermediateDirectories: false)
+        XCTAssertEqual(try repository.loadAgents().map(\.displayName), ["Renamed"])
+
+        try FileManager.default.removeItem(at: layout.package)
+        XCTAssertEqual(try repository.loadAgents(), [])
+    }
+
     func testCopiedPackageIsDiscoveredAndManagedLinksRefresh() throws {
         let created = try repository.createAgent(named: "Copy", backstory: "Same core")
         let destination = WorkspaceRepository(rootURL: root.appendingPathComponent("Destination"), launcherExecutableURL: URL(fileURLWithPath: "/bin/cat"))
