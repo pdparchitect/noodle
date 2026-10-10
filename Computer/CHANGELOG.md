@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-10
+
 ### Changed
 
 - Switching tabs in Settings hides the old tab while the window resizes, then fades in the new one once the window has its size, as in Safari.

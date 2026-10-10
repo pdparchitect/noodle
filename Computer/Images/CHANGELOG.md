@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-10
+
 ### Fixed
 
 - Start Desktop again after its computer was stopped while starting, instead of failing with “usermod: cannot lock /etc/passwd; try again later.”

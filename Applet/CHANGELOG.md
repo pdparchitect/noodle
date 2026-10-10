@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-10
+
 ### Added
 
 - Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads, without repackaging. A noodlet's files now load like a website's, so its scripts can fetch them, import modules and stream WebAssembly.

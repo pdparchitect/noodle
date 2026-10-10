@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-10
+
 ### Added
 
 - Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads.
