@@ -99,7 +99,7 @@
         element(element) {
           if (!(element instanceof HTMLMediaElement) || routed.has(element) || element.srcObject) return;
           const source = element.currentSrc || element.src;
-          if (!/^(file|blob|data):/.test(source)) return;
+          if (!/^(noodlet-package|file|blob|data):/.test(source)) return;
           routed.add(element);
           try {
             const node = capture.createMediaElementSource(element);
