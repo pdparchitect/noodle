@@ -197,6 +197,13 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
             """)
         XCTAssertEqual(site, "[true,42,true,206,[2,3,4],404,404]")
 
+        // WebKit isolates a page on an app's own scheme only from macOS 27 and iOS 27.
+        guard ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+        else {
+            let isolated = try await page.evaluate("return crossOriginIsolated")
+            XCTAssertEqual(isolated, "false")
+            return
+        }
         let threads = try await page.evaluate("""
             const memory = new WebAssembly.Memory({initial: 1, maximum: 1, shared: true});
             const worker = new Worker('worker.js');
@@ -232,7 +239,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
     /// once it loads as its own site.
     func testWhatAPageKeptInLocalStorageMovesToThePackageSite() async throws {
         let id = UUID()
-        addTeardownBlock { try? await WKWebsiteDataStore.remove(forIdentifier: id) }
+        addTeardownBlock { @MainActor in try? await WKWebsiteDataStore.remove(forIdentifier: id) }
         let (old, _, root) = try page(files: ["index.html": "<title>Old</title>"])
         let before = WKWebViewConfiguration()
         before.websiteDataStore = WKWebsiteDataStore(forIdentifier: id)

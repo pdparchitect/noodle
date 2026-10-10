@@ -6,7 +6,7 @@
 
 ### Added
 
-- Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads.
+- Noodlets can be games exported for the web by engines such as Godot, Unity and Emscripten, including ones that run on several threads on iOS 27 and later.
 - While a noodlet comes from your Hub, its screen says what is happening: Preparing on Hub, then how much has downloaded, Unpacking and Starting, and fades into the noodlet once it has drawn.
 
 ### Changed

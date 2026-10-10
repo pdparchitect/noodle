@@ -150,11 +150,13 @@ import WebKit
       return JSON.stringify([location.protocol, isSecureContext, crossOriginIsolated, typeof SharedArrayBuffer,
                              await fetch('index.html').then(r => r.status, e => String(e))]);
       """) as? String
-    try require(site == #"["noodlet-package:",true,true,"function",200]"#,
-                "The package is not served as an isolated site of its own: \(site ?? "no answer")")
+    // WebKit isolates a page on an app's own scheme only from macOS 27, so threads need it.
+    let isolated = ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+    try require(site == #"["noodlet-package:",true,\#(isolated),"\#(isolated ? "function" : "undefined")",200]"#,
+                "The package is not served as a site of its own: \(site ?? "no answer")")
     _ = try await call("terminate", "--session", session)
     try require(try await call("status", "--session", session).state == "stopped", "Terminated session still running")
-    print("PASS HTML interaction, logs, persistence, isolated package site, canonical lock, PNG and MP4")
+    print("PASS HTML interaction, logs, persistence, package site, canonical lock, PNG and MP4")
 
     var manifest = NoodletManifest(title: "Network test")
     manifest.permissions = ["local-network"]
