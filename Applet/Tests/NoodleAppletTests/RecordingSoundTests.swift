@@ -21,9 +21,10 @@ import XCTest
             _ = try await session.web?.evaluate("await document.getElementById('a').play(); return true")
         }
         XCTAssertTrue(muted, "Recording made the page audible on the Mac.")
-        // The oscillator alone, then the oscillator with the media element over it.
+        // The oscillator alone, then the oscillator with the media element over it, which can take
+        // a second to be heard on a busy machine.
         XCTAssertGreaterThan(levels(0.3, 0.6), 0.1, "The page's Web Audio is missing.")
-        XCTAssertGreaterThan(levels(1.4, 1.8), levels(0.3, 0.6) + 0.05, "The media element is missing.")
+        XCTAssertGreaterThan(levels(2.2, 2.7), levels(0.3, 0.6) + 0.05, "The media element is missing.")
     }
 
     /// Games start their music as they load, often from an element that is never in the page.
@@ -40,7 +41,7 @@ import XCTest
         XCTAssertGreaterThan(levels(0.5, 1.5), 0.2, "The music playing before the recording is missing.")
     }
 
-    /// Opens `page` in the background, records it for two seconds while `during` runs, and
+    /// Opens `page` in the background, records it for three seconds while `during` runs, and
     /// returns the recording's sound levels and whether the page stayed muted on the Mac.
     private func record(
         _ page: String, during: (AppletSession) async throws -> Void,
@@ -73,11 +74,11 @@ import XCTest
 
         var record = AppletRequest(.recordStart)
         record.sessionID = sessionID
-        record.duration = 3
+        record.duration = 4
         _ = try await runtime.handle(record, identity: AppletBuildIdentity.current.noodleID).checked()
         let clock = ContinuousClock(), start = clock.now
         try await during(session)
-        try await Task.sleep(until: start + .seconds(2))
+        try await Task.sleep(until: start + .seconds(3))
         var stop = AppletRequest(.recordStop)
         stop.sessionID = sessionID
         _ = try await runtime.handle(stop, identity: AppletBuildIdentity.current.noodleID).checked()

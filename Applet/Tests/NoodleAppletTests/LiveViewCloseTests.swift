@@ -101,6 +101,8 @@ import XCTest
             page = session.web?.web
             session.web?.window.performClose(nil)
         }
+        // WebKit can hold the page until the main queue drains, as the app's run loop does.
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
         XCTAssertEqual(session.state, "stopped")
         XCTAssertNil(page)
     }
