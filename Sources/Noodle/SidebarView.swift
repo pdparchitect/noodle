@@ -199,13 +199,7 @@ private struct ConversationRow: View {
         .accessibilityValue(runtimeHelp)
     }
 
-    private var timestamp: String {
-        if Calendar.current.isDateInToday(conversation.updatedAt) {
-            conversation.updatedAt.formatted(date: .omitted, time: .shortened)
-        } else {
-            conversation.updatedAt.formatted(date: .abbreviated, time: .omitted)
-        }
-    }
+    private var timestamp: String { SidebarTimestamp.text(for: conversation.updatedAt) }
 
     private var runtimeColor: Color { store.runtimeStatus(for: conversation).color }
 
@@ -214,5 +208,20 @@ private struct ConversationRow: View {
     private var accessibilityLabel: String {
         let unread = store.hasUnreadMessages(in: conversation) ? "Unread, " : ""
         return "\(unread)\(store.title(for: conversation)), \(store.preview(for: conversation))"
+    }
+}
+
+/// Time for today, day and month for this year, and the year only when it differs.
+enum SidebarTimestamp {
+    static func text(
+        for date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
+    ) -> String {
+        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        if calendar.isDate(date, inSameDayAs: now) {
+            return date.formatted(style.hour().minute())
+        }
+        style = style.day().month(.abbreviated)
+        if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
+        return date.formatted(style)
     }
 }

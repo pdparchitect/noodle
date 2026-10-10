@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Switching tabs in Settings hides the old tab while the window resizes, then fades in the new one once the window has its size, as in Safari.
+- The sidebar shows dates from this year without the year, such as 25 Sep. Older dates still show it.
 
 ### Fixed
 
