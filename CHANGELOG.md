@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- A recovery interrupted by a relaunch retries itself once on the next start instead of waiting for a manual Kick on every launch; a harness that fails recovery repeatedly still pauses after that one retry.
+
 ## [0.56.1] - 2026-10-11
 
 ### Fixed

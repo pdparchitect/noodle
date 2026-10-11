@@ -41,6 +41,10 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private var notifications = PendingAgentNotification()
     private var notificationPending: Bool { notifications.isPending }
     private var recoveryPending: Bool
+    /// Recovery retries still allowed this app launch: an interrupted recovery
+    /// heals itself on the next start, while a harness that dies during every
+    /// recovery attempt still cannot loop within a single launch.
+    private var recoveryRetriesThisLaunch = 0
     private var pid: Int32?
     private var sequence = 0
     private enum Purpose { case initialize, authenticate, create, load, model, effort, prompt(AgentWakeReason) }
@@ -92,9 +96,15 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         guard extendedAccess || provider.supportsRestrictedAccess else { update(.failed, "\(name) requires unrestricted access in Settings → Bots"); return }
         stopped = false
         if state.needsHistoryRecovery {
-            guard !state.recoveryBlocked else {
-                pause("Recovery was interrupted or could not finish. Choose Kick to try again. Your messages, files, and unfinished work are preserved.", failure: .recoveryFailed)
-                return
+            if state.recoveryBlocked {
+                guard recoveryRetriesThisLaunch == 0 else {
+                    pause("Recovery was interrupted or could not finish. Choose Kick to try again. Your messages, files, and unfinished work are preserved.", failure: .recoveryFailed)
+                    return
+                }
+                // The blocked flag survives the relaunch that interrupted the
+                // attempt; one retry per launch consumes it instead of waiting
+                // for a manual Kick.
+                recoveryRetriesThisLaunch += 1
             }
             // Persist before starting: neither supervision nor app relaunch can
             // repeatedly create replacements after a failed recovery attempt.

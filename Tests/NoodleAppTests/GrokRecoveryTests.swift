@@ -56,8 +56,9 @@ import XCTest
 
     /// After a confirmed replacement the new session is told to rebuild its
     /// context from Messenger, including after the first turn is cancelled.
-    /// A disconnect pauses recovery; relaunching does not retry it, and only
-    /// an explicit retry resumes the saved replacement exactly once.
+    /// A disconnect pauses recovery; the next launch retries it once by
+    /// itself, and after that only an explicit retry resumes the saved
+    /// replacement.
     func testConfirmedRecoveryRebuildsContextAndRetriesOnlyWhenAllowed() async throws {
         for extended in [false, true] {
             let f = try fixture(), (url, old) = try prepareConfirmedRecovery(f, extended: extended)
@@ -85,13 +86,17 @@ import XCTest
             let unfinished = try Data(contentsOf: marker)
             p.stop { _ in }
 
-            let idle = HarnessWire(), relaunched = f.acp(idle, provider: .grokBuild, extended: extended)
-            relaunched.start()
-            XCTAssertEqual(relaunched.snapshot.failure, .recoveryFailed)
-            XCTAssertTrue(relaunched.isAlive)
+            let second = HarnessWire(), relaunched = f.acp(second, provider: .grokBuild, extended: extended)
+            relaunched.start(); try await open(f, second, relaunched, session: "replacement-session", resuming: true)
+            try await f.wait { second.count("session/prompt") == 1 }
+            XCTAssertTrue(try promptText(second).contains(MessengerDocumentation.recoveredModelContext),
+                          "The relaunch retries the interrupted recovery by itself")
+
+            second.onExit?(1)
+            try await f.wait { relaunched.snapshot.failure == .recoveryFailed }
             relaunched.notify(immediately: true); relaunched.heartbeat(); relaunched.start(); await f.drain()
-            XCTAssertTrue(idle.launches.isEmpty, "A relaunch does not retry blocked recovery")
-            XCTAssertEqual(try Data(contentsOf: marker), unfinished)
+            XCTAssertEqual(second.launches.count, 1, "One launch retries blocked recovery once")
+            XCTAssertNoThrow(try Data(contentsOf: marker), "The retried recovery keeps its unfinished marker")
             relaunched.stop { _ in }
 
             try ACPSessionState.allowRecoveryRetry(at: url)
@@ -118,7 +123,8 @@ import XCTest
     }
 
     /// When the replacement session cannot be created, recovery pauses without
-    /// prompting and stays paused across a relaunch until the user retries.
+    /// prompting. A relaunch retries it once by itself and pauses again until
+    /// the user retries.
     func testFailedReplacementSessionPausesAcrossRelaunch() async throws {
         let f = try fixture(), (url, old) = try prepareConfirmedRecovery(f)
         let wire = HarnessWire(), p = f.acp(wire, provider: .grokBuild)
@@ -130,10 +136,15 @@ import XCTest
         XCTAssertTrue(f.failures.isEmpty)
         p.stop { _ in }
 
-        let idle = HarnessWire(), relaunched = f.acp(idle, provider: .grokBuild)
-        relaunched.start()
-        XCTAssertEqual(relaunched.snapshot.failure, .recoveryFailed)
-        XCTAssertTrue(idle.launches.isEmpty)
+        let second = HarnessWire(), relaunched = f.acp(second, provider: .grokBuild)
+        relaunched.start(); try await handshake(f, second)
+        try await f.wait { second.count("session/new") == 1 }
+        try second.reply("session/new", error: ["code": -32603, "message": "Storage unavailable"])
+        try await f.wait { relaunched.snapshot.failure == .recoveryFailed }
+        XCTAssertEqual(second.count("session/prompt"), 0)
+        relaunched.notify(immediately: true); relaunched.heartbeat(); relaunched.start(); await f.drain()
+        XCTAssertEqual(second.launches.count, 1, "The relaunch retries a failed recovery once")
+        XCTAssertTrue(f.failures.isEmpty)
         let saved = try savedState(url)
         XCTAssertNil(saved.sessionID)
         XCTAssertEqual(saved.previousSessionIDs, [old])
