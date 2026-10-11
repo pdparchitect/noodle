@@ -15,6 +15,10 @@ public struct AppleRemoteModelsView: View {
     @State private var usageAccountID: UUID?
     @State private var editingAgent: AgentRecord?
     @State private var returnToAccountID: UUID?
+    @State private var decisionChoice: DecisionModelChoice?
+    @State private var decisionCatalogs: [UUID: [DiscoveredDecisionModel]] = [:]
+    @State private var decisionCatalogsLoading: Set<UUID> = []
+    @State private var decisionCatalogLoadFailed: Set<UUID> = []
     @State private var listHeight: CGFloat = 0
     private let accountStore: RemoteModelAccountStore?
     private let checkSupport: @MainActor () async throws -> Bool
@@ -227,7 +231,69 @@ public struct AppleRemoteModelsView: View {
                     }
                 }
             }
+            Divider()
+            decisionModelRow(account)
         }
+    }
+
+    /// The account's decision-model picker: one chosen model answers Noodle's
+    /// typed browser and terminal questions; discovered live from the provider.
+    private func decisionModelRow(_ account: RemoteModelAccount) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Decision Model").font(.callout)
+                Text("Answers typed browser and terminal questions").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            Menu {
+                Button("None") { chooseDecisionModel(nil, account: account) }
+                let models = decisionCatalogs[account.id] ?? []
+                if decisionCatalogsLoading.contains(account.id) {
+                    Text("Loading…")
+                } else if decisionCatalogLoadFailed.contains(account.id) {
+                    Text("Couldn't load decision models")
+                } else if models.isEmpty {
+                    Text("No decision models found")
+                }
+                ForEach(models, id: \.requestID) { model in
+                    Button(model.displayName) { chooseDecisionModel(model, account: account) }
+                }
+            } label: {
+                let chosen = decisionChoice?.accountID == account.id ? decisionChoice?.displayName : nil
+                Text(chosen ?? "None").font(.callout).foregroundStyle(chosen == nil ? .secondary : .primary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .task(id: account.id) { await loadDecisionModels(account) }
+    }
+
+    private func loadDecisionModels(_ account: RemoteModelAccount) async {
+        guard decisionCatalogs[account.id] == nil else { return }
+        let key = (try? storage.apiKey(for: account.id)) ?? ""
+        decisionCatalogsLoading.insert(account.id)
+        do {
+            decisionCatalogs[account.id] = try await RemoteDecisionsCatalog(account: account, key: key).decisionModels()
+            decisionCatalogsLoading.remove(account.id)
+            decisionCatalogLoadFailed.remove(account.id)
+        } catch {
+            // Catalog stays nil so the row's .task re-fires and retries on its next appearance.
+            decisionCatalogsLoading.remove(account.id)
+            decisionCatalogLoadFailed.insert(account.id)
+        }
+    }
+
+    private func chooseDecisionModel(_ model: DiscoveredDecisionModel?, account: RemoteModelAccount) {
+        do {
+            let choiceStore = DecisionModelChoiceStore(repository: store.repository.rootURL)
+            if let model {
+                try choiceStore.save(DecisionModelChoice(accountID: account.id, modelID: model.requestID, displayName: model.displayName))
+            } else {
+                try choiceStore.save(nil)
+            }
+            decisionChoice = choiceStore.load()
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     private func botsUsing(_ account: RemoteModelAccount, model: String? = nil) -> [AgentRecord] {
@@ -239,7 +305,10 @@ public struct AppleRemoteModelsView: View {
         .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 
-    private func reload() throws { accounts = try storage.accounts() }
+    private func reload() throws {
+        accounts = try storage.accounts()
+        decisionChoice = DecisionModelChoiceStore(repository: store.repository.rootURL).load()
+    }
 
     private func changed() throws {
         try reload()
