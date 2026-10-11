@@ -28,7 +28,8 @@ import NoodleCore
         self.call = call
         self.surface = surface ?? { try await BrowserConnection.openSurface($0, socket: BrowserConnection.socketURL(), team: BrowserConnection.signingTeam()) }
         registry = (try? BrowserAssignments.load(root: root)) ?? BrowserAssignments()
-        try? tools.register(BrowserToolProvider(stagingRoot: stagingRoot, transport: call))
+        try? tools.register(BrowserToolProvider(stagingRoot: stagingRoot, transport: call,
+                                                judge: DecisionModelServingCache(root: root).browserServing()))
         publish()
     }
 

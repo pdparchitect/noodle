@@ -6,6 +6,12 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Decision models: each remote model account can name one decision model, discovered live from the provider, that answers Noodle's typed browser and terminal questions (settled, blocker triage, injection screens) in one round-trip instead of a full model turn. Works across the TypeSafe Decisions, SystemOne and OpenAI Decisions wire formats, and falls back to the Mac's on-device model when the account's model is unavailable.
+- Browser tools: actions that change a page answer with code-computed settle `signals` and, when a decision model is configured, a `judgement` (settled gate, blocker triage for cookie/login/captcha/paywall/age/download walls; guidance sends CAPTCHA and 2FA to the person instead of retrying). `inspect` ranks elements by relevance and trims long lists to the ranked head, screens page text, WebMCP descriptions and WebMCP call results for prompt-injection attempts, and `present` attaches a handoff verification (page facts versus the card's message). Every decision-model field is fail-open: no model configured, no extra fields.
+- Computer tools: `read` answers may carry a decision-model `commandStatus` (succeeded, failed, waiting_for_input) over the terminal tail, terminal output and downloaded files are screened for prompt-injection attempts (flagged `injectionSuspected`, terminal text delimited), and `present` attaches a handoff `verification` plus a desktop `readiness` verdict from the preview image. All fields are fail-open: no model configured, no extra fields.
+
 ## [0.56.1] - 2026-10-11
 
 ### Fixed

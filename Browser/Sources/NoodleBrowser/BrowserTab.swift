@@ -319,6 +319,25 @@ import WebKit
         result["frames"] = frames.map { ["id": $0.key, "url": $0.value.request.url?.absoluteString ?? "", "main": $0.value.isMainFrame] as [String: Any] }
         return String(decoding: try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]), as: UTF8.self)
     }
+
+    /// Samples page facts after an action: one short mutation window, then the
+    /// document's own state. `wait` holds until a navigation's document finishes,
+    /// so the facts describe the new page rather than the old one.
+    func settle(previousURL: String? = nil, target: String? = nil, text: String? = nil, wait: Bool = false) async throws -> BrowserSettleSignals {
+        if wait {
+            for _ in 0..<80 where !(finishedDocument && !web.isLoading) {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        let url = BrowserResources.bundle.url(forResource: "Resources", withExtension: nil)!.appendingPathComponent("Settle.js")
+        let source = try String(contentsOf: url, encoding: .utf8)
+        let value = try await evaluate(source, arguments: ["previousURL": previousURL ?? "", "target": target ?? "", "text": text ?? ""],
+                                       world: Self.controlWorld)
+        var facts = (value as? [String: Any]) ?? [:]
+        facts["loading"] = web.isLoading
+        return try JSONDecoder().decode(BrowserSettleSignals.self, from: JSONSerialization.data(withJSONObject: facts))
+    }
     func move(target: String?, x: Double?, y: Double?, frame: String?) async throws {
         let generation = inputGeneration
         var point: CGPoint

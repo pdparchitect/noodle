@@ -12,11 +12,14 @@ public struct ComputerToolProvider: ToolProvider {
         id: "computer", title: "Noodle Computer",
         summary: "Run commands, transfer files and share previews in the computers assigned to this bot.",
         instructions: ComputerToolGuidance.instructions, activation: .whenAssigned("computer"))
+    /// The decision-model questions this provider asks; nil keeps responses unverified.
+    private let judge: ComputerJudgeServing?
     private let transport: Transport
     private let stagingRoot: @Sendable () throws -> URL
 
-    public init(stagingRoot: @escaping @Sendable () throws -> URL, transport: @escaping Transport) {
-        self.stagingRoot = stagingRoot; self.transport = transport
+    public init(stagingRoot: @escaping @Sendable () throws -> URL, transport: @escaping Transport,
+                judge: ComputerJudgeServing? = nil) {
+        self.stagingRoot = stagingRoot; self.transport = transport; self.judge = judge
     }
 
     // MARK: Tool list
@@ -84,6 +87,7 @@ public struct ComputerToolProvider: ToolProvider {
                 if let text = String(data: bytes, encoding: .utf8) { object["text"] = text; object["data"] = nil }
                 else { object["text"] = String(decoding: bytes, as: UTF8.self) }
             }
+            await Self.judge(entry.operation, object: &object, serving: judge)
             return try Self.result(object)
         } catch {
             return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": error.localizedDescription]], "isError": true], options: [.sortedKeys])
@@ -141,6 +145,17 @@ public struct ComputerToolProvider: ToolProvider {
         }
         var object = try Self.object(response)
         object["localPath"] = options[upload ? "source" : "destination"] as? String
+        // A download is untrusted guest content; flag it when its head reads as
+        // an injection attempt. The file itself is never altered.
+        if !upload, let judge {
+            if let handle = try? FileHandle(forReadingFrom: payload) {
+                defer { try? handle.close() }
+                if let head = try? handle.read(upToCount: 2000), let text = String(data: head ?? Data(), encoding: .utf8),
+                   let noul = await judge.screen(text, source: "downloaded file"), noul >= DecisionGates.injection {
+                    object["injectionSuspected"] = true
+                }
+            }
+        }
         return object
     }
 
@@ -164,8 +179,49 @@ public struct ComputerToolProvider: ToolProvider {
             "attachment": ["filename": filename, "mediaType": ComputerCard.mediaType, "data": try JSONEncoder().encode(reference).base64EncodedString()]]
         var structured: [String: Any] = ["view": view]
         structured["terminalID"] = terminal?.uuidString
+        // Done-verify before the handoff: the view facts versus the message, and
+        // desktop readiness from the preview image. Advice only, never a gate.
+        if let judge {
+            async let handoffCheck = judge.handoff(computer: computer.name, view: view, preview: text, message: message)
+            async let readyCheck = Self.readinessCheck(response.previewImage, serving: judge)
+            if let check = await handoffCheck {
+                structured["verification"] = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(check))
+            }
+            if let check = await readyCheck {
+                structured["readiness"] = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(check))
+            }
+        }
         return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": "Presented."]], "structuredContent": structured,
                                                            "isError": false, "_meta": ["noodle/post": post]], options: [.sortedKeys])
+    }
+
+    /// Screens the preview frame for desktop readiness. A non-empty preview implies
+    /// the daemon's pixel heuristic accepted the frame — ComputerPreviewSnapshot gates
+    /// preview generation on isUseful — so `codeSaysUseful: true` is a fact, not a guess.
+    private static func readinessCheck(_ image: Data?, serving: ComputerJudgeServing) async -> ComputerReadinessCheck? {
+        guard let image, !image.isEmpty else { return nil }
+        return await serving.readiness(image: DecisionImage(data: image, label: "computer preview"), codeSaysUseful: true)
+    }
+
+    /// Applies the decision-model questions to a tool result in place; fail-open
+    /// throughout: no model, no field, never an error.
+    private static func judge(_ operation: ComputerOperation, object: inout [String: Any], serving: ComputerJudgeServing?) async {
+        guard let serving else { return }
+        let text = object["text"] as? String ?? ""
+        if operation == .terminalRead {
+            if let status = await serving.status(tail: text, exited: object["exited"] as? Bool ?? false) {
+                object["commandStatus"] = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(status))
+            }
+        }
+        // Untrusted terminal output is screened before a bot reads it; suspicion above
+        // the gate marks the result and delimits the text so it reads as data, not orders.
+        if [.terminalRead, .terminalWrite].contains(operation), !text.isEmpty,
+           let noul = await serving.screen(text, source: "terminal"), noul >= DecisionGates.injection {
+            object["injectionSuspected"] = true
+            if operation == .terminalRead {
+                object["text"] = "[untrusted terminal content begins]\n\(text)\n[untrusted terminal content ends]"
+            }
+        }
     }
 
     private static func request(_ operation: ComputerOperation, options: [String: Any]) throws -> ComputerRequest {

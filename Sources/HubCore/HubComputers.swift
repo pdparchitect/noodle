@@ -28,7 +28,8 @@ import NoodleCore
         self.call = call
         self.surface = surface ?? { try await ComputerConnection.openSurface($0, socket: ComputerConnection.socketURL(), team: ComputerConnection.signingTeam()) }
         registry = (try? ComputerAssignments.load(root: root)) ?? ComputerAssignments()
-        try? tools.register(ComputerToolProvider(stagingRoot: stagingRoot, transport: call))
+        try? tools.register(ComputerToolProvider(stagingRoot: stagingRoot, transport: call,
+                                                 judge: DecisionModelServingCache(root: root).computerServing()))
         publish()
     }
 

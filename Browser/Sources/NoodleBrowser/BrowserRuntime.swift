@@ -375,6 +375,7 @@ import WebKit
         if request.operation == .open {
             let tab = try makeTab(browserID: id)
             if let url = request.url { tab.navigate(try BrowserRequest.navigationURL(url)) }
+            if request.url != nil { response.signals = try? await tab.settle(wait: true) }
             response.tabID = tab.id; response.tabs = [tab.info]; return response
         }
         if request.operation == .download {
@@ -389,10 +390,12 @@ import WebKit
         touch(browserID: id, tabID: tab.id)
         if ![.inspect, .screenshot, .present].contains(request.operation) { tab.beginAgentInteraction() }
         switch request.operation {
-        case .navigate: tab.navigate(try BrowserRequest.navigationURL(request.url!))
-        case .back: _ = tab.web.goBack()
-        case .forward: _ = tab.web.goForward()
-        case .reload: _ = tab.web.reload()
+        case .navigate:
+            tab.navigate(try BrowserRequest.navigationURL(request.url!))
+            response.signals = try? await tab.settle(wait: true)
+        case .back: _ = tab.web.goBack(); response.signals = try? await tab.settle(wait: true)
+        case .forward: _ = tab.web.goForward(); response.signals = try? await tab.settle(wait: true)
+        case .reload: _ = tab.web.reload(); response.signals = try? await tab.settle(wait: true)
         case .close: try closeTab(browserID: id, tabID: tab.id)
         case .inspect: response.text = try await tab.inspect(frame: request.frame)
         case .webMCPList, .webMCPCall: response.text = try await tab.webMCP(request)
@@ -402,8 +405,10 @@ import WebKit
             guard text.utf8.count <= 2 * 1_048_576 else { throw BrowserError("JavaScript result exceeds 2 MiB. Return less data.") }
             response.text = text
         case .click:
+            let before = tab.info.url
             try await tab.click(target: request.target, x: request.x, y: request.y, frame: request.frame, count: request.clickCount ?? 1)
             response.pointer = tab.pointer.state
+            response.signals = try? await tab.settle(previousURL: before, target: request.target)
         case .move:
             try await tab.move(target: request.target, x: request.x, y: request.y, frame: request.frame)
             response.pointer = tab.pointer.state
@@ -411,9 +416,14 @@ import WebKit
             tab.resetPointer(); response.pointer = tab.pointer.state
         case .fill:
             _ = try await tab.evaluate("const e=document.querySelector(target); if(!e) throw Error('Element not found'); if(e.type==='file') throw Error('Use upload for file inputs'); e.focus(); if(e.isContentEditable){e.textContent=text;} else {const p=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(p,'value').set.call(e,text);} e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); return true;", arguments: ["target": request.target!, "text": request.text!], frame: request.frame)
-        case .key: try tab.press(request.text!)
+            response.signals = try? await tab.settle(target: request.target, text: request.text)
+        case .key:
+            let before = tab.info.url
+            try tab.press(request.text!)
+            response.signals = try? await tab.settle(previousURL: before)
         case .scroll:
             _ = try await tab.evaluate("const e=target?document.querySelector(target):window; if(!e) throw Error('Element not found'); e.scrollBy(x,y); return true;", arguments: ["target": request.target ?? "", "x": request.x ?? 0, "y": request.y ?? 600], frame: request.frame)
+            response.signals = try? await tab.settle(target: request.target)
         case .screenshot:
             let data = try await tab.snapshot()
             let url = try staging(request, root: stagingRoot)

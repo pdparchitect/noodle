@@ -246,6 +246,42 @@ public struct BrowserRequest: Codable, Sendable {
         return url
     }
 }
+
+/// Code-computed page facts sampled right after an action, for Noodle to judge
+/// with a decision model: whether the page settled, and what blocks it. Every
+/// field comes from the document, never from a model's guess.
+public struct BrowserSettleSignals: Codable, Equatable, Sendable {
+    public var url: String
+    public var title: String
+    public var readyState: String
+    /// The web view still loading, from the app side rather than the document.
+    public var loading: Bool?
+    /// Visible progress or spinner indicators.
+    public var spinners: Int?
+    /// DOM mutations observed in the sampling window after the action.
+    public var mutations: Int?
+    /// Resource-timing entries that have not finished.
+    public var activeResources: Int?
+    /// Trimmed text of the topmost page-covering overlay, when one exists.
+    public var overlayText: String?
+    /// Blocker vocabulary the overlay's identity or text matches.
+    public var overlayMatches: [String]?
+    /// For fill: the field ended up holding exactly the filled text.
+    public var inputEcho: Bool?
+    /// For click with a target: the target element is gone from the document.
+    public var targetGone: Bool?
+    /// The URL changed relative to before the action.
+    public var urlChanged: Bool?
+    public init(url: String, title: String, readyState: String, loading: Bool? = nil, spinners: Int? = nil,
+                mutations: Int? = nil, activeResources: Int? = nil, overlayText: String? = nil,
+                overlayMatches: [String]? = nil, inputEcho: Bool? = nil, targetGone: Bool? = nil,
+                urlChanged: Bool? = nil) {
+        self.url = url; self.title = title; self.readyState = readyState; self.loading = loading
+        self.spinners = spinners; self.mutations = mutations; self.activeResources = activeResources
+        self.overlayText = overlayText; self.overlayMatches = overlayMatches
+        self.inputEcho = inputEcho; self.targetGone = targetGone; self.urlChanged = urlChanged
+    }
+}
 public struct BrowserResponse: Codable, Sendable {
     public var version = 1
     public var browsers: [RemoteBrowser]?
@@ -254,6 +290,8 @@ public struct BrowserResponse: Codable, Sendable {
     public var browser: RemoteBrowser?
     public var tabs: [BrowserTabInfo]?
     public var tabID: UUID?
+    /// Page facts sampled after an action, on operations that change the page.
+    public var signals: BrowserSettleSignals?
     public var downloads: [BrowserDownloadInfo]?
     public var reference: BrowserReference?
     public var attachmentID: UUID?
