@@ -108,7 +108,10 @@ public enum AppleModel {
             // The final text is private, as for other harnesses; replies go
             // through Messenger.
             _ = try await AppleResponseRecovery.respond(session: session, prompt: Prompt(wake),
-                responseTokens: backend.responseTokens, control: control, allowsEmptyReply: true, onEvent: onEvent, onActivity: onActivity)
+                responseTokens: backend.responseTokens, control: control, allowsEmptyReply: true,
+                uncheckedInboxRetry: wake.hasPrefix(AgentWakeReason.inboxChanged.eventText)
+                    ? Prompt(AppleResponseRecovery.uncheckedInboxPrompt) : nil,
+                onEvent: onEvent, onActivity: onActivity)
             try Task.checkCancellation()
             try AppleConversationSession(transcript: AppleConversationSession.persistable(session.transcript),
                 modelIdentifier: backend.identifier).save(to: file)

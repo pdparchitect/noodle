@@ -8,9 +8,11 @@ import NoodleCore
 enum AppleResponseRecovery {
     static let incompletePrompt = "Your last response reached its output limit. Continue from the recorded tool results, then give a complete concise final answer. Do not repeat completed actions. If blocked, state what remains unfinished and why."
     static let emptyPrompt = "Your last response contained no answer. Continue from the recorded tool results: take the next necessary action or give the final answer. Do not repeat completed actions. If blocked, explain the blocker."
+    static let uncheckedInboxPrompt = "Your last response was empty and no tools were used, so an unread message may be waiting. Check Messenger once now and prioritize unread deliveries. If the inbox is empty, finish quietly."
 
     static func respond(session: LanguageModelSession, prompt: Prompt, responseTokens: Int,
                         control: AppleTurnControl, allowsEmptyReply: Bool = false,
+                        uncheckedInboxRetry: Prompt? = nil,
                         onEvent: @escaping @Sendable (AppleActivityEvent) async -> Void = { _ in },
                         onActivity: @escaping @Sendable () -> Void = {}) async throws -> String {
         // Response snapshots can be buffered until a generation ends. The
@@ -36,6 +38,7 @@ enum AppleResponseRecovery {
         let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: responseTokens)
         #endif
         var next = prompt
+        var retriedUncheckedInbox = false
         for attempt in 0...2 {
             try Task.checkCancellation()
             onActivity()
@@ -45,16 +48,36 @@ enum AppleResponseRecovery {
             try Task.checkCancellation()
             let incomplete = isIncomplete(response.transcriptEntries)
             let empty = response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if !incomplete && (!empty || allowsEmptyReply) { return response.content }
+            if incomplete {
+                guard attempt < 2 else {
+                    throw HarnessSetupError("The model repeatedly reached its output limit without finishing a reply.")
+                }
+                await control.recover()
+                await onEvent(.status("Retrying after the model's output limit (\(attempt + 1)/2)"))
+                next = Prompt(incompletePrompt)
+                continue
+            }
+            if !empty { return response.content }
+            if allowsEmptyReply {
+                // An empty reply to a quiet wake is legitimate. An inbox-changed
+                // wake answered with no tool use never checked for the message
+                // that caused it; nudge once before accepting silence, or that
+                // message waits forever with no further event to deliver it.
+                if let uncheckedInboxRetry, !retriedUncheckedInbox, attempt < 2, await control.usedNoTools() {
+                    retriedUncheckedInbox = true
+                    await control.recover()
+                    await onEvent(.status("Retrying an unchecked inbox notification (1/1)"))
+                    next = uncheckedInboxRetry
+                    continue
+                }
+                return response.content
+            }
             guard attempt < 2 else {
-                throw HarnessSetupError(incomplete
-                    ? "The model repeatedly reached its output limit without finishing a reply."
-                    : "The model returned an empty reply after two recovery attempts.")
+                throw HarnessSetupError("The model returned an empty reply after two recovery attempts.")
             }
             await control.recover()
-            await onEvent(.status(incomplete ? "Retrying after the model's output limit (\(attempt + 1)/2)"
-                : "Retrying an empty model reply (\(attempt + 1)/2)"))
-            next = Prompt(incomplete ? incompletePrompt : emptyPrompt)
+            await onEvent(.status("Retrying an empty model reply (\(attempt + 1)/2)"))
+            next = Prompt(emptyPrompt)
         }
         preconditionFailure("Bounded recovery must return or throw")
     }
@@ -63,7 +86,7 @@ enum AppleResponseRecovery {
         let text = prompt.segments.compactMap { segment -> String? in
             if case .text(let text) = segment { return text.content }; return nil
         }.joined()
-        return text == incompletePrompt || text == emptyPrompt
+        return text == incompletePrompt || text == emptyPrompt || text == uncheckedInboxPrompt
     }
 
     static func isIncomplete(_ entries: ArraySlice<Transcript.Entry>) -> Bool {
@@ -103,4 +126,7 @@ actor AppleTurnControl {
         recovering = resuming
     }
     func recover() { recovering = true }
+    /// True when this turn completed no tool call, e.g. an inbox wake the
+    /// model answered without checking anything.
+    func usedNoTools() -> Bool { toolCalls == 0 }
 }

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Apple bots that answer an inbox notification with an empty reply and no tool use are nudged once to check Messenger, so a waiting message is no longer left unread with nothing left to wake the bot.
+
 ## [0.56.1] - 2026-10-11
 
 ### Fixed
