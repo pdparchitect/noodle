@@ -150,6 +150,20 @@ final class AppleRemoteModelTests: XCTestCase {
         XCTAssertEqual(AppleRemoteTranscript.effort(nil, selected: "bogus", model: model), "medium")
     }
 
+    func testUnofferedOrDefaultlessCatalogSendsNoEffort() throws {
+        guard #available(macOS 27, *) else { return }
+        let model = RemoteModelInfo(id: "zai/glm-5.3", displayName: "GLM 5.3", contextSize: 1_000_000,
+            maximumOutputTokens: 131_072, supportsImages: false,
+            efforts: RemoteModelInfo.efforts("low", "high"), defaultEffort: "")
+        XCTAssertNil(AppleRemoteTranscript.effort(nil, selected: nil, model: model),
+            "An empty catalog default must not reach the wire as reasoning_effort")
+        XCTAssertNil(AppleRemoteTranscript.effort(nil, selected: "bogus", model: model))
+        let request = LanguageModelExecutorGenerationRequest(id: UUID(),
+            transcript: Transcript(entries: [.prompt(.init(segments: [.text(.init(content: "Hi"))]))]),
+            enabledTools: [], generationOptions: GenerationOptions(), contextOptions: ContextOptions(), metadata: [:])
+        XCTAssertNil(try AppleRemoteTranscript.request(request, model: model, effort: nil).effort)
+    }
+
     func testUnknownModelsAndMissingKeysAreRefusedBeforeAnyRequest() throws {
         guard #available(macOS 27, *) else { return }
         let provider = ScriptedProvider([])

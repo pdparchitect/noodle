@@ -196,7 +196,10 @@ enum AppleRemoteTranscript {
         }
         if let requested, offered.contains(requested) { return requested }
         if let selected, offered.contains(selected) { return selected }
-        return model.defaultEffort
+        // A catalog saved by an older version can keep a default the model no
+        // longer offers, or none at all; the provider's own default is safer
+        // than sending an empty reasoning_effort it must reject.
+        return offered.contains(model.defaultEffort) ? model.defaultEffort : nil
     }
 
     private static func text(_ segments: [Transcript.Segment]) -> String? {

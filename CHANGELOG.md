@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Remote Apple models whose saved catalog default is missing or no longer offered send no reasoning_effort instead of an empty one the provider rejects.
+
 ## [0.56.1] - 2026-10-11
 
 ### Fixed
