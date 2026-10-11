@@ -20,11 +20,14 @@ public struct BrowserToolProvider: ToolProvider {
         \(BrowserToolGuidance.conventions)
         """,
         activation: .whenAssigned("browser"))
-    private let transport: Transport
+    /// The two decision-model questions this provider asks; nil keeps responses unverified.
+    private let judge: BrowserJudgeServing?
     private let stagingRoot: @Sendable () throws -> URL
+    private let transport: Transport
 
-    public init(stagingRoot: @escaping @Sendable () throws -> URL, transport: @escaping Transport) {
-        self.stagingRoot = stagingRoot; self.transport = transport
+    public init(stagingRoot: @escaping @Sendable () throws -> URL, transport: @escaping Transport,
+                judge: BrowserJudgeServing? = nil) {
+        self.stagingRoot = stagingRoot; self.transport = transport; self.judge = judge
     }
 
     // MARK: Tool list
@@ -53,6 +56,7 @@ public struct BrowserToolProvider: ToolProvider {
             "y": ["type": "number", "description": "Main-viewport y in points."], "count": ["type": "integer", "description": "1 or 2 clicks."],
             "download": string("Download ID from downloads."), "accept": ["type": "boolean", "description": "Accept or dismiss the dialog."],
             "bookmark": string("Bookmark ID from bookmarks."), "title": string("Bookmark title."), "query": string("Search in titles and URLs."),
+            "for": string("What the task wants to act on; a decision model then recommends the matching element."),
             "limit": ["type": "integer", "description": "1–200 results."], "offset": ["type": "integer", "description": "Results to skip."],
             "tool": string("WebMCP tool ID from webmcp-list."), "args": ["type": "object", "description": "WebMCP tool arguments."],
             // Noodle verifies membership and does the posting; this extension only supplies the card.
@@ -62,6 +66,9 @@ public struct BrowserToolProvider: ToolProvider {
             "args-file": file("read", "UTF-8 JSON arguments in your workspace, instead of --args."),
             "source": file("read", "Workspace file to upload."), "output": file("write", "New workspace file to create.")]
         for name in operation.options { properties[name] = options[name] }
+        // `--for` is Noodle's own: the pick is decided here, over the elements the
+        // app already returned, so the shared protocol and the external CLI never see it.
+        if operation == .inspect { properties["for"] = options["for"] }
         if operation.isFileTransfer { required.append(operation == .upload ? "source" : "output") }
         if operation == .present { required.append("conversation") }
         var tool: [String: Any] = [
@@ -114,7 +121,9 @@ public struct BrowserToolProvider: ToolProvider {
             } else {
                 response = try await transport(request).checked()
             }
-            if operation == .present { return try Self.card(response, request: request, message: options["message"] as? String) }
+            if operation == .present {
+                return try await Self.card(response, request: request, message: options["message"] as? String, judge: judge)
+            }
             var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response)) as? [String: Any] ?? [:]
             var failed = false
             // Page scripts and WebMCP answer in JSON; hand bots the value, not a string to parse again.
@@ -124,11 +133,70 @@ public struct BrowserToolProvider: ToolProvider {
                 // A website tool's own failure fails the call but keeps its structured details.
                 failed = operation == .webMCPCall && (value as? [String: Any])?["status"] as? String == "error"
             }
+            await Self.judge(operation, object: &object, signals: response.signals, serving: judge)
+            if operation == .inspect { Self.trimRankedElements(&object) }
+            // A --for pick rides on the trimmed head, so the winner survives the cut.
+            if operation == .inspect, let query = (options["for"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty,
+                let judge, var value = object["value"] as? [String: Any],
+                let elements = value["elements"] as? [[String: Any]],
+                let pick = await judge.recommend(query: query, elements: elements),
+                pick.confidence >= DecisionGates.recommend {
+                value["recommendation"] = ["target": pick.target, "confidence": pick.confidence]
+                object["value"] = value
+            }
             let text = String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self)
             return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": text]], "structuredContent": object, "isError": failed], options: [.sortedKeys])
         } catch {
             return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": error.localizedDescription]], "isError": true], options: [.sortedKeys])
         }
+    }
+
+    /// Applies the decision-model questions to a tool result in place; fail-open
+    /// throughout: no model, no field, never an error.
+    private static func judge(_ operation: BrowserOperation, object: inout [String: Any], signals: BrowserSettleSignals?, serving: BrowserJudgeServing?) async {
+        guard let serving else { return }
+        if let signals, let judgement = await serving.settle(signals) {
+            object["judgement"] = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(judgement))
+        }
+        // Untrusted page content is screened before a bot reads it; a suspicion above
+        // the gate marks the value and delimits the text so it reads as data, not orders.
+        guard var value = object["value"] as? [String: Any] else { return }
+        var suspicion: Float?
+        if operation == .inspect, let page = value["text"] as? String {
+            suspicion = await serving.screen(page, source: "page")
+            if let probability = suspicion, probability >= DecisionGates.injection {
+                value["text"] = "[untrusted page content begins]\n\(page)\n[untrusted page content ends]"
+                object["value"] = value
+            }
+        }
+        // webMCP results are page-script output, as untrusted as descriptions.
+        let resultText: String?
+        if operation == .webMCPCall, let result = value["result"] {
+            if let text = result as? String { resultText = text }
+            else if let data = try? JSONSerialization.data(withJSONObject: result, options: [.fragmentsAllowed]) { resultText = String(data: data, encoding: .utf8) }
+            else { resultText = nil }
+        } else { resultText = nil }
+        if let text = resultText {
+            suspicion = await serving.screen(text, source: "WebMCP result")
+            if let probability = suspicion, probability >= DecisionGates.webMCPInjection {
+                value["webMCPInjectionSuspected"] = true
+                object["value"] = value
+            }
+        }
+        if let probability = suspicion, probability >= DecisionGates.injection {
+            value["injectionSuspected"] = true
+            object["value"] = value
+        }
+    }
+
+    /// Inspect can return hundreds of elements; the ranked head carries
+    /// what a task acts on, and the omitted count says what was dropped.
+    private static func trimRankedElements(_ object: inout [String: Any]) {
+        guard var value = object["value"] as? [String: Any],
+            let elements = value["elements"] as? [[String: Any]], elements.count > DecisionGates.elementCap else { return }
+        value["elements"] = Array(elements.prefix(DecisionGates.elementCap))
+        value["elementsOmitted"] = elements.count - DecisionGates.elementCap
+        object["value"] = value
     }
 
     private static func request(_ operation: BrowserOperation, options: [String: Any], files: [ToolFile]) throws -> BrowserRequest {
@@ -173,7 +241,7 @@ public struct BrowserToolProvider: ToolProvider {
 
     /// The page card for Noodle to post. It must describe exactly the browser and tab the
     /// broker authorized, and it never carries the browser's private description.
-    private static func card(_ response: BrowserResponse, request: BrowserRequest, message: String?) throws -> Data {
+    private static func card(_ response: BrowserResponse, request: BrowserRequest, message: String?, judge: BrowserJudgeServing?) async throws -> Data {
         guard var reference = response.reference, reference.browser.id == request.browserID, reference.tabID == request.tabID else {
             throw BrowserError("The browser returned a different page reference.")
         }
@@ -183,7 +251,11 @@ public struct BrowserToolProvider: ToolProvider {
         let filename = name.isEmpty || name == "." || name == ".." ? "Browser Page" : name
         let post: [String: Any] = ["message": message ?? reference.title,
             "attachment": ["filename": filename, "mediaType": BrowserReference.mediaType, "data": try JSONEncoder().encode(reference).base64EncodedString()]]
-        let structured: [String: Any] = ["tabID": reference.tabID.uuidString]
+        var structured: [String: Any] = ["tabID": reference.tabID.uuidString]
+        // Done-verify before the handoff: the card's page versus its message, advice only.
+        if let judge, let check = await judge.handoff(title: reference.title, url: reference.url, message: message) {
+            structured["verification"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(check))
+        }
         return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": "Presented."]], "structuredContent": structured,
                                                            "isError": false, "_meta": ["noodle/post": post]], options: [.sortedKeys])
     }
