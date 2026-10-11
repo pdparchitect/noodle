@@ -194,4 +194,14 @@ import XCTest
             XCTAssertEqual(f.store.selectedConversationID, f.directB.id, name)
         }
     }
+
+    func testAgentsWithUnreadInboxTracksUndeliveredMessagesOnly() throws {
+        let f = try fixture()
+        f.store.setDraft("Are you there?", for: f.directA.id)
+        f.store.sendDraft(to: f.directA.id)
+        XCTAssertEqual(try f.repository.agentsWithUnreadInbox([f.a.id, f.b.id]), [f.a.id])
+        // A bot that has taken its messages is no longer waiting on one.
+        XCTAssertFalse(try f.repository.latestMessages(for: f.a.id).isEmpty)
+        XCTAssertEqual(try f.repository.agentsWithUnreadInbox([f.a.id, f.b.id]), [])
+    }
 }

@@ -36,6 +36,12 @@ public struct AgentHeartbeatConfiguration: Equatable, Sendable {
 /// A clock-injected inactivity policy. Checking the deadline never counts as activity.
 /// One overdue heartbeat is consumed, even after a long sleep; there is no catch-up burst.
 public struct AgentHeartbeatScheduler: Sendable {
+    /// Undelivered inbox work does not wait out the inactivity floor: a bot
+    /// whose Messenger inbox still holds unread messages this old is due every
+    /// grace period instead of every configured interval, so a wake that failed
+    /// to deliver the message is retried without a person's nudge.
+    public static let unreadWakeGrace: TimeInterval = 300
+
     public private(set) var configuration: AgentHeartbeatConfiguration
     public private(set) var lastActivity: [UUID: Date] = [:]
 
@@ -75,10 +81,16 @@ public struct AgentHeartbeatScheduler: Sendable {
         configuration = updated
     }
 
-    public mutating func takeDueHeartbeats(readyAgentIDs: Set<UUID>, at date: Date) -> [UUID] {
+    /// Due bots, oldest-name first. A bot with unread inbox messages is due on
+    /// the grace period rather than the configured interval — undelivered work
+    /// does not wait out the inactivity floor. The wake itself still counts as
+    /// activity (a turn is another chance to read the inbox), so an inbox a bot
+    /// refuses to consume is re-offered at the grace pace, never in a burst.
+    public mutating func takeDueHeartbeats(readyAgentIDs: Set<UUID>, at date: Date, unreadAgentIDs: Set<UUID> = []) -> [UUID] {
         let due = readyAgentIDs.filter { id in
             guard configuration.isEnabled(for: id), let last = lastActivity[id] else { return false }
-            return date.timeIntervalSince(last) >= configuration.interval
+            let floor = unreadAgentIDs.contains(id) ? min(configuration.interval, Self.unreadWakeGrace) : configuration.interval
+            return date.timeIntervalSince(last) >= floor
         }.sorted { $0.uuidString < $1.uuidString }
         for id in due { lastActivity[id] = date }
         return due

@@ -140,6 +140,32 @@ final class AgentHeartbeatTests: XCTestCase {
         XCTAssertTrue(AgentWakeReason.recoveryInstructions.contains("do not wait for the user to repeat the request"))
     }
 
+    func testUnreadInboxBypassesTheInactivityFloorAtTheGracePace() {
+        var scheduler = tracked()
+        let unread: Set<UUID> = [bob]
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(299), unreadAgentIDs: unread), [])
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(300), unreadAgentIDs: unread), [bob])
+        // The wake counted as activity; the next offer waits out the grace again.
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(301), unreadAgentIDs: unread), [])
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(600), unreadAgentIDs: unread), [bob])
+        // Without unread, the configured interval applies again.
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(601)), [])
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(2_400)), [bob])
+    }
+
+    func testAShorterIntervalStaysShorterThanTheUnreadGrace() {
+        var scheduler = tracked()
+        scheduler.configure(.init(intervalMinutes: 2), at: start)
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(119), unreadAgentIDs: [bob]), [])
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(120), unreadAgentIDs: [bob]), [bob])
+    }
+
+    func testUnreadNeverWakesABotOptedOutOfHeartbeats() {
+        var scheduler = tracked()
+        scheduler.configure(.init(disabledAgentIDs: [bob]), at: start)
+        XCTAssertEqual(scheduler.takeDueHeartbeats(readyAgentIDs: [bob], at: start.addingTimeInterval(3_600), unreadAgentIDs: [bob]), [])
+    }
+
     private func tracked() -> AgentHeartbeatScheduler {
         var scheduler = AgentHeartbeatScheduler()
         scheduler.recordActivity(for: bob, at: start)

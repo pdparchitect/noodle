@@ -1273,6 +1273,21 @@ public struct WorkspaceRepository: Sendable {
         return deliveries
     }
 
+
+    /// Bots with unread inbox messages, for wakes that must not wait out the
+    /// heartbeat inactivity floor. Reaction-only rows and system authors never
+    /// wake anyone; reading this never advances an inbox.
+    public func agentsWithUnreadInbox(_ agentIDs: [UUID]) throws -> Set<UUID> {
+        var unread: Set<UUID> = []
+        for agentID in agentIDs {
+            if try latestMessages(for: agentID, consuming: false)
+                .contains(where: { $0.reactionChange == nil && $0.message.author != .system }) {
+                unread.insert(agentID)
+            }
+        }
+        return unread
+    }
+
     /// Marks the user's messages a bot elsewhere, such as on a Noodle Hub, has taken.
     public func markDelivered(conversationID: UUID, messageIDs: Set<UUID>) throws {
         try withConversationLock(conversationID) {

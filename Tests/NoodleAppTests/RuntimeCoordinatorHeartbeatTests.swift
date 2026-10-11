@@ -144,4 +144,32 @@ import XCTest
         let runtime = AgentRuntimeCoordinator(discovery: f.discovery, defaults: f.defaults)
         XCTAssertTrue(runtime.lastHeartbeatDates.isEmpty)
     }
+
+    func testUnreadInboxWakesBeforeTheIntervalAtTheGracePace() throws {
+        let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
+        process.canReceiveHeartbeat = true
+        f.runtime.configureHeartbeats(intervalMinutes: 30)
+        let start = f.clock.date
+        f.runtime.seedHeartbeatActivity(for: agent.id, at: start)
+        f.clock.date = start.addingTimeInterval(299)
+        f.runtime.checkHeartbeats(unreadAgentIDs: [agent.id])
+        XCTAssertEqual(process.heartbeats, 0)
+        f.clock.date = start.addingTimeInterval(300)
+        f.runtime.checkHeartbeats(unreadAgentIDs: [agent.id])
+        XCTAssertEqual(process.heartbeats, 1)
+        // The wake counted as activity; the next offer waits out the grace again.
+        f.clock.date = start.addingTimeInterval(301)
+        f.runtime.checkHeartbeats(unreadAgentIDs: [agent.id])
+        XCTAssertEqual(process.heartbeats, 1)
+        f.clock.date = start.addingTimeInterval(600)
+        f.runtime.checkHeartbeats(unreadAgentIDs: [agent.id])
+        XCTAssertEqual(process.heartbeats, 2)
+        // Delivered work returns to the configured interval.
+        f.clock.date = start.addingTimeInterval(601)
+        f.runtime.checkHeartbeats()
+        XCTAssertEqual(process.heartbeats, 2)
+        f.clock.date = start.addingTimeInterval(2_400)
+        f.runtime.checkHeartbeats()
+        XCTAssertEqual(process.heartbeats, 3)
+    }
 }

@@ -2293,7 +2293,7 @@ final class NoodleStore {
                 await self.processSharedInbox()
                 guard !Task.isCancelled else { break }
                 self.runtime.reconcile(agents: self.agents, repository: self.repository)
-                self.runtime.checkHeartbeats()
+                self.runtime.checkHeartbeats(repository: self.repository)
             }
         }
         // Harnesses Noodle installed have no updater of their own. Settings need not be open.

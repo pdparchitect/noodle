@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Bots with unread Messenger messages are woken again every five minutes once their heartbeat grace passes, instead of waiting out the full heartbeat interval: messages a failed or empty turn left undelivered no longer need a person to notice.
+
 ## [0.56.1] - 2026-10-11
 
 ### Fixed

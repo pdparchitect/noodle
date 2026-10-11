@@ -178,6 +178,11 @@ public final class AgentRuntimeCoordinator {
     private var isStoppingAll = false
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
+    /// Bots whose Messenger inbox still holds unread messages, refreshed off
+    /// the main actor at most once a minute; absent means no unread.
+    @ObservationIgnored private var unreadInboxAgents: Set<UUID> = []
+    @ObservationIgnored private var unreadInboxRefreshedAt = Date.distantPast
+    @ObservationIgnored private var unreadInboxTask: Task<Void, Never>?
     private let defaults: UserDefaults
     @ObservationIgnored private lazy var messageDelivery = MessageDeliveryRouter(defaults: defaults)
 
@@ -444,13 +449,38 @@ public final class AgentRuntimeCoordinator {
         })
     }
 
-    public func checkHeartbeats() {
+    public func checkHeartbeats(repository: WorkspaceRepository? = nil) {
+        refreshUnreadInboxes(repository)
+        checkHeartbeats(unreadAgentIDs: unreadInboxAgents)
+    }
+
+    func checkHeartbeats(unreadAgentIDs: Set<UUID>) {
         let readyIDs = Set(processes.filter { $0.value.canReceiveHeartbeat }.map(\.key))
-        let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: now())
+        let dueIDs = heartbeatScheduler.takeDueHeartbeats(readyAgentIDs: readyIDs, at: now(), unreadAgentIDs: unreadAgentIDs)
         if !dueIDs.isEmpty { saveHeartbeatActivityDates() }
         for id in dueIDs {
             // Do not start offline/failed bots or enqueue a heartbeat behind real work.
             processes[id]?.heartbeat()
+        }
+    }
+
+    /// Unread state comes from conversation reads, too heavy for a once-a-second
+    /// tick: only bots already past the grace floor are looked at, off the main
+    /// actor, at most once a minute and one flight at a time.
+    private func refreshUnreadInboxes(_ repository: WorkspaceRepository?) {
+        guard let repository, unreadInboxTask == nil,
+              now().timeIntervalSince(unreadInboxRefreshedAt) >= 60 else { return }
+        let grace = AgentHeartbeatScheduler.unreadWakeGrace
+        let candidates = heartbeatScheduler.lastActivity.compactMap { id, last -> UUID? in
+            guard heartbeatScheduler.configuration.isEnabled(for: id),
+                  now().timeIntervalSince(last) >= grace else { return nil }
+            return id
+        }
+        unreadInboxRefreshedAt = now()
+        unreadInboxTask = Task { @MainActor [weak self] in
+            let refreshed = await Task.detached { try? repository.agentsWithUnreadInbox(candidates) }.value
+            defer { self?.unreadInboxTask = nil }
+            if let refreshed { self?.unreadInboxAgents = refreshed }
         }
     }
 

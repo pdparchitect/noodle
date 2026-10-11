@@ -132,7 +132,7 @@ import NoodleRuntime
                 if let agents = try? self.repository.loadAgents() {
                     self.runtime.reconcile(agents: agents, repository: self.repository)
                 }
-                self.runtime.checkHeartbeats()
+                self.runtime.checkHeartbeats(repository: self.repository)
                 await self.checkForChangesInBackground()
             }
         }
