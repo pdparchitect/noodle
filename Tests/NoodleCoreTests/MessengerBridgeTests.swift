@@ -176,15 +176,27 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertNil(try status(of: agent.id))
     }
 
-    /// Asking a bot tells Noodle the helper has a wake, not the bot that asked.
-    func testAskingABotTellsNoodleToWakeTheHelper() throws {
-        let changed = expectation(description: "helper's wakes reported")
+    /// Asking a bot tells Noodle the helper has a wake, and the asker a wake for when the request expires.
+    func testAskingABotTellsNoodleToWakeTheHelperAndTheAsker() throws {
+        let changed = expectation(description: "both bots' wakes reported")
+        changed.expectedFulfillmentCount = 2
+        var reported: Set<UUID> = []
+        broker.onWakesChanged = { id in reported.insert(id); changed.fulfill() }
+        XCTAssertEqual(try call(.askBot(helperID: other.id, conversationID: conversation.id, text: "Help")).exitCode, 0)
+        wait(for: [changed], timeout: 5)
+        XCTAssertEqual(reported, [other.id, agent.id])
+    }
+
+    /// Cancelling removes the asker's expiry wake, so Noodle hears of the change.
+    func testCancellingARequestTellsNoodleTheAskersWakesChanged() throws {
+        let asked = try repository.askBot(other.id, for: agent.id, in: conversation.id, text: "Help")
+        let changed = expectation(description: "asker's wakes reported")
         changed.assertForOverFulfill = false
         var reported: [UUID] = []
         broker.onWakesChanged = { id in reported.append(id); changed.fulfill() }
-        XCTAssertEqual(try call(.askBot(helperID: other.id, conversationID: conversation.id, text: "Help")).exitCode, 0)
+        XCTAssertEqual(try call(.cancelRequest(id: asked.id)).exitCode, 0)
         wait(for: [changed], timeout: 5)
-        XCTAssertEqual(reported, [other.id])
+        XCTAssertEqual(reported, [agent.id])
     }
 
     /// Answering tells Noodle the asking bot has a wake, not the bot that answered.

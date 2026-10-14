@@ -213,6 +213,8 @@ final class MessengerDocumentationTests: XCTestCase {
             case .listRequests: options = []
             case .answerRequest: options = [requestID, "--body", "Done"]
             case .listAnswers: options = []
+            case .cancelRequest:
+                options = [try repository.askBot(helper.agent.id, for: bot.agent.id, in: bot.conversation.id, text: "Cancel me").id.uuidString]
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]

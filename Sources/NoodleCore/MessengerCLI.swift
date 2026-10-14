@@ -184,6 +184,9 @@ public enum MessengerCLI {
             case .listAnswers:
                 return .json(try repository.listBotAnswers(for: agentID))
 
+            case .cancelRequest(let id):
+                return .json(try repository.cancelBotRequest(id, by: agentID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -352,6 +355,11 @@ public enum MessengerCLI {
                 action = .answerRequest(id: id, text: text)
             case .listAnswers:
                 action = .listAnswers
+            case .cancelRequest:
+                guard let raw = Self.option("--cancel-request", in: values), let id = UUID(uuidString: raw) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                action = .cancelRequest(id: id)
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -565,6 +573,7 @@ public enum MessengerAction: Codable, Sendable {
         case listRequests
         case answerRequest(id: UUID, text: String)
         case listAnswers
+        case cancelRequest(id: UUID)
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

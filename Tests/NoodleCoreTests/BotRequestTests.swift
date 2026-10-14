@@ -172,7 +172,7 @@ final class BotRequestTests: XCTestCase {
         let before = Date()
         XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "First").exitCode, 0)
         XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Second").exitCode, 0)
-        XCTAssertNil(repository.nextWakeDate(agentID: created.agent.id))
+        XCTAssertGreaterThan(try XCTUnwrap(repository.nextWakeDate(agentID: created.agent.id)), Date().addingTimeInterval(3_600))
         XCTAssertLessThanOrEqual(try XCTUnwrap(repository.nextWakeDate(agentID: helper.id)), before.addingTimeInterval(1))
         XCTAssertTrue(try repository.takeDueWakes(agentID: helper.id, at: Date().addingTimeInterval(1)))
         let due = try repository.listWakes(agentID: helper.id).due
@@ -259,7 +259,7 @@ final class BotRequestTests: XCTestCase {
         let helper = try repository.createAgent(named: "Accounts").agent
         let first = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "First"))
         let second = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Second"))
-        XCTAssertNil(repository.nextWakeDate(agentID: created.agent.id))
+        XCTAssertGreaterThan(try XCTUnwrap(repository.nextWakeDate(agentID: created.agent.id)), Date().addingTimeInterval(3_600))
         let before = Date()
         XCTAssertEqual(answer(helper, first.id, "One").exitCode, 0)
         XCTAssertEqual(answer(helper, second.id, "Two").exitCode, 0)
@@ -284,6 +284,53 @@ final class BotRequestTests: XCTestCase {
         XCTAssertEqual(listed.first?.conversationID, conversation.id)
         XCTAssertEqual(try decode([BotRequest].self, from: messenger(asker, "--list-answers")), [])
         XCTAssertEqual(try decode([BotRequest].self, from: messenger(helper, "--list-answers")), [])
+    }
+
+    func testAskerCancelsAWaitingRequest() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let other = try repository.createAgent(named: "Research").agent
+        let asked = try decode(BotRequest.self, from: ask(asker, helper.id, in: created.conversation.id, "Total the invoices"))
+        XCTAssertNotEqual(messenger(helper, "--cancel-request", asked.id.uuidString).exitCode, 0)
+        XCTAssertNotEqual(messenger(other, "--cancel-request", asked.id.uuidString).exitCode, 0)
+        let cancelled = try decode(BotRequest.self, from: messenger(asker, "--cancel-request", asked.id.uuidString))
+        XCTAssertEqual(cancelled.status, .cancelled)
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(helper, "--list-requests")), [])
+        let refused = answer(helper, asked.id, "Too late")
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains("cancelled"), refused.standardError)
+        XCTAssertNotEqual(messenger(asker, "--cancel-request", asked.id.uuidString).exitCode, 0)
+        XCTAssertNil(repository.nextWakeDate(agentID: asker.id))
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(asker, "--list-answers")), [])
+    }
+
+    func testAskingSetsAWakeForExpiryThatAnsweringRemoves() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let asked = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Total the invoices"))
+        XCTAssertEqual(repository.nextWakeDate(agentID: created.agent.id), asked.createdAt.addingTimeInterval(BotRequestLimits.expiry))
+        XCTAssertEqual(answer(helper, asked.id, "Done").exitCode, 0)
+        XCTAssertFalse(try repository.listWakes(agentID: created.agent.id).pending.contains { $0.id == asked.id })
+    }
+
+    func testUnansweredRequestExpiresAfterADay() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let start = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let asked = try repository.askBot(helper.id, for: asker.id, in: created.conversation.id, text: "Total the invoices", now: start)
+        let expiry = start.addingTimeInterval(BotRequestLimits.expiry)
+        XCTAssertEqual(try repository.listBotRequests(waitingFor: helper.id, now: expiry.addingTimeInterval(-1)).map(\.id), [asked.id])
+        XCTAssertTrue(try repository.takeDueWakes(agentID: asker.id, at: expiry))
+        XCTAssertTrue(try repository.listWakes(agentID: asker.id).due.first?.note.contains("--list-answers") == true)
+        XCTAssertEqual(try repository.listBotRequests(waitingFor: helper.id, now: expiry), [])
+        XCTAssertThrowsError(try repository.answerBotRequest(asked.id, by: helper.id, answer: "Late", now: expiry))
+        let expired = try repository.listBotAnswers(for: asker.id, now: expiry)
+        XCTAssertEqual(expired.map(\.id), [asked.id])
+        XCTAssertEqual(expired.first?.status, .expired)
+        XCTAssertNil(expired.first?.answer)
+        XCTAssertEqual(try repository.listBotAnswers(for: asker.id, now: expiry), [])
     }
 
     func testAddedRequestIsKeptForBothBots() throws {

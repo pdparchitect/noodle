@@ -17,13 +17,15 @@ public struct BotRequest: Codable, Hashable, Sendable {
 }
 
 public enum BotRequestStatus: String, Codable, Sendable {
-    case waiting, answered
+    case waiting, answered, cancelled, expired
 }
 
 /// Limits that keep bots asking each other from turning into a loop.
 public enum BotRequestLimits {
     public static let waiting = 3
     public static let depth = 2
+    /// A request still waiting this long expires, and the bot that asked is told.
+    public static let expiry: TimeInterval = 24 * 3_600
 }
 
 public struct MessengerBot: Codable, Hashable, Sendable {
@@ -40,6 +42,13 @@ struct BotRequestError: LocalizedError {
 /// neither may change it except through Messenger.
 private struct BotRequestState: Codable {
     var requests: [BotRequest] = []
+
+    mutating func expire(at now: Date) {
+        for index in requests.indices where requests[index].status == .waiting
+            && requests[index].createdAt.addingTimeInterval(BotRequestLimits.expiry) <= now {
+            requests[index].status = .expired
+        }
+    }
 
     /// The bots up the chain of requests waiting for this bot, with how many steps up the chain goes.
     /// A request is asked to answer another while one is waiting for its asker.
@@ -63,7 +72,7 @@ extension WorkspaceRepository {
 
     private func addBotRequest(askerID: UUID, helperID: UUID, conversationID: UUID, text: String, now: Date,
                                check: (BotRequestState) throws -> Void) throws -> BotRequest {
-        try updateBotRequests { state in
+        try updateBotRequests(now: now) { state in
             try check(state)
             // Whole seconds, as stored, so the request returned now equals the one read later.
             let request = BotRequest(id: UUID(), askerID: askerID, helperID: helperID, conversationID: conversationID,
@@ -78,7 +87,8 @@ extension WorkspaceRepository {
     /// asking never confirms that a bot it may not see exists. The limits stop bots asking each other
     /// in a loop: a chain never reaches back to a bot already in it or goes deeper than its limit, and
     /// turns woken by requests and answers count towards waking in a row.
-    public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String) throws -> BotRequest {
+    public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String,
+                       now: Date = Date()) throws -> BotRequest {
         guard try listBots(for: agentID, in: conversationID).contains(where: { $0.bot.agentID == helperID }) else {
             throw WorkspaceError.missingAgent(helperID)
         }
@@ -86,7 +96,7 @@ extension WorkspaceRepository {
             throw BotRequestError("You have been woken \(AgentWakeLimits.withoutOutsideMessages) times with no message from anyone else. Wait for a message before asking another bot.")
         }
         let request = try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID,
-                                        text: text, now: Date()) { state in
+                                        text: text, now: now) { state in
             guard state.requests.filter({ $0.askerID == agentID && $0.status == .waiting }).count < BotRequestLimits.waiting else {
                 throw BotRequestError("You already have \(BotRequestLimits.waiting) requests waiting for answers. Wait for one, or carry on with what you have.")
             }
@@ -99,35 +109,59 @@ extension WorkspaceRepository {
             }
         }
         try wakeFromAnotherBot(agentID: helperID, note: AgentWake.requestNote, now: request.createdAt)
+        try wakeForExpiry(agentID: agentID, requestID: request.id, at: request.createdAt.addingTimeInterval(BotRequestLimits.expiry))
         return request
     }
 
-    public func listBotRequests(waitingFor agentID: UUID) throws -> [BotRequest] {
-        try readBotRequests().requests.filter { $0.helperID == agentID && $0.status == .waiting }
+    public func listBotRequests(waitingFor agentID: UUID, now: Date = Date()) throws -> [BotRequest] {
+        var state = try readBotRequests()
+        state.expire(at: now)
+        return state.requests.filter { $0.helperID == agentID && $0.status == .waiting }
     }
 
     /// Only the bot asked may answer, and only once.
     public func answerBotRequest(_ id: UUID, by agentID: UUID, answer: String, now: Date = Date()) throws -> BotRequest {
-        let answered = try updateBotRequests { state in
-            guard let index = state.requests.firstIndex(where: { $0.id == id && $0.helperID == agentID && $0.status == .waiting }) else {
+        let answered = try updateBotRequests(now: now) { state in
+            guard let index = state.requests.firstIndex(where: { $0.id == id && $0.helperID == agentID }) else {
                 throw BotRequestError("No request \(id) is waiting for you. --list-requests shows the ones that are.")
+            }
+            switch state.requests[index].status {
+            case .waiting: break
+            case .answered: throw BotRequestError("You have already answered request \(id).")
+            case .cancelled: throw BotRequestError("Request \(id) was cancelled by the bot that asked, so it needs no answer.")
+            case .expired: throw BotRequestError("Request \(id) expired before it was answered, so it needs no answer.")
             }
             state.requests[index].status = .answered
             state.requests[index].answer = answer
             state.requests[index].answeredAt = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
             return state.requests[index]
         }
+        try removeExpiryWake(agentID: answered.askerID, requestID: id)
         try wakeFromAnotherBot(agentID: answered.askerID, note: AgentWake.answerNote, now: now)
         return answered
     }
 
+    /// Only the bot that asked may cancel, and only while the request is waiting.
+    public func cancelBotRequest(_ id: UUID, by agentID: UUID, now: Date = Date()) throws -> BotRequest {
+        let cancelled = try updateBotRequests(now: now) { state in
+            guard let index = state.requests.firstIndex(where: { $0.id == id && $0.askerID == agentID && $0.status == .waiting }) else {
+                throw BotRequestError("No request \(id) of yours is waiting for an answer.")
+            }
+            state.requests[index].status = .cancelled
+            return state.requests[index]
+        }
+        try removeExpiryWake(agentID: agentID, requestID: id)
+        return cancelled
+    }
+
     /// Hands over the answers to the bot's requests that it has not read yet, oldest answer first.
+    /// Hands over expired requests too, with no answer, so the bot can tell the person.
     public func listBotAnswers(for agentID: UUID, now: Date = Date()) throws -> [BotRequest] {
-        try updateBotRequests { state in
+        try updateBotRequests(now: now) { state in
             let read = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
             var answers: [BotRequest] = []
             for index in state.requests.indices where state.requests[index].askerID == agentID
-                && state.requests[index].status == .answered && state.requests[index].answerReadAt == nil {
+                && [.answered, .expired].contains(state.requests[index].status) && state.requests[index].answerReadAt == nil {
                 state.requests[index].answerReadAt = read
                 answers.append(state.requests[index])
             }
@@ -171,13 +205,15 @@ extension WorkspaceRepository {
     }
 
     /// Messenger and the runtime change the file from different threads, so changes take a lock.
-    private func updateBotRequests<Value>(_ change: (inout BotRequestState) throws -> Value) throws -> Value {
+    /// Requests past their expiry are marked expired before any change.
+    private func updateBotRequests<Value>(now: Date = Date(), _ change: (inout BotRequestState) throws -> Value) throws -> Value {
         let descriptor = Darwin.open(rootURL.appendingPathComponent(".bot-requests.lock").path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw POSIXError(.EIO) }
         defer { Darwin.close(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
         defer { flock(descriptor, LOCK_UN) }
         var state = try readBotRequests()
+        state.expire(at: now)
         let value = try change(&state)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
