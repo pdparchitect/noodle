@@ -143,6 +143,12 @@ public final class MessengerBroker: @unchecked Sendable {
         switch request.action {
         case .scheduleWake, .scheduleRecurringWake, .cancelWake: if response.exitCode == 0 { onWakesChanged?(agent.id) }
         case .askBot(let helperID, _, _): if response.exitCode == 0 { onWakesChanged?(helperID) }
+        case .answerRequest:
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if response.exitCode == 0, let answered = try? decoder.decode(BotRequest.self, from: Data(response.standardOutput.utf8)) {
+                onWakesChanged?(answered.askerID)
+            }
         default: break
         }
         return response

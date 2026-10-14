@@ -12,6 +12,8 @@ public struct BotRequest: Codable, Hashable, Sendable {
     public let createdAt: Date
     public var answer: String?
     public var answeredAt: Date?
+    /// When the asking bot read the answer; each answer is handed over once.
+    public var answerReadAt: Date?
 }
 
 public enum BotRequestStatus: String, Codable, Sendable {
@@ -54,7 +56,7 @@ extension WorkspaceRepository {
             throw WorkspaceError.missingAgent(helperID)
         }
         let request = try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
-        try wakeForRequest(agentID: helperID, now: request.createdAt)
+        try wakeFromAnotherBot(agentID: helperID, note: AgentWake.requestNote, now: request.createdAt)
         return request
     }
 
@@ -64,7 +66,7 @@ extension WorkspaceRepository {
 
     /// Only the bot asked may answer, and only once.
     public func answerBotRequest(_ id: UUID, by agentID: UUID, answer: String, now: Date = Date()) throws -> BotRequest {
-        try updateBotRequests { state in
+        let answered = try updateBotRequests { state in
             guard let index = state.requests.firstIndex(where: { $0.id == id && $0.helperID == agentID && $0.status == .waiting }) else {
                 throw BotRequestError("No request \(id) is waiting for you. --list-requests shows the ones that are.")
             }
@@ -72,6 +74,22 @@ extension WorkspaceRepository {
             state.requests[index].answer = answer
             state.requests[index].answeredAt = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
             return state.requests[index]
+        }
+        try wakeFromAnotherBot(agentID: answered.askerID, note: AgentWake.answerNote, now: now)
+        return answered
+    }
+
+    /// Hands over the answers to the bot's requests that it has not read yet, oldest answer first.
+    public func listBotAnswers(for agentID: UUID, now: Date = Date()) throws -> [BotRequest] {
+        try updateBotRequests { state in
+            let read = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+            var answers: [BotRequest] = []
+            for index in state.requests.indices where state.requests[index].askerID == agentID
+                && state.requests[index].status == .answered && state.requests[index].answerReadAt == nil {
+                state.requests[index].answerReadAt = read
+                answers.append(state.requests[index])
+            }
+            return answers.sorted { ($0.answeredAt ?? $0.createdAt) < ($1.answeredAt ?? $1.createdAt) }
         }
     }
 

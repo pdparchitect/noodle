@@ -47,6 +47,7 @@ final class MessengerDocumentationTests: XCTestCase {
     func testWakeGuidanceCoversRequestsFromOtherBots() {
         let guidance = AgentWakeReason.wake.reference.guidance
         XCTAssertTrue(guidance.contains("--list-requests"))
+        XCTAssertTrue(guidance.contains("--list-answers"))
         XCTAssertTrue(guidance.contains("another bot"))
     }
 
@@ -211,6 +212,7 @@ final class MessengerDocumentationTests: XCTestCase {
             case .askBot: options = [helper.agent.id.uuidString] + conversation + ["--body", "Help"]
             case .listRequests: options = []
             case .answerRequest: options = [requestID, "--body", "Done"]
+            case .listAnswers: options = []
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]

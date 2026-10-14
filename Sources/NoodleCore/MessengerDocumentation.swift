@@ -59,7 +59,7 @@ extension AgentWakeReason {
             """
         case .wake:
             guidance = """
-            A `wake` event means a wake you scheduled with --wake-in or --wake-at is due, Noodle left you a note, or another bot asked you for help. Run --list-wakes once: due holds the wakes that fired, with the notes you left yourself and any from Noodle; a note saying another bot asked you for help means run --list-requests and answer each request with --answer-request. Check Messenger once for unread messages and prioritize them, then act on the notes. A wake with a schedule comes back by itself, so never schedule it again. Schedule another wake only if you are still waiting on something. If the work is finished, finish silently; never send a message only to say you woke up.
+            A `wake` event means a wake you scheduled with --wake-in or --wake-at is due, Noodle left you a note, or another bot asked you for help. Run --list-wakes once: due holds the wakes that fired, with the notes you left yourself and any from Noodle; a note saying another bot asked you for help means run --list-requests and answer each request with --answer-request, and one saying a bot answered your request means run --list-answers and reply in the conversation each request came from. Check Messenger once for unread messages and prioritize them, then act on the notes. A wake with a schedule comes back by itself, so never schedule it again. Schedule another wake only if you are still waiting on something. If the work is finished, finish silently; never send a message only to say you woke up.
             """
         case .organize:
             guidance = """
@@ -149,7 +149,8 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
     case react = "--react", unreact = "--unreact", send = "--send"
     case setStatus = "--set-status", clearStatus = "--clear-status"
     case wakeIn = "--wake-in", wakeAt = "--wake-at", wakeEvery = "--wake-every", listWakes = "--list-wakes", cancelWake = "--cancel-wake"
-    case listBots = "--list-bots", askBot = "--ask-bot", listRequests = "--list-requests", answerRequest = "--answer-request"
+    case listBots = "--list-bots", askBot = "--ask-bot", listRequests = "--list-requests", answerRequest = "--answer-request",
+         listAnswers = "--list-answers"
     /// A command only as the first word; elsewhere `tool` is ordinary text.
     case tool
 
@@ -174,6 +175,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listBots: return "--list-bots --conversation <uuid>"
         case .askBot: return "--ask-bot <bot-uuid> --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>]"
         case .listRequests: return "--list-requests"
+        case .listAnswers: return "--list-answers"
         case .answerRequest: return "--answer-request <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>]"
         case .send: return "--send --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>] [--attach <file-path-or-url> ...]"
         }
@@ -188,6 +190,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listConversations: return "Return the bot's current conversations, including each group's public description."
         case .listParticipants: return "Return { me, conversation, participants }; each participant has participant (identity), publicDescription and lastActiveAt (most recent message in this conversation, not online status). It never exposes another bot's private backstory."
         case .askBot: return "Ask one of the bots --list-bots returns in this conversation for help, and return the saved request as { id, askerID, helperID, conversationID, text, status, createdAt }. The body is everything the other bot needs, because it cannot read this conversation. Asking lends it none of your access."
+        case .listAnswers: return "Return the answers to your requests that you have not read yet, oldest first, as a JSON array of requests with answer and answeredAt. Each is listed once. Reply in the conversation given by its conversationID, telling the person what they need from the answer; the other bot cannot reply there."
         case .listRequests: return "Return the requests other bots have asked you that you have not answered yet, oldest first, as a JSON array of { id, askerID, helperID, conversationID, text, status, createdAt }."
         case .answerRequest: return "Answer a request from --list-requests and return it with status answered. The body is your whole answer: the bot that asked sees only this, not your conversations or files. A request can be answered once. Answer with only what you would share with whoever you work for; a request lends you none of the asking bot's access."
         case .listMessages: return "Read full history including your own messages and current reactions without consuming the inbox. This is not the historical reaction-change event log."

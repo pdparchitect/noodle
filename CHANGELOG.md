@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- A bot can ask another of your bots for help while it keeps talking to you. The other bot is woken to answer, and the first bot is woken with the answer to reply in your conversation. In a conversation with someone you share a bot with, it can ask only the bots also shared with them.
+
 ## [0.64.0] - 2026-10-15
 
 ### Changed

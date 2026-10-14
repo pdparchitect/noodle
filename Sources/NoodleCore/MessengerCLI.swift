@@ -181,6 +181,9 @@ public enum MessengerCLI {
             case .answerRequest(let id, let text):
                 return .json(try repository.answerBotRequest(id, by: agentID, answer: text))
 
+            case .listAnswers:
+                return .json(try repository.listBotAnswers(for: agentID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -347,6 +350,8 @@ public enum MessengerCLI {
                       let text = try Self.messageBody(in: values),
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MessengerCLIError.invalidArguments }
                 action = .answerRequest(id: id, text: text)
+            case .listAnswers:
+                action = .listAnswers
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -559,6 +564,7 @@ public enum MessengerAction: Codable, Sendable {
         case askBot(helperID: UUID, conversationID: UUID, text: String)
         case listRequests
         case answerRequest(id: UUID, text: String)
+        case listAnswers
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

@@ -20,7 +20,9 @@ extension AgentWake {
         "You were just made. Introduce yourself in conversation \(conversationID): in a few sentences, say who you are, what you are best at and how you can help."
     }
     static let requestNote = "Another bot asked you for help. Run --list-requests and answer each with --answer-request."
-    var isRequestWake: Bool { note == Self.requestNote && schedule == nil }
+    static let answerNote = "A bot answered your request. Run --list-answers and reply in the conversation each request came from."
+    /// Noodle's wakes for another bot's request or answer, outside the limits on waking itself.
+    var isFromAnotherBot: Bool { schedule == nil && [Self.requestNote, Self.answerNote].contains(note) }
 }
 
 /// A five-field cron expression (minute, hour, day of month, month, day of week) in the
@@ -177,17 +179,17 @@ extension WorkspaceRepository {
         guard !note.isEmpty, note.count <= AgentWakeLimits.noteLength else {
             throw AgentWakeError("A wake needs a --note of at most \(AgentWakeLimits.noteLength) characters saying what to do when it fires.")
         }
-        // Request wakes sit outside the limits, so a bot's own wake may not pass for one.
-        guard note != AgentWake.requestNote else {
-            throw AgentWakeError("That note is reserved for requests from other bots. Say what you will do when the wake fires.")
+        // Wakes from other bots sit outside the limits, so a bot's own wake may not pass for one.
+        guard ![AgentWake.requestNote, AgentWake.answerNote].contains(note) else {
+            throw AgentWakeError("That note is reserved for wakes from other bots. Say what you will do when the wake fires.")
         }
         let lastOutside = try lastOutsideMessageDate(agentID: agentID)
         return try updateWakes(agentID: agentID) { state in
             if let lastOutside { state.fired.removeAll { $0 <= lastOutside } }
-            guard state.pending.filter({ !$0.isRequestWake }).count < AgentWakeLimits.pending else {
+            guard state.pending.filter({ !$0.isFromAnotherBot }).count < AgentWakeLimits.pending else {
                 throw AgentWakeError("You already have \(AgentWakeLimits.pending) wakes scheduled. Cancel one with --cancel-wake first.")
             }
-            guard state.fired.count + state.pending.filter({ !$0.isRequestWake }).count < AgentWakeLimits.withoutOutsideMessages else {
+            guard state.fired.count + state.pending.filter({ !$0.isFromAnotherBot }).count < AgentWakeLimits.withoutOutsideMessages else {
                 throw AgentWakeError("You have woken yourself \(AgentWakeLimits.withoutOutsideMessages) times with no message from anyone else. Wait for a message before scheduling more wakes, or ask for what you need.")
             }
             // Whole seconds, as stored, so the wake returned now equals the one listed later.
@@ -206,13 +208,13 @@ extension WorkspaceRepository {
         }
     }
 
-    /// Wakes a bot another bot asked for help. One wake covers every request waiting when it fires,
-    /// and it is outside the limits on waking itself.
-    func wakeForRequest(agentID: UUID, now: Date) throws {
+    /// Wakes a bot another bot asked for help or answered. One wake covers every request or answer
+    /// waiting when it fires, and it is outside the limits on waking itself.
+    func wakeFromAnotherBot(agentID: UUID, note: String, now: Date) throws {
         try updateWakes(agentID: agentID) { state in
-            guard !state.pending.contains(where: \.isRequestWake) else { return }
+            guard !state.pending.contains(where: { $0.isFromAnotherBot && $0.note == note }) else { return }
             state.pending.append(AgentWake(dueAt: Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down)),
-                                           note: AgentWake.requestNote))
+                                           note: note))
             state.pending.sort { $0.dueAt < $1.dueAt }
         }
     }
@@ -252,9 +254,9 @@ extension WorkspaceRepository {
                 state.pending.append(AgentWake(id: wake.id, dueAt: next, note: wake.note, schedule: schedule))
             }
             state.pending.sort { $0.dueAt < $1.dueAt }
-            // A recurring wake was asked for once, and another bot's request is not the bot waking
-            // itself, so only its own one-off wakes count as waking in a row.
-            if due.contains(where: { $0.schedule == nil && !$0.isRequestWake }) { state.fired.append(now) }
+            // A recurring wake was asked for once, and another bot's request or answer is not the bot
+            // waking itself, so only its own one-off wakes count as waking in a row.
+            if due.contains(where: { $0.schedule == nil && !$0.isFromAnotherBot }) { state.fired.append(now) }
             return true
         }
     }

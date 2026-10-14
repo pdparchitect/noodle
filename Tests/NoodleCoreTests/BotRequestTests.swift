@@ -199,7 +199,40 @@ final class BotRequestTests: XCTestCase {
     func testBotCannotDisguiseItsOwnWakeAsARequest() throws {
         let bot = try repository.createAgent(named: "Assistant").agent
         XCTAssertNotEqual(messenger(bot, "--wake-in", "10m", "--note", AgentWake.requestNote).exitCode, 0)
+        XCTAssertNotEqual(messenger(bot, "--wake-in", "10m", "--note", AgentWake.answerNote).exitCode, 0)
         XCTAssertNil(repository.nextWakeDate(agentID: bot.id))
+    }
+
+    func testAnsweringWakesTheAskerOnce() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let first = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "First"))
+        let second = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Second"))
+        XCTAssertNil(repository.nextWakeDate(agentID: created.agent.id))
+        let before = Date()
+        XCTAssertEqual(answer(helper, first.id, "One").exitCode, 0)
+        XCTAssertEqual(answer(helper, second.id, "Two").exitCode, 0)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(repository.nextWakeDate(agentID: created.agent.id)), before.addingTimeInterval(1))
+        XCTAssertTrue(try repository.takeDueWakes(agentID: created.agent.id, at: Date().addingTimeInterval(1)))
+        let due = try repository.listWakes(agentID: created.agent.id).due
+        XCTAssertEqual(due.count, 1)
+        XCTAssertTrue(due.first?.note.contains("--list-answers") == true, due.first?.note ?? "")
+    }
+
+    func testAskerListsEachAnswerOnce() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let answered = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "Total the invoices"))
+        _ = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "Still waiting"))
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(asker, "--list-answers")), [])
+        _ = try decode(BotRequest.self, from: answer(helper, answered.id, "The total is 120"))
+        let listed = try decode([BotRequest].self, from: messenger(asker, "--list-answers"))
+        XCTAssertEqual(listed.map(\.id), [answered.id])
+        XCTAssertEqual(listed.first?.answer, "The total is 120")
+        XCTAssertEqual(listed.first?.conversationID, conversation.id)
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(asker, "--list-answers")), [])
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(helper, "--list-answers")), [])
     }
 
     func testAddedRequestIsKeptForBothBots() throws {
