@@ -17,7 +17,7 @@ public struct BotRequest: Codable, Hashable, Sendable {
 }
 
 public enum BotRequestStatus: String, Codable, Sendable {
-    case waiting, answered, cancelled, expired
+    case waiting, answered, cancelled, expired, withheld
 }
 
 /// Limits that keep bots asking each other from turning into a loop.
@@ -127,7 +127,7 @@ extension WorkspaceRepository {
             }
             switch state.requests[index].status {
             case .waiting: break
-            case .answered: throw BotRequestError("You have already answered request \(id).")
+            case .answered, .withheld: throw BotRequestError("You have already answered request \(id).")
             case .cancelled: throw BotRequestError("Request \(id) was cancelled by the bot that asked, so it needs no answer.")
             case .expired: throw BotRequestError("Request \(id) expired before it was answered, so it needs no answer.")
             }
@@ -155,13 +155,25 @@ extension WorkspaceRepository {
     }
 
     /// Hands over the answers to the bot's requests that it has not read yet, oldest answer first.
-    /// Hands over expired requests too, with no answer, so the bot can tell the person.
+    /// Hands over expired requests too, with no answer, so the bot can tell the person. Sharing may
+    /// have changed since the bot asked, so an answer from a bot it may no longer ask in that
+    /// conversation is withheld and dropped.
     public func listBotAnswers(for agentID: UUID, now: Date = Date()) throws -> [BotRequest] {
-        try updateBotRequests(now: now) { state in
+        let conversations = Set(try readBotRequests().requests.filter { $0.askerID == agentID }.map(\.conversationID))
+        var askable: [UUID: Set<UUID>] = [:]
+        for conversation in conversations {
+            askable[conversation] = Set(((try? listBots(for: agentID, in: conversation)) ?? []).compactMap(\.bot.agentID))
+        }
+        return try updateBotRequests(now: now) { state in
             let read = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
             var answers: [BotRequest] = []
             for index in state.requests.indices where state.requests[index].askerID == agentID
                 && [.answered, .expired].contains(state.requests[index].status) && state.requests[index].answerReadAt == nil {
+                let request = state.requests[index]
+                if request.status == .answered, askable[request.conversationID]?.contains(request.helperID) != true {
+                    state.requests[index].status = .withheld
+                    state.requests[index].answer = nil
+                }
                 state.requests[index].answerReadAt = read
                 answers.append(state.requests[index])
             }

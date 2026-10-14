@@ -333,6 +333,22 @@ final class BotRequestTests: XCTestCase {
         XCTAssertEqual(try repository.listBotAnswers(for: asker.id, now: expiry), [])
     }
 
+    func testAnswerIsWithheldWhenTheHelperIsNoLongerSharedWithTheGuest() throws {
+        let asker = try repository.createAgent(named: "Assistant").agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let guest = ConversationGuest(id: UUID(), name: "Guest")
+        let guestConversation = try repository.createGuestConversation(with: asker, guest: guest)
+        let helperShare = try repository.createGuestConversation(with: helper, guest: guest)
+        let asked = try decode(BotRequest.self, from: ask(asker, helper.id, in: guestConversation.id, "Total the invoices"))
+        XCTAssertEqual(answer(helper, asked.id, "The total is 120").exitCode, 0)
+        try repository.deleteConversation(id: helperShare.id)
+        let listed = try decode([BotRequest].self, from: messenger(asker, "--list-answers"))
+        XCTAssertEqual(listed.map(\.id), [asked.id])
+        XCTAssertEqual(listed.first?.status, .withheld)
+        XCTAssertNil(listed.first?.answer)
+        XCTAssertNil(try repository.botRequests().first?.answer)
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent
