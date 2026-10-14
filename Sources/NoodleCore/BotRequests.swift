@@ -20,6 +20,12 @@ public enum BotRequestStatus: String, Codable, Sendable {
     case waiting, answered
 }
 
+/// Limits that keep bots asking each other from turning into a loop.
+public enum BotRequestLimits {
+    public static let waiting = 3
+    public static let depth = 2
+}
+
 public struct MessengerBot: Codable, Hashable, Sendable {
     public let bot: MessengerIdentity
     public let publicDescription: String?
@@ -34,12 +40,31 @@ struct BotRequestError: LocalizedError {
 /// neither may change it except through Messenger.
 private struct BotRequestState: Codable {
     var requests: [BotRequest] = []
+
+    /// The bots up the chain of requests waiting for this bot, with how many steps up the chain goes.
+    /// A request is asked to answer another while one is waiting for its asker.
+    func chain(above agentID: UUID, visited: Set<UUID> = []) -> (bots: Set<UUID>, depth: Int) {
+        var bots: Set<UUID> = [], depth = 0
+        for request in requests where request.helperID == agentID && request.status == .waiting
+            && !visited.contains(request.askerID) {
+            let above = chain(above: request.askerID, visited: visited.union([agentID]))
+            bots.formUnion(above.bots.union([request.askerID]))
+            depth = max(depth, above.depth + 1)
+        }
+        return (bots, depth)
+    }
 }
 
 extension WorkspaceRepository {
     public func addBotRequest(askerID: UUID, helperID: UUID, conversationID: UUID, text: String,
                               now: Date = Date()) throws -> BotRequest {
+        try addBotRequest(askerID: askerID, helperID: helperID, conversationID: conversationID, text: text, now: now) { _ in }
+    }
+
+    private func addBotRequest(askerID: UUID, helperID: UUID, conversationID: UUID, text: String, now: Date,
+                               check: (BotRequestState) throws -> Void) throws -> BotRequest {
         try updateBotRequests { state in
+            try check(state)
             // Whole seconds, as stored, so the request returned now equals the one read later.
             let request = BotRequest(id: UUID(), askerID: askerID, helperID: helperID, conversationID: conversationID,
                                      text: text, status: .waiting,
@@ -50,12 +75,29 @@ extension WorkspaceRepository {
     }
 
     /// A bot may ask only the bots it may list in that conversation; any other is reported missing, so
-    /// asking never confirms that a bot it may not see exists.
+    /// asking never confirms that a bot it may not see exists. The limits stop bots asking each other
+    /// in a loop: a chain never reaches back to a bot already in it or goes deeper than its limit, and
+    /// turns woken by requests and answers count towards waking in a row.
     public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String) throws -> BotRequest {
         guard try listBots(for: agentID, in: conversationID).contains(where: { $0.bot.agentID == helperID }) else {
             throw WorkspaceError.missingAgent(helperID)
         }
-        let request = try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
+        guard try wakesInARow(agentID: agentID) < AgentWakeLimits.withoutOutsideMessages else {
+            throw BotRequestError("You have been woken \(AgentWakeLimits.withoutOutsideMessages) times with no message from anyone else. Wait for a message before asking another bot.")
+        }
+        let request = try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID,
+                                        text: text, now: Date()) { state in
+            guard state.requests.filter({ $0.askerID == agentID && $0.status == .waiting }).count < BotRequestLimits.waiting else {
+                throw BotRequestError("You already have \(BotRequestLimits.waiting) requests waiting for answers. Wait for one, or carry on with what you have.")
+            }
+            let chain = state.chain(above: agentID)
+            guard !chain.bots.contains(helperID) else {
+                throw BotRequestError("That bot is waiting for your answer, directly or further up the chain, so asking it would go round in a loop. Answer with what you have.")
+            }
+            guard chain.depth < BotRequestLimits.depth else {
+                throw BotRequestError("You are answering a chain of requests already \(BotRequestLimits.depth) deep, the most allowed. Answer with what you have.")
+            }
+        }
         try wakeFromAnotherBot(agentID: helperID, note: AgentWake.requestNote, now: request.createdAt)
         return request
     }

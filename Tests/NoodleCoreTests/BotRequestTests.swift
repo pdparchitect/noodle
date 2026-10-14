@@ -180,20 +180,71 @@ final class BotRequestTests: XCTestCase {
         XCTAssertTrue(due.first?.note.contains("--list-requests") == true, due.first?.note ?? "")
     }
 
-    func testRequestWakesLeaveTheHelpersOwnWakeLimitsAlone() throws {
+    func testRequestWakesTakeNoneOfTheHelpersOwnWakes() throws {
         let created = try repository.createAgent(named: "Assistant")
         let helper = try repository.createAgent(named: "Accounts").agent
-        var now = Date()
-        for _ in 1...AgentWakeLimits.withoutOutsideMessages {
-            XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Again").exitCode, 0)
-            now = Date().addingTimeInterval(1)
-            XCTAssertTrue(try repository.takeDueWakes(agentID: helper.id, at: now))
-        }
         XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Waiting").exitCode, 0)
+        let now = Date()
         for hours in 1...AgentWakeLimits.pending {
             XCTAssertNoThrow(try repository.scheduleWake(agentID: helper.id, at: now.addingTimeInterval(Double(hours) * 3_600),
                                                          note: "Own wake \(hours)", now: now))
         }
+    }
+
+    func testBotHasAtMostThreeRequestsWaiting() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let first = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Request 1"))
+        for index in 2...BotRequestLimits.waiting {
+            XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Request \(index)").exitCode, 0)
+        }
+        let refused = ask(created.agent, helper.id, in: created.conversation.id, "One too many")
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains("\(BotRequestLimits.waiting)"), refused.standardError)
+        XCTAssertEqual(answer(helper, first.id, "Done").exitCode, 0)
+        XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Room again").exitCode, 0)
+    }
+
+    func testBotCannotAskBackUpItsChainOfRequests() throws {
+        let first = try repository.createAgent(named: "Assistant")
+        let second = try repository.createAgent(named: "Accounts")
+        let third = try repository.createAgent(named: "Research")
+        XCTAssertEqual(ask(first.agent, second.agent.id, in: first.conversation.id, "Help").exitCode, 0)
+        XCTAssertNotEqual(ask(second.agent, first.agent.id, in: second.conversation.id, "Back to you").exitCode, 0)
+        XCTAssertEqual(ask(second.agent, third.agent.id, in: second.conversation.id, "Onwards").exitCode, 0)
+        XCTAssertNotEqual(ask(third.agent, first.agent.id, in: third.conversation.id, "Round again").exitCode, 0)
+        XCTAssertNotEqual(ask(third.agent, second.agent.id, in: third.conversation.id, "Back again").exitCode, 0)
+        XCTAssertEqual(try repository.botRequests().count, 2)
+    }
+
+    func testRequestsGoAtMostTwoDeep() throws {
+        let bots = try ["Assistant", "Accounts", "Research", "Calendar"].map { try repository.createAgent(named: $0) }
+        XCTAssertEqual(ask(bots[0].agent, bots[1].agent.id, in: bots[0].conversation.id, "Depth 1").exitCode, 0)
+        XCTAssertEqual(ask(bots[1].agent, bots[2].agent.id, in: bots[1].conversation.id, "Depth 2").exitCode, 0)
+        let refused = ask(bots[2].agent, bots[3].agent.id, in: bots[2].conversation.id, "Depth 3")
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains("\(BotRequestLimits.depth)"), refused.standardError)
+        XCTAssertEqual(ask(bots[3].agent, bots[2].agent.id, in: bots[3].conversation.id, "A fresh chain").exitCode, 0)
+    }
+
+    func testRequestTurnsCountTowardWakingInARow() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let helper = try repository.createAgent(named: "Accounts").agent
+        var now = Date()
+        for index in 1...AgentWakeLimits.withoutOutsideMessages {
+            let asked = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "Request \(index)"))
+            XCTAssertEqual(answer(helper, asked.id, "Answer \(index)").exitCode, 0)
+            now = Date().addingTimeInterval(1)
+            XCTAssertTrue(try repository.takeDueWakes(agentID: asker.id, at: now))
+        }
+        let refused = ask(asker, helper.id, in: conversation.id, "Once more")
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains("\(AgentWakeLimits.withoutOutsideMessages)"), refused.standardError)
+        XCTAssertThrowsError(try repository.scheduleWake(agentID: asker.id, at: now.addingTimeInterval(600), note: "Own", now: now))
+        try repository.append(ChatMessage(conversationID: conversation.id, author: .user, body: "Carry on",
+                                          createdAt: now.addingTimeInterval(1), delivery: .queued))
+        XCTAssertEqual(ask(asker, helper.id, in: conversation.id, "After a message").exitCode, 0)
     }
 
     func testBotCannotDisguiseItsOwnWakeAsARequest() throws {

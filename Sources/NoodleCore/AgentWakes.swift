@@ -21,7 +21,8 @@ extension AgentWake {
     }
     static let requestNote = "Another bot asked you for help. Run --list-requests and answer each with --answer-request."
     static let answerNote = "A bot answered your request. Run --list-answers and reply in the conversation each request came from."
-    /// Noodle's wakes for another bot's request or answer, outside the limits on waking itself.
+    /// Noodle's wakes for another bot's request or answer. They take none of the bot's own wakes,
+    /// but their turns count towards waking in a row.
     var isFromAnotherBot: Bool { schedule == nil && [Self.requestNote, Self.answerNote].contains(note) }
 }
 
@@ -209,7 +210,7 @@ extension WorkspaceRepository {
     }
 
     /// Wakes a bot another bot asked for help or answered. One wake covers every request or answer
-    /// waiting when it fires, and it is outside the limits on waking itself.
+    /// waiting when it fires.
     func wakeFromAnotherBot(agentID: UUID, note: String, now: Date) throws {
         try updateWakes(agentID: agentID) { state in
             guard !state.pending.contains(where: { $0.isFromAnotherBot && $0.note == note }) else { return }
@@ -217,6 +218,12 @@ extension WorkspaceRepository {
                                            note: note))
             state.pending.sort { $0.dueAt < $1.dueAt }
         }
+    }
+
+    /// One-off wakes fired since anyone else last wrote to the bot.
+    func wakesInARow(agentID: UUID) throws -> Int {
+        let lastOutside = try lastOutsideMessageDate(agentID: agentID)
+        return try readWakes(agentID: agentID).fired.filter { date in lastOutside.map { date > $0 } ?? true }.count
     }
 
     /// Hands over the wakes that fired; they are not listed again.
@@ -254,9 +261,9 @@ extension WorkspaceRepository {
                 state.pending.append(AgentWake(id: wake.id, dueAt: next, note: wake.note, schedule: schedule))
             }
             state.pending.sort { $0.dueAt < $1.dueAt }
-            // A recurring wake was asked for once, and another bot's request or answer is not the bot
-            // waking itself, so only its own one-off wakes count as waking in a row.
-            if due.contains(where: { $0.schedule == nil && !$0.isFromAnotherBot }) { state.fired.append(now) }
+            // A recurring wake was asked for once, so only one-off wakes count as waking in a row.
+            // Wakes for another bot's request or answer count too, so two bots cannot keep each other busy.
+            if due.contains(where: { $0.schedule == nil }) { state.fired.append(now) }
             return true
         }
     }
