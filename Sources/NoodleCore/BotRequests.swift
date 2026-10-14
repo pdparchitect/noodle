@@ -10,15 +10,22 @@ public struct BotRequest: Codable, Hashable, Sendable {
     public let text: String
     public var status: BotRequestStatus
     public let createdAt: Date
+    public var answer: String?
+    public var answeredAt: Date?
 }
 
 public enum BotRequestStatus: String, Codable, Sendable {
-    case waiting
+    case waiting, answered
 }
 
 public struct MessengerBot: Codable, Hashable, Sendable {
     public let bot: MessengerIdentity
     public let publicDescription: String?
+}
+
+struct BotRequestError: LocalizedError {
+    let errorDescription: String?
+    init(_ description: String) { errorDescription = description }
 }
 
 /// Kept in the library, outside every workspace, because a request belongs to two bots and
@@ -47,6 +54,23 @@ extension WorkspaceRepository {
             throw WorkspaceError.missingAgent(helperID)
         }
         return try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
+    }
+
+    public func listBotRequests(waitingFor agentID: UUID) throws -> [BotRequest] {
+        try readBotRequests().requests.filter { $0.helperID == agentID && $0.status == .waiting }
+    }
+
+    /// Only the bot asked may answer, and only once.
+    public func answerBotRequest(_ id: UUID, by agentID: UUID, answer: String, now: Date = Date()) throws -> BotRequest {
+        try updateBotRequests { state in
+            guard let index = state.requests.firstIndex(where: { $0.id == id && $0.helperID == agentID && $0.status == .waiting }) else {
+                throw BotRequestError("No request \(id) is waiting for you. --list-requests shows the ones that are.")
+            }
+            state.requests[index].status = .answered
+            state.requests[index].answer = answer
+            state.requests[index].answeredAt = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+            return state.requests[index]
+        }
     }
 
     /// A Hub keeps bots for several people; a Mac's bots all have no owner, so they share one. In a

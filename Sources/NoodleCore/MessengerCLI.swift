@@ -175,6 +175,12 @@ public enum MessengerCLI {
             case .askBot(let helperID, let conversationID, let text):
                 return .json(try repository.askBot(helperID, for: agentID, in: conversationID, text: text))
 
+            case .listRequests:
+                return .json(try repository.listBotRequests(waitingFor: agentID))
+
+            case .answerRequest(let id, let text):
+                return .json(try repository.answerBotRequest(id, by: agentID, answer: text))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -334,6 +340,13 @@ public enum MessengerCLI {
                       let text = try Self.messageBody(in: values),
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MessengerCLIError.invalidArguments }
                 action = .askBot(helperID: helperID, conversationID: conversationID, text: text)
+            case .listRequests:
+                action = .listRequests
+            case .answerRequest:
+                guard let raw = Self.option("--answer-request", in: values), let id = UUID(uuidString: raw),
+                      let text = try Self.messageBody(in: values),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MessengerCLIError.invalidArguments }
+                action = .answerRequest(id: id, text: text)
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -544,6 +557,8 @@ public enum MessengerAction: Codable, Sendable {
         case cancelWake(UUID)
         case listBots(conversationID: UUID)
         case askBot(helperID: UUID, conversationID: UUID, text: String)
+        case listRequests
+        case answerRequest(id: UUID, text: String)
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

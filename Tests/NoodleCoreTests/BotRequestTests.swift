@@ -120,6 +120,52 @@ final class BotRequestTests: XCTestCase {
         XCTAssertEqual(try repository.botRequests(), [])
     }
 
+    private func answer(_ agent: AgentRecord, _ request: UUID, _ text: String) -> MessengerCommandResult {
+        messenger(agent, "--answer-request", request.uuidString, "--body", text)
+    }
+
+    func testHelperListsOnlyRequestsWaitingForIt() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let other = try repository.createAgent(named: "Research").agent
+        let first = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "First"))
+        let second = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "Second"))
+        _ = try decode(BotRequest.self, from: ask(asker, other.id, in: conversation.id, "Elsewhere"))
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(helper, "--list-requests")), [first, second])
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(asker, "--list-requests")), [])
+        _ = try decode(BotRequest.self, from: answer(helper, first.id, "Done"))
+        XCTAssertEqual(try decode([BotRequest].self, from: messenger(helper, "--list-requests")), [second])
+    }
+
+    func testHelperAnswersARequest() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let asked = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Total the invoices"))
+        let answered = try decode(BotRequest.self, from: answer(helper, asked.id, "The total is 120"))
+        XCTAssertEqual(answered.id, asked.id)
+        XCTAssertEqual(answered.status, .answered)
+        XCTAssertEqual(answered.answer, "The total is 120")
+        XCTAssertNotNil(answered.answeredAt)
+        XCTAssertEqual(try repository.botRequests(), [answered])
+    }
+
+    func testOnlyTheAskedBotAnswersAndOnlyOnce() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let other = try repository.createAgent(named: "Research").agent
+        let asked = try decode(BotRequest.self, from: ask(asker, helper.id, in: created.conversation.id, "Total the invoices"))
+        XCTAssertNotEqual(answer(asker, asked.id, "Answering myself").exitCode, 0)
+        XCTAssertNotEqual(answer(other, asked.id, "Not asked").exitCode, 0)
+        XCTAssertNotEqual(answer(helper, UUID(), "No such request").exitCode, 0)
+        XCTAssertNotEqual(answer(helper, asked.id, "  ").exitCode, 0)
+        XCTAssertEqual(try repository.botRequests(), [asked])
+        _ = try decode(BotRequest.self, from: answer(helper, asked.id, "First answer"))
+        XCTAssertNotEqual(answer(helper, asked.id, "Second answer").exitCode, 0)
+        XCTAssertEqual(try repository.botRequests().map(\.answer), ["First answer"])
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent

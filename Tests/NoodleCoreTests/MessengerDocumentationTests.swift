@@ -186,8 +186,9 @@ final class MessengerDocumentationTests: XCTestCase {
         let message = ChatMessage(conversationID: bot.conversation.id, author: .user, body: "Test", delivery: .delivered)
         try repository.append(message)
         let prefix = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path]
+        let helperPrefix = ["messenger", "--agent-directory", repository.directory(for: helper.agent).path]
         let conversation = ["--conversation", bot.conversation.id.uuidString]
-        var wakeID = ""
+        var wakeID = "", requestID = ""
         for command in MessengerCommandKind.allCases {
             let options: [String]
             switch command {
@@ -201,15 +202,21 @@ final class MessengerDocumentationTests: XCTestCase {
             case .clearStatus, .listWakes: options = []
             case .listBots: options = conversation
             case .askBot: options = [helper.agent.id.uuidString] + conversation + ["--body", "Help"]
+            case .listRequests: options = []
+            case .answerRequest: options = [requestID, "--body", "Done"]
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]
             case .cancelWake: options = [wakeID]
             }
-            let result = MessengerCLI.runDirect(arguments: prefix + [command.rawValue] + options, environment: [:])
+            let caller = command == .answerRequest ? helperPrefix : prefix
+            let result = MessengerCLI.runDirect(arguments: caller + [command.rawValue] + options, environment: [:])
             XCTAssertEqual(result.exitCode, 0, "\(command): \(result.standardError)")
             if command == .wakeIn {
                 wakeID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
+            }
+            if command == .askBot {
+                requestID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
             }
             if command == .help {
                 XCTAssertEqual(result.standardOutput, MessengerDocumentation.cliHelp + "\n")
