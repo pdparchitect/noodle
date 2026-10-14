@@ -53,7 +53,9 @@ extension WorkspaceRepository {
         guard try listBots(for: agentID, in: conversationID).contains(where: { $0.bot.agentID == helperID }) else {
             throw WorkspaceError.missingAgent(helperID)
         }
-        return try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
+        let request = try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
+        try wakeForRequest(agentID: helperID, now: request.createdAt)
+        return request
     }
 
     public func listBotRequests(waitingFor agentID: UUID) throws -> [BotRequest] {

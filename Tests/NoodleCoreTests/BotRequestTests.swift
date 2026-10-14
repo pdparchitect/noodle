@@ -166,6 +166,42 @@ final class BotRequestTests: XCTestCase {
         XCTAssertEqual(try repository.botRequests().map(\.answer), ["First answer"])
     }
 
+    func testAskingWakesTheHelperOnce() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let before = Date()
+        XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "First").exitCode, 0)
+        XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Second").exitCode, 0)
+        XCTAssertNil(repository.nextWakeDate(agentID: created.agent.id))
+        XCTAssertLessThanOrEqual(try XCTUnwrap(repository.nextWakeDate(agentID: helper.id)), before.addingTimeInterval(1))
+        XCTAssertTrue(try repository.takeDueWakes(agentID: helper.id, at: Date().addingTimeInterval(1)))
+        let due = try repository.listWakes(agentID: helper.id).due
+        XCTAssertEqual(due.count, 1)
+        XCTAssertTrue(due.first?.note.contains("--list-requests") == true, due.first?.note ?? "")
+    }
+
+    func testRequestWakesLeaveTheHelpersOwnWakeLimitsAlone() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        var now = Date()
+        for _ in 1...AgentWakeLimits.withoutOutsideMessages {
+            XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Again").exitCode, 0)
+            now = Date().addingTimeInterval(1)
+            XCTAssertTrue(try repository.takeDueWakes(agentID: helper.id, at: now))
+        }
+        XCTAssertEqual(ask(created.agent, helper.id, in: created.conversation.id, "Waiting").exitCode, 0)
+        for hours in 1...AgentWakeLimits.pending {
+            XCTAssertNoThrow(try repository.scheduleWake(agentID: helper.id, at: now.addingTimeInterval(Double(hours) * 3_600),
+                                                         note: "Own wake \(hours)", now: now))
+        }
+    }
+
+    func testBotCannotDisguiseItsOwnWakeAsARequest() throws {
+        let bot = try repository.createAgent(named: "Assistant").agent
+        XCTAssertNotEqual(messenger(bot, "--wake-in", "10m", "--note", AgentWake.requestNote).exitCode, 0)
+        XCTAssertNil(repository.nextWakeDate(agentID: bot.id))
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent

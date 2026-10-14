@@ -43,6 +43,13 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertTrue(guidance.contains("assignments.md"))
     }
 
+    /// A wake can carry another bot's request, so the guidance sends the bot to answer it.
+    func testWakeGuidanceCoversRequestsFromOtherBots() {
+        let guidance = AgentWakeReason.wake.reference.guidance
+        XCTAssertTrue(guidance.contains("--list-requests"))
+        XCTAssertTrue(guidance.contains("another bot"))
+    }
+
     /// Organize moves recurring work out of preferences.md and tidies the rest without dropping anything owed.
     func testOrganizeTidiesTheBotsOwnFiles() {
         let guidance = AgentWakeReason.organize.reference.guidance

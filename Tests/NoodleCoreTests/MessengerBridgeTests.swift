@@ -176,6 +176,17 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertNil(try status(of: agent.id))
     }
 
+    /// Asking a bot tells Noodle the helper has a wake, not the bot that asked.
+    func testAskingABotTellsNoodleToWakeTheHelper() throws {
+        let changed = expectation(description: "helper's wakes reported")
+        changed.assertForOverFulfill = false
+        var reported: [UUID] = []
+        broker.onWakesChanged = { id in reported.append(id); changed.fulfill() }
+        XCTAssertEqual(try call(.askBot(helperID: other.id, conversationID: conversation.id, text: "Help")).exitCode, 0)
+        wait(for: [changed], timeout: 5)
+        XCTAssertEqual(reported, [other.id])
+    }
+
     /// A status is one short line, so it fits the bubble over a pinned bot.
     func testAStatusIsOneShortLine() throws {
         XCTAssertEqual(try call(.setStatus(String(repeating: "a", count: 60))).exitCode, 0)

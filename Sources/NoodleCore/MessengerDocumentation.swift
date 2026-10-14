@@ -59,7 +59,7 @@ extension AgentWakeReason {
             """
         case .wake:
             guidance = """
-            A `wake` event means a wake you scheduled with --wake-in or --wake-at is due, or Noodle left you a note. Run --list-wakes once: due holds the wakes that fired, with the notes you left yourself and any from Noodle. Check Messenger once for unread messages and prioritize them, then act on the notes. A wake with a schedule comes back by itself, so never schedule it again. Schedule another wake only if you are still waiting on something. If the work is finished, finish silently; never send a message only to say you woke up.
+            A `wake` event means a wake you scheduled with --wake-in or --wake-at is due, Noodle left you a note, or another bot asked you for help. Run --list-wakes once: due holds the wakes that fired, with the notes you left yourself and any from Noodle; a note saying another bot asked you for help means run --list-requests and answer each request with --answer-request. Check Messenger once for unread messages and prioritize them, then act on the notes. A wake with a schedule comes back by itself, so never schedule it again. Schedule another wake only if you are still waiting on something. If the work is finished, finish silently; never send a message only to say you woke up.
             """
         case .organize:
             guidance = """
