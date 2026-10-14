@@ -149,7 +149,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
     case react = "--react", unreact = "--unreact", send = "--send"
     case setStatus = "--set-status", clearStatus = "--clear-status"
     case wakeIn = "--wake-in", wakeAt = "--wake-at", wakeEvery = "--wake-every", listWakes = "--list-wakes", cancelWake = "--cancel-wake"
-    case listBots = "--list-bots"
+    case listBots = "--list-bots", askBot = "--ask-bot"
     /// A command only as the first word; elsewhere `tool` is ordinary text.
     case tool
 
@@ -172,6 +172,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listWakes: return "--list-wakes"
         case .cancelWake: return "--cancel-wake <uuid>"
         case .listBots: return "--list-bots --conversation <uuid>"
+        case .askBot: return "--ask-bot <bot-uuid> --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>]"
         case .send: return "--send --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>] [--attach <file-path-or-url> ...]"
         }
     }
@@ -184,6 +185,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .getLatest: return "Return unread messages and reaction changes as a JSON array and advance message/reaction cursors. --peek leaves cursors unchanged."
         case .listConversations: return "Return the bot's current conversations, including each group's public description."
         case .listParticipants: return "Return { me, conversation, participants }; each participant has participant (identity), publicDescription and lastActiveAt (most recent message in this conversation, not online status). It never exposes another bot's private backstory."
+        case .askBot: return "Ask one of the bots --list-bots returns in this conversation for help, and return the saved request as { id, askerID, helperID, conversationID, text, status, createdAt }. The body is everything the other bot needs, because it cannot read this conversation. Asking lends it none of your access."
         case .listMessages: return "Read full history including your own messages and current reactions without consuming the inbox. This is not the historical reaction-change event log."
         case .react: return "Add your own single emoji reaction. Adding twice is idempotent; other participants receive reactionChange feedback."
         case .unreact: return "Remove only your own matching emoji reaction. Repeating a removal is safe."

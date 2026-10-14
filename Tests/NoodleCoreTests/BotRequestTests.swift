@@ -24,7 +24,9 @@ final class BotRequestTests: XCTestCase {
 
     private func decode<Value: Decodable>(_ type: Value.Type, from result: MessengerCommandResult) throws -> Value {
         XCTAssertEqual(result.exitCode, 0, result.standardError)
-        return try JSONDecoder().decode(type, from: Data(result.standardOutput.utf8))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(type, from: Data(result.standardOutput.utf8))
     }
 
     private func listBots(_ agent: AgentRecord, in conversation: UUID) throws -> [UUID?] {
@@ -74,6 +76,48 @@ final class BotRequestTests: XCTestCase {
         let elsewhere = try repository.createAgent(named: "Accounts").conversation
         XCTAssertNotEqual(messenger(asker, "--list-bots", "--conversation", elsewhere.id.uuidString).exitCode, 0)
         XCTAssertNotEqual(messenger(asker, "--list-bots").exitCode, 0)
+    }
+
+    private func ask(_ agent: AgentRecord, _ helper: UUID, in conversation: UUID, _ text: String) -> MessengerCommandResult {
+        messenger(agent, "--ask-bot", helper.uuidString, "--conversation", conversation.uuidString, "--body", text)
+    }
+
+    func testBotAsksABotItMayList() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let asked = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation.id, "Total the invoices"))
+        XCTAssertEqual(asked.askerID, asker.id)
+        XCTAssertEqual(asked.helperID, helper.id)
+        XCTAssertEqual(asked.conversationID, conversation.id)
+        XCTAssertEqual(asked.text, "Total the invoices")
+        XCTAssertEqual(asked.status, .waiting)
+        XCTAssertEqual(try repository.botRequests(), [asked])
+    }
+
+    func testBotCannotAskABotItMayNotList() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let stranger = try repository.createAgent(named: "Other Assistant").agent
+        try repository.updateAgentOwner(stranger, owner: AgentOwner(id: UUID(), name: "Second owner"))
+        let unshared = try repository.createAgent(named: "Private Helper").agent
+        let guestConversation = try repository.createGuestConversation(with: asker, guest: ConversationGuest(id: UUID(), name: "Guest"))
+        let elsewhere = try repository.createAgent(named: "Accounts")
+        XCTAssertNotEqual(ask(asker, stranger.id, in: conversation.id, "Hello").exitCode, 0)
+        XCTAssertNotEqual(ask(asker, unshared.id, in: guestConversation.id, "Hello").exitCode, 0)
+        XCTAssertNotEqual(ask(asker, asker.id, in: conversation.id, "Hello").exitCode, 0)
+        XCTAssertNotEqual(ask(asker, elsewhere.agent.id, in: elsewhere.conversation.id, "Hello").exitCode, 0)
+        XCTAssertNotEqual(ask(asker, UUID(), in: conversation.id, "Hello").exitCode, 0)
+        XCTAssertEqual(try repository.botRequests(), [])
+    }
+
+    func testRequestNeedsText() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        XCTAssertNotEqual(ask(created.agent, helper.id, in: created.conversation.id, "  \n").exitCode, 0)
+        XCTAssertNotEqual(messenger(created.agent, "--ask-bot", helper.id.uuidString,
+                                    "--conversation", created.conversation.id.uuidString).exitCode, 0)
+        XCTAssertEqual(try repository.botRequests(), [])
     }
 
     func testAddedRequestIsKeptForBothBots() throws {

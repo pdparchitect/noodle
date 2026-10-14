@@ -182,6 +182,7 @@ final class MessengerDocumentationTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Tester")
+        let helper = try repository.createAgent(named: "Helper")
         let message = ChatMessage(conversationID: bot.conversation.id, author: .user, body: "Test", delivery: .delivered)
         try repository.append(message)
         let prefix = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path]
@@ -199,6 +200,7 @@ final class MessengerDocumentationTests: XCTestCase {
             case .setStatus: options = ["Busy"]
             case .clearStatus, .listWakes: options = []
             case .listBots: options = conversation
+            case .askBot: options = [helper.agent.id.uuidString] + conversation + ["--body", "Help"]
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]

@@ -40,6 +40,15 @@ extension WorkspaceRepository {
         }
     }
 
+    /// A bot may ask only the bots it may list in that conversation; any other is reported missing, so
+    /// asking never confirms that a bot it may not see exists.
+    public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String) throws -> BotRequest {
+        guard try listBots(for: agentID, in: conversationID).contains(where: { $0.bot.agentID == helperID }) else {
+            throw WorkspaceError.missingAgent(helperID)
+        }
+        return try addBotRequest(askerID: agentID, helperID: helperID, conversationID: conversationID, text: text)
+    }
+
     /// A Hub keeps bots for several people; a Mac's bots all have no owner, so they share one. In a
     /// conversation with a guest, only bots also shared with that guest are listed, so a shared bot
     /// never learns of its owner's private bots while it works for someone else.
