@@ -169,6 +169,9 @@ public enum MessengerCLI {
             case .cancelWake(let id):
                 return .json(try repository.cancelWake(agentID: agentID, id: id))
 
+            case .listBots(let conversationID):
+                return .json(try repository.listBots(for: agentID, in: conversationID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -317,6 +320,10 @@ public enum MessengerCLI {
                     throw MessengerCLIError.invalidArguments
                 }
                 action = .cancelWake(id)
+            case .listBots:
+                guard let raw = Self.option("--conversation", in: values),
+                      let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
+                action = .listBots(conversationID: id)
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -525,6 +532,7 @@ public enum MessengerAction: Codable, Sendable {
         case scheduleRecurringWake(schedule: String, note: String)
         case listWakes
         case cancelWake(UUID)
+        case listBots(conversationID: UUID)
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

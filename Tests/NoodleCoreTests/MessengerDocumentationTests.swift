@@ -198,6 +198,7 @@ final class MessengerDocumentationTests: XCTestCase {
             case .send: options = conversation + ["--body", "Reply"]
             case .setStatus: options = ["Busy"]
             case .clearStatus, .listWakes: options = []
+            case .listBots: options = conversation
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]

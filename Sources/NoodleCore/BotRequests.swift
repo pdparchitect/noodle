@@ -16,6 +16,11 @@ public enum BotRequestStatus: String, Codable, Sendable {
     case waiting
 }
 
+public struct MessengerBot: Codable, Hashable, Sendable {
+    public let bot: MessengerIdentity
+    public let publicDescription: String?
+}
+
 /// Kept in the library, outside every workspace, because a request belongs to two bots and
 /// neither may change it except through Messenger.
 private struct BotRequestState: Codable {
@@ -33,6 +38,28 @@ extension WorkspaceRepository {
             state.requests.append(request)
             return request
         }
+    }
+
+    /// A Hub keeps bots for several people; a Mac's bots all have no owner, so they share one. In a
+    /// conversation with a guest, only bots also shared with that guest are listed, so a shared bot
+    /// never learns of its owner's private bots while it works for someone else.
+    public func listBots(for agentID: UUID, in conversationID: UUID) throws -> [MessengerBot] {
+        let agents = try loadAgents()
+        guard let me = agents.first(where: { $0.id == agentID }) else { throw WorkspaceError.missingAgent(agentID) }
+        let conversations = try loadConversations()
+        guard let conversation = conversations.first(where: { $0.id == conversationID && $0.participantIDs.contains(agentID) }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        let owner = try loadAgentOwner(me)?.id
+        let sharedWithGuest = conversation.guest.map { guest in
+            Set(conversations.filter { $0.guest?.id == guest.id }.flatMap(\.participantIDs))
+        }
+        return try agents.filter { agent in
+            try agent.id != agentID && loadAgentOwner(agent)?.id == owner && sharedWithGuest?.contains(agent.id) != false
+        }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+            .map { MessengerBot(bot: MessengerIdentity(handle: .bot, agentID: $0.id, displayName: $0.displayName),
+                                publicDescription: $0.publicDescription) }
     }
 
     public func botRequests() throws -> [BotRequest] {

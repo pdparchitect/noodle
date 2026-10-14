@@ -149,6 +149,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
     case react = "--react", unreact = "--unreact", send = "--send"
     case setStatus = "--set-status", clearStatus = "--clear-status"
     case wakeIn = "--wake-in", wakeAt = "--wake-at", wakeEvery = "--wake-every", listWakes = "--list-wakes", cancelWake = "--cancel-wake"
+    case listBots = "--list-bots"
     /// A command only as the first word; elsewhere `tool` is ordinary text.
     case tool
 
@@ -170,6 +171,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .wakeEvery: return "--wake-every '<cron>' --note <text>"
         case .listWakes: return "--list-wakes"
         case .cancelWake: return "--cancel-wake <uuid>"
+        case .listBots: return "--list-bots --conversation <uuid>"
         case .send: return "--send --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>] [--attach <file-path-or-url> ...]"
         }
     }
@@ -192,6 +194,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .wakeEvery: return "Schedule a wake that comes back on a schedule, for work that recurs, such as a daily report, and return it as { id, dueAt, note, schedule }. Each time it fires you get a wake event and it is scheduled again for its next time, keeping its ID, until you cancel it with --cancel-wake. The schedule is a standard five-field cron expression in this Mac's local time: minute hour day-of-month month day-of-week, with lists, ranges, steps and three-letter names, or @hourly, @daily, @weekly, @monthly or @yearly. Quote it so the shell does not expand the asterisks, as in --wake-every '0 9 * * 1-5'. Times less than \(Int(AgentWakeLimits.minimumDelay / 60)) minutes after the previous one are skipped. A recurring wake counts towards the \(AgentWakeLimits.pending) that can wait at once, but its firings do not count as waking yourself in a row. Use it only for recurring work you were asked for; for a single follow-up, use --wake-in or --wake-at. A wake does not authorize new projects, broader access or external actions."
         case .listWakes: return "Return { due, pending }: due holds wakes that fired since you last listed them, with your notes, and is cleared by listing; pending holds wakes still scheduled, soonest first."
         case .cancelWake: return "Cancel one of your pending wakes and return it."
+        case .listBots: return "Return the other bots that work for the same person as you, as a JSON array of { bot, publicDescription } sorted by name. In a conversation with someone you are shared with, only the bots also shared with them are listed. It never exposes another bot's private backstory."
         case .send: return "Send text, files, links, or a mixture and return the saved ChatMessage with a `next` field saying what to do next; follow it before finishing. --attach is repeatable: plain paths and file:/// URLs attach local files; relative paths resolve from the working directory (normally the bot workspace). noodlet://UUID (production) and noodlet-dev://UUID (development) URLs create live Applet link attachments; share one with the applet tool's present command, which sets its preview and attaches it; a noodlet with no preview yet is refused here and nothing is sent. Noodle opens the live registered creation in Noodle Applet when clicked, without copying it into the conversation. These links work on this Mac and become unavailable if the package is deleted. Public http:// and https:// URLs create link attachments with the native attachment preview; private/local web hosts, embedded credentials and other schemes are rejected. Files are copied into the conversation. Links store a small .webloc bookmark, not downloaded page content; macOS Quick Look supplies the preview, with a file-icon fallback when no thumbnail is available. With no body, an attachment summary is supplied. Use one body encoding; do not edit conversation JSON directly."
         }
     }

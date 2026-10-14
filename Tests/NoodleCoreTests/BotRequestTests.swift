@@ -17,6 +17,65 @@ final class BotRequestTests: XCTestCase {
         if let root { try? FileManager.default.removeItem(at: root) }
     }
 
+    private func messenger(_ agent: AgentRecord, _ arguments: String...) -> MessengerCommandResult {
+        let command = repository.directory(for: agent).appendingPathComponent(".agents/skills/messenger/messenger")
+        return MessengerCLI.runDirect(arguments: [command.path] + arguments)
+    }
+
+    private func decode<Value: Decodable>(_ type: Value.Type, from result: MessengerCommandResult) throws -> Value {
+        XCTAssertEqual(result.exitCode, 0, result.standardError)
+        return try JSONDecoder().decode(type, from: Data(result.standardOutput.utf8))
+    }
+
+    private func listBots(_ agent: AgentRecord, in conversation: UUID) throws -> [UUID?] {
+        try decode([MessengerBot].self, from: messenger(agent, "--list-bots", "--conversation", conversation.uuidString))
+            .map(\.bot.agentID)
+    }
+
+    func testBotListsTheOtherBotsOfItsOwner() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let accounts = try repository.createAgent(named: "Accounts", publicDescription: "Keeps the accounts").agent
+        let research = try repository.createAgent(named: "Research").agent
+        let listed = try decode([MessengerBot].self,
+                                from: messenger(asker, "--list-bots", "--conversation", conversation.id.uuidString))
+        XCTAssertEqual(listed.map(\.bot.agentID), [accounts.id, research.id])
+        XCTAssertEqual(listed.map(\.bot.handle), [.bot, .bot])
+        XCTAssertEqual(listed.first?.publicDescription, "Keeps the accounts")
+    }
+
+    func testBotListsNoBotsOfAnotherOwner() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation
+        let accounts = try repository.createAgent(named: "Accounts").agent
+        let other = try repository.createAgent(named: "Other Assistant")
+        let stranger = other.agent, strangerConversation = other.conversation
+        let first = AgentOwner(id: UUID(), name: "First owner"), second = AgentOwner(id: UUID(), name: "Second owner")
+        try repository.updateAgentOwner(asker, owner: first)
+        try repository.updateAgentOwner(accounts, owner: first)
+        try repository.updateAgentOwner(stranger, owner: second)
+        XCTAssertEqual(try listBots(asker, in: conversation.id), [accounts.id])
+        XCTAssertEqual(try listBots(stranger, in: strangerConversation.id), [])
+    }
+
+    func testGuestConversationListsOnlyBotsSharedWithThatGuest() throws {
+        let asker = try repository.createAgent(named: "Assistant").agent
+        let shared = try repository.createAgent(named: "Shared Helper").agent
+        let unshared = try repository.createAgent(named: "Private Helper").agent
+        let guest = ConversationGuest(id: UUID(), name: "Guest")
+        let guestConversation = try repository.createGuestConversation(with: asker, guest: guest)
+        _ = try repository.createGuestConversation(with: shared, guest: guest)
+        _ = try repository.createGuestConversation(with: unshared, guest: ConversationGuest(id: UUID(), name: "Another guest"))
+        XCTAssertEqual(try listBots(asker, in: guestConversation.id), [shared.id])
+    }
+
+    func testBotCannotListBotsForAConversationItIsNotIn() throws {
+        let asker = try repository.createAgent(named: "Assistant").agent
+        let elsewhere = try repository.createAgent(named: "Accounts").conversation
+        XCTAssertNotEqual(messenger(asker, "--list-bots", "--conversation", elsewhere.id.uuidString).exitCode, 0)
+        XCTAssertNotEqual(messenger(asker, "--list-bots").exitCode, 0)
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent
