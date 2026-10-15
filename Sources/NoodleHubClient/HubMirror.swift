@@ -614,9 +614,12 @@ import Observation
                         Task { await openSignInPage(id, url: url) }
                     case .botPhase(let bot, let phase):
                         record(phase, ofBot: bot)
-                    // Reactions made on the Hub are not shown on the Mac yet; a call's card is.
+                    // Reactions made on the Hub are not shown on the Mac yet; a call's card and a request's line are.
                     case .messageChanged(let message):
                         if message.call != nil { try await syncMessages(message.conversationID) }
+                        if let line = message.request, let thread = thread(remote: message.conversationID) {
+                            _ = try? repository.setRequestLine(requestLine(line, of: message.id), ofMessage: message.id, in: thread.local)
+                        }
                     case .usersChanged:
                         usersChanges += 1
                     case .effectWaiting(let id):
@@ -785,6 +788,11 @@ import Observation
                                                     lines: callRecord(call).lines, endedAt: call.endedAt ?? Date())
                 continue
             }
+            if known.contains(message.id), let line = message.request {
+                // A request's line follows the request.
+                _ = try? repository.setRequestLine(requestLine(line, of: message.id), ofMessage: message.id, in: thread.local)
+                continue
+            }
             guard !known.contains(message.id) else { continue }
             try await fetchMissing(message.attachments, into: thread)
             let author: MessageAuthor = switch message.author {
@@ -797,6 +805,7 @@ import Observation
                                    createdAt: message.createdAt, delivery: message.delivered ? .delivered : .queued,
                                    attachmentIDs: message.attachments.map(\.id))
             copy.call = message.call.map(callRecord)
+            copy.request = message.request.map { requestLine($0, of: message.id) }
             try repository.append(copy)
             known.insert(message.id)
             latest = message.createdAt
@@ -807,10 +816,19 @@ import Observation
             try repository.updateConversation(conversation)
         }
         // Delivery changes after the first read, so the last user message is read again until the bot
-        // takes it, and a call's card until the call ends.
-        let pendingFrom = page.messages.firstIndex { ($0.author == .you && !$0.delivered) || ($0.call != nil && $0.call?.endedAt == nil) }
+        // takes it, a call's card until the call ends, and a request's line until it is answered. Later
+        // changes to a line come as the Hub tells of them.
+        let pendingFrom = page.messages.firstIndex {
+            ($0.author == .you && !$0.delivered) || ($0.call != nil && $0.call?.endedAt == nil) || $0.request?.status == .waiting
+        }
         setSynced(pendingFrom.map { thread.synced + $0 } ?? thread.synced + page.messages.count, in: thread.remote)
         return page
+    }
+
+    /// The helper is known here only by name: it may be no bot of this Mac's.
+    private func requestLine(_ line: LinkRequestLine, of messageID: UUID) -> BotRequestLine {
+        BotRequestLine(requestID: messageID, helperID: nil, helperName: line.helperName, text: line.text,
+                       status: BotRequestStatus(rawValue: line.status.rawValue) ?? .waiting, answer: line.answer)
     }
 
     private func callRecord(_ record: LinkCallRecord) -> VoiceCallRecord {
