@@ -55,6 +55,8 @@ import NoodleVoicePeer
     public var isHidden: (UUID) -> Bool = { _ in false }
     /// The last seen size and date of each conversation's messages, their count, and the latest reaction change.
     private var transcripts: [UUID: (size: Int, modified: Date, count: Int, reactions: Int)] = [:]
+    /// Each conversation's request lines as last told, by message, to tell when one changes.
+    private var requestLines: [UUID: [UUID: BotRequestLine]] = [:]
     /// When each conversation's chat effects last changed, as last checked.
     private var effectsChanged: [UUID: Date] = [:]
     /// Each conversation's background when last checked.
@@ -556,6 +558,7 @@ import NoodleVoicePeer
         let messages = try repository.loadMessages(conversationID: request.conversationID)
         let files = Dictionary(try repository.loadAttachments(conversationID: request.conversationID).map { ($0.id, $0) },
                                uniquingKeysWith: { first, _ in first })
+        let guest = isGuest(request.conversationID, in: repository)
         let limit = min(max(1, request.limit), 200)
         let encoder = JSONEncoder()
         var page: [LinkMessage] = [], bytes = 0
@@ -569,7 +572,9 @@ import NoodleVoicePeer
         if let after = request.after {
             start = min(max(0, after), messages.count)
             for message in messages[start...] {
-                let linked = linkMessage(message, files: files, pictures: false) { pixelSize(of: $0, in: repository, sizes: &pixelSizes) }
+                let linked = linkMessage(message, files: files, pictures: false, guest: guest) {
+                    pixelSize(of: $0, in: repository, sizes: &pixelSizes)
+                }
                 guard fits(linked) else { break }
                 page.append(linked)
             }
@@ -577,7 +582,9 @@ import NoodleVoicePeer
             let end = min(max(0, request.before ?? messages.count), messages.count)
             start = end
             for message in messages[..<end].reversed() {
-                let linked = linkMessage(message, files: files, pictures: false) { pixelSize(of: $0, in: repository, sizes: &pixelSizes) }
+                let linked = linkMessage(message, files: files, pictures: false, guest: guest) {
+                    pixelSize(of: $0, in: repository, sizes: &pixelSizes)
+                }
                 guard fits(linked) else { break }
                 page.insert(linked, at: 0)
                 start -= 1
@@ -1143,6 +1150,17 @@ import NoodleVoicePeer
                     onHostChange?(host, .conversationChanged(conversationID: conversation.id, count: messages.count))
                 }
             }
+            // A request's line changes as the request goes on, which a device reading on from its count would miss.
+            let lines = Dictionary(messages.compactMap { message in message.request.map { (message.id, $0) } },
+                                   uniquingKeysWith: { first, _ in first })
+            if let before = requestLines[conversation.id] {
+                let changed = messages.filter { message in before[message.id].map { $0 != message.request } ?? false }
+                if !changed.isEmpty {
+                    let files = (try? attachments(in: conversation.id)) ?? [:]
+                    for message in changed { onChange?(owner, .messageChanged(linkMessage(message, files: files))) }
+                }
+            }
+            requestLines[conversation.id] = lines
             // Reactions change messages already sent, which a device reading on from its count would miss.
             if let known, latestReaction > known.reactions, let files = read.attachments {
                 let host = conversation.guest == nil ? nil : conversation.participantIDs.first.flatMap(access.host(ofBot:))
@@ -1514,11 +1532,18 @@ import NoodleVoicePeer
     }
 
     private func linkMessage(_ message: ChatMessage, files: [UUID: ConversationAttachment], pictures: Bool = true) -> LinkMessage {
-        Self.linkMessage(message, files: files, pictures: pictures) { pixelSize(of: $0) }
+        Self.linkMessage(message, files: files, pictures: pictures, guest: Self.isGuest(message.conversationID, in: repository)) {
+            pixelSize(of: $0)
+        }
     }
 
+    nonisolated private static func isGuest(_ conversationID: UUID, in repository: WorkspaceRepository) -> Bool {
+        (try? repository.loadConversations().first { $0.id == conversationID })?.guest != nil
+    }
+
+    /// Someone a bot is shared with sees only how its requests went, not what it asked or was told.
     nonisolated private static func linkMessage(_ message: ChatMessage, files: [UUID: ConversationAttachment], pictures: Bool,
-                                                pixelSize: (ConversationAttachment) -> LinkPixelSize?) -> LinkMessage {
+                                                guest: Bool, pixelSize: (ConversationAttachment) -> LinkPixelSize?) -> LinkMessage {
         let author: LinkMessage.Author = switch message.author {
         case .user: .you
         case .agent(let id): .bot(id)
@@ -1545,9 +1570,15 @@ import NoodleVoicePeer
                 LinkCallLine(speaker: $0.speaker == .person ? .you : .bot, text: $0.text, at: $0.at)
             })
         }
+        let request = message.request.flatMap { line in
+            LinkRequestLine.Status(rawValue: line.status.rawValue).map {
+                guest ? LinkRequestLine(helperName: line.helperName, status: $0)
+                    : LinkRequestLine(helperName: line.helperName, status: $0, text: line.text, answer: line.answer)
+            }
+        }
         return LinkMessage(id: message.id, conversationID: message.conversationID, author: author, body: message.body,
                            createdAt: message.createdAt, delivered: message.delivery == .delivered, attachments: attachments,
-                           reactions: reactions, call: call)
+                           reactions: reactions, call: call, request: request)
     }
 }
 
