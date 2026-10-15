@@ -147,7 +147,7 @@ public final class MessengerBroker: @unchecked Sendable {
         case .answerRequest:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            if response.exitCode == 0, let answered = try? decoder.decode(BotRequest.self, from: Data(response.standardOutput.utf8)) {
+            if response.exitCode == 0, let answered = try? decoder.decode(BotRequestForHelper.self, from: Data(response.standardOutput.utf8)) {
                 onWakesChanged?(answered.askerID)
             }
         default: break

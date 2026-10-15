@@ -34,6 +34,23 @@ public struct BotRequestLine: Codable, Hashable, Sendable {
     }
 }
 
+/// A request as the bot asked sees it: who asked and what, but not where the asking bot was asked
+/// from, which is no conversation of the helper's.
+public struct BotRequestForHelper: Codable, Hashable, Sendable {
+    public let id: UUID
+    public let askerID: UUID
+    public let text: String
+    public let status: BotRequestStatus
+    public let createdAt: Date
+    public let answer: String?
+    public let answeredAt: Date?
+
+    public init(_ request: BotRequest) {
+        id = request.id; askerID = request.askerID; text = request.text; status = request.status
+        createdAt = request.createdAt; answer = request.answer; answeredAt = request.answeredAt
+    }
+}
+
 public enum BotRequestStatus: String, Codable, Sendable {
     case waiting, answered, cancelled, expired, withheld
 }

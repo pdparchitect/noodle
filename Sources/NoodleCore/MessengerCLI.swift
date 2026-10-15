@@ -176,10 +176,10 @@ public enum MessengerCLI {
                 return .json(try repository.askBot(helperID, for: agentID, in: conversationID, text: text))
 
             case .listRequests:
-                return .json(try repository.listBotRequests(waitingFor: agentID))
+                return .json(try repository.listBotRequests(waitingFor: agentID).map(BotRequestForHelper.init))
 
             case .answerRequest(let id, let text):
-                return .json(try repository.answerBotRequest(id, by: agentID, answer: text))
+                return .json(BotRequestForHelper(try repository.answerBotRequest(id, by: agentID, answer: text)))
 
             case .listAnswers:
                 return .json(try repository.listBotAnswers(for: agentID))

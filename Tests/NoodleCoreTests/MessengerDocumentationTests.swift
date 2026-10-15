@@ -43,6 +43,12 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertTrue(guidance.contains("assignments.md"))
     }
 
+    /// A bot answering a request has no conversation of the asker's, so it is told where it may ask from.
+    func testAnsweringGuidanceSaysWhereAHelperMayAskFrom() {
+        XCTAssertTrue(MessengerCommandKind.answerRequest.guidance.contains("your own conversations"))
+        XCTAssertFalse(MessengerCommandKind.listRequests.guidance.contains("conversationID"))
+    }
+
     /// A wake can carry another bot's request, so the guidance sends the bot to answer it.
     func testWakeGuidanceCoversRequestsFromOtherBots() {
         let guidance = AgentWakeReason.wake.reference.guidance
