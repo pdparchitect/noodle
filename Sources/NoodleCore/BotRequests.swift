@@ -101,14 +101,14 @@ extension WorkspaceRepository {
         }
     }
 
-    /// A bot may ask only the bots it may list in that conversation; any other is reported missing, so
-    /// asking never confirms that a bot it may not see exists. The limits stop bots asking each other
+    /// A bot may ask only the bots it may list in that conversation; any other is refused the same way,
+    /// so asking never confirms that a bot it may not see exists. The limits stop bots asking each other
     /// in a loop: a chain never reaches back to a bot already in it or goes deeper than its limit, and
     /// turns woken by requests and answers count towards waking in a row.
     public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String,
                        now: Date = Date()) throws -> BotRequest {
         guard let helper = try listBots(for: agentID, in: conversationID).first(where: { $0.bot.agentID == helperID }) else {
-            throw WorkspaceError.missingAgent(helperID)
+            throw BotRequestError("You can't ask that bot here. --list-bots shows the bots you can ask in this conversation.")
         }
         guard try wakesInARow(agentID: agentID) < AgentWakeLimits.withoutOutsideMessages else {
             throw BotRequestError("You have been woken \(AgentWakeLimits.withoutOutsideMessages) times with no message from anyone else. Wait for a message before asking another bot.")

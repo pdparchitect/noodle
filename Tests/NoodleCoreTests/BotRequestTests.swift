@@ -423,6 +423,20 @@ final class BotRequestTests: XCTestCase {
         XCTAssertEqual(try listBots(asker, in: conversation), [helper.id])
     }
 
+    /// A bot that may not be asked is refused the same way whatever the reason, so the refusal never
+    /// confirms that a private bot exists, nor suggests that a closed one was deleted.
+    func testARefusalNamesNoReasonAndPointsToTheBotsThatCanBeAsked() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let closed = try repository.createAgent(named: "Accounts").agent
+        try repository.updateAgentTakesBotRequests(closed, takes: false)
+        for helper in [closed.id, UUID()] {
+            let refused = ask(created.agent, helper, in: created.conversation.id, "Total the invoices")
+            XCTAssertNotEqual(refused.exitCode, 0)
+            XCTAssertTrue(refused.standardError.contains("--list-bots"), refused.standardError)
+            XCTAssertFalse(refused.standardError.contains("no longer exists"), refused.standardError)
+        }
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent
