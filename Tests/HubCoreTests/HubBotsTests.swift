@@ -1350,6 +1350,16 @@ import XCTest
         XCTAssertEqual(lines, [LinkRequestLine(helperName: "Ledger", status: .answered)])
     }
 
+    /// A request's line is a record for the person, not a reply waiting to be read.
+    func testARequestLineIsNotAnUnreadReply() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f), helper = try await helperBot(f)
+        _ = try f.hub.repository.askBot(helper.id, for: bot.id, in: bot.conversationID, text: "Total the invoices")
+        XCTAssertEqual(try f.hub.bots.unread(in: bot.conversationID), 0)
+        _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Asked Ledger for you.")
+        XCTAssertEqual(try f.hub.bots.unread(in: bot.conversationID), 1)
+    }
+
     /// A line changes after it is sent, which a device reading on from its count would miss.
     func testAChangedRequestLineReachesTheDevices() async throws {
         let f = try await fixture()

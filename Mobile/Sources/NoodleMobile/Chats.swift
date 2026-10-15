@@ -1694,6 +1694,8 @@ struct ChatView: View {
                     VStack(spacing: Bubble.rowSpacing) {
                         if let record = message.call {
                             CallCardRow(name: thread.name, message: message, record: record, live: liveCard == message.id ? call : nil)
+                        } else if let line = message.request {
+                            RequestLineRow(line: line)
                         } else {
                             Bubble(chats: chats, thread: thread, message: message, author: authors[message.id],
                                    avatar: avatars[message.id].flatMap { chats.agent($0)?.draft }, besideAvatars: thread.group != nil,

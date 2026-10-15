@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- When a bot asks another bot for help, phones see a line saying how it went, without the request or answer for people the bot is shared with. The line is not counted as an unread reply.
+
 ## [0.35.0] - 2026-10-15
 
 ### Changed

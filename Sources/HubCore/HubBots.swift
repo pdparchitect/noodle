@@ -1242,11 +1242,11 @@ import NoodleVoicePeer
         onRead?(mark.conversationID, upTo)
     }
 
-    /// How many of the bot's replies its owner has not read.
+    /// How many of the bot's replies its owner has not read. A request's line is a record, not a reply.
     public func unread(in conversationID: UUID) throws -> Int {
         let mark = readMarks[conversationID] ?? .distantPast
         return try repository.loadMessages(conversationID: conversationID).filter {
-            if case .agent = $0.author { $0.createdAt > mark } else { false }
+            if case .agent = $0.author { $0.createdAt > mark && $0.request == nil } else { false }
         }.count
     }
 
