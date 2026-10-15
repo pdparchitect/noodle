@@ -407,10 +407,14 @@ struct EditBotSheet: View {
                             title: localSharingHubs.count > 1 ? "Sharing on \(hub.pairing.hub?.name ?? "Noodle Hub")" : "Sharing")
                     }
                     if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
-                        Toggle(isOn: $takesBotRequests) {
+                        // Laid out like the rows above it: the label leading, the switch trailing.
+                        HStack {
                             Label("Other bots can ask this bot", systemImage: "bubble.left.and.bubble.right")
+                            Spacer()
+                            Toggle("Other bots can ask this bot", isOn: $takesBotRequests)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
                         }
-                        .toggleStyle(.switch)
                         .padding(12)
                         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
                     }
