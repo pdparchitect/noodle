@@ -1481,6 +1481,19 @@ final class NoodleStore {
 
     func voice(for agent: AgentRecord) -> String? { try? repository.loadAgentVoice(agent) }
 
+    /// Whether the person's other bots may ask this one for help.
+    func takesBotRequests(for agent: AgentRecord) -> Bool { (try? repository.loadAgentTakesBotRequests(agent)) ?? true }
+
+    func setTakesBotRequests(_ takes: Bool, for agent: AgentRecord) -> Bool {
+        do {
+            try repository.updateAgentTakesBotRequests(agent, takes: takes)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     /// What a bot with this name sounds like until a voice is chosen for it.
     func defaultVoice(forBotNamed name: String, harnessIdentifier: String) async -> String? {
         // A harness a Hub lends speaks with the same voices.

@@ -316,6 +316,7 @@ struct EditBotSheet: View {
     @State private var reminderListIDs: Set<String> = []
     @State private var builtInTools: Set<EventKitAssignments.Kind> = []
     @State private var imageGeneration = false
+    @State private var takesBotRequests = true
     @State private var folders: [AgentFolder] = []
     @State private var selectedProfileID: UUID?
     @State private var sharedWith: Set<UUID> = []
@@ -405,6 +406,14 @@ struct EditBotSheet: View {
                             set: { sharedOnHubs[hub.pairing.directory] = $0 }),
                             title: localSharingHubs.count > 1 ? "Sharing on \(hub.pairing.hub?.name ?? "Noodle Hub")" : "Sharing")
                     }
+                    if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
+                        Toggle(isOn: $takesBotRequests) {
+                            Label("Other bots can ask this bot", systemImage: "bubble.left.and.bubble.right")
+                        }
+                        .toggleStyle(.switch)
+                        .padding(12)
+                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+                    }
                     Divider()
                     DestructiveActionButton(title: "Delete Bot") {
                         confirmingDeletion = true
@@ -465,6 +474,7 @@ struct EditBotSheet: View {
                 !($0 == .calendar ? calendarIDs : reminderListIDs).isEmpty
             })
             folders = store.folders(for: agent)
+            takesBotRequests = store.takesBotRequests(for: agent)
             selectedProfileID = store.harnessProfile(for: agent)
             selectedVoice = store.voice(for: agent) ?? ""
             hasChosenVoice = !selectedVoice.isEmpty
@@ -565,7 +575,8 @@ struct EditBotSheet: View {
                 sharedWith: sharingHub == nil ? nil : sharedWith,
                 sharedOnHubs: localSharingHubs.isEmpty ? nil : sharedOnHubs,
                 voice: .some(selectedVoice.nilIfEmpty)
-            )
+            ) && (HubHarnessChoice(identifier: selectedHarnessIdentifier) != nil
+                  || store.setTakesBotRequests(takesBotRequests, for: agent))
         }) {
             dismiss()
         }

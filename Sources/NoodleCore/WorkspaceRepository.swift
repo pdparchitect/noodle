@@ -383,6 +383,19 @@ public struct WorkspaceRepository: Sendable {
         try configuration.save(to: layout)
     }
 
+    /// Whether the person's other bots may ask this one for help. They may unless the person said not.
+    public func loadAgentTakesBotRequests(_ agent: AgentRecord) throws -> Bool {
+        try !AgentConfiguration.load(from: storage(for: agent.id)).closedToBotRequests
+    }
+
+    public func updateAgentTakesBotRequests(_ agent: AgentRecord, takes: Bool) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard configuration.closedToBotRequests == takes else { return }
+        configuration.closedToBotRequests = !takes
+        try configuration.save(to: layout)
+    }
+
     public func loadAgentOwner(_ agent: AgentRecord) throws -> AgentOwner? {
         try AgentConfiguration.load(from: storage(for: agent.id)).owner
     }

@@ -230,6 +230,7 @@ extension WorkspaceRepository {
         }
         return try agents.filter { agent in
             try agent.id != agentID && loadAgentOwner(agent)?.id == owner && sharedWithGuest?.contains(agent.id) != false
+                && loadAgentTakesBotRequests(agent)
         }
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
             .map { MessengerBot(bot: MessengerIdentity(handle: .bot, agentID: $0.id, displayName: $0.displayName),

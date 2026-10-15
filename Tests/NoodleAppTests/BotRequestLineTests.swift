@@ -24,6 +24,16 @@ import XCTest
         }
     }
 
+    func testEditingABotClosesItToOtherBots() throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        XCTAssertTrue(f.store.takesBotRequests(for: f.b))
+        XCTAssertTrue(f.store.setTakesBotRequests(false, for: f.b))
+        XCTAssertFalse(f.store.takesBotRequests(for: f.b))
+        XCTAssertFalse(try f.repository.loadAgentTakesBotRequests(f.b))
+        XCTAssertEqual(try f.repository.listBots(for: f.a.id, in: f.directA.id), [])
+    }
+
     /// The line is a record for the person, not a message from the bot, so it neither marks the
     /// chat unread nor wakes the other bots in it.
     func testARequestLineNeitherMarksTheChatUnreadNorWakesTheGroup() throws {

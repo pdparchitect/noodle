@@ -408,6 +408,21 @@ final class BotRequestTests: XCTestCase {
         XCTAssertFalse(try repository.latestMessages(for: member.id, consuming: false).contains { $0.message.request != nil })
     }
 
+    /// The person can close a bot to other bots: then they can neither see it nor ask it.
+    func testABotClosedToRequestsIsNeitherListedNorAsked() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation.id
+        let helper = try repository.createAgent(named: "Accounts").agent
+        XCTAssertTrue(try repository.loadAgentTakesBotRequests(helper))
+        try repository.updateAgentTakesBotRequests(helper, takes: false)
+        XCTAssertFalse(try WorkspaceRepository(rootURL: root).loadAgentTakesBotRequests(helper))
+        XCTAssertEqual(try listBots(asker, in: conversation), [])
+        XCTAssertNotEqual(ask(asker, helper.id, in: conversation, "Total the invoices").exitCode, 0)
+        XCTAssertEqual(try repository.botRequests(), [])
+        try repository.updateAgentTakesBotRequests(helper, takes: true)
+        XCTAssertEqual(try listBots(asker, in: conversation), [helper.id])
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent
