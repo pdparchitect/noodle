@@ -1447,10 +1447,14 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
     public var reactions: [LinkReaction]
     /// Set on the message that marks where a voice call started.
     public var call: LinkCallRecord?
+    /// Set on the line marking that a bot asked another for help.
+    public var request: LinkRequestLine?
 
     public init(id: UUID, conversationID: UUID, author: Author, body: String, createdAt: Date, delivered: Bool,
-                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = [], call: LinkCallRecord? = nil) {
+                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = [], call: LinkCallRecord? = nil,
+                request: LinkRequestLine? = nil) {
         self.attachments = attachments
+        self.request = request
         self.reactions = reactions
         self.call = call
         self.id = id
@@ -1461,7 +1465,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         self.delivered = delivered
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions, call }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions, call, request }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1474,6 +1478,8 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         attachments = try c.decode(.attachments, or: [])
         reactions = try c.decode(.reactions, or: [])
         call = try c.decodeIfPresent(LinkCallRecord.self, forKey: .call)
+        // A line this app cannot read, such as one with a newer status, shows as its plain text.
+        request = (try? c.decodeIfPresent(LinkRequestLine.self, forKey: .request)) ?? nil
     }
 }
 
