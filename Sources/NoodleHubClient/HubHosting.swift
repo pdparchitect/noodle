@@ -79,6 +79,9 @@ import Observation
     @ObservationIgnored private var changedConversations: Set<UUID> = []
     /// Messages whose reactions changed on the Hub, as it said.
     @ObservationIgnored private var changedMessages: [LinkMessage] = []
+    /// How each request line on the Hub last went, as this Mac told it. After a launch every line is told
+    /// once again, which the Hub takes as no change.
+    @ObservationIgnored private var toldRequests: [UUID: BotRequestStatus] = [:]
     /// The work in progress, so the next waits for it: each reads and writes the copies here.
     @ObservationIgnored private var queue: Task<Void, Never>?
 
@@ -174,6 +177,7 @@ import Observation
             try wake(for: messages)
             try await publishChanges()
             try await sendReplies()
+            try await sendRequestChanges()
             try await sendReactions()
             try await sendEffects()
             try await sendDelivered()
@@ -477,9 +481,35 @@ import Observation
                     // So the person knows what the bot shared that only its owner can open.
                     let owner = pairing.hub?.userName ?? "its owner"
                     let body = ([message.body] + keptHere.map { "\($0) opens only on \(owner)'s Mac." }).joined(separator: "\n\n")
+                    // Only how a request went leaves this Mac, never what was asked or answered.
+                    let request = message.request.flatMap { line in
+                        LinkRequestLine.Status(rawValue: line.status.rawValue).map { LinkRequestLine(helperName: line.helperName, status: $0) }
+                    }
                     _ = try await pairing.request(.host(.reply(LinkHostedReply(
-                        conversationID: thread.conversation, id: message.id, body: body, attachmentIDs: attachmentIDs, links: links))))
+                        conversationID: thread.conversation, id: message.id, body: body, attachmentIDs: attachmentIDs, links: links,
+                        request: request))))
                     setThread(thread.conversation) { $0.postedUpTo = message.createdAt }
+                    if let line = message.request { toldRequests[message.id] = line.status }
+                }
+            }
+        }
+    }
+
+    /// Tells the Hub how the requests on lines it already has went on since.
+    private func sendRequestChanges() async throws {
+        for entry in entries where !entry.archived {
+            for thread in entry.threads {
+                for message in try repository.loadMessages(conversationID: thread.conversation)
+                where message.author == .agent(entry.agent) && message.createdAt <= thread.postedUpTo {
+                    guard let line = message.request, toldRequests[message.id] != line.status,
+                          let status = LinkRequestLine.Status(rawValue: line.status.rawValue) else { continue }
+                    do {
+                        _ = try await pairing.request(.host(.requestChanged(conversationID: thread.conversation, messageID: message.id,
+                                                                            status: status)))
+                    } catch is LinkError {
+                        // A Hub that keeps no request lines refuses; asking again would not change that.
+                    }
+                    toldRequests[message.id] = line.status
                 }
             }
         }

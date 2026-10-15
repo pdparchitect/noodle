@@ -69,6 +69,30 @@ import XCTest
         try XCTUnwrap(f.local.loadConversations().first { $0.guest != nil && $0.participantIDs == [f.alfred.id] })
     }
 
+    /// When the bot on this Mac asks another for help in Grace's conversation, she sees how it goes, and
+    /// nothing of what was asked or answered leaves this Mac.
+    func testARequestLineFromThisMacReachesThePersonAndKeepsUp() async throws {
+        let f = try await fixture()
+        let hosting = f.hosting()
+        try await hosting.share(f.alfred, with: [f.grace.id])
+        await hosting.sync()
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        let local = try guestConversation(f)
+        let ledger = try f.local.createAgent(named: "Ledger").agent
+        _ = try f.local.createGuestConversation(with: ledger, guest: ConversationGuest(id: f.grace.id, name: "Grace"))
+        let asked = try f.local.askBot(ledger.id, for: f.alfred.id, in: local.id, text: "Total the invoices")
+        await hosting.sync()
+        var seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.compactMap(\.request), [LinkRequestLine(helperName: "Ledger", status: .waiting)])
+        XCTAssertNil(try f.hub.repository.loadMessages(conversationID: graces.conversationID).compactMap(\.request).first?.text)
+
+        _ = try f.local.answerBotRequest(asked.id, by: ledger.id, answer: "The total is 120")
+        _ = try f.local.listBotAnswers(for: f.alfred.id)
+        await hosting.step()
+        seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.compactMap(\.request), [LinkRequestLine(helperName: "Ledger", status: .answered)])
+    }
+
     /// Grace talks with the bot on this Mac through the Hub: it hears her by name, its reply reaches her, and
     /// her message shows taken once the bot has read it.
     func testPeopleTalkWithABotOnThisMacThroughTheHub() async throws {
