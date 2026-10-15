@@ -60,3 +60,26 @@ import XCTest
         XCTAssertTrue(second.notifications.isEmpty)
     }
 }
+
+/// An opened line keeps a long answer to a scrolling area, so it never takes over the conversation.
+@MainActor final class BotRequestLineLayoutTests: HiddenViewTests {
+    private func openedHeight(answer: String) async throws -> CGFloat {
+        let f = try fixture()
+        let line = BotRequestLine(requestID: UUID(), helperID: nil, helperName: "Accounts", text: "Total the invoices",
+                                  status: .answered, answer: answer)
+        let root = host(BotRequestLineView(line: line, isOpen: true).environment(f.store).frame(width: 500))
+        for _ in 0..<5 {
+            root.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return root.fittingSize.height
+    }
+
+    func testALongAnswerScrollsInsteadOfGrowingTheLine() async throws {
+        let long = try await openedHeight(answer: String(repeating: "The total is 120 across many invoices. ", count: 200))
+        let short = try await openedHeight(answer: "The total is 120.")
+        XCTAssertLessThanOrEqual(long, BotRequestLineView.openedHeight + 60)
+        XCTAssertLessThan(short, long)
+        XCTAssertGreaterThan(short, 60, "A short answer shows in full")
+    }
+}

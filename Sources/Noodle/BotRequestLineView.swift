@@ -20,7 +20,15 @@ extension BotRequestLine {
 struct BotRequestLineView: View {
     @Environment(NoodleStore.self) private var store
     let line: BotRequestLine
-    @State private var isOpen = false
+    @State private var isOpen: Bool
+    /// How tall the request and answer may grow before they scroll.
+    static let openedHeight: CGFloat = 220
+    @State private var partsHeight: CGFloat = 0
+
+    init(line: BotRequestLine, isOpen: Bool = false) {
+        self.line = line
+        _isOpen = State(initialValue: isOpen)
+    }
 
     var body: some View {
         HStack {
@@ -32,8 +40,14 @@ struct BotRequestLineView: View {
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                     if isOpen {
-                        if let text = line.text { part("Request", text) }
-                        if let answer = line.answer { part("Answer", answer) }
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 8) {
+                                if let text = line.text { part("Request", text) }
+                                if let answer = line.answer { part("Answer", answer) }
+                            }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { partsHeight = $0 }
+                        }
+                        .frame(height: min(partsHeight, Self.openedHeight))
                     }
                 }
                 .padding(.horizontal, 12)
