@@ -2072,7 +2072,8 @@ final class NoodleStore {
                 .flatMap { $0 }
                 .filter { message in
                     guard !knownMessageIDs.contains(message.id) else { return false }
-                    if case .agent = message.author { return true }
+                    // A request's line is a record for the person, not something the bot said.
+                    if case .agent = message.author { return message.request == nil }
                     return false
                 }
                 .sorted { $0.createdAt < $1.createdAt }
