@@ -18,10 +18,4 @@ import Testing
             #expect(line.failed == failed)
         }
     }
-
-    /// Someone a bot is shared with gets only how a request went, so there is nothing to open.
-    @Test func onlyALineWithItsRequestOpens() {
-        #expect(LinkRequestLine(helperName: "Accounts", status: .answered, text: "Total the invoices", answer: "120").opens)
-        #expect(!LinkRequestLine(helperName: "Accounts", status: .answered).opens)
-    }
 }

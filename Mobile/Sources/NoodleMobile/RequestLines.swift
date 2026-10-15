@@ -13,50 +13,20 @@ extension LinkRequestLine {
     }
 
     var failed: Bool { status == .expired || status == .withheld }
-
-    /// Someone a bot is shared with gets only how a request went, so there is nothing to open.
-    var opens: Bool { text != nil }
 }
 
-/// Where a bot asked another for help: a slim line that opens in place to show the request and,
-/// once the asking bot has it, the answer.
+/// Where a bot asked another for help: a slim line saying how it went. It never shows what was
+/// asked or answered; the bot that asked tells the person what they need.
 struct RequestLineRow: View {
     let line: LinkRequestLine
-    @State private var isOpen = false
-    /// How tall the request and answer may grow before they scroll.
-    static let openedHeight: CGFloat = 260
-    @State private var partsHeight: CGFloat = 0
 
     var body: some View {
-        Button { withAnimation(.snappy) { isOpen.toggle() } } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(line.title, systemImage: line.failed ? "exclamationmark.bubble" : "bubble.left.and.bubble.right")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                if isOpen {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let text = line.text { part("Request", text) }
-                            if let answer = line.answer { part("Answer", answer) }
-                        }
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { partsHeight = $0 }
-                    }
-                    .frame(height: min(partsHeight, Self.openedHeight))
-                }
-            }
+        Label(line.title, systemImage: line.failed ? "exclamationmark.bubble" : "bubble.left.and.bubble.right")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
-        .disabled(!line.opens)
-        .frame(maxWidth: .infinity)
-    }
-
-    private func part(_ title: String, _ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(text).font(.subheadline).fixedSize(horizontal: false, vertical: true)
-        }
+            .frame(maxWidth: .infinity)
     }
 }

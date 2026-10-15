@@ -15,58 +15,24 @@ extension BotRequestLine {
     var failed: Bool { status == .expired || status == .withheld }
 }
 
-/// Where a bot asked another for help: a slim line that opens in place to show the request and,
-/// once the asking bot has collected it, the answer.
+/// Where a bot asked another for help: a slim line saying how it went. It never shows what was
+/// asked or answered; the bot that asked tells the person what they need.
 struct BotRequestLineView: View {
     @Environment(NoodleStore.self) private var store
     let line: BotRequestLine
-    @State private var isOpen: Bool
-    /// How tall the request and answer may grow before they scroll.
-    static let openedHeight: CGFloat = 220
-    @State private var partsHeight: CGFloat = 0
-
-    init(line: BotRequestLine, isOpen: Bool = false) {
-        self.line = line
-        _isOpen = State(initialValue: isOpen)
-    }
 
     var body: some View {
         HStack {
             Spacer(minLength: 80)
-            Button { withAnimation(.snappy) { isOpen.toggle() } } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(line.title(helperName: helperName),
-                          systemImage: line.failed ? "exclamationmark.bubble" : "bubble.left.and.bubble.right")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                    if isOpen {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 8) {
-                                if let text = line.text { part("Request", text) }
-                                if let answer = line.answer { part("Answer", answer) }
-                            }
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { partsHeight = $0 }
-                        }
-                        .frame(height: min(partsHeight, Self.openedHeight))
-                    }
-                }
+            Label(line.title(helperName: helperName),
+                  systemImage: line.failed ? "exclamationmark.bubble" : "bubble.left.and.bubble.right")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .contentShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-            .help(isOpen ? "Hide Request" : "Show Request")
             Spacer(minLength: 80)
         }
-    }
-
-    private func part(_ title: String, _ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
-            Text(text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: 420, alignment: .leading)
     }
 
     /// The helper's current name, or the one it had when asked if it has gone since.
