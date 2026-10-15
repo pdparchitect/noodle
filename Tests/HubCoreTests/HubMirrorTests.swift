@@ -128,6 +128,33 @@ import XCTest
         XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).filter { $0.call != nil }.count, 1)
     }
 
+    /// When one of the user's bots on the Hub asks another for help, this Mac shows the line and keeps it
+    /// up as the request goes on.
+    func testRequestLinesFromTheHubShowHereAndKeepUp() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        _ = try await mirror.createBot(LinkBotDraft(name: "Ledger", provider: "claude-code"))
+        let hubAgents = try f.hub.repository.loadAgents()
+        let alfred = try XCTUnwrap(hubAgents.first { $0.displayName == "Alfred" })
+        let ledger = try XCTUnwrap(hubAgents.first { $0.displayName == "Ledger" })
+        let hubConversation = try conversation(of: alfred.id, in: f.hub.repository)
+        let local = try conversation(of: agent.id, in: f.local)
+        let asked = try f.hub.repository.askBot(ledger.id, for: alfred.id, in: hubConversation.id, text: "Total the invoices")
+        await mirror.sync()
+        func line() throws -> BotRequestLine? { try f.local.loadMessages(conversationID: local.id).compactMap(\.request).first }
+        XCTAssertEqual(try line()?.helperName, "Ledger")
+        XCTAssertEqual(try line()?.text, "Total the invoices")
+        XCTAssertEqual(try line()?.status, .waiting)
+
+        _ = try f.hub.repository.answerBotRequest(asked.id, by: ledger.id, answer: "The total is 120")
+        _ = try f.hub.repository.listBotAnswers(for: alfred.id)
+        await mirror.sync()
+        XCTAssertEqual(try line()?.status, .answered)
+        XCTAssertEqual(try line()?.answer, "The total is 120")
+        XCTAssertEqual(try f.local.loadMessages(conversationID: local.id).filter { $0.request != nil }.count, 1)
+    }
+
     /// Sharing a bot from this Mac, and a bot someone shared with this Mac's user, which they can
     /// only talk with: it shows whose it is, and the mirror keeps nothing of how it is made.
     func testBotsAreSharedFromHereAndSharedBotsShowWhoseTheyAre() async throws {

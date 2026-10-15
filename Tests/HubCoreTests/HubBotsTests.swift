@@ -1305,6 +1305,84 @@ import XCTest
     }
 
     /// Deleting a shared bot, or removing someone from the Hub, leaves no conversation behind.
+    private func helperBot(_ f: Fixture) async throws -> LinkBot {
+        guard case .bot(let bot) = try await f.device.request(.createBot(LinkBotDraft(name: "Ledger", provider: "claude-code"))) else {
+            throw XCTSkip("unexpected answer")
+        }
+        return bot
+    }
+
+    private func requestLines(_ device: HubPairing, in conversationID: UUID) async throws -> [LinkRequestLine?] {
+        guard case .messages(let all) = try await device.request(.messages(conversationID: conversationID, after: 0)),
+              case .messages(let page) = try await device.request(.messagePage(LinkMessagePage(conversationID: conversationID))) else {
+            throw XCTSkip("no messages")
+        }
+        XCTAssertEqual(all.messages.map(\.request), page.messages.map(\.request))
+        return all.messages.filter { $0.request != nil }.map(\.request)
+    }
+
+    /// The owner sees what one bot asked another and, once collected, the answer.
+    func testTheOwnerSeesARequestLineWithItsRequestAndAnswer() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f), helper = try await helperBot(f)
+        let asked = try f.hub.repository.askBot(helper.id, for: bot.id, in: bot.conversationID, text: "Total the invoices")
+        let waiting = try await requestLines(f.device, in: bot.conversationID)
+        XCTAssertEqual(waiting, [LinkRequestLine(helperName: "Ledger", status: .waiting, text: "Total the invoices")])
+        _ = try f.hub.repository.answerBotRequest(asked.id, by: helper.id, answer: "The total is 120")
+        _ = try f.hub.repository.listBotAnswers(for: bot.id)
+        let answered = try await requestLines(f.device, in: bot.conversationID)
+        XCTAssertEqual(answered, [LinkRequestLine(helperName: "Ledger", status: .answered, text: "Total the invoices",
+                                                  answer: "The total is 120")])
+    }
+
+    /// Someone a bot is shared with sees only how a request went, never what was asked or answered.
+    func testSomeoneABotIsSharedWithSeesOnlyHowARequestWent() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f), helper = try await helperBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        _ = try await share(helper, with: [grace.user], f)
+        guard let graces = try await bots(of: grace.device).first(where: { $0.id == bot.id }) else { return XCTFail("not shared") }
+        let asked = try f.hub.repository.askBot(helper.id, for: bot.id, in: graces.conversationID, text: "Total the invoices")
+        _ = try f.hub.repository.answerBotRequest(asked.id, by: helper.id, answer: "The total is 120")
+        _ = try f.hub.repository.listBotAnswers(for: bot.id)
+        let lines = try await requestLines(grace.device, in: graces.conversationID)
+        XCTAssertEqual(lines, [LinkRequestLine(helperName: "Ledger", status: .answered)])
+    }
+
+    /// A request's line is a record for the person, not a reply waiting to be read.
+    func testARequestLineIsNotAnUnreadReply() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f), helper = try await helperBot(f)
+        _ = try f.hub.repository.askBot(helper.id, for: bot.id, in: bot.conversationID, text: "Total the invoices")
+        XCTAssertEqual(try f.hub.bots.unread(in: bot.conversationID), 0)
+        _ = try f.hub.repository.sendAgentMessage(agentID: bot.id, conversationID: bot.conversationID, body: "Asked Ledger for you.")
+        XCTAssertEqual(try f.hub.bots.unread(in: bot.conversationID), 1)
+    }
+
+    /// A line changes after it is sent, which a device reading on from its count would miss.
+    func testAChangedRequestLineReachesTheDevices() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f), helper = try await helperBot(f)
+        let events = try await f.device.subscribe()
+        let asked = try f.hub.repository.askBot(helper.id, for: bot.id, in: bot.conversationID, text: "Total the invoices")
+        f.hub.bots.checkForChanges()
+        _ = try f.hub.repository.answerBotRequest(asked.id, by: helper.id, answer: "The total is 120")
+        f.hub.bots.checkForChanges()
+        let announced = expectation(description: "changed line announced")
+        let watching = Task {
+            for try await event in events {
+                if case .messageChanged(let message) = event, message.request?.status == .answered {
+                    XCTAssertEqual(message.request, LinkRequestLine(helperName: "Ledger", status: .answered, text: "Total the invoices"))
+                    announced.fulfill()
+                    return
+                }
+            }
+        }
+        await fulfillment(of: [announced], timeout: 10)
+        watching.cancel()
+    }
+
     func testSharedConversationsGoWithTheBotOrThePerson() async throws {
         let f = try await fixture()
         let first = try await createBot(f)

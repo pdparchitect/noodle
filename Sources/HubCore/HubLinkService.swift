@@ -837,6 +837,8 @@ import os
         case .effect(let conversationID, let id, let kind):
             try bots.hostedEffect(kind, id: id, in: conversationID, on: device)
             return .done
+        case .requestChanged(let conversationID, let messageID, let status):
+            return .message(try bots.hostedRequestChanged(status, of: messageID, in: conversationID, on: device))
         }
     }
 

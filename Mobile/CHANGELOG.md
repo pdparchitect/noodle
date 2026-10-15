@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- When a bot asks another of your bots for help, its conversation shows a line saying how it went, such as Asking Accounts or Accounts answered. This needs the Hub update released alongside.
+
 ## [0.33.0] - 2026-10-15
 
 ### Changed

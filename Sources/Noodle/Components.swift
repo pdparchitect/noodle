@@ -229,6 +229,7 @@ struct MessageBubble: View {
 
     static func insertion(for message: ChatMessage) -> AnyTransition {
         if case .system = message.author { return .opacity }
+        if message.request != nil { return .opacity }
         return .move(edge: .bottom).combined(with: .opacity)
     }
 
@@ -236,6 +237,8 @@ struct MessageBubble: View {
         let attachments = store.attachments(for: message)
         if let call = message.call {
             VoiceCallCard(message: message, record: call)
+        } else if let request = message.request {
+            BotRequestLineView(line: request)
         } else if isSystem {
             HStack {
                 Spacer(minLength: 80)

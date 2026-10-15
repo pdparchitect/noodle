@@ -1481,6 +1481,19 @@ final class NoodleStore {
 
     func voice(for agent: AgentRecord) -> String? { try? repository.loadAgentVoice(agent) }
 
+    /// Whether the person's other bots may ask this one for help.
+    func takesBotRequests(for agent: AgentRecord) -> Bool { (try? repository.loadAgentTakesBotRequests(agent)) ?? true }
+
+    func setTakesBotRequests(_ takes: Bool, for agent: AgentRecord) -> Bool {
+        do {
+            try repository.updateAgentTakesBotRequests(agent, takes: takes)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     /// What a bot with this name sounds like until a voice is chosen for it.
     func defaultVoice(forBotNamed name: String, harnessIdentifier: String) async -> String? {
         // A harness a Hub lends speaks with the same voices.
@@ -2072,7 +2085,8 @@ final class NoodleStore {
                 .flatMap { $0 }
                 .filter { message in
                     guard !knownMessageIDs.contains(message.id) else { return false }
-                    if case .agent = message.author { return true }
+                    // A request's line is a record for the person, not something the bot said.
+                    if case .agent = message.author { return message.request == nil }
                     return false
                 }
                 .sorted { $0.createdAt < $1.createdAt }
@@ -2332,8 +2346,9 @@ final class NoodleStore {
         return ConversationName.display(conversation.displayName)
     }
 
+    /// A request's line is a record, not something said, so the preview is what was said last.
     func preview(for conversation: BotConversation) -> String {
-        guard let body = messages(for: conversation).last?.body else { return "No messages yet" }
+        guard let body = messages(for: conversation).last(where: { $0.request == nil })?.body else { return "No messages yet" }
         return MarkdownPlainText.convert(MessageSegment.previewText(body))
     }
 

@@ -564,7 +564,10 @@ enum HubThread: HubConversation {
 
     func messages(of conversation: some HubConversation) -> [LinkMessage] { conversations[conversation.conversationID] ?? [] }
 
-    func latestMessage(of conversation: some HubConversation) -> LinkMessage? { messages(of: conversation).last }
+    /// What was said last: a request's line is a record, not something said.
+    func latestMessage(of conversation: some HubConversation) -> LinkMessage? {
+        messages(of: conversation).last { $0.request == nil }
+    }
 
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.
     func note(for thread: HubThread) -> PinnedNote? {
@@ -1694,6 +1697,8 @@ struct ChatView: View {
                     VStack(spacing: Bubble.rowSpacing) {
                         if let record = message.call {
                             CallCardRow(name: thread.name, message: message, record: record, live: liveCard == message.id ? call : nil)
+                        } else if let line = message.request {
+                            RequestLineRow(line: line)
                         } else {
                             Bubble(chats: chats, thread: thread, message: message, author: authors[message.id],
                                    avatar: avatars[message.id].flatMap { chats.agent($0)?.draft }, besideAvatars: thread.group != nil,

@@ -43,6 +43,20 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertTrue(guidance.contains("assignments.md"))
     }
 
+    /// A bot answering a request has no conversation of the asker's, so it is told where it may ask from.
+    func testAnsweringGuidanceSaysWhereAHelperMayAskFrom() {
+        XCTAssertTrue(MessengerCommandKind.answerRequest.guidance.contains("your own conversations"))
+        XCTAssertFalse(MessengerCommandKind.listRequests.guidance.contains("conversationID"))
+    }
+
+    /// A wake can carry another bot's request, so the guidance sends the bot to answer it.
+    func testWakeGuidanceCoversRequestsFromOtherBots() {
+        let guidance = AgentWakeReason.wake.reference.guidance
+        XCTAssertTrue(guidance.contains("--list-requests"))
+        XCTAssertTrue(guidance.contains("--list-answers"))
+        XCTAssertTrue(guidance.contains("another bot"))
+    }
+
     /// Organize moves recurring work out of preferences.md and tidies the rest without dropping anything owed.
     func testOrganizeTidiesTheBotsOwnFiles() {
         let guidance = AgentWakeReason.organize.reference.guidance
@@ -78,6 +92,7 @@ final class MessengerDocumentationTests: XCTestCase {
         message.reactionChanges = [MessageReactionChange(id: UUID(), conversationID: conversation.id,
             messageID: message.id, sequence: 1, author: .agent(botID), emoji: "✅", removed: false, createdAt: Date())]
         message.call = VoiceCallRecord(agentID: botID, endedAt: Date(), lines: [.init(.person, "Hello")])
+        message.request = BotRequestLine(requestID: UUID(), helperID: UUID(), helperName: "Helper", text: "Help", status: .waiting)
         var delivery = MessengerDelivery(me: me, conversation: conversation, participants: [me],
             sender: .init(handle: .user, displayName: "User"), message: message, attachments: [])
         delivery.reactions = [.init(emoji: "✅", sender: me)]
@@ -182,11 +197,13 @@ final class MessengerDocumentationTests: XCTestCase {
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let bot = try repository.createAgent(named: "Tester")
+        let helper = try repository.createAgent(named: "Helper")
         let message = ChatMessage(conversationID: bot.conversation.id, author: .user, body: "Test", delivery: .delivered)
         try repository.append(message)
         let prefix = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path]
+        let helperPrefix = ["messenger", "--agent-directory", repository.directory(for: helper.agent).path]
         let conversation = ["--conversation", bot.conversation.id.uuidString]
-        var wakeID = ""
+        var wakeID = "", requestID = ""
         for command in MessengerCommandKind.allCases {
             let options: [String]
             switch command {
@@ -198,15 +215,26 @@ final class MessengerDocumentationTests: XCTestCase {
             case .send: options = conversation + ["--body", "Reply"]
             case .setStatus: options = ["Busy"]
             case .clearStatus, .listWakes: options = []
+            case .listBots: options = conversation
+            case .askBot: options = [helper.agent.id.uuidString] + conversation + ["--body", "Help"]
+            case .listRequests: options = []
+            case .answerRequest: options = [requestID, "--body", "Done"]
+            case .listAnswers: options = []
+            case .cancelRequest:
+                options = [try repository.askBot(helper.agent.id, for: bot.agent.id, in: bot.conversation.id, text: "Cancel me").id.uuidString]
             case .wakeIn: options = ["20m", "--note", "Check"]
             case .wakeAt: options = ["2099-01-01T00:00:00Z", "--note", "Later"]
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]
             case .cancelWake: options = [wakeID]
             }
-            let result = MessengerCLI.runDirect(arguments: prefix + [command.rawValue] + options, environment: [:])
+            let caller = command == .answerRequest ? helperPrefix : prefix
+            let result = MessengerCLI.runDirect(arguments: caller + [command.rawValue] + options, environment: [:])
             XCTAssertEqual(result.exitCode, 0, "\(command): \(result.standardError)")
             if command == .wakeIn {
                 wakeID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
+            }
+            if command == .askBot {
+                requestID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
             }
             if command == .help {
                 XCTAssertEqual(result.standardOutput, MessengerDocumentation.cliHelp + "\n")

@@ -327,6 +327,34 @@ import XCTest
         } catch {}
     }
 
+    /// A request the bot made from the Mac shows Grace how it went, and nothing of what was asked.
+    func testARequestLineFromTheMacShowsThePersonHowItWent() async throws {
+        let f = try await fixture()
+        _ = try await host(f)
+        guard let graces = try await bots(of: f.gracesPhone).first else { return XCTFail("not shared") }
+        var reply = LinkHostedReply(conversationID: graces.conversationID, id: UUID(), body: "Asked Ledger")
+        reply.request = LinkRequestLine(helperName: "Ledger", status: .waiting, text: "Total the invoices")
+        _ = try await f.mac.request(.host(.reply(reply)))
+        let seen = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(seen.first { $0.id == reply.id }?.request, LinkRequestLine(helperName: "Ledger", status: .waiting))
+
+        let events = try await f.gracesPhone.subscribe()
+        _ = try await f.gracesPhone.request(.status)
+        f.hub.bots.checkForChanges()
+        let replyID = reply.id
+        _ = try await f.mac.request(.host(.requestChanged(conversationID: graces.conversationID, messageID: replyID, status: .answered)))
+        try await expect("the line's new status", in: events) {
+            if case .messageChanged(let message) = $0 { message.id == replyID && message.request?.status == .answered } else { false }
+        }
+        let after = try await messages(in: graces.conversationID, of: f.gracesPhone)
+        XCTAssertEqual(after.first { $0.id == replyID }?.request, LinkRequestLine(helperName: "Ledger", status: .answered))
+        do {
+            _ = try await f.gracesPhone.request(.host(.requestChanged(conversationID: graces.conversationID, messageID: replyID,
+                                                                        status: .withheld)))
+            XCTFail("Changed a line from a device that does not host the bot")
+        } catch {}
+    }
+
     /// A chat effect the bot sends from the Mac waits on the Hub for Grace to see her conversation.
     func testAChatEffectFromTheMacWaitsForThePerson() async throws {
         let f = try await fixture()

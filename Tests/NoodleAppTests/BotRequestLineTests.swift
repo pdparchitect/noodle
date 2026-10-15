@@ -1,0 +1,76 @@
+import Foundation
+import NoodleCore
+import XCTest
+@testable import Noodle
+
+@MainActor final class BotRequestLineTests: XCTestCase {
+    private func line(_ status: BotRequestStatus, answer: String? = nil) -> BotRequestLine {
+        BotRequestLine(requestID: UUID(), helperID: UUID(), helperName: "Accounts", text: "Total the invoices",
+                       status: status, answer: answer)
+    }
+
+    func testEachStatusHasItsOwnWording() {
+        let expected: [(BotRequestLine, String, Bool)] = [
+            (line(.waiting), "Asking Accounts", false),
+            (line(.answered), "Accounts answered", false),
+            (line(.answered, answer: "The total is 120"), "Accounts answered", false),
+            (line(.cancelled), "Cancelled asking Accounts", false),
+            (line(.expired), "Accounts didn’t answer", true),
+            (line(.withheld), "Accounts couldn’t help", true),
+        ]
+        for (line, title, failed) in expected {
+            XCTAssertEqual(line.title(helperName: "Accounts"), title, "\(line.status)")
+            XCTAssertEqual(line.failed, failed, "\(line.status)")
+        }
+    }
+
+    /// A request's line is a record, not something the bot said, so the chat list shows what it last said.
+    func testTheChatListPreviewSkipsRequestLines() throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        _ = try f.repository.sendAgentMessage(agentID: f.a.id, conversationID: f.directA.id, body: "Let me check with Grace.")
+        _ = try f.repository.askBot(f.b.id, for: f.a.id, in: f.directA.id, text: "Total the invoices")
+        f.store.refreshTranscripts()
+        XCTAssertEqual(f.store.preview(for: f.directA), "Let me check with Grace.")
+    }
+
+    func testEditingABotClosesItToOtherBots() throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        XCTAssertTrue(f.store.takesBotRequests(for: f.b))
+        XCTAssertTrue(f.store.setTakesBotRequests(false, for: f.b))
+        XCTAssertFalse(f.store.takesBotRequests(for: f.b))
+        XCTAssertFalse(try f.repository.loadAgentTakesBotRequests(f.b))
+        XCTAssertEqual(try f.repository.listBots(for: f.a.id, in: f.directA.id), [])
+    }
+
+    /// The line is a record for the person, not a message from the bot, so it neither marks the
+    /// chat unread nor wakes the other bots in it.
+    func testARequestLineNeitherMarksTheChatUnreadNorWakesTheGroup() throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        let group = try f.group()
+        let helper = try f.runtime.agent("Accounts")
+        let first = try f.runtime.start(f.a), second = try f.runtime.start(f.b)
+        _ = try f.repository.askBot(helper.id, for: f.a.id, in: group.id, text: "Total the invoices")
+        f.store.refreshTranscripts()
+        XCTAssertTrue(f.store.messages(for: group).contains { $0.request != nil })
+        XCTAssertFalse(f.store.unreadConversationIDs.contains(group.id))
+        XCTAssertTrue(first.notifications.isEmpty)
+        XCTAssertTrue(second.notifications.isEmpty)
+    }
+}
+
+/// The line says only how a request went: nothing opens it to show what was asked or answered.
+@MainActor final class BotRequestLineViewTests: HiddenViewTests {
+    func testTheLineShowsOnlyHowItWent() async throws {
+        let f = try fixture()
+        let line = BotRequestLine(requestID: UUID(), helperID: nil, helperName: "Accounts", text: "Total the invoices",
+                                  status: .answered, answer: "The total is 120")
+        let root = host(BotRequestLineView(line: line).environment(f.store).frame(width: 500))
+        try await wait { self.elements(root).contains { self.labels($0).contains { $0.contains("Accounts answered") } } }
+        let shown = elements(root).filter { labels($0).contains { $0.contains("Accounts answered") } }
+        XCTAssertFalse(shown.contains { attribute($0, .role) as? String == NSAccessibility.Role.button.rawValue })
+        XCTAssertFalse(elements(root).flatMap(labels).contains { $0.contains("Request") })
+    }
+}

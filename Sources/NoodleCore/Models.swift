@@ -135,6 +135,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var reactions: [MessageReaction]?
     public var reactionChanges: [MessageReactionChange]?
     public var call: VoiceCallRecord?
+    public var request: BotRequestLine?
 
     public init(
         id: UUID = UUID(),

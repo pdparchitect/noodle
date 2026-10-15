@@ -169,6 +169,24 @@ public enum MessengerCLI {
             case .cancelWake(let id):
                 return .json(try repository.cancelWake(agentID: agentID, id: id))
 
+            case .listBots(let conversationID):
+                return .json(try repository.listBots(for: agentID, in: conversationID))
+
+            case .askBot(let helperID, let conversationID, let text):
+                return .json(try repository.askBot(helperID, for: agentID, in: conversationID, text: text))
+
+            case .listRequests:
+                return .json(try repository.listBotRequests(waitingFor: agentID).map(BotRequestForHelper.init))
+
+            case .answerRequest(let id, let text):
+                return .json(BotRequestForHelper(try repository.answerBotRequest(id, by: agentID, answer: text)))
+
+            case .listAnswers:
+                return .json(try repository.listBotAnswers(for: agentID))
+
+            case .cancelRequest(let id):
+                return .json(try repository.cancelBotRequest(id, by: agentID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -317,6 +335,31 @@ public enum MessengerCLI {
                     throw MessengerCLIError.invalidArguments
                 }
                 action = .cancelWake(id)
+            case .listBots:
+                guard let raw = Self.option("--conversation", in: values),
+                      let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
+                action = .listBots(conversationID: id)
+            case .askBot:
+                guard let rawHelper = Self.option("--ask-bot", in: values), let helperID = UUID(uuidString: rawHelper),
+                      let rawConversation = Self.option("--conversation", in: values),
+                      let conversationID = UUID(uuidString: rawConversation),
+                      let text = try Self.messageBody(in: values),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MessengerCLIError.invalidArguments }
+                action = .askBot(helperID: helperID, conversationID: conversationID, text: text)
+            case .listRequests:
+                action = .listRequests
+            case .answerRequest:
+                guard let raw = Self.option("--answer-request", in: values), let id = UUID(uuidString: raw),
+                      let text = try Self.messageBody(in: values),
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MessengerCLIError.invalidArguments }
+                action = .answerRequest(id: id, text: text)
+            case .listAnswers:
+                action = .listAnswers
+            case .cancelRequest:
+                guard let raw = Self.option("--cancel-request", in: values), let id = UUID(uuidString: raw) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                action = .cancelRequest(id: id)
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -525,6 +568,12 @@ public enum MessengerAction: Codable, Sendable {
         case scheduleRecurringWake(schedule: String, note: String)
         case listWakes
         case cancelWake(UUID)
+        case listBots(conversationID: UUID)
+        case askBot(helperID: UUID, conversationID: UUID, text: String)
+        case listRequests
+        case answerRequest(id: UUID, text: String)
+        case listAnswers
+        case cancelRequest(id: UUID)
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

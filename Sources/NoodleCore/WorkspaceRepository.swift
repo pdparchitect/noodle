@@ -383,6 +383,19 @@ public struct WorkspaceRepository: Sendable {
         try configuration.save(to: layout)
     }
 
+    /// Whether the person's other bots may ask this one for help. They may unless the person said not.
+    public func loadAgentTakesBotRequests(_ agent: AgentRecord) throws -> Bool {
+        try !AgentConfiguration.load(from: storage(for: agent.id)).closedToBotRequests
+    }
+
+    public func updateAgentTakesBotRequests(_ agent: AgentRecord, takes: Bool) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard configuration.closedToBotRequests == takes else { return }
+        configuration.closedToBotRequests = !takes
+        try configuration.save(to: layout)
+    }
+
     public func loadAgentOwner(_ agent: AgentRecord) throws -> AgentOwner? {
         try AgentConfiguration.load(from: storage(for: agent.id)).owner
     }
@@ -1300,6 +1313,8 @@ public struct WorkspaceRepository: Sendable {
                 if !includingRead, case .agent(let authorID) = message.author, authorID == agentID { continue }
                 // The bot was on the call; its card is the person's record of it.
                 if !includingRead, message.call != nil { continue }
+                // A request's line is the person's record of it; the bots involved hear of it through Messenger.
+                if !includingRead, message.request != nil { continue }
                 deliveries.append(delivery(for: message))
             }
 
@@ -1563,6 +1578,29 @@ public struct WorkspaceRepository: Sendable {
             }
             messages[index].call?.lines = lines
             messages[index].call?.endedAt = endedAt
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+            return messages[index]
+        }
+    }
+
+    /// Changes the line a bot's request left in the conversation it was asked from.
+    func updateRequestLine(requestID: UUID, conversationID: UUID, _ change: (inout BotRequestLine) -> Void) throws {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.request?.requestID == requestID }),
+                  var line = messages[index].request else { return }
+            change(&line)
+            messages[index].request = line
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+        }
+    }
+
+    /// Sets the request line of a message, as a Hub keeps the lines of a bot on its owner's Mac.
+    public func setRequestLine(_ line: BotRequestLine, ofMessage messageID: UUID, in conversationID: UUID) throws -> ChatMessage {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.id == messageID }) else { throw WorkspaceError.missingMessage(messageID) }
+            messages[index].request = line
             try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
             return messages[index]
         }
