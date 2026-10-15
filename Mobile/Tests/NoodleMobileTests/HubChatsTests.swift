@@ -77,6 +77,13 @@ private actor FakeHub {
                                     createdAt: Date(), delivered: true))
     }
 
+    /// The bot asking another bot for help, which leaves a line in its conversation.
+    func botAsks(_ helper: String) {
+        messages.append(LinkMessage(id: UUID(), conversationID: bot.conversationID, author: .bot(bot.id), body: "Asked \(helper)",
+                                    createdAt: Date(), delivered: true,
+                                    request: LinkRequestLine(helperName: helper, status: .waiting)))
+    }
+
     /// A noodlet the bot shares, as a link.
     func botSharesNoodlet(_ name: String) -> LinkAttachment {
         let attachment = LinkAttachment(id: UUID(), filename: "\(name).noodlet", mediaType: "application/x-noodlet", byteCount: 0,
@@ -467,6 +474,17 @@ private actor RecordedSubscriptions: PushSubscriptions {
         try await chats.reload()
 
         #expect(chats.agents.map(\.draft.name) == ["Scout"])
+        #expect(chats.latestMessage(of: try #require(chats.agents.first))?.body == "Hello")
+    }
+
+    /// A request's line is a record, not something the bot said, so the list shows what it last said.
+    @Test func theListShowsTheLatestMessageThatIsNotARequestLine() async throws {
+        let hub = FakeHub()
+        await hub.botAsks("Ledger")
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        #expect(chats.messages(of: try #require(chats.agents.first)).contains { $0.request != nil })
         #expect(chats.latestMessage(of: try #require(chats.agents.first))?.body == "Hello")
     }
 

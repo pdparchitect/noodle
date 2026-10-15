@@ -2346,8 +2346,9 @@ final class NoodleStore {
         return ConversationName.display(conversation.displayName)
     }
 
+    /// A request's line is a record, not something said, so the preview is what was said last.
     func preview(for conversation: BotConversation) -> String {
-        guard let body = messages(for: conversation).last?.body else { return "No messages yet" }
+        guard let body = messages(for: conversation).last(where: { $0.request == nil })?.body else { return "No messages yet" }
         return MarkdownPlainText.convert(MessageSegment.previewText(body))
     }
 

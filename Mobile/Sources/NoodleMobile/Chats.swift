@@ -564,7 +564,10 @@ enum HubThread: HubConversation {
 
     func messages(of conversation: some HubConversation) -> [LinkMessage] { conversations[conversation.conversationID] ?? [] }
 
-    func latestMessage(of conversation: some HubConversation) -> LinkMessage? { messages(of: conversation).last }
+    /// What was said last: a request's line is a record, not something said.
+    func latestMessage(of conversation: some HubConversation) -> LinkMessage? {
+        messages(of: conversation).last { $0.request == nil }
+    }
 
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.
     func note(for thread: HubThread) -> PinnedNote? {

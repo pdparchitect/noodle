@@ -24,6 +24,16 @@ import XCTest
         }
     }
 
+    /// A request's line is a record, not something the bot said, so the chat list shows what it last said.
+    func testTheChatListPreviewSkipsRequestLines() throws {
+        let f = try StoreFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        _ = try f.repository.sendAgentMessage(agentID: f.a.id, conversationID: f.directA.id, body: "Let me check with Grace.")
+        _ = try f.repository.askBot(f.b.id, for: f.a.id, in: f.directA.id, text: "Total the invoices")
+        f.store.refreshTranscripts()
+        XCTAssertEqual(f.store.preview(for: f.directA), "Let me check with Grace.")
+    }
+
     func testEditingABotClosesItToOtherBots() throws {
         let f = try StoreFixture()
         addTeardownBlock { @MainActor in f.cleanUp() }
