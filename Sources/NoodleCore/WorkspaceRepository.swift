@@ -1300,6 +1300,8 @@ public struct WorkspaceRepository: Sendable {
                 if !includingRead, case .agent(let authorID) = message.author, authorID == agentID { continue }
                 // The bot was on the call; its card is the person's record of it.
                 if !includingRead, message.call != nil { continue }
+                // A request's line is the person's record of it; the bots involved hear of it through Messenger.
+                if !includingRead, message.request != nil { continue }
                 deliveries.append(delivery(for: message))
             }
 
@@ -1565,6 +1567,18 @@ public struct WorkspaceRepository: Sendable {
             messages[index].call?.endedAt = endedAt
             try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
             return messages[index]
+        }
+    }
+
+    /// Changes the line a bot's request left in the conversation it was asked from.
+    func updateRequestLine(requestID: UUID, conversationID: UUID, _ change: (inout BotRequestLine) -> Void) throws {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.request?.requestID == requestID }),
+                  var line = messages[index].request else { return }
+            change(&line)
+            messages[index].request = line
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
         }
     }
 

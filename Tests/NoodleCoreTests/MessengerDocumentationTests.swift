@@ -86,6 +86,7 @@ final class MessengerDocumentationTests: XCTestCase {
         message.reactionChanges = [MessageReactionChange(id: UUID(), conversationID: conversation.id,
             messageID: message.id, sequence: 1, author: .agent(botID), emoji: "✅", removed: false, createdAt: Date())]
         message.call = VoiceCallRecord(agentID: botID, endedAt: Date(), lines: [.init(.person, "Hello")])
+        message.request = BotRequestLine(requestID: UUID(), helperID: UUID(), helperName: "Helper", text: "Help", status: .waiting)
         var delivery = MessengerDelivery(me: me, conversation: conversation, participants: [me],
             sender: .init(handle: .user, displayName: "User"), message: message, attachments: [])
         delivery.reactions = [.init(emoji: "✅", sender: me)]

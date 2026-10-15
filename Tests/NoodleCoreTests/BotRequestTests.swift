@@ -349,6 +349,65 @@ final class BotRequestTests: XCTestCase {
         XCTAssertNil(try repository.botRequests().first?.answer)
     }
 
+    private func line(for request: UUID, in conversation: UUID) throws -> ChatMessage? {
+        try repository.loadMessages(conversationID: conversation).first { $0.request?.requestID == request }
+    }
+
+    func testAskingAddsALineToTheAskingConversation() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let asked = try decode(BotRequest.self, from: ask(created.agent, helper.id, in: created.conversation.id, "Total the invoices"))
+        let line = try XCTUnwrap(try line(for: asked.id, in: created.conversation.id))
+        XCTAssertEqual(line.author, .agent(created.agent.id))
+        XCTAssertEqual(line.body, "Asked Accounts")
+        XCTAssertEqual(line.request, BotRequestLine(requestID: asked.id, helperID: helper.id, helperName: "Accounts",
+                                                    text: "Total the invoices", status: .waiting))
+    }
+
+    func testLineFollowsTheRequestAndShowsTheAnswerOnceCollected() throws {
+        let created = try repository.createAgent(named: "Assistant")
+        let asker = created.agent, conversation = created.conversation.id
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let answered = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation, "Total the invoices"))
+        let cancelled = try decode(BotRequest.self, from: ask(asker, helper.id, in: conversation, "Never mind"))
+        XCTAssertEqual(answer(helper, answered.id, "The total is 120").exitCode, 0)
+        XCTAssertEqual(try line(for: answered.id, in: conversation)?.request?.status, .answered)
+        XCTAssertNil(try line(for: answered.id, in: conversation)?.request?.answer)
+        XCTAssertEqual(messenger(asker, "--cancel-request", cancelled.id.uuidString).exitCode, 0)
+        XCTAssertEqual(try line(for: cancelled.id, in: conversation)?.request?.status, .cancelled)
+        XCTAssertEqual(messenger(asker, "--list-answers").exitCode, 0)
+        XCTAssertEqual(try line(for: answered.id, in: conversation)?.request?.answer, "The total is 120")
+    }
+
+    func testLineShowsExpiredAndWithheldRequestsWithoutAnAnswer() throws {
+        let asker = try repository.createAgent(named: "Assistant").agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let guest = ConversationGuest(id: UUID(), name: "Guest")
+        let conversation = try repository.createGuestConversation(with: asker, guest: guest).id
+        let helperShare = try repository.createGuestConversation(with: helper, guest: guest)
+        let start = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let expired = try repository.askBot(helper.id, for: asker.id, in: conversation, text: "Slow", now: start)
+        let withheld = try repository.askBot(helper.id, for: asker.id, in: conversation, text: "Private", now: start)
+        _ = try repository.answerBotRequest(withheld.id, by: helper.id, answer: "Secret", now: start)
+        try repository.deleteConversation(id: helperShare.id)
+        _ = try repository.listBotAnswers(for: asker.id, now: start.addingTimeInterval(BotRequestLimits.expiry))
+        XCTAssertEqual(try line(for: expired.id, in: conversation)?.request?.status, .expired)
+        XCTAssertEqual(try line(for: withheld.id, in: conversation)?.request?.status, .withheld)
+        XCTAssertNil(try line(for: withheld.id, in: conversation)?.request?.answer)
+    }
+
+    func testOtherBotsInTheConversationNeverReceiveTheLine() throws {
+        let asker = try repository.createAgent(named: "Assistant").agent
+        let member = try repository.createAgent(named: "Research").agent
+        let helper = try repository.createAgent(named: "Accounts").agent
+        let group = try repository.createGroup(named: "Team", participantIDs: [asker.id, member.id],
+                                               existingAgents: try repository.loadAgents())
+        _ = try repository.latestMessages(for: member.id)
+        let asked = try repository.askBot(helper.id, for: asker.id, in: group.id, text: "Total the invoices")
+        XCTAssertNotNil(try line(for: asked.id, in: group.id))
+        XCTAssertFalse(try repository.latestMessages(for: member.id, consuming: false).contains { $0.message.request != nil })
+    }
+
     func testAddedRequestIsKeptForBothBots() throws {
         let asker = try repository.createAgent(named: "Assistant").agent
         let helper = try repository.createAgent(named: "Accounts").agent

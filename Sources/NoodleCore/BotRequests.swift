@@ -16,6 +16,23 @@ public struct BotRequest: Codable, Hashable, Sendable {
     public var answerReadAt: Date?
 }
 
+/// A request as the asking conversation shows it, updated as the request changes. It is never
+/// delivered to bots. The answer appears only once the asking bot has collected it, so an answer
+/// withheld from the conversation never shows there.
+public struct BotRequestLine: Codable, Hashable, Sendable {
+    public let requestID: UUID
+    public let helperID: UUID
+    public let helperName: String
+    public let text: String
+    public var status: BotRequestStatus
+    public var answer: String?
+
+    public init(requestID: UUID, helperID: UUID, helperName: String, text: String, status: BotRequestStatus, answer: String? = nil) {
+        self.requestID = requestID; self.helperID = helperID; self.helperName = helperName
+        self.text = text; self.status = status; self.answer = answer
+    }
+}
+
 public enum BotRequestStatus: String, Codable, Sendable {
     case waiting, answered, cancelled, expired, withheld
 }
@@ -89,7 +106,7 @@ extension WorkspaceRepository {
     /// turns woken by requests and answers count towards waking in a row.
     public func askBot(_ helperID: UUID, for agentID: UUID, in conversationID: UUID, text: String,
                        now: Date = Date()) throws -> BotRequest {
-        guard try listBots(for: agentID, in: conversationID).contains(where: { $0.bot.agentID == helperID }) else {
+        guard let helper = try listBots(for: agentID, in: conversationID).first(where: { $0.bot.agentID == helperID }) else {
             throw WorkspaceError.missingAgent(helperID)
         }
         guard try wakesInARow(agentID: agentID) < AgentWakeLimits.withoutOutsideMessages else {
@@ -110,6 +127,11 @@ extension WorkspaceRepository {
         }
         try wakeFromAnotherBot(agentID: helperID, note: AgentWake.requestNote, now: request.createdAt)
         try wakeForExpiry(agentID: agentID, requestID: request.id, at: request.createdAt.addingTimeInterval(BotRequestLimits.expiry))
+        var line = ChatMessage(conversationID: conversationID, author: .agent(agentID), body: "Asked \(helper.bot.displayName)",
+                               createdAt: request.createdAt, delivery: .delivered)
+        line.request = BotRequestLine(requestID: request.id, helperID: helperID, helperName: helper.bot.displayName,
+                                      text: text, status: .waiting)
+        try append(line)
         return request
     }
 
@@ -137,6 +159,8 @@ extension WorkspaceRepository {
             return state.requests[index]
         }
         try removeExpiryWake(agentID: answered.askerID, requestID: id)
+        // The answer shows only once the asking bot collects it, after sharing is checked again.
+        try? updateRequestLine(requestID: id, conversationID: answered.conversationID) { $0.status = .answered }
         try wakeFromAnotherBot(agentID: answered.askerID, note: AgentWake.answerNote, now: now)
         return answered
     }
@@ -151,6 +175,7 @@ extension WorkspaceRepository {
             return state.requests[index]
         }
         try removeExpiryWake(agentID: agentID, requestID: id)
+        try? updateRequestLine(requestID: id, conversationID: cancelled.conversationID) { $0.status = .cancelled }
         return cancelled
     }
 
@@ -164,7 +189,7 @@ extension WorkspaceRepository {
         for conversation in conversations {
             askable[conversation] = Set(((try? listBots(for: agentID, in: conversation)) ?? []).compactMap(\.bot.agentID))
         }
-        return try updateBotRequests(now: now) { state in
+        let answers = try updateBotRequests(now: now) { state in
             let read = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
             var answers: [BotRequest] = []
             for index in state.requests.indices where state.requests[index].askerID == agentID
@@ -179,6 +204,13 @@ extension WorkspaceRepository {
             }
             return answers.sorted { ($0.answeredAt ?? $0.createdAt) < ($1.answeredAt ?? $1.createdAt) }
         }
+        for request in answers {
+            try? updateRequestLine(requestID: request.id, conversationID: request.conversationID) {
+                $0.status = request.status
+                $0.answer = request.answer
+            }
+        }
+        return answers
     }
 
     /// A Hub keeps bots for several people; a Mac's bots all have no owner, so they share one. In a
