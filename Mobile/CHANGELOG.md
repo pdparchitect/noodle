@@ -4,7 +4,7 @@
 
 ### Added
 
-- When a bot asks another of your bots for help, its conversation shows a line saying how it went, which opens to show the request and answer. In a conversation with a bot someone shared with you, the line shows only how it went. This needs the Hub update released alongside.
+- When a bot asks another of your bots for help, its conversation shows a line saying how it went, such as Asking Accounts or Accounts answered. This needs the Hub update released alongside.
 
 ## [0.33.0] - 2026-10-15
 
