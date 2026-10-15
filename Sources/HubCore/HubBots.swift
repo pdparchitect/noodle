@@ -867,10 +867,30 @@ import NoodleVoicePeer
         for (link, url) in links where !present.contains(link.id) {
             _ = try repository.importLinkAttachment(url, into: reply.conversationID, id: link.id)
         }
-        let message = try repository.sendAgentMessage(agentID: agent.id, conversationID: reply.conversationID, body: reply.body,
+        var message = try repository.sendAgentMessage(agentID: agent.id, conversationID: reply.conversationID, body: reply.body,
                                                       attachmentIDs: reply.attachmentIDs + reply.links.map(\.id), id: reply.id)
+        // Only how the request went is kept, even if a device sent more.
+        if let line = reply.request, let status = BotRequestStatus(rawValue: line.status.rawValue) {
+            message = try repository.setRequestLine(BotRequestLine(requestID: reply.id, helperID: nil, helperName: line.helperName,
+                                                                   text: nil, status: status),
+                                                    ofMessage: reply.id, in: reply.conversationID)
+        }
         checkForChanges()
         return linkMessage(message, files: try attachments(in: reply.conversationID))
+    }
+
+    /// How a request the bot made from its Mac went on, shown on the reply that marks it.
+    public func hostedRequestChanged(_ status: LinkRequestLine.Status, of messageID: UUID, in conversationID: UUID,
+                                     on device: HubDevice) throws -> LinkMessage {
+        _ = try hostedConversation(conversationID, on: device)
+        guard let message = try repository.loadMessages(conversationID: conversationID).first(where: { $0.id == messageID }),
+              var line = message.request, let changed = BotRequestStatus(rawValue: status.rawValue) else {
+            throw LinkError("There is no such request.")
+        }
+        line.status = changed
+        let updated = try repository.setRequestLine(line, ofMessage: messageID, in: conversationID)
+        checkForChanges()
+        return linkMessage(updated, files: try attachments(in: conversationID))
     }
 
     public func hostedDelivered(_ messageIDs: [UUID], in conversationID: UUID, on device: HubDevice) throws {

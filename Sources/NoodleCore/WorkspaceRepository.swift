@@ -1582,6 +1582,17 @@ public struct WorkspaceRepository: Sendable {
         }
     }
 
+    /// Sets the request line of a message, as a Hub keeps the lines of a bot on its owner's Mac.
+    public func setRequestLine(_ line: BotRequestLine, ofMessage messageID: UUID, in conversationID: UUID) throws -> ChatMessage {
+        try withConversationLock(conversationID) {
+            var messages = try loadMessages(conversationID: conversationID)
+            guard let index = messages.firstIndex(where: { $0.id == messageID }) else { throw WorkspaceError.missingMessage(messageID) }
+            messages[index].request = line
+            try write(messages, to: conversationDirectory(id: conversationID).appendingPathComponent("messages.json"))
+            return messages[index]
+        }
+    }
+
     /// Queue retries reuse the request UUID, so restarting after delivery never sends twice.
     public func sendSharedMessage(_ request: SharedRequest, files: [URL]) throws -> ChatMessage {
         guard var conversation = try loadConversations().first(where: { $0.id == request.conversationID }),

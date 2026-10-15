@@ -32,7 +32,7 @@ struct BotRequestLineView: View {
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(line.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                     if isOpen {
-                        part("Request", line.text)
+                        if let text = line.text { part("Request", text) }
                         if let answer = line.answer { part("Answer", answer) }
                     }
                 }
@@ -57,6 +57,6 @@ struct BotRequestLineView: View {
 
     /// The helper's current name, or the one it had when asked if it has gone since.
     private var helperName: String {
-        store.agents.first { $0.id == line.helperID }?.displayName ?? line.helperName
+        line.helperID.flatMap { id in store.agents.first { $0.id == id } }?.displayName ?? line.helperName
     }
 }

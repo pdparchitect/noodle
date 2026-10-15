@@ -313,6 +313,8 @@ public enum LinkHostRequest: Codable, Equatable, Sendable {
     case react(LinkReactionChange)
     /// A chat effect the bot sent in one of its conversations, which waits on the Hub to be seen. Answered with `done`.
     case effect(conversationID: UUID, id: UUID, kind: String)
+    /// How a request the bot made, shown on one of its replies, went on. Answered with `message`.
+    case requestChanged(conversationID: UUID, messageID: UUID, status: LinkRequestLine.Status)
 }
 
 /// A bot a device hosts, with its conversation with each person it is shared with.
@@ -347,8 +349,13 @@ public struct LinkHostedReply: Codable, Equatable, Sendable {
     public var attachmentIDs: [UUID]
     /// Links to web pages; links that open live on the device are not sent.
     public var links: [LinkAttachment]
+    /// Set on the line marking that the bot asked another for help. Only how it went is sent: the
+    /// request and the answer stay on the device.
+    public var request: LinkRequestLine?
 
-    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [], links: [LinkAttachment] = []) {
+    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [], links: [LinkAttachment] = [],
+                request: LinkRequestLine? = nil) {
+        self.request = request
         self.conversationID = conversationID
         self.id = id
         self.body = body
@@ -356,7 +363,7 @@ public struct LinkHostedReply: Codable, Equatable, Sendable {
         self.links = links
     }
 
-    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, links }
+    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, links, request }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -365,6 +372,7 @@ public struct LinkHostedReply: Codable, Equatable, Sendable {
         body = try c.decode(.body, or: "")
         attachmentIDs = try c.decode(.attachmentIDs, or: [])
         links = try c.decode(.links, or: [])
+        request = (try? c.decodeIfPresent(LinkRequestLine.self, forKey: .request)) ?? nil
     }
 }
 

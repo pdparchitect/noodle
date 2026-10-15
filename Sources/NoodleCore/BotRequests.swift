@@ -21,13 +21,14 @@ public struct BotRequest: Codable, Hashable, Sendable {
 /// withheld from the conversation never shows there.
 public struct BotRequestLine: Codable, Hashable, Sendable {
     public let requestID: UUID
-    public let helperID: UUID
+    /// Nil, like the text, on a Hub's copy of a line from a bot on its owner's Mac, which keeps them.
+    public let helperID: UUID?
     public let helperName: String
-    public let text: String
+    public let text: String?
     public var status: BotRequestStatus
     public var answer: String?
 
-    public init(requestID: UUID, helperID: UUID, helperName: String, text: String, status: BotRequestStatus, answer: String? = nil) {
+    public init(requestID: UUID, helperID: UUID?, helperName: String, text: String?, status: BotRequestStatus, answer: String? = nil) {
         self.requestID = requestID; self.helperID = helperID; self.helperName = helperName
         self.text = text; self.status = status; self.answer = answer
     }

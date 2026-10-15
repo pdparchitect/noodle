@@ -43,4 +43,23 @@ final class LinkRequestTests: XCTestCase {
         XCTAssertEqual(decoded.body, "Asked Accounts")
         XCTAssertNil(decoded.request)
     }
+
+    /// A bot on its owner's Mac sends the Hub only how a request went; the request and answer stay on the Mac.
+    func testHostedRepliesCarryARequestLine() throws {
+        var reply = LinkHostedReply(conversationID: UUID(), id: UUID(), body: "Asked Accounts")
+        reply.request = LinkRequestLine(helperName: "Accounts", status: .waiting)
+        XCTAssertEqual(try decoder.decode(LinkHostedReply.self, from: encoder.encode(reply)), reply)
+        reply.request = nil
+        let json = String(decoding: try encoder.encode(reply), as: UTF8.self)
+        XCTAssertFalse(json.contains("request"))
+        XCTAssertNil(try decoder.decode(LinkHostedReply.self, from: Data(json.utf8)).request)
+    }
+
+    func testTheMacSendsALinesNewStatus() throws {
+        let change = LinkHostRequest.requestChanged(conversationID: UUID(), messageID: UUID(), status: .answered)
+        guard case .success(.host(let decoded)) = LinkProtocol.decode(try LinkProtocol.encode(.host(change))) else {
+            return XCTFail("The change did not survive the link")
+        }
+        XCTAssertEqual(decoded, change)
+    }
 }
