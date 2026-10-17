@@ -330,6 +330,13 @@ import Observation
         try await stream(.subscribe)
     }
 
+    /// Sends what comes next on a fresh connection that tries every address of the Hub again, as
+    /// after the network changed or the one kept failed. Streams already open on it go on.
+    public func reconnect() {
+        guard let hub, let identity = try? identity() else { return }
+        LinkClient.dropConnection(identity: identity, hubKey: hub.key)
+    }
+
     /// Opens a channel to the Hub for a request it answers with a stream, such as `openSurface`:
     /// frames come down it, and this side sends its own up it. Video takes a connection of its
     /// own, since it can fill the link and answers on the shared one would queue behind it.

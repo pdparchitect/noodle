@@ -380,6 +380,71 @@ final class LinkStreamTests: XCTestCase {
     }
 }
 
+extension LinkStreamTests {
+    private func quietServer(_ hub: LinkIdentity, _ open: @escaping @Sendable (LinkStream) -> Void) async throws -> LinkEndpoint {
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in .stream(open) })
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        return LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+    }
+
+    /// A Hub that goes quiet, as when the way to it is lost without a word, ends the stream on the
+    /// device instead of leaving it to wait for QUIC to notice.
+    func testAStreamTheHubGoesQuietOnEnds() async throws {
+        let hub = LinkIdentity()
+        let endpoint = try await quietServer(hub) { $0.send(Data("hello".utf8)) }
+        let subscription = try await LinkClient.subscribe(Data("subscribe".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                          endpoints: [endpoint], silenceLimit: .milliseconds(500))
+        try await subscription.heard()
+        let (frames, message) = try await within(.seconds(5)) {
+            var frames: [Data] = []
+            do { for try await frame in subscription.frames { frames.append(frame) } } catch { return (frames, error.localizedDescription) }
+            return (frames, "ended without an error")
+        }
+        XCTAssertEqual(frames, [Data("hello".utf8)])
+        XCTAssertEqual(message, "The Hub stopped answering.")
+    }
+
+    /// Keep-alives alone keep a stream open past the silence limit.
+    func testKeepAlivesKeepAQuietStreamOpen() async throws {
+        let hub = LinkIdentity()
+        let endpoint = try await quietServer(hub) { stream in
+            Task {
+                for _ in 0..<10 {
+                    stream.send(Data())
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                stream.send(Data("still here".utf8))
+            }
+        }
+        let subscription = try await LinkClient.subscribe(Data("subscribe".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                          endpoints: [endpoint], silenceLimit: .milliseconds(800))
+        defer { subscription.cancel() }
+        let first = try await within(.seconds(5)) {
+            for try await frame in subscription.frames { return frame }
+            return Data()
+        }
+        XCTAssertEqual(first, Data("still here".utf8))
+    }
+
+    /// A Hub that never writes, not even to keep the stream alive, is not waited on for ever.
+    func testAHubThatNeverWritesIsNotWaitedOnForEver() async throws {
+        let hub = LinkIdentity()
+        let endpoint = try await quietServer(hub) { _ in }
+        let subscription = try await LinkClient.subscribe(Data("subscribe".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                          endpoints: [endpoint], silenceLimit: .milliseconds(500))
+        let message = try await within(.seconds(5)) {
+            do {
+                try await subscription.heard()
+                return "heard"
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        XCTAssertEqual(message, "The Hub stopped answering.")
+    }
+}
+
 final class StreamBox: @unchecked Sendable {
     var stream: LinkStream?
 }
@@ -574,6 +639,44 @@ final class LinkSessionTests: XCTestCase {
         let answer = try await within(.seconds(10)) {
             try await LinkClient.exchange(Data("after".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint]).response
         }
+        XCTAssertEqual(answer, Data("after".utf8))
+        XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 2)
+    }
+
+    /// A request the Hub never answers, as on a connection whose way to the Hub is gone, gives up,
+    /// and the next one connects afresh instead of waiting on the same connection.
+    func testARequestNeverAnsweredGivesUpAndTheNextConnectsAfresh() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }) { _, request in
+            if request == Data("never".utf8) { try? await Task.sleep(for: .seconds(30)) }
+            return .response(request)
+        }
+        try await server.start()
+        addTeardownBlock { server.stop() }
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        let message = try await within(.seconds(5)) {
+            do {
+                _ = try await LinkClient.exchange(Data("never".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint],
+                                                  answerWait: .milliseconds(500))
+                return "answered"
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        XCTAssertEqual(message, "The Hub did not answer in time.")
+        let (answer, _) = try await LinkClient.exchange(Data("after".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        XCTAssertEqual(answer, Data("after".utf8))
+        XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 2)
+    }
+
+    /// After the network changes, the next request races every address again on a new connection.
+    func testADroppedConnectionIsMadeAgain() async throws {
+        let hub = LinkIdentity(), device = LinkIdentity()
+        let server = try await echo(hub)
+        let endpoint = LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))
+        _ = try await LinkClient.exchange(Data("before".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
+        LinkClient.dropConnection(identity: device, hubKey: hub.publicKey)
+        let (answer, _) = try await LinkClient.exchange(Data("after".utf8), identity: device, hubKey: hub.publicKey, endpoints: [endpoint])
         XCTAssertEqual(answer, Data("after".utf8))
         XCTAssertEqual(LinkSessions.handshakes(to: hub.publicKey), 2)
     }

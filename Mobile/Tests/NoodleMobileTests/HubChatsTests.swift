@@ -5,6 +5,7 @@ import NoodleWallpaperCore
 import UIKit
 @testable import NoodleMobile
 import SwiftUI
+import Synchronization
 import Testing
 
 /// A Hub with one bot that answers every message, reached over QUIC like the real one.
@@ -38,6 +39,23 @@ private actor FakeHub {
     var keepsFailedSends = false
 
     func listen(at endpoint: LinkEndpoint) { endpoints = [endpoint] }
+
+    /// The live streams phones opened, each told at once that the Hub took it on, as the real Hub does.
+    var followers: [LinkStream] = []
+
+    func follow(_ stream: LinkStream) {
+        followers.append(stream)
+        stream.send(Data())
+    }
+
+    func push(_ event: LinkEvent) { followers.last?.send(LinkProtocol.encode(event)) }
+
+    func endStreams() { followers.forEach { $0.close() } }
+
+    /// Conversations whose messages do not load, as on a lossy link.
+    var failingConversations: Set<UUID> = []
+
+    func failLoading(_ conversationID: UUID) { failingConversations.insert(conversationID) }
 
     func failSends(_ count: Int, keeping: Bool = false) {
         failingSends = count
@@ -145,6 +163,8 @@ private actor FakeHub {
         case .success(.messages(let conversationID, let after)):
             let messages = messages.filter { $0.conversationID == conversationID }
             return .messages(LinkMessages(messages: Array(messages.dropFirst(after)), count: messages.count))
+        case .success(.messagePage(let page)) where failingConversations.contains(page.conversationID):
+            return .failure("The Hub did not answer in time.")
         case .success(.messagePage(let page)):
             pageRequests += 1
             let messages = messages.filter { $0.conversationID == page.conversationID }
@@ -272,6 +292,20 @@ private actor FakeHub {
     func askBeforeKick(_ confirmation: LinkKickConfirmation?) { kickConfirmation = confirmation }
 }
 
+/// Whether the Hub lets the phone in, switched by a test from any thread.
+private final class Door: Sendable {
+    private let open = Mutex(true)
+    var isOpen: Bool { open.withLock { $0 } }
+    func set(open: Bool) { self.open.withLock { $0 = open } }
+}
+
+/// The pauses `follow` took before trying again.
+private final class Pauses: Sendable {
+    private let taken = Mutex<[Duration]>([])
+    var all: [Duration] { taken.withLock { $0 } }
+    func take(_ pause: Duration) { taken.withLock { $0.append(pause) } }
+}
+
 /// Stands in for CloudKit, keeping the topics subscribed to.
 private actor RecordedSubscriptions: PushSubscriptions {
     var topics: Set<String> = []
@@ -289,10 +323,12 @@ private actor RecordedSubscriptions: PushSubscriptions {
 
 @MainActor @Suite struct HubChatsTests {
     private func paired(to hub: FakeHub, directory: URL = FileManager.default.temporaryDirectory
-        .appendingPathComponent(UUID().uuidString)) async throws -> (HubChats, LinkServer) {
+        .appendingPathComponent(UUID().uuidString),
+                        admits: @escaping @Sendable (LinkPublicKey) -> Bool = { _ in true }) async throws -> (HubChats, LinkServer) {
         let identity = LinkIdentity()
-        let server = try LinkServer(identity: identity, port: 0, admits: { _ in true }) { _, data in
-            .response(LinkProtocol.encode(await hub.reply(to: data)))
+        let server = try LinkServer(identity: identity, port: 0, admits: admits) { _, data in
+            if case .success(.subscribe) = LinkProtocol.decode(data) { return .stream { stream in Task { await hub.follow(stream) } } }
+            return .response(LinkProtocol.encode(await hub.reply(to: data)))
         }
         try await server.start()
         let endpoint = LinkEndpoint(host: "127.0.0.1", port: try #require(server.port))
@@ -303,6 +339,114 @@ private actor RecordedSubscriptions: PushSubscriptions {
         await pairing.join(invitation.url().absoluteString)
         try #require(pairing.hub != nil)
         return (HubChats(pairing: pairing), server)
+    }
+
+    /// The live stream opens even when a conversation does not load, as on a lossy link: the rest
+    /// still load, the failure is kept, and what the Hub pushes arrives.
+    @Test func followingOpensTheLiveStreamWhenAConversationDoesNotLoad() async throws {
+        let hub = FakeHub()
+        let crew = await hub.addGroup(named: "Crew", saying: "Morning")
+        let scout = await hub.bot
+        await hub.failLoading(scout.conversationID)
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        let following = Task { await chats.follow() }
+        defer { following.cancel() }
+        for _ in 0..<100 where !chats.isConnected || chats.error == nil || chats.messages(of: crew).isEmpty {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(chats.isConnected)
+        #expect(await hub.followers.count == 1)
+        #expect(chats.agents.map(\.id) == [scout.id])
+        #expect(chats.messages(of: crew).map(\.body) == ["Morning"])
+        #expect(chats.error == "The Hub did not answer in time.")
+
+        await hub.push(.botPhase(botID: scout.id, phase: .working))
+        for _ in 0..<50 where chats.agent(scout.id)?.phase != .working { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(chats.agent(scout.id)?.phase == .working)
+    }
+
+    /// Each failure waits longer before trying again, up to half a minute; once the Hub answers
+    /// again, the next wait starts over from a second.
+    @Test func reconnectingWaitsLongerEachTimeAndStartsOverOnceConnected() async throws {
+        let hub = FakeHub()
+        let door = Door()
+        let (phone, server) = try await paired(to: hub, admits: { _ in door.isOpen })
+        defer { server.stop() }
+        let pauses = Pauses()
+        let chats = HubChats(pairing: phone.pairing, networkChanges: { AsyncStream { _ in } },
+                             pause: { pause in
+                                 pauses.take(pause)
+                                 try await Task.sleep(for: .milliseconds(20))
+                             },
+                             backoff: HubBackoff(jitter: { 1 }))
+        door.set(open: false)
+        let following = Task { await chats.follow() }
+        defer { following.cancel() }
+        for _ in 0..<100 where pauses.all.count < 6 { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(Array(pauses.all.prefix(6)) == [.seconds(1), .seconds(2), .seconds(4), .seconds(8), .seconds(16), .seconds(30)])
+        #expect(chats.connectionProblem != nil)
+        #expect(!chats.isConnected)
+
+        door.set(open: true)
+        for _ in 0..<100 where !chats.isConnected { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(chats.isConnected)
+        #expect(chats.connectionProblem == nil)
+        let connected = pauses.all.count
+        await hub.endStreams()
+        for _ in 0..<100 where pauses.all.count == connected { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(pauses.all.dropFirst(connected).first == .seconds(1))
+    }
+
+    /// A change of network, as on joining Wi-Fi, connects at once instead of waiting out the pause.
+    @Test func aNetworkChangeConnectsAtOnce() async throws {
+        let hub = FakeHub()
+        let door = Door()
+        let (phone, server) = try await paired(to: hub, admits: { _ in door.isOpen })
+        defer { server.stop() }
+        let pauses = Pauses()
+        let (changes, change) = AsyncStream.makeStream(of: Void.self)
+        let chats = HubChats(pairing: phone.pairing, networkChanges: { changes }, pause: { pause in
+            pauses.take(pause)
+            try await Task.sleep(for: .seconds(3600))
+        })
+        door.set(open: false)
+        let following = Task { await chats.follow() }
+        defer { following.cancel() }
+        for _ in 0..<100 where pauses.all.isEmpty { try await Task.sleep(for: .milliseconds(100)) }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(pauses.all.count == 1)
+
+        door.set(open: true)
+        change.yield()
+        for _ in 0..<100 where !chats.isConnected { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(chats.isConnected)
+        #expect(pauses.all.count == 1, "Connected without waiting out the pause")
+    }
+
+    /// Try Again connects at once too.
+    @Test func tryAgainConnectsAtOnce() async throws {
+        let hub = FakeHub()
+        let door = Door()
+        let (phone, server) = try await paired(to: hub, admits: { _ in door.isOpen })
+        defer { server.stop() }
+        let pauses = Pauses()
+        let chats = HubChats(pairing: phone.pairing, networkChanges: { AsyncStream { _ in } }, pause: { pause in
+            pauses.take(pause)
+            try await Task.sleep(for: .seconds(3600))
+        })
+        door.set(open: false)
+        let following = Task { await chats.follow() }
+        defer { following.cancel() }
+        for _ in 0..<100 where pauses.all.isEmpty { try await Task.sleep(for: .milliseconds(100)) }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(chats.connectionProblem != nil)
+
+        door.set(open: true)
+        chats.tryAgain()
+        for _ in 0..<100 where !chats.isConnected { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(chats.isConnected)
+        #expect(pauses.all.count == 1)
     }
 
     /// A chat effect waits on the Hub until the phone shows its conversation: the phone hears of it, takes it

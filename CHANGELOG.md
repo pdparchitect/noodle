@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - This Mac as a Hub, reached through your router, comes back within minutes, not half an hour, when the router forgets the port it opened, restarts or gets a new internet address, and right away when this Mac joins another network.
+- Noodle reconnects to a Hub sooner when it stops answering: a live connection silent for 25 seconds, or a request unanswered for two minutes, is dropped and tried again.
 - Closed sheets and Settings windows are freed, so the app no longer slows down the longer it runs.
 - A closed Usage window no longer keeps reading usage history, which slowed scrolling and typing.
 - Noodle no longer quits at launch when a bot's folder cannot be read; it shows what is wrong instead. A bot folder missing its workspace or runtime folder, as a crash or a full disk can leave it, gets them back and the bot loads.

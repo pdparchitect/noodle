@@ -14,8 +14,15 @@
 
 - A bot's profile in a group shows Reply, Message, Call and Edit as matching rounded buttons on one line, instead of uneven ovals with Message split over two lines, and they sit right under a short description.
 - Groups suggested in the share sheet show their bots whole inside the round picture, instead of with their edges cut off.
+- Noodle reconnects to your Hub within seconds after you switch between Wi-Fi and mobile data, turn off airplane mode or come back to the app, instead of sometimes staying unable to connect for a long time. A slow or patchy connection no longer keeps new messages from arriving while older conversations load, and a connection that goes silent is noticed and replaced.
+- When your Hub can't be reached, a bar above your chats says so and keeps retrying, with Try Again to retry at once. Not Connected has Try Again too.
 
 ### What to Test
+
+- With the app open, turn on airplane mode for a few seconds, then turn it off: a bar says Noodle can't reach your Hub, then goes away within a few seconds, and new messages arrive.
+- Switch between Wi-Fi and mobile data with the app open, and again with it in the background before coming back: new messages arrive within seconds without closing the app.
+- With the Mac your Hub runs on asleep or its Hub quit, open the app: the bar shows above your chats. Tap Try Again, then wake the Mac or open the Hub: the bar goes away and new messages arrive.
+- On a weak connection, such as one bar of mobile data, open the app: new messages still arrive while the conversations catch up.
 
 - In a group, tap a bot's picture with no description, then one with a long description: the four buttons are the same size with one-line titles, sit just below a short description, and a long description scrolls.
 - Send a message in a group with two bots and one with three, then share a photo from Photos: both groups' suggestions show every bot whole inside the circle. Suggestions update after the next message in each group.

@@ -118,8 +118,25 @@ enum HubThread: HubConversation {
         try await pairing.channel(.startCall(start))
     })
 
-    init(pairing: HubPairing) {
+    /// Whether the live stream from the Hub is open.
+    private(set) var isConnected = false
+    /// Whether a try at opening it is under way, rather than a pause before the next.
+    private(set) var isConnecting = false
+    /// Why the live stream is down, from its last failure until it opens again.
+    private(set) var connectionProblem: String?
+    @ObservationIgnored private let networkChanges: @Sendable () -> AsyncStream<Void>
+    @ObservationIgnored private let pause: @Sendable (Duration) async throws -> Void
+    @ObservationIgnored private let backoff: HubBackoff
+    /// Wakes `follow` to connect at once. Only a wait under way hears it.
+    @ObservationIgnored private let wakes = Wakes()
+
+    init(pairing: HubPairing, networkChanges: @escaping @Sendable () -> AsyncStream<Void> = NetworkChanges.live,
+         pause: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         backoff: HubBackoff = HubBackoff()) {
         self.pairing = pairing
+        self.networkChanges = networkChanges
+        self.pause = pause
+        self.backoff = backoff
         linkPreviews = LinkPreviews(folder: pairing.directory.appendingPathComponent("Link Previews", isDirectory: true))
         pinned = Set((try? JSONDecoder().decode([UUID].self, from: Data(contentsOf: pairing.directory.appendingPathComponent("pins.json")))) ?? [])
         seen = try? JSONDecoder().decode([UUID: Date].self, from: Data(contentsOf: seenURL))
@@ -617,18 +634,116 @@ enum HubThread: HubConversation {
         return avatars
     }
 
-    /// Loads everything, then follows the Hub's changes until cancelled, reconnecting after a pause.
+    /// Follows the Hub's changes until cancelled. The live stream opens first and everything loads
+    /// beside it, so what the Hub pushes arrives even while a slow link is still loading. After a
+    /// failure it waits longer each time, and not at all once the network changes or `reconnect`
+    /// is called.
     func follow() async {
+        let watching = Task { [networkChanges, pairing, wakes] in
+            for await _ in networkChanges() {
+                // The connection kept may be on the way the phone just left.
+                pairing.reconnect()
+                wakes.wake()
+            }
+        }
+        defer { watching.cancel() }
+        var backoff = backoff
+        while !Task.isCancelled {
+            if await connect() { backoff.reset() }
+            guard !Task.isCancelled else { return }
+            // The connection kept may be what failed, so the next try races every address afresh.
+            pairing.reconnect()
+            await wait(backoff.next())
+        }
+    }
+
+    /// Connects again at once, as when someone taps Try Again or the network changes.
+    func reconnect() { wakes.wake() }
+
+    /// Connects again if the live stream is down, or else loads everything again.
+    func tryAgain() {
+        if isConnected { Task { try? await reload() } } else { reconnect() }
+    }
+
+    /// Opens the live stream and applies what comes down it, until it ends or `reconnect` is
+    /// called. Whether it opened.
+    private func connect() async -> Bool {
+        isConnecting = true
+        defer { isConnecting = false }
+        let wakes = wakes
+        return await withTaskGroup(of: Bool?.self) { group in
+            group.addTask { await self.listen() }
+            group.addTask {
+                await wakes.next()
+                return nil
+            }
+            var opened = false
+            while let next = await group.next() {
+                group.cancelAll()
+                if let next { opened = next }
+            }
+            return opened
+        }
+    }
+
+    private func listen() async -> Bool {
+        var opened = false
+        do {
+            let events = try await pairing.subscribe()
+            opened = true
+            isConnected = true
+            isConnecting = false
+            connectionProblem = nil
+            // The check-in says so at once, so the bots no longer show offline, and brings the Hub's addresses up to date.
+            Task { await pairing.refresh(quietly: true) }
+            var loading = Task { await catchUp() }
+            defer { loading.cancel() }
+            for try await event in events {
+                do {
+                    try await apply(event)
+                } catch {
+                    // What this missed is caught up on with the rest, on the same stream.
+                    self.error = error.localizedDescription
+                    loading.cancel()
+                    loading = Task { await catchUp() }
+                }
+            }
+            if !Task.isCancelled { throw LinkError("The Hub ended the stream.") }
+        } catch let error where !Task.isCancelled {
+            self.error = error.localizedDescription
+            connectionProblem = error.localizedDescription
+        } catch {}
+        isConnected = false
+        return opened
+    }
+
+    /// Loads what changed while this phone was not listening, trying again until the Hub answers.
+    private func catchUp() async {
+        var backoff = backoff
         while !Task.isCancelled {
             do {
                 try await reload()
                 // Effects sent while this phone was away were heard of by nobody here.
                 waitingEffects.formUnion(agents.map(\.conversationID) + groups.map(\.id))
-                for try await event in try await pairing.subscribe() { try await apply(event) }
-            } catch {
+                return
+            } catch let error where !Task.isCancelled {
                 self.error = error.localizedDescription
+            } catch {
+                return
             }
-            try? await Task.sleep(for: .seconds(5))
+            // Not `wait`: `reconnect` is for the live stream, which is open.
+            try? await pause(backoff.next())
+        }
+    }
+
+    /// Waits `delay`, or less if `reconnect` is called first.
+    private func wait(_ delay: Duration) async {
+        let pause = pause, wakes = wakes
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { _ = try? await pause(delay) }
+            group.addTask { await wakes.next() }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -637,7 +752,7 @@ enum HubThread: HubConversation {
         case .botsChanged:
             try await reload()
         case .groupsChanged:
-            try await loadGroups()
+            if let failure = try await loadGroups() { throw failure }
             forgetGone()
             Task { await fetchBackgrounds() }
         case .conversationChanged(let id, _):
@@ -695,12 +810,18 @@ enum HubThread: HubConversation {
         saveCache()
     }
 
+    /// Loads the bots and groups and what is new in their conversations. One conversation that does
+    /// not load is left as it was, to load next time, and says why in `error`; the rest still load.
     func reload() async throws {
         guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
         agents = pairing.keptPictures(bots)
-        for bot in bots { try await load(bot.conversationID) }
+        var failure: Error?
+        for bot in bots {
+            do { try await load(bot.conversationID) } catch { failure = failure ?? error }
+        }
         // A Hub from before groups does not know the request; it has none to show.
-        try? await loadGroups()
+        if let failed = try? await loadGroups() { failure = failure ?? failed }
+        try Task.checkCancellation()
         forgetGone()
         if seen == nil {
             seen = conversations.compactMapValues { $0.last?.createdAt }
@@ -710,7 +831,7 @@ enum HubThread: HubConversation {
         // Chats work even when the Hub cannot list tools.
         try? await loadTools()
         isLoaded = true
-        error = nil
+        error = failure?.localizedDescription
         saveCache()
         // The Hub answers again: a message that did not go through goes now, if nothing newer has come.
         for id in unsent.keys { await deliver(id, pauses: [.zero]) }
@@ -722,13 +843,16 @@ enum HubThread: HubConversation {
         saveCache()
     }
 
-    private func loadGroups() async throws {
+    /// Throws if the groups cannot be listed; returns why the first conversation that did not load failed.
+    private func loadGroups() async throws -> Error? {
         guard case .groups(let listed) = try await pairing.request(.groups) else { throw LinkError("The Hub sent an unexpected answer.") }
         groups = listed
+        var failure: Error?
         for group in listed {
-            try await load(group.id)
+            do { try await load(group.id) } catch { failure = failure ?? error }
             if let upTo = group.readUpTo { noteRead(group.id, upTo: upTo) }
         }
+        return failure
     }
 
     /// Conversations of bots and groups that are gone.
@@ -1176,6 +1300,14 @@ struct AgentsView: View {
                 }
             }
             .listStyle(.plain)
+            // The saved chats still show while a Hub cannot be reached, so this says so above them.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !rows.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(chats.filter { $0.connectionProblem != nil }, id: \.pairing.directory) { ConnectionBanner(chats: $0) }
+                    }
+                }
+            }
             .searchable(text: $search, prompt: "Search")
             .overlay {
                 if searching && found.isEmpty && !rows.isEmpty {
@@ -1184,7 +1316,13 @@ struct AgentsView: View {
                     if chats.isEmpty || chats.contains(where: { !$0.isLoaded && $0.error == nil }) {
                         ProgressView()
                     } else if let error = chats.lazy.compactMap(\.error).first {
-                        ContentUnavailableView("Not Connected", systemImage: "wifi.exclamationmark", description: Text(error))
+                        ContentUnavailableView {
+                            Label("Not Connected", systemImage: "wifi.exclamationmark")
+                        } description: {
+                            Text(error)
+                        } actions: {
+                            Button("Try Again") { for hub in chats { hub.tryAgain() } }
+                        }
                     } else {
                         ContentUnavailableView("No Bots", systemImage: "bubble.left.and.bubble.right")
                     }
@@ -1212,7 +1350,10 @@ struct AgentsView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .wordmarkRefreshable {
-                for hub in chats { try? await hub.reload() }
+                for hub in chats {
+                    if !hub.isConnected { hub.reconnect() }
+                    try? await hub.reload()
+                }
             }
             .sheet(isPresented: $showingMore, onDismiss: openChosen) {
                 MoreSheet { choice in
@@ -1251,6 +1392,11 @@ struct AgentsView: View {
         .onChange(of: chats.flatMap { $0.listedThreads.map(\.conversationID) }) { open() }
         .onChange(of: widgetSource, initial: true) { _, source in
             if let source { BotWidgetPublisher.shared.publish(source) }
+        }
+        // Back in front, as after switching airplane mode off in Control Center, a Hub not connected is tried at once.
+        .onChange(of: phase) {
+            guard phase == .active else { return }
+            for hub in chats where !hub.isConnected { hub.reconnect() }
         }
         // Not while the phone is away, so the Hub knows at once to notify it instead.
         .task(id: FollowKey(hubs: pairings.map(CurrentHub.name), away: phase == .background)) {
@@ -1428,6 +1574,29 @@ struct AgentsView: View {
         case nil: break
         }
         chosen = nil
+    }
+}
+
+/// A Hub whose live connection is down, above the chats saved from it, with a way to try again at once.
+private struct ConnectionBanner: View {
+    let chats: HubChats
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
+            Text("Can't reach \(chats.pairing.hubName). Retrying…")
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if chats.isConnecting {
+                ProgressView()
+            } else {
+                Button("Try Again") { chats.reconnect() }
+                    .font(.subheadline.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 }
 

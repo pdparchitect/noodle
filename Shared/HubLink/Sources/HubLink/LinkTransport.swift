@@ -69,7 +69,7 @@ enum LinkQUIC {
     }
 
     /// Reads one whole message: everything until the peer finishes its side of the stream.
-    static func receive(_ connection: NWConnection, limit: Int) async throws -> Data {
+    static func receive(_ connection: NWConnection, limit: Int, heard: (@Sendable () -> Void)? = nil) async throws -> Data {
         var data = Data()
         while true {
             let (chunk, complete) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
@@ -80,6 +80,7 @@ enum LinkQUIC {
             if let chunk {
                 data.append(chunk)
                 LinkSessions.heard(on: connection)
+                heard?()
             }
             guard data.count <= limit else { throw LinkError("The message is too large.") }
             if complete || chunk == nil { return data }
@@ -87,7 +88,7 @@ enum LinkQUIC {
     }
 
     /// Reads exactly `count` bytes, or nil if the peer finished before sending any.
-    static func read(_ count: Int, from connection: NWConnection) async throws -> Data? {
+    static func read(_ count: Int, from connection: NWConnection, heard: (@Sendable () -> Void)? = nil) async throws -> Data? {
         var data = Data()
         while data.count < count {
             let (chunk, complete) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data?, Bool), Error>) in
@@ -100,6 +101,7 @@ enum LinkQUIC {
             if let chunk {
                 data.append(chunk)
                 LinkSessions.heard(on: connection)
+                heard?()
             }
             if complete && data.count < count {
                 if data.isEmpty { return nil }
@@ -357,22 +359,30 @@ public final class LinkServer: @unchecked Sendable {
 
 /// Frames the Hub pushes, until the stream ends or `cancel` is called.
 public final class LinkSubscription: Sendable {
+    /// How long the Hub may say nothing. It writes at least every `LinkStream.keepAliveInterval`,
+    /// so a stream quiet for longer has lost the Hub, which QUIC can be slow to notice, as when the
+    /// device leaves the network it reached the Hub through.
+    public static let silenceLimit: Duration = .seconds(LinkStream.keepAliveInterval * 2.5)
+
     public let frames: AsyncThrowingStream<Data, Error>
     public let endpoint: LinkEndpoint
     private let connection: NWConnection
     private let firstWord = FirstWord()
 
-    init(connection: NWConnection, endpoint: LinkEndpoint) {
+    init(connection: NWConnection, endpoint: LinkEndpoint, silenceLimit: Duration = LinkSubscription.silenceLimit) {
         self.connection = connection
         self.endpoint = endpoint
+        let silence = LinkSilence(limit: silenceLimit, connection: connection)
         frames = AsyncThrowingStream { [firstWord] continuation in
             let reader = Task {
+                defer { silence.stop() }
                 do {
-                    while let header = try await LinkQUIC.read(4, from: connection) {
+                    while let header = try await LinkQUIC.read(4, from: connection, heard: { silence.heard() }) {
                         firstWord.resolve(.success(()))
                         // A Hub that refuses answers once, in JSON, instead of opening the stream.
                         if header.first == UInt8(ascii: "{") {
-                            let response = try LinkProtocol.decodeResponse(header + (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit)))
+                            let rest = try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit, heard: { silence.heard() })
+                            let response = try LinkProtocol.decodeResponse(header + rest)
                             if case .failure(let message) = response { throw LinkError(message) }
                             throw LinkError("The Hub sent an unexpected answer.")
                         }
@@ -380,17 +390,21 @@ public final class LinkSubscription: Sendable {
                         guard length <= LinkQUIC.answerLimit else { throw LinkError("The message is too large.") }
                         // Empty frames only keep the stream alive.
                         guard length > 0 else { continue }
-                        guard let payload = try await LinkQUIC.read(length, from: connection) else { break }
+                        guard let payload = try await LinkQUIC.read(length, from: connection, heard: { silence.heard() }) else { break }
                         continuation.yield(payload)
                     }
+                    // A stream cancelled for its silence reads as one the Hub ended.
+                    if silence.hasEnded { throw LinkError("The Hub stopped answering.", isUnreachable: true) }
                     firstWord.resolve(.failure(LinkError("The Hub ended the stream.")))
                     continuation.finish()
                 } catch {
+                    let error = silence.hasEnded ? LinkError("The Hub stopped answering.", isUnreachable: true) : error
                     firstWord.resolve(.failure(error))
                     continuation.finish(throwing: error)
                 }
             }
             continuation.onTermination = { _ in
+                silence.stop()
                 reader.cancel()
                 connection.cancel()
             }
@@ -409,6 +423,41 @@ public final class LinkSubscription: Sendable {
     }
 
     public func cancel() { connection.cancel() }
+}
+
+/// Ends a stream nothing has arrived on for `limit`, and the connection it is on for anything
+/// that would open next, so the next try connects afresh and races every address again.
+final class LinkSilence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lastHeard = ContinuousClock.now
+    private var ended = false
+    private let timer = DispatchSource.makeTimerSource(queue: LinkQUIC.queue)
+
+    init(limit: Duration, connection: NWConnection) {
+        let check = min(limit / 4, .seconds(1))
+        let interval = Double(check.components.seconds) + Double(check.components.attoseconds) / 1e18
+        timer.schedule(deadline: .now() + interval, repeating: interval)
+        timer.setEventHandler { [weak self] in
+            guard let self, lock.withLock({ () -> Bool in
+                guard !self.ended, ContinuousClock.now - self.lastHeard > limit else { return false }
+                self.ended = true
+                return true
+            }) else { return }
+            timer.cancel()
+            LinkSessions.abandon(connection)
+            connection.cancel()
+        }
+        timer.resume()
+    }
+
+    deinit { timer.cancel() }
+
+    /// Whether this ended the stream.
+    var hasEnded: Bool { lock.withLock { ended } }
+
+    func heard() { lock.withLock { lastHeard = .now } }
+
+    func stop() { timer.cancel() }
 }
 
 /// The outcome of a subscription's first read, kept for whoever waits on it.
@@ -484,9 +533,10 @@ public enum LinkClient {
         return channel
     }
 
-    /// Opens a stream the Hub keeps pushing frames down.
+    /// Opens a stream the Hub keeps pushing frames down. It fails once the Hub says nothing for `silenceLimit`.
     public static func subscribe(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
-                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> LinkSubscription {
+                                 endpoints: [LinkEndpoint], timeout: Duration = .seconds(10),
+                                 silenceLimit: Duration = LinkSubscription.silenceLimit) async throws -> LinkSubscription {
         try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await LinkSessions.stream(identity: identity, hubKey: hubKey, endpoints: endpoints, timeout: timeout)
@@ -496,17 +546,45 @@ public enum LinkClient {
             connection.cancel()
             throw error
         }
-        return LinkSubscription(connection: connection, endpoint: endpoint)
+        return LinkSubscription(connection: connection, endpoint: endpoint, silenceLimit: silenceLimit)
     }
 
+    /// How long a request waits for the Hub to answer, or for the next piece of a long answer.
+    /// The Hub answers most at once; this only ends a wait on a connection that is gone.
+    public static let answerWait: Duration = .seconds(120)
+
     public static func exchange(_ request: Data, identity: LinkIdentity, hubKey: LinkPublicKey,
-                                endpoints: [LinkEndpoint], timeout: Duration = .seconds(10)) async throws -> (response: Data, endpoint: LinkEndpoint) {
+                                endpoints: [LinkEndpoint], timeout: Duration = .seconds(10),
+                                answerWait: Duration = LinkClient.answerWait) async throws -> (response: Data, endpoint: LinkEndpoint) {
         try checkSize(request)
         guard !endpoints.isEmpty else { throw LinkError("The Hub has no addresses to try.", isUnreachable: true) }
         let (connection, endpoint) = try await LinkSessions.stream(identity: identity, hubKey: hubKey, endpoints: endpoints, timeout: timeout)
         defer { connection.cancel() }
-        try await LinkQUIC.send(request, on: connection)
-        return (try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit), endpoint)
+        let silence = LinkSilence(limit: answerWait, connection: connection)
+        defer { silence.stop() }
+        do {
+            // Cancelling ends the stream, which is what ends a wait on the network.
+            return try await withTaskCancellationHandler {
+                try await LinkQUIC.send(request, on: connection)
+                let answer = try await LinkQUIC.receive(connection, limit: LinkQUIC.answerLimit, heard: { silence.heard() })
+                // A stream cancelled for its silence reads as one the Hub finished.
+                try Task.checkCancellation()
+                if silence.hasEnded { throw LinkError("The Hub did not answer in time.", isUnreachable: true) }
+                return (answer, endpoint)
+            } onCancel: {
+                connection.cancel()
+            }
+        } catch {
+            try Task.checkCancellation()
+            if silence.hasEnded { throw LinkError("The Hub did not answer in time.", isUnreachable: true) }
+            throw error
+        }
+    }
+
+    /// Opens no more on the connection kept to the Hub, so the next request connects afresh and
+    /// races every address again, as after the network changed. Streams open on it go on.
+    public static func dropConnection(identity: LinkIdentity, hubKey: LinkPublicKey) {
+        LinkSessions.drop(device: identity.publicKey, hub: hubKey)
     }
 
     /// Left to itself, Network.framework can reuse a local port from an earlier connection with
@@ -824,6 +902,23 @@ enum LinkSessions {
 
     static func heard(on stream: NWConnection) {
         lock.withLock { streams[ObjectIdentifier(stream)] }?.heard()
+    }
+
+    /// Forgets the connection to `hub`; it closes after the last stream open on it.
+    static func drop(device: LinkPublicKey, hub: LinkPublicKey) {
+        let key = Key(device: device, hub: hub)
+        replace(lock.withLock { sessions[key] }, for: key, with: nil)
+    }
+
+    /// Forgets the connection `stream` is on, which went quiet.
+    static func abandon(_ stream: NWConnection) {
+        let found = lock.withLock { () -> (Key, LinkSession)? in
+            guard let session = streams[ObjectIdentifier(stream)] else { return nil }
+            return sessions.first { $0.value === session }.map { ($0.key, session) }
+        }
+        guard let (key, session) = found else { return }
+        session.end()
+        replace(session, for: key, with: nil)
     }
 
     static func track(_ stream: NWConnection, in session: LinkSession) {
