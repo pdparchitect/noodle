@@ -1,5 +1,6 @@
+import Foundation
 import XCTest
-@testable import NoodleCore
+import NoodlePatch
 
 final class PatchTests: XCTestCase {
     func testReadsAFormatPatchSeries() throws {
@@ -203,19 +204,30 @@ final class PatchTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("patch-reviews.json")
         let conversation = UUID(), other = UUID()
-        func attachment(in conversation: UUID) -> ConversationAttachment {
-            ConversationAttachment(conversationID: conversation, originalFilename: "change.patch", storedFilename: "x.patch",
-                                   mediaType: "text/x-patch", byteCount: 1)
-        }
-        let first = attachment(in: conversation), second = attachment(in: conversation), elsewhere = attachment(in: other)
+        let first = UUID(), second = UUID(), elsewhere = UUID()
         let store = PatchReviewStore(fileURL: url)
-        try store.save(["a.swift", "b.swift"], for: first)
-        try store.save(["c.swift"], for: elsewhere)
-        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(first), ["a.swift", "b.swift"])
-        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(second), [])
+        try store.save(["a.swift", "b.swift"], attachment: first, in: conversation)
+        try store.save(["c.swift"], attachment: elsewhere, in: other)
+        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(attachment: first, in: conversation), ["a.swift", "b.swift"])
+        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(attachment: second, in: conversation), [])
         try store.retainConversations([conversation])
-        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(elsewhere), [])
-        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(first), ["a.swift", "b.swift"])
+        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(attachment: elsewhere, in: other), [])
+        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(attachment: first, in: conversation), ["a.swift", "b.swift"])
+        try store.save([], attachment: first, in: conversation)
+        XCTAssertEqual(PatchReviewStore(fileURL: url).viewed(attachment: first, in: conversation), [])
+    }
+
+    func testCardsAndReviewsSumAPatchUp() throws {
+        let patch = try XCTUnwrap(Patch(series))
+        XCTAssertEqual(patch.headline(filename: "smooth.patch"), "a1c9e04…9e40c3a · Wren")
+        XCTAssertEqual(patch.summary, "\(patch.fileCount) files · +\(patch.added) −\(patch.removed) · 3 commits · by Wren")
+        let largest = patch.largestFiles(2).map { $0.added + $0.removed }
+        XCTAssertEqual(largest.count, 2)
+        XCTAssertEqual(largest.first, patch.files.map { $0.added + $0.removed }.max())
+
+        let diff = try XCTUnwrap(Patch("--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-# Old\n+# New\n"))
+        XCTAssertEqual(diff.headline(filename: "readme.diff"), "readme.diff")
+        XCTAssertEqual(diff.summary, "1 file · +1 −1")
     }
 }
 

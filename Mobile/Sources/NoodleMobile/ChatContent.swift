@@ -2,6 +2,7 @@ import CryptoKit
 import HubLink
 import ImageIO
 @preconcurrency import LinkPresentation
+import NoodlePatch
 import NoodletRuntime
 import PhotosUI
 import QuickLook
@@ -17,7 +18,7 @@ extension EnvironmentValues {
 }
 
 /// One file in a message: a picture shown inline, anything else as a card. Tapping opens Quick Look,
-/// which swipes through the other files of the same message.
+/// which swipes through the other files of the same message, or a patch's review.
 struct AttachmentView: View {
     let chats: HubChats
     let thread: HubThread
@@ -36,7 +37,10 @@ struct AttachmentView: View {
     @State private var gallery: [URL] = []
     /// A live link with the card the Hub resolved for it, as a noodlet's name and picture.
     @State private var liveCard: LinkCardInfo?
+    /// The file read as a patch, once it is on the phone and reads as one.
+    @State private var patch: Patch?
     @Environment(\.watchLive) private var watchLive
+    @Environment(\.reviewPatch) private var reviewPatch
 
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
 
@@ -55,7 +59,7 @@ struct AttachmentView: View {
 
     private var file: some View {
         Button(action: open) {
-            if isImage { picture } else { card }
+            if isImage { picture } else if let patch { PatchCard(patch: patch, filename: attachment.filename) } else { card }
         }
         .buttonStyle(.plain)
         .disabled(url == nil && image == nil)
@@ -211,6 +215,10 @@ struct AttachmentView: View {
                 opening = false
             }
             guard let url else { return }
+            if let patch, let reviewPatch {
+                reviewPatch(PatchReviewRequest(attachment: attachment, patch: patch, file: url))
+                return
+            }
             gallery = LinkAttachment.previewGallery(opening: attachment, among: group).compactMap {
                 $0.id == attachment.id ? url : chats.downloadedFile(for: $0)
             }
@@ -233,17 +241,26 @@ struct AttachmentView: View {
         do {
             if let file = chats.downloadedFile(for: attachment) {
                 url = file
+                if await readPatch(file) { return }
                 image = await shown(file, isPreview: false)
             } else if attachment.hasHubPreview, let preview = try await chats.preview(of: attachment, in: thread) {
                 image = await shown(preview, isPreview: true)
             } else {
                 let file = try await chats.file(for: attachment, in: thread)
                 url = file
+                if await readPatch(file) { return }
                 image = await shown(file, isPreview: false)
             }
         } catch {
             failed = true
         }
+    }
+
+    /// A patch shows what it changes on its card instead of a thumbnail; true when the file reads as one.
+    private func readPatch(_ file: URL) async -> Bool {
+        guard attachment.isPatchFile else { return false }
+        patch = await PatchCache.patch(at: file)
+        return patch != nil
     }
 
     private func shown(_ file: URL, isPreview: Bool) async -> UIImage? {

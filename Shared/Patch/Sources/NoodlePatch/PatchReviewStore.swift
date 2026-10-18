@@ -1,7 +1,7 @@
 import Foundation
 
 /// The files of each patch attachment the person has ticked off as viewed. Only theirs, on this
-/// Mac: kept with the repository beside the reading positions, and never sent to a bot.
+/// device, and never sent to a bot.
 public final class PatchReviewStore {
     private let fileURL: URL
     /// Paths, by attachment, by conversation.
@@ -17,14 +17,14 @@ public final class PatchReviewStore {
         }
     }
 
-    public func viewed(_ attachment: ConversationAttachment) -> Set<String> {
-        viewed[attachment.conversationID]?[attachment.id] ?? []
+    public func viewed(attachment: UUID, in conversation: UUID) -> Set<String> {
+        viewed[conversation]?[attachment] ?? []
     }
 
-    public func save(_ paths: Set<String>, for attachment: ConversationAttachment) throws {
+    public func save(_ paths: Set<String>, attachment: UUID, in conversation: UUID) throws {
         var updated = viewed
-        updated[attachment.conversationID, default: [:]][attachment.id] = paths.isEmpty ? nil : paths
-        if updated[attachment.conversationID]?.isEmpty == true { updated[attachment.conversationID] = nil }
+        updated[conversation, default: [:]][attachment] = paths.isEmpty ? nil : paths
+        if updated[conversation]?.isEmpty == true { updated[conversation] = nil }
         try persist(updated)
     }
 

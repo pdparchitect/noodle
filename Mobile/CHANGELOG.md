@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- A .patch or .diff file in a conversation shows its commits and the files that changed most on its card, as on the Mac. Tap it to read the patch: a walkthrough of its commits, its files by folder with a filter, and each file's changes with line numbers. Tick files off as Viewed; this phone remembers them.
+
+### What to Test
+
+- Ask a bot to send a patch of a change made with `git format-patch`: check its card shows the commits, the files that changed most with the lines added and removed, and the totals.
+- Tap the card: check the walkthrough lists each commit with its message and the files are grouped by folder. Tap a file: check its changes show with line numbers, added lines in green and removed ones in red, and long lines wrap.
+- Tick some files as Viewed with their circle or by swiping, then close the review and open it again, also after quitting the app: check they are still ticked, and the eye button hides them.
+- Type part of a file's name in the search field: check only matching files show.
+- Send a .diff file that is not a patch, such as plain text: check it opens in Quick Look as before.
+
 ## [0.37.0] - 2026-10-17
 
 ### Added

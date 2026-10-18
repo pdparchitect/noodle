@@ -1,5 +1,6 @@
 import HubLink
 import NoodleBrand
+import NoodlePatch
 import NoodletRuntime
 import NoodleWallpaperCore
 import PhotosUI
@@ -117,6 +118,8 @@ enum HubThread: HubConversation {
     @ObservationIgnored private(set) lazy var calls = PhoneCalls(open: { [pairing] start in
         try await pairing.channel(.startCall(start))
     })
+    /// Which files of each patch the person has viewed, kept on this phone only.
+    @ObservationIgnored private lazy var patchReviews = PatchReviewStore(fileURL: pairing.directory.appendingPathComponent("patch-reviews.json"))
 
     /// Whether the live stream from the Hub is open.
     private(set) var isConnected = false
@@ -867,6 +870,7 @@ enum HubThread: HubConversation {
         if !gone.isEmpty { Task { await ConversationSuggestions.forget(gone) } }
         conversations = conversations.filter { kept.contains($0.key) }
         linkPreviews.keep(only: kept)
+        try? patchReviews.retainConversations(kept)
     }
 
     /// Your messages the Hub has not confirmed, kept on this phone with their files to send again.
@@ -1081,6 +1085,14 @@ enum HubThread: HubConversation {
 
     private func previewURL(for attachment: LinkAttachment) -> URL {
         filesFolder.appendingPathComponent(attachment.id.uuidString, isDirectory: true).appendingPathComponent(".preview")
+    }
+
+    func viewedPatchFiles(_ attachment: LinkAttachment, in conversation: some HubConversation) -> Set<String> {
+        patchReviews.viewed(attachment: attachment.id, in: conversation.conversationID)
+    }
+
+    func saveViewedPatchFiles(_ paths: Set<String>, for attachment: LinkAttachment, in conversation: some HubConversation) {
+        try? patchReviews.save(paths, attachment: attachment.id, in: conversation.conversationID)
     }
 
     /// The file on this phone if it is already downloaded.
@@ -1866,6 +1878,8 @@ struct ChatView: View {
     @State private var watching: LinkAttachment?
     /// Where the person asked to open the noodlet they are watching, from its card's menu.
     @State private var watchingAt: NoodletManifest.Placement?
+    /// The patch open for review, held here for the same reason.
+    @State private var reviewing: PatchReviewRequest?
     /// The message lifted by a long press, with its reactions and actions.
     @State private var focused: MessageFocus?
     /// Whether the panel of things to attach is open over the conversation.
@@ -2053,6 +2067,12 @@ struct ChatView: View {
             attach { try result.get().map { try PickedFiles.copy($0) } }
         }
         .environment(\.watchLive) { watchingAt = $1; watching = $0 }
+        .environment(\.reviewPatch) { reviewing = $0 }
+        .sheet(item: $reviewing) { request in
+            PatchReviewScreen(request: request, viewed: chats.viewedPatchFiles(request.attachment, in: thread)) {
+                chats.saveViewedPatchFiles($0, for: request.attachment, in: thread)
+            }
+        }
         .environment(\.openURL, OpenURLAction { url in
             guard let link = WebLinkPreview.previewed(url, enabled: previewsLinks) else { return .systemAction }
             previewing = PreviewedLink(url: link)

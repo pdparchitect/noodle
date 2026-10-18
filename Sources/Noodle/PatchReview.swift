@@ -10,43 +10,6 @@ extension ConversationAttachment {
     }
 }
 
-/// Patches read from attachments. An attachment's file never changes, so each is read once while
-/// there is memory to keep it, and one that does not read as a patch is remembered as such.
-@MainActor enum PatchCache {
-    private final class Entry {
-        let patch: Patch?
-        init(_ patch: Patch?) { self.patch = patch }
-    }
-
-    private static let entries: NSCache<NSURL, Entry> = {
-        let cache = NSCache<NSURL, Entry>()
-        cache.totalCostLimit = 256 << 20
-        return cache
-    }()
-
-    /// Read away from the main thread, for a card.
-    static func patch(at url: URL) async -> Patch? {
-        if let entry = entries.object(forKey: url as NSURL) { return entry.patch }
-        let patch = await Task.detached(priority: .utility) { Patch(contentsOf: url) }.value
-        remember(patch, for: url)
-        return patch
-    }
-
-    /// Read now, for an attachment someone is opening; its card has usually read it already.
-    static func patchNow(at url: URL) -> Patch? {
-        if let entry = entries.object(forKey: url as NSURL) { return entry.patch }
-        let patch = Patch(contentsOf: url)
-        remember(patch, for: url)
-        return patch
-    }
-
-    private static func remember(_ patch: Patch?, for url: URL) {
-        // Read into lines and hunks, a patch takes a few times its size.
-        let size = patch == nil ? 0 : (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        entries.setObject(Entry(patch), forKey: url as NSURL, cost: size * 4)
-    }
-}
-
 // MARK: - Card
 
 /// The picture on a patch's card: its commits and who made them, and the files that changed most.
@@ -56,11 +19,11 @@ struct PatchCardPicture: View {
     static let shown = 6
 
     var body: some View {
-        let files = patch.files.sorted { $0.added + $0.removed > $1.added + $1.removed }.prefix(Self.shown)
+        let files = patch.largestFiles(Self.shown)
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 9, weight: .semibold))
-                Text(headline).font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                Text(patch.headline(filename: filename)).font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
                 if patch.commits.count > 1 {
@@ -82,16 +45,6 @@ struct PatchCardPicture: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    /// The commit, or the first and last of a series, and whose; a plain diff by the name of its file.
-    private var headline: String {
-        let author = patch.author.map { " · \($0)" } ?? ""
-        switch patch.commits.count {
-        case 0: return filename
-        case 1: return (patch.commits[0].shortSHA ?? "") + author
-        default: return (patch.commits.first?.shortSHA ?? "") + "…" + (patch.commits.last?.shortSHA ?? "") + author
-        }
     }
 }
 
@@ -343,20 +296,11 @@ struct PatchReviewView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(summary).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+            Text(model.patch.summary).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
             if !model.patch.commits.isEmpty { walkthrough.padding(.top, 6) }
         }
         .padding(.horizontal, 18).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var summary: String {
-        let patch = model.patch
-        var parts = ["\(patch.fileCount) \(patch.fileCount == 1 ? "file" : "files")", "+\(patch.added) −\(patch.removed)"]
-        if !patch.commits.isEmpty { parts.append("\(patch.commits.count) \(patch.commits.count == 1 ? "commit" : "commits")") }
-        if let author = patch.author { parts.append("by \(author)") }
-        if patch.omittedFiles > 0 { parts.append("\(patch.omittedFiles) not listed") }
-        return parts.joined(separator: " · ")
     }
 
     private var walkthrough: some View {

@@ -8,7 +8,7 @@ let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
 let project = Project(
     name: "NoodleMobile",
     packages: [.local(path: "../Shared/HubLink"), .local(path: "../Shared/Wallpaper"), .local(path: "../Shared/Brand"),
-               .local(path: "../Applet/Protocol")],
+               .local(path: "../Shared/Patch"), .local(path: "../Applet/Protocol")],
     settings: .settings(
         base: [
             "DEVELOPMENT_TEAM": "S8VNVK39LH",
@@ -64,7 +64,7 @@ let project = Project(
             resources: ["Support/Assets.xcassets", .folderReference(path: "../Support/VoicePreviews")],
             entitlements: .file(path: "Support/NoodleMobile.entitlements"),
             dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore"), .package(product: "NoodleBrand"),
-                           .package(product: "NoodletRuntime"),
+                           .package(product: "NoodletRuntime"), .package(product: "NoodlePatch"),
                            .target(name: "NoodleMobileNotifications"), .target(name: "NoodleMobileShare"),
                            .target(name: "NoodleMobileWidgets")],
             settings: .settings(base: [
