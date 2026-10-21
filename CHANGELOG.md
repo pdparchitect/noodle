@@ -11,6 +11,7 @@ All notable changes to Noodle are documented here, following
 - Bots on this Mac whose harness takes voice calls (Codex) can call you when something needs you now. The call rings in a panel in the top right corner with the bot's reason, and Answer starts the call in its conversation. It rings as a time-sensitive notification, so Focus and Do Not Disturb decide whether you hear it, and it does not ring while you are on a call. A call you decline or miss leaves a card in the conversation, and the bot is told so it can write instead. A bot can call at most once every 30 minutes and three times a day.
 - Calls from your bots on a Noodle Hub ring on this Mac too, in the same panel, and stop when you answer or decline on another device. A call you miss there shows as a missed call in its conversation here. Needs the Hub updated.
 - Bots with a computer have a `terminals` tool that lists their own open terminals there, with when each was opened and last used and whether a command is running, so they can find and close ones they lost track of. Their Computer skill tells them to close terminals they no longer need. An older Noodle Computer answers "Update Noodle Computer to list your terminals."
+- Bots can read mailboxes kept in Noodle Mail: assign them in Edit Bot → Mail, and the bot lists, searches and reads mail and saves attachments through `messenger tool mail`. Mailbox passwords stay in Noodle Mail's Keychain, and bots can't send mail.
 
 ## [0.70.0] - 2026-10-20
 

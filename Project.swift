@@ -130,6 +130,7 @@ let project = Project(
         .local(path: "Shared/Brand"),
         .local(path: "Computer/Bridge"),
         .local(path: "Browser/BrowserProtocol"),
+        .local(path: "Mail/MailProtocol"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
     settings: .settings(
@@ -187,6 +188,7 @@ let project = Project(
             scripts: [extractExtensionPoint, embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "BrowserBridge"),
+                .package(product: "MailBridge"),
                 .package(product: "NoodleCore"),
                 .package(product: "NoodleAppletTools"),
                 .package(product: "NoodleBrowserTools"),
@@ -218,6 +220,7 @@ let project = Project(
                 .target(name: "NoodleMapsToolsExtension"),
                 .target(name: "NoodleBrowserToolsExtension"),
                 .target(name: "NoodleComputerToolsExtension"),
+                .target(name: "NoodleMailToolsExtension"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
             ],
@@ -305,6 +308,7 @@ let project = Project(
         toolExtension("Maps"),
         toolExtension("Browser"),
         toolExtension("Computer"),
+        toolExtension("Mail"),
         helper("messenger", sources: ["Sources/NoodleMessenger/**"],
                dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleToolScripting")]),
         // Its Info.plist is linked in as the root package does: an Info.plist Xcode builds itself would

@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Builds an app's development identity and opens it: Noodle by default, or Computer, Applet, Browser or
-# Hub. Development only; launchers never accept production-data overrides, including inherited ones.
+# Builds an app's development identity and opens it: Noodle by default, or Computer, Applet, Browser, Hub
+# or Mail. Development only; launchers never accept production-data overrides, including inherited ones.
 # Computer Dev is installed first, where its Local Mac accounts can read it.
 # --rehearse opens Noodle Dev as on a Mac with no bots and no harnesses, to try first-run setup with
 # real downloads and sign-ins. Those stay in its own folder, emptied each time; your data is kept.
@@ -12,11 +12,11 @@ if [[ "${1:-}" == --rehearse ]]; then rehearse=true; shift; fi
 app_name="${1:-Noodle}"
 case "$app_name" in
     Noodle) container_setting=NOODLE_DATA_CONTAINER; bundle=com.pdparchitect.noodle.local ;;
-    Computer|Applet|Browser|Hub) container_setting="NOODLE_${(U)app_name}_DATA_CONTAINER"; bundle="com.pdparchitect.noodle.${(L)app_name}.local" ;;
+    Computer|Applet|Browser|Hub|Mail) container_setting="NOODLE_${(U)app_name}_DATA_CONTAINER"; bundle="com.pdparchitect.noodle.${(L)app_name}.local" ;;
     *) container_setting= ;;
 esac
 [[ -n "$container_setting" && $# -le 1 && ( "$rehearse" == false || "$app_name" == Noodle ) ]] || {
-    print -u2 'Usage: scripts/build-and-launch.sh [--rehearse | Computer|Applet|Browser|Hub] (isolated development only)'; exit 1
+    print -u2 'Usage: scripts/build-and-launch.sh [--rehearse | Computer|Applet|Browser|Hub|Mail] (isolated development only)'; exit 1
 }
 # A copy already running would only come forward, still showing your own bots.
 if [[ "$rehearse" == true ]] && pgrep -qf 'Noodle Dev.app/Contents/MacOS/'; then
