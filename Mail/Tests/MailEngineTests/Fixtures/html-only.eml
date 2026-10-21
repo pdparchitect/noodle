@@ -1,0 +1,9 @@
+From: Shop <shop@example.com>
+To: borek@mail.example.org
+Subject: Objednávka
+Date: Wed, 30 Sep 2026 08:00:00 +0000
+Message-ID: <html@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Objednávka&nbsp;č.&nbsp;1023 je na cestě.</p></body></html>
