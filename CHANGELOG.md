@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - More Shortcuts actions: Open Chat opens your chat with a bot or group, and Call Agent calls a bot, opening your chat with it instead when it can't take calls. Send to Agent can send files, with or without a message, copied into the conversation as dropped files are, and can open the chat after sending.
 
+### Fixed
+
+- A video background fills the whole window whatever its shape, cropping the sides or top and bottom instead of leaving bars, and stays filled while you resize the window.
+
 ## [0.74.1] - 2026-10-23
 
 ### Fixed
