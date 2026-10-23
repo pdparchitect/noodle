@@ -16,10 +16,10 @@ signed identities to name the bot a request is for, so its provider runs inside 
 and reaches Applet through `AppletController`. Noodle grants it to every bot while
 Applet is installed.
 
-`Tools/Browser` and `Tools/Computer` are the bot-facing tools. The apps they
-drive live in `/Browser` and `/Computer` and are separate products with their
-own versions and changelogs. A change here ships with Noodle and goes in the
-root `CHANGELOG.md`.
+`Tools/Browser`, `Tools/Computer` and `Tools/Mail` are the bot-facing tools. The
+apps they drive live in `/Browser`, `/Computer` and `/Mail` and are separate
+products with their own versions and changelogs. A change here ships with
+Noodle and goes in the root `CHANGELOG.md`.
 
 ## Layout
 
@@ -63,7 +63,7 @@ Bots reach every tool through `messenger tool PROVIDER TOOL`. There is no per-to
 - Before an action that cannot be undone, call `context.authorize`. It fails if the assignment was removed while the call was running.
 - Activation is `.always`, `.whenAssigned(KIND)` when the tool only makes sense with an assigned resource, or `.whenGranted(KIND, id:)` when the provider itself is what Noodle grants.
 - Everything a bot reads about a tool comes from the extension: `manifest.summary`, `manifest.instructions` and the tool descriptions. Do not add tool text to `MessengerDocumentation`, `WorkspaceRepository.swift` or `docs/`.
-- An extension gets the App Sandbox only. Browser and Computer also hold their companion's app group, and only that. `scripts/verify-tool-extensions.sh` pins this; a new entitlement needs a change there and a reason.
+- An extension gets the App Sandbox only. Browser, Computer and Mail also hold their companion's app group, and only that. `scripts/verify-tool-extensions.sh` pins this; a new entitlement needs a change there and a reason.
 - Bundled extensions only. Do not add loading of third-party extensions.
 - Extensions are background processes: keep `LSBackgroundOnly` in `Info.plist`.
 

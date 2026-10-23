@@ -1,4 +1,5 @@
 import Foundation
+import MailBridge
 import NoodleCore
 import XCTest
 @testable import Noodle
@@ -10,16 +11,28 @@ import XCTest
         let f = try StoreFixture(); addTeardownBlock { @MainActor in f.cleanUp() }; return f
     }
     private func create(_ f: StoreFixture, name: String = "New bot", harness: String = HarnessProvider.codex.rawValue,
-                        mcp: Set<UUID> = [], computers: Set<UUID> = []) -> Bool {
+                        mcp: Set<UUID> = [], computers: Set<UUID> = [], mailboxes: Set<UUID> = []) -> Bool {
         f.store.createAgent(named: name, harnessIdentifier: harness, modelIdentifier: "fixture-model", reasoningEffort: "high",
             avatarSymbolName: "sparkles", avatarColorIndex: 2, avatarImageData: nil,
-            publicDescription: "  Research assistant  ", backstory: "  Remember the project.  ", mcpConnectionIDs: mcp, computerIDs: computers)
+            publicDescription: "  Research assistant  ", backstory: "  Remember the project.  ", mcpConnectionIDs: mcp, computerIDs: computers,
+            mailboxIDs: mailboxes)
     }
     private func update(_ f: StoreFixture, name: String = "Renamed bot", harness: HarnessProvider = .codex,
-                        backstory: String = "Updated backstory", mcp: Set<UUID>? = nil, computers: Set<UUID>? = nil) -> Bool {
+                        backstory: String = "Updated backstory", mcp: Set<UUID>? = nil, computers: Set<UUID>? = nil,
+                        mailboxes: Set<UUID>? = nil) -> Bool {
         f.store.updateAgent(f.a, name: name, harnessIdentifier: harness.rawValue, modelIdentifier: "new-model", reasoningEffort: "high",
             avatarSymbolName: "sparkles", avatarColorIndex: 3, avatarImageData: nil,
-            publicDescription: "Updated public description", backstory: backstory, mcpConnectionIDs: mcp, computerIDs: computers)
+            publicDescription: "Updated public description", backstory: backstory, mcpConnectionIDs: mcp, computerIDs: computers,
+            mailboxIDs: mailboxes)
+    }
+    /// Lists one mailbox in mail.json, as Noodle Mail's list would, without starting Noodle Mail.
+    private func knownMailbox(_ f: StoreFixture) throws -> UUID {
+        let id = UUID()
+        var mail = MailAssignments()
+        mail.mailboxes = [RemoteMailbox(id: id, name: "Fixture mailbox", address: "fixture@example.com")]
+        try mail.save(root: f.repository.rootURL)
+        try f.store.mail.reloadAssignments()
+        return id
     }
     private func makeReadOnly(_ directory: URL) throws {
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
@@ -257,6 +270,68 @@ import XCTest
         XCTAssertTrue(f.store.errorMessage?.contains("repair") == true)
     }
 
+    /// A saved mailbox reaches the assignments the tool broker enforces, under kind "mailbox".
+    func testSavedMailboxIsPublishedToTheToolBrokerAsMailboxKind() throws {
+        let f = try fixture(), mailbox = try knownMailbox(f)
+        XCTAssertTrue(update(f, mailboxes: [mailbox]), f.store.errorMessage ?? "")
+        // The store keeps the broker's assignments private; read the very object the broker consults.
+        let published = try XCTUnwrap(Mirror(reflecting: f.store).descendant("toolAssignments") as? ToolAssignmentStore)
+        XCTAssertEqual(published.assignments(for: f.a.id).ids("mailbox"), [mailbox.uuidString])
+    }
+
+    /// An unknown mailbox fails the save before anything is written, so nothing needs rolling back.
+    func testUnknownMailboxFailsBeforeAnySettingIsSaved() throws {
+        let f = try fixture()
+        _ = try knownMailbox(f)
+        let configuration = f.repository.storage(for: f.a.id).configuration
+        let mailURL = f.repository.rootURL.appendingPathComponent("mail.json")
+        let config = try Data(contentsOf: configuration), mail = try Data(contentsOf: mailURL)
+        let backstory = try f.repository.loadAgentBackstory(f.a)
+        let file = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: configuration.path)[.systemFileNumber] as? Int)
+        XCTAssertFalse(update(f, name: "Renamed bot", mailboxes: [UUID()]))
+        XCTAssertNotNil(f.store.errorMessage)
+        XCTAssertEqual(try Data(contentsOf: configuration), config)
+        XCTAssertEqual(try f.repository.loadAgentBackstory(f.a), backstory)
+        XCTAssertEqual(try Data(contentsOf: mailURL), mail)
+        // A rollback would restore the same bytes; only an untouched file proves nothing was written.
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: configuration.path)[.systemFileNumber] as? Int, file)
+    }
+
+    /// A save that fails late puts mail.json back and reloads it, so the bot keeps its mailbox.
+    func testLateWorkspaceFailureReloadsMailAssignments() throws {
+        let f = try fixture(), mailbox = try knownMailbox(f)
+        try f.store.mail.assign([mailbox], to: f.a)
+        let mailURL = f.repository.rootURL.appendingPathComponent("mail.json")
+        let before = try Data(contentsOf: mailURL)
+        let instructions = f.repository.directory(for: f.a).appendingPathComponent(".agents/skills/messenger/SKILL.md")
+        try FileManager.default.removeItem(at: instructions)
+        try FileManager.default.createDirectory(at: instructions, withIntermediateDirectories: false)
+        XCTAssertFalse(update(f, mailboxes: []))
+        XCTAssertEqual(try Data(contentsOf: mailURL), before)
+        XCTAssertEqual(f.store.mail.selectedIDs(for: f.a), [mailbox])
+    }
+
+    /// A mailbox the bot already has stays with it when Noodle Mail no longer lists it; only an added one must be listed.
+    func testUnlistedMailboxesTheBotAlreadyHasDoNotBlockSaving() throws {
+        let f = try fixture()
+        let gone = UUID()
+        var mail = MailAssignments(); mail.agents[f.a.id.uuidString] = [gone]
+        try mail.save(root: f.repository.rootURL); try f.store.mail.reloadAssignments()
+        func save(effort: String, mailboxes: Set<UUID>) -> Bool {
+            f.store.updateAgent(f.a, name: f.a.displayName, harnessIdentifier: HarnessProvider.codex.rawValue, modelIdentifier: nil,
+                reasoningEffort: effort, avatarSymbolName: nil, avatarColorIndex: 0, avatarImageData: nil,
+                publicDescription: "", backstory: "Backstory", mailboxIDs: mailboxes)
+        }
+        XCTAssertTrue(save(effort: "low", mailboxes: f.store.mail.selectedIDs(for: f.a)), f.store.errorMessage ?? "")
+        XCTAssertEqual(try f.repository.loadAgents().first { $0.id == f.a.id }?.reasoningEffort, "low")
+        XCTAssertEqual(f.store.mail.selectedIDs(for: f.a), [gone])
+
+        XCTAssertFalse(save(effort: "high", mailboxes: [gone, UUID()]))
+        XCTAssertNotNil(f.store.errorMessage)
+        XCTAssertEqual(try f.repository.loadAgents().first { $0.id == f.a.id }?.reasoningEffort, "low")
+        XCTAssertEqual(f.store.mail.selectedIDs(for: f.a), [gone])
+    }
+
     func testFailedAssignmentDuringCreationRemovesNewBotAndAllowsRetry() throws {
         let f = try fixture()
         let account = try MCPConnectionRecord(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
@@ -273,6 +348,29 @@ import XCTest
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         XCTAssertTrue(create(f, mcp: [account.id]), f.store.errorMessage ?? "")
         XCTAssertEqual(try f.repository.loadAgents().count, before.count + 1)
+    }
+
+    /// New Bot assigns mailboxes as it does browsers: a creation that fails after the mailbox was assigned takes the new bot away
+    /// and puts mail.json back, and the retry gives the new bot its mailbox.
+    func testFailedCreationWithAMailboxRemovesNewBotAndAllowsRetry() throws {
+        let f = try fixture(), mailbox = try knownMailbox(f)
+        let before = try f.repository.loadAgents().map(\.id)
+        let mailURL = f.repository.rootURL.appendingPathComponent("mail.json")
+        let mail = try Data(contentsOf: mailURL)
+        // Image generation settings that could not be read refuse the last assignment, after the mailbox's. The file is gone
+        // again before the bot is created, so the rollback reads them afresh and the retry succeeds.
+        let images = f.repository.rootURL.appendingPathComponent(ImageGenerationSettings.file)
+        try Data("not json".utf8).write(to: images)
+        XCTAssertThrowsError(try f.store.imageGeneration.reloadAssignments())
+        try FileManager.default.removeItem(at: images)
+        XCTAssertFalse(create(f, mailboxes: [mailbox]))
+        XCTAssertEqual(try f.repository.loadAgents().map(\.id), before)
+        XCTAssertEqual(try Data(contentsOf: mailURL), mail)
+        XCTAssertTrue(f.store.mail.registry.agents.isEmpty)
+        XCTAssertTrue(f.runtime.factory.processes.isEmpty)
+        XCTAssertTrue(create(f, mailboxes: [mailbox]), f.store.errorMessage ?? "")
+        let created = try XCTUnwrap(f.store.agents.first { !before.contains($0.id) })
+        XCTAssertEqual(f.store.mail.selectedIDs(for: created), [mailbox])
     }
 
     func testFailedGroupUpdateDuringDeletionRestoresAllMovedDirectories() throws {

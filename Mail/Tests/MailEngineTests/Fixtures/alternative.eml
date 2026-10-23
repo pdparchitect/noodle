@@ -1,0 +1,17 @@
+From: Ada <ada@example.com>
+To: borek@mail.example.org
+Subject: Alternative
+Date: Wed, 30 Sep 2026 08:00:00 +0000
+Message-ID: <alt@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Dobrý den, text verze.
+--b1
+Content-Type: text/html; charset=utf-8
+
+<p>Dobrý den, <b>HTML</b> verze.</p>
+--b1--

@@ -326,6 +326,19 @@ jobs:
       - name: Test Browser
         run: swift test --disable-sandbox --package-path Browser --scratch-path .build/browser
 
+  test-mail:
+    needs: [versions]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test Mail
+        run: swift test --disable-sandbox --package-path Mail --scratch-path .build/mail
+      - name: Test the Mail protocol
+        run: swift test --disable-sandbox --package-path Mail/MailProtocol --scratch-path .build/mail-protocol
+
   test-hub:
     needs: [versions]
     if: contains(fromJSON(needs.versions.outputs.suites), 'hub')
@@ -370,7 +383,7 @@ jobs:
   # One check for main's ruleset to require: every test job passed or was skipped.
   ci-passed:
     name: CI passed
-    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile]
+    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-mail, test-hub, test-mobile]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -422,7 +435,7 @@ jobs:
     secrets: inherit
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-mail, test-hub, test-mobile, test-bridge, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -430,7 +443,7 @@ jobs:
       needs.workflow-lint.result == 'success' &&
       needs.checks.result == 'success' &&
       ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true' && needs.versions.outputs.hub != 'true') ||
-       (needs.test-noodle.result == 'success' && needs.test-shared.result == 'success' && needs.test-bridge.result == 'success')) &&
+       (needs.test-noodle.result == 'success' && needs.test-shared.result == 'success' && needs.test-bridge.result == 'success' && needs.test-mail.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet-rendering.result == 'success') &&

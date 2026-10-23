@@ -142,7 +142,7 @@ rmdir "$contents/XPCServices" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Noodle" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Noodle" "$plist"
-for key in CFBundleURLTypes NSServices NoodleSharedGroup NoodleBrowserGroup NoodleAppletGroup NoodleComputerGroup; do
+for key in CFBundleURLTypes NSServices NoodleSharedGroup NoodleBrowserGroup NoodleAppletGroup NoodleComputerGroup NoodleMailGroup; do
     /usr/libexec/PlistBuddy -c "Delete :$key" "$plist" >/dev/null 2>&1 || true
 done
 /usr/libexec/PlistBuddy -c "Add :NoodleScenariosRoot string $scenarios" "$plist"

@@ -11,10 +11,13 @@ import NoodleRuntimeSettings
 import NoodleWallpaper
 
 enum BotEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers"
+    case general = "General", runtime = "Harness", mcp = "Tools", computers = "Computers", browsers = "Browsers", mail = "Mail"
 }
 
-private struct BotEditorTabPicker: View {
+/// The bot sheets' width: every BotEditorTab side by side, plus the sheets' 20-point padding.
+enum BotSheetLayout { static let width: CGFloat = 580 }
+
+struct BotEditorTabPicker: View {
     @Binding var selection: BotEditorTab
     let harnessIdentifier: String
     /// What was chosen on this Mac means nothing on a Hub, and one Hub's means nothing on another.
@@ -64,6 +67,7 @@ struct NewBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var mailboxIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
     @State private var reminderListIDs: Set<String> = []
     @State private var builtInTools: Set<EventKitAssignments.Kind> = []
@@ -141,7 +145,7 @@ struct NewBotSheet: View {
                 NameValidationMessage(name: name)
 
                 BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier) {
-                    mcpConnectionIDs = []; computerIDs = []; browserIDs = []
+                    mcpConnectionIDs = []; computerIDs = []; browserIDs = []; mailboxIDs = []
                 }
                 switch selectedTab {
                 case .general:
@@ -184,6 +188,13 @@ struct NewBotSheet: View {
                     } else {
                         ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }
+                case .mail:
+                    if store.hubMirror(forHarness: selectedHarnessIdentifier) != nil {
+                        Text("Mailboxes aren’t available for bots on a Noodle Hub yet.")
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        MailAssignmentPicker(controller: store.mail, bot: name, selectedIDs: $mailboxIDs)
+                    }
                 }
                 if selectedTab != .runtime {
                     HarnessExperimentalWarning(provider: HarnessProvider(rawValue: selectedHarnessIdentifier))
@@ -191,7 +202,7 @@ struct NewBotSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520)
+        .frame(width: BotSheetLayout.width)
         .onAppear {
             if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle) }
             selectAvailableHarnessIfNeeded()
@@ -259,7 +270,8 @@ struct NewBotSheet: View {
             publicDescription: publicDescription,
             backstory: backstory,
             mcpConnectionIDs: mcpConnectionIDs,
-            computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, imageGeneration: imageGeneration, folders: folders,
+            computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, imageGeneration: imageGeneration,
+            mailboxIDs: mailboxIDs, folders: folders,
             harnessProfile: selectedProfileID,
             voice: selectedVoice.nilIfEmpty,
             background: backgroundDraft
@@ -312,6 +324,7 @@ struct EditBotSheet: View {
     @State private var mcpConnectionIDs: Set<UUID> = []
     @State private var computerIDs: Set<UUID> = []
     @State private var browserIDs: Set<UUID> = []
+    @State private var mailboxIDs: Set<UUID> = []
     @State private var calendarIDs: Set<String> = []
     @State private var reminderListIDs: Set<String> = []
     @State private var builtInTools: Set<EventKitAssignments.Kind> = []
@@ -445,11 +458,18 @@ struct EditBotSheet: View {
                     } else {
                         ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }
+                case .mail:
+                    if store.hubMirror(forHarness: selectedHarnessIdentifier) != nil {
+                        Text("Mailboxes aren’t available for bots on a Noodle Hub yet.")
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        MailAssignmentPicker(controller: store.mail, bot: name, selectedIDs: $mailboxIDs)
+                    }
                 }
             }
             .padding(20)
         }
-        .frame(width: 520)
+        .frame(width: BotSheetLayout.width)
         .followsNameForVoice($selectedVoice, chosen: $hasChosenVoice, name: name,
                              harnessIdentifier: selectedHarnessIdentifier, store: store)
         .onAppear {
@@ -458,6 +478,7 @@ struct EditBotSheet: View {
             mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
+            mailboxIDs = store.mail.selectedIDs(for: agent)
             calendarIDs = store.calendars.selectedIDs(for: agent)
             reminderListIDs = store.reminders.selectedIDs(for: agent)
             imageGeneration = store.imageGeneration.isAssigned(agent)
@@ -560,7 +581,7 @@ struct EditBotSheet: View {
                 publicDescription: publicDescription,
                 backstory: backstory,
                 mcpConnectionIDs: mcpConnectionIDs,
-                computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, imageGeneration: imageGeneration, folders: folders,
+                computerIDs: computerIDs, browserIDs: browserIDs, calendarIDs: calendarIDs, reminderListIDs: reminderListIDs, imageGeneration: imageGeneration, mailboxIDs: mailboxIDs, folders: folders,
                 harnessProfile: .some(selectedProfileID),
                 sharedWith: sharingHub == nil ? nil : sharedWith,
                 sharedOnHubs: localSharingHubs.isEmpty ? nil : sharedOnHubs,

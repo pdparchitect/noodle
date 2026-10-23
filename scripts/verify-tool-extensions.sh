@@ -32,6 +32,7 @@ for extension in "$extensions"/*.appex(N); do
     case "$identifier" in
         "$bundle_identifier.tools.browser") group_key=NoodleBrowserGroup ;;
         "$bundle_identifier.tools.computer") group_key=NoodleComputerGroup ;;
+        "$bundle_identifier.tools.mail") group_key=NoodleMailGroup ;;
         *) group_key='' ;;
     esac
     if [[ -n "$group_key" ]]; then

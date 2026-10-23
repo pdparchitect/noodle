@@ -64,6 +64,7 @@ let package = Package(
         .library(name: "NoodleImagesTools", targets: ["NoodleImagesTools"]),
         .library(name: "NoodleVisionTools", targets: ["NoodleVisionTools"]),
         .library(name: "NoodleMapsTools", targets: ["NoodleMapsTools"]),
+        .library(name: "NoodleMailTools", targets: ["NoodleMailTools"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
         .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
     ],
@@ -77,6 +78,7 @@ let package = Package(
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
         .package(path: "Browser/BrowserProtocol"),
+        .package(path: "Mail/MailProtocol"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
         // The macOS 27 Foundation Models adapter is not in an MLX release yet.
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", revision: "3e6ea1ede1596f05c1715d6b82567619276e98f0"),
@@ -100,7 +102,7 @@ let package = Package(
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
-        .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
+        .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "MailBridge", package: "MailProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks),
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
@@ -136,7 +138,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "MailBridge", package: "MailProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -160,7 +162,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol"), .product(name: "MailBridge", package: "MailProtocol")],
             swiftSettings: developmentHooks
         ),
         .testTarget(
@@ -195,6 +197,7 @@ package.targets += tool("Vision")
     + builtInTool("Images")
     + tool("Browser", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol")])
     + tool("Computer", dependencies: [.product(name: "ComputerBridge", package: "Bridge")])
+    + tool("Mail", dependencies: [.product(name: "MailBridge", package: "MailProtocol")])
 
 // Only the Apple harness and its tests, for CI's macOS 27 job; the app is tested separately.
 if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {

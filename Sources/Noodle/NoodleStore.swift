@@ -166,6 +166,7 @@ final class NoodleStore {
     let mcp: MCPController
     let computers: ComputerController
     let browsers: BrowserController
+    let mail: MailController
     let calendars: EventKitController
     let reminders: EventKitController
     let imageGeneration: ImageGenerationController
@@ -276,6 +277,11 @@ final class NoodleStore {
         browsers = BrowserController(repository: self.repository)
         browsers.onAssignmentsChange = { [toolAssignments, tools] assigned in
             toolAssignments.replace("browser", with: assigned)
+            tools.synchronizeSkills()
+        }
+        mail = MailController(repository: self.repository)
+        mail.onAssignmentsChange = { [toolAssignments, tools] assigned in
+            toolAssignments.replace("mailbox", with: assigned)
             tools.synchronizeSkills()
         }
         // Calendar and Reminders are the providers Noodle hosts itself: macOS grants this
@@ -797,6 +803,7 @@ final class NoodleStore {
                 mcp.start(agents: agents)
                 computers.start(agents: agents)
                 browsers.start(agents: agents)
+                mail.start(agents: agents)
                 applets.start(agents: agents)
             }
             conversations = try repository.loadConversations().filter(\.isShownHere)
@@ -1184,6 +1191,7 @@ final class NoodleStore {
         calendarIDs: Set<String> = [],
         reminderListIDs: Set<String> = [],
         imageGeneration: Bool = false,
+        mailboxIDs: Set<UUID> = [],
         folders: [AgentFolder] = [],
         harnessProfile: UUID? = nil,
         voice: String? = nil,
@@ -1212,6 +1220,7 @@ final class NoodleStore {
             try mcp.validateAssignment(mcpConnectionIDs)
             try computers.validate(computerIDs)
             try browsers.validate(browserIDs)
+            try mail.validate(mailboxIDs)
             try calendars.validate(calendarIDs)
             try reminders.validate(reminderListIDs)
             checkpoint = try AgentSettingsCheckpoint(repository: repository)
@@ -1232,6 +1241,7 @@ final class NoodleStore {
             try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
             try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
+            try mail.assign(mailboxIDs, to: result.agent, synchronizeWorkspace: false)
             try calendars.assign(calendarIDs, to: result.agent, synchronizeWorkspace: false)
             try reminders.assign(reminderListIDs, to: result.agent, synchronizeWorkspace: false)
             try self.imageGeneration.assign(imageGeneration, to: result.agent)
@@ -1240,7 +1250,7 @@ final class NoodleStore {
             var detail = error.localizedDescription
             do {
                 try checkpoint?.restore()
-                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments(); try mail.reloadAssignments()
                 if let created {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
@@ -1285,6 +1295,7 @@ final class NoodleStore {
         calendarIDs: Set<String>? = nil,
         reminderListIDs: Set<String>? = nil,
         imageGeneration: Bool? = nil,
+        mailboxIDs: Set<UUID>? = nil,
         folders: [AgentFolder]? = nil,
         harnessProfile: UUID?? = nil,
         sharedWith: Set<UUID>? = nil,
@@ -1338,6 +1349,7 @@ final class NoodleStore {
             if let browserIDs { try browsers.validate(browserIDs, for: agent) }
             if let calendarIDs { try calendars.validate(calendarIDs) }
             if let reminderListIDs { try reminders.validate(reminderListIDs) }
+            if let mailboxIDs { try mail.validate(mailboxIDs, for: agent) }
             previousBackstory = try repository.loadAgentBackstory(agent)
             checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: agent, conversations: conversations)
             updated = try repository.updateAgent(
@@ -1365,13 +1377,14 @@ final class NoodleStore {
             if let calendarIDs { try calendars.assign(calendarIDs, to: updated, synchronizeWorkspace: false) }
             if let reminderListIDs { try reminders.assign(reminderListIDs, to: updated, synchronizeWorkspace: false) }
             if let imageGeneration { try self.imageGeneration.assign(imageGeneration, to: updated) }
+            if let mailboxIDs { try mail.assign(mailboxIDs, to: updated, synchronizeWorkspace: false) }
             try repository.synchronizeAgentWorkspace(updated)
         } catch {
             var detail = error.localizedDescription
             if let checkpoint {
                 do {
                     try checkpoint.restore()
-                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments(); try mail.reloadAssignments()
                     // Generated skills derive from the restored settings. A damaged
                     // workspace may still need repair before it can be synchronized.
                     try repository.synchronizeAgentWorkspace(agent)
@@ -1404,6 +1417,7 @@ final class NoodleStore {
         guard connectsServices else { return }
         computers.start(agents: agents)
         browsers.start(agents: agents)
+        mail.start(agents: agents)
         applets.start(agents: agents)
         mcp.start(agents: agents)
         do { try messenger.start(agents: agents) }
