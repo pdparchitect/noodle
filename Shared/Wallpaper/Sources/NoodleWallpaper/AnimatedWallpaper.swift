@@ -22,7 +22,7 @@ struct AnimatedWallpaper: NSViewRepresentable {
     private var reduceMotion = false
     public private(set) var player: AVQueuePlayer?
     private var looper: AVPlayerLooper?
-    private var videoLayer: AVPlayerLayer?
+    private var videoLayer: AVPlayerLayer? { layer as? AVPlayerLayer }
     private let imageLayer = CALayer()
     private var frameTask: Task<Void, Never>?
     private var initialFrameTask: Task<Void, Never>?
@@ -36,6 +36,7 @@ struct AnimatedWallpaper: NSViewRepresentable {
         wantsLayer = true
         imageLayer.contentsGravity = .resizeAspectFill
         imageLayer.masksToBounds = true
+        imageLayer.frame = bounds
         layer?.masksToBounds = true
         layer?.addSublayer(imageLayer)
     }
@@ -43,10 +44,18 @@ struct AnimatedWallpaper: NSViewRepresentable {
     public required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    public override func layout() {
-        super.layout()
+    /// The view's own layer plays the video, as on Noodle Mobile, and the picture layer follows
+    /// it. Both fill the view's exact bounds with every size change, not only after the next
+    /// layout pass, so a resizing window always stays covered.
+    public override func makeBackingLayer() -> CALayer {
+        let layer = AVPlayerLayer()
+        layer.videoGravity = .resizeAspectFill
+        return layer
+    }
+
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        videoLayer?.frame = bounds
         imageLayer.frame = bounds
         CATransaction.commit()
     }
@@ -64,11 +73,7 @@ struct AnimatedWallpaper: NSViewRepresentable {
                 let item = AVPlayerItem(asset: BackgroundMedia.videoAsset(at: url))
                 self.player = player
                 looper = AVPlayerLooper(player: player, templateItem: item)
-                let videoLayer = AVPlayerLayer(player: player)
-                videoLayer.videoGravity = .resizeAspectFill
-                self.videoLayer = videoLayer
-                layer?.addSublayer(videoLayer)
-                needsLayout = true
+                videoLayer?.player = player
             } else {
                 initialFrameTask = Task { [weak self] in await self?.showFrame(0, fade: false) }
             }
@@ -151,7 +156,6 @@ struct AnimatedWallpaper: NSViewRepresentable {
         looper?.disableLooping(); looper = nil
         player?.removeAllItems(); player = nil
         videoLayer?.player = nil
-        videoLayer?.removeFromSuperlayer(); videoLayer = nil
         imageLayer.removeAllAnimations(); imageLayer.contents = nil
         frameIndex = 0
     }
