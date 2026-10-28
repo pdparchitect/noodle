@@ -889,3 +889,174 @@ private final class FakeLink: @unchecked Sendable {
     var backlog = 0
     var forwarded: [SurfacePacket] = []
 }
+
+
+final class SurfaceFileAskTests: XCTestCase {
+    func testAFileAskRoundTripsAndIsNotAStatus() {
+        let ask = SurfaceFileAsk(id: UUID(uuidString: "00000000-0000-0000-0000-000000000166")!, multiple: true, directories: false)
+        XCTAssertEqual(SurfaceFileAsk(ask.encoded), ask)
+        XCTAssertNil(SurfaceStatus(ask.encoded))
+        let files = SurfaceControl.files(id: ask.id, names: ["a.txt"], bodies: [Data("hi".utf8)])
+        XCTAssertEqual(SurfaceControl(files.encoded), files)
+        XCTAssertNil(SurfaceFileAsk(files.encoded))
+    }
+
+    func testAnOversizedFrameIsNotSent() async throws {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let sender = SurfaceSocket(fd: fds[0]), receiver = SurfaceSocket(fd: fds[1])
+        addTeardownBlock { sender.close(); receiver.close() }
+        XCTAssertFalse(sender.send(Data(count: SurfaceSocket.maxFrame + 1)))
+        XCTAssertTrue(sender.send(Data([1])))
+        var got: Data?
+        for await frame in receiver.frames { got = frame; break }
+        XCTAssertEqual(got, Data([1]))
+    }
+
+    func testAFileLargerThanOneFrameIsSentInPieces() throws {
+        let id = UUID()
+        let big = Data(repeating: 9, count: SurfaceSocket.maxFrame)
+        let whole = SurfaceControl.files(id: id, names: ["big.bin"], bodies: [big]).encoded
+        XCTAssertGreaterThan(whole.count, SurfaceSocket.maxFrame)
+        let frames = try XCTUnwrap(SurfaceFileParts.frames(id: id, names: ["big.bin", "note.txt"], bodies: [big, Data("second".utf8)]))
+        XCTAssertGreaterThan(frames.count, 2)
+        var files = 0
+        for frame in frames {
+            XCTAssertLessThanOrEqual(frame.count, SurfaceSocket.maxFrame)
+            XCTAssertLessThanOrEqual(frame.count, SurfaceSocket.linkLimit)
+
+            guard case .filePart(_, _, let count, _, _, _, _)? = SurfaceControl(frame) else {
+                XCTFail("a piece was not a file part"); return
+            }
+            files = count
+        }
+        XCTAssertEqual(files, 2)
+    }
+
+    @MainActor func testTheClickingViewerAloneAnswersAndALargeFileArrivesWhole() async throws {
+        let picture = try XCTUnwrap(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        var applied = 0
+        let streamer = SurfaceStreamer(fps: 5, maxPixelSize: 16, capture: { (picture, CGSize(width: 2, height: 2)) },
+                                       apply: { _ in applied += 1 })
+        defer { streamer.stop() }
+        let (companionA, watchA) = try Self.ends(), (companionB, watchB) = try Self.ends()
+        addTeardownBlock { companionA.close(); watchA.close(); companionB.close(); watchB.close() }
+        streamer.attach(companionA)
+        streamer.attach(companionB)
+        final class Seen { var ask = false }
+        let seen = Seen()
+        let sniff = Task {
+            for await frame in watchB.frames {
+                if Task.isCancelled { return }
+                if SurfaceFileAsk(frame) != nil { seen.ask = true }
+            }
+        }
+        defer { sniff.cancel() }
+        watchA.send(SurfaceControl.input(.pointer(.down, x: 1, y: 1)).encoded)
+        for _ in 0..<100 where applied == 0 { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(applied, 1)
+        let pending = Task { await streamer.requestFiles(multiple: true, directories: false) }
+        let found = await withTaskGroup(of: SurfaceFileAsk?.self) { group in
+            group.addTask {
+                for await frame in watchA.frames {
+                    if Task.isCancelled { return nil }
+                    if let ask = SurfaceFileAsk(frame) { return ask }
+                }
+                return nil
+            }
+            group.addTask { try? await Task.sleep(for: .seconds(5)); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? nil
+        }
+        let ask = try XCTUnwrap(found ?? nil)
+        try? await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(seen.ask)
+        let id = ask.id
+        let wrong = try XCTUnwrap(SurfaceFileParts.frames(id: id, names: ["nope.txt"], bodies: [Data("no".utf8)]))
+        for frame in wrong { watchB.send(frame) }
+        try? await Task.sleep(for: .milliseconds(150))
+        let big = Data(repeating: 3, count: SurfaceSocket.maxFrame)
+        let right = try XCTUnwrap(SurfaceFileParts.frames(id: id, names: ["big.bin", "note.txt"], bodies: [big, Data("second".utf8)]))
+        XCTAssertGreaterThan(right.count, 2)
+        for frame in right { XCTAssertTrue(watchA.send(frame)) }
+        let answer = await pending.value
+        XCTAssertEqual(answer?.names, ["big.bin", "note.txt"])
+        XCTAssertEqual(answer?.bodies, [big, Data("second".utf8)])
+    }
+
+    @MainActor func testTheClickingViewerLeavingCancelsTheFileRequest() async throws {
+        let picture = try XCTUnwrap(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        var applied = 0
+        let streamer = SurfaceStreamer(fps: 5, maxPixelSize: 16, capture: { (picture, CGSize(width: 2, height: 2)) },
+                                       apply: { _ in applied += 1 })
+        defer { streamer.stop() }
+        let (companion, watch) = try Self.ends()
+        addTeardownBlock { companion.close(); watch.close() }
+        streamer.attach(companion)
+        let (other, _) = try Self.ends()
+        addTeardownBlock { other.close() }
+        streamer.attach(other)
+        watch.send(SurfaceControl.input(.pointer(.down, x: 1, y: 1)).encoded)
+        for _ in 0..<100 where applied == 0 { try? await Task.sleep(for: .milliseconds(20)) }
+        let pending = Task { await streamer.requestFiles(multiple: false, directories: false) }
+        var saw = false
+        let look = Task { () -> Bool in
+            for await frame in watch.frames {
+                if SurfaceFileAsk(frame) != nil { return true }
+            }
+            return false
+        }
+        let found = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await look.value }
+            group.addTask { try? await Task.sleep(for: .seconds(5)); return false }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        XCTAssertTrue(found)
+        saw = found
+        companion.close()
+        let answer = await pending.value
+        XCTAssertTrue(saw)
+        XCTAssertNil(answer)
+    }
+
+    func testARegularFileIsReadInFramesAndADirectoryFailsVisibly() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("note.txt")
+        let body = Data("hello".utf8)
+        try body.write(to: file)
+        let id = UUID()
+        let frames = SurfaceFileRead.frames(id: id, urls: [file])
+        XCTAssertEqual(frames.count, 1)
+        guard case .filePart(_, _, let files, _, _, let name, let data)? = SurfaceControl(frames[0]) else {
+            XCTFail("a file was not sent as a part"); return
+        }
+        XCTAssertEqual(files, 1)
+        XCTAssertEqual(name, "note.txt")
+        XCTAssertEqual(data, body)
+        let refused = SurfaceFileRead.frames(id: id, urls: [folder])
+        guard case .files(_, let names, _)? = SurfaceControl(refused[0]) else {
+            XCTFail("a directory was not reported"); return
+        }
+        XCTAssertEqual(names, [SurfaceFileAsk.failed])
+        let cancelled = SurfaceFileRead.frames(id: id, urls: [])
+        guard case .files(_, let empty, _)? = SurfaceControl(cancelled[0]) else {
+            XCTFail("cancel was not a file reply"); return
+        }
+        XCTAssertTrue(empty.isEmpty)
+    }
+
+    private static func ends() throws -> (SurfaceSocket, SurfaceSocket) {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        return (SurfaceSocket(fd: fds[0]), SurfaceSocket(fd: fds[1]))
+    }
+}

@@ -6,6 +6,14 @@ import Darwin
 import ImageIO
 import WebKit
 
+enum ViewerFileChoice: Sendable {
+    case chosen([(name: String, body: Data)])
+    case cancelled
+    case tooLarge
+    case failed
+    case unavailable
+}
+
 @MainActor final class BrowserRuntime: NSObject, ObservableObject, WKDownloadDelegate {
     let library: BrowserLibrary
     @Published var failure: String?
@@ -64,6 +72,8 @@ import WebKit
     private var deleting: Set<UUID> = []
     /// Live views, by browser. While one is watched, bots are kept off that browser.
     private var surfaces: [UUID: SurfaceStreamer] = [:]
+    /// Tests supply what a person watching would choose, instead of asking a live view.
+    var supplyViewerFiles: ((_ multiple: Bool, _ directories: Bool) async -> ViewerFileChoice)?
     private let transferRoot: URL?
     /// What apps outside Noodle may use, when the person allows them.
     let external: ExternalGate?
@@ -626,6 +636,31 @@ import WebKit
                   ftruncate(destination, 0) == 0 else { throw BrowserError("Choose a writable regular file.") }
             _ = try BrowserTransferFiles.copy(source: source, destination: destination)
         }.value
+    }
+    func filesFromViewer(browserID: UUID, multiple: Bool, directories: Bool) async -> ViewerFileChoice {
+        let choice: ViewerFileChoice
+        if let supply = supplyViewerFiles {
+            choice = await supply(multiple, directories)
+        } else {
+            guard let streamer = surfaces[browserID], streamer.isWatched else { return .unavailable }
+            guard let answer = await streamer.requestFiles(multiple: multiple, directories: directories) else { return .unavailable }
+            if answer.names == [SurfaceFileAsk.tooLarge] { return .tooLarge }
+            if answer.names == [SurfaceFileAsk.failed] { return .failed }
+            if answer.names.isEmpty { return .cancelled }
+            let pairs = Array(zip(answer.names, answer.bodies))
+            guard pairs.allSatisfy({ $0.1.count <= SurfaceFileAsk.byteLimit }) else { return .tooLarge }
+            choice = .chosen(pairs.map { (name: $0.0, body: $0.1) })
+        }
+        guard case .chosen(let files) = choice, !multiple else { return choice }
+        return .chosen(Array(files.prefix(1)))
+    }
+    func stageUserData(_ body: Data, name: String, browserID: UUID) async throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent(BrowserLibrary.safeFilename(name.isEmpty ? "file" : name))
+        try body.write(to: file, options: .atomic)
+        return try await stageUserFile(file, browserID: browserID)
     }
     func stageUserFile(_ source: URL, browserID: UUID) async throws -> URL {
         let access = source.startAccessingSecurityScopedResource(); defer { if access { source.stopAccessingSecurityScopedResource() } }

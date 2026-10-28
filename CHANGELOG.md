@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Watching a browser from this Mac opens the file picker here when a page asks for a file. The file you choose is the one the page gets, including a large one. Cancelling chooses nothing.
+
 ## [0.79.1] - 2026-10-28
 
 ### Changed

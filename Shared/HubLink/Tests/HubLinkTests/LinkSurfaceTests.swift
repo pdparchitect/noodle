@@ -135,6 +135,52 @@ final class LinkSurfaceTests: XCTestCase {
         XCTAssertGreaterThan(late.count, 45)
         XCTAssertGreaterThanOrEqual(rate, 7_000_000, "after two seconds the companion was asked for only \(Int(rate)) bits a second")
     }
+
+    /// Pieces of more than one file, each under the socket cap, cross the Hub and still make the files.
+    func testASplitFileCrossesTheHubWhole() async throws {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let companion = SurfaceSocket(fd: fds[0]), hubEnd = SurfaceSocket(fd: fds[1])
+        let hub = LinkIdentity()
+        let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in
+            .stream { LinkSurface.relay(hubEnd, to: $0) }
+        })
+        try await server.start()
+        defer { companion.close(); server.stop() }
+        let channel = try await LinkClient.channel(Data("{}".utf8), identity: LinkIdentity(), hubKey: hub.publicKey,
+                                                   endpoints: [LinkEndpoint(host: "::1", port: try XCTUnwrap(server.port))], ownConnection: true)
+        defer { channel.cancel() }
+        let big = Data(repeating: 4, count: SurfaceSocket.maxFrame)
+        let note = Data("second".utf8)
+        let id = UUID()
+        let frames = try XCTUnwrap(SurfaceFileParts.frames(id: id, names: ["big.bin", "note.txt"], bodies: [big, note]))
+        XCTAssertGreaterThan(frames.count, 2)
+        let whole = SurfaceControl.files(id: id, names: ["big.bin"], bodies: [big]).encoded
+        XCTAssertGreaterThan(whole.count, SurfaceSocket.maxFrame)
+        XCTAssertLessThanOrEqual(SurfaceSocket.linkLimit, LinkQUIC.requestLimit)
+        for frame in frames {
+            XCTAssertLessThanOrEqual(frame.count, SurfaceSocket.frameLimit)
+            XCTAssertLessThanOrEqual(frame.count, LinkQUIC.requestLimit)
+            channel.send(frame)
+        }
+        var parts: [(file: Int, part: Int, name: String, body: Data)] = []
+        let deadline = Task { try? await Task.sleep(for: .seconds(30)); companion.close() }
+        defer { deadline.cancel() }
+        for await frame in companion.frames {
+            if case .rate? = SurfaceControl(frame) { continue }
+            guard case .filePart(_, let file, _, let part, _, let name, let body)? = SurfaceControl(frame) else { continue }
+            parts.append((file, part, name, body))
+            if parts.count == frames.count { break }
+        }
+        XCTAssertEqual(parts.count, frames.count)
+        func joined(_ file: Int) -> Data {
+            parts.filter { $0.file == file }.sorted { $0.part < $1.part }.reduce(into: Data()) { $0.append($1.body) }
+        }
+        XCTAssertEqual(joined(0), big)
+        XCTAssertEqual(joined(1), note)
+        XCTAssertEqual(Set(parts.map(\.name)), ["big.bin", "note.txt"])
+    }
+
 }
 
 /// A companion's side of a live view: frames at a steady pace, as large as the rate the Hub

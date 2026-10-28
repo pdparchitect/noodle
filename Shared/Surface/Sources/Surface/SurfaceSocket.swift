@@ -18,7 +18,12 @@ public final class SurfaceSocket: @unchecked Sendable {
     private var queued = 0
     private var held: Bool
     private var closed = false
-    private static let maxFrame = 16 << 20
+    /// A frame larger than this is refused. Callers report that instead of waiting.
+    public static let maxFrame = 16 << 20
+    /// What the Hub will read from the device on a live view. A longer frame stops that stream.
+    public static let linkLimit = 1 << 20
+    /// A file piece has to fit both, or the Hub stops reading before the browser sees it.
+    public static var frameLimit: Int { min(maxFrame, linkLimit) }
 
     /// `held` keeps queued frames back until `start(with:)`, so an answer can go first.
     public init(fd: Int32, held: Bool = false) {
@@ -50,19 +55,23 @@ public final class SurfaceSocket: @unchecked Sendable {
 
     public var isClosed: Bool { lock.withLock { closed } }
 
-    public func send(_ frame: Data) {
-        guard !frame.isEmpty, frame.count <= Self.maxFrame else { return }
+    /// Queues `frame`. False when it is empty, larger than `maxFrame`, or the socket is closed,
+    /// so a caller can say the send failed instead of dropping it.
+    @discardableResult
+    public func send(_ frame: Data) -> Bool {
+        guard !frame.isEmpty, frame.count <= Self.maxFrame else { return false }
         let accepted = lock.withLock { () -> Bool in
             guard !closed else { return false }
             queued += 1
             return true
         }
-        guard accepted else { return }
+        guard accepted else { return false }
         writer.async { [self] in
             let written = !isClosed && write(frame)
             lock.withLock { queued -= 1 }
             if !written { close() }
         }
+        return true
     }
 
     /// Writes `first` ahead of anything queued, then lets the queue go.

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Watching a browser opens the Files picker on this iPhone when a page asks for a file. The file you choose is the one the page gets, including a large one.
+
+### What to Test
+
+- Watch a browser tab from this iPhone. On the page, tap a button that asks for a file: check the Files picker opens on this iPhone. Choose a file: check the page receives it. Choose Cancel: check the page gets nothing new. Choose a file larger than the Hub allows: check the page is told it is too large.
+
 ## [0.51.0] - 2026-10-28
 
 ### Changed

@@ -116,8 +116,110 @@ import XCTest
         }
         XCTAssertNil(tab.surface.attachedSheet, "a file picker opened on this Mac")
         XCTAssertEqual(tab.info.error, BrowserTab.liveViewUploadNote)
+        XCTAssertTrue(tab.web is BrowserPageWebView)
         let picture = try await view.picture()
         XCTAssertGreaterThan(picture.size.height, tab.web.bounds.height + BrowserLiveChrome.height, "the live view did not show the note")
+    }
+
+
+    /// A person watching from another device chooses a file there, and that file is what the page gets.
+    func testFilesChosenByTheViewerReachThePageAndTheForm() async throws {
+        let tab = try await fileTab("<form id=form><input id=f type=file name=photo style='position:fixed;inset:0;width:100%;height:100%'></form>")
+        tab.runtime?.supplyViewerFiles = { multiple, directories in
+            XCTAssertFalse(multiple)
+            XCTAssertFalse(directories)
+            return .chosen([("id.png", Data("photo".utf8))])
+        }
+        try await clickPage(tab)
+        let sent = try await waitString(tab, """
+            const file = document.querySelector('#f').files[0]
+            const data = new FormData(document.querySelector('#form'))
+            const part = data.get('photo')
+            return file && part instanceof File && file.name === 'id.png' && part.name === 'id.png' && part.size === 5 ? 'yes' : 'no'
+            """)
+        XCTAssertEqual(sent, "yes")
+        XCTAssertNil(tab.surface.attachedSheet, "a file picker opened on this Mac")
+    }
+
+    /// Several files when the input allows them, and only one when it does not.
+    func testSeveralFilesOnlyWhenTheInputAllowsThem() async throws {
+        let several = try await fileTab("<input id=f type=file multiple style='position:fixed;inset:0;width:100%;height:100%'>")
+        several.runtime?.supplyViewerFiles = { multiple, _ in
+            XCTAssertTrue(multiple)
+            return .chosen([("a.txt", Data("a".utf8)), ("b.txt", Data("b".utf8))])
+        }
+        try await clickPage(several)
+        let severalCount = try await waitString(several, "return String(document.querySelector('#f').files.length)")
+        XCTAssertEqual(severalCount, "2")
+
+        let one = try await fileTab("<input id=f type=file style='position:fixed;inset:0;width:100%;height:100%'>")
+        one.runtime?.supplyViewerFiles = { multiple, _ in
+            XCTAssertFalse(multiple)
+            return .chosen([("a.txt", Data("a".utf8)), ("b.txt", Data("b".utf8))])
+        }
+        try await clickPage(one)
+        let name = try await waitString(one, "return document.querySelector('#f').files[0] ? document.querySelector('#f').files[0].name : ''")
+        let oneCount = try await waitString(one, "return String(document.querySelector('#f').files.length)")
+        XCTAssertEqual(name, "a.txt")
+        XCTAssertEqual(oneCount, "1")
+    }
+
+    /// A custom button that activates the input after a short wait still asks the person watching.
+    func testACustomButtonAsksTheViewer() async throws {
+        let html = """
+        <button id=b style='position:fixed;left:0;top:0;width:160px;height:48px'>Choose</button>
+        <input id=f type=file style='display:none'>
+        <script>document.getElementById('b').onclick=()=>setTimeout(()=>document.getElementById('f').click(),40)</script>
+        """
+        let tab = try await fileTab(html)
+        tab.runtime?.supplyViewerFiles = { _, _ in .chosen([("card.png", Data("x".utf8))]) }
+        try await clickPage(tab, x: 20, y: BrowserLiveChrome.height + 16)
+        let name = try await waitString(tab, "return document.querySelector('#f').files[0] ? document.querySelector('#f').files[0].name : ''")
+        XCTAssertEqual(name, "card.png")
+        XCTAssertNil(tab.surface.attachedSheet)
+    }
+
+    /// The bot's upload command still attaches a workspace file without a dialog.
+    func testTheBotUploadCommandOpensNoPicker() async throws {
+        let tab = try await fileTab("<input id=f type=file style='position:fixed;inset:0;width:100%;height:100%'>")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("note.txt")
+        try Data("hello".utf8).write(to: file)
+        try await tab.attach([file], target: "#f", frame: nil)
+        XCTAssertNil(tab.surface.attachedSheet)
+        let name = try await tab.evaluate("return document.querySelector('#f').files[0].name") as? String
+        XCTAssertEqual(name, "note.txt")
+    }
+
+    private func fileTab(_ html: String) async throws -> BrowserTab {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let library = BrowserLibrary(root: root), runtime = BrowserRuntime(library: library)
+        addTeardownBlock { runtime.shutdown(); try? FileManager.default.removeItem(at: root) }
+        let browser = try library.create(name: "Work").id
+        let tab = try runtime.makeTab(browserID: browser)
+        tab.web.loadHTMLString(html, baseURL: nil)
+        for _ in 0..<250 where try await tab.evaluate("return document.readyState") as? String != "complete" {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        tab.watched = true
+        return tab
+    }
+
+    private func clickPage(_ tab: BrowserTab, x: Double = 200, y: Double? = nil) async throws {
+        let view = BrowserLiveView(browserID: tab.browserID, runtime: tab.runtime!)
+        let point = (x: x, y: y ?? BrowserLiveChrome.height + 200)
+        try view.apply(.pointer(.down, x: point.x, y: point.y, clickCount: 1))
+        try view.apply(.pointer(.up, x: point.x, y: point.y, clickCount: 1))
+    }
+
+    private func waitString(_ tab: BrowserTab, _ script: String) async throws -> String {
+        for _ in 0..<250 {
+            if let value = try await tab.evaluate(script) as? String, !value.isEmpty, value != "0", value != "no" { return value }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return (try await tab.evaluate(script) as? String) ?? ""
     }
 
     private func samples(_ image: CGImage) -> [UInt32] {

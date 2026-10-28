@@ -170,6 +170,8 @@ struct HubSurfaceWindow: View {
                 case .failed(let reason)?: failure = reason; showing = false
                 case .controls(let gamepad)?: controls = gamepad
                 case .notice(let next)?: notice = next
+                case .fileAsk(let ask)?:
+                    for frame in await ViewerFilePanel.choose(ask) { channel.send(frame) }
                 default: break
                 }
             }
@@ -385,5 +387,22 @@ private struct ControllerInput: NSViewRepresentable {
             guard let controls, let window else { return gamepad.detach() }
             gamepad.attach(controls, in: window) { [weak self] in self?.onKey($0) }
         }
+    }
+}
+
+
+/// The system open panel on the Mac where the person is watching, not on the Mac running Browser.
+private enum ViewerFilePanel {
+    static func choose(_ ask: SurfaceFileAsk) async -> [Data] {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = ask.directories
+        panel.allowsMultipleSelection = ask.multiple
+        let response: NSApplication.ModalResponse = await withCheckedContinuation { continuation in
+            panel.begin { continuation.resume(returning: $0) }
+        }
+        guard response == .OK else { return SurfaceFileRead.frames(id: ask.id, urls: []) }
+        let urls = ask.multiple ? panel.urls : Array(panel.urls.prefix(1))
+        return SurfaceFileRead.frames(id: ask.id, urls: urls)
     }
 }

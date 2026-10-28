@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Clicking a file button in a tab you can see opens the Mac file picker, and dropping a file on the page attaches it. When someone is watching the tab, the picker opens for them instead, on their Mac or iPhone.
+
 ## [0.22.3] - 2026-10-28
 
 ### Changed

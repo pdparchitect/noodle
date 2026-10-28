@@ -68,7 +68,7 @@ import WebKit
         config.preferences.inactiveSchedulingPolicy = .throttle
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.applicationNameForUserAgent = Self.safariName
-        web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
+        web = BrowserPageWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
         pointer = BrowserPointer(web: web)
         surface = BrowserSurfacePanel(contentRect: web.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
@@ -386,9 +386,14 @@ import WebKit
             completionHandler(pending.urls); return
         }
         guard humanInput, let window = web.window, window.isVisible else {
+            if viewerInput {
+                let multiple = parameters.allowsMultipleSelection
+                let directories = parameters.allowsDirectories
+                Task { await self.completeViewerOpen(multiple: multiple, directories: directories, completion: completionHandler) }
+                return
+            }
             completionHandler(nil)
-            // A picker here could open where nobody is, so a live view says why the upload did nothing.
-            info.error = viewerInput ? Self.liveViewUploadNote : "Use the upload command to provide files."
+            info.error = "Use the upload command to provide files."
             runtime?.saveTab(self); return
         }
         humanInput = false
@@ -410,6 +415,35 @@ import WebKit
     }
     private func finishUpload(_ result: Result<Void, Error>) {
         let pending = upload; upload = nil; pending?.continuation.resume(with: result)
+    }
+    /// The person watching chooses on their own Mac or iPhone. Nothing opens on this Mac.
+    private func completeViewerOpen(multiple: Bool, directories: Bool, completion: @escaping ([URL]?) -> Void) async {
+        guard let runtime else { completion(nil); return }
+        switch await runtime.filesFromViewer(browserID: browserID, multiple: multiple, directories: directories) {
+        case .unavailable:
+            info.error = Self.liveViewUploadNote
+            runtime.saveTab(self)
+            completion(nil)
+        case .cancelled:
+            completion(nil)
+        case .tooLarge:
+            info.error = "That file is larger than this Hub allows."
+            runtime.saveTab(self)
+            completion(nil)
+        case .failed:
+            info.error = "That file couldn't be sent. Try a smaller one."
+            runtime.saveTab(self)
+            completion(nil)
+        case .chosen(let files):
+            do {
+                var staged: [URL] = []
+                for file in files { staged.append(try await runtime.stageUserData(file.body, name: file.name, browserID: browserID)) }
+                completion(staged)
+            } catch {
+                runtime.failure = error.localizedDescription
+                completion(nil)
+            }
+        }
     }
     func attach(_ urls: [URL], target: String, frame: String?) async throws {
         guard upload == nil else { throw BrowserError("An upload is already pending.") }
@@ -689,6 +723,43 @@ import WebKit
     private var continuation: CheckedContinuation<T, Error>?
     init(_ continuation: CheckedContinuation<T, Error>) { self.continuation = continuation }
     func finish(_ result: Result<T, Error>) { let value = continuation; continuation = nil; value?.resume(with: result) }
+}
+
+/// Keeps a Finder drop readable for WebKit while the sandboxed browser copies it onto the page.
+final class BrowserPageWebView: WKWebView {
+    private var scoped: [URL] = []
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        hold(sender.draggingPasteboard)
+        return super.draggingEntered(sender)
+    }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        hold(sender.draggingPasteboard)
+        return super.prepareForDragOperation(sender)
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        hold(sender.draggingPasteboard)
+        let accepted = super.performDragOperation(sender)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            self.releaseScoped()
+        }
+        return accepted
+    }
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        releaseScoped()
+        super.draggingExited(sender)
+    }
+
+    private func hold(_ pasteboard: NSPasteboard) {
+        releaseScoped()
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        for url in urls where url.startAccessingSecurityScopedResource() { scoped.append(url) }
+    }
+    private func releaseScoped() {
+        scoped.forEach { $0.stopAccessingSecurityScopedResource() }
+        scoped.removeAll()
+    }
 }
 
 /// Finds and fetches the icon a page names for itself.

@@ -1,6 +1,7 @@
 import AuthenticationServices
 import HubLink
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Where a tool connection's sign-in comes back to this phone.
 private let signInScheme = "noodle-mobile"
@@ -1063,6 +1064,8 @@ struct LiveSurfaceScreen: View {
                     controls = gamepad
                     hardware.attach(gamepad, onKey: hold)
                 case .notice(let next)?: notice = next
+                case .fileAsk(let ask)?:
+                    for frame in await PhoneFilePicker.choose(ask) { channel.send(frame) }
                 default: break
                 }
             }
@@ -1146,4 +1149,39 @@ extension LinkAttachment {
     static func arranged(_ attachments: [LinkAttachment]) -> (alone: [LinkAttachment], together: [LinkAttachment]) {
         (attachments.filter { !$0.joinsPreviewGallery }, attachments.filter(\.joinsPreviewGallery))
     }
+}
+
+
+/// The document picker on the iPhone where the person is watching.
+private final class PhoneFilePicker: NSObject, UIDocumentPickerDelegate {
+    private var finish: (([URL]) -> Void)?
+
+    static func choose(_ ask: SurfaceFileAsk) async -> [Data] {
+        let urls = await PhoneFilePicker().present(ask)
+        let picked = ask.multiple ? urls : Array(urls.prefix(1))
+        return SurfaceFileRead.frames(id: ask.id, urls: picked)
+    }
+
+    private func present(_ ask: SurfaceFileAsk) async -> [URL] {
+        let types: [UTType] = ask.directories ? [.item, .folder] : [.item]
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+        picker.allowsMultipleSelection = ask.multiple
+        picker.delegate = self
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let root = scene.keyWindow?.rootViewController else { return [] }
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        return await withCheckedContinuation { continuation in
+            finish = { continuation.resume(returning: $0) }
+            top.present(picker, animated: true)
+        }
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        finish?(urls); finish = nil
+    }
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        finish?([]); finish = nil
+    }
+
 }

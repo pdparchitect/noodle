@@ -434,7 +434,7 @@ extension HubPairing {
                 return (channel, packets)
             case .failed(let reason)?:
                 throw LinkError(reason)
-            case .controls?, .notice?: break
+            case .controls?, .notice?, .fileAsk?: break
             case nil: XCTFail("an unreadable surface frame")
             }
         }

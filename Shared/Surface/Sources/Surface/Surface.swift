@@ -26,6 +26,11 @@ public enum SurfaceControl: Codable, Equatable, Sendable {
     case shown(sequence: UInt64)
     /// Frames were skipped, but the viewer can still decode on from those it has shown.
     case recover
+    /// Files a person watching chose for a page that asked. Empty names means they cancelled.
+    /// Bodies here are only the small answers: cancel, too large, or could not send.
+    case files(id: UUID, names: [String], bodies: [Data])
+    /// One piece of a chosen file. Pieces of one request share `id`. `file` and `part` start at 0.
+    case filePart(id: UUID, file: Int, files: Int, part: Int, parts: Int, name: String, body: Data)
 
     public init?(_ data: Data) {
         guard let control = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
@@ -33,6 +38,112 @@ public enum SurfaceControl: Codable, Equatable, Sendable {
     }
 
     public var encoded: Data { (try? JSONEncoder().encode(self)) ?? Data() }
+}
+
+/// A page asked the person watching to choose a file. The picker is on their Mac or iPhone,
+/// never on the Mac that is running the browser.
+public struct SurfaceFileAsk: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var multiple: Bool
+    public var directories: Bool
+    /// The Hub's default largest file. A bigger body is refused.
+    public static let byteLimit = 100_000_000
+    /// Sent in place of a name when every chosen file was over `byteLimit`.
+    public static let tooLarge = "\u{0}"
+    /// Sent in place of a name when the file could not be read or could not fit on the channel.
+    public static let failed = "\u{1}"
+
+    public init(id: UUID, multiple: Bool, directories: Bool) {
+        self.id = id
+        self.multiple = multiple
+        self.directories = directories
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id = "surfaceFileAsk"
+        case multiple = "surfaceFileMultiple"
+        case directories = "surfaceFileDirectories"
+    }
+
+    public init?(_ data: Data) {
+        guard data.first == UInt8(ascii: "{"), let ask = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        self = ask
+    }
+
+    public var encoded: Data { (try? JSONEncoder().encode(self)) ?? Data() }
+}
+
+/// Splits chosen files into controls that each fit one live-view frame.
+public enum SurfaceFileParts {
+    /// Raw bytes in one piece. A piece with a long name still encodes under `SurfaceSocket.frameLimit`.
+    public static let rawLimit: Int = {
+        let name = String(repeating: "n", count: 255)
+        var size = ((SurfaceSocket.frameLimit - 1024) / 4) * 3
+        while size > 1024 {
+            let part = SurfaceControl.filePart(id: UUID(), file: 99, files: 100, part: 99, parts: 100, name: name, body: Data(count: size))
+            if part.encoded.count <= SurfaceSocket.frameLimit { return size }
+            size = size * 9 / 10
+        }
+        return 1024
+    }()
+
+    /// Frames for the reply. Nil when a piece cannot fit, which the caller reports as a failure.
+    public static func frames(id: UUID, names: [String], bodies: [Data]) -> [Data]? {
+        if names.isEmpty || names == [SurfaceFileAsk.tooLarge] || names == [SurfaceFileAsk.failed] {
+            let frame = SurfaceControl.files(id: id, names: names, bodies: bodies).encoded
+            return frame.count <= SurfaceSocket.frameLimit && !frame.isEmpty ? [frame] : nil
+        }
+        guard names.count == bodies.count, !names.isEmpty else { return nil }
+        var frames: [Data] = []
+        for (file, pair) in zip(names, bodies).enumerated() {
+            let body = pair.1
+            let count = max(1, (body.count + rawLimit - 1) / rawLimit)
+            var offset = body.startIndex
+            var part = 0
+            repeat {
+                let end = body.index(offset, offsetBy: rawLimit, limitedBy: body.endIndex) ?? body.endIndex
+                let slice = Data(body[offset..<end])
+                let frame = SurfaceControl.filePart(id: id, file: file, files: names.count, part: part, parts: count, name: pair.0, body: slice).encoded
+                guard !frame.isEmpty, frame.count <= SurfaceSocket.frameLimit else { return nil }
+                frames.append(frame)
+                offset = end
+                part += 1
+                if slice.isEmpty { break }
+            } while offset < body.endIndex
+        }
+        return frames
+    }
+}
+
+/// Reads chosen files without loading one the Hub would refuse, then splits them into frames.
+public enum SurfaceFileRead {
+    public static func frames(id: UUID, urls: [URL]) -> [Data] {
+        func signal(_ name: String) -> [Data] {
+            SurfaceFileParts.frames(id: id, names: name.isEmpty ? [] : [name], bodies: name.isEmpty ? [] : [Data()]) ?? []
+        }
+        if urls.isEmpty { return signal("") }
+        var total = 0
+        var chosen: [(name: String, url: URL, size: Int)] = []
+        for url in urls {
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values?.isRegularFile == true, let size = values?.fileSize else { return signal(SurfaceFileAsk.failed) }
+            if size > SurfaceFileAsk.byteLimit || total > SurfaceFileAsk.byteLimit - size { return signal(SurfaceFileAsk.tooLarge) }
+            total += size
+            chosen.append((url.lastPathComponent, url, size))
+        }
+        var names: [String] = []
+        var bodies: [Data] = []
+        for item in chosen {
+            let access = item.url.startAccessingSecurityScopedResource()
+            defer { if access { item.url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: item.url), data.count == item.size else { return signal(SurfaceFileAsk.failed) }
+            names.append(item.name)
+            bodies.append(data)
+        }
+        return SurfaceFileParts.frames(id: id, names: names, bodies: bodies) ?? signal(SurfaceFileAsk.failed)
+    }
 }
 
 /// Where a surface sits in a viewer that shows all of it, keeping its shape.
