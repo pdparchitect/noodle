@@ -91,6 +91,7 @@ let package = Package(
         .target(name: "NoodleAgentBridge"),
         .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
+        .executableTarget(name: "NoodleMCPProgramHost", dependencies: ["NoodleCore"]),
         .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore",
             .product(name: "MLXFoundationModels", package: "mlx-swift-lm"),
             .product(name: "MLXLLM", package: "mlx-swift-lm"),

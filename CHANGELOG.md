@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Settings can start a program on this Mac and talk to it over its standard input and output. You approve that program before it runs. The app does not start it inside the app sandbox.
+
 ## [0.79.1] - 2026-10-28
 
 ### Changed

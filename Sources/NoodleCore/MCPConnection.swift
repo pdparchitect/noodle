@@ -42,20 +42,41 @@ public enum MCPConnectionError: LocalizedError {
 
 public struct MCPRegistry: Codable, Equatable, Sendable {
     public var connections: [MCPConnectionRecord] = []
+    /// Programs Noodle starts. An older build does not read this key, so it never treats one as a public server.
+    public var programs: [MCPProgramRecord] = []
     public var assignments: [String: [UUID]] = [:]
     public init() {}
+    private enum CodingKeys: String, CodingKey { case connections, assignments, programs }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        connections = try container.decodeIfPresent([MCPConnectionRecord].self, forKey: .connections) ?? []
+        assignments = try container.decodeIfPresent([String: [UUID]].self, forKey: .assignments) ?? [:]
+        programs = try container.decodeIfPresent([MCPProgramRecord].self, forKey: .programs) ?? []
+    }
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(connections, forKey: .connections)
+        try container.encode(assignments, forKey: .assignments)
+        if !programs.isEmpty { try container.encode(programs, forKey: .programs) }
+    }
     public func assigned(to agentID: UUID) -> [MCPConnectionRecord] {
         let ids = Set(assignments[agentID.uuidString.lowercased()] ?? [])
         return connections.filter { ids.contains($0.id) }
     }
+    public func assignedPrograms(to agentID: UUID) -> [MCPProgramRecord] {
+        let ids = Set(assignments[agentID.uuidString.lowercased()] ?? [])
+        return programs.filter { ids.contains($0.id) }
+    }
     public mutating func assign(_ ids: Set<UUID>, to agentID: UUID) throws {
-        guard ids.isSubset(of: Set(connections.map(\.id))) else {
+        let known = Set(connections.map(\.id)).union(programs.map(\.id))
+        guard ids.isSubset(of: known) else {
             throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
         }
         assignments[agentID.uuidString.lowercased()] = ids.sorted { $0.uuidString < $1.uuidString }
     }
     public mutating func remove(_ id: UUID) {
         connections.removeAll { $0.id == id }
+        programs.removeAll { $0.id == id }
         for key in assignments.keys { assignments[key]?.removeAll { $0 == id } }
     }
     public static func load(root: URL) throws -> Self {
@@ -83,34 +104,52 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     // Allocate once when saving; preserve clean names across display-name edits,
     // removals and reloads.
     private mutating func normalizeSkillNames() {
-        let reserved = Set(connections.map(\.skillName))
+        let reserved = Set(connections.map(\.skillName)).union(programs.map(\.skillName))
         var used: Set<String> = []
         for index in connections.indices {
-            let stem = connections[index].skillName
-            var candidate = stem
-            var number = 2
-            while used.contains(candidate) || (stem != candidate && reserved.contains(candidate)) {
-                candidate = String(stem.prefix(52)) + "-\(number)"
-                number += 1
-            }
-            connections[index].skillName = candidate
-            used.insert(candidate)
+            connections[index].skillName = Self.uniqueSkill(connections[index].skillName, used: &used, reserved: reserved)
+        }
+        for index in programs.indices {
+            programs[index].allocateSkillName(Self.uniqueSkill(programs[index].skillName, used: &used, reserved: reserved))
         }
     }
+    private static func uniqueSkill(_ stem: String, used: inout Set<String>, reserved: Set<String>) -> String {
+        var candidate = stem
+        var number = 2
+        while used.contains(candidate) || (stem != candidate && reserved.contains(candidate)) {
+            candidate = String(stem.prefix(52)) + "-\(number)"
+            number += 1
+        }
+        used.insert(candidate)
+        return candidate
+    }
     private func validate() throws {
-        guard Set(connections.map(\.id)).count == connections.count else {
+        let ids = connections.map(\.id) + programs.map(\.id)
+        guard Set(ids).count == ids.count else {
             throw MCPConnectionError.message("Duplicate MCP connection identifiers.")
         }
         for connection in connections {
             _ = try ConversationName.validated(connection.name)
             _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
-            guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,
-                  connection.skillName.utf8.count <= 64,
-                  connection.skillName.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }),
+            guard Self.validSkill(connection.skillName),
                   connection.description.count <= 1_000, connection.instructions.count <= 20_000,
                   (connection.iconData?.count ?? 0) <= 131_072 else {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")
             }
         }
+        for program in programs {
+            _ = try ConversationName.validated(program.name)
+            _ = try MCPProgramRecord.validatedExecutable(program.executable)
+            _ = try program.arguments.map(MCPProgramRecord.validatedArgument)
+            _ = try MCPProgramRecord.validatedNames(program.environmentNames)
+            guard Self.validSkill(program.skillName),
+                  program.description.count <= 1_000, program.instructions.count <= 20_000 else {
+                throw MCPConnectionError.message("Invalid saved MCP connection.")
+            }
+        }
+    }
+    private static func validSkill(_ name: String) -> Bool {
+        name.hasPrefix("mcp-") && name.count > 4 && name.utf8.count <= 64
+            && name.unicodeScalars.allSatisfy { CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }
     }
 }

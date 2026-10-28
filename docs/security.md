@@ -169,6 +169,16 @@ finish. Removing the connection deletes its sign-in from this Mac. To revoke the
 provider's permission too, use that provider's connected-app settings. An
 unrestricted bot's wider access means assignments do not strictly limit it.
 
+A program Noodle starts on this Mac is different. It runs as the macOS account
+that is running Noodle, not inside a restricted agent's sandbox, and it can
+reach that account's files. The approval names the program path, the arguments,
+the working folder, and that account. Secret values you give it stay in the
+login keychain. Noodle does not put those values in the approval, in logs, or
+in text it writes for an agent. The program is trusted with them: if it returns
+one in tool output, that output reaches the assigned agent. Assigning one to a
+restricted agent shows that the program can reach more than that agent's
+sandbox does.
+
 ## Noodlets
 
 A noodlet a bot writes in [Noodle Applet](../Applet/README.md) does not widen

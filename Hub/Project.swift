@@ -149,6 +149,7 @@ let project = Project(
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .target(name: "NoodleAgentHost"),
+                .target(name: "NoodleMCPProgramHost"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
             ],
@@ -196,6 +197,32 @@ let project = Project(
             settings: .settings(base: signing.merging([
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(HUB_APP_BUNDLE_ID).agent-host",
                 "PRODUCT_NAME": "NoodleAgentHost",
+            ]) { $1 })
+        ),
+        // launchd starts this helper. It is not given the app sandbox. It applies its own Seatbelt before exec.
+        .target(
+            name: "NoodleMCPProgramHost",
+            destinations: .macOS,
+            product: .xpc,
+            bundleId: "com.pdparchitect.noodle.hub.mcp-program-host",
+            deploymentTargets: .macOS("26.0"),
+            entitlements: .file(path: "../Support/MCPProgramHost.entitlements"),
+            infoPlist: .extendingDefault(with: [
+                "CFBundleName": "Noodle MCP Program Host",
+                "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+                "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+                "XPCService": ["ServiceType": "Application", "JoinExistingSession": true],
+                "NoodleSigningTeam": "$(DEVELOPMENT_TEAM)",
+                "NoodleApplicationIdentifier": "$(HUB_APP_BUNDLE_ID)",
+                "NoodleMCPProgramHostService": "$(HUB_APP_BUNDLE_ID).mcp-program-host",
+                "NoodleHostServesOtherPeople": true,
+            ]),
+            sources: ["../Sources/NoodleMCPProgramHost/**"],
+            dependencies: [.package(product: "NoodleCore")],
+            settings: .settings(base: signing.merging([
+                "PRODUCT_BUNDLE_IDENTIFIER": "$(HUB_APP_BUNDLE_ID).mcp-program-host",
+                "PRODUCT_NAME": "NoodleMCPProgramHost",
+                "ENABLE_APP_SANDBOX": "NO",
             ]) { $1 })
         ),
         helper("messenger", sources: ["../Sources/NoodleMessenger/**"], bundleID: "messenger",

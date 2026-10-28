@@ -44,6 +44,33 @@ import NoodleCore
         }
     }
 
+    /// Registers launched programs the same way as remote connections. Calls run on this Mac.
+    public func synchronize(_ programs: [MCPProgramRecord], root: URL,
+                            current: @escaping @MainActor (UUID) -> MCPProgramRecord?) {
+        let wanted = Dictionary(uniqueKeysWithValues: programs.map { ($0.id, "program\n" + $0.skillName + "\n" + $0.name) })
+        for (id, signature) in signatures where signature.hasPrefix("program\n") && wanted[id] != signature {
+            registry.unregister(String(signature.split(separator: "\n", maxSplits: 2).dropFirst().first ?? ""))
+            signatures[id] = nil
+        }
+        for program in programs where signatures[program.id] == nil {
+            let id = program.id, service = service, root = root
+            let provider = ConnectionToolProvider(id: program.skillName, title: program.name, connection: id,
+                summary: program.description, userInstructions: program.instructions) { [weak self] action, tool, arguments, uri, authorized in
+                guard let current = await current(id) else { throw MCPServiceError.revoked }
+                do {
+                    return try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
+                                                     program: current, root: root, authorized: authorized)
+                } catch {
+                    let message = Self.safeError(error)
+                    await self?.onError?(id, message)
+                    throw ToolProviderError(message)
+                }
+            }
+            do { try registry.register(provider); signatures[id] = wanted[id] }
+            catch { onError?(id, error.localizedDescription) }
+        }
+    }
+
     /// Only Noodle's own errors are shown; anything else may carry a provider's private response.
     public nonisolated static func safeError(_ error: Error) -> String {
         if error is MCPServiceError || error is MCPConnectionError { return error.localizedDescription }

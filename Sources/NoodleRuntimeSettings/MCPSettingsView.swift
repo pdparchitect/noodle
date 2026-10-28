@@ -7,8 +7,11 @@ public struct MCPSettingsView: View {
     /// Tools the app has built in, listed above the connections and never removed.
     private let builtIn: AnyView?
     @State private var showingAdd = false
+    @State private var showingProgram = false
     @State private var editing: MCPConnectionRecord?
+    @State private var editingProgram: MCPProgramRecord?
     @State private var removing: MCPConnectionRecord?
+    @State private var removingProgram: MCPProgramRecord?
     @State private var connectionsHeight: CGFloat = 80
     public var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +25,24 @@ public struct MCPSettingsView: View {
                         Label("No connections", systemImage: "puzzlepiece.extension")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, minHeight: 80)
+                    }
+                    ForEach(store.mcp.registry.programs) { program in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "terminal").frame(width: 32, height: 32)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(program.name).font(.headline).lineLimit(1)
+                                Text(program.executable).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text(program.consentedSubject == nil ? "Not approved" : "Approved").font(.caption).foregroundStyle(.secondary)
+                                if let error = store.mcp.errors[program.id] {
+                                    Text(error).font(.caption).foregroundStyle(.red)
+                                }
+                                HStack(spacing: 12) {
+                                    Button("Edit…") { editingProgram = program }.buttonStyle(.link)
+                                    Button("Remove") { removingProgram = program }.buttonStyle(.link)
+                                }
+                            }
+                        }.padding(14)
+                        Divider().padding(.leading, 58)
                     }
                     ForEach(store.mcp.registry.connections) { connection in
                         HStack(alignment: .top, spacing: 12) {
@@ -74,12 +95,24 @@ public struct MCPSettingsView: View {
             Divider()
             HStack {
                 Spacer()
+                Button { showingProgram = true } label: { Label("Program on this Mac…", systemImage: "terminal") }
+                    .help("Start a program on this Mac and talk to it over its standard input and output")
                 Button { showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
                     .help("Add a service or another account")
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
         .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.mcp).noodleSheetSizing() }
+        .sheet(isPresented: $showingProgram) { MCPProgramEditor(controller: store.mcp, existing: nil).noodleSheetSizing() }
+        .sheet(item: $editingProgram) { program in MCPProgramEditor(controller: store.mcp, existing: program).noodleSheetSizing() }
+        .confirmationDialog("Remove this program?", isPresented: Binding(get: { removingProgram != nil }, set: { if !$0 { removingProgram = nil } }),
+                            titleVisibility: .visible) {
+            Button("Remove Program", role: .destructive) {
+                if let removingProgram { store.mcp.remove(removingProgram) }
+                removingProgram = nil
+            }
+            Button("Cancel", role: .cancel) { removingProgram = nil }
+        }
         .sheet(item: $editing) { connection in MCPEditor(controller: store.mcp, existing: connection).noodleSheetSizing() }
         .confirmationDialog("Remove Tool Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             titleVisibility: .visible) {
@@ -319,4 +352,104 @@ private struct RoundedBorderBezel: NSViewRepresentable {
 
     func makeNSView(context: Context) -> BezelView { BezelView() }
     func updateNSView(_ nsView: BezelView, context: Context) {}
+}
+
+/// Executable and arguments are separate fields. Nothing is started from this sheet.
+public struct MCPProgramEditor: View {
+    let controller: MCPController
+    let existing: MCPProgramRecord?
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var executable: String
+    @State private var arguments: String
+    @State private var envName: String
+    @State private var envValue: String
+    @State private var consent: String?
+    @State private var error: String?
+    @State private var saving = false
+    private let id: UUID
+
+    public init(controller: MCPController, existing: MCPProgramRecord?) {
+        self.controller = controller
+        self.existing = existing
+        id = existing?.id ?? UUID()
+        _name = State(initialValue: existing?.name ?? "")
+        _executable = State(initialValue: existing?.executable ?? "")
+        _arguments = State(initialValue: existing?.arguments.joined(separator: "\n") ?? "")
+        _envName = State(initialValue: existing?.environmentNames.first ?? "")
+        _envValue = State(initialValue: "")
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(existing == nil ? "Program on this Mac" : "Edit program").font(.headline)
+            TextField("Name", text: $name)
+            TextField("Executable, such as npx", text: $executable)
+            Text("One argument on each line. Do not enter a shell command.").font(.caption).foregroundStyle(.secondary)
+            TextEditor(text: $arguments).font(.system(size: 13)).frame(height: 70)
+            TextField("Environment name, such as OPENAPI_MCP_HEADERS", text: $envName)
+            SecureField("Environment value. A saved value is not shown again.", text: $envValue)
+            Text("A server you already run is a different connection. This does not add one.").font(.caption).foregroundStyle(.secondary)
+            if let consent {
+                Text(consent).font(.caption).textSelection(.enabled)
+                HStack {
+                    Button("Don't allow") { Task { await save(allow: false) } }
+                    Button("Allow") { Task { await save(allow: true) } }
+                        .keyboardShortcut(.defaultAction)
+                }.disabled(saving)
+            } else {
+                Button("Review") { review() }.keyboardShortcut(.defaultAction)
+            }
+            if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+        }
+        .padding(20)
+        .frame(width: 480)
+        .textFieldStyle(.roundedBorder)
+    }
+
+    private func argumentList() -> [String] {
+        arguments.split(separator: "\n", omittingEmptySubsequences: false).map(String.init).filter { !$0.isEmpty }
+    }
+
+    private func review() {
+        do {
+            let program = try draft(allow: false)
+            let resolved = try MCPProgramRecord.resolveExecutable(program.executable, lookup: MCPProgramRecord.pathLookup)
+            let directory = MCPProgramRecord.workingDirectory(root: controller.programRoot, id: program.id)
+            consent = MCPProgramRecord.consentText(executable: resolved, arguments: program.arguments, workingDirectory: directory,
+                                                    user: NSUserName(), mayDownload: MCPProgramRecord.mayDownloadCode(executable: program.executable, arguments: program.arguments))
+            error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func draft(allow: Bool) throws -> MCPProgramRecord {
+        let names = envName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : [envName.trimmingCharacters(in: .whitespacesAndNewlines)]
+        var program = try existing ?? MCPProgramRecord(id: id, name: name, executable: executable, arguments: argumentList(), environmentNames: names)
+        program.name = try ConversationName.validated(name)
+        program.executable = try MCPProgramRecord.validatedExecutable(executable)
+        program.arguments = try argumentList().map(MCPProgramRecord.validatedArgument)
+        program.environmentNames = try MCPProgramRecord.validatedNames(names)
+        if allow {
+            let resolved = try MCPProgramRecord.resolveExecutable(program.executable, lookup: MCPProgramRecord.pathLookup)
+            let directory = MCPProgramRecord.workingDirectory(root: controller.programRoot, id: program.id)
+            program.consentedSubject = MCPProgramRecord.subject(executable: resolved, arguments: program.arguments,
+                                                                 workingDirectory: directory, environmentNames: program.environmentNames)
+        } else {
+            program.consentedSubject = nil
+        }
+        return program
+    }
+
+    private func save(allow: Bool) async {
+        saving = true
+        defer { saving = false }
+        do {
+            let program = try draft(allow: allow)
+            var secrets: [String: String] = [:]
+            if !envName.isEmpty && !envValue.isEmpty { secrets[envName] = envValue }
+            try await controller.save(program, secrets: secrets)
+            dismiss()
+        } catch { self.error = error.localizedDescription }
+    }
 }

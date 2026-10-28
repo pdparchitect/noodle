@@ -12,8 +12,12 @@ public actor MCPService {
     private var epochs: [UUID: Int] = [:]
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
+    private let programRuntime: MCPProgramRuntime
     public init(namespace: String) {
         credentials = MCPCredentialStore(service: namespace + ".mcp.oauth")
+        programRuntime = MCPProgramRuntime(
+            secrets: MCPProgramKeychain(service: namespace + ".mcp.program"),
+            spawner: MCPProgramHostLauncher.spawn)
         oauth = MCPOAuth()
         httpConfiguration = {
             let configuration = URLSessionConfiguration.ephemeral
@@ -23,8 +27,23 @@ public actor MCPService {
         }
     }
     init(credentials: any MCPCredentialStorage, oauth: MCPOAuth,
-         httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
+         httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration,
+         programRuntime: MCPProgramRuntime = MCPProgramRuntime()) {
         self.credentials = credentials; self.oauth = oauth; self.httpConfiguration = httpConfiguration
+        self.programRuntime = programRuntime
+    }
+    public func saveProgramSecrets(_ values: [String: String], id: UUID) async throws {
+        try await programRuntime.saveSecrets(values, id: id)
+    }
+    public func loadProgramSecrets(_ id: UUID) async throws -> [String: String] {
+        try await programRuntime.loadSecrets(id)
+    }
+    public func stopProgram(_ id: UUID) async throws {
+        try await programRuntime.remove(id)
+    }
+    public func perform(_ request: MCPBridgeRequest, program: MCPProgramRecord, root: URL,
+                        authorized: @escaping @Sendable () async -> Bool = { true }) async throws -> Data {
+        try await programRuntime.perform(request, program: program, root: root, user: NSUserName(), authorized: authorized)
     }
     public func hasCredentials(_ id: UUID) -> Bool {
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }

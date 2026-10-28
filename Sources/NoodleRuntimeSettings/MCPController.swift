@@ -12,6 +12,8 @@ public final class MCPController {
     public private(set) var errors: [UUID: String] = [:]
     var errorMessage: String?
     @ObservationIgnored private let repository: WorkspaceRepository
+    /// Working directories for launched programs live under this folder.
+    var programRoot: URL { repository.rootURL }
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
     @ObservationIgnored public let service: MCPService
     @ObservationIgnored private var loginTask: Task<Void, Never>?
@@ -110,7 +112,8 @@ public final class MCPController {
     }
     public func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()
-        guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
+        let known = Set(registry.connections.map(\.id)).union(registry.programs.map(\.id))
+        guard ids.isSubset(of: known) else {
             throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
         }
     }
@@ -119,7 +122,47 @@ public final class MCPController {
             throw MCPConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
         }
     }
-    public func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
+    public func selectedIDs(for agent: AgentRecord) -> Set<UUID> {
+        Set(registry.assigned(to: agent.id).map(\.id)).union(registry.assignedPrograms(to: agent.id).map(\.id))
+    }
+    /// Saves the program without starting it. Secret values go to the keychain, not the registry.
+    public func save(_ program: MCPProgramRecord, secrets: [String: String]) async throws {
+        try requireReadableRegistry()
+        let allowed = Set(program.environmentNames)
+        var stored = try await service.loadProgramSecrets(program.id)
+        stored = stored.filter { allowed.contains($0.key) }
+        for (name, value) in secrets where allowed.contains(name) && !value.isEmpty {
+            stored[name] = value
+        }
+        try await service.saveProgramSecrets(stored, id: program.id)
+        var next = registry
+        if let index = next.programs.firstIndex(where: { $0.id == program.id }) {
+            next.programs[index] = program
+        } else {
+            next.programs.append(program)
+        }
+        do {
+            try next.save(root: repository.rootURL)
+        } catch {
+            try? await service.stopProgram(program.id)
+            throw error
+        }
+        registry = next
+        synchronizeProviders()
+    }
+    func remove(_ program: MCPProgramRecord) {
+        var next = registry
+        next.remove(program.id)
+        do {
+            try requireReadableRegistry()
+            try next.save(root: repository.rootURL)
+            registry = next
+            synchronizeProviders()
+            errors[program.id] = nil
+            Task { try? await service.stopProgram(program.id) }
+            try synchronize()
+        } catch { errorMessage = error.localizedDescription }
+    }
     func remove(_ record: MCPConnectionRecord) {
         if signingIn == record.id { loginTask?.cancel() }
         var next = registry
@@ -202,7 +245,11 @@ public final class MCPController {
     /// Call after every change to `registry`. A connection that cannot be read grants nothing.
     private func synchronizeProviders() {
         let connections = registryReadable ? registry.connections : []
+        let programs = registryReadable ? registry.programs : []
         providers?.synchronize(connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
+        providers?.synchronize(programs, root: repository.rootURL) { [weak self] id in
+            self?.registry.programs.first { $0.id == id }
+        }
         let granted = registryReadable ? registry.assignments : [:]
         onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
             UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }

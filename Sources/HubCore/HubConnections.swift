@@ -164,7 +164,7 @@ import NoodleMCP
 
     public func assigned(to bot: UUID, for user: HubUser) -> Set<UUID> {
         guard access.owner(ofBot: bot) == user.id else { return [] }
-        return Set(registry.assigned(to: bot).map(\.id))
+        return Set(registry.assigned(to: bot).map(\.id)).union(registry.assignedPrograms(to: bot).map(\.id))
     }
 
     /// Deletes a connection and its saved sign-in.
@@ -219,6 +219,7 @@ import NoodleMCP
 
     private func synchronize() {
         providers.synchronize(registry.connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
+        providers.synchronize(registry.programs, root: root) { [weak self] id in self?.registry.programs.first { $0.id == id } }
         assignments.replace(ConnectionToolProvider.grantKind, with: Dictionary(uniqueKeysWithValues: registry.assignments.compactMap { key, ids in
             UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }
         }))

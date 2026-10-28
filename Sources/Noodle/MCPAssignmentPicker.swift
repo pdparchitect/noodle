@@ -67,6 +67,14 @@ struct MCPAssignmentPicker: View {
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
+                        ForEach(controller.registry.programs.filter { selectedIDs.contains($0.id) }) { program in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(program.name).lineLimit(1)
+                                if let warning = MCPProgramRecord.assignmentWarning(restricted: true) {
+                                    Text(warning).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }.padding(8)
+                        }
                         ForEach(controller.registry.connections.filter { selectedIDs.contains($0.id) }) { connection in
                             HStack(spacing: 10) {
                                 MCPConnectionIcon(connection: connection, size: 26)
@@ -157,6 +165,18 @@ struct MCPConnectionChooser: View {
                                 Spacer()
                                 Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                             }.padding(8).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                    ForEach(controller.registry.programs.filter {
+                        !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
+                    }) { program in
+                        Button { selectedIDs.insert(program.id) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(program.name).foregroundStyle(Color.primary)
+                                if let warning = MCPProgramRecord.assignmentWarning(restricted: true) {
+                                    Text(warning).font(.caption).foregroundStyle(Color.secondary).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }.padding(8)
                         }.buttonStyle(.plain)
                     }
                     ForEach(controller.registry.connections.filter {

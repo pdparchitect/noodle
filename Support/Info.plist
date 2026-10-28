@@ -110,6 +110,8 @@
 	</array>
 	<key>NoodleAgentHostService</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent-host</string>
+	<key>NoodleMCPProgramHostService</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER).mcp-program-host</string>
 	<key>NoodleAppletGroup</key>
 	<string>$(DEVELOPMENT_TEAM).com.pdparchitect.noodle.applets$(NOODLE_COMPANION_SUFFIX)</string>
 	<key>NoodleApplicationIdentifier</key>
