@@ -67,7 +67,7 @@ struct MCPCredentialStore: MCPCredentialStorage {
 public enum MCPServiceError: LocalizedError, Sendable {
     case credentialStorage, signInRequired, registrationUnsupported, invalidMetadata, invalidCallback
     case network(Int), timedOut, revoked, responseTooLarge
-    case keychain(Int32)
+    case keychain(Int32), untrustedCertificate, consentRequired, legacyEventStream
     public var errorDescription: String? {
         switch self {
         case .credentialStorage: return "Could not securely save or read this connection in Keychain."
@@ -84,6 +84,65 @@ public enum MCPServiceError: LocalizedError, Sendable {
         case .timedOut: return "The MCP request timed out. A remote action may have completed; verify before retrying."
         case .revoked: return "This connection was removed or disconnected."
         case .responseTooLarge: return "The MCP response exceeded the supported size."
+        case .untrustedCertificate: return "The server certificate is not trusted."
+        case .consentRequired: return "Approve this connection in Settings → Tools before using it."
+        case .legacyEventStream: return "This server uses a separate event stream, which Noodle does not support."
         }
+    }
+}
+
+extension MCPServiceError {
+    /// URLSession delivers this error as NSError, so the Swift value has to be rebuilt.
+    static func restored(_ error: Error) -> MCPServiceError? {
+        if let service = error as? MCPServiceError { return service }
+        let ns = error as NSError
+        if let nested = ns.userInfo[NSUnderlyingErrorKey] as? Error, let service = restored(nested) {
+            return service
+        }
+        guard ns.domain == errorDomain || ns.domain == "NoodleMCP.MCPServiceError" else { return nil }
+        let status = ns.userInfo["NoodleMCPStatus"] as? Int
+        switch (ns.domain, ns.code) {
+        case (errorDomain, 6):
+            guard let status else { return nil }
+            return .network(status)
+        case (errorDomain, 10):
+            guard let status else { return nil }
+            return .keychain(Int32(status))
+        case (errorDomain, 11), ("NoodleMCP.MCPServiceError", 10): return .untrustedCertificate
+        case (errorDomain, 12), ("NoodleMCP.MCPServiceError", 11): return .consentRequired
+        case (errorDomain, 13), ("NoodleMCP.MCPServiceError", 12): return .legacyEventStream
+        default: return nil
+        }
+    }
+}
+
+extension MCPServiceError: CustomNSError {
+    public static var errorDomain: String { "Noodle.MCP.Service" }
+    public var errorCode: Int {
+        switch self {
+        case .credentialStorage: return 1
+        case .signInRequired: return 2
+        case .registrationUnsupported: return 3
+        case .invalidMetadata: return 4
+        case .invalidCallback: return 5
+        case .network: return 6
+        case .timedOut: return 7
+        case .revoked: return 8
+        case .responseTooLarge: return 9
+        case .keychain: return 10
+        case .untrustedCertificate: return 11
+        case .consentRequired: return 12
+        case .legacyEventStream: return 13
+        }
+    }
+    public var errorUserInfo: [String: Any] {
+        var info: [String: Any] = [:]
+        if let errorDescription { info[NSLocalizedDescriptionKey] = errorDescription }
+        switch self {
+        case .network(let status): info["NoodleMCPStatus"] = status
+        case .keychain(let status): info["NoodleMCPStatus"] = Int(status)
+        default: break
+        }
+        return info
     }
 }

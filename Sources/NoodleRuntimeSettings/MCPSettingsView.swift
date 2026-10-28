@@ -16,14 +16,14 @@ public struct MCPSettingsView: View {
                 VStack(spacing: 0) {
                     if let builtIn {
                         builtIn
-                        if !store.mcp.registry.connections.isEmpty { Divider().padding(.leading, 58) }
+                        if !store.mcp.registry.all.isEmpty { Divider().padding(.leading, 58) }
                     }
-                    if store.mcp.registry.connections.isEmpty && builtIn == nil {
+                    if store.mcp.registry.all.isEmpty && builtIn == nil {
                         Label("No connections", systemImage: "puzzlepiece.extension")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, minHeight: 80)
                     }
-                    ForEach(store.mcp.registry.connections) { connection in
+                    ForEach(store.mcp.registry.all) { connection in
                         HStack(alignment: .top, spacing: 12) {
                             MCPConnectionIcon(connection: connection, size: 32)
                             VStack(alignment: .leading, spacing: 5) {
@@ -59,7 +59,7 @@ public struct MCPSettingsView: View {
                                 }.padding(.top, 3)
                             }
                         }.padding(14)
-                        if connection.id != store.mcp.registry.connections.last?.id { Divider().padding(.leading, 58) }
+                        if connection.id != store.mcp.registry.all.last?.id { Divider().padding(.leading, 58) }
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { geometry in
@@ -125,6 +125,10 @@ public struct MCPEditor: View {
     /// Saves the connection on this Mac at once, or elsewhere, as on a Noodle Hub, and returns it as saved.
     private let saveNow: ((MCPConnectionRecord) throws -> MCPConnectionRecord)?
     private let saveLater: ((MCPConnectionRecord) async throws -> MCPConnectionRecord)?
+    private let storeBearer: ((String, MCPConnectionRecord) async throws -> Void)?
+    private let discardBearer: ((MCPConnectionRecord) async throws -> Void)?
+    /// The Mac app can add a server on this Mac. Noodle Hub only adds a remote server.
+    private let choosesPlace: Bool
     let existing: MCPConnectionRecord?
     let onBack: (() -> Void)?
     let onSaved: (MCPConnectionRecord) -> Void
@@ -134,6 +138,10 @@ public struct MCPEditor: View {
     @State private var endpoint: String
     @State private var description: String
     @State private var instructions: String
+    @State private var place: MCPConnectionPlace
+    @State private var authorization: MCPLocalAuthorization
+    @State private var bearer: String
+    @State private var allowed: Bool
     @State private var error: String?
     @State private var newConnectionID = UUID()
     @State private var saving = false
@@ -142,9 +150,12 @@ public struct MCPEditor: View {
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
         saveNow = { record in
             try controller.save(record)
-            return controller.registry.connections.first { $0.id == record.id } ?? record
+            return controller.registry.record(record.id) ?? record
         }
         saveLater = nil
+        storeBearer = { token, record in try await controller.storeBearer(token, for: record) }
+        discardBearer = { record in try await controller.discardLoopbackBearer(record) }
+        choosesPlace = true
         self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect ?? controller.connect
@@ -152,6 +163,10 @@ public struct MCPEditor: View {
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
         _instructions = State(initialValue: existing?.instructions ?? "")
+        _place = State(initialValue: existing?.place ?? .remote)
+        _authorization = State(initialValue: Self.shownAuthorization(existing?.authorization))
+        _bearer = State(initialValue: "")
+        _allowed = State(initialValue: existing?.consentedOrigin != nil)
     }
 
     /// For a connection kept somewhere other than this Mac, as on a Noodle Hub.
@@ -161,6 +176,9 @@ public struct MCPEditor: View {
                 save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
         saveNow = nil
         saveLater = save
+        storeBearer = nil
+        discardBearer = nil
+        choosesPlace = false
         self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect
@@ -168,6 +186,10 @@ public struct MCPEditor: View {
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
         _instructions = State(initialValue: existing?.instructions ?? "")
+        _place = State(initialValue: existing?.place ?? .remote)
+        _authorization = State(initialValue: Self.shownAuthorization(existing?.authorization))
+        _bearer = State(initialValue: "")
+        _allowed = State(initialValue: existing?.consentedOrigin != nil)
     }
     public var body: some View {
         VStack(spacing: 0) {
@@ -191,10 +213,30 @@ public struct MCPEditor: View {
                     TextField("e.g. Notion — Work", text: $name, axis: .horizontal).lineLimit(1)
                         .help("Use a distinct name for each account")
                 }
+                if choosesPlace, existing == nil {
+                    Picker("Connection", selection: $place) {
+                        Text("Remote server").tag(MCPConnectionPlace.remote)
+                        Text("Server on this Mac").tag(MCPConnectionPlace.loopback)
+                    }.pickerStyle(.radioGroup)
+                }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("MCP Server URL").font(.caption.weight(.semibold))
-                    TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
+                    Text(place == .loopback ? "Address on this Mac" : "MCP Server URL").font(.caption.weight(.semibold))
+                    TextField(place == .loopback ? "http://127.0.0.1:8080/mcp" : "https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
                         .autocorrectionDisabled().disabled(existing != nil)
+                }
+                if place == .loopback {
+                    Picker("Authorization", selection: $authorization) {
+                        Text("No token").tag(MCPLocalAuthorization.none)
+                        Text("Bearer token").tag(MCPLocalAuthorization.bearer)
+                    }.pickerStyle(.radioGroup)
+                    if authorization == .bearer {
+                        SecureField("Bearer token", text: $bearer)
+                            .help("Stored in the login keychain. It is not written into the address or the registry.")
+                    }
+                    Toggle(isOn: $allowed) {
+                        Text(consentText)
+                    }
+                    .font(.caption)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description").font(.caption.weight(.semibold))
@@ -208,7 +250,9 @@ public struct MCPEditor: View {
                         .frame(height: 130)
                         .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
                 }
-                Text("MCP connection · Sign-in opens in your browser.")
+                Text(place == .loopback
+                     ? "A server on this Mac receives tool calls from the agents you assign. A program on this Mac is not started by Noodle."
+                     : "MCP connection · Sign-in opens in your browser.")
                     .font(.caption).foregroundStyle(.secondary)
                 if existing != nil {
                     Text("Changes apply to every bot using this connection.").font(.caption).foregroundStyle(.secondary)
@@ -218,10 +262,45 @@ public struct MCPEditor: View {
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
+    private static func shownAuthorization(_ stored: MCPLocalAuthorization?) -> MCPLocalAuthorization {
+        guard let stored, stored != .browser else { return MCPLocalAuthorization.none }
+        return stored
+    }
+    private var consentText: String {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let origin = URL(string: trimmed).map { MCPConnectionRecord.origin(of: $0) } ?? trimmed
+        let host = origin.split(separator: "://").last.map(String.init) ?? origin
+        return "Noodle on this Mac will send tool calls from the agents you assign to the program listening on \(host). Any program that listens on that port will receive them."
+    }
     private func save() {
         do {
             let record = try draft()
-            if let saveNow { return finish(try saveNow(record)) }
+            let trimmedBearer = bearer.trimmingCharacters(in: .whitespacesAndNewlines)
+            if place == .loopback, authorization == .bearer, trimmedBearer.isEmpty, existing?.authorization != .bearer {
+                throw MCPConnectionError.message("Enter the bearer token in the secure field.")
+            }
+            // An empty field on an existing bearer connection leaves the saved token in place.
+            let token = (place == .loopback && authorization == .bearer && !trimmedBearer.isEmpty) ? trimmedBearer : nil
+            if let token, storeBearer == nil {
+                throw MCPConnectionError.message("Save the bearer token in Noodle on this Mac.")
+            }
+            let dropBearer = place == .loopback && authorization != .bearer
+            if let saveNow {
+                let saved = try saveNow(record)
+                if (token != nil && storeBearer != nil) || (dropBearer && discardBearer != nil) {
+                    saving = true
+                    Task { @MainActor in
+                        defer { saving = false }
+                        do {
+                            if let token, let storeBearer { try await storeBearer(token, saved) }
+                            if dropBearer, let discardBearer { try await discardBearer(saved) }
+                            finish(saved)
+                        } catch { self.error = error.localizedDescription }
+                    }
+                    return
+                }
+                return finish(saved)
+            }
             saving = true
             Task { @MainActor in
                 defer { saving = false }
@@ -231,19 +310,33 @@ public struct MCPEditor: View {
     }
     private func draft() throws -> MCPConnectionRecord {
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
+            throw MCPConnectionError.message(place == .loopback
+                ? "Enter a loopback HTTP address without credentials or a fragment."
+                : "Enter a valid HTTPS server URL.")
         }
         // A registry save can succeed before workspace refresh fails. Keep
         // the draft's identity so retry updates that account in place.
-        var record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
-        record.name = try ConversationName.validated(name)
-        record.description = String(description.prefix(1_000))
-        record.instructions = String(instructions.prefix(20_000))
-        return record
+        let record: MCPConnectionRecord
+        if place == .loopback {
+            let origin = MCPConnectionRecord.origin(of: try MCPConnectionRecord.validatedLoopbackEndpoint(url))
+            record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, loopback: url,
+                authorization: authorization, consentedOrigin: allowed ? origin : nil)
+        } else {
+            record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
+        }
+        var editable = record
+        editable.name = try ConversationName.validated(name)
+        editable.description = String(description.prefix(1_000))
+        editable.instructions = String(instructions.prefix(20_000))
+        if place == .loopback {
+            editable.authorization = authorization
+            editable.consentedOrigin = allowed ? MCPConnectionRecord.origin(of: record.endpoint) : nil
+        }
+        return editable
     }
     private func finish(_ record: MCPConnectionRecord) {
         onSaved(record)
-        let shouldConnect = existing == nil
+        let shouldConnect = existing == nil && (record.place != .loopback || record.consentedOrigin != nil)
         dismiss()
         if shouldConnect {
             Task { @MainActor in

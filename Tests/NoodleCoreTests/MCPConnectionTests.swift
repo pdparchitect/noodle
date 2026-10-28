@@ -168,4 +168,104 @@ final class MCPConnectionTests: XCTestCase {
         XCTAssertThrowsError(try registry.save(root: root))
         XCTAssertEqual(try Data(contentsOf: file), corrupt)
     }
+
+    func testPublicValidatorStillRejectsLoopbackAndLocalNetworks() {
+        let rejected = [
+            "http://127.0.0.1:8080", "http://localhost", "https://localhost", "http://[::1]",
+            "http://192.168.1.5", "https://x.local", "http://10.0.0.1", "https://10.0.0.1/mcp",
+            "https://user:password@example.com/mcp", "https://example.com/mcp#fragment"
+        ]
+        for url in rejected {
+            XCTAssertThrowsError(try MCPConnectionRecord.validatedEndpoint(URL(string: url)!)) { error in
+                XCTAssertEqual(error.localizedDescription, "Enter a public HTTPS server URL without credentials or a fragment.")
+            }
+        }
+        XCTAssertNoThrow(try MCPConnectionRecord.validatedEndpoint(URL(string: "https://mcp.notion.com/mcp")!))
+    }
+
+    func testLoopbackValidatorAcceptsOnlyLoopbackAndRefusesSecrets() throws {
+        let accepted = ["http://127.0.0.1:8080/mcp", "http://[::1]:8080/mcp", "http://localhost/mcp", "https://127.0.0.1:9/mcp"]
+        for url in accepted {
+            let canonical = try MCPConnectionRecord.validatedLoopbackEndpoint(URL(string: url)!)
+            XCTAssertTrue(MCPConnectionRecord.isLoopbackName(canonical.host ?? ""))
+        }
+        let localOnly = ["http://192.168.1.5/mcp", "http://10.0.0.1/mcp", "http://169.254.1.1/mcp",
+                         "http://x.local/mcp", "http://100.64.0.1/mcp", "https://example.com/mcp"]
+        for url in localOnly {
+            XCTAssertThrowsError(try MCPConnectionRecord.validatedLoopbackEndpoint(URL(string: url)!)) { error in
+                XCTAssertEqual(error.localizedDescription, "Local mode accepts loopback only.")
+            }
+        }
+        for url in ["http://user:pass@127.0.0.1:8080/mcp", "http://127.0.0.1:8080/mcp?token=1", "http://127.0.0.1:8080/mcp?apiKey=1"] {
+            XCTAssertThrowsError(try MCPConnectionRecord.validatedLoopbackEndpoint(URL(string: url)!)) { error in
+                XCTAssertEqual(error.localizedDescription, "Put the secret in the secure field, not in the address.")
+            }
+        }
+    }
+
+    func testConnectTimeLookupRefusesANameThatIsNotLoopback() throws {
+        let url = URL(string: "http://localhost:8080/mcp")!
+        XCTAssertThrowsError(try MCPConnectionRecord.dialURL(url, lookup: { _ in ["10.1.2.3"] })) { error in
+            XCTAssertEqual(error.localizedDescription, "Local mode accepts loopback only.")
+        }
+        let dial = try MCPConnectionRecord.dialURL(url, lookup: { _ in ["127.0.0.1"] })
+        XCTAssertEqual(dial.host, "127.0.0.1")
+
+        let v6 = try MCPConnectionRecord.dialURL(url, lookup: { _ in ["::1", "127.0.0.1"] })
+        XCTAssertEqual(v6.absoluteString, "http://[::1]:8080/mcp")
+        XCTAssertEqual(v6.host, "::1")
+        let literal = try MCPConnectionRecord.dialURL(URL(string: "https://127.0.0.1:8080/mcp")!, lookup: { _ in ["127.0.0.1"] })
+        XCTAssertEqual(literal.host, "127.0.0.1")
+    }
+
+    func testOlderRegistryIgnoresLoopbackAndNeverTreatsItAsPublic() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var registry = MCPRegistry()
+        let remote = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)
+        let local = try MCPConnectionRecord(name: "Local", loopback: URL(string: "http://127.0.0.1:8080/mcp")!,
+                                            authorization: .none, consentedOrigin: "http://127.0.0.1:8080")
+        registry.connections = [remote]
+        registry.loopback = [local]
+        let agent = UUID()
+        try registry.assign([remote.id, local.id], to: agent)
+        try registry.save(root: root)
+        let saved = try String(contentsOf: root.appendingPathComponent("MCP/connections.json"), encoding: .utf8)
+        XCTAssertFalse(saved.contains("super-secret"))
+        XCTAssertTrue(saved.contains("loopback"))
+        struct OldRegistry: Decodable {
+            var connections: [MCPConnectionRecord]
+            var assignments: [String: [UUID]]
+        }
+        let old = try JSONDecoder().decode(OldRegistry.self, from: Data(saved.utf8))
+        XCTAssertEqual(old.connections.map(\.id), [remote.id])
+        XCTAssertNoThrow(try MCPConnectionRecord.validatedEndpoint(old.connections[0].endpoint))
+        XCTAssertThrowsError(try MCPConnectionRecord.validatedEndpoint(local.endpoint))
+        let loaded = try MCPRegistry.load(root: root)
+        XCTAssertEqual(loaded.assigned(to: agent).map(\.id).sorted { $0.uuidString < $1.uuidString },
+                       [remote.id, local.id].sorted { $0.uuidString < $1.uuidString })
+        XCTAssertEqual(loaded.loopback.first?.consentedOrigin, "http://127.0.0.1:8080")
+    }
+
+    func testLoopbackLookalikesAreNotLoopback() {
+        let rejected = ["127.0.0.1.example.com", "127.0.0.1%.example.com", "127.1", "0.0.0.0", "::ffff:127.0.0.1", "[::ffff:127.0.0.1]", "[::1%25en0]"]
+        for host in rejected {
+            XCTAssertFalse(MCPConnectionRecord.isLoopbackName(host), host)
+            XCTAssertFalse(MCPConnectionRecord.isNumericLoopback(host), host)
+        }
+        for host in ["127.0.0.1", "127.255.255.255", "::1", "[::1]", "localhost"] {
+            XCTAssertTrue(MCPConnectionRecord.isLoopbackName(host), host)
+        }
+        let urls = [
+            "http://127.0.0.1.example.com/mcp", "http://127.0.0.1%25.example.com/mcp", "http://127.1/mcp", "http://0.0.0.0/mcp",
+            "http://[::ffff:127.0.0.1]/mcp"
+        ]
+        for url in urls {
+            XCTAssertThrowsError(try MCPConnectionRecord.validatedLoopbackEndpoint(URL(string: url)!)) { error in
+                XCTAssertEqual(error.localizedDescription, "Local mode accepts loopback only.")
+            }
+        }
+    }
+
 }

@@ -67,7 +67,7 @@ struct MCPAssignmentPicker: View {
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
-                        ForEach(controller.registry.connections.filter { selectedIDs.contains($0.id) }) { connection in
+                        ForEach(controller.registry.all.filter { selectedIDs.contains($0.id) }) { connection in
                             HStack(spacing: 10) {
                                 MCPConnectionIcon(connection: connection, size: 26)
                                 Text(connection.name).lineLimit(1)
@@ -159,7 +159,7 @@ struct MCPConnectionChooser: View {
                             }.padding(8).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
-                    ForEach(controller.registry.connections.filter {
+                    ForEach(controller.registry.all.filter {
                         !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
                     }) { connection in
                         Button { selectedIDs.insert(connection.id) } label: {
@@ -177,7 +177,7 @@ struct MCPConnectionChooser: View {
                             }.padding(8).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
-                    if controller.registry.connections.isEmpty {
+                    if controller.registry.all.isEmpty {
                         Text("No saved connections. Choose New to add one.").foregroundStyle(.secondary).padding()
                     }
                 }

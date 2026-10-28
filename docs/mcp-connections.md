@@ -23,9 +23,22 @@ before trying again.
 
 ## Supported services
 
-Custom connections must be services that sign you in through your browser.
-Services that ask you to paste an API key, token or client secret, or that run
-as a program on your Mac, are not supported. Providers may restrict accounts or
+A custom connection is either a public server that signs you in through your
+browser, or a server already running on this Mac at a loopback address
+(`127.0.0.1`, `::1`, or `localhost` when that name resolves only to loopback).
+Choose **Server on this Mac** and allow the connection before agents can use it.
+The allow step names the address. A changed address asks again. Declining leaves
+the connection unconnected.
+
+A loopback connection can use no token, or a bearer token entered in the secure
+field. The token is stored in the
+login keychain. It is not part of the address, and it is not written into the
+registry, bot instructions, or logs. Noodle does not follow redirects, and
+`https` on this Mac uses normal certificate checks.
+
+A program that Noodle would start on this Mac is not supported. Public servers
+stay on the public address check: `https`, a public host, browser sign-in, and
+no redirects. Providers may restrict accounts or
 plans.
 
 Some connections, such as Pipedream, give access to several services at once.

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Settings can connect a server that is already running on this Mac at a loopback address. You allow that address before agents use it. A bearer token stays in the login keychain.
+
 ## [0.79.1] - 2026-10-28
 
 ### Changed

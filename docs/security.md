@@ -159,6 +159,8 @@ Assigning a [tool](mcp-connections.md) lets the bot use the permissions you
 granted during sign-in, without asking you again for each use. Tool sign-ins
 stay in the macOS Keychain and are never written to the bot's files.
 
+A connected tool on the public internet is a remote service. A server on this Mac is different: it runs on the Mac where Noodle is open, and any program listening on the allowed port receives the tool calls and any token for that connection. Noodle stores that token in the login keychain and does not write it into bot files, logs, or the address. Noodle does not control what that server returns, and tool output reaches the assigned bot. A bot on a Noodle Computer uses the connection through Noodle, on Noodle's Mac, not through the computer's own loopback. A program that Noodle would start on this Mac is not part of this connection.
+
 A connected tool is a remote service. It receives only workspace files the bot
 chooses to send, and it cannot open workspace files or post into a conversation
 on its own. Files a tool returns are saved in the workspace without overwriting

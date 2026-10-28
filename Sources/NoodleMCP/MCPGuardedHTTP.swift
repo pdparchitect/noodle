@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import Security
 
 /// Retains the HTTP status across URLSession without exposing response contents.
 struct MCPHTTPError: Error, CustomNSError, Sendable {
@@ -14,7 +15,10 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
     private var session: URLSession?
     private var loadingTask: URLSessionDataTask?
     private var received = 0
-    private var responseError: MCPHTTPError?
+    private var responseError: Error?
+    private var eventStream = false
+    private var sawBody = false
+    private var heldResponse: HTTPURLResponse?
     // Per-instance configuration lets transport tests run without shared session state.
     var sessionConfiguration: () -> URLSessionConfiguration = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -24,7 +28,7 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        guard let url = request.url, (try? MCPConnectionRecord.validatedEndpoint(url)) != nil else {
+        guard let url = request.url, Self.allowed(url) else {
             client?.urlProtocol(self, didFailWithError: MCPServiceError.invalidMetadata)
             return
         }
@@ -39,9 +43,41 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
         loadingTask?.resume()
     }
     override func stopLoading() { loadingTask?.cancel(); session?.invalidateAndCancel() }
+
+    /// The old separate-endpoint handshake. A Streamable HTTP body starts with `event: message`.
+    private static func legacyEndpointHandshake(_ prefix: String) -> Bool {
+        let line = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let field = line.trimmingCharacters(in: .whitespaces).lowercased()
+        guard field.hasPrefix("event:") else { return false }
+        let name = field.dropFirst("event:".count).trimmingCharacters(in: .whitespaces)
+        return name == "endpoint"
+    }
+
+    private static func allowed(_ url: URL) -> Bool {
+        (try? MCPConnectionRecord.validatedEndpoint(url)) != nil
+            || (try? MCPConnectionRecord.validatedLoopbackEndpoint(url)) != nil
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         completionHandler(nil)
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust,
+              let host = task.originalRequest?.url?.host,
+              MCPConnectionRecord.isLoopbackName(host) else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        var trustError: CFError?
+        guard SecTrustEvaluateWithError(trust, &trustError) else {
+            responseError = MCPServiceError.untrustedCertificate
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+        completionHandler(.useCredential, URLCredential(trust: trust))
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
@@ -55,7 +91,16 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
             completionHandler(.cancel)
             return
         }
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        let type = response.value(forHTTPHeaderField: "Content-Type")?.lowercased() ?? ""
+        eventStream = type.contains("text/event-stream")
+        let host = dataTask.originalRequest?.url?.host ?? ""
+        if MCPConnectionRecord.isLoopbackName(host) {
+            // Hold the response until the first body bytes are checked. A legacy
+            // loopback `event: endpoint` handshake must fail before the client treats this as success.
+            heldResponse = response
+        } else {
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        }
         completionHandler(.allow)
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -64,12 +109,33 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
             loadingTask?.cancel()
             return
         }
+        if eventStream, !sawBody {
+            sawBody = true
+            let prefix = String(decoding: data.prefix(64), as: UTF8.self)
+            let host = dataTask.originalRequest?.url?.host ?? ""
+            if MCPConnectionRecord.isLoopbackName(host), Self.legacyEndpointHandshake(prefix) {
+                responseError = MCPServiceError.legacyEventStream
+                heldResponse = nil
+                loadingTask?.cancel()
+                return
+            }
+        }
+        deliverHeldResponse()
         client?.urlProtocol(self, didLoad: data)
+    }
+    private func deliverHeldResponse() {
+        if let heldResponse {
+            client?.urlProtocol(self, didReceive: heldResponse, cacheStoragePolicy: .notAllowed)
+            self.heldResponse = nil
+        }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let responseError { client?.urlProtocol(self, didFailWithError: responseError) }
         else if let error { client?.urlProtocol(self, didFailWithError: error) }
-        else { client?.urlProtocolDidFinishLoading(self) }
+        else {
+            deliverHeldResponse()
+            client?.urlProtocolDidFinishLoading(self)
+        }
         session.finishTasksAndInvalidate()
         self.session = nil
         self.loadingTask = nil

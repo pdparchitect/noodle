@@ -59,19 +59,36 @@ public final class MCPController {
     }
     /// Reads which connections are signed in, after something besides Settings signed one in or out.
     public func readSignIns() async {
-        for connection in registry.connections {
-            if await service.hasCredentials(connection.id) { connected.insert(connection.id) } else { connected.remove(connection.id) }
+        for connection in registry.all {
+            if connection.place == .loopback, connection.authorization == MCPLocalAuthorization.none,
+               connection.consentedOrigin == MCPConnectionRecord.origin(of: connection.endpoint) {
+                connected.insert(connection.id)
+            } else if await service.hasCredentials(connection.id) { connected.insert(connection.id) }
+            else { connected.remove(connection.id) }
         }
     }
     func save(_ record: MCPConnectionRecord) throws {
         try requireReadableRegistry()
         var next = registry
-        if let index = next.connections.firstIndex(where: { $0.id == record.id }) { next.connections[index] = record }
-        else { next.connections.append(record) }
+        if record.place == .loopback {
+            next.connections.removeAll { $0.id == record.id }
+            if let index = next.loopback.firstIndex(where: { $0.id == record.id }) { next.loopback[index] = record }
+            else { next.loopback.append(record) }
+        } else {
+            next.loopback.removeAll { $0.id == record.id }
+            if let index = next.connections.firstIndex(where: { $0.id == record.id }) { next.connections[index] = record }
+            else { next.connections.append(record) }
+        }
         try next.save(root: repository.rootURL)
         registry = next
         synchronizeProviders()
         try synchronize()
+    }
+    func storeBearer(_ token: String, for record: MCPConnectionRecord) async throws {
+        try await service.storeBearer(token, id: record.id, endpoint: record.endpoint)
+    }
+    func discardLoopbackBearer(_ record: MCPConnectionRecord) async throws {
+        try await service.discardLoopbackBearer(record.id)
     }
 
     /// Creates a separate saved MCP account without signing in or assigning it.
@@ -110,7 +127,7 @@ public final class MCPController {
     }
     public func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()
-        guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
+        guard ids.isSubset(of: Set(registry.all.map(\.id))) else {
             throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
         }
     }
@@ -141,12 +158,20 @@ public final class MCPController {
         await deletions.run { id in
             // A removal whose registry write failed keeps its connection, so it keeps its sign-in too.
             guard registryReadable else { throw MCPConnectionError.message("Saved tool connections could not be read.") }
-            guard !registry.connections.contains(where: { $0.id == id }) else { return }
+            guard registry.record(id) == nil else { return }
             try await service.disconnect(id)
         }
     }
     func connect(_ record: MCPConnectionRecord) {
         guard signingIn == nil else { return }
+        if record.place == .loopback {
+            if record.authorization == .browser {
+                errors[record.id] = "Browser sign-in is not available for a server on this Mac."
+                return
+            }
+            connectLoopback(record)
+            return
+        }
         browser.captureReturnWindow()
         signingIn = record.id
         errors[record.id] = nil
@@ -164,16 +189,35 @@ public final class MCPController {
                 let request = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
                 _ = try await service.perform(request, connection: record)
                 let icon = await service.icon(for: record)
-                guard var current = registry.connections.first(where: { $0.id == record.id }) else { return }
+                guard var current = registry.record(record.id) else { return }
                 connected.insert(record.id)
                 if let icon { current.iconData = icon; try save(current) }
                 else { try synchronize() }
             } catch is CancellationError {
                 errors[record.id] = "Sign-in cancelled."
             } catch {
-                if registry.connections.contains(where: { $0.id == record.id }) {
+                if registry.record(record.id) != nil {
                     errors[record.id] = Self.safeError(error)
                 }
+            }
+        }
+    }
+    private func connectLoopback(_ record: MCPConnectionRecord) {
+        signingIn = record.id
+        errors[record.id] = nil
+        loginTask = Task {
+            defer { signingIn = nil; loginTask = nil; signInStage = "" }
+            do {
+                signInStage = "Checking available tools…"
+                let request = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
+                _ = try await service.perform(request, connection: record)
+                guard registry.record(record.id) != nil else { return }
+                connected.insert(record.id)
+                try synchronize()
+            } catch is CancellationError {
+                errors[record.id] = "Sign-in cancelled."
+            } catch {
+                if registry.record(record.id) != nil { errors[record.id] = Self.safeError(error) }
             }
         }
     }
@@ -201,8 +245,8 @@ public final class MCPController {
     }
     /// Call after every change to `registry`. A connection that cannot be read grants nothing.
     private func synchronizeProviders() {
-        let connections = registryReadable ? registry.connections : []
-        providers?.synchronize(connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
+        let connections = registryReadable ? registry.all : []
+        providers?.synchronize(connections) { [weak self] id in self?.registry.record(id) }
         let granted = registryReadable ? registry.assignments : [:]
         onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
             UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }

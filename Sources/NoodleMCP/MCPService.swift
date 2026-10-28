@@ -27,8 +27,25 @@ public actor MCPService {
         self.credentials = credentials; self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     public func hasCredentials(_ id: UUID) -> Bool {
-        guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
+        guard let stored = try? credentials.load(id), let token = stored.accessToken, !token.isEmpty else { return false }
+        if stored.clientID == "loopback-bearer" { return true }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
+    }
+    /// Stores a loopback bearer token in the login keychain. The registry never receives it.
+    public func storeBearer(_ token: String, id: UUID, endpoint: URL) throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 8_192, !trimmed.contains("\n"), !trimmed.contains("\u{0}") else {
+            throw MCPConnectionError.message("Enter the bearer token in the secure field.")
+        }
+        let stored = MCPCredentials(endpoint: endpoint, issuer: endpoint, authorizationEndpoint: endpoint,
+            tokenEndpoint: endpoint, clientID: "loopback-bearer", redirectURI: endpoint, resource: endpoint,
+            scope: nil, accessToken: trimmed, refreshToken: nil, expiresAt: nil)
+        try credentials.save(stored, id: id)
+    }
+    /// Removes a loopback bearer previously stored for this connection. Other sign-ins are left alone.
+    public func discardLoopbackBearer(_ id: UUID) throws {
+        guard let stored = try credentials.load(id), stored.clientID == "loopback-bearer" else { return }
+        try credentials.remove(id)
     }
     public func disconnect(_ id: UUID) throws {
         epochs[id, default: 0] += 1
@@ -171,8 +188,7 @@ public actor MCPService {
         if let deadline, Date() >= deadline { throw MCPServiceError.timedOut }
     }
 
-    private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
-                         authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+    private func refreshedToken(_ connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> String {
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw MCPServiceError.signInRequired }
         let oauthConfiguration = Self.oauthConfiguration(for: connection.endpoint)
@@ -192,11 +208,38 @@ public actor MCPService {
         }
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         guard let token = stored.accessToken else { throw MCPServiceError.signInRequired }
+        return token
+    }
+
+    private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
+                         authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+        let dial: URL
+        let token: String
+        if connection.place == .loopback {
+            guard connection.consentedOrigin == MCPConnectionRecord.origin(of: connection.endpoint) else {
+                throw MCPServiceError.consentRequired
+            }
+            dial = try MCPConnectionRecord.dialURL(connection.endpoint, lookup: MCPConnectionRecord.systemAddresses)
+            if connection.authorization == .bearer {
+                guard let stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
+                      stored.clientID == "loopback-bearer", let access = stored.accessToken, !access.isEmpty else {
+                    throw MCPServiceError.signInRequired
+                }
+                token = access
+            } else if connection.authorization == .browser {
+                throw MCPConnectionError.message("Browser sign-in is not available for a server on this Mac.")
+            } else {
+                token = ""
+            }
+        } else {
+            dial = connection.endpoint
+            token = try await refreshedToken(connection, epoch: epoch, deadline: deadline)
+        }
         let configuration = httpConfiguration()
-        let transport = HTTPClientTransport(endpoint: connection.endpoint, configuration: configuration, streaming: false,
+        let transport = HTTPClientTransport(endpoint: dial, configuration: configuration, streaming: false,
             requestModifier: { original in
                 var request = original
-                request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+                if !token.isEmpty { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
                 return request
             })
         // A fresh protocol session per operation avoids leaking server-side session
@@ -281,6 +324,7 @@ public actor MCPService {
             let underlying: Error
             if case MCPError.transportError(let cause) = error { underlying = cause }
             else { underlying = error }
+            if let service = MCPServiceError.restored(underlying) ?? MCPServiceError.restored(error) { throw service }
             let http = underlying as NSError
             if http.domain == MCPHTTPError.errorDomain { throw MCPServiceError.network(http.code) }
             let message: String
