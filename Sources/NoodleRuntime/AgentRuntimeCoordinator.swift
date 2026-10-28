@@ -50,11 +50,13 @@ public struct HarnessHostInspection {
     }
 }
 
-/// A bot running on another harness from Settings › Harnesses because its own ran out of usage.
-/// It uses that harness's default model and login, and goes back at an idle point after `returnAfter`.
+/// A bot running on another profile or harness from Settings because its own login ran out of usage.
+/// It uses the selected login, and goes back at an idle point after `returnAfter`.
 public struct HarnessFallback: Equatable, Sendable {
     public let primary: HarnessProvider
     public var current: HarnessProvider
+    public var profile: UUID?
+    var unavailable: Set<HarnessFallbackTarget> = []
     public let returnAfter: Date
     /// How many times in a row the bot's own harness ran out again soon after it came back.
     let flaps: Int
@@ -716,9 +718,15 @@ public final class AgentRuntimeCoordinator {
         harnessFallbacks = harnessFallbacks.filter { liveIDs.contains($0.key) }
         fallbackReturns = fallbackReturns.filter { liveIDs.contains($0.key) }
         for agent in agents {
-            // A bot given another harness in Edit Bot runs on that one from now on.
-            if let fallback = harnessFallbacks[agent.id], agent.harnessIdentifier != fallback.primary.rawValue {
-                harnessFallbacks[agent.id] = nil
+            // Editing the saved harness or profile replaces the temporary fallback choice.
+            if let fallback = harnessFallbacks[agent.id] {
+                let profileChanged = repository.map {
+                    let target = HarnessFallbackTarget(provider: fallback.primary, profile: try? $0.loadAgentHarnessProfile(agent))
+                    return SubscriptionUsageStore.key(fallback.primary, profile: target.profile) != fallback.primaryKey
+                } ?? false
+                if agent.harnessIdentifier != fallback.primary.rawValue || profileChanged {
+                    harnessFallbacks[agent.id] = nil
+                }
             }
             if blockedRestarts.contains(agent.id) { continue }
             if blockedRecoveries.contains(agent.id), connectionRecoveryAttempts[agent.id] != nil { continue }
@@ -880,7 +888,7 @@ public final class AgentRuntimeCoordinator {
         let runtimeID = UUID()
         runtimeIDs[agent.id] = runtimeID
         usageMeters[agent.id] = UsageMeter()
-        let ownLogin = harnessFallbacks[agent.id] == nil
+        let profile = runningProfile(for: configured, repository: repository)
         let process = makeProcess(AgentRuntimeLaunch(
             agent: agent, provider: installation.provider,
             executableURL: URL(fileURLWithPath: executablePath), workspaceURL: repository.directory(for: agent),
@@ -900,9 +908,8 @@ public final class AgentRuntimeCoordinator {
                 guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
                 self.activity.record(message, provider: installation.provider, agentID: agent.id)
                 self.recordUsage(message, provider: installation.provider, agent: agent)
-                self.recordSubscriptionUsage(message, provider: installation.provider, agent: agent, repository: repository,
-                                             ownLogin: ownLogin)
-            }))
+                self.recordSubscriptionUsage(message, provider: installation.provider, profile: profile)
+            }, profileOverride: harnessFallbacks[agent.id].map { $0.profile ?? HarnessProfileStore.defaultID($0.current) }))
         processes[agent.id] = process
         process.start()
         recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
@@ -921,12 +928,16 @@ public final class AgentRuntimeCoordinator {
         }
     }
 
-    /// Plan limits belong to the login the bot runs on, its profile's or the system one; a fallback harness runs on its system one.
-    private func recordSubscriptionUsage(_ message: [String: Any], provider: HarnessProvider, agent: AgentRecord,
-                                         repository: WorkspaceRepository, ownLogin: Bool) {
+    /// Usage is charged to the actual login, including a temporary fallback profile.
+    private func recordSubscriptionUsage(_ message: [String: Any], provider: HarnessProvider, profile: UUID?) {
         guard SubscriptionUsage.isReport(message, provider: provider) else { return }
-        subscriptionUsage.record(message, provider: provider,
-                                 profile: ownLogin ? (try? repository.loadAgentHarnessProfile(agent)) : nil, at: now())
+        subscriptionUsage.record(message, provider: provider, profile: profile, at: now())
+    }
+
+    public func runningProfile(for agent: AgentRecord, repository: WorkspaceRepository) -> UUID? {
+        if let fallback = harnessFallbacks[agent.id] { return fallback.profile }
+        guard let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") else { return nil }
+        return HarnessFallbackTarget(provider: provider, profile: try? repository.loadAgentHarnessProfile(agent)).profile
     }
 
     /// Organize waits for an idle bot, like a heartbeat, so it never cuts into work.
@@ -1005,10 +1016,9 @@ public final class AgentRuntimeCoordinator {
     public func retryAfterSignIn(provider: HarnessProvider, profile: UUID?, agents: [AgentRecord], repository: WorkspaceRepository) {
         guard !isStoppingAll else { return }
         for agent in agents where snapshot(for: agent.id).phase == .failed && snapshot(for: agent.id).failure == .authenticationRequired {
-            // A bot on a fallback harness waits on that harness's own login.
-            guard harnessFallbacks[agent.id] == nil, !changingAccess.contains(agent.id),
+            guard !changingAccess.contains(agent.id),
                   runningAgent(agent).harnessIdentifier == provider.rawValue,
-                  (try? repository.loadAgentHarnessProfile(agent)) == profile else { continue }
+                  runningProfile(for: agent, repository: repository) == profile else { continue }
             forgetSignInRetries(agent.id)
             RestrictedHarnessStorage.forgetRefusedLogin(provider: provider, workspace: repository.directory(for: agent))
             restart(agent: agent, repository: repository, sessionRecovery: sessionRecovery(.retry, for: agent))
@@ -1267,70 +1277,101 @@ public final class AgentRuntimeCoordinator {
         checkFallbackReturns(agents: agents, repository: repository)
     }
 
-    /// The bot's record as it runs now: on a fallback, that harness with its default model and effort.
+    /// A profile switch keeps the bot's model and effort; a harness switch uses the new defaults.
     func runningAgent(_ agent: AgentRecord) -> AgentRecord {
         guard let fallback = harnessFallbacks[agent.id], agent.harnessIdentifier == fallback.primary.rawValue else { return agent }
         var running = agent
         running.harnessIdentifier = fallback.current.rawValue
-        running.modelIdentifier = nil
-        running.reasoningEffort = nil
+        if fallback.current != fallback.primary {
+            running.modelIdentifier = nil
+            running.reasoningEffort = nil
+        }
         return running
     }
 
-    /// Moves a bot whose harness ran out of usage, or whose fallback needs a sign-in, to the next harness
-    /// in Settings › Harnesses that is on, installed and has usage left. False when there is none, and the
-    /// bot pauses as before.
+    /// Try an opted-in login on the current harness first, then the separate ordered fallback list.
+    /// A temporary login refused at startup can be skipped too; the bot's own sign-in still waits for the person.
     private func fallBack(_ agent: AgentRecord, repository: WorkspaceRepository, after snapshot: AgentRuntimeSnapshot) -> Bool {
         guard let failure = snapshot.failure,
               failure == .usageLimit || failure == .authenticationRequired && harnessFallbacks[agent.id] != nil,
-              harnesses.fallbackIsOn, !isStoppingAll, !neverStarts(agent.id), !changingAccess.contains(agent.id),
+              !isStoppingAll, !neverStarts(agent.id), !changingAccess.contains(agent.id),
               let primary = HarnessProvider(rawValue: agent.harnessIdentifier ?? "") else { return false }
         let date = now()
-        let primaryKey = SubscriptionUsageStore.key(primary, profile: try? repository.loadAgentHarnessProfile(agent))
-        let current = harnessFallbacks[agent.id]?.current ?? primary
-        let currentKey = current == primary ? primaryKey : SubscriptionUsageStore.key(current, profile: nil)
+        let primaryTarget = HarnessFallbackTarget(provider: primary, profile: try? repository.loadAgentHarnessProfile(agent))
+        let primaryKey = SubscriptionUsageStore.key(primary, profile: primaryTarget.profile)
+        let current = harnessFallbacks[agent.id].map { HarnessFallbackTarget(provider: $0.current, profile: $0.profile) } ?? primaryTarget
+        let currentKey = SubscriptionUsageStore.key(current.provider, profile: current.profile)
         if failure == .usageLimit {
             let reset = (snapshot.usageResetsAt ?? reportedReset(currentKey, at: date)).flatMap { $0 > date ? $0 : nil }
             usageExhaustedUntil[currentKey] = reset ?? date.addingTimeInterval(Self.unknownUsageReset)
         }
-        guard let next = nextFallback(after: current, primary: primary, agent: agent, at: date) else { return false }
+        var unavailable = harnessFallbacks[agent.id]?.unavailable ?? []
+        // Sign-in refusals stay skipped for this fallback cycle; usage limits expire by account.
+        if failure == .authenticationRequired { unavailable.insert(current) }
+        guard let next = nextFallback(after: current, primary: primaryTarget, unavailable: unavailable,
+                                      agent: agent, repository: repository, at: date) else { return false }
         if var fallback = harnessFallbacks[agent.id] {
-            fallback.current = next
+            fallback.current = next.provider
+            fallback.profile = next.profile
+            fallback.unavailable = unavailable
             harnessFallbacks[agent.id] = fallback
         } else {
-            // Out again soon after coming back: stay away longer each time, so a harness whose usage
-            // has only just come back cannot make the bot flap between harnesses.
+            // Increase the stay away after a quick repeat failure to avoid flapping between logins.
             let flaps = fallbackReturns[agent.id].map { date.timeIntervalSince($0.date) < Self.fallbackCooldown ? $0.flaps + 1 : 0 } ?? 0
             let cooldown = min(Self.fallbackCooldown * pow(2, Double(flaps)), Self.longestFallbackCooldown)
             let reset = usageExhaustedUntil[primaryKey] ?? date.addingTimeInterval(Self.unknownUsageReset)
-            harnessFallbacks[agent.id] = HarnessFallback(primary: primary, current: next,
-                returnAfter: max(reset, date.addingTimeInterval(cooldown)), flaps: flaps, primaryKey: primaryKey)
+            harnessFallbacks[agent.id] = HarnessFallback(primary: primary, current: next.provider, profile: next.profile,
+                unavailable: unavailable, returnAfter: max(reset, date.addingTimeInterval(cooldown)), flaps: flaps, primaryKey: primaryKey)
         }
         let reason = failure == .usageLimit ? "is out of usage" : "needs you to sign in"
-        onHarnessSwitch?(agent.id, "\(current.displayName) \(reason), continuing on \(next.displayName)")
+        onHarnessSwitch?(agent.id, "\(fallbackName(current, repository: repository)) \(reason), continuing on \(fallbackName(next, repository: repository))")
         restart(agent: agent, repository: repository, sessionRecovery: nil)
         return true
     }
 
-    /// The next harness in the list after `current`, around to the start, that the bot can run on now.
-    private func nextFallback(after current: HarnessProvider, primary: HarnessProvider, agent: AgentRecord,
-                              at date: Date) -> HarnessProvider? {
-        let list = harnesses.fallbacks
-        let start = list.firstIndex(of: current).map { $0 + 1 } ?? 0
-        return (Array(list[start...]) + Array(list[..<start])).first { provider in
-            guard provider != primary, provider != current, harnesses.isOn(provider), capabilityErrors[provider] == nil,
-                  installations.contains(where: { $0.provider == provider && $0.isAvailable }) else { return false }
-            var running = agent
-            running.harnessIdentifier = provider.rawValue
-            // A harness that needs unrestricted access runs only for a bot allowed it in Settings › Bots.
-            guard provider.supportsRestrictedAccess || accessConfiguration.isExtended(for: running) else { return false }
-            return !isOutOfUsage(SubscriptionUsageStore.key(provider, profile: nil), at: date)
-        }
+    private func fallbackName(_ target: HarnessFallbackTarget, repository: WorkspaceRepository) -> String {
+        guard let id = target.profile, let profile = try? repository.harnessProfiles.profile(id) else { return target.provider.displayName }
+        return "\(target.provider.displayName) · \(profile.displayName)"
     }
 
-    /// When a harness's own login has usage again, while it is out of usage; nil while it has usage left.
-    public func usageReturns(_ provider: HarnessProvider) -> Date? {
-        let key = SubscriptionUsageStore.key(provider, profile: nil), date = now()
+    /// An eligible login on the current harness, then the next usable choice in the ordered fallback list.
+    private func nextFallback(after current: HarnessFallbackTarget, primary: HarnessFallbackTarget,
+                              unavailable: Set<HarnessFallbackTarget>, agent: AgentRecord,
+                              repository: WorkspaceRepository, at date: Date) -> HarnessFallbackTarget? {
+        func usable(_ target: HarnessFallbackTarget) -> Bool {
+            let provider = target.provider
+            guard target != primary, target != current, !unavailable.contains(target), harnesses.isOn(provider),
+                  installations.contains(where: { $0.provider == provider && $0.isAvailable }) else { return false }
+            if let id = target.profile {
+                // Model probes use Default's login. Its failure says nothing about a separate account.
+                guard let profile = try? repository.harnessProfiles.validated(id), profile.provider == provider else { return false }
+            } else if capabilityErrors[provider] != nil { return false }
+            var running = agent
+            running.harnessIdentifier = provider.rawValue
+            guard provider.supportsRestrictedAccess || accessConfiguration.isExtended(for: running) else { return false }
+            return !isOutOfUsage(SubscriptionUsageStore.key(provider, profile: target.profile), at: date)
+        }
+
+        // Try profiles in stable creation order, wrapping after the current login. A profile
+        // on another harness never enters this pool; Default also requires explicit opt-in.
+        let profiles = (try? repository.harnessProfiles.load()) ?? []
+        let local = [HarnessFallbackTarget(provider: current.provider)] + profiles
+            .filter { $0.provider == current.provider }
+            .map { HarnessFallbackTarget(provider: $0.provider, profile: $0.id) }
+        let localStart = local.firstIndex(of: current).map { $0 + 1 } ?? 0
+        let localOrder = Array(local[localStart...]) + Array(local[..<localStart])
+        if let next = localOrder.first(where: { harnesses.allowsUsageRetries($0) && usable($0) }) { return next }
+
+        guard harnesses.fallbackIsOn else { return nil }
+        let list = harnesses.fallbackTargets
+        let start = list.firstIndex(of: current).map { $0 + 1 } ?? 0
+        return (Array(list[start...]) + Array(list[..<start])).first(where: usable)
+    }
+
+    /// When this login has usage again; nil while it has usage left.
+    public func usageReturns(_ provider: HarnessProvider, profile: UUID? = nil) -> Date? {
+        let target = HarnessFallbackTarget(provider: provider, profile: profile)
+        let key = SubscriptionUsageStore.key(provider, profile: target.profile), date = now()
         return [usageExhaustedUntil[key].flatMap { $0 > date ? $0 : nil }, reportedReset(key, at: date)].compactMap { $0 }.max()
     }
 

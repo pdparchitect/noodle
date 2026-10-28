@@ -421,9 +421,7 @@ final class NoodleStore {
         }
         self.runtime.checkSignIn = { [weak self] agent in
             guard let self, let installation = self.runtime.installation(for: agent) else { return nil }
-            // A bot on a fallback harness runs on that harness's own login, not its profile.
-            guard self.runtime.runningHarness(for: agent.id) == nil,
-                  let profile = try? self.repository.loadAgentHarnessProfile(agent) else {
+            guard let profile = self.runtime.runningProfile(for: agent, repository: self.repository) else {
                 return await self.harnessSetup.signedIn(installation)
             }
             return await self.harnessProfiles.signedIn(profile, installation: installation)

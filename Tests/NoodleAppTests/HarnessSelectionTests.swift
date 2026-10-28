@@ -29,6 +29,44 @@ import XCTest
         XCTAssertFalse(reloaded.isOn(.openCode))
     }
 
+    func testFallbackProfilesKeepTheirOrderAndHarnessDefaultChoicesRemainValid() {
+        let defaults = defaults()
+        defaults.set([HarnessProvider.codex.rawValue, HarnessProvider.claudeCode.rawValue], forKey: HarnessSelection.fallbacksDefaultsKey)
+        let selection = HarnessSelection(defaults: defaults)
+        XCTAssertEqual(selection.fallbackTargets, [.init(provider: .codex), .init(provider: .claudeCode)])
+        let work = HarnessFallbackTarget(provider: .codex, profile: UUID())
+        let home = HarnessFallbackTarget(provider: .codex, profile: UUID())
+        let defaultCodex = HarnessFallbackTarget(provider: .codex, profile: HarnessProfileStore.defaultID(.codex))
+        selection.setFallbackTargets([work, home, work, defaultCodex, .init(provider: .claudeCode)])
+        selection.setFallback(on: true)
+        selection.setFallback(on: false)
+        let reloaded = HarnessSelection(defaults: defaults)
+        XCTAssertFalse(reloaded.fallbackIsOn)
+        XCTAssertEqual(reloaded.fallbackTargets, [work, home, .init(provider: .codex), .init(provider: .claudeCode)])
+    }
+
+    func testUsageRetryEligibilityIsOptInPersistedAndIndependentOfTheFallbackList() {
+        let defaults = defaults()
+        let selection = HarnessSelection(defaults: defaults)
+        let work = HarnessFallbackTarget(provider: .codex, profile: UUID())
+        let home = HarnessFallbackTarget(provider: .codex, profile: UUID())
+        XCTAssertFalse(selection.allowsUsageRetries(work))
+        XCTAssertFalse(selection.allowsUsageRetries(home))
+        selection.setUsageRetries(work, on: true)
+        selection.setUsageRetries(.init(provider: .codex, profile: HarnessProfileStore.defaultID(.codex)), on: true)
+        selection.setFallbacks([.claudeCode])
+        selection.setFallback(on: true)
+        selection.setFallback(on: false)
+        let reloaded = HarnessSelection(defaults: defaults)
+        XCTAssertTrue(reloaded.allowsUsageRetries(work))
+        XCTAssertTrue(reloaded.allowsUsageRetries(.init(provider: .codex)))
+        XCTAssertFalse(reloaded.allowsUsageRetries(home))
+        XCTAssertFalse(reloaded.fallbackIsOn)
+        XCTAssertEqual(reloaded.fallbackTargets, [.init(provider: .claudeCode)])
+        reloaded.setUsageRetries(work, on: false)
+        XCTAssertFalse(HarnessSelection(defaults: defaults).allowsUsageRetries(work))
+    }
+
     func testATurnedOffHarnessIsNotOfferedAndItsBotsDoNotStart() throws {
         let f = try RuntimeCoordinatorFixture()
         addTeardownBlock { @MainActor in f.cleanUp() }

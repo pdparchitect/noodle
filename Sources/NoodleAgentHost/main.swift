@@ -129,7 +129,7 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] 
 
 // The child creates a dedicated process group before starting the harness. Disabling
 // extended access terminates this group, including ordinary tool descendants.
-if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-child" {
+if CommandLine.arguments.count == 12, CommandLine.arguments[1] == "--harness-child" {
     do {
         guard let provider = HarnessProvider(rawValue: CommandLine.arguments[2]) else {
             throw HostError("Unsupported harness.")
@@ -146,10 +146,13 @@ if CommandLine.arguments.count == 11, CommandLine.arguments[1] == "--harness-chi
         guard !appsEnabled || provider.supportsAccountApps else { throw HostError("This harness does not support account apps.") }
         guard restricted || CommandLine.arguments[9] == "autonomous",
               !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
-        // The profile comes from the bot's own agent.json and is resolved here
-        // to a folder in Noodle's storage. The XPC caller cannot supply a path.
+        // Only a UUID may override the saved login. Both parent and child resolve it
+        // inside Noodle's storage and verify its harness; the caller cannot supply a path.
         let profiles = HostPaths.profiles
-        let harnessProfile = try profiles.selected(workspace: workspace, provider: provider)
+        let rawProfile = CommandLine.arguments[11]
+        let override = UUID(uuidString: rawProfile)
+        guard rawProfile.isEmpty || override != nil else { throw HostError("Invalid profile identifier.") }
+        let harnessProfile = try profiles.selected(workspace: workspace, provider: provider, override: override)
         let loginHome = harnessProfile.map(profiles.loginHome) ?? HostPaths.home
         try isolateProcessGroup()
         guard chdir(workspace.path) == 0 else { throw HostError("Could not open the bot workspace: \(String(cString: strerror(errno)))") }
@@ -366,9 +369,20 @@ private final class HostSession: NSObject, AgentHostService {
                      effortIdentifier: nil, restricted: true, reply: reply)
     }
 
+    func startProfileHarness(harnessIdentifier: String, agentID: String, executablePath: String, profileID: String,
+                             restricted: Bool, appsEnabled: Bool, sessionID: String?, resumeSession: Bool,
+                             modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void) {
+        guard let profile = UUID(uuidString: profileID) else { reply(0, "Invalid profile identifier."); return }
+        startRuntime(harnessIdentifier: harnessIdentifier, agentID: agentID, executablePath: executablePath,
+            sessionID: sessionID, resumeSession: resumeSession, modelIdentifier: modelIdentifier,
+            effortIdentifier: effortIdentifier, restricted: restricted, appsEnabled: appsEnabled,
+            profileOverride: profile, reply: reply)
+    }
+
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
                               sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
-                              restricted: Bool, appsEnabled: Bool = false, reply: @escaping (Int32, String?) -> Void) {
+                              restricted: Bool, appsEnabled: Bool = false, profileOverride: UUID? = nil, reply: @escaping (Int32, String?) -> Void) {
         queue.async { [self] in
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
@@ -377,7 +391,8 @@ private final class HostSession: NSObject, AgentHostService {
                 }
                 let executable = try HostPaths.executable(executablePath, provider: provider)
                 let workspace = try HostPaths.workspace(agentID)
-                let profile = try HostPaths.profiles.selected(workspace: workspace, provider: provider)
+                guard !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
+                let profile = try HostPaths.profiles.selected(workspace: workspace, provider: provider, override: profileOverride)
                 let loginHome = profile.map(HostPaths.profiles.loginHome) ?? HostPaths.home
                 if provider == .codex { SharedLogins.shared.refreshCodexIfDue(loginHome: loginHome, executable: executable) }
                 // Refused before the child starts, so the bot never shows as ready on a login that cannot work.
@@ -395,7 +410,7 @@ private final class HostSession: NSObject, AgentHostService {
                     "--harness-child", provider.rawValue, executablePath, agentID,
                     sessionID ?? "", resumeSession ? "1" : "0",
                     modelIdentifier ?? "", effortIdentifier ?? "", restricted ? "restricted" : "autonomous",
-                    appsEnabled ? "1" : "0"
+                    appsEnabled ? "1" : "0", profileOverride?.uuidString ?? ""
                 ]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.

@@ -10,6 +10,7 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     var onSignInChallenge: ((String, String) -> Void)?
     var onAccountUsage: ((Data) -> Void)?
     var onAccountName: ((String) -> Void)?
+    var profileOverride: UUID?
     private var stopping = false
 
     public init(bundle: Bundle = .main) throws {
@@ -96,6 +97,17 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
         proxy()?.startRestrictedAntigravity(agentID: agentID.uuidString, executablePath: executablePath,
             conversationID: conversationID?.uuidString, modelIdentifier: modelIdentifier, withReply: reply)
     }
+    func startProfileHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
+                             extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
+                             modelIdentifier: String?, effortIdentifier: String?, profile: UUID,
+                             reply: @escaping (Int32, String?) -> Void) {
+        proxy(failure: { reply(0, $0) })?.startProfileHarness(harnessIdentifier: provider.rawValue,
+            agentID: agentID.uuidString, executablePath: executablePath, profileID: profile.uuidString,
+            restricted: !extendedAccess, appsEnabled: appsEnabled, sessionID: sessionID?.uuidString,
+            resumeSession: resumeSession, modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier,
+            withReply: reply)
+    }
+
     public func write(_ data: Data) { proxy()?.write(data) }
     public func stop(reply: @escaping (Bool) -> Void) {
         stopping = true

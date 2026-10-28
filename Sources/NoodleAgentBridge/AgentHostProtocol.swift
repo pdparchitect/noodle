@@ -57,6 +57,11 @@ public enum AgentHostIdentity {
         appsEnabled: Bool,
         withReply reply: @escaping (Int32, String?) -> Void
     )
+    /// A temporary login selection, resolved and checked against the harness by the host.
+    func startProfileHarness(harnessIdentifier: String, agentID: String, executablePath: String, profileID: String,
+                             restricted: Bool, appsEnabled: Bool, sessionID: String?, resumeSession: Bool,
+                             modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void)
     func write(_ data: Data)
     func stop(withReply reply: @escaping (Bool) -> Void)
     func checkCompatibility(withReply reply: @escaping (Bool, String) -> Void)

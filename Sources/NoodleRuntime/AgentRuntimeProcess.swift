@@ -53,33 +53,46 @@ public struct AgentRuntimeLaunch {
     let onUnexpectedTermination: @MainActor (any AgentRuntimeProcess, String, Bool) -> Void
     var onActivity: @MainActor ([String: Any]) -> Void = { _ in }
 
+    /// Only temporary fallback launches override the saved profile. The host resolves this UUID itself.
+    public var profileOverride: UUID? = nil
+
     public func makeProcess() -> any AgentRuntimeProcess {
+        let connect: @MainActor () throws -> ExtendedAgentConnection = {
+            let connection = try ExtendedAgentConnection()
+            connection.profileOverride = profileOverride
+            return connection
+        }
         switch provider {
         case .muse:
             return MuseAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
+                onActivity: onActivity, makeConnection: { try connect() })
         case .apple, .fx, .grokBuild, .openCode:
             return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
+                onActivity: onActivity, makeConnection: { try connect() })
         case .codex:
             return CodexAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
+                onActivity: onActivity, makeConnection: { try connect() })
         case .antigravity:
             return AntigravityAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
+                onActivity: onActivity, makeConnection: { try connect() })
         case .claudeCode:
             return ClaudeAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, appsEnabled: appsEnabled, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
-                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) }, onActivity: onActivity)
+                onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
+                onActivity: onActivity, makeConnection: { try connect() })
         }
     }
 }

@@ -20,6 +20,13 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
                                 extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                                 modelIdentifier: String?, effortIdentifier: String?,
                                 reply: @escaping (Int32, String?) -> Void) {
+        if let profileOverride, provider.supportsProfiles {
+            startProfileHarness(provider: provider, agentID: agentID, executablePath: executablePath,
+                extendedAccess: extendedAccess, appsEnabled: appsEnabled, sessionID: sessionID,
+                resumeSession: resumeSession, modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier,
+                profile: profileOverride, reply: reply)
+            return
+        }
         if extendedAccess {
             start(provider: provider, agentID: agentID, executablePath: executablePath,
                   sessionID: sessionID, resumeSession: resumeSession,

@@ -21,6 +21,131 @@ import XCTest
         return agent
     }
 
+    func testAnExhaustedNamedProfileContinuesOnTheSameHarnessDefaultLogin() throws {
+        let f = try fixture(fallbacks: [.codex])
+        let agent = try codexBot(f)
+        let profiles = HarnessProfileStore(root: f.repository.rootURL)
+        f.runtime.harnessProfiles = profiles
+        let work = try profiles.create(provider: .codex, named: "Work")
+        try f.repository.updateAgentHarnessProfile(agent, profile: work.id)
+
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+
+        XCTAssertEqual(f.factory.processes.count, 2, "Another profile on the same harness can still have usage")
+        XCTAssertEqual(f.runtime.runningHarness(for: agent.id), .codex)
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, HarnessProfileStore.defaultID(.codex))
+        XCTAssertEqual(f.factory.processes.last?.configuration.modelIdentifier, agent.modelIdentifier)
+        XCTAssertEqual(try f.repository.loadAgentHarnessProfile(agent), work.id, "Fallback must preserve the bot's chosen login")
+    }
+
+    func testNamedProfilesSwitchInOrderTrackTheirOwnUsageAndReturnToTheSavedLogin() throws {
+        let f = try fixture(fallbacks: [])
+        let agent = try codexBot(f)
+        let profiles = f.repository.harnessProfiles
+        let first = try profiles.create(provider: .codex, named: "First")
+        let second = try profiles.create(provider: .codex, named: "Second")
+        let third = try profiles.create(provider: .codex, named: "Third")
+        try f.repository.updateAgentHarnessProfile(agent, profile: first.id)
+        f.runtime.harnesses.setFallbackTargets([first, second, third].map { HarnessFallbackTarget(provider: .codex, profile: $0.id) })
+        var lines: [String] = []
+        f.runtime.onHarnessSwitch = { lines.append($1) }
+        let start = f.clock.date
+        try f.start(agent).transition(.failed, failure: .usageLimit, usageResetsAt: start.addingTimeInterval(60))
+        let secondProcess = try XCTUnwrap(f.factory.processes.last)
+        XCTAssertEqual(secondProcess.launch.profileOverride, second.id)
+        XCTAssertEqual(secondProcess.configuration.modelIdentifier, agent.modelIdentifier)
+        XCTAssertEqual(secondProcess.configuration.reasoningEffort, agent.reasoningEffort)
+        secondProcess.launch.onActivity(["method": "account/rateLimits/updated", "params": ["rateLimits": [
+            "primary": ["usedPercent": 100, "windowDurationMins": 300, "resetsAt": start.addingTimeInterval(7200).timeIntervalSince1970]]]])
+        XCTAssertEqual(f.runtime.subscriptionUsage.usage(.codex, profile: second.id)?.windows.first?.usedPercent, 100)
+        XCTAssertNil(f.runtime.subscriptionUsage.usage(.codex, profile: nil))
+        XCTAssertNotNil(f.runtime.usageReturns(.codex, profile: first.id))
+        XCTAssertNil(f.runtime.usageReturns(.codex, profile: third.id))
+        secondProcess.transition(.failed, failure: .usageLimit)
+        let thirdProcess = try XCTUnwrap(f.factory.processes.last)
+        XCTAssertEqual(thirdProcess.launch.profileOverride, third.id)
+        XCTAssertEqual(lines, ["Codex · First is out of usage, continuing on Codex · Second",
+                               "Codex · Second is out of usage, continuing on Codex · Third"])
+        f.runtime.refresh(agents: [agent], repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 3)
+        f.clock.date = start.addingTimeInterval(31 * 60)
+        thirdProcess.canReceiveHeartbeat = true
+        f.runtime.reconcile(agents: [agent], repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 4)
+        XCTAssertNil(f.factory.processes.last?.launch.profileOverride)
+        XCTAssertNil(f.runtime.runningHarness(for: agent.id))
+        XCTAssertEqual(try profiles.selected(workspace: f.repository.directory(for: agent), provider: .codex)?.id, first.id)
+    }
+
+    func testExhaustedAndDeletedProfilesAreSkippedWithoutBlockingOtherProfiles() throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let profiles = f.repository.harnessProfiles
+        let exhausted = try profiles.create(provider: .codex, named: "Exhausted")
+        let deleted = try profiles.create(provider: .codex, named: "Deleted")
+        let available = try profiles.create(provider: .codex, named: "Available")
+        f.runtime.harnesses.setFallbackTargets([exhausted, deleted, available].map { HarnessFallbackTarget(provider: .codex, profile: $0.id) })
+        try profiles.delete(deleted)
+        f.runtime.subscriptionUsage.record(SubscriptionUsage(windows: [SubscriptionUsageWindow(id: "primary", minutes: 300,
+            usedPercent: 100, resetsAt: f.clock.date.addingTimeInterval(3600))], updatedAt: f.clock.date), provider: .codex, profile: exhausted.id)
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, available.id)
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.count, 2, "All eligible logins are now exhausted")
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id).failure, .usageLimit)
+    }
+
+    func testRefusedFallbackProfilesAreNotRetriedInACycle() throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let profiles = try ["One", "Two", "Three"].map { try f.repository.harnessProfiles.create(provider: .codex, named: $0) }
+        f.runtime.harnesses.setFallbackTargets(profiles.map { HarnessFallbackTarget(provider: .codex, profile: $0.id) })
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+        for _ in profiles { try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .authenticationRequired) }
+        XCTAssertEqual(f.factory.processes.count, 4)
+        XCTAssertEqual(f.runtime.snapshot(for: agent.id).failure, .authenticationRequired)
+    }
+
+    func testCrossHarnessFallbackUsesTheSelectedProfileAndItsDefaultModel() throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let work = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Work")
+        f.runtime.harnesses.setFallbackTargets([HarnessFallbackTarget(provider: .claudeCode, profile: work.id)])
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+        let process = try XCTUnwrap(f.factory.processes.last)
+        XCTAssertEqual(process.launch.provider, .claudeCode)
+        XCTAssertEqual(process.launch.profileOverride, work.id)
+        XCTAssertNil(process.configuration.modelIdentifier)
+        XCTAssertNil(process.configuration.reasoningEffort)
+    }
+
+    func testADefaultLoginProbeFailureDoesNotBlockANamedFallbackProfile() async throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let profile = try f.repository.harnessProfiles.create(provider: .codex, named: "Other")
+        f.runtime.harnesses.setFallbackTargets([.init(provider: .codex, profile: profile.id)])
+        // The fixture executable exits without reporting models for the Default login.
+        f.runtime.harnessProfiles = f.repository.harnessProfiles
+        f.runtime.refreshCapabilities()
+        try await f.clock.waitUntil { !f.runtime.isLoadingCapabilities }
+        XCTAssertNotNil(f.runtime.capabilityErrors[.codex])
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.count, 2, "The separate profile can work even when the Default login probe failed")
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, profile.id)
+    }
+
+    func testAFallbackProfileWhoseUsageHasResetCanBeUsedAgain() throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let work = try f.repository.harnessProfiles.create(provider: .codex, named: "Work")
+        let home = try f.repository.harnessProfiles.create(provider: .codex, named: "Home")
+        f.runtime.harnesses.setFallbackTargets([work, home].map { .init(provider: .codex, profile: $0.id) })
+        let start = f.clock.date
+        try f.start(agent).transition(.failed, failure: .usageLimit, usageResetsAt: start.addingTimeInterval(3 * 3600))
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit, usageResetsAt: start.addingTimeInterval(60))
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, home.id)
+        f.clock.date = start.addingTimeInterval(120)
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.count, 4)
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, work.id, "Work has usage again while the saved login is still exhausted")
+    }
+
     func testUsageLimitContinuesOnTheNextHarnessAndSaysSo() throws {
         let f = try fixture(), agent = try codexBot(f)
         var lines: [String] = [], paused: [UUID] = []

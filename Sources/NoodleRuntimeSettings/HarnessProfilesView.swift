@@ -125,6 +125,9 @@ public struct HarnessProfilesView: View {
                     Button("Sign In…") { controller.signIn(profile, installation: installation) }
                 }
                 Menu {
+                    HarnessUsageRetryToggle(harnesses: store.runtime.harnesses,
+                        target: HarnessFallbackTarget(provider: profile.provider, profile: profile.id))
+                    Divider()
                     if controller.activity[profile.id] == nil, controller.authentication[profile.id] == .authenticated, !waitingForSignIn {
                         // A login can be revoked on the server while still reading as signed in here.
                         Button("Sign In Again…") { controller.signIn(profile, installation: installation) }
@@ -218,5 +221,18 @@ public struct HarnessProfilesView: View {
             error = nil
         } catch { self.error = error.localizedDescription }
         naming = nil
+    }
+}
+
+/// Shared by a named profile's actions and the harness's Default-login actions.
+struct HarnessUsageRetryToggle: View {
+    let harnesses: HarnessSelection
+    let target: HarnessFallbackTarget
+
+    var body: some View {
+        Toggle("Use for Usage Retries", isOn: Binding(
+            get: { harnesses.allowsUsageRetries(target) },
+            set: { harnesses.setUsageRetries(target, on: $0) }))
+            .help("Allow this login when another profile on the same harness runs out of usage, before trying the fallback list. The bot keeps its model. This works even when the fallback list is off.")
     }
 }

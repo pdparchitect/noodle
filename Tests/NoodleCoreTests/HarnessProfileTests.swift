@@ -40,6 +40,22 @@ final class HarnessProfileTests: XCTestCase {
         XCTAssertThrowsError(try store.create(provider: .codex, named: " \n "))
     }
 
+    func testRuntimeProfileOverrideIsValidatedAndLeavesTheSavedLoginAlone() throws {
+        let agent = try repository.createAgent(named: "Bot", harnessIdentifier: "codex").agent
+        let first = try store.create(provider: .codex, named: "First")
+        let second = try store.create(provider: .codex, named: "Second")
+        let other = try store.create(provider: .claudeCode, named: "Other")
+        try repository.updateAgentHarnessProfile(agent, profile: first.id)
+        let workspace = repository.directory(for: agent)
+        XCTAssertEqual(try store.selected(workspace: workspace, provider: .codex, override: second.id), second)
+        XCTAssertEqual(try store.selected(workspace: workspace, provider: .codex, override: HarnessProfileStore.defaultID(.codex)), try store.defaultProfile(.codex))
+        XCTAssertEqual(try store.selected(workspace: workspace, provider: .codex, override: nil), first)
+        XCTAssertEqual(try repository.loadAgentHarnessProfile(agent), first.id)
+        XCTAssertThrowsError(try store.selected(workspace: workspace, provider: .codex, override: other.id))
+        try store.delete(second)
+        XCTAssertThrowsError(try store.selected(workspace: workspace, provider: .codex, override: second.id))
+    }
+
     func testBotSelectionIsPrivateAndSurvivesRecordUpdates() throws {
         var agent = try repository.createAgent(named: "Profile Bot", harnessIdentifier: "codex").agent
         let workspace = repository.storage(for: agent.id).workspace

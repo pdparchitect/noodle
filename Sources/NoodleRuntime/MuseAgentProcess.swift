@@ -16,6 +16,12 @@ import NoodleCore
 extension ExtendedAgentConnection: MuseRuntimeConnection {
     @MainActor public func startMuse(agentID: UUID, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
                              extendedAccess: Bool, reply: @escaping (Int32, String?) -> Void) {
+        if let profileOverride {
+            startProfileHarness(provider: .muse, agentID: agentID, executablePath: executablePath,
+                extendedAccess: extendedAccess, appsEnabled: false, sessionID: nil, resumeSession: false,
+                modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, profile: profileOverride, reply: reply)
+            return
+        }
         if extendedAccess {
             start(provider: .muse, agentID: agentID, executablePath: executablePath,
                   modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)

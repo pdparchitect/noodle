@@ -167,8 +167,25 @@ with the elapsed time in **Settings → Harness → Codex**. You can wait or cho
 on with its unfinished work, up to twice; after that it waits for you to choose
 **Kick**.
 
-Provider usage limits apply in either access mode. If a provider reports a rate
-limit, wait for it to clear before retrying.
+Provider usage limits apply in either access mode. Under **Settings → Harness →
+Profiles**, open a profile's **…** menu and turn on **Use for Usage Retries** to
+let bots on that harness use it when another login runs out of usage. To allow
+the **Default** login, use the **…** menu in the harness's main row. Every login
+starts with this option off. These retries keep the bot's model and work even
+when the fallback list is off.
+
+Separately, turn on **Use the fallback list when usage runs out** in **Settings →
+Harness** to continue elsewhere after eligible profiles on the current harness
+are exhausted. Use **Add Harness** to choose a harness and one of its profiles,
+and add further choices in the order you want them tried. Each row's **… →
+Profile** menu lets you change its profile; **Move Up** and **Move Down** change
+the order.
+
+When a bot runs out of usage, it continues on the next available choice, skipping
+profiles that have also run out. Switching profiles keeps its model; switching
+harnesses uses the new harness's default model. Its saved profile stays the same,
+and it returns there when usage is available again and the bot is idle. If every
+choice is unavailable, the bot pauses until usage returns or you choose **Kick**.
 
 ## Apple Intelligence and local models
 

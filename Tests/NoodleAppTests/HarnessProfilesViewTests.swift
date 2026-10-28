@@ -1,10 +1,45 @@
+import AppKit
 import SwiftUI
 import XCTest
 import NoodleCore
 @testable import Noodle
 @testable import NoodleRuntimeSettings
+import NoodleRuntime
 
 @MainActor final class HarnessProfilesViewTests: HiddenViewTests {
+    func testUsageRetryControlOptsInOnlyItsOwnProfileAndCanBeTurnedOff() async throws {
+        let f = try fixture()
+        let work = try f.store.harnessProfiles.create(provider: .codex, named: "Work")
+        let privateProfile = try f.store.harnessProfiles.create(provider: .codex, named: "Private")
+        let selection = f.store.runtime.harnesses
+        let target = HarnessFallbackTarget(provider: .codex, profile: work.id)
+        let view = host(HarnessUsageRetryToggle(harnesses: selection, target: target).toggleStyle(.switch))
+        try await wait { self.elements(view).contains { $0 is NSSwitch } }
+        let toggle = try XCTUnwrap(elements(view).compactMap { $0 as? NSSwitch }.first)
+        XCTAssertFalse(selection.allowsUsageRetries(target))
+        toggle.performClick(nil)
+        try await wait { selection.allowsUsageRetries(target) }
+        XCTAssertFalse(selection.allowsUsageRetries(.init(provider: .codex, profile: privateProfile.id)))
+        XCTAssertFalse(selection.fallbackIsOn)
+        XCTAssertTrue(selection.fallbackTargets.isEmpty)
+        toggle.performClick(nil)
+        try await wait { !selection.allowsUsageRetries(target) }
+    }
+
+    func testFallbackRowsShowAndUpdateTheirSelectedProfile() async throws {
+        let f = try fixture()
+        let work = try f.store.harnessProfiles.create(provider: .codex, named: "Work")
+        let selection = f.store.runtime.harnesses
+        for provider in HarnessProvider.allCases { selection.set(provider, on: provider == .codex) }
+        selection.setFallback(on: true)
+        selection.setFallbackTargets([.init(provider: .codex, profile: work.id)])
+        let form = host(Form { HarnessFallbackSection(store: f.store) }.formStyle(.grouped))
+        _ = try await control("Work", in: form)
+        selection.setFallbackTargets([.init(provider: .codex)])
+        _ = try await control("Default", in: form)
+        XCTAssertFalse(hasControl("Work", in: form))
+    }
+
     func testProfileRowsOfferSignInWhileTheirStatusIsUnknown() async throws {
         let f = try fixture()
         _ = try f.store.harnessProfiles.create(provider: .codex, named: "Work")

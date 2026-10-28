@@ -43,7 +43,7 @@ public struct HarnessesSettingsView: View {
                         }
                     }
                 }
-                HarnessFallbackSection(runtime: store.runtime)
+                HarnessFallbackSection(store: store)
                 if installations.contains(where: setup.isManaged) {
                     Section {
                         @Bindable var setup = setup
@@ -172,6 +172,18 @@ public struct HarnessInstallationRow: View {
                     }
                     Spacer()
                     statusLabel
+                    if id.supportsProfiles {
+                        Menu {
+                            HarnessUsageRetryToggle(harnesses: store.runtime.harnesses,
+                                target: HarnessFallbackTarget(provider: id))
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel("\(id.displayName) Default Profile Actions")
+                    }
                 }
 
                 if installation.executablePath != nil {

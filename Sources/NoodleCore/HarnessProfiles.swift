@@ -227,8 +227,8 @@ public struct HarnessProfileStore: Sendable {
     /// default profile when it chose none. Nil only for a harness without a
     /// login. A missing or redirected profile is an error: a bot must never start
     /// under a different account of its harness by accident. A profile belongs to
-    /// its own harness; on another one, where a bot continues when its own runs
-    /// out of usage, the bot uses that harness's default profile.
+    /// its own harness. Without an explicit temporary runtime choice, starting
+    /// on another harness uses that harness's Default profile.
     public func selected(workspace: URL, provider: HarnessProvider) throws -> HarnessProfile? {
         guard provider.supportsProfiles else { return nil }
         guard let id = try AgentConfiguration.load(from: AgentStorageLayout(workspace: workspace)).harnessProfile else {
@@ -238,6 +238,15 @@ public struct HarnessProfileStore: Sendable {
             throw HarnessSetupError("This bot's \(provider.displayName) profile is unavailable. Choose another profile in the bot's settings, then retry startup.")
         }
         return profile.provider == provider ? profile : try defaultProfile(provider)
+    }
+
+    /// A temporary runtime choice must name an existing profile of this harness. It never
+    /// edits the bot's saved choice and cannot silently use another account if it disappears.
+    public func selected(workspace: URL, provider: HarnessProvider, override: UUID?) throws -> HarnessProfile? {
+        guard let id = override else { return try selected(workspace: workspace, provider: provider) }
+        let profile = try validated(id)
+        guard profile.provider == provider else { throw HarnessSetupError("The selected profile belongs to another harness.") }
+        return profile
     }
 
     /// A profile whose folders are in place and not redirected elsewhere.
