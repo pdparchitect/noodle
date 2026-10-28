@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.45.3] - 2026-10-28
+
+### Added
+
+- Harness fallback choices can include specific profiles, including several profiles of the same harness. Bots continue on the next available login when usage runs out, keep their model when switching profiles, and return to their saved login once usage resets.
+- Profiles can be opted in to usage retries on their own harness. These are tried before the ordered fallback list and work even when that list is off.
+
 ## [0.45.2] - 2026-10-28
 
 ### Changed

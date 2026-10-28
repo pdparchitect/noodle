@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.79.2] - 2026-10-28
+
 ### Added
 
 - Harness fallback choices can include specific profiles, including several profiles of the same harness. Bots continue on the next available login when usage runs out, keep their model when switching profiles, and return to their saved login once usage resets.
