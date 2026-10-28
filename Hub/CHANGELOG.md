@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An Apple Intelligence bot that finishes a turn without checking its messages is asked once to check them, and shows a failure if it still does not, so messages to it no longer go unanswered while it shows Ready (#213).
+
 ## [0.45.1] - 2026-10-27
 
 ### Changed

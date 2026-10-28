@@ -9,8 +9,10 @@ enum AppleResponseRecovery {
     static let incompletePrompt = "Your last response reached its output limit. Continue from the recorded tool results, then give a complete concise final answer. Do not repeat completed actions. If blocked, state what remains unfinished and why."
     static let emptyPrompt = "Your last response contained no answer. Continue from the recorded tool results: take the next necessary action or give the final answer. Do not repeat completed actions. If blocked, explain the blocker."
 
+    static let messengerPrompt = "You have not checked your messages. Run ./.agents/skills/messenger/messenger --get-latest once, then answer any message that needs a reply with --send, or finish without a reply if none does."
+
     static func respond(session: LanguageModelSession, prompt: Prompt, responseTokens: Int,
-                        control: AppleTurnControl, allowsEmptyReply: Bool = false,
+                        control: AppleTurnControl, allowsEmptyReply: Bool = false, checksMessenger: Bool = false,
                         onEvent: @escaping @Sendable (AppleActivityEvent) async -> Void = { _ in },
                         onActivity: @escaping @Sendable () -> Void = {}) async throws -> String {
         // Response snapshots can be buffered until a generation ends. The
@@ -36,34 +38,68 @@ enum AppleResponseRecovery {
         let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: responseTokens)
         #endif
         var next = prompt
-        for attempt in 0...2 {
+        var attempt = 0
+        var checkedMessenger = !checksMessenger
+        var reminded = false
+        while true {
             try Task.checkCancellation()
             onActivity()
             await onEvent(.status("Generating response"))
             let response = try await session.streamResponse(to: next,
                 options: options).collect()
             try Task.checkCancellation()
+            checkedMessenger = checkedMessenger || ranMessengerCheck(response.transcriptEntries)
             let incomplete = isIncomplete(response.transcriptEntries)
             let empty = response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if !incomplete && (!empty || allowsEmptyReply) { return response.content }
+            if !incomplete && (!empty || allowsEmptyReply) {
+                if checkedMessenger { return response.content }
+                // A final answer is private, so a Noodle event answered
+                // without reading the inbox would lose the person's message.
+                // Finishing without a reply is fine once the inbox was read.
+                guard !reminded else { throw AppleMessengerNotChecked() }
+                reminded = true
+                await control.recover()
+                await onEvent(.status("Reminding the model to check its messages"))
+                next = Prompt(messengerPrompt)
+                continue
+            }
             guard attempt < 2 else {
                 throw HarnessSetupError(incomplete
                     ? "The model repeatedly reached its output limit without finishing a reply."
                     : "The model returned an empty reply after two recovery attempts.")
             }
+            attempt += 1
             await control.recover()
-            await onEvent(.status(incomplete ? "Retrying after the model's output limit (\(attempt + 1)/2)"
-                : "Retrying an empty model reply (\(attempt + 1)/2)"))
+            await onEvent(.status(incomplete ? "Retrying after the model's output limit (\(attempt)/2)"
+                : "Retrying an empty model reply (\(attempt)/2)"))
             next = Prompt(incomplete ? incompletePrompt : emptyPrompt)
         }
-        preconditionFailure("Bounded recovery must return or throw")
+    }
+
+    /// Every Noodle event asks the bot to check Messenger once.
+    static func expectsMessengerCheck(_ prompt: String) -> Bool {
+        AgentWakeReason.allCases.contains { prompt.hasPrefix("<noodle-event type=\"\($0.rawValue)\"") }
+    }
+
+    /// Reading the inbox, not replying, is required: an empty inbox or a
+    /// group message for someone else correctly ends without a reply.
+    static func ranMessengerCheck(_ entries: ArraySlice<Transcript.Entry>) -> Bool {
+        entries.contains { entry in
+            guard case .toolCalls(let calls) = entry else { return false }
+            return calls.contains { call in
+                guard call.toolName == "bash",
+                      let command = try? call.arguments.value(String.self, forProperty: "command") else { return false }
+                return command.contains("messenger")
+                    && (command.contains("--get-latest") || command.contains("--list-messages"))
+            }
+        }
     }
 
     static func isRecoveryPrompt(_ prompt: Transcript.Prompt) -> Bool {
         let text = prompt.segments.compactMap { segment -> String? in
             if case .text(let text) = segment { return text.content }; return nil
         }.joined()
-        return text == incompletePrompt || text == emptyPrompt
+        return text == incompletePrompt || text == emptyPrompt || text == messengerPrompt
     }
 
     static func isIncomplete(_ entries: ArraySlice<Transcript.Entry>) -> Bool {
@@ -103,4 +139,8 @@ actor AppleTurnControl {
         recovering = resuming
     }
     func recover() { recovering = true }
+}
+
+struct AppleMessengerNotChecked: Error, LocalizedError {
+    var errorDescription: String? { "The model did not check its messages, even when reminded." }
 }
