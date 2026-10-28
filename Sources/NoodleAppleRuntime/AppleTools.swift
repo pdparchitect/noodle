@@ -184,7 +184,8 @@ private final class CommandJob: @unchecked Sendable {
         defer { CommandRegistry.shared.remove(id) }
         let child = Process(), pipe = Pipe(), finished = DispatchSemaphore(value: 0), drained = DispatchSemaphore(value: 0)
         child.executableURL = URL(fileURLWithPath: "/bin/bash")
-        child.arguments = ["-c", command]
+        child.arguments = ["-c", AppleCommand.keepingPathsWhole(
+            command, paths: [workspace.path, workspace.resolvingSymlinksInPath().path])]
         child.currentDirectoryURL = workspace
         child.environment = ["HOME": workspace.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
                              "TMPDIR": workspace.appendingPathComponent(".noodle/tmp").path,

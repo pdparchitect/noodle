@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- An Apple Intelligence bot's shell command can name its workspace folder without quotes when the path holds a space, as in `Application Support`. The path stays one word instead of being split.
+
 ## [0.79.1] - 2026-10-28
 
 ### Changed
