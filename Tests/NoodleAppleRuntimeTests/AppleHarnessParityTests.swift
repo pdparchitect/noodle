@@ -28,7 +28,7 @@ final class AppleHarnessParityTests: XCTestCase {
     func testTurnGetsOnlyAgentsFileSkillsAndWakeEvent() async throws {
         guard #available(macOS 27, *) else { return }
         let message = try repository.sendUserMessage(conversationID: bot.conversation.id, body: "Remember saffron")
-        let state = ScriptState(answers: ["Done."])
+        let state = ScriptState(answers: [Self.peek, "Done."])
         let wake = AgentWakeReason.inboxChanged.eventText
         try await AppleModel.run(workspace: workspace, backend: backend(state), wake: wake, onEvent: { _ in }, onActivity: {})
 
@@ -45,15 +45,29 @@ final class AppleHarnessParityTests: XCTestCase {
 
     func testEveryWakeResumesOneSession() async throws {
         guard #available(macOS 27, *) else { return }
-        let state = ScriptState(answers: ["First wake handled.", "Second wake handled."])
+        let state = ScriptState(answers: [Self.peek, "First wake handled.", Self.peek, "Second wake handled."])
         for reason in [AgentWakeReason.inboxChanged, .heartbeat] {
             try await AppleModel.run(workspace: workspace, backend: backend(state), wake: reason.eventText, onEvent: { _ in }, onActivity: {})
         }
         let requests = await state.requests
-        XCTAssertEqual(requests.count, 2, "Each wake reaches the model")
+        XCTAssertEqual(requests.count, 4, "Each wake reaches the model")
         let second = try XCTUnwrap(requests.last).transcript.map(\.description).joined(separator: "\n")
         XCTAssertTrue(second.contains("First wake handled."))
         XCTAssertTrue(second.contains(AgentWakeReason.heartbeat.eventText))
+    }
+
+    func testWakeThatNeverChecksMessagesFailsVisibly() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = ScriptState(answers: ["Done.", "Still done."])
+        do {
+            try await AppleModel.run(workspace: workspace, backend: backend(state), wake: AgentWakeReason.inboxChanged.eventText,
+                                     onEvent: { _ in }, onActivity: {})
+            XCTFail("A wake that never checked its messages must not end as Ready")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("did not check its messages"), error.localizedDescription)
+        }
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 2)
     }
 
     func testLargeContextKeepsShortHistoryWithoutSummarizing() async throws {
@@ -73,6 +87,9 @@ final class AppleHarnessParityTests: XCTestCase {
     private func backend(_ state: ScriptState) -> AppleModelBackend {
         .custom(ScriptModel(state: state), contextSize: 32_768) { _ in 100 }
     }
+
+    /// Every Noodle event asks the model to check Messenger; peeking leaves the inbox unread.
+    static let peek = "$ ./.agents/skills/messenger/messenger --get-latest --peek"
 
     @available(macOS 27, *)
     static func instructions(_ request: LanguageModelExecutorGenerationRequest) -> String? {
@@ -115,7 +132,13 @@ private struct ScriptModel: LanguageModel {
         func respond(to request: LanguageModelExecutorGenerationRequest, model: ScriptModel,
                      streamingInto channel: LanguageModelExecutorGenerationChannel) async throws {
             let answer = try await model.state.next(request)
-            await channel.send(.response(action: .appendText(answer, tokenCount: 4)))
+            if answer.hasPrefix("$ ") {
+                let arguments = try JSONSerialization.data(withJSONObject: ["command": String(answer.dropFirst(2))])
+                await channel.send(.toolCalls(action: .toolCall(id: UUID().uuidString, name: "bash",
+                    action: .appendArguments(String(decoding: arguments, as: UTF8.self), tokenCount: 5))))
+            } else {
+                await channel.send(.response(action: .appendText(answer, tokenCount: 4)))
+            }
         }
     }
 }

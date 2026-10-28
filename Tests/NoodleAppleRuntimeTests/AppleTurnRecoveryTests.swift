@@ -167,6 +167,80 @@ final class AppleTurnRecoveryTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
     }
 
+    func testNoodleEventsExpectAMessengerCheckButOtherPromptsDoNot() {
+        guard #available(macOS 27, *) else { return }
+        for reason in AgentWakeReason.allCases {
+            XCTAssertTrue(AppleResponseRecovery.expectsMessengerCheck(reason.eventText), reason.rawValue)
+            XCTAssertTrue(AppleResponseRecovery.expectsMessengerCheck(reason.eventText + "\n\nRecovered context."), reason.rawValue)
+        }
+        XCTAssertFalse(AppleResponseRecovery.expectsMessengerCheck("Operate."))
+        XCTAssertFalse(AppleResponseRecovery.expectsMessengerCheck("<noodle-event type=\"unknown\" />"))
+    }
+
+    func testInboxWakeThatAnswersWithoutCheckingMessengerIsRemindedOnce() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = RecoveryFixture([.bash("cat .agents/skills/messenger/SKILL.md"), .text("I will check my messages now.", false),
+            .bash("./.agents/skills/messenger/messenger --get-latest"), .text("", false)])
+        let control = AppleTurnControl()
+        let activity = ActivityEvents()
+        _ = try await AppleResponseRecovery.respond(session: session(state, control: control),
+            prompt: Prompt(AgentWakeReason.inboxChanged.eventText), responseTokens: 256, control: control,
+            allowsEmptyReply: true, checksMessenger: true, onEvent: { await activity.append($0) })
+        let commands = await state.commands
+        XCTAssertEqual(commands, ["cat .agents/skills/messenger/SKILL.md", "./.agents/skills/messenger/messenger --get-latest"])
+        let statuses = await activity.values.compactMap { event -> String? in
+            if case .status(let title) = event { return title }; return nil
+        }
+        XCTAssertEqual(statuses, ["Generating response", "Reminding the model to check its messages", "Generating response"])
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 4)
+        guard requests.count == 4 else { return }
+        let reminded = requests[2].transcript.map(\.description).joined(separator: "\n")
+        XCTAssertTrue(reminded.contains("--get-latest once"), "The reminder must reach the model")
+        let prompts = requests[2].transcript.filter { if case .prompt = $0 { return true }; return false }
+        XCTAssertEqual(prompts.count, 1, "The reminder is runtime guidance, not a new user request")
+    }
+
+    func testInboxWakeThatCheckedMessengerFinishesQuietlyWithoutReminder() async throws {
+        guard #available(macOS 27, *) else { return }
+        for command in ["./.agents/skills/messenger/messenger --get-latest", ".agents/skills/messenger/messenger --list-messages --limit 5"] {
+            let state = RecoveryFixture([.bash(command), .text("No messages need a reply.", false)])
+            let control = AppleTurnControl()
+            _ = try await AppleResponseRecovery.respond(session: session(state, control: control),
+                prompt: Prompt(AgentWakeReason.inboxChanged.eventText), responseTokens: 256, control: control,
+                allowsEmptyReply: true, checksMessenger: true)
+            let requests = await state.requests
+            XCTAssertEqual(requests.count, 2, command)
+        }
+    }
+
+    func testInboxWakeThatStillSkipsMessengerAfterReminderFailsVisibly() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = RecoveryFixture([.bash("cat .agents/skills/messenger/SKILL.md"), .text("Done.", false), .text("Still done.", false)])
+        let control = AppleTurnControl()
+        do {
+            _ = try await AppleResponseRecovery.respond(session: session(state, control: control),
+                prompt: Prompt(AgentWakeReason.inboxChanged.eventText), responseTokens: 256, control: control,
+                allowsEmptyReply: true, checksMessenger: true)
+            XCTFail("A turn that never checked its messages must not end as Ready")
+        } catch {
+            XCTAssertTrue(error is AppleMessengerNotChecked, "\(error)")
+        }
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 3)
+    }
+
+    func testPromptWithoutMessengerCheckIsNotReminded() async throws {
+        guard #available(macOS 27, *) else { return }
+        let state = RecoveryFixture([.bash("cat .agents/skills/messenger/SKILL.md"), .text("Done.", false)])
+        let control = AppleTurnControl()
+        let reply = try await AppleResponseRecovery.respond(session: session(state, control: control), prompt: Prompt("Operate."),
+            responseTokens: 256, control: control, allowsEmptyReply: true)
+        XCTAssertEqual(reply, "Done.")
+        let requests = await state.requests
+        XCTAssertEqual(requests.count, 2)
+    }
+
     func testThrownErrorAndCancellationAreNeverRetried() async throws {
         guard #available(macOS 27, *) else { return }
         for step in [RecoveryFixture.Step.failure, .cancel] {
@@ -370,19 +444,21 @@ final class AppleTurnRecoveryTests: XCTestCase {
         let model = AppleContextModel(base: RecoveryModel(state: state),
             budget: AppleContextBudget(contextSize: 32_768, responseTokens: 256), count: { _ in 500 },
             control: control, canDisableReasoning: toggleableReasoning, checkpoint: checkpoint)
-        return AppleTurnProfile.session(model: model, tools: [RecoveryTool(state: state)], instructions: "Perform the task and report actual results.")
+        return AppleTurnProfile.session(model: model, tools: [RecoveryTool(state: state), RecoveryBash(state: state)],
+            instructions: "Perform the task and report actual results.")
     }
 }
 
 @available(macOS 27, *)
 private actor RecoveryFixture {
     enum Step: Sendable {
-        case text(String, Bool), call(String), failure, cancel, waitForCancellation
+        case text(String, Bool), call(String), bash(String), failure, cancel, waitForCancellation
         case slowChunks(RecoveryActivity), silentPause(RecoveryActivity)
     }
     var steps: [Step]
     var requests: [LanguageModelExecutorGenerationRequest] = []
     var calls: [String] = []
+    var commands: [String] = []
     var observedActivity: [Int] = []
     init(_ steps: [Step]) { self.steps = steps }
     func next(_ request: LanguageModelExecutorGenerationRequest) throws -> (Step, Int) {
@@ -391,6 +467,7 @@ private actor RecoveryFixture {
         return (steps.removeFirst(), requests.count)
     }
     func operate(_ value: String) { calls.append(value) }
+    func run(_ command: String) { commands.append(command) }
     func observe(_ value: Int) { observedActivity.append(value) }
 }
 
@@ -424,6 +501,10 @@ private struct RecoveryModel: LanguageModel {
             case .call(let value):
                 await channel.send(.toolCalls(action: .toolCall(id: "call-\(index)", name: "operation",
                     action: .appendArguments("{\"value\":\"\(value)\"}", tokenCount: 5))))
+            case .bash(let command):
+                let arguments = String(decoding: try JSONSerialization.data(withJSONObject: ["command": command]), as: UTF8.self)
+                await channel.send(.toolCalls(action: .toolCall(id: "call-\(index)", name: "bash",
+                    action: .appendArguments(arguments, tokenCount: 5))))
             case .failure: throw HarnessSetupError("Synthetic provider failure")
             case .cancel: throw CancellationError()
             case .waitForCancellation:
@@ -462,6 +543,18 @@ private struct RecoveryTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await state.operate(arguments.value)
         return "Operation completed."
+    }
+}
+
+@available(macOS 27, *)
+private struct RecoveryBash: Tool {
+    let state: RecoveryFixture
+    let name = "bash"
+    let description = "Run a Bash command."
+    @Generable struct Arguments { let command: String }
+    func call(arguments: Arguments) async throws -> String {
+        await state.run(arguments.command)
+        return "Exit status 0."
     }
 }
 #endif

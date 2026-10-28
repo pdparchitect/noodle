@@ -108,7 +108,8 @@ public enum AppleModel {
             // The final text is private, as for other harnesses; replies go
             // through Messenger.
             _ = try await AppleResponseRecovery.respond(session: session, prompt: Prompt(wake),
-                responseTokens: backend.responseTokens, control: control, allowsEmptyReply: true, onEvent: onEvent, onActivity: onActivity)
+                responseTokens: backend.responseTokens, control: control, allowsEmptyReply: true,
+                checksMessenger: AppleResponseRecovery.expectsMessengerCheck(wake), onEvent: onEvent, onActivity: onActivity)
             try Task.checkCancellation()
             try AppleConversationSession(transcript: AppleConversationSession.persistable(session.transcript),
                 modelIdentifier: backend.identifier).save(to: file)
@@ -143,6 +144,7 @@ public enum AppleModel {
     @available(macOS 26, *)
     private static func failureDescription(_ error: Error) -> String {
         if error is AppleContextLimit { return error.localizedDescription }
+        if error is AppleMessengerNotChecked { return "it did not check its messages, even when reminded" }
         if AppleContextOverflow.matches(error) { return "the selected model’s context filled while processing the turn" }
         #if canImport(FoundationModels, _version: 2)
         if #available(macOS 27, *) {
