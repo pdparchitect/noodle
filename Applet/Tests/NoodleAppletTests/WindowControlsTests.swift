@@ -16,6 +16,37 @@ final class WindowControlsTests: XCTestCase {
         return window
     }
 
+
+    /// A real mouse hit must reach WebKit before its HTML no-drag exclusions can work.
+    @MainActor func testCustomTitlebarDoesNotCoverPageControls() throws {
+        for extra in ["", #","background":"translucent","cornerRadius":18"#, #","type":"preview""#] {
+            let options = try JSONDecoder().decode(NoodletWindowOptions.self,
+                from: Data(#"{"titlebar":"none"\#(extra)}"#.utf8))
+            let size = options.size()
+            let page = NSView(frame: CGRect(origin: .zero, size: size))
+            let window = WindowPresentation.make(options, size: size)
+            defer { window.close() }
+            WindowPresentation.apply(options, to: window, content: page, size: size, key: "", remember: false)
+            let root = try XCTUnwrap(window.contentView)
+            root.layoutSubtreeIfNeeded()
+            // Custom controls at CSS y=9...34, plus the rest of the title bar.
+            for x in [20.0, 100.0, 200.0] {
+                let point = CGPoint(x: x, y: root.bounds.height - 20)
+                XCTAssertTrue(root.hitTest(point) === page, "native view intercepted page at \(point), \(extra)")
+            }
+        }
+    }
+
+    @MainActor func testHiddenNativeTitlebarStillHasADragStrip() throws {
+        let window = try window(titlebar: "false")
+        defer { window.close() }
+        let root = try XCTUnwrap(window.contentView)
+        root.layoutSubtreeIfNeeded()
+        let hit = try XCTUnwrap(root.hitTest(CGPoint(x: 150, y: root.bounds.height - 15)))
+        XCTAssertTrue(hit.mouseDownCanMoveWindow)
+        XCTAssertFalse(hit === root)
+    }
+
     @MainActor private func buttons(_ window: NSWindow) -> [NSButton] {
         [.closeButton, .miniaturizeButton, .zoomButton].compactMap { window.standardWindowButton($0) }
     }

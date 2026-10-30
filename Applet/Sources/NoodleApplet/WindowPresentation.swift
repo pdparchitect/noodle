@@ -82,13 +82,15 @@ struct WindowPlace: Codable, Equatable {
       root = WindowShapeView(root, radius: radius, filled: options.background == .opaque)
     }
     window.contentView = root
-    if options.titlebar != .visible || options.type == .preview, let container = window.contentView {
+    // A page drawing its own title bar handles dragging through CSS regions. A native
+    // strip above WebKit would swallow its controls before no-drag can be checked.
+    if !ownTitlebar && (options.titlebar != .visible || options.type == .preview), let container = window.contentView {
       let drag = NoodletTitlebarDragView()
       drag.translatesAutoresizingMaskIntoConstraints = false
       container.addSubview(drag, positioned: .above, relativeTo: nil)
       NSLayoutConstraint.activate([
         drag.topAnchor.constraint(equalTo: container.topAnchor),
-        drag.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: ownTitlebar ? 0 : options.type == .preview ? 28 : 78),
+        drag.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: options.type == .preview ? 28 : 78),
         drag.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         drag.heightAnchor.constraint(equalToConstant: 30)
       ])

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Buttons and other controls at the top of a noodlet’s custom title bar receive clicks instead of starting a window drag.
+
 ## [0.33.5] - 2026-10-28
 
 ### Fixed
