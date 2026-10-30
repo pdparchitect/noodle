@@ -1,0 +1,158 @@
+Subject: [PATCH] Separate policy decisions from enforcement outcomes
+
+Review fixture for AgentFleet issue #184. The observation path must not
+claim that it prevented a tool, and raw tool input stays off the wire.
+
+diff --git a/crates/sensor/src/audit.rs b/crates/sensor/src/audit.rs
+--- a/crates/sensor/src/audit.rs
++++ b/crates/sensor/src/audit.rs
+@@ -4,19 +4,42 @@
+ #[serde(rename_all = "snake_case")]
+ pub enum Decision { Allow, Deny }
+ 
++// Supplied by the adapter, never inferred from a policy match or agent name.
++#[derive(Clone, Copy, PartialEq, Serialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Enforcement { Enforced, ObserveOnly, Unknown }
++
+ #[derive(Serialize)]
+ pub struct AuditEvent<'a> {
+     pub event_id: &'a str,
+     pub policy_decision: Decision,
+-    pub blocked: bool,
+-    pub tool_input: &'a str,
++    pub enforcement: Enforcement,
++    pub tool: &'a str,
++    pub resource_class: &'a str,
+ }
+ 
+-pub fn audit<'a>(id: &'a str, decision: Decision, input: &'a str) -> AuditEvent<'a> {
+-    AuditEvent {
+-        event_id: id,
+-        policy_decision: decision,
+-        blocked: decision == Decision::Deny,
+-        tool_input: input,
++// Accept metadata only: raw arguments and file contents cannot be serialized here.
++pub fn audit<'a>(
++    id: &'a str,
++    decision: Decision,
++    enforcement: Enforcement,
++    tool: &'a str,
++    resource_class: &'a str,
++) -> AuditEvent<'a> {
++    AuditEvent { event_id: id, policy_decision: decision, enforcement, tool, resource_class }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn a_deny_decision_can_be_observation_only() {
++        let event = audit("evt_184", Decision::Deny, Enforcement::ObserveOnly,
++                          "file_read", "credential_file");
++        let json = serde_json::to_value(event).unwrap();
++        assert_eq!(json["enforcement"], "observe_only");
++        assert!(json.get("blocked").is_none());
++        assert!(json.get("tool_input").is_none());
+     }
+ }
+diff --git a/web/src/events/outcome.ts b/web/src/events/outcome.ts
+--- a/web/src/events/outcome.ts
++++ b/web/src/events/outcome.ts
+@@ -1,5 +1,10 @@
+-type Event = { policy_decision: "allow" | "deny" };
++type Event = {
++  policy_decision: "allow" | "deny";
++  enforcement: "enforced" | "observe_only" | "unknown";
++};
+ 
+ export function outcome(event: Event): string {
++  if (event.enforcement === "unknown") return "Unconfirmed";
++  if (event.enforcement === "observe_only") return "Observed";
+   return event.policy_decision === "deny" ? "Blocked" : "Allowed";
+ }
+diff --git a/sdks/python/agentfleet/observation.py b/sdks/python/agentfleet/observation.py
+--- a/sdks/python/agentfleet/observation.py
++++ b/sdks/python/agentfleet/observation.py
+@@ -1,7 +1,9 @@
+-def observation(event_id, decision, tool_input):
++def observation(event_id, decision, tool, resource_class):
++    # Recording a callback does not imply that the framework prevented its tool.
+     return {
+         "event_id": event_id,
+         "policy_decision": decision,
+-        "blocked": decision == "deny",
+-        "tool_input": tool_input,
++        "enforcement": "observe_only",
++        "tool": tool,
++        "resource_class": resource_class,
+     }
+diff --git a/sdks/typescript/src/observation.ts b/sdks/typescript/src/observation.ts
+--- a/sdks/typescript/src/observation.ts
++++ b/sdks/typescript/src/observation.ts
+@@ -1,3 +1,11 @@
+-export function observation(eventId: string, decision: "allow" | "deny", input: unknown) {
+-  return { event_id: eventId, policy_decision: decision, blocked: decision === "deny", tool_input: input };
++export function observation(
++  eventId: string, decision: "allow" | "deny", tool: string, resourceClass: string,
++) {
++  return {
++    event_id: eventId,
++    policy_decision: decision,
++    enforcement: "observe_only" as const,
++    tool,
++    resource_class: resourceClass,
++  };
+ }
+diff --git a/api/event.schema.json b/api/event.schema.json
+--- a/api/event.schema.json
++++ b/api/event.schema.json
+@@ -1,12 +1,24 @@
+ {
+   "type": "object",
++  "additionalProperties": false,
+   "required": [
+     "event_id",
+     "policy_decision",
+-    "blocked"
++    "enforcement",
++    "tool",
++    "resource_class"
+   ],
+   "properties": {
+     "event_id": {
++      "type": "string"
++    },
++    "device_id": {
++      "type": "string"
++    },
++    "agent": {
++      "type": "string"
++    },
++    "policy_id": {
+       "type": "string"
+     },
+     "policy_decision": {
+@@ -15,9 +27,18 @@
+         "deny"
+       ]
+     },
+-    "blocked": {
+-      "type": "boolean"
++    "enforcement": {
++      "enum": [
++        "enforced",
++        "observe_only",
++        "unknown"
++      ]
+     },
+-    "tool_input": {}
++    "tool": {
++      "type": "string"
++    },
++    "resource_class": {
++      "type": "string"
++    }
+   }
+ }

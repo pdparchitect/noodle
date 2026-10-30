@@ -1,0 +1,864 @@
+{
+  "version": 1,
+  "title": "Building AgentFleet: what did the coding agent actually do?",
+  "clock": "14:40",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "claude-code": {
+      "models": "builtin"
+    },
+    "codex": {
+      "models": [
+        {
+          "id": "gpt-5.2-codex",
+          "name": "GPT-5.2 Codex",
+          "efforts": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "defaultEffort": "medium",
+          "default": true
+        }
+      ]
+    }
+  },
+  "agents": [
+    {
+      "key": "ada",
+      "name": "Ada",
+      "harness": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "description": "Maintainer: AgentFleet scope, issues and integration reviews",
+      "avatar": {
+        "image": "face:feminine-01"
+      },
+      "backstory": "You maintain AgentFleet, an open-source project for visibility and policy controls across coding-agent fleets. Keep issues tied to concrete repository changes. Treat observed activity and prevented actions as different facts; never claim enforcement coverage without evidence from the integration.",
+      "autoReplies": [
+        "I will put that on the issue and ask the component owner for a patch."
+      ]
+    },
+    {
+      "key": "wren",
+      "name": "Wren",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "description": "Rust sensor: local tool gates and redacted audit events",
+      "avatar": {
+        "image": "face:any-03"
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Separating policy decisions from enforcement results"
+      }
+    },
+    {
+      "key": "mara",
+      "name": "Mara",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Web console: fleet inventory and the live event timeline",
+      "avatar": {
+        "image": "face:feminine-05"
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Fixing the event outcome badge"
+      }
+    },
+    {
+      "key": "kai",
+      "name": "Kai",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Web console: event detail, filters and keyboard navigation",
+      "avatar": {
+        "image": "face:any-01"
+      }
+    },
+    {
+      "key": "victor",
+      "name": "Victor",
+      "harness": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "description": "Ingestion server: event validation and tenant boundaries",
+      "avatar": {
+        "image": "face:masculine-06"
+      }
+    },
+    {
+      "key": "andre",
+      "name": "Andre",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "description": "Postgres: event storage, retention and deduplication",
+      "avatar": {
+        "image": "face:masculine-02"
+      }
+    },
+    {
+      "key": "sol",
+      "name": "Sol",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "description": "Rust policy engine: rule evaluation and enforcement outcomes",
+      "avatar": {
+        "image": "face:any-02"
+      }
+    },
+    {
+      "key": "clara",
+      "name": "Clara",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Linux device service: installation, updates and disk queue",
+      "avatar": {
+        "image": "face:feminine-03"
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Testing systemd restart with queued events"
+      }
+    },
+    {
+      "key": "tony",
+      "name": "Tony",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Go SDK and integrations for custom agent runtimes",
+      "avatar": {
+        "image": "face:masculine-05"
+      }
+    },
+    {
+      "key": "ivan",
+      "name": "Ivan",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "description": "CI: Rust builds, signing and release packages",
+      "avatar": {
+        "image": "face:masculine-04"
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Investigating the macOS signing job"
+      }
+    },
+    {
+      "key": "bruno",
+      "name": "Bruno",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Server reliability: reconnects, backpressure and load tests",
+      "avatar": {
+        "image": "face:masculine-03"
+      }
+    },
+    {
+      "key": "mila",
+      "name": "Mila",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Integration tests: replay a tool attempt from device to console",
+      "avatar": {
+        "image": "face:feminine-06"
+      }
+    },
+    {
+      "key": "chloe",
+      "name": "Chloe",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Python SDK: framework callbacks and audit event fixtures",
+      "avatar": {
+        "image": "face:feminine-02"
+      }
+    },
+    {
+      "key": "kira",
+      "name": "Kira",
+      "harness": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "description": "Security review: data minimisation and enforcement coverage",
+      "avatar": {
+        "image": "face:feminine-04"
+      }
+    },
+    {
+      "key": "sonia",
+      "name": "Sonia",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "TypeScript SDK: tool wrappers and event delivery",
+      "avatar": {
+        "image": "face:feminine-07"
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Reproducing duplicate event IDs on SDK retries"
+      }
+    },
+    {
+      "key": "ines",
+      "name": "Ines",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Release review: installation checks and the pilot backlog",
+      "avatar": {
+        "image": "face:feminine-08"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "engineering",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-blue.png"
+      },
+      "group": {
+        "name": "AgentFleet",
+        "description": "Open-source monitoring and policy controls for coding-agent fleets",
+        "members": [
+          "ada",
+          "wren",
+          "mara",
+          "kai",
+          "victor",
+          "andre",
+          "sol",
+          "clara",
+          "tony",
+          "ivan",
+          "bruno",
+          "mila",
+          "chloe",
+          "kira",
+          "sonia",
+          "ines"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-3d 16:08",
+          "from": "user",
+          "text": "One Rust binary per device. Collect coding-agent usage and tool events, send them to our server, and give the security team a web console. Python, TypeScript and Go SDKs for custom agents. Keep it open source."
+        },
+        {
+          "at": "-1d 17:42",
+          "from": "ada",
+          "text": "The first vertical slice is in: sensor → POST /v1/events → Postgres → live console. Next is #184: make the outcome of a policy check honest."
+        },
+        {
+          "at": "13:52",
+          "from": "user",
+          "text": "For #184, show me what happens when an agent tries to read .env.production. Was it stopped, or did we only see it? Also, the file contents must never leave the device."
+        },
+        {
+          "at": "14:11",
+          "from": "mila",
+          "text": "The Claude Code hook fixture stops the read. But the imported Codex observation gets the same green Blocked badge. That second event is only telemetry."
+        },
+        {
+          "at": "14:16",
+          "from": "kira",
+          "text": "That is the bug. A deny decision is not proof the action was prevented. The event needs to say which actually happened."
+        },
+        {
+          "at": "14:32",
+          "from": "ada",
+          "text": "Wren has the Rust change. Mara is on the console. Victor and the SDK owners are checking the same two event fixtures. Keep the pilot on hold until those agree."
+        }
+      ]
+    },
+    {
+      "key": "sensor",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-blue.png"
+      },
+      "group": {
+        "name": "Rust agent",
+        "description": "crates/sensor · local checks, redacted events and the device queue",
+        "members": [
+          "wren",
+          "sol",
+          "clara",
+          "tony"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 16:47",
+          "from": "clara",
+          "text": "The Linux service now resumes the disk queue after a restart. I still need to check what happens when the spool reaches its limit."
+        },
+        {
+          "at": "13:58",
+          "from": "wren",
+          "text": "Found the bad assumption in the sensor serializer: `blocked = decision == Deny`. That is also used by the observation adapter, which has no way to stop the tool."
+        },
+        {
+          "at": "14:05",
+          "from": "sol",
+          "text": "Pass the enforcement result in separately. Please leave Unknown as a real value; a missing result must not turn into Allowed."
+        },
+        {
+          "at": "14:28",
+          "from": "wren",
+          "text": "Proposed fix attached. The serialized event keeps the tool name and resource class; the raw tool input is gone. The console and SDK changes are in the same diff.",
+          "key": "proposed-patch",
+          "attachments": [
+            {
+              "file": "assets/184-honest-outcomes.patch"
+            }
+          ]
+        },
+        {
+          "at": "14:35",
+          "from": "clara",
+          "text": "Separate issue: a full spool currently drops the oldest audit event. That needs an explicit counter before we call the pilot ready."
+        }
+      ]
+    },
+    {
+      "key": "console",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-violet.png"
+      },
+      "group": {
+        "name": "Web console",
+        "description": "web/ · device usage, policy matches and the live event timeline",
+        "members": [
+          "mara",
+          "kai",
+          "wren"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 15:20",
+          "from": "mara",
+          "text": "Device list is wired to the server. The usage chart is still counting sessions, not tokens; leaving the cost column out until the providers agree on units."
+        },
+        {
+          "at": "14:09",
+          "from": "kai",
+          "text": "The event drawer is showing decision=deny and then deriving the Blocked badge from it. That is where the observation case goes wrong."
+        },
+        {
+          "at": "14:22",
+          "from": "mara",
+          "text": "Changing the badge to use enforcement. The rule match stays in its own field. An observed attempt can still have matched a deny rule."
+        },
+        {
+          "at": "14:34",
+          "from": "kai",
+          "text": "Can we avoid green for Blocked? Green reads like the command succeeded. I would use a neutral badge and put the policy match beside it."
+        },
+        {
+          "at": "14:37",
+          "from": "mara",
+          "text": "Agreed. Also found that reconnect appends an event we already have. I will key rows by event_id, not their position in the stream."
+        }
+      ]
+    },
+    {
+      "key": "server",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-teal.png"
+      },
+      "group": {
+        "name": "Ingestion API",
+        "description": "server/ · event validation, Postgres and the live stream",
+        "members": [
+          "victor",
+          "andre",
+          "bruno"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 11:18",
+          "from": "andre",
+          "text": "Tenant ID comes from the device credential, never the event body. Event IDs are unique within a tenant."
+        },
+        {
+          "at": "13:44",
+          "from": "bruno",
+          "text": "Collector restart replays the last batch. Inserts deduplicate, but subscribers still get the duplicate notification. I opened #191 for that."
+        },
+        {
+          "at": "14:18",
+          "from": "victor",
+          "text": "New contract: policy_decision is allow/deny; enforcement is enforced/observe_only/unknown. The server stores both. I am not inferring enforcement from the agent name."
+        },
+        {
+          "at": "14:30",
+          "from": "andre",
+          "text": "The existing development events have no enforcement field. They will read as Unknown in the console. Reingesting them must not make them look blocked."
+        },
+        {
+          "at": "14:36",
+          "from": "victor",
+          "text": "These are the two wire examples I am validating against. The only sensitive resource metadata is credential_file; no path or file contents.",
+          "attachments": [
+            {
+              "file": "assets/184-event-pair.json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "sdks",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-violet.png"
+      },
+      "group": {
+        "name": "SDKs",
+        "description": "sdks/python · sdks/typescript · sdks/go",
+        "members": [
+          "sonia",
+          "chloe",
+          "tony"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-2d 10:24",
+          "from": "tony",
+          "text": "Go SDK example is a tool callback around an agent runtime. No separate daemon required for that path; it sends the same event envelope as the sensor."
+        },
+        {
+          "at": "13:48",
+          "from": "chloe",
+          "text": "Python framework callback is observation-only today. Returning an audit event does not stop the framework from calling its tool."
+        },
+        {
+          "at": "14:20",
+          "from": "sonia",
+          "text": "The TypeScript wrapper copied the sensor's blocked flag. Fixing the envelope before I publish the next dev package."
+        },
+        {
+          "at": "14:29",
+          "from": "tony",
+          "text": "Please make enforcement mandatory. Otherwise every SDK will eventually pick a different default."
+        },
+        {
+          "at": "14:38",
+          "from": "sonia",
+          "text": "Another bug: each retry creates a fresh event_id. That explains the duplicate rows Mara saw. I have a reproduction; fix is not in this diff yet."
+        }
+      ],
+      "unread": true
+    },
+    {
+      "key": "policy",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-teal.png"
+      },
+      "group": {
+        "name": "Policy engine",
+        "description": "policies/ · rule matches, local gates and coverage",
+        "members": [
+          "kira",
+          "sol",
+          "victor",
+          "wren"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 14:10",
+          "from": "sol",
+          "text": "The credential-file rule evaluates on the device. A server round trip is not on the tool permission path."
+        },
+        {
+          "at": "14:02",
+          "from": "kira",
+          "text": "The pilot case is a Claude Code Read hook. It does not demonstrate blocking arbitrary shell commands, child processes or every coding tool."
+        },
+        {
+          "at": "14:17",
+          "from": "wren",
+          "text": "Right. The Codex path in this candidate imports observations. I am not adding a Blocked badge to those events."
+        },
+        {
+          "at": "14:27",
+          "from": "kira",
+          "text": "For the audit payload: agent, tool name, policy ID, resource class, decision and enforcement. Raw arguments and environment values stay out."
+        },
+        {
+          "at": "14:39",
+          "from": "sol",
+          "text": "Unknown is important when an adapter cannot confirm the result. Keep that distinct from both Observe only and Enforced."
+        }
+      ]
+    },
+    {
+      "key": "quality",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-teal.png"
+      },
+      "group": {
+        "name": "Integration tests",
+        "description": "fixtures/ · the same tool attempt from device to console",
+        "members": [
+          "mila",
+          "chloe",
+          "ivan",
+          "kira"
+        ]
+      },
+      "messages": [
+        {
+          "at": "13:41",
+          "from": "mila",
+          "text": "Added a fake credential value to the test file. I am checking that it appears in neither the local queue nor the upload body."
+        },
+        {
+          "at": "14:12",
+          "from": "mila",
+          "text": "Current failure: Codex observation with decision=deny renders Blocked. It should render Observed. Both cases are attached to #184."
+        },
+        {
+          "at": "14:24",
+          "from": "chloe",
+          "text": "The Python SDK fixture has the same problem. I will use the server's event pair rather than another handwritten example."
+        },
+        {
+          "at": "14:33",
+          "from": "ivan",
+          "text": "Linux job is through. macOS packaging is failing at signing, before the install test runs. That is still open; it is not an SDK test failure."
+        }
+      ]
+    },
+    {
+      "key": "pilot",
+      "pinned": true,
+      "background": {
+        "image": "assets/geometry-blue.png"
+      },
+      "group": {
+        "name": "v0.3 pilot",
+        "description": "Linux lab first · macOS package and SDK retries still open",
+        "members": [
+          "ada",
+          "ines",
+          "ivan",
+          "kira",
+          "mila"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 18:10",
+          "from": "ines",
+          "text": "For the first pilot: a signed-in device sends an event, the console shows it, and the displayed outcome matches the adapter's actual capability."
+        },
+        {
+          "at": "14:13",
+          "from": "ivan",
+          "text": "macOS package is held by the signing job. The Linux artifact is available for the lab; nothing has been published."
+        },
+        {
+          "at": "14:31",
+          "from": "ines",
+          "text": "Three open items: #184 outcome labels, #191 duplicate events, #193 spool-overflow counter. I am not bundling all of them into one PR."
+        }
+      ]
+    },
+    {
+      "key": "wren",
+      "direct": "wren",
+      "background": {
+        "image": "assets/geometry-blue.png"
+      },
+      "messages": [
+        {
+          "at": "-1d 18:21",
+          "from": "user",
+          "text": "Keep the first release small. One event I can follow through the code is better than a dashboard full of made-up numbers."
+        },
+        {
+          "at": "14:26",
+          "from": "wren",
+          "text": "The proposed #184 diff is in Rust agent. It crosses the event schema, one Rust serializer, the console badge and the Python/TypeScript observation helpers. No policy changes."
+        }
+      ]
+    },
+    {
+      "key": "sonia",
+      "direct": "sonia",
+      "background": {
+        "image": "assets/geometry-violet.png"
+      },
+      "messages": [
+        {
+          "at": "14:39",
+          "from": "sonia",
+          "text": "The TypeScript retry issue needs a separate change. Are we happy to hold that package while the sensor work gets reviewed?"
+        }
+      ],
+      "unread": true
+    },
+    {
+      "key": "mila",
+      "direct": "mila",
+      "background": {
+        "image": "assets/geometry-teal.png"
+      },
+      "messages": [
+        {
+          "at": "14:14",
+          "from": "mila",
+          "text": "The current UI says Blocked for an event that never had a blocking integration. I would fix that before showing it to anyone outside the team."
+        }
+      ]
+    },
+    {
+      "key": "ada",
+      "direct": "ada",
+      "background": {
+        "image": "assets/geometry-blue.png"
+      },
+      "messages": [
+        {
+          "at": "-2d 16:32",
+          "from": "ada",
+          "text": "AgentFleet is the working name. Repository is split into crates/sensor, server, web and sdks. I have kept the device protocol shared so each component does not invent its own event."
+        }
+      ]
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1640,
+        940
+      ]
+    },
+    "columns": [
+      "engineering",
+      "sensor",
+      "console"
+    ],
+    "select": "engineering"
+  },
+  "film": {
+    "background": "black",
+    "intro": {
+      "title": "See what your coding agents actually do",
+      "subtitle": "A team building an open-source fleet monitor, from the Rust sensor to the web console."
+    },
+    "outro": {
+      "tagline": "Your agents, working on the same software."
+    }
+  },
+  "timeline": [
+    {
+      "capture": "01-a-real-issue"
+    },
+    {
+      "wait": 0.7,
+      "focus": "composer"
+    },
+    {
+      "in": "engineering",
+      "type": {
+        "text": "Keep #184 focused: show both events correctly, prove the audit payload contains no secret, and send me the diff. Leave the retry bug separate.",
+        "interval": 0.04
+      }
+    },
+    {
+      "focus": "transcript"
+    },
+    {
+      "wait": 0.5,
+      "agent": "ada",
+      "in": "engineering",
+      "reply": {
+        "text": "Yes. Wren owns the envelope, Mara owns the display. Sonia, hold the TypeScript package until #191 is fixed."
+      }
+    },
+    {
+      "wait": 0.6,
+      "agent": "wren",
+      "in": "sensor",
+      "reply": {
+        "text": "The serializer now takes an enforcement result instead of guessing from deny. Observe-only events stay observe-only. I left the policy evaluator unchanged."
+      }
+    },
+    {
+      "agent": "wren",
+      "status": {
+        "phase": "ready"
+      }
+    },
+    {
+      "wait": 0.5,
+      "agent": "victor",
+      "in": "server",
+      "reply": {
+        "text": "Validated the two fixtures. They both match the deny rule; only the hook case carries enforcement=enforced. Unknown is accepted and stays Unknown."
+      }
+    },
+    {
+      "wait": 0.5,
+      "agent": "mara",
+      "in": "console",
+      "reply": {
+        "text": "Both cases are visible now: Blocked for the enforced deny; Observed for the imported trace. The rule still reads credentials/no-read on both."
+      }
+    },
+    {
+      "agent": "mara",
+      "status": {
+        "phase": "ready"
+      }
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "server"
+      }
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "sdks"
+      }
+    },
+    {
+      "wait": 0.6,
+      "agent": "chloe",
+      "in": "sdks",
+      "reply": {
+        "text": "Python observation helper matches the schema. It sends metadata only and always marks its own output observe_only. A framework would need a separate gate to prevent execution."
+      }
+    },
+    {
+      "wait": 0.6,
+      "agent": "sonia",
+      "in": "sdks",
+      "reply": {
+        "text": "TypeScript has the same change. The retry test still fails: two sends produce two IDs. Package stays on hold; I am fixing that on #191."
+      }
+    },
+    {
+      "focus": "none"
+    },
+    {
+      "capture": "02-one-contract-across-components"
+    },
+    {
+      "wait": 0.8,
+      "present": {
+        "select": "quality"
+      }
+    },
+    {
+      "wait": 0.6,
+      "agent": "mila",
+      "in": "quality",
+      "reply": {
+        "text": "Replayed the two #184 fixtures through the candidate. Hook case: tool did not execute, console says Blocked. Imported observation: console says Observed. The canary credential value is absent from the queue and request body."
+      }
+    },
+    {
+      "wait": 0.4,
+      "agent": "kira",
+      "in": "quality",
+      "reply": {
+        "text": "That covers the narrow Read-hook case. Keep the coverage note visible in the event detail; this is not evidence of general process-level prevention."
+      }
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "pilot"
+      }
+    },
+    {
+      "wait": 0.5,
+      "agent": "ines",
+      "in": "pilot",
+      "reply": {
+        "text": "The outcome fix is ready to review. Still open: the TypeScript retry bug, spool-overflow reporting and macOS signing. Linux lab build only; no public release."
+      }
+    },
+    {
+      "wait": 0.5,
+      "agent": "ada",
+      "in": "engineering",
+      "reply": {
+        "text": "#184 is ready for your code review. The event path is consistent now. The wider pilot is still held on the three open items in v0.3 pilot."
+      }
+    },
+    {
+      "focus": "none"
+    },
+    {
+      "capture": "03-work-still-open"
+    },
+    {
+      "wait": 0.8,
+      "present": {
+        "select": "sensor"
+      }
+    },
+    {
+      "wait": 0.5,
+      "agent": "wren",
+      "in": "sensor",
+      "reply": {
+        "text": "Here is the review copy. The important change is that a rule decision and an enforcement result are separate fields. Please check the Unknown branch as well as the happy path.",
+        "key": "review-copy",
+        "attachments": [
+          {
+            "file": "assets/184-honest-outcomes.patch"
+          }
+        ]
+      }
+    },
+    {
+      "wait": 0.8,
+      "present": {
+        "windows": [
+          {
+            "attachment": "review-copy",
+            "frame": [
+              260,
+              70,
+              1020,
+              830
+            ],
+            "expanded": [
+              "crates/sensor/src/audit.rs",
+              "web/src/events/outcome.ts"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "capture": "04-review-the-code"
+    }
+  ]
+}

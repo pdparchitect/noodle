@@ -1,0 +1,22 @@
+[
+  {
+    "event_id": "evt_184_claude_code",
+    "device_id": "lab-lnx-07",
+    "agent": "claude-code",
+    "tool": "Read",
+    "resource_class": "credential_file",
+    "policy_id": "credentials/no-read",
+    "policy_decision": "deny",
+    "enforcement": "enforced"
+  },
+  {
+    "event_id": "evt_184_codex",
+    "device_id": "lab-lnx-12",
+    "agent": "codex",
+    "tool": "file_read",
+    "resource_class": "credential_file",
+    "policy_id": "credentials/no-read",
+    "policy_decision": "deny",
+    "enforcement": "observe_only"
+  }
+]
