@@ -109,8 +109,6 @@ struct NoodleSettingsView: View {
 struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
     @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
-    @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
-    @AppStorage(SidebarRowDetail.key) private var sidebarRowDetail = SidebarRowDetail.standard.rawValue
 
     var body: some View {
         Form {
@@ -121,22 +119,6 @@ struct GeneralSettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-            }
-            Section {
-                Picker("Sort conversations", selection: $conversationOrder) {
-                    ForEach(ConversationOrder.allCases) { order in
-                        Text(order.name).tag(order.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help((ConversationOrder(rawValue: conversationOrder) ?? .standard).explanation)
-                Picker("Sidebar shows", selection: $sidebarRowDetail) {
-                    ForEach(SidebarRowDetail.allCases) { detail in
-                        Text(detail.name).tag(detail.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help("The line under each bot’s or group’s name. Without a description, it shows the latest message.")
             }
             Section {
                 Picker("In groups, notify me for", selection: Binding(get: { store.groupNotifications },

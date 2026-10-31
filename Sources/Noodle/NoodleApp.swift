@@ -127,6 +127,8 @@ struct NoodleApp: App {
         .commands {
             CommandGroup(before: .toolbar) {
                 MainWindowLayoutCommands()
+                Divider()
+                SidebarCommands()
                 FullScreenCommand()
             }
             CommandGroup(replacing: .help) {
