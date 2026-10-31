@@ -6,6 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- View › Sidebar › As Icons shows bots and groups as a grid of their pictures, each with its name and a short line: why the bot is paused, Working while it works, or else its latest message or description. Bots waiting on you, such as for Kick or sign-in, gather in a Needs You section at the top. As List keeps the rows.
+
+### Changed
+
+- The sidebar's options are in View › Sidebar: As List or As Icons, Show Latest Message or Show Description, and Newest First, Unread First or Unread Section. They are no longer in Settings › General; your choices are kept.
+
 ## [0.79.2] - 2026-10-28
 
 ### Added

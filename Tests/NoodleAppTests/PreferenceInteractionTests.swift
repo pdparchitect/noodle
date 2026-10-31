@@ -60,6 +60,17 @@ import HubLink
         }
     }
 
+    /// View › Sidebar holds the order and the line shown; Settings no longer repeats them.
+    func testGeneralSettingsNoLongerSortsOrChoosesTheSidebarLine() async throws {
+        let f = try fixture()
+        let settings = host(GeneralSettingsView().environment(f.store).defaultAppStorage(f.runtime.defaults))
+        _ = try await control(BotNameStyle.real.displayName, in: settings)
+        for name in ["Sort conversations", "Sidebar shows"] + ConversationOrder.allCases.map(\.name)
+            + SidebarRowDetail.allCases.map(\.name) {
+            XCTAssertFalse(hasControl(name, in: settings), name)
+        }
+    }
+
     func testAwakePreferencePersistsIntoANewRuntimeAndSettingsView() async throws {
         let f = try fixture()
         let settings = host(GeneralSettingsView().environment(f.store).defaultAppStorage(f.runtime.defaults))

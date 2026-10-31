@@ -63,6 +63,7 @@ private struct SidebarList: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(SidebarRowDetail.key) private var rowDetail = SidebarRowDetail.standard.rawValue
+    @AppStorage(SidebarStyle.key) private var style = SidebarStyle.standard.rawValue
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
     let searchIsFocused: Bool
@@ -72,7 +73,9 @@ private struct SidebarList: View {
     var body: some View {
         @Bindable var store = store
 
-        let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard)
+        let showsIcons = SidebarStyle(rawValue: style) == .icons
+        let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard,
+                                             separatingNeedsYou: showsIcons)
         List(selection: Binding(get: { store.selectedConversationID }, set: { id in
             // A conversation clicked starts in its input; one reached with the arrow keys leaves the list focused.
             // Asked here, since the views showing it learn of the selection only after the click.
@@ -80,10 +83,18 @@ private struct SidebarList: View {
             if id != store.selectedConversationID { store.selectedConversationID = id }
             if clicked, id != nil { DispatchQueue.main.async(execute: focusComposer) }
         })) {
-            section("Pinned", sections.pinned)
-            section("Unread", sections.unread)
-            section("Bots", sections.bots)
-            section("Groups", sections.groups)
+            if showsIcons {
+                grid("Needs You", sections.needsYou)
+                grid("Pinned", sections.pinned)
+                grid("Unread", sections.unread)
+                grid("Bots", sections.bots)
+                grid("Groups", sections.groups)
+            } else {
+                section("Pinned", sections.pinned)
+                section("Unread", sections.unread)
+                section("Bots", sections.bots)
+                section("Groups", sections.groups)
+            }
         }
         .listStyle(.sidebar)
         .modifier(ConversationListKeyboardNavigation(
@@ -113,6 +124,32 @@ private struct SidebarList: View {
                         .tag(conversation.id)
                         .contextMenu { menu(for: conversation) }
                 }
+            }
+        }
+    }
+
+    /// A section as a grid of pictures, in a single row of the list so search and the sections stay as they are.
+    @ViewBuilder
+    private func grid(_ title: String, _ conversations: [BotConversation]) -> some View {
+        if !conversations.isEmpty {
+            Section(title) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 6)], spacing: 8) {
+                    ForEach(conversations) { conversation in
+                        ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
+                            isSelected: store.selectedConversationID == conversation.id,
+                            content: ConversationRowContent(conversation, store: store, detail: SidebarRowDetail(rawValue: rowDetail) ?? .standard))
+                            .equatable()
+                            // Like a row clicked: selected, and its input focused.
+                            .onTapGesture {
+                                store.selectedConversationID = conversation.id
+                                DispatchQueue.main.async(execute: focusComposer)
+                            }
+                            .contextMenu { menu(for: conversation) }
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                .listRowSeparator(.hidden)
             }
         }
     }
@@ -331,6 +368,115 @@ private struct ConversationRow: View, Equatable {
     }
 }
 
+/// A bot or group in the sidebar's icon view: its picture, name and a short line on what it is doing.
+private struct ConversationIcon: View, Equatable {
+    @Environment(NoodleStore.self) private var store
+    @State private var isDropTargeted = false
+    let conversationID: UUID
+    let isGroup: Bool
+    let isSelected: Bool
+    let content: ConversationRowContent
+
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.conversationID == b.conversationID && a.isGroup == b.isGroup && a.isSelected == b.isSelected && a.content == b.content
+    }
+
+    var body: some View {
+        let label = SidebarIconLabel(pause: content.pause, status: content.runtimeStatus, detail: content.detail)
+        VStack(spacing: 4) {
+            ZStack(alignment: .bottomTrailing) {
+                ConversationAvatar(participants: content.participants, isGroup: isGroup, size: 60)
+                    .runtimeLook(content.runtimeStatus, size: 60)
+                if content.runtimeStatus.hasMark {
+                    RuntimeStatusMark(status: content.runtimeStatus, size: 12)
+                        .padding(2)
+                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                        .padding(-2)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if content.isUnread {
+                    // A muted group's dot is dimmed, as in the list.
+                    Circle()
+                        .fill(content.isMuted ? Color.secondary.opacity(0.5) : Color.blue)
+                        .frame(width: 10, height: 10)
+                        .padding(2)
+                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                        .offset(x: -2, y: -2)
+                        .accessibilityHidden(true)
+                }
+            }
+            .help(content.runtimeHelp)
+            .padding(.top, 4)
+
+            Text(content.title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+
+            Text(label.text)
+                .font(.system(size: 10.5, weight: label.tone == .detail ? .regular : .medium))
+                .foregroundStyle(label.tone.style)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(height: 28, alignment: .top)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background {
+            if isSelected || isDropTargeted {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.accentColor.opacity(isDropTargeted ? 0.25 : 0.18))
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
+        // A file dropped here goes to this conversation, as on a row.
+        .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isDropTargeted) { providers in
+            store.drop(providers, onConversation: conversationID)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel(label))
+        .accessibilityValue(content.runtimeHelp)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func accessibilityLabel(_ label: SidebarIconLabel) -> String {
+        let unread = content.isUnread ? "Unread, " : ""
+        let muted = content.isMuted ? "Muted, " : ""
+        return "\(unread)\(muted)\(content.title), \(label.text)"
+    }
+}
+
+/// The short line under a picture in the icon view: why its bot waits, that it is working, or else the row's line.
+struct SidebarIconLabel: Equatable {
+    enum Tone {
+        case attention, working, detail
+
+        var style: AnyShapeStyle {
+            switch self {
+            case .attention: AnyShapeStyle(.orange)
+            case .working: AnyShapeStyle(Color.accentColor)
+            case .detail: AnyShapeStyle(.secondary)
+            }
+        }
+    }
+
+    var text: String
+    var tone: Tone
+
+    init(text: String, tone: Tone) {
+        self.text = text
+        self.tone = tone
+    }
+
+    init(pause: String?, status: ConversationRuntimeStatus, detail: String) {
+        if let pause { self.init(text: pause, tone: .attention) }
+        else if status == .working { self.init(text: "Working", tone: .working) }
+        else { self.init(text: detail, tone: .detail) }
+    }
+}
+
 /// Time for today, day and month for this year, and the year only when it differs.
 enum SidebarTimestamp {
     static func text(
@@ -358,6 +504,22 @@ enum SidebarRowDetail: String, CaseIterable, Identifiable {
         switch self {
         case .latestMessage: "Latest Message"
         case .description: "Description"
+        }
+    }
+}
+
+/// How the sidebar shows bots and groups: as rows, or as a grid of their pictures.
+enum SidebarStyle: String, CaseIterable, Identifiable {
+    case list, icons
+
+    static let key = "sidebarStyle"
+    static let standard = Self.list
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .list: "As List"
+        case .icons: "As Icons"
         }
     }
 }
