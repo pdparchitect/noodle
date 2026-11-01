@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-11-01
+
 ### Fixed
 
 - When the Hub cannot show a computer, browser or noodlet live, the viewer says why instead of only "The Hub could not show this."

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.33.6] - 2026-11-01
+
 ### Added
 
 - Watch and use a Local Mac live from Noodle on iPhone and iPad, or from another Mac, through Noodle Hub, as other computers already could: its desktop, with taps, clicks, scrolling and typing. A stopped Local Mac starts when someone opens it.

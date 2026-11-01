@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.80.3] - 2026-11-01
+
 ### Fixed
 
 - When Noodle Hub cannot show a computer, browser or noodlet live, the viewer says why instead of only "The Hub could not show this."
