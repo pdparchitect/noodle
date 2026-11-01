@@ -62,7 +62,14 @@ case "$command" in
         if ! use_simulator; then
             build -workspace "$folder/NoodleMobile.xcworkspace" -scheme NoodleMobile -configuration Debug \
                 -derivedDataPath "$folder/Derived" "${on_mac[@]}" build
-            open "$folder/Derived/Build/Products/Debug-iphoneos/NoodleMobile.app"
+            # macOS opens an iPad app only inside a wrapper, laid out as the App Store installs one; the bare
+            # app fails as "an incorrect executable format".
+            wrapper="$folder/Derived/Build/Products/Noodle Mobile Dev.app"
+            rm -rf "$wrapper"
+            mkdir -p "$wrapper/Wrapper"
+            ditto "$folder/Derived/Build/Products/Debug-iphoneos/NoodleMobile.app" "$wrapper/Wrapper/NoodleMobile.app"
+            ln -s Wrapper/NoodleMobile.app "$wrapper/WrappedBundle"
+            open "$wrapper"
             exit
         fi
         choose_simulator
