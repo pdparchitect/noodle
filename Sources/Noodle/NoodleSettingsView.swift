@@ -145,8 +145,6 @@ struct ChatSettingsView: View {
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(WebLinkPreview.defaultsKey) private var previewsWebLinks = true
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
-    @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
-    @AppStorage(MessageTextLayout.defaultsKey) private var textLayout = MessageTextLayout.defaultValue.rawValue
     @AppStorage(FloatingConversations.keepsOneDefaultsKey) private var keepsOneFloat = false
     @AppStorage(MessageReceivedSound.defaultsKey) private var receivedSound = MessageReceivedSound.defaultName
     @State private var microphones: [VoiceInputDevice] = []
@@ -162,22 +160,6 @@ struct ChatSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker("Attachment layout", selection: $attachmentLayout) {
-                    ForEach(ChatAttachmentLayout.allCases) { mode in
-                        Text(mode.displayName).tag(mode.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help((ChatAttachmentLayout(rawValue: attachmentLayout) ?? .defaultValue).explanation)
-                Picker("Long messages", selection: $textLayout) {
-                    ForEach(MessageTextLayout.allCases) { layout in
-                        Text(layout.displayName).tag(layout.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help((MessageTextLayout(rawValue: textLayout) ?? .defaultValue).explanation)
-            }
             ConversationRuntimeSettingsSections()
             Section {
                 Picker("Message received sound", selection: $receivedSound) {

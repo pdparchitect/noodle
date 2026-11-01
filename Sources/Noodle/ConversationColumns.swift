@@ -602,6 +602,31 @@ struct SidebarCommands: View {
     }
 }
 
+/// View › Conversation: how a conversation lays out attachments and long messages.
+struct ConversationLayoutCommands: View {
+    @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
+    @AppStorage(MessageTextLayout.defaultsKey) private var textLayout = MessageTextLayout.defaultValue.rawValue
+
+    var body: some View {
+        Menu("Conversation") {
+            Section("Attachments") {
+                Picker("Attachments", selection: $attachmentLayout) {
+                    ForEach(ChatAttachmentLayout.allCases) { Text($0.displayName).tag($0.rawValue).help($0.explanation) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+            Section("Long Messages") {
+                Picker("Long Messages", selection: $textLayout) {
+                    ForEach(MessageTextLayout.allCases) { Text($0.displayName).tag($0.rawValue).help($0.explanation) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+        }
+    }
+}
+
 /// The open columns as pictures in the toolbar; choosing one brings its column into view.
 struct ColumnSwitcher: View {
     @Environment(NoodleStore.self) private var store
