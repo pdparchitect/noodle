@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- In View › Conversation, the Attachments and Long Messages headings sit directly above their choices, with a line only between the two sections.
+
 ## [0.80.1] - 2026-11-01
 
 ### Added

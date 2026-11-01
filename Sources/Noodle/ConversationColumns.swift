@@ -609,21 +609,24 @@ struct ConversationLayoutCommands: View {
 
     var body: some View {
         Menu("Conversation") {
+            // Toggles, not inline pickers: a picker brings its own separators, which put a line
+            // between each section's header and its items.
             Section("Attachments") {
-                Picker("Attachments", selection: $attachmentLayout) {
-                    ForEach(ChatAttachmentLayout.allCases) { Text($0.displayName).tag($0.rawValue).help($0.explanation) }
+                ForEach(ChatAttachmentLayout.allCases) { layout in
+                    Toggle(layout.displayName, isOn: choice(layout.rawValue, in: $attachmentLayout)).help(layout.explanation)
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
             }
             Section("Long Messages") {
-                Picker("Long Messages", selection: $textLayout) {
-                    ForEach(MessageTextLayout.allCases) { Text($0.displayName).tag($0.rawValue).help($0.explanation) }
+                ForEach(MessageTextLayout.allCases) { layout in
+                    Toggle(layout.displayName, isOn: choice(layout.rawValue, in: $textLayout)).help(layout.explanation)
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
             }
         }
+    }
+
+    /// On while `value` is chosen; choosing it again leaves it chosen.
+    private func choice(_ value: String, in selection: Binding<String>) -> Binding<Bool> {
+        Binding(get: { selection.wrappedValue == value }, set: { if $0 { selection.wrappedValue = value } })
     }
 }
 
