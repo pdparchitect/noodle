@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A Local Mac no longer asks to be enabled again while its helper is already running. macOS can lose track of the registered helper, and Enable Local Mac then failed with "Operation not permitted".
+
 ## [0.33.5] - 2026-10-28
 
 ### Changed

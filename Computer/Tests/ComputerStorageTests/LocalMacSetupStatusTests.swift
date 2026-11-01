@@ -51,6 +51,18 @@ import XCTest
         await session.refreshLocalMacSetup(read: { .helperMissing })
         XCTAssertEqual(session.phase, .failed(LocalMacSetupRequired(registration: .helperMissing).localizedDescription))
     }
+    func testAnsweringServiceOverridesANotRegisteredReport() async {
+        let enabled = await LocalMacSetup.confirmed(.notRegistered) { true }
+        XCTAssertEqual(enabled, .enabled)
+        let firstUse = await LocalMacSetup.confirmed(.notRegistered) { false }
+        XCTAssertEqual(firstUse, .notRegistered)
+        for status: LocalMacRegistrationStatus in [.requiresApproval, .helperMissing, .unknown, .enabled] {
+            var asked = false
+            let result = await LocalMacSetup.confirmed(status) { asked = true; return true }
+            XCTAssertEqual(result, status)
+            XCTAssertFalse(asked)
+        }
+    }
     func testStatusRefreshCannotReplaceAnInFlightStart() async {
         let session = ComputerSession(Computer(name: "Mac", kind: .localMac))
         await session.refreshLocalMacSetup(read: {

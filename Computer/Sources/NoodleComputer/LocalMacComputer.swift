@@ -37,7 +37,17 @@ struct LocalMacSetupRequired: LocalizedError {
                                                     providerID: providerID, team: team)
     }
     static func registrationStatus() async -> LocalMacRegistrationStatus {
-        await LocalMacRegistrationProbe.read(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/MacOS/LocalMacSetup"))
+        let reported = await LocalMacRegistrationProbe.read(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/MacOS/LocalMacSetup"))
+        return await confirmed(reported) { (try? await serviceInfo()) != nil }
+    }
+    /// macOS 27 can report a registered, running daemon as not found when
+    /// backgroundtaskmanagementd fails to resolve its owning app, and registering
+    /// it again then fails with EPERM. launchd only serves the signed service's
+    /// Mach name while the daemon is registered, so an answer settles it.
+    static func confirmed(_ reported: LocalMacRegistrationStatus,
+                          serviceAnswers: () async -> Bool) async -> LocalMacRegistrationStatus {
+        guard reported == .notRegistered else { return reported }
+        return await serviceAnswers() ? .enabled : reported
     }
     static func resolve(_ status: LocalMacRegistrationStatus) throws {
         if status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
