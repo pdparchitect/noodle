@@ -1475,6 +1475,23 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(!chats.isUnread(try #require(chats.agents.first)))
     }
 
+    /// A phone joining a Hub starts from what the person has read on their other devices: a conversation with a
+    /// reply after the Hub's read mark is unread here too, from the first sync.
+    @Test func aNewPhoneShowsWhatIsUnreadOnTheOtherDevices() async throws {
+        let hub = FakeHub()
+        await hub.botSays("Read on the Mac")
+        let read = try #require(await hub.messages.last)
+        let conversationID = await hub.bot.conversationID
+        _ = await hub.reply(to: try LinkProtocol.encode(.markRead(LinkReadMark(conversationID: conversationID, messageID: read.id))))
+        await hub.botSays("Not read yet")
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+
+        try await chats.reload()
+
+        #expect(chats.isUnread(try #require(chats.agents.first)))
+    }
+
     /// A pinned circle's bubble shows the start of an unread reply, or else the bot's status.
     @Test func aPinnedBubbleShowsAnUnreadReplyBeforeTheStatus() async throws {
         let hub = FakeHub()

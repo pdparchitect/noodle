@@ -8,10 +8,15 @@
 - On iPad with a keyboard, the menu bar has the Mac's menus where Noodle on iPad can do the same: Settings… (⌘,), View › Sidebar (what the line under each name shows, and the order), View › Conversation (how attachments and long messages are laid out), New Space… and Edit Spaces… in Spaces, and Help › Noodle Help. The menus' groups are separated by lines.
 - Settings › Conversation List › Layout › As Icons shows bots and groups as a grid of their pictures, as on the Mac, each with its name and the line Show chooses, or why its bots wait. On iPhone the grid fills the screen; on iPad and Mac it fills the sidebar. View › Sidebar › As List and As Icons choose it from the menu bar.
 
+### Fixed
+
+- A phone or iPad that has just joined a Hub shows the bots and groups you haven't read on your other devices as unread, instead of counting everything already there as read.
+
 ### What to Test
 
 - In Settings, set Show to Status and check that a bot that has set a status shows it under its name, and one without shows its own latest reply rather than your message. Set it to Description and check that each bot and group shows what it is for.
 - In Settings, set Layout to As Icons. Check that every bot and group shows as a picture with its name and line, in Pinned, Unread and the rest, that tapping one opens it and holding one shows its own menu, and that a long list scrolls with no gaps.
+- Join a Hub on a device that hasn't joined it before, while another of your devices has unread conversations. Check the same ones show as unread.
 - On iPad, open the menu bar (swipe down from the top, or hold ⌘ with a keyboard). Check View › Sidebar and View › Conversation change the list and the chat as Settings does, ⌘, opens Settings, and Help › Noodle Help opens the Noodle page.
 
 ## [0.51.0] - 2026-10-28

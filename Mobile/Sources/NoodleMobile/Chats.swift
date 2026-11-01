@@ -189,8 +189,8 @@ final class ChatsCacheFile: @unchecked Sendable {
     private(set) var isLoaded = false
     /// Pins shown in All belong to this phone alone; those of the Hub's own space are its bots' and groups' `pinnedAt`.
     private var pinned: Set<UUID>
-    /// When each conversation was last read on this phone. Nil until the first sync after
-    /// installing, which counts everything already there as read.
+    /// When each conversation was last read on this phone. Nil until the first sync after installing, which
+    /// starts from the Hub's read marks and counts the rest of what is already there as read.
     private var seen: [UUID: Date]?
     /// Unsent text, by conversation, kept on this phone.
     private var drafts: [UUID: String] = [:]
@@ -551,6 +551,12 @@ final class ChatsCacheFile: @unchecked Sendable {
     }
 
     /// Read as far as the Hub says, on this phone or another device. Never unreads what was read here.
+    /// What the first sync after joining counts as read: as far as the person has read on their other devices,
+    /// by the Hub's marks, and everything already there where the Hub has none.
+    static func firstSeen(latest: [UUID: Date], readOnHub: [(UUID, Date)]) -> [UUID: Date] {
+        latest.merging(readOnHub) { _, mark in mark }
+    }
+
     private func noteRead(_ conversationID: UUID, upTo: Date) {
         guard var seen, (seen[conversationID] ?? .distantPast) < upTo else { return }
         seen[conversationID] = upTo
@@ -1191,7 +1197,8 @@ final class ChatsCacheFile: @unchecked Sendable {
         try Task.checkCancellation()
         forgetGone()
         if seen == nil {
-            seen = conversations.compactMapValues { $0.last?.createdAt }
+            seen = Self.firstSeen(latest: conversations.compactMapValues { $0.last?.createdAt },
+                                  readOnHub: threads.compactMap { thread in thread.readUpTo.map { (thread.conversationID, $0) } })
             saveSeen()
         }
         for thread in threads { if let upTo = thread.readUpTo { noteRead(thread.conversationID, upTo: upTo) } }
