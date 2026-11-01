@@ -817,7 +817,7 @@ import os
             await computers.refresh()
             return .computers(computers.link(for: try user(key)))
         case .computerTemplates:
-            return .computerTemplates(try await hubComputers().templates().map {
+            return .computerTemplates(try await hubComputers().templates(for: try user(key)).map {
                 LinkComputerTemplate(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
             })
         case .createComputer(let requestID, let draft):

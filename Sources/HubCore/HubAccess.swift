@@ -31,9 +31,11 @@ public struct HubPlan: Identifiable, Codable, Hashable, Sendable {
     public var browserLimit: Int?
     /// How many tokens each user's bots on it may use in a period; nil for any number.
     public var tokenLimit: HubTokenLimit?
+    /// The kinds of computer each user on it may make, by the template Noodle Computer makes them from; nil for every kind.
+    public var computerTypes: Set<String>?
 
     public init(id: UUID = UUID(), name: String, harnesses: Set<HubHarness> = [], models: [HubHarness: Set<String>] = [:],
-                computerLimit: Int? = nil, browserLimit: Int? = nil, tokenLimit: HubTokenLimit? = nil) {
+                computerLimit: Int? = nil, browserLimit: Int? = nil, tokenLimit: HubTokenLimit? = nil, computerTypes: Set<String>? = nil) {
         self.id = id
         self.name = name
         self.harnesses = harnesses
@@ -41,9 +43,10 @@ public struct HubPlan: Identifiable, Codable, Hashable, Sendable {
         self.computerLimit = computerLimit
         self.browserLimit = browserLimit
         self.tokenLimit = tokenLimit
+        self.computerTypes = computerTypes
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, harnesses, models, computerLimit, browserLimit, tokenLimit }
+    private enum CodingKeys: String, CodingKey { case id, name, harnesses, models, computerLimit, browserLimit, tokenLimit, computerTypes }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,6 +58,8 @@ public struct HubPlan: Identifiable, Codable, Hashable, Sendable {
         browserLimit = try c.decodeIfPresent(Int.self, forKey: .browserLimit)
         // A period a later Hub knows and this one does not must not cost the file its users.
         tokenLimit = try? c.decodeIfPresent(HubTokenLimit.self, forKey: .tokenLimit)
+        // Plans saved before computer types let their users make every kind.
+        computerTypes = try c.decodeIfPresent(Set<String>.self, forKey: .computerTypes)
     }
 
     public var isDefault: Bool { id == Self.defaultID }
@@ -272,6 +277,18 @@ public struct HubCallPush: Codable, Hashable, Sendable {
     public func computerLimit(for user: HubUser) -> Int? {
         guard !isPersonal, let current = current(user) else { return nil }
         return plans.first { $0.id == current.plan }?.computerLimit
+    }
+
+    /// The kinds of computer the user's plan lets them make; nil when every kind.
+    public func computerTypes(for user: HubUser) -> Set<String>? {
+        guard !isPersonal, let current = current(user) else { return nil }
+        return plans.first { $0.id == current.plan }?.computerTypes
+    }
+
+    /// Whether the user's plan lets them make a computer from `template`; one of no named kind only when it allows every kind.
+    public func allowsComputerType(_ template: String?, for user: HubUser) -> Bool {
+        guard let allowed = computerTypes(for: user) else { return true }
+        return template.map(allowed.contains) ?? false
     }
 
     /// How many browsers the user's plan lets them keep; nil when any number.
@@ -539,7 +556,7 @@ public struct HubCallPush: Codable, Hashable, Sendable {
             return String(original.name.prefix(ConversationName.maximumLength - suffix.count)) + suffix
         }.first { !taken.contains($0) }!
         let copy = HubPlan(name: name, harnesses: original.harnesses, models: original.models, computerLimit: original.computerLimit,
-                           browserLimit: original.browserLimit, tokenLimit: original.tokenLimit)
+                           browserLimit: original.browserLimit, tokenLimit: original.tokenLimit, computerTypes: original.computerTypes)
         plans.append(copy)
         save()
         return copy
@@ -564,6 +581,12 @@ public struct HubCallPush: Codable, Hashable, Sendable {
     /// Limits the computers each user on the plan may keep; nil lets them keep any number.
     public func setComputerLimit(_ limit: Int?, in plan: HubPlan) {
         update(plan) { $0.computerLimit = limit.map { max(0, $0) } }
+    }
+
+    /// Limits the kinds of computer each user on the plan may make; nil lets them make every kind.
+    /// Computers they already have stay theirs to use.
+    public func setComputerTypes(_ types: Set<String>?, in plan: HubPlan) {
+        update(plan) { $0.computerTypes = types }
     }
 
     /// Limits the browsers each user on the plan may keep; nil lets them keep any number.

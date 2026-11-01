@@ -58,8 +58,19 @@ import NoodleCore
         try await manage(ComputerRequest(.templates)).templates ?? []
     }
 
+    /// The kinds of computer the user may make: those Noodle Computer can make that their plan includes.
+    public func templates(for user: HubUser) async throws -> [ComputerTemplateSummary] {
+        let offered = try await templates()
+        guard access.computerTypes(for: user) != nil else { return offered }
+        let allowed = offered.filter { access.allowsComputerType($0.id, for: user) }
+        if allowed.isEmpty, !offered.isEmpty { throw LinkError("Your plan does not include any kind of computer this Hub offers.") }
+        return allowed
+    }
+
     /// Makes a computer for the user. It reaches no bot until assigned.
     public func create(_ draft: ComputerDraft, for user: HubUser) async throws -> RemoteComputer {
+        // Whatever the device offered: one from before plans chose kinds offers every kind.
+        guard access.allowsComputerType(draft.template, for: user) else { throw LinkError("Your plan does not include this kind of computer.") }
         if let limit = access.computerLimit(for: user), computers(for: user).count + making[user.id, default: 0] >= limit {
             throw HubAccess.limitReached(limit, "computer", "computers")
         }

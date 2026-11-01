@@ -264,6 +264,36 @@ import XCTest
         XCTAssertNil(plan.tokenLimit)
     }
 
+    func testAPlanCanLimitTheKindsOfComputerItsUsersMake() throws {
+        let (access, url) = access()
+        let family = try access.addPlan(named: "Family")
+        let ada = try access.addUser(named: "Ada"), bob = try access.addUser(named: "Bob")
+        access.move(ada, to: family)
+        XCTAssertNil(family.computerTypes, "Every kind by default")
+        XCTAssertNil(access.computerTypes(for: ada))
+        XCTAssertTrue(access.allowsComputerType("desktop", for: ada))
+
+        access.setComputerTypes(["shell"], in: family)
+        XCTAssertEqual(access.computerTypes(for: ada), ["shell"])
+        XCTAssertTrue(access.allowsComputerType("shell", for: ada))
+        XCTAssertFalse(access.allowsComputerType("desktop", for: ada))
+        XCTAssertFalse(access.allowsComputerType(nil, for: ada), "A computer of no named kind slipped past the plan")
+        XCTAssertTrue(access.allowsComputerType("desktop", for: bob), "Another plan's users were limited too")
+        XCTAssertEqual(HubAccess(url: url).plans, access.plans)
+        XCTAssertEqual(try access.duplicate(family).computerTypes, ["shell"])
+
+        access.setComputerTypes(nil, in: family)
+        XCTAssertTrue(access.allowsComputerType("desktop", for: ada))
+    }
+
+    /// Plans saved before computer types let their users make every kind, so nothing changes until one is turned off.
+    func testPlansSavedBeforeComputerTypesAllowEveryKind() throws {
+        let old = #"{"id":"00000000-0000-0000-0000-00000000000A","name":"Family","harnesses":[],"computerLimit":2}"#
+        let plan = try JSONDecoder().decode(HubPlan.self, from: Data(old.utf8))
+        XCTAssertNil(plan.computerTypes)
+        XCTAssertEqual(plan.computerLimit, 2)
+    }
+
     func testThePersonalMacsOwnerHasNoLimits() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-hub-access-\(UUID()).json")
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
@@ -271,9 +301,12 @@ import XCTest
         access.setComputerLimit(0, in: access.plans[0])
         access.setBrowserLimit(0, in: access.plans[0])
         access.setTokenLimit(HubTokenLimit(tokens: 1), in: access.plans[0])
+        access.setComputerTypes(["shell"], in: access.plans[0])
         XCTAssertNil(access.computerLimit(for: access.users[0]))
         XCTAssertNil(access.browserLimit(for: access.users[0]))
         XCTAssertNil(access.tokenLimit(for: access.users[0]))
+        XCTAssertNil(access.computerTypes(for: access.users[0]))
+        XCTAssertTrue(access.allowsComputerType("desktop", for: access.users[0]))
     }
 
     func testAHarnessLeavingAPlanTakesItsModelsWithIt() throws {

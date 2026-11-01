@@ -27,7 +27,7 @@ import XCTest
                 response.capabilities = ComputerCapabilities()
                 switch request.operation {
                 case .templates:
-                    response.templates = [ComputerTemplateSummary(id: "ubuntu", name: "Ubuntu", description: "", symbol: "terminal")]
+                    response.templates = offered
                 case .create:
                     let draft = try XCTUnwrap(request.computer)
                     let made = RemoteComputer(id: UUID(), name: draft.name, kind: "Linux", state: "Stopped", symbol: draft.symbol ?? "terminal")
@@ -66,6 +66,13 @@ import XCTest
             set { lock.withLock { pendingIdle = newValue } }
         }
         private var pendingIdle: [ComputerIdleNotice] = []
+
+        /// The kinds of computer it offers.
+        var templates: [ComputerTemplateSummary] {
+            get { lock.withLock { offered } }
+            set { lock.withLock { offered = newValue } }
+        }
+        private var offered = [ComputerTemplateSummary(id: "ubuntu", name: "Ubuntu", description: "", symbol: "terminal")]
 
         /// False for one from before owners, which cannot read the request.
         var knowsOwners = true
@@ -132,6 +139,51 @@ import XCTest
         try await f.hub.computers.delete(first.id, for: f.ada)
         _ = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Three"), for: f.ada)
         XCTAssertEqual(f.hub.computers.computers(for: f.ada).count, 2)
+    }
+
+    /// A plan can let its users make only some kinds of computer. The Hub offers them only those and refuses
+    /// the others, whatever a device asks for; computers they already have keep working.
+    func testAPlanLimitsTheKindsOfComputerEachUserMakes() async throws {
+        let f = try fixture()
+        f.computer.templates = [ComputerTemplateSummary(id: "desktop", name: "Desktop", description: "", symbol: "desktopcomputer"),
+                                ComputerTemplateSummary(id: "shell", name: "Shell", description: "", symbol: "terminal")]
+        let family = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        let desk = try await f.hub.computers.create(ComputerDraft(template: "desktop", name: "Desk"), for: f.ada)
+        f.hub.access.setComputerTypes(["shell"], in: family)
+
+        let offered = try await f.hub.computers.templates(for: f.ada)
+        XCTAssertEqual(offered.map(\.id), ["shell"])
+        let all = try await f.hub.computers.templates()
+        XCTAssertEqual(all.map(\.id), ["desktop", "shell"])
+        for draft in [ComputerDraft(template: "desktop", name: "Another Desk"), ComputerDraft(name: "No Kind")] {
+            do {
+                _ = try await f.hub.computers.create(draft, for: f.ada)
+                XCTFail("Ada made \(draft.name), a kind of computer her plan does not include")
+            } catch {
+                XCTAssertEqual(error.localizedDescription, "Your plan does not include this kind of computer.")
+            }
+        }
+        _ = try await f.hub.computers.create(ComputerDraft(template: "shell", name: "Shell"), for: f.ada)
+        XCTAssertEqual(f.hub.computers.computers(for: f.ada).count, 2)
+
+        // The one made before the plan changed is still hers to use and change.
+        let renamed = try await f.hub.computers.update(desk.id, with: ComputerDraft(name: "Old Desk"), for: f.ada)
+        XCTAssertEqual(renamed.name, "Old Desk")
+
+        // Someone on another plan makes any kind.
+        let carol = try f.hub.access.addUser(named: "Carol")
+        let carols = try await f.hub.computers.templates(for: carol)
+        XCTAssertEqual(carols.map(\.id), ["desktop", "shell"])
+        _ = try await f.hub.computers.create(ComputerDraft(template: "desktop", name: "Carol's"), for: carol)
+
+        // A plan none of whose kinds this Mac offers says so, rather than offer nothing.
+        f.hub.access.setComputerTypes(["windows"], in: family)
+        do {
+            _ = try await f.hub.computers.templates(for: f.ada)
+            XCTFail("Ada was offered no kind of computer without a reason")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Your plan does not include any kind of computer this Hub offers.")
+        }
     }
 
     /// Computers asked for at once count those still being made.
