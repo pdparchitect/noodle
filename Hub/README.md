@@ -13,6 +13,8 @@ which lends nothing until you add harnesses to it.
 A bot on a model its owner's plan no longer lends can't answer. The plan's editor lists
 such bots: choose Change Model… to move one to a model the plan lends, or Move All to…
 for every one on that harness. Bots marks them "model not lent", with Change Model… too.
+Computer types in the plan's editor limits the kinds of computer its users can make, such
+as Shell only; computers they already have keep working.
 Turn on Suspended in a user’s actions menu to stop their bots and block their devices
 without deleting their data. Turn it off to restore access with the same plan and paired devices.
 

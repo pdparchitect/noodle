@@ -11,6 +11,7 @@ import XCTest
         let hub: Hub
         let ada: HubUser
         let device: HubPairing
+        let computer: HubComputersTests.FakeComputer
     }
 
     private func fixture() async throws -> Fixture {
@@ -33,7 +34,7 @@ import XCTest
         let device = HubPairing(directory: root.appendingPathComponent("Device"), deviceName: "Mac")
         await device.join(link.invite(ada).url().absoluteString)
         XCTAssertNil(device.error)
-        return Fixture(hub: hub, ada: ada, device: device)
+        return Fixture(hub: hub, ada: ada, device: device, computer: computer)
     }
 
     func testADeviceMakesAndAssignsComputersOnTheHub() async throws {
@@ -77,5 +78,28 @@ import XCTest
         _ = try await f.device.request(.deleteComputer(id: computer.id))
         guard case .computers(let left) = try await f.device.request(.computers) else { return XCTFail("not listed") }
         XCTAssertEqual(left, [])
+    }
+
+    /// A device, however old, is offered only the kinds of computer the user's plan includes, and is refused the others.
+    func testADeviceIsOfferedOnlyTheKindsOfComputerThePlanIncludes() async throws {
+        let f = try await fixture()
+        f.computer.templates = [ComputerTemplateSummary(id: "desktop", name: "Desktop", description: "", symbol: "desktopcomputer"),
+                                ComputerTemplateSummary(id: "shell", name: "Shell", description: "", symbol: "terminal")]
+        let family = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        f.hub.access.setComputerTypes(["shell"], in: family)
+        guard case .computerTemplates(let templates) = try await f.device.request(.computerTemplates) else { return XCTFail("no templates") }
+        XCTAssertEqual(templates.map(\.id), ["shell"])
+
+        let events = try await f.device.subscribe()
+        let requestID = UUID()
+        _ = try await f.device.request(.createComputer(requestID: requestID, LinkComputerDraft(template: "desktop", name: "Desk")))
+        for try await event in events {
+            if case .computerCreated(let id, let computer, let error) = event, id == requestID {
+                XCTAssertNil(computer)
+                XCTAssertEqual(error, "Your plan does not include this kind of computer.")
+                break
+            }
+        }
+        XCTAssertEqual(f.hub.computers.computers(for: f.ada), [])
     }
 }

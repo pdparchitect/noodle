@@ -237,6 +237,8 @@ struct HubPlanEditor: View {
     @State private var error: String?
     /// Counts moves to another model, which change no plan, so the list of bots on models not lent is read again.
     @State private var moves = 0
+    /// The kinds of computer Noodle Computer on this Mac offers; none while it cannot be reached.
+    @State private var computerTypes: [(id: String, name: String)] = []
 
     private var access: HubAccess { host.hub.access }
     private var plan: HubPlan? { access.plans.first { $0.id == planID } }
@@ -306,6 +308,9 @@ struct HubPlanEditor: View {
             // The Default logins name their accounts only once their sign-in has been checked.
             let unnamed = host.runtime.availableInstallations.filter { $0.provider.supportsProfiles && host.setup.accounts[$0.provider] == nil }
             if !unnamed.isEmpty { Task { await host.setup.refresh(unnamed) } }
+        }
+        .task {
+            computerTypes = ((try? await host.hub.computers.templates()) ?? []).map { ($0.id, $0.name) }
         }
         .alert("Delete Plan?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) {
@@ -412,11 +417,32 @@ struct HubPlanEditor: View {
         VStack(spacing: 0) {
             limitRow("Computers per user", limit: plan.computerLimit) { access.setComputerLimit($0, in: plan) }
             Divider()
+            computerTypesRow(plan)
             limitRow("Browsers per user", limit: plan.browserLimit) { access.setBrowserLimit($0, in: plan) }
             Divider()
             tokenLimitRow(plan)
         }
         .planPanel()
+    }
+
+    /// The kinds of computer the plan's users may make: those Noodle Computer offers, and any the plan names that it no longer does.
+    @ViewBuilder private func computerTypesRow(_ plan: HubPlan) -> some View {
+        let allowed = plan.computerTypes
+        let ids = computerTypes.map(\.id) + (allowed ?? []).subtracting(computerTypes.map(\.id)).sorted()
+        if !ids.isEmpty {
+            HStack {
+                Text("Computer types")
+                Spacer()
+                HubChoicePicker(
+                    every: "All types",
+                    choices: ids.map { id in (id, computerTypes.first { $0.id == id }?.name ?? id) },
+                    allowed: allowed,
+                    set: { access.setComputerTypes($0, in: plan) }
+                )
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            Divider()
+        }
     }
 
     /// Tokens per user, and once there is a limit, the period it counts them over.
@@ -470,8 +496,9 @@ struct HubPlanEditor: View {
         let allowed = plan.models[harness]
         let ids = known.map(\.id) + (allowed ?? []).subtracting(known.map(\.id)).sorted()
         if !ids.isEmpty {
-            HubModelPicker(
-                models: ids.map { id in (id, known.first { $0.id == id }?.displayName ?? id) },
+            HubChoicePicker(
+                every: "All models",
+                choices: ids.map { id in (id, known.first { $0.id == id }?.displayName ?? id) },
                 allowed: allowed,
                 set: { access.setModels($0, for: harness, in: plan) }
             )
@@ -501,16 +528,18 @@ private extension View {
     }
 }
 
-/// Any model, or only those ticked; the last one ticked stays so the harness still lends something.
-private struct HubModelPicker: View {
-    let models: [(id: String, name: String)]
+/// Every choice, or only those ticked; the last one ticked stays so the plan still includes something.
+private struct HubChoicePicker: View {
+    /// "All models", or "All types".
+    let every: String
+    let choices: [(id: String, name: String)]
     let allowed: Set<String>?
     let set: (Set<String>?) -> Void
     @State private var showing = false
 
     private var title: String {
-        guard let allowed else { return "All models" }
-        return models.filter { allowed.contains($0.id) }.map(\.name).joined(separator: ", ")
+        guard let allowed else { return every }
+        return choices.filter { allowed.contains($0.id) }.map(\.name).joined(separator: ", ")
     }
 
     var body: some View {
@@ -521,20 +550,20 @@ private struct HubModelPicker: View {
             .truncationMode(.tail)
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Toggle("All models", isOn: Binding(
+                    Toggle(every, isOn: Binding(
                         get: { allowed == nil },
-                        set: { set($0 ? nil : Set(models.map(\.id))) }
+                        set: { set($0 ? nil : Set(choices.map(\.id))) }
                     ))
                     Divider()
-                    ForEach(models, id: \.id) { model in
-                        Toggle(model.name, isOn: Binding(
-                            get: { allowed?.contains(model.id) ?? true },
+                    ForEach(choices, id: \.id) { choice in
+                        Toggle(choice.name, isOn: Binding(
+                            get: { allowed?.contains(choice.id) ?? true },
                             set: { on in
-                                let current = allowed ?? Set(models.map(\.id))
-                                set(on ? current.union([model.id]) : current.subtracting([model.id]))
+                                let current = allowed ?? Set(choices.map(\.id))
+                                set(on ? current.union([choice.id]) : current.subtracting([choice.id]))
                             }
                         ))
-                        .disabled(allowed == nil || allowed == [model.id])
+                        .disabled(allowed == nil || allowed == [choice.id])
                     }
                 }
                 .toggleStyle(.checkbox)
