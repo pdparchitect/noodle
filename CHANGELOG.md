@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - In View › Conversation, the Attachments and Long Messages headings sit directly above their choices, with a line only between the two sections.
+- A bot's Backstory and an MCP connection's Instructions show a focus ring while you type in them, like the fields beside them.
 
 ## [0.80.1] - 2026-11-01
 

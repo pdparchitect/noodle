@@ -283,16 +283,41 @@ public extension View {
     /// translucent and its colours depend on where it sits, so it is drawn by
     /// AppKit rather than imitated.
     func roundedBorderEditor() -> some View {
-        scrollContentBackground(.hidden)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 4)
-            .background { RoundedBorderBezel() }
+        modifier(RoundedBorderEditor())
     }
 }
 
-private struct RoundedBorderBezel: NSViewRepresentable {
+private struct RoundedBorderEditor: ViewModifier {
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focused($focused)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
+            .background {
+                RoundedBorderBezel(focused: focused)
+                    .padding(-RoundedBorderBezel.ringMargin)
+            }
+    }
+}
+
+/// The bezel field never becomes first responder, so AppKit never rings it;
+/// while the editor has focus the bezel draws a ring matching the one AppKit
+/// gives focused single-line fields. The view reaches `ringMargin` past the
+/// field so the ring is not clipped.
+struct RoundedBorderBezel: NSViewRepresentable {
+    static let ringMargin: CGFloat = 4
+    var focused: Bool
+
     final class BezelView: NSView {
         private let field = NSTextField(string: "")
+        private let ring = FocusRingView()
+        var focused: Bool {
+            get { ring.shown }
+            set { ring.shown = newValue }
+        }
 
         override init(frame: NSRect) {
             super.init(frame: frame)
@@ -303,6 +328,7 @@ private struct RoundedBorderBezel: NSViewRepresentable {
             field.refusesFirstResponder = true
             field.setAccessibilityElement(false)
             addSubview(field)
+            addSubview(ring)
         }
 
         required init?(coder: NSCoder) { nil }
@@ -311,12 +337,76 @@ private struct RoundedBorderBezel: NSViewRepresentable {
         // autoresizing; setting its frame here lets the bezel fill the editor.
         override func layout() {
             super.layout()
-            field.frame = bounds
+            field.frame = bounds.insetBy(dx: ringMargin, dy: ringMargin)
+            ring.frame = bounds
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    /// Measured from a focused rounded field: 4 pt wide, from 3 pt outside
+    /// the 6 pt-radius bezel to 1 pt inside it. Like AppKit's, it shrinks
+    /// into place as it fades in, and fades out.
+    final class FocusRingView: NSView {
+        private let shape = CAShapeLayer()
+
+        var shown = false {
+            didSet { if shown != oldValue { animate() } }
+        }
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            shape.fillColor = nil
+            shape.lineWidth = 4
+            shape.opacity = 0
+            layer?.addSublayer(shape)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override var wantsUpdateLayer: Bool { true }
+
+        override func updateLayer() {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                shape.strokeColor = NSColor.keyboardFocusIndicatorColor.cgColor
+            }
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            shape.frame = bounds
+            shape.path = path(outset: 0)
+            CATransaction.commit()
+        }
+
+        private func path(outset: CGFloat) -> CGPath {
+            let rect = bounds.insetBy(dx: ringMargin - 1 - outset, dy: ringMargin - 1 - outset)
+            return CGPath(roundedRect: rect, cornerWidth: 7 + outset, cornerHeight: 7 + outset, transform: nil)
+        }
+
+        private func animate() {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = shape.presentation()?.opacity ?? shape.opacity
+            shape.opacity = shown ? 1 : 0
+            let group = CAAnimationGroup()
+            group.duration = shown ? 0.2 : 0.12
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            group.animations = [fade]
+            if shown && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let shrink = CABasicAnimation(keyPath: "path")
+                shrink.fromValue = path(outset: 8)
+                shrink.toValue = path(outset: 0)
+                group.animations?.append(shrink)
+            }
+            shape.add(group, forKey: "focus")
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 
     func makeNSView(context: Context) -> BezelView { BezelView() }
-    func updateNSView(_ nsView: BezelView, context: Context) {}
+    func updateNSView(_ nsView: BezelView, context: Context) { nsView.focused = focused }
 }
