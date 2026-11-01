@@ -2796,8 +2796,16 @@ final class NoodleStore {
         return text
     }
 
-    /// The line under a sidebar row's name. A bot or group with no description keeps its latest message.
+    /// The line under a sidebar name: its latest message, or what the bot or group is for, or, as the widgets say,
+    /// the status the bot set or else its own latest reply. A group has a status per bot, so it keeps its latest
+    /// message, as does one without the other line.
     func sidebarDetail(for conversation: BotConversation, showing detail: SidebarRowDetail) -> String {
+        if detail == .status, conversation.kind == .direct, let agent = participants(for: conversation).first,
+           let status = WidgetBots.statusLine(status: agent.status, messages: messages(for: conversation), agentID: agent.id, preview: {
+               MarkdownPlainText.convert(MessageSegment.previewText($0))
+           }) {
+            return status
+        }
         if detail == .description {
             let conversation = current(conversation)
             let description = conversation.kind == .direct

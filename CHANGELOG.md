@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- View › Sidebar › Show Status puts what each bot says it is doing under its name, as the widgets do; without a status it shows the start of the bot's own latest reply. A group, and a bot that has never replied, shows its latest message.
+
 ### Fixed
 
 - In the sidebar's icon view, a section taller than the window no longer leaves some of its bots or groups as blank space.

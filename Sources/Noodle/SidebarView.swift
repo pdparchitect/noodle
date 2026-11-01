@@ -555,7 +555,7 @@ enum SidebarTimestamp {
 
 /// What the line under each sidebar row's name shows.
 enum SidebarRowDetail: String, CaseIterable, Identifiable {
-    case latestMessage, description
+    case latestMessage, description, status
 
     static let key = "sidebarRowDetail"
     static let standard = Self.latestMessage
@@ -565,6 +565,7 @@ enum SidebarRowDetail: String, CaseIterable, Identifiable {
         switch self {
         case .latestMessage: "Latest Message"
         case .description: "Description"
+        case .status: "Status"
         }
     }
 }
