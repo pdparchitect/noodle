@@ -76,27 +76,36 @@ private struct SidebarList: View {
         let showsIcons = SidebarStyle(rawValue: style) == .icons
         let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard,
                                              separatingNeedsYou: showsIcons)
-        List(selection: Binding(get: { store.selectedConversationID }, set: { id in
-            // A conversation clicked starts in its input; one reached with the arrow keys leaves the list focused.
-            // Asked here, since the views showing it learn of the selection only after the click.
-            let clicked = NSApp.currentEventIsClick
-            if id != store.selectedConversationID { store.selectedConversationID = id }
-            if clicked, id != nil { DispatchQueue.main.async(execute: focusComposer) }
-        })) {
+        Group {
             if showsIcons {
-                grid("Needs You", sections.needsYou)
-                grid("Pinned", sections.pinned)
-                grid("Unread", sections.unread)
-                grid("Bots", sections.bots)
-                grid("Groups", sections.groups)
+                // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        grid("Needs You", sections.needsYou)
+                        grid("Pinned", sections.pinned)
+                        grid("Unread", sections.unread)
+                        grid("Bots", sections.bots)
+                        grid("Groups", sections.groups)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                }
             } else {
-                section("Pinned", sections.pinned)
-                section("Unread", sections.unread)
-                section("Bots", sections.bots)
-                section("Groups", sections.groups)
+                List(selection: Binding(get: { store.selectedConversationID }, set: { id in
+                    // A conversation clicked starts in its input; one reached with the arrow keys leaves the list focused.
+                    // Asked here, since the views showing it learn of the selection only after the click.
+                    let clicked = NSApp.currentEventIsClick
+                    if id != store.selectedConversationID { store.selectedConversationID = id }
+                    if clicked, id != nil { DispatchQueue.main.async(execute: focusComposer) }
+                })) {
+                    section("Pinned", sections.pinned)
+                    section("Unread", sections.unread)
+                    section("Bots", sections.bots)
+                    section("Groups", sections.groups)
+                }
+                .listStyle(.sidebar)
             }
         }
-        .listStyle(.sidebar)
         .modifier(ConversationListKeyboardNavigation(
             hasSelection: store.selectedConversationID != nil,
             searchIsFocused: searchIsFocused,
@@ -128,29 +137,32 @@ private struct SidebarList: View {
         }
     }
 
-    /// A section as a grid of pictures, in a single row of the list so search and the sections stay as they are.
+    /// A section as a grid of pictures under its title, set like a list's section header.
     @ViewBuilder
     private func grid(_ title: String, _ conversations: [BotConversation]) -> some View {
         if !conversations.isEmpty {
-            Section(title) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 6)], spacing: 8) {
-                    ForEach(conversations) { conversation in
-                        ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
-                            isSelected: store.selectedConversationID == conversation.id,
-                            content: ConversationRowContent(conversation, store: store, detail: SidebarRowDetail(rawValue: rowDetail) ?? .standard))
-                            .equatable()
-                            // Like a row clicked: selected, and its input focused.
-                            .onTapGesture {
-                                store.selectedConversationID = conversation.id
-                                DispatchQueue.main.async(execute: focusComposer)
-                            }
-                            .contextMenu { menu(for: conversation) }
-                    }
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+                .padding(.top, 10)
+                .padding(.bottom, 2)
+                .accessibilityAddTraits(.isHeader)
+            IconGridLayout {
+                ForEach(conversations) { conversation in
+                    ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
+                        isSelected: store.selectedConversationID == conversation.id,
+                        content: ConversationRowContent(conversation, store: store, detail: SidebarRowDetail(rawValue: rowDetail) ?? .standard))
+                        .equatable()
+                        // Like a row clicked: selected, and its input focused.
+                        .onTapGesture {
+                            store.selectedConversationID = conversation.id
+                            DispatchQueue.main.async(execute: focusComposer)
+                        }
+                        .contextMenu { menu(for: conversation) }
                 }
-                .padding(.vertical, 4)
-                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                .listRowSeparator(.hidden)
             }
+            .padding(.vertical, 4)
         }
     }
 
@@ -365,6 +377,55 @@ private struct ConversationRow: View, Equatable {
         let muted = content.isMuted ? "Muted, " : ""
         let paused = pause.map { "\($0), " } ?? ""
         return "\(unread)\(muted)\(content.title), \(paused)\(detail)"
+    }
+}
+
+/// The icon view's grid: as many columns of at least 96 points as fit, each row as tall as its tallest picture.
+/// Every picture is laid out, unlike a lazy grid, which in a list row only ever drew those first on screen.
+private struct IconGridLayout: Layout {
+    private let minimumWidth: CGFloat = 96, columnSpacing: CGFloat = 6, rowSpacing: CGFloat = 8
+
+    private struct Grid {
+        let columns: Int, itemWidth: CGFloat, rowHeights: [CGFloat]
+    }
+
+    private func grid(_ proposal: ProposedViewSize, _ subviews: Subviews) -> Grid {
+        // Asked for its smallest or largest size, it is one column or one row.
+        let width = width(proposal, subviews)
+        let columns = max(1, Int((width + columnSpacing) / (minimumWidth + columnSpacing)))
+        let itemWidth = max(0, (width - columnSpacing * CGFloat(columns - 1)) / CGFloat(columns))
+        let rowHeights = stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(start + columns, subviews.count)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: itemWidth, height: nil)).height }.max() ?? 0
+        }
+        return Grid(columns: columns, itemWidth: itemWidth, rowHeights: rowHeights)
+    }
+
+    private func width(_ proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
+        guard let width = proposal.width else { return minimumWidth }
+        guard width.isFinite else { return CGFloat(subviews.count) * (minimumWidth + columnSpacing) - columnSpacing }
+        return width
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let grid = grid(proposal, subviews)
+        let height = grid.rowHeights.reduce(0, +) + rowSpacing * CGFloat(max(0, grid.rowHeights.count - 1))
+        return CGSize(width: width(proposal, subviews), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let grid = grid(ProposedViewSize(width: bounds.width, height: nil), subviews)
+        var y = bounds.minY
+        for (row, height) in grid.rowHeights.enumerated() {
+            for column in 0..<grid.columns {
+                let index = row * grid.columns + column
+                guard index < subviews.count else { break }
+                let x = bounds.minX + CGFloat(column) * (grid.itemWidth + columnSpacing)
+                subviews[index].place(at: CGPoint(x: x, y: y), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: grid.itemWidth, height: height))
+            }
+            y += height + rowSpacing
+        }
     }
 }
 

@@ -6,6 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- In the sidebar's icon view, a section taller than the window no longer leaves some of its bots or groups as blank space.
+- In the sidebar's icon view, right-clicking a bot or group opens its own menu, not the menu of the first one in its section.
+
 ## [0.80.0] - 2026-10-31
 
 ### Added
