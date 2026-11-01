@@ -37,7 +37,7 @@ struct HubActivityView: View {
                         }
                     }
                 }
-                .font(.body.monospaced())
+                .font(.subheadline.monospaced())
             }
         }
         .frame(minWidth: 640, minHeight: 360)
