@@ -74,14 +74,12 @@ private struct SidebarList: View {
         @Bindable var store = store
 
         let showsIcons = SidebarStyle(rawValue: style) == .icons
-        let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard,
-                                             separatingNeedsYou: showsIcons)
+        let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard)
         Group {
             if showsIcons {
                 // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        grid("Needs You", sections.needsYou)
                         grid("Pinned", sections.pinned)
                         grid("Unread", sections.unread)
                         grid("Bots", sections.bots)

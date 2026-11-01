@@ -21,7 +21,7 @@ import NoodleCore
         window.setContentSize(.init(width: 320, height: 400))
         try await settle(window)
         let scrollView = try XCTUnwrap(descendant(NSScrollView.self, of: window.contentView!))
-        let bots = Set(f.store.sidebarSections(.standard, separatingNeedsYou: true).bots.map { f.store.title(for: $0) })
+        let bots = Set(f.store.sidebarSections(.standard).bots.map { f.store.title(for: $0) })
         XCTAssertEqual(bots.count, 15)
 
         let documentHeight = try XCTUnwrap(scrollView.documentView).frame.height
@@ -43,7 +43,7 @@ import NoodleCore
         let window = try XCTUnwrap(host(SidebarView().environment(f.store)).window)
         window.setContentSize(.init(width: 320, height: 400))
         try await settle(window)
-        let bots = f.store.sidebarSections(.standard, separatingNeedsYou: true).bots
+        let bots = f.store.sidebarSections(.standard).bots
         XCTAssertEqual(bots.count, 2)
 
         for bot in bots.reversed() {
@@ -65,6 +65,25 @@ import NoodleCore
             for other in bots { f.store.setPinned(false, conversationID: other.id) }
             try await settle(window)
         }
+    }
+
+    /// A bot waiting on the person, such as for sign-in, stays in its section, as in the list; its picture says why.
+    func testABotWaitingOnThePersonStaysInItsSection() async throws {
+        let f = try fixture()
+        useIcons()
+        let ada = try f.runtime.start(f.a)
+        try f.runtime.start(f.b)
+        ada.transition(.failed, failure: .authenticationRequired)
+        let pause = try XCTUnwrap(f.store.pauseSummary(for: f.directA))
+
+        let window = try XCTUnwrap(host(SidebarView().environment(f.store)).window)
+        window.setContentSize(.init(width: 320, height: 400))
+        try await settle(window)
+        let texts = elements(window.contentView!).flatMap(labels)
+        XCTAssertFalse(texts.contains("Needs You"))
+        XCTAssertTrue(texts.contains("Bots"))
+        XCTAssertTrue(texts.contains { $0.hasPrefix("Ada, \(pause)") }, "\(texts)")
+        XCTAssertEqual(Set(f.store.sidebarSections(.standard).bots.map(\.id)), [f.directA.id, f.directB.id])
     }
 
     private func useIcons() {

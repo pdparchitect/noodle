@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - How a conversation lays out attachments (Wrap, Vertical or Stack) and long messages (Together, Paragraphs or Chunks) is in View › Conversation. They are no longer in Settings › Conversation; your choices are kept.
+- The sidebar's icon view no longer has a Needs You section. A bot waiting on you stays in its section, as in the list, and still says why under its picture.
 
 ### Fixed
 

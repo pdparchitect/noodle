@@ -657,28 +657,11 @@ final class NoodleStore {
 
     struct SidebarSections {
         var unread: [BotConversation], pinned: [BotConversation], bots: [BotConversation], groups: [BotConversation]
-        var needsYou: [BotConversation] = []
     }
 
     /// Pinned bots and groups always sit on top, in the order they were pinned, whatever the order; the rest come
     /// newest message first. An Unread section takes the unread ones out of the others until they are read.
-    /// Separating those that need the person moves the ones whose bots wait on them, such as for Kick or sign-in,
-    /// out of the others to a section of their own.
-    func sidebarSections(_ order: ConversationOrder, separatingNeedsYou: Bool = false) -> SidebarSections {
-        var sections = sidebarSectionsInOrder(order)
-        guard separatingNeedsYou else { return sections }
-        sections.needsYou = (sections.pinned + sections.unread + sections.bots + sections.groups)
-            .filter { pauseSummary(for: $0) != nil }
-        let needsYouIDs = Set(sections.needsYou.map(\.id))
-        guard !needsYouIDs.isEmpty else { return sections }
-        sections.pinned.removeAll { needsYouIDs.contains($0.id) }
-        sections.unread.removeAll { needsYouIDs.contains($0.id) }
-        sections.bots.removeAll { needsYouIDs.contains($0.id) }
-        sections.groups.removeAll { needsYouIDs.contains($0.id) }
-        return sections
-    }
-
-    private func sidebarSectionsInOrder(_ order: ConversationOrder) -> SidebarSections {
+    func sidebarSections(_ order: ConversationOrder) -> SidebarSections {
         let pinnedIDs = Set(shownPinnedIDs)
         let unpinned = filteredConversations.filter { !pinnedIDs.contains($0.id) }
         let newest = unpinned.sorted { lastMessageDate(of: $0) > lastMessageDate(of: $1) }
