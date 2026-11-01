@@ -5,10 +5,12 @@
 ### Added
 
 - Settings › Conversation List › Show chooses the line under each name, as on the Mac: Latest Message, Description, or Status, what each bot says it is doing, or else the start of its own latest reply. Groups keep their latest message. Sort Conversations has moved beside it, at the top of Settings.
+- On iPad with a keyboard, the menu bar has the Mac's menus where Noodle on iPad can do the same: Settings… (⌘,), View › Sidebar (what the line under each name shows, and the order), View › Conversation (how attachments and long messages are laid out), New Space… and Edit Spaces… in Spaces, and Help › Noodle Help. The menus' groups are separated by lines.
 
 ### What to Test
 
 - In Settings, set Show to Status and check that a bot that has set a status shows it under its name, and one without shows its own latest reply rather than your message. Set it to Description and check that each bot and group shows what it is for.
+- On iPad, open the menu bar (swipe down from the top, or hold ⌘ with a keyboard). Check View › Sidebar and View › Conversation change the list and the chat as Settings does, ⌘, opens Settings, and Help › Noodle Help opens the Noodle page.
 
 ## [0.51.0] - 2026-10-28
 

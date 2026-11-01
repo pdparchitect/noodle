@@ -1,3 +1,4 @@
+import HubLink
 import SwiftUI
 import UIKit
 
@@ -9,7 +10,10 @@ struct HomeCommands {
     var next: (() -> Void)?
     var previous: (() -> Void)?
     var close: (() -> Void)?
+    var settings: (() -> Void)?
     var spaces: [SpaceCommand] = []
+    var newSpace: (() -> Void)?
+    var editSpaces: (() -> Void)?
 }
 
 /// A space in the Spaces menu, ticked while it is shown.
@@ -29,30 +33,74 @@ extension FocusedValues {
     @Entry var homeCommands: HomeCommands?
 }
 
-/// The app's menus for a hardware keyboard, which holding ⌘ lists on iPad: the Mac's shortcuts where it has
-/// the same command, and the arrows to go through the conversations.
+/// The app's menus, laid out as the Mac's where it has the same command: in the menu bar on a Mac and on iPad,
+/// and listed by holding ⌘ with a hardware keyboard. Sections draw the separators; a divider shows none there.
 struct NoodleCommands: Commands {
     @FocusedValue(\.homeCommands) private var home
+    @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
+    @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
+    @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
+    @AppStorage(MessageTextLayout.key) private var textLayout = MessageTextLayout.standard.rawValue
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            command("Settings…", home?.settings).keyboardShortcut(",")
+        }
         CommandGroup(replacing: .newItem) {
             command("New Bot", home?.newBot).keyboardShortcut("n")
             command("New Group", home?.newGroup).keyboardShortcut("n", modifiers: [.command, .shift])
         }
-        CommandMenu("Conversation") {
-            command("Search Conversations", home?.search).keyboardShortcut("f")
-            Divider()
-            command("Next Conversation", home?.next).keyboardShortcut(.downArrow, modifiers: [.command, .option])
-            command("Previous Conversation", home?.previous).keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            command("Close Conversation", home?.close).keyboardShortcut(.escape, modifiers: [])
-        }
-        if let spaces = home?.spaces, spaces.count > 1 {
-            CommandMenu("Spaces") {
-                ForEach(Array(spaces.enumerated()), id: \.element.id) { index, space in
-                    Toggle(space.title, isOn: Binding(get: { space.isShown }, set: { if $0 { KeyboardCommand.run(space.show) } }))
-                        .keyboardShortcut(SpaceCommand.shortcut(at: index))
+        CommandGroup(before: .toolbar) {
+            Section {
+                Menu("Sidebar") {
+                    Section { choices($rowDetail, ConversationRowDetail.allCases) { "Show \($0.name)" } }
+                    Section { choices($conversationOrder, ConversationOrder.allCases) { $0.name } }
+                }
+                Menu("Conversation") {
+                    Section("Attachments") { choices($attachmentLayout, AttachmentLayout.allCases) { $0.name } }
+                    Section("Long Messages") { choices($textLayout, MessageTextLayout.allCases) { $0.name } }
                 }
             }
+        }
+        CommandMenu("Conversation") {
+            Section {
+                command("Search Conversations", home?.search).keyboardShortcut("f")
+            }
+            Section {
+                command("Next Conversation", home?.next).keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                command("Previous Conversation", home?.previous).keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                command("Close Conversation", home?.close).keyboardShortcut(.escape, modifiers: [])
+            }
+        }
+        if let home, home.spaces.count > 1 || home.newSpace != nil {
+            CommandMenu("Spaces") {
+                Section {
+                    ForEach(Array(home.spaces.enumerated()), id: \.element.id) { index, space in
+                        Toggle(space.title, isOn: Binding(get: { space.isShown }, set: { if $0 { KeyboardCommand.run(space.show) } }))
+                            .keyboardShortcut(SpaceCommand.shortcut(at: index))
+                    }
+                }
+                Section {
+                    command("New Space…", home.newSpace)
+                    if home.editSpaces != nil { command("Edit Spaces…", home.editSpaces) }
+                }
+            }
+        }
+        CommandGroup(replacing: .help) {
+            Button("Noodle Help") { UIApplication.shared.open(NoodleCommands.help) }
+        }
+    }
+
+    static let help = URL(string: "https://github.com/pdparchitect/noodle")!
+
+    /// A choice of stored values as checkmark items, as the Mac's View menu lists them. Toggles, not an inline
+    /// picker, which brings its own separators and so a line between a section's heading and its items.
+    private func choices<Choice: RawRepresentable & Identifiable>(_ selection: Binding<String>, _ all: [Choice],
+                                                                  title: @escaping (Choice) -> String) -> some View
+        where Choice.RawValue == String {
+        ForEach(all) { choice in
+            Toggle(title(choice), isOn: Binding(get: { selection.wrappedValue == choice.rawValue },
+                                                set: { if $0 { selection.wrappedValue = choice.rawValue } }))
         }
     }
 

@@ -1948,7 +1948,10 @@ struct AgentsView: View {
             next: order.isEmpty ? nil : { navigation.step(1, through: order, in: layout) },
             previous: order.isEmpty ? nil : { navigation.step(-1, through: order, in: layout) },
             close: navigation.current == nil ? nil : { navigation.close() },
-            spaces: chats.isEmpty ? [] : spaces)
+            settings: { showingSettings = true },
+            spaces: chats.isEmpty ? [] : spaces,
+            newSpace: chats.isEmpty ? nil : { name(SpaceNaming(adding: nil)) },
+            editSpaces: !spaceList.spaces.isEmpty || chats.count > 1 ? { editingSpaces = true } : nil)
     }
 
     private func list(_ rows: [Row]) -> some View {
