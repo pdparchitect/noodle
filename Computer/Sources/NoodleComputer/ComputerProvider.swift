@@ -237,7 +237,7 @@ enum AgentTerminalSweep {
             if session.phase == .stopped { idle.stopped(session.id) }
             return ComputerResponse(computers: [Self.remote(session)])
         }
-        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner, stagingRoot: stagingRoot) }
+        if session.computer.kind == .localMac { return try await handleLocal(request, session: session, store: store, owner: owner, socket: socket, stagingRoot: stagingRoot) }
         if session.computer.kind == .windows { return try await handleWindows(request, session: session, store: store, owner: owner, stagingRoot: stagingRoot) }
         if session.computer.kind == .ssh { return try await handleSSH(request, session: session, store: store, owner: owner, socket: socket, stagingRoot: stagingRoot) }
         if request.operation == .revoke {
@@ -680,7 +680,8 @@ enum AgentTerminalSweep {
         return .init()
     }
 
-    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String, stagingRoot: URL?) async throws -> ComputerResponse {
+    private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String,
+                             socket: SurfaceSocket?, stagingRoot: URL?) async throws -> ComputerResponse {
         localTerminals = localTerminals.filter { _, value in
             store.sessions.contains { $0.id == value.computer && $0.localMac === value.runtime && $0.phase == .running }
         }
@@ -692,12 +693,25 @@ enum AgentTerminalSweep {
             }
             return .init()
         }
-        if request.operation == .start {
+        if request.operation == .start || request.operation == .surfaceStream {
             if session.phase.canStart { await store.start(session) }
+        }
+        if request.operation == .start {
             guard session.phase == .running else { throw ComputerBridgeError(session.phase.startFailureDescription) }
             return .init()
         }
         guard session.phase == .running, let runtime = session.localMac else { throw ComputerBridgeError("Start this Local Mac in \(ComputerAppIdentity.name).") }
+        if request.operation == .surfaceStream {
+            guard let socket else { throw ComputerBridgeError("A live view needs a connection of its own.") }
+            // Keyed by connection: a restarted Local Mac gets a new desktop, so a new streamer.
+            streamer("desktop:\(session.id):\(ObjectIdentifier(runtime).hashValue)", computer: session.id, capture: { [weak runtime] in
+                runtime?.image.flatMap(LocalMacLiveView.picture)
+            }, apply: { [weak runtime] input in
+                guard let runtime, let size = runtime.image?.size else { return }
+                LocalMacLiveView.events(for: input, size: size).forEach(runtime.send)
+            }).attach(socket)
+            return .init()
+        }
         func terminal(_ id: UUID?) throws -> UUID {
             guard let id, let value = localTerminals[id], value.owner == owner, value.computer == session.id, value.runtime === runtime else {
                 throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")

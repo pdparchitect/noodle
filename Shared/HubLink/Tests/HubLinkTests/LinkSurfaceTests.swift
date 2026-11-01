@@ -4,6 +4,14 @@ import Foundation
 import XCTest
 
 final class LinkSurfaceTests: XCTestCase {
+    /// A Local Mac the Hub could not show said why, and the viewer replaced it with a general
+    /// "The Hub could not show this." as the channel closed.
+    func testAViewThatEndsKeepsTheHubsReason() {
+        XCTAssertEqual(LinkSurface.ending(reason: "Start this Local Mac in Noodle Computer.", showing: false),
+                       "Start this Local Mac in Noodle Computer.")
+        XCTAssertEqual(LinkSurface.ending(reason: nil, showing: false), "The Hub could not show this.")
+        XCTAssertNil(LinkSurface.ending(reason: nil, showing: true))
+    }
     /// What the device has shown reaches the companion too, which builds recovery frames on it.
     func testTheCompanionHearsWhatTheDeviceHasShown() async throws {
         var fds: [Int32] = [0, 0]

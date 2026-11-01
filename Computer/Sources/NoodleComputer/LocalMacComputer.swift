@@ -3,6 +3,7 @@ import ComputerCore
 import Foundation
 import LocalMacCore
 import ServiceManagement
+import Surface
 
 struct LocalMacSetupRequired: LocalizedError {
     var registration: LocalMacRegistrationStatus = .unknown
@@ -511,4 +512,51 @@ private final class Once<T>: @unchecked Sendable {
         if notify { error = message; onDisconnect?(message) }
     }
     deinit { try? output?.close(); try? input?.close() }
+}
+
+/// A Local Mac's desktop as a live view through the Hub: the frames the app already shows, and
+/// what the viewer does as the helper's input, at positions relative to the picture.
+enum LocalMacLiveView {
+    static func picture(_ image: NSImage) -> (image: CGImage, size: CGSize)? {
+        image.cgImage(forProposedRect: nil, context: nil, hints: nil).map { ($0, image.size) }
+    }
+
+    static func events(for input: SurfaceInput, size: CGSize) -> [LocalMacInput] {
+        guard size.width > 0, size.height > 0 else { return [] }
+        func at(_ kind: LocalMacInput.Kind, _ x: Double, _ y: Double) -> LocalMacInput {
+            var event = LocalMacInput(kind)
+            event.x = min(1, max(0, x / size.width)); event.y = min(1, max(0, y / size.height))
+            return event
+        }
+        func key(_ code: UInt16, down: Bool) -> LocalMacInput {
+            var event = LocalMacInput(down ? .keyDown : .keyUp); event.key = code
+            return event
+        }
+        switch input {
+        case .pointer(let phase, let x, let y, let clickCount):
+            // The helper turns a move with the button held into a drag.
+            let kinds: [SurfaceInput.Phase: LocalMacInput.Kind] = [.move: .move, .drag: .move, .down: .down, .up: .up]
+            var event = at(kinds[phase] ?? .move, x, y)
+            event.clickCount = min(10, max(1, clickCount))
+            return [event]
+        case .scroll(let x, let y, _, let dy):
+            var event = at(.scroll, x, y)
+            event.scroll = min(10_000, max(-10_000, -dy))
+            return [event]
+        case .key(let named):
+            guard let code = keyCodes[named.rawValue] else { return [] }
+            return [key(code, down: true), key(code, down: false)]
+        case .hold(let named, let pressed):
+            guard let code = keyCodes[named] else { return [] }
+            return [key(code, down: pressed)]
+        case .text(let text):
+            var event = LocalMacInput(.text); event.text = String(text.utf16.prefix(4096)) ?? ""
+            return [event]
+        }
+    }
+
+    private static let keyCodes: [String: UInt16] = [
+        "enter": 36, "tab": 48, "escape": 53, "backspace": 51, "space": 49,
+        "left": 123, "right": 124, "down": 125, "up": 126,
+    ]
 }

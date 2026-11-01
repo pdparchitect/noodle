@@ -173,7 +173,7 @@ struct HubSurfaceWindow: View {
                 default: break
                 }
             }
-            if !showing { failure = "The Hub could not show this." }
+            failure = LinkSurface.ending(reason: failure, showing: showing)
         } catch {
             failure = error.localizedDescription
         }

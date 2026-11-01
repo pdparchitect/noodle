@@ -27,6 +27,12 @@ public enum LinkSurface {
 
     public static func control(_ control: SurfaceControl) -> Data { control.encoded }
 
+    /// What a viewer shows once its channel has ended: nothing after a picture, else the Hub's
+    /// reason when it gave one.
+    public static func ending(reason: String?, showing: Bool) -> String? {
+        showing ? nil : reason ?? "The Hub could not show this."
+    }
+
     /// Relays a live view between the companion showing it and the device watching it, both
     /// ways and as it happens: video down as the companion encodes it, the person's controls up
     /// in the order they sent them. Video comes only as fast as the device's link takes it, so a

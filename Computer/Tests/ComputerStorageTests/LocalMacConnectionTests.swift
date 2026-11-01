@@ -4,6 +4,7 @@ import Foundation
 import Combine
 import LocalMacCore
 import ComputerCore
+import Surface
 import XCTest
 @testable import NoodleComputer
 
@@ -467,6 +468,59 @@ import XCTest
     }
 
     /// Agents share a Local Mac's 16 running shells; the person's own terminal never counts.
+    /// Opened from the Hub, as from Noodle on iPhone, a Local Mac shows its desktop and takes taps
+    /// and typing. It used to refuse with a terminal error, which the viewer showed as
+    /// "The Hub could not show this."
+    func testHubLiveViewShowsTheDesktopAndTakesInput() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ComputerStore(root: root)
+        let provider = try ComputerProvider(store: store, socket: root.appendingPathComponent("computer.sock"), listens: false)
+        let session = ComputerSession(Computer(name: "Theo", kind: .localMac))
+        store.sessions = [session]
+        let input = Pipe(), output = Pipe()
+        let received = expectation(description: "input reached the helper")
+        received.expectedFulfillmentCount = 3
+        let helper = Task.detached { () -> [LocalMacInput] in
+            defer { try? output.fileHandleForWriting.close(); try? input.fileHandleForReading.close() }
+            var inputs: [LocalMacInput] = []
+            while let data = try? LocalMacWire.read(input.fileHandleForReading),
+                  let request = try? LocalMacWire.decode(LocalMacRequest.self, from: data) {
+                if request.operation == .input, let event = request.input { inputs.append(event); received.fulfill() }
+                let reply = Self.reply(request, displayID: request.operation == .status ? nil : 99)
+                try? LocalMacWire.write(JSONEncoder().encode(reply), to: output.fileHandleForWriting)
+            }
+            return inputs
+        }
+        let runtime = LocalMacComputer(displayIDs: { [2] })
+        runtime.expectDisconnect(true)
+        try await runtime.connect(input: output.fileHandleForReading, output: input.fileHandleForWriting, protectedDisplays: [2])
+        session.localMac = runtime; session.phase = .running
+        runtime.image = NSImage(size: NSSize(width: 800, height: 600), flipped: false) { rect in
+            NSColor.systemBlue.setFill(); rect.fill(); return true
+        }
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let companion = SurfaceSocket(fd: fds[0]), viewer = SurfaceSocket(fd: fds[1])
+        defer { companion.close(); viewer.close() }
+
+        _ = try await provider.handle(.init(.surfaceStream, computerID: session.id, agentID: UUID()), peer: "hub", surface: companion)
+        let pictured = expectation(description: "the viewer got a picture")
+        pictured.assertForOverFulfill = false
+        let watching = Task { for await frame in viewer.frames where !(SurfacePacket.decode(frame) ?? []).isEmpty { pictured.fulfill() } }
+        defer { watching.cancel() }
+        viewer.send(SurfaceControl.input(.pointer(.down, x: 400, y: 150)).encoded)
+        viewer.send(SurfaceControl.input(.pointer(.up, x: 400, y: 150)).encoded)
+        viewer.send(SurfaceControl.input(.text("hi")).encoded)
+        await fulfillment(of: [received, pictured], timeout: 10)
+
+        runtime.close()
+        let inputs = await helper.value
+        XCTAssertEqual(inputs.map(\.kind), [.down, .up, .text])
+        XCTAssertEqual(inputs[0].x, 0.5, accuracy: 0.01)
+        XCTAssertEqual(inputs[0].y, 0.25, accuracy: 0.01)
+        XCTAssertEqual(inputs[2].text, "hi")
+    }
     func testAgentShellsAreLimitedButThePersonsTerminalAlwaysOpens() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

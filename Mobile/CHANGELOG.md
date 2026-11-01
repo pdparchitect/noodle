@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- When the Hub cannot show a computer, browser or noodlet live, the viewer says why instead of only "The Hub could not show this."
+
+### What to Test
+
+- Open a Local Mac a bot shared and check its desktop shows, and that taps, scrolling and typing reach it. Needs the latest Noodle Computer on the Mac.
+- Open something live while its Mac's app is closed, and check the message says what went wrong.
+
 ## [0.52.0] - 2026-11-01
 
 ### Added
