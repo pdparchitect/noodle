@@ -460,9 +460,10 @@ struct AttachmentRows: Layout {
 enum WebLinkPreview {
     static let key = "webLinksPreview"
 
-    /// The link to preview, or nil when it goes straight to the system.
-    static func previewed(_ url: URL, enabled: Bool) -> URL? {
-        guard enabled, ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false else { return nil }
+    /// The link to preview, or nil when it goes straight to the system. On a Mac it always does: Safari inside
+    /// the app cannot show a page there, only open it in the browser behind a sheet saying so.
+    static func previewed(_ url: URL, enabled: Bool, onMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) -> URL? {
+        guard enabled, !onMac, ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host?.isEmpty == false else { return nil }
         return url
     }
 }

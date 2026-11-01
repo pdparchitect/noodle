@@ -47,9 +47,11 @@ import Testing
 
     @Test func onlyWebLinksOpenInAPreview() throws {
         let web = try #require(URL(string: "https://example.com/page"))
-        #expect(WebLinkPreview.previewed(web, enabled: true) == web)
-        #expect(WebLinkPreview.previewed(web, enabled: false) == nil)
-        #expect(WebLinkPreview.previewed(try #require(URL(string: "mailto:a@example.com")), enabled: true) == nil)
+        #expect(WebLinkPreview.previewed(web, enabled: true, onMac: false) == web)
+        #expect(WebLinkPreview.previewed(web, enabled: false, onMac: false) == nil)
+        #expect(WebLinkPreview.previewed(try #require(URL(string: "mailto:a@example.com")), enabled: true, onMac: false) == nil)
+        // On a Mac the preview would only hand the link to the browser behind a sheet saying so.
+        #expect(WebLinkPreview.previewed(web, enabled: true, onMac: true) == nil)
     }
 
     @Test func attachedWebLinksShowAsLinkCards() throws {
