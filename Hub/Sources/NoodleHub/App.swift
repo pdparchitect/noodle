@@ -228,6 +228,7 @@ struct HubMenu: View {
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: HubPairWindow.windowID)
         }
+        Divider()
         Button("Usage") {
             hub.usage.agentFilter = nil
             NSApp.unhide(nil)
