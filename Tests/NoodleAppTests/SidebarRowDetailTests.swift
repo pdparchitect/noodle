@@ -1,5 +1,6 @@
 import XCTest
 import NoodleCore
+import HubLink
 @testable import Noodle
 
 @MainActor final class SidebarRowDetailTests: XCTestCase {
@@ -8,8 +9,8 @@ import NoodleCore
     }
 
     func testLatestMessageIsTheDefault() {
-        XCTAssertEqual(SidebarRowDetail.standard, .latestMessage)
-        XCTAssertEqual(SidebarRowDetail.allCases.map(\.name), ["Latest Message", "Description", "Status"])
+        XCTAssertEqual(ConversationRowDetail.standard, .latestMessage)
+        XCTAssertEqual(ConversationRowDetail.allCases.map(\.name), ["Latest Message", "Description", "Status"])
     }
 
     func testDescriptionShowsWhatEachBotAndGroupIsFor() throws {

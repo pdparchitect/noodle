@@ -2779,26 +2779,21 @@ final class NoodleStore {
         return text
     }
 
-    /// The line under a sidebar name: its latest message, or what the bot or group is for, or, as the widgets say,
-    /// the status the bot set or else its own latest reply. A group has a status per bot, so it keeps its latest
-    /// message, as does one without the other line.
-    func sidebarDetail(for conversation: BotConversation, showing detail: SidebarRowDetail) -> String {
-        if detail == .status, conversation.kind == .direct, let agent = participants(for: conversation).first,
-           let status = WidgetBots.statusLine(status: agent.status, messages: messages(for: conversation), agentID: agent.id, preview: {
-               MarkdownPlainText.convert(MessageSegment.previewText($0))
-           }) {
-            return status
-        }
-        if detail == .description {
-            let conversation = current(conversation)
-            let description = conversation.kind == .direct
-                ? participants(for: conversation).first?.publicDescription
-                : conversation.publicDescription
-            if let description = description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
-                return description
-            }
-        }
-        return preview(for: conversation)
+    /// The line under a sidebar name, as the chosen detail and the conversation list on iPhone say it.
+    func sidebarDetail(for conversation: BotConversation, showing detail: ConversationRowDetail) -> String {
+        let conversation = current(conversation)
+        let agent = conversation.kind == .direct ? participants(for: conversation).first : nil
+        return detail.line(isGroup: conversation.kind == .group,
+                           description: agent?.publicDescription ?? conversation.publicDescription,
+                           status: agent?.status,
+                           latestReply: {
+                               agent.flatMap { agent in
+                                   WidgetBots.statusLine(status: nil, messages: self.messages(for: conversation), agentID: agent.id) {
+                                       MarkdownPlainText.convert(MessageSegment.previewText($0))
+                                   }
+                               }
+                           },
+                           latestMessage: preview(for: conversation))
     }
 
     func revealWorkspace(for agent: AgentRecord) {

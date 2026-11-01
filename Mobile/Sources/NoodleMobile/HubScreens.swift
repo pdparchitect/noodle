@@ -1110,6 +1110,7 @@ struct SettingsView: View {
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
     @AppStorage(MessageTextLayout.key) private var textLayout = MessageTextLayout.standard.rawValue
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
+    @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var noodlets = NoodletGrants().all
@@ -1118,6 +1119,18 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Picker("Show", selection: $rowDetail) {
+                        ForEach(ConversationRowDetail.allCases) { Text($0.name).tag($0.rawValue) }
+                    }
+                    Picker("Sort Conversations", selection: $conversationOrder) {
+                        ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
+                    }
+                } header: {
+                    Text("Conversation List")
+                } footer: {
+                    Text((ConversationOrder(rawValue: conversationOrder) ?? .standard).explanation)
+                }
                 // Every joined Hub that knows Mentions only takes the same choice; the first one shows it.
                 let mentioning = chats.filter(\.notifiesMentions)
                 if let shown = mentioning.first {
@@ -1132,13 +1145,6 @@ struct SettingsView: View {
                     } header: {
                         Text("In Groups, Notify Me For")
                     }
-                }
-                Section {
-                    Picker("Sort Conversations", selection: $conversationOrder) {
-                        ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
-                    }
-                } footer: {
-                    Text((ConversationOrder(rawValue: conversationOrder) ?? .standard).explanation)
                 }
                 Section {
                     Picker("Attachments", selection: $attachmentLayout) {

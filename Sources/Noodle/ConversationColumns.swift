@@ -576,7 +576,7 @@ struct MainWindowLayoutCommands: View {
 /// View › Sidebar: how the sidebar shows bots and groups, the line under each name, and their order.
 struct SidebarCommands: View {
     @AppStorage(SidebarStyle.key) private var style = SidebarStyle.standard.rawValue
-    @AppStorage(SidebarRowDetail.key) private var detail = SidebarRowDetail.standard.rawValue
+    @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
 
     var body: some View {
@@ -588,7 +588,7 @@ struct SidebarCommands: View {
             .labelsHidden()
             Divider()
             Picker("Line", selection: $detail) {
-                ForEach(SidebarRowDetail.allCases) { Text("Show \($0.name)").tag($0.rawValue) }
+                ForEach(ConversationRowDetail.allCases) { Text("Show \($0.name)").tag($0.rawValue) }
             }
             .pickerStyle(.inline)
             .labelsHidden()

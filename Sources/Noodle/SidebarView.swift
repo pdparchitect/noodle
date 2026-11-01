@@ -62,7 +62,7 @@ private struct SidebarList: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
-    @AppStorage(SidebarRowDetail.key) private var rowDetail = SidebarRowDetail.standard.rawValue
+    @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(SidebarStyle.key) private var style = SidebarStyle.standard.rawValue
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
@@ -122,7 +122,7 @@ private struct SidebarList: View {
                 ForEach(conversations) { conversation in
                     ConversationRow(conversationID: conversation.id, isGroup: conversation.kind == .group,
                         isSelected: store.selectedConversationID == conversation.id,
-                        content: ConversationRowContent(conversation, store: store, detail: SidebarRowDetail(rawValue: rowDetail) ?? .standard))
+                        content: ConversationRowContent(conversation, store: store, detail: ConversationRowDetail(rawValue: rowDetail) ?? .standard))
                         .equatable()
                         // Outside the equatable row, where the list can see them.
                         .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
@@ -150,7 +150,7 @@ private struct SidebarList: View {
                 ForEach(conversations) { conversation in
                     ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
                         isSelected: store.selectedConversationID == conversation.id,
-                        content: ConversationRowContent(conversation, store: store, detail: SidebarRowDetail(rawValue: rowDetail) ?? .standard))
+                        content: ConversationRowContent(conversation, store: store, detail: ConversationRowDetail(rawValue: rowDetail) ?? .standard))
                         .equatable()
                         // Like a row clicked: selected, and its input focused.
                         .onTapGesture {
@@ -262,7 +262,7 @@ private struct ConversationRowContent: Equatable {
     var isUnread: Bool
     var isMuted: Bool
 
-    @MainActor init(_ conversation: BotConversation, store: NoodleStore, detail: SidebarRowDetail) {
+    @MainActor init(_ conversation: BotConversation, store: NoodleStore, detail: ConversationRowDetail) {
         participants = store.shownParticipants(for: conversation)
         title = store.title(for: conversation)
         timestamp = SidebarTimestamp.text(for: conversation.updatedAt)
@@ -548,23 +548,6 @@ enum SidebarTimestamp {
         style = style.day().month(.abbreviated)
         if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
         return date.formatted(style)
-    }
-}
-
-/// What the line under each sidebar row's name shows.
-enum SidebarRowDetail: String, CaseIterable, Identifiable {
-    case latestMessage, description, status
-
-    static let key = "sidebarRowDetail"
-    static let standard = Self.latestMessage
-    var id: String { rawValue }
-
-    var name: String {
-        switch self {
-        case .latestMessage: "Latest Message"
-        case .description: "Description"
-        case .status: "Status"
-        }
     }
 }
 

@@ -942,6 +942,16 @@ final class ChatsCacheFile: @unchecked Sendable {
 
     func latestMessage(of conversation: some HubConversation) -> LinkMessage? { messages(of: conversation).last }
 
+    /// The line under a name in the list, as the person chose, the same as on the Mac.
+    func line(for thread: HubThread, showing detail: ConversationRowDetail) -> String {
+        detail.line(isGroup: thread.group != nil, description: thread.about, status: thread.bot?.status,
+                    latestReply: {
+                        self.messages(of: thread).last { if case .bot = $0.author { true } else { false } }
+                            .map { MessageRendering.previewText($0.body).split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+                    },
+                    latestMessage: latestMessage(of: thread).map { MessageRendering.previewText($0.body) } ?? thread.about)
+    }
+
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.
     func note(for thread: HubThread) -> PinnedNote? {
         if isUnread(thread), let reply = messages(of: thread).last(where: { if case .bot = $0.author { true } else { false } }) {
@@ -1731,6 +1741,7 @@ struct AgentsView: View {
     /// The joined Hubs' spaces in the person's order, after All.
     @AppStorage(HubSpaceOrder.key) private var hubOrder = ""
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
+    @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     /// The spaces the person made, kept on this phone.
     @State private var spaceList = SpaceList(file: URL.applicationSupportDirectory.appendingPathComponent("spaces.json"))
     /// Carries them to the person's other devices through iCloud.
@@ -2186,6 +2197,7 @@ struct AgentsView: View {
         ForEach(rows) { row in
             rowLink(row,
                     AgentRow(chats: row.chats, thread: row.thread, latest: row.chats.latestMessage(of: row.thread),
+                             line: row.chats.line(for: row.thread, showing: ConversationRowDetail(rawValue: rowDetail) ?? .standard),
                              unread: row.chats.isUnread(row.thread),
                              muted: row.chats.isMuted(row.thread),
                              hub: chats.count > 1 && spaceChats == nil ? row.chats.pairing.hubName : nil))
@@ -2436,6 +2448,7 @@ private struct AgentRow: View, Equatable {
     let chats: HubChats
     let thread: HubThread
     let latest: LinkMessage?
+    let line: String
     let unread: Bool
     /// A muted group dims its dot: new replies show, but do not ask for attention.
     var muted = false
@@ -2444,7 +2457,7 @@ private struct AgentRow: View, Equatable {
     static let dotSize: CGFloat = 10, dotGap: CGFloat = 8
 
     nonisolated static func == (a: Self, b: Self) -> Bool {
-        a.chats === b.chats && a.thread == b.thread && a.latest == b.latest && a.unread == b.unread && a.muted == b.muted
+        a.chats === b.chats && a.thread == b.thread && a.latest == b.latest && a.line == b.line && a.unread == b.unread && a.muted == b.muted
             && a.hub == b.hub
     }
 
@@ -2476,7 +2489,7 @@ private struct AgentRow: View, Equatable {
                 if let pause {
                     Text(pause).font(.subheadline).foregroundStyle(.red).lineLimit(1)
                 }
-                Text(latest.map { MessageRendering.previewText($0.body) } ?? thread.about)
+                Text(line)
                     .font(.subheadline).foregroundStyle(.secondary)
                     .lineLimit(pause == nil ? 2 : 1)
             }
