@@ -2771,8 +2771,10 @@ final class NoodleStore {
         return ConversationName.display(conversation.displayName)
     }
 
+    /// What was last said, by the person or a bot; the app's own notices, such as a bot being back on its first
+    /// harness, are left out.
     func preview(for conversation: BotConversation) -> String {
-        guard let message = messages(for: conversation).last else { return "No messages yet" }
+        guard let message = messages(for: conversation).last(where: { $0.author != .system }) else { return "No messages yet" }
         if let cached = previewTexts[conversation.id], cached.messageID == message.id, cached.body == message.body { return cached.text }
         let text = MarkdownPlainText.convert(MessageSegment.previewText(message.body))
         previewTexts[conversation.id] = (message.id, message.body, text)

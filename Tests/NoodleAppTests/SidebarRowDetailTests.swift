@@ -57,4 +57,18 @@ import HubLink
         XCTAssertEqual(f.store.sidebarDetail(for: f.directA, showing: .status), "A violet notebook",
                        "Without a status, the bot's own latest reply, not the person's message after it")
     }
+
+    /// A notice the app posts, such as a bot being back on its first harness, is not what was last said.
+    func testTheLatestMessageSkipsTheAppsOwnNotices() throws {
+        let f = try fixture()
+        try f.repository.append(ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id),
+                                            body: "The report is ready", delivery: .delivered))
+        try f.repository.append(ChatMessage(conversationID: f.directA.id, author: .system,
+                                            body: "Back on Claude Code", delivery: .delivered))
+        f.store.refreshTranscripts()
+
+        for detail in ConversationRowDetail.allCases {
+            XCTAssertEqual(f.store.sidebarDetail(for: f.directA, showing: detail), "The report is ready", "\(detail)")
+        }
+    }
 }

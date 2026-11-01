@@ -115,6 +115,12 @@ private actor FakeHub {
                                     createdAt: Date(), delivered: true))
     }
 
+    /// A notice the Hub posts itself, such as the bot being back on its first harness.
+    func notice(_ body: String) {
+        messages.append(LinkMessage(id: UUID(), conversationID: bot.conversationID, author: .system, body: body,
+                                    createdAt: Date(), delivered: true))
+    }
+
     /// A noodlet the bot shares, as a link.
     func botSharesNoodlet(_ name: String) -> LinkAttachment {
         let attachment = LinkAttachment(id: UUID(), filename: "\(name).noodlet", mediaType: "application/x-noodlet", byteCount: 0,
@@ -1490,6 +1496,21 @@ private actor RecordedSubscriptions: PushSubscriptions {
         try await chats.reload()
 
         #expect(chats.isUnread(try #require(chats.agents.first)))
+    }
+
+    /// The line under a name is what was last said; the Hub's own notices are left out, as on the Mac.
+    @Test func theLatestMessageSkipsTheHubsOwnNotices() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        await hub.botSays("The report is ready")
+        await hub.notice("Back on Claude Code")
+        try await chats.reload()
+        let scout = HubThread.bot(try #require(chats.agents.first))
+
+        for detail in ConversationRowDetail.allCases {
+            #expect(chats.line(for: scout, showing: detail) == "The report is ready", "\(detail)")
+        }
     }
 
     /// A pinned circle's bubble shows the start of an unread reply, or else the bot's status.

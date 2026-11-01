@@ -955,7 +955,9 @@ final class ChatsCacheFile: @unchecked Sendable {
                         self.messages(of: thread).last { if case .bot = $0.author { true } else { false } }
                             .map { MessageRendering.previewText($0.body).split(whereSeparator: \.isWhitespace).joined(separator: " ") }
                     },
-                    latestMessage: latestMessage(of: thread).map { MessageRendering.previewText($0.body) } ?? thread.about)
+                    // What was last said: the Hub's own notices, such as a bot being back on its first harness, are left out.
+                    latestMessage: messages(of: thread).last { $0.author != .system }
+                        .map { MessageRendering.previewText($0.body) } ?? thread.about)
     }
 
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.

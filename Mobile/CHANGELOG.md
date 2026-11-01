@@ -10,12 +10,14 @@
 
 ### Fixed
 
+- The line under a name shows what was last said, not Noodle's own notices such as "Back on Claude Code".
 - A phone or iPad that has just joined a Hub shows the bots and groups you haven't read on your other devices as unread, instead of counting everything already there as read.
 
 ### What to Test
 
 - In Settings, set Show to Status and check that a bot that has set a status shows it under its name, and one without shows its own latest reply rather than your message. Set it to Description and check that each bot and group shows what it is for.
 - In Settings, set Layout to As Icons. Check that every bot and group shows as a picture with its name and line, in Pinned, Unread and the rest, that tapping one opens it and holding one shows its own menu, and that a long list scrolls with no gaps.
+- Let a bot fall back to another harness and come back, then check the line under its name still shows its last reply, not "Back on …".
 - Join a Hub on a device that hasn't joined it before, while another of your devices has unread conversations. Check the same ones show as unread.
 - On iPad, open the menu bar (swipe down from the top, or hold ⌘ with a keyboard). Check View › Sidebar and View › Conversation change the list and the chat as Settings does, ⌘, opens Settings, Help › Noodle Help opens the Noodle page, and the … menu beside the list has lines between New Bot and New Group, Play, and Hubs and Settings.
 
