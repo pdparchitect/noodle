@@ -7,6 +7,7 @@
 - Settings › Conversation List › Show chooses the line under each name, as on the Mac: Latest Message, Description, or Status, what each bot says it is doing, or else the start of its own latest reply. Groups keep their latest message. Sort Conversations has moved beside it, at the top of Settings.
 - On iPad with a keyboard, the menu bar has the Mac's menus where Noodle on iPad can do the same: Settings… (⌘,), View › Sidebar (what the line under each name shows, and the order), View › Conversation (how attachments and long messages are laid out), New Space… and Edit Spaces… in Spaces, and Help › Noodle Help. The menus' groups are separated by lines.
 - Settings › Conversation List › Layout › As Icons shows bots and groups as a grid of their pictures, as on the Mac, each with its name and the line Show chooses, or why its bots wait. On iPhone the grid fills the screen; on iPad and Mac it fills the sidebar. View › Sidebar › As List and As Icons choose it from the menu bar.
+- Holding a bot or group, in the list or the icon view, shows its latest messages above its menu, to read without opening it.
 
 ### Fixed
 
@@ -18,6 +19,7 @@
 - In Settings, set Show to Status and check that a bot that has set a status shows it under its name, and one without shows its own latest reply rather than your message. Set it to Description and check that each bot and group shows what it is for.
 - In Settings, set Layout to As Icons. Check that every bot and group shows as a picture with its name and line, in Pinned, Unread and the rest, that tapping one opens it and holding one shows its own menu, and that a long list scrolls with no gaps.
 - Let a bot fall back to another harness and come back, then check the line under its name still shows its last reply, not "Back on …".
+- Hold a bot or group in the list and in the icon view. Check its latest messages show above its own menu, and that in the icon view each picture shows its own.
 - Join a Hub on a device that hasn't joined it before, while another of your devices has unread conversations. Check the same ones show as unread.
 - On iPad, open the menu bar (swipe down from the top, or hold ⌘ with a keyboard). Check View › Sidebar and View › Conversation change the list and the chat as Settings does, ⌘, opens Settings, Help › Noodle Help opens the Noodle page, and the … menu beside the list has lines between New Bot and New Group, Play, and Hubs and Settings.
 

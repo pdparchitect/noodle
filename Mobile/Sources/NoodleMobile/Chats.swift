@@ -1967,44 +1967,54 @@ struct AgentsView: View {
     private func list(_ rows: [Row]) -> some View {
         let listing = listing(rows)
         let (searching, found, pinned, unread, rest) = (listing.searching, listing.found, listing.pinned, listing.unread, listing.rest)
-        return List {
+        return Group {
             if ConversationListStyle(rawValue: listStyle) == .icons {
-                // As on the Mac: each section a grid of pictures, with what each bot is doing under its name.
-                if layout.pinsInList { iconSection(unread.isEmpty && rest.isEmpty ? nil : "Pinned", pinned) }
-                if unread.isEmpty {
-                    iconSection(nil, rest)
-                } else {
-                    iconSection("Unread", unread)
-                    iconSection("Others", rest)
+                // As on the Mac: each section a grid of pictures, with what each bot is doing under its name. Not a
+                // list: in a list a section's grid is one row, which lifts as a whole and gives every picture the
+                // first one's menu and preview.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if layout.pinsInList { iconSection(unread.isEmpty && rest.isEmpty ? nil : "Pinned", pinned) }
+                        if unread.isEmpty {
+                            iconSection(nil, rest)
+                        } else {
+                            iconSection("Unread", unread)
+                            iconSection("Others", rest)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 12)
                 }
             } else {
-            if !pinned.isEmpty, layout.pinsInList {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
-                    ForEach(pinned) { row in
-                        // A menu held on each circle: context menus in one list row all lift the row
-                        // and show the first circle's menu, whichever was pressed.
-                        Menu { menu(for: row) } label: {
-                            PinnedAgent(chats: row.chats, thread: row.thread, unread: row.chats.isUnread(row.thread))
-                        } primaryAction: { navigation.open(row.id, in: layout) }
-                        .buttonStyle(.plain)
-                        .menuIndicator(.hidden)
-                        .hoverEffect(.lift)
+                List {
+                    if !pinned.isEmpty, layout.pinsInList {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
+                            ForEach(pinned) { row in
+                                // A menu held on each circle: context menus in one list row all lift the row
+                                // and show the first circle's menu, whichever was pressed.
+                                Menu { menu(for: row) } label: {
+                                    PinnedAgent(chats: row.chats, thread: row.thread, unread: row.chats.isUnread(row.thread))
+                                } primaryAction: { navigation.open(row.id, in: layout) }
+                                .buttonStyle(.plain)
+                                .menuIndicator(.hidden)
+                                .hoverEffect(.lift)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        // Room above the first row for its bubbles.
+                        .padding(.top, pinned.prefix(3).contains { $0.chats.note(for: $0.thread) != nil } ? 8 : 0)
+                        .listRowSeparator(.hidden)
+                    }
+                    if unread.isEmpty {
+                        agentRows(rest)
+                    } else {
+                        Section("Unread") { agentRows(unread) }
+                        if !rest.isEmpty { Section("Others") { agentRows(rest) } }
                     }
                 }
-                .padding(.vertical, 8)
-                // Room above the first row for its bubbles.
-                .padding(.top, pinned.prefix(3).contains { $0.chats.note(for: $0.thread) != nil } ? 8 : 0)
-                .listRowSeparator(.hidden)
-            }
-            if unread.isEmpty {
-                agentRows(rest)
-            } else {
-                Section("Unread") { agentRows(unread) }
-                if !rest.isEmpty { Section("Others") { agentRows(rest) } }
-            }
+                .listStyle(.plain)
             }
         }
-        .listStyle(.plain)
         .readingVerticalBar($verticalBar)
         // The saved chats still show while a Hub cannot be reached, so this says so above them.
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -2221,32 +2231,34 @@ struct AgentsView: View {
         }
     }
 
-    /// A section of the icon view: its pictures in one list row, laid out all at once. Each picture is its own
-    /// menu, as a pinned circle is, since context menus in one list row would all show the first one's.
+    /// A section of the icon view: its title, set like a list's, over its pictures. A tap opens a conversation;
+    /// holding one shows its latest messages over its menu.
     @ViewBuilder
     private func iconSection(_ title: String?, _ rows: [Row]) -> some View {
         if !rows.isEmpty {
             let detail = ConversationRowDetail(rawValue: rowDetail) ?? .standard
-            Section {
-                ConversationIconGrid {
-                    ForEach(rows) { row in
-                        Menu { menu(for: row) } label: {
-                            AgentIcon(chats: row.chats, thread: row.thread,
-                                      line: row.chats.line(for: row.thread, showing: detail),
-                                      unread: row.chats.isUnread(row.thread), muted: row.chats.isMuted(row.thread),
-                                      selected: layout == .split && navigation.selection == row.id)
-                        } primaryAction: { navigation.open(row.id, in: layout) }
-                        .buttonStyle(.plain)
-                        .menuIndicator(.hidden)
-                        .hoverEffect(.lift)
-                    }
-                }
-                .padding(.vertical, 4)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-            } header: {
-                if let title { Text(title) }
+            if let title {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 8)
+                    .padding(.top, 12)
+                    .accessibilityAddTraits(.isHeader)
             }
+            ConversationIconGrid {
+                ForEach(rows) { row in
+                    Button { navigation.open(row.id, in: layout) } label: {
+                        AgentIcon(chats: row.chats, thread: row.thread,
+                                  line: row.chats.line(for: row.thread, showing: detail),
+                                  unread: row.chats.isUnread(row.thread), muted: row.chats.isMuted(row.thread),
+                                  selected: layout == .split && navigation.selection == row.id)
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    .contextMenu { menu(for: row) } preview: { ConversationPeek(chats: row.chats, thread: row.thread) }
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 
@@ -2266,7 +2278,7 @@ struct AgentsView: View {
                 Button { togglePin(row) } label: { Label("Pin", systemImage: "pin.fill") }
                     .tint(.orange)
             }
-            .contextMenu { menu(for: row) }
+            .contextMenu { menu(for: row) } preview: { ConversationPeek(chats: row.chats, thread: row.thread) }
         }
     }
 
@@ -2560,6 +2572,46 @@ private struct AgentRow: View, Equatable {
 
 enum PinnedNote: Equatable {
     case unread(String), status(String)
+}
+
+/// What holding a conversation shows over its menu, as Messages does: its picture and name, then its latest
+/// messages, to read without opening it.
+private struct ConversationPeek: View {
+    let chats: HubChats
+    let thread: HubThread
+
+    var body: some View {
+        // What was said, without the Hub's own notices.
+        let recent = chats.messages(of: thread).filter { $0.author != .system }.suffix(4)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ThreadAvatar(chats: chats, thread: thread, size: 36)
+                Text(thread.name).font(.headline).lineLimit(1)
+            }
+            .padding(.bottom, 4)
+            if recent.isEmpty {
+                Text(thread.about.isEmpty ? "No messages yet" : thread.about).font(.subheadline).foregroundStyle(.secondary)
+            }
+            ForEach(Array(recent), id: \.id) { message in
+                let mine = message.author == .you
+                VStack(alignment: mine ? .trailing : .leading, spacing: 2) {
+                    if thread.group != nil, !mine {
+                        Text(chats.authorName(of: message, in: thread)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Text(MessageRendering.previewText(message.body))
+                        .font(.subheadline)
+                        .lineLimit(4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(mine ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.fill.tertiary),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+            }
+        }
+        .padding(16)
+        .frame(width: 340, alignment: .topLeading)
+    }
 }
 
 /// A bot or group in the icon view, as on the Mac: its picture, its name and a short line, which says why its bots
