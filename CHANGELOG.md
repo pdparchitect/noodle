@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- The Call button is disabled while a bot on a Noodle Hub can't take a call: the Hub is out of reach, or the bot is stopped, starting, failed or paused. Messages can still be sent for it to pick up later.
 - The line under a name in the sidebar and in columns shows what was last said, not Noodle's own notices such as "Back on Claude Code".
 - In View › Conversation, the Attachments and Long Messages headings sit directly above their choices, with a line only between the two sections.
 - A bot's Backstory and an MCP connection's Instructions show a focus ring while you type in them, like the fields beside them.

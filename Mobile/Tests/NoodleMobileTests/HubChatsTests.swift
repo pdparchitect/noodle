@@ -82,6 +82,7 @@ private actor FakeHub {
     func setPicture(_ data: Data) { bot.draft.avatarImageData = data }
 
     func setStatus(_ status: String?) { bot.status = status }
+    func takesCalls() { bot.canCall = true }
 
     /// The small copies of background files the phone asks for, by media name.
     var backgroundFiles: [String: Data] = [:]
@@ -1513,6 +1514,22 @@ private actor RecordedSubscriptions: PushSubscriptions {
         }
     }
 
+    /// A call needs the bot running now, unlike a message it can pick up later: not stopped, starting or failed,
+    /// not paused, and its Hub in reach.
+    @Test func onlyABotThatIsRunningCanBeCalled() async throws {
+        let hub = FakeHub()
+        await hub.takesCalls()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+
+        for (phase, callable) in [(LinkBotPhase.ready, true), (.working, true), (.offline, false), (.starting, false), (.failed, false)] {
+            try await chats.apply(.botPhase(botID: scout.id, phase: phase))
+            #expect(chats.canCallNow(try #require(chats.agent(scout.id))) == callable, "\(phase)")
+        }
+    }
+
     /// A pinned circle's bubble shows the start of an unread reply, or else the bot's status.
     @Test func aPinnedBubbleShowsAnUnreadReplyBeforeTheStatus() async throws {
         let hub = FakeHub()
@@ -2148,10 +2165,12 @@ private actor RecordedSubscriptions: PushSubscriptions {
         let own = LinkBot(id: UUID(), conversationID: UUID(), draft: draft, createdAt: Date(), canCall: true)
         let shared = LinkBot(id: UUID(), conversationID: UUID(), draft: draft, createdAt: Date(), owner: "Ada")
 
-        #expect(AgentProfile.actions(for: own, canOpen: true, inCall: false) == [.reply, .message, .call, .edit])
+        #expect(AgentProfile.actions(for: own, canOpen: true, inCall: false, canCallNow: true) == [.reply, .message, .call, .edit])
         // A bot someone shared is only talked with; one already on a call is not called again.
-        #expect(AgentProfile.actions(for: shared, canOpen: true, inCall: false) == [.reply, .message])
-        #expect(AgentProfile.actions(for: own, canOpen: false, inCall: true) == [.reply, .edit])
+        #expect(AgentProfile.actions(for: shared, canOpen: true, inCall: false, canCallNow: true) == [.reply, .message])
+        #expect(AgentProfile.actions(for: own, canOpen: false, inCall: true, canCallNow: true) == [.reply, .edit])
+        // Nor is one that is not running now.
+        #expect(AgentProfile.actions(for: own, canOpen: true, inCall: false, canCallNow: false) == [.reply, .message, .edit])
         #expect(AgentProfile.replying(to: "Scout", draft: "what do you think?") == "Scout, what do you think?")
     }
 

@@ -554,7 +554,7 @@ private struct WithSelectedConversation<Content: View>: View {
 /// What the main window's toolbar shows for the selected conversation, kept apart from the conversation itself.
 @MainActor @Observable private final class MainToolbarState {
     enum Info: Equatable { case none, editBot, groupInfo }
-    enum Call: Equatable { case none, available(String), ongoing(UUID) }
+    enum Call: Equatable { case none, available(String, now: Bool), ongoing(UUID) }
 
     struct Shown: Equatable {
         var info = Info.none
@@ -592,7 +592,7 @@ private struct MainToolbarStateUpdater: View {
         if let call = store.voiceCalls.call, call.conversationID == conversation.id {
             shown.call = .ongoing(conversation.id)
         } else if let agent = store.voiceCallTarget(for: conversation) {
-            shown.call = .available(agent.displayName)
+            shown.call = .available(agent.displayName, now: store.canCallNow(in: conversation))
         }
         if !store.companions(in: conversation).isEmpty { shown.companionsConversationID = conversation.id }
         return shown
@@ -643,13 +643,15 @@ private struct MainToolbarCallControl: View {
 
     var body: some View {
         switch state.shown.call {
-        case .available(let name):
+        case .available(let name, let now):
             Button {
                 if let conversation = store.selectedConversation { store.startVoiceCall(in: conversation) }
             } label: {
                 Label("Call", systemImage: "phone")
             }
             .help("Call \(name)")
+            // A message waits for the bot; a call needs it running now.
+            .disabled(!now)
         case .ongoing(let id):
             if let conversation = store.conversation(withID: id) { VoiceCallToolbarControl(conversation: conversation) }
         case .none:

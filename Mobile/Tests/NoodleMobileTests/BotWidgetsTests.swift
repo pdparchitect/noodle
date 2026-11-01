@@ -133,11 +133,13 @@ import UIKit
         let call = NotificationRoute(topic: "topic", conversation: caller.conversationID, call: true)
         let open = NotificationRoute(topic: "topic", conversation: caller.conversationID)
 
-        #expect(AgentsView.startsCall(call, to: caller, calling: nil))
-        #expect(AgentsView.startsCall(call, to: caller, calling: UUID()))
-        #expect(!AgentsView.startsCall(call, to: caller, calling: caller.id))
-        #expect(!AgentsView.startsCall(call, to: quiet, calling: nil))
-        #expect(!AgentsView.startsCall(open, to: caller, calling: nil))
+        #expect(AgentsView.startsCall(call, to: caller, calling: nil, canCallNow: true))
+        #expect(AgentsView.startsCall(call, to: caller, calling: UUID(), canCallNow: true))
+        #expect(!AgentsView.startsCall(call, to: caller, calling: caller.id, canCallNow: true))
+        #expect(!AgentsView.startsCall(call, to: quiet, calling: nil, canCallNow: true))
+        #expect(!AgentsView.startsCall(open, to: caller, calling: nil, canCallNow: true))
+        // A bot that is not running now only has its chat opened.
+        #expect(!AgentsView.startsCall(call, to: caller, calling: nil, canCallNow: false))
     }
 
     /// The app draws each bot's picture for the widgets, which cannot draw its symbol and colours themselves.

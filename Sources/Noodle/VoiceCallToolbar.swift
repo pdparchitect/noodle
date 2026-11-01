@@ -15,6 +15,8 @@ struct VoiceCallToolbarControl: View {
                 Label("Call", systemImage: "phone")
             }
             .help("Call \(agent.displayName)")
+            // A message waits for the bot; a call needs it running now.
+            .disabled(!store.canCallNow(in: conversation))
         }
     }
 

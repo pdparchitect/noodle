@@ -110,6 +110,29 @@ import XCTest
         XCTAssertTrue(graces.canCall(agent: shared.id))
     }
 
+    /// A call needs the bot running now, unlike a message it picks up later: the Hub in reach, the bot ready or
+    /// working, and not paused.
+    func testOnlyABotRunningOnAConnectedHubCanBeCalledNow() async throws {
+        XCTAssertTrue(HubMirror.canCallNow(canCall: true, isConnected: true, phase: .ready, isPaused: false))
+        XCTAssertTrue(HubMirror.canCallNow(canCall: true, isConnected: true, phase: .working, isPaused: false))
+        XCTAssertTrue(HubMirror.canCallNow(canCall: true, isConnected: true, phase: nil, isPaused: false),
+                      "a Hub that does not say lets the call be tried")
+        for phase in [AgentRuntimePhase.offline, .starting, .failed] {
+            XCTAssertFalse(HubMirror.canCallNow(canCall: true, isConnected: true, phase: phase, isPaused: false), "\(phase)")
+        }
+        XCTAssertFalse(HubMirror.canCallNow(canCall: true, isConnected: false, phase: .ready, isPaused: false))
+        XCTAssertFalse(HubMirror.canCallNow(canCall: true, isConnected: true, phase: .ready, isPaused: true))
+        XCTAssertFalse(HubMirror.canCallNow(canCall: false, isConnected: true, phase: .ready, isPaused: false))
+
+        let f = try await fixture()
+        let plan = try XCTUnwrap(f.hub.access.plans.first { $0.name == "Family" })
+        f.hub.access.set(HubHarness(provider: .codex, profile: nil), included: true, in: plan)
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Yuki", provider: "codex"))
+        XCTAssertTrue(mirror.canCall(agent: agent.id))
+        XCTAssertFalse(mirror.canCallNow(agent: agent.id), "callable with the Hub out of reach")
+    }
+
     /// A call the Hub keeps shows here as its card, live at first and with what was said once it ends.
     func testCallCardsFromTheHubShowHereAndGetTheirTranscriptWhenTheCallEnds() async throws {
         let f = try await fixture()

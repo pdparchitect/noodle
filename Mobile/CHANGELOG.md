@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- The Call button is disabled while a bot can't take a call: its Hub is out of reach, or the bot is stopped, starting, failed or paused. Messages can still be sent for it to pick up later. A widget's call button then only opens the chat.
 - The line under a name shows what was last said, not Noodle's own notices such as "Back on Claude Code".
 - A phone or iPad that has just joined a Hub shows the bots and groups you haven't read on your other devices as unread, instead of counting everything already there as read.
 
@@ -20,6 +21,7 @@
 - In Settings, set Layout to As Icons. Check that every bot and group shows as a picture with its name and line, in Pinned, Unread and the rest, that tapping one opens it and holding one shows its own menu, and that a long list scrolls with no gaps.
 - Let a bot fall back to another harness and come back, then check the line under its name still shows its last reply, not "Back on …".
 - Hold a bot or group in the list and in the icon view. Check its latest messages show above its own menu, and that in the icon view each picture shows its own.
+- With the Hub out of reach, or a bot stopped, open its chat and check the call button is greyed out while the message field still works.
 - Join a Hub on a device that hasn't joined it before, while another of your devices has unread conversations. Check the same ones show as unread.
 - On iPad, open the menu bar (swipe down from the top, or hold ⌘ with a keyboard). Check View › Sidebar and View › Conversation change the list and the chat as Settings does, ⌘, opens Settings, Help › Noodle Help opens the Noodle page, and the … menu beside the list has lines between New Bot and New Group, Play, and Hubs and Settings.
 

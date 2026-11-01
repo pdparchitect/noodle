@@ -1834,9 +1834,17 @@ final class NoodleStore {
         return agent
     }
 
+    /// Whether a call can start now. A bot on this Mac starts for it; one on a Hub must be running there already.
+    func canCallNow(in conversation: BotConversation) -> Bool {
+        guard let agent = voiceCallTarget(for: conversation) else { return false }
+        return hubMirror(forAgent: agent.id)?.canCallNow(agent: agent.id) ?? true
+    }
+
     func startVoiceCall(in conversation: BotConversation, media: (any VoiceCallMedia)? = nil, answeredCallReason: String? = nil,
                         answeredCallID: UUID? = nil) {
         guard let agent = voiceCallTarget(for: conversation) else { return }
+        // Answering a call the bot placed needs no check: it is running to have placed it.
+        guard answeredCallID != nil || canCallNow(in: conversation) else { return }
         let personName = (try? repository.loadAgentOwner(agent))?.name ?? "User"
         let recentLines = messages(for: conversation).suffix(12).compactMap { message -> VoiceCallLine? in
             switch message.author {

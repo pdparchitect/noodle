@@ -406,6 +406,16 @@ final class ChatsCacheFile: @unchecked Sendable {
     /// The bot's phase as its dot shows it: offline while its Hub does not answer.
     func phase(of agent: LinkBot) -> LinkBotPhase? { HubConnection(pairing).phase(of: agent.phase) }
 
+    /// Whether a call can start now. A call needs the bot running, unlike a message, which it picks up later: not
+    /// stopped, starting or failed, not paused, and its Hub in reach. A Hub that does not say lets it be tried.
+    func canCallNow(_ bot: LinkBot) -> Bool {
+        guard bot.canCall, pause(of: bot) == nil else { return false }
+        switch phase(of: bot) {
+        case .offline, .starting, .failed: return false
+        default: return true
+        }
+    }
+
     /// Why a bot does not answer for now, as its Hub last listed it while it answers. Nil from a Hub that does not say.
     func pause(of agent: LinkBot) -> LinkBotPause? {
         guard pairing.status?.explainsPauses == true, HubConnection(pairing) != .notConnected else { return nil }
@@ -2377,14 +2387,16 @@ struct AgentsView: View {
               let thread = hub.listedThreads.first(where: { $0.conversationID == route.conversation }) else { return }
         navigation.open(ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id), in: layout)
         opening = nil
-        if Self.startsCall(route, to: thread, calling: hub.calls.call?.threadID) {
+        if Self.startsCall(route, to: thread, calling: hub.calls.call?.threadID,
+                           canCallNow: thread.bot.map { hub.canCallNow(hub.agent($0.id) ?? $0) } ?? false) {
             hub.calls.start(threadID: thread.id, conversationID: thread.conversationID, name: thread.name)
         }
     }
 
-    /// Whether opening a conversation calls its bot: only for a call button, while the bot takes calls and is not on one already.
-    static func startsCall(_ route: NotificationRoute, to thread: HubThread, calling: UUID?) -> Bool {
-        route.call && thread.bot?.canCall == true && calling != thread.id
+    /// Whether opening a conversation calls its bot: only for a call button, while the bot takes calls, is running
+    /// now and is not on one already. Otherwise its chat just opens.
+    static func startsCall(_ route: NotificationRoute, to thread: HubThread, calling: UUID?, canCallNow: Bool) -> Bool {
+        route.call && thread.bot?.canCall == true && canCallNow && calling != thread.id
     }
 
     /// What the widgets show, once every Hub's list is known or could not be, so they never show a Hub's bots gone.
@@ -3264,6 +3276,8 @@ struct ChatView: View {
                         Image(systemName: "phone")
                     }
                     .accessibilityLabel("Call \(thread.name)")
+                    // A message waits for the bot; a call needs it running now.
+                    .disabled(!chats.canCallNow(chats.agent(bot.id) ?? bot))
                 }
             }
             // As the Mac's Shared button: the computers, browser tabs and noodlets shared here, newest first.
@@ -3295,7 +3309,8 @@ struct ChatView: View {
         .sheet(isPresented: $editing) { ThreadEditor(chats: chats, thread: thread).formSheetSizing() }
         .sheet(item: $profile, onDismiss: finishProfileChoice) { bot in
             AgentProfile(bot: bot, actions: AgentProfile.actions(for: bot, canOpen: openThread != nil,
-                                                                inCall: chats.calls.call?.threadID == bot.id)) { action in
+                                                                inCall: chats.calls.call?.threadID == bot.id,
+                                                                canCallNow: chats.canCallNow(chats.agent(bot.id) ?? bot))) { action in
                 profileChoice = (action, bot)
                 profile = nil
             }
@@ -3725,11 +3740,12 @@ struct AgentProfile: View {
     let actions: [Action]
     let choose: (Action) -> Void
 
-    /// Its conversation and a call need somewhere to open them; a bot someone shared is only talked with.
-    static func actions(for bot: LinkBot, canOpen: Bool, inCall: Bool) -> [Action] {
+    /// Its conversation and a call need somewhere to open them; a bot someone shared is only talked with, and one
+    /// not running now is not called.
+    static func actions(for bot: LinkBot, canOpen: Bool, inCall: Bool, canCallNow: Bool) -> [Action] {
         var actions: [Action] = [.reply]
         if canOpen { actions.append(.message) }
-        if canOpen, bot.canCall, !inCall { actions.append(.call) }
+        if canOpen, bot.canCall, canCallNow, !inCall { actions.append(.call) }
         if bot.owner == nil { actions.append(.edit) }
         return actions
     }

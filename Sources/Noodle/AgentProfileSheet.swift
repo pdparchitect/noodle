@@ -75,10 +75,10 @@ struct AgentProfileSheet: View {
 
     private var isShared: Bool { store.isShared(agent.id) }
 
-    /// The direct conversation a call would start in, while the bot can take one and isn't already on it.
+    /// The direct conversation a call would start in, while the bot can take one now and isn't already on it.
     private var callableConversation: BotConversation? {
         guard let direct = store.conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agent.id] }),
-              store.voiceCallTarget(for: direct) != nil,
+              store.canCallNow(in: direct),
               store.voiceCalls.call?.conversationID != direct.id else { return nil }
         return direct
     }

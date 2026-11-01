@@ -184,6 +184,22 @@ import Observation
     /// Whether the Hub takes calls with a bot here, as it said when it last listed it.
     public func canCall(agent: UUID) -> Bool { entries.first { $0.agent == agent }?.canCall == true }
 
+    /// Whether a call can start now. A call needs the bot running, unlike a message, which it picks up later: the
+    /// Hub in reach, the bot ready or working, and not paused.
+    public func canCallNow(agent: UUID) -> Bool {
+        Self.canCallNow(canCall: canCall(agent: agent), isConnected: isConnected, phase: phase(ofAgent: agent),
+                        isPaused: pause(ofAgent: agent) != nil)
+    }
+
+    /// A Hub that does not say how its bot is lets the call be tried.
+    public static func canCallNow(canCall: Bool, isConnected: Bool, phase: AgentRuntimePhase?, isPaused: Bool) -> Bool {
+        guard canCall, isConnected, !isPaused else { return false }
+        switch phase {
+        case .offline, .starting, .failed: return false
+        default: return true
+        }
+    }
+
     /// Calls the bot of a conversation here on the Hub. What happens comes down the channel as
     /// `LinkCallEvent`s among the bot's `LinkCallAudio`, which the person's goes up; cancelling it hangs up.
     /// `answering` names the call the bot placed, as `onCallRinging` gave it, when this answers it.
