@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-01
+
 ### Added
 
 - Settings › Conversation List › Show chooses the line under each name, as on the Mac: Latest Message, Description, or Status, what each bot says it is doing, or else the start of its own latest reply. Groups keep their latest message. Sort Conversations has moved beside it, at the top of Settings.

@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.80.2] - 2026-11-01
+
 ### Fixed
 
 - The Call button is disabled while a bot on a Noodle Hub can't take a call: the Hub is out of reach, or the bot is stopped, starting, failed or paused. Messages can still be sent for it to pick up later.

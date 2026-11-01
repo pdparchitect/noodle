@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.45.4] - 2026-11-01
+
+### Changed
+
+- The menu bar menu has a line between Pair… and Usage and Logs.
+- The Logs window uses a smaller font, so more of the log fits.
+
 ## [0.45.3] - 2026-10-28
 
 ### Added
