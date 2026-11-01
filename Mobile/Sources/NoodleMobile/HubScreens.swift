@@ -1144,21 +1144,6 @@ struct SettingsView: View {
                 } footer: {
                     Text((ConversationOrder(rawValue: conversationOrder) ?? .standard).explanation)
                 }
-                // Every joined Hub that knows Mentions only takes the same choice; the first one shows it.
-                let mentioning = chats.filter(\.notifiesMentions)
-                if let shown = mentioning.first {
-                    Section {
-                        Picker("In Groups, Notify Me For", selection: Binding(get: { shown.groupNotifications },
-                                                                             set: { setGroupNotifications($0, on: mentioning) })) {
-                            Text("All Messages").tag(LinkNotifications.all)
-                            Text("Only When My Name Is Mentioned").tag(LinkNotifications.mentions)
-                        }
-                        .pickerStyle(.inline)
-                        .labelsHidden()
-                    } header: {
-                        Text("In Groups, Notify Me For")
-                    }
-                }
                 Section {
                     Picker("Attachments", selection: $attachmentLayout) {
                         ForEach(AttachmentLayout.allCases) { Text($0.name).tag($0.rawValue) }
@@ -1178,6 +1163,21 @@ struct SettingsView: View {
                     Text("Long Messages")
                 } footer: {
                     Text((MessageTextLayout(rawValue: textLayout) ?? .standard).explanation)
+                }
+                // Every joined Hub that knows Mentions only takes the same choice; the first one shows it.
+                let mentioning = chats.filter(\.notifiesMentions)
+                if let shown = mentioning.first {
+                    Section {
+                        Picker("In Groups, Notify Me For", selection: Binding(get: { shown.groupNotifications },
+                                                                             set: { setGroupNotifications($0, on: mentioning) })) {
+                            Text("All Messages").tag(LinkNotifications.all)
+                            Text("Only When My Name Is Mentioned").tag(LinkNotifications.mentions)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } header: {
+                        Text("In Groups, Notify Me For")
+                    }
                 }
                 Section {
                     Toggle("Preview Web Links", isOn: $previewsLinks)
