@@ -447,26 +447,29 @@ struct PairingSources: View {
             if DataScannerViewController.isSupported {
                 option("Scan QR Code", systemImage: "qrcode.viewfinder", .camera).buttonStyle(.borderedProminent)
             }
-            PasteLinkButton { choose(.pasted($0)) }.frame(height: 50)
+            // On a Mac iOS draws no paste button at all.
+            if !ProcessInfo.processInfo.isiOSAppOnMac {
+                PasteLinkButton { choose(.pasted($0)) }.frame(height: 50)
+            }
             option("Choose Photo", systemImage: "photo", .photo).buttonStyle(.bordered)
-            #if targetEnvironment(simulator)
-            // The Simulator gets a Mac's clipboard too late for the paste button to light up;
-            // pasting into a field always works.
-            TextField("Invitation Link", text: $link)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-                .frame(height: 50)
-                .background(Color(.tertiarySystemFill), in: Capsule())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .submitLabel(.join)
-                .onSubmit { if !link.isEmpty { choose(.pasted(link)) } }
-                .onChange(of: link) { _, text in
-                    // A whole invitation pasted at once joins without needing Return.
-                    if (try? LinkInvitation(text: text)) != nil { choose(.pasted(text)) }
-                }
-            #endif
+            if Self.takesTypedLink {
+                // The Simulator gets a Mac's clipboard too late for the paste button to light up, and a Mac shows
+                // none; pasting into a field always works.
+                TextField("Invitation Link", text: $link)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .frame(height: 50)
+                    .background(Color(.tertiarySystemFill), in: Capsule())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .submitLabel(.join)
+                    .onSubmit { if !link.isEmpty { choose(.pasted(link)) } }
+                    .onChange(of: link) { _, text in
+                        // A whole invitation pasted at once joins without needing Return.
+                        if (try? LinkInvitation(text: text)) != nil { choose(.pasted(text)) }
+                    }
+            }
         }
         .controlSize(.large)
         .padding(24)
@@ -476,10 +479,20 @@ struct PairingSources: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// Where the link is pasted into a field: in the Simulator, and on a Mac.
+    static var takesTypedLink: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        ProcessInfo.processInfo.isiOSAppOnMac
+        #endif
+    }
+
     private static var height: CGFloat {
         #if targetEnvironment(simulator)
         248
         #else
+        // A Mac has the field in place of the paste button, so as many rows.
         DataScannerViewController.isSupported ? 244 : 184
         #endif
     }
