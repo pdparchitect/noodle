@@ -1124,6 +1124,7 @@ struct SettingsView: View {
     @AppStorage(MessageTextLayout.key) private var textLayout = MessageTextLayout.standard.rawValue
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
+    @AppStorage(ConversationListStyle.key) private var listStyle = ConversationListStyle.standard.rawValue
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var noodlets = NoodletGrants().all
@@ -1133,6 +1134,9 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Layout", selection: $listStyle) {
+                        ForEach(ConversationListStyle.allCases) { Text($0.name).tag($0.rawValue) }
+                    }
                     Picker("Show", selection: $rowDetail) {
                         ForEach(ConversationRowDetail.allCases) { Text($0.name).tag($0.rawValue) }
                     }

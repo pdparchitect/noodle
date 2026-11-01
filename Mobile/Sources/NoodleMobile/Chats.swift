@@ -1742,6 +1742,7 @@ struct AgentsView: View {
     @AppStorage(HubSpaceOrder.key) private var hubOrder = ""
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
+    @AppStorage(ConversationListStyle.key) private var listStyle = ConversationListStyle.standard.rawValue
     /// The spaces the person made, kept on this phone.
     @State private var spaceList = SpaceList(file: URL.applicationSupportDirectory.appendingPathComponent("spaces.json"))
     /// Carries them to the person's other devices through iCloud.
@@ -1958,6 +1959,16 @@ struct AgentsView: View {
         let listing = listing(rows)
         let (searching, found, pinned, unread, rest) = (listing.searching, listing.found, listing.pinned, listing.unread, listing.rest)
         return List {
+            if ConversationListStyle(rawValue: listStyle) == .icons {
+                // As on the Mac: each section a grid of pictures, with what each bot is doing under its name.
+                if layout.pinsInList { iconSection(unread.isEmpty && rest.isEmpty ? nil : "Pinned", pinned) }
+                if unread.isEmpty {
+                    iconSection(nil, rest)
+                } else {
+                    iconSection("Unread", unread)
+                    iconSection("Others", rest)
+                }
+            } else {
             if !pinned.isEmpty, layout.pinsInList {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
                     ForEach(pinned) { row in
@@ -1981,6 +1992,7 @@ struct AgentsView: View {
             } else {
                 Section("Unread") { agentRows(unread) }
                 if !rest.isEmpty { Section("Others") { agentRows(rest) } }
+            }
             }
         }
         .listStyle(.plain)
@@ -2193,6 +2205,35 @@ struct AgentsView: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
         } else {
             NavigationLink(value: row.id) { label.equatable() }
+        }
+    }
+
+    /// A section of the icon view: its pictures in one list row, laid out all at once. Each picture is its own
+    /// menu, as a pinned circle is, since context menus in one list row would all show the first one's.
+    @ViewBuilder
+    private func iconSection(_ title: String?, _ rows: [Row]) -> some View {
+        if !rows.isEmpty {
+            let detail = ConversationRowDetail(rawValue: rowDetail) ?? .standard
+            Section {
+                ConversationIconGrid {
+                    ForEach(rows) { row in
+                        Menu { menu(for: row) } label: {
+                            AgentIcon(chats: row.chats, thread: row.thread,
+                                      line: row.chats.line(for: row.thread, showing: detail),
+                                      unread: row.chats.isUnread(row.thread), muted: row.chats.isMuted(row.thread),
+                                      selected: layout == .split && navigation.selection == row.id)
+                        } primaryAction: { navigation.open(row.id, in: layout) }
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .hoverEffect(.lift)
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+            } header: {
+                if let title { Text(title) }
+            }
         }
     }
 
@@ -2503,6 +2544,48 @@ private struct AgentRow: View, Equatable {
 
 enum PinnedNote: Equatable {
     case unread(String), status(String)
+}
+
+/// A bot or group in the icon view, as on the Mac: its picture, its name and a short line, which says why its bots
+/// wait when they do.
+private struct AgentIcon: View {
+    let chats: HubChats
+    let thread: HubThread
+    let line: String
+    let unread: Bool
+    let muted: Bool
+    let selected: Bool
+
+    var body: some View {
+        let pause = chats.pauseSummary(for: thread)
+        VStack(spacing: 4) {
+            ThreadAvatar(chats: chats, thread: thread, size: 60)
+                .overlay(alignment: .topLeading) {
+                    if unread {
+                        Circle().fill(muted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint)).frame(width: 12, height: 12)
+                            .overlay { Circle().strokeBorder(Color(.systemBackground), lineWidth: 2) }
+                            .offset(x: -2, y: -2)
+                    }
+                }
+                .padding(.top, 4)
+            Text(thread.name).font(.footnote.weight(.semibold)).lineLimit(1)
+            Text(pause ?? line)
+                .font(.caption2.weight(pause == nil ? .regular : .medium))
+                .foregroundStyle(pause == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background {
+            if selected { RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.accentColor.opacity(0.15)) }
+        }
+        .contentShape(.rect)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([unread ? "Unread" : nil, thread.name, pause ?? line].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
 }
 
 /// A pinned bot or group: a large picture with its name beneath, as Messages shows pinned conversations.

@@ -63,7 +63,7 @@ private struct SidebarList: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
-    @AppStorage(SidebarStyle.key) private var style = SidebarStyle.standard.rawValue
+    @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
     let searchIsFocused: Bool
@@ -73,7 +73,7 @@ private struct SidebarList: View {
     var body: some View {
         @Bindable var store = store
 
-        let showsIcons = SidebarStyle(rawValue: style) == .icons
+        let showsIcons = ConversationListStyle(rawValue: style) == .icons
         let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard)
         Group {
             if showsIcons {
@@ -146,7 +146,7 @@ private struct SidebarList: View {
                 .padding(.top, 10)
                 .padding(.bottom, 2)
                 .accessibilityAddTraits(.isHeader)
-            IconGridLayout {
+            ConversationIconGrid {
                 ForEach(conversations) { conversation in
                     ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
                         isSelected: store.selectedConversationID == conversation.id,
@@ -378,55 +378,6 @@ private struct ConversationRow: View, Equatable {
     }
 }
 
-/// The icon view's grid: as many columns of at least 96 points as fit, each row as tall as its tallest picture.
-/// Every picture is laid out, unlike a lazy grid, which in a list row only ever drew those first on screen.
-private struct IconGridLayout: Layout {
-    private let minimumWidth: CGFloat = 96, columnSpacing: CGFloat = 6, rowSpacing: CGFloat = 8
-
-    private struct Grid {
-        let columns: Int, itemWidth: CGFloat, rowHeights: [CGFloat]
-    }
-
-    private func grid(_ proposal: ProposedViewSize, _ subviews: Subviews) -> Grid {
-        // Asked for its smallest or largest size, it is one column or one row.
-        let width = width(proposal, subviews)
-        let columns = max(1, Int((width + columnSpacing) / (minimumWidth + columnSpacing)))
-        let itemWidth = max(0, (width - columnSpacing * CGFloat(columns - 1)) / CGFloat(columns))
-        let rowHeights = stride(from: 0, to: subviews.count, by: columns).map { start in
-            subviews[start..<min(start + columns, subviews.count)]
-                .map { $0.sizeThatFits(ProposedViewSize(width: itemWidth, height: nil)).height }.max() ?? 0
-        }
-        return Grid(columns: columns, itemWidth: itemWidth, rowHeights: rowHeights)
-    }
-
-    private func width(_ proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
-        guard let width = proposal.width else { return minimumWidth }
-        guard width.isFinite else { return CGFloat(subviews.count) * (minimumWidth + columnSpacing) - columnSpacing }
-        return width
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let grid = grid(proposal, subviews)
-        let height = grid.rowHeights.reduce(0, +) + rowSpacing * CGFloat(max(0, grid.rowHeights.count - 1))
-        return CGSize(width: width(proposal, subviews), height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let grid = grid(ProposedViewSize(width: bounds.width, height: nil), subviews)
-        var y = bounds.minY
-        for (row, height) in grid.rowHeights.enumerated() {
-            for column in 0..<grid.columns {
-                let index = row * grid.columns + column
-                guard index < subviews.count else { break }
-                let x = bounds.minX + CGFloat(column) * (grid.itemWidth + columnSpacing)
-                subviews[index].place(at: CGPoint(x: x, y: y), anchor: .topLeading,
-                    proposal: ProposedViewSize(width: grid.itemWidth, height: height))
-            }
-            y += height + rowSpacing
-        }
-    }
-}
-
 /// A bot or group in the sidebar's icon view: its picture, name and a short line on what it is doing.
 private struct ConversationIcon: View, Equatable {
     @Environment(NoodleStore.self) private var store
@@ -551,18 +502,3 @@ enum SidebarTimestamp {
     }
 }
 
-/// How the sidebar shows bots and groups: as rows, or as a grid of their pictures.
-enum SidebarStyle: String, CaseIterable, Identifiable {
-    case list, icons
-
-    static let key = "sidebarStyle"
-    static let standard = Self.list
-    var id: String { rawValue }
-
-    var name: String {
-        switch self {
-        case .list: "As List"
-        case .icons: "As Icons"
-        }
-    }
-}

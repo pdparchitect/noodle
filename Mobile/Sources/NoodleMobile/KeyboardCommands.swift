@@ -37,6 +37,7 @@ extension FocusedValues {
 /// and listed by holding ⌘ with a hardware keyboard. Sections draw the separators; a divider shows none there.
 struct NoodleCommands: Commands {
     @FocusedValue(\.homeCommands) private var home
+    @AppStorage(ConversationListStyle.key) private var listStyle = ConversationListStyle.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
@@ -53,6 +54,7 @@ struct NoodleCommands: Commands {
         CommandGroup(before: .toolbar) {
             Section {
                 Menu("Sidebar") {
+                    Section { choices($listStyle, ConversationListStyle.allCases) { $0.name } }
                     Section { choices($rowDetail, ConversationRowDetail.allCases) { "Show \($0.name)" } }
                     Section { choices($conversationOrder, ConversationOrder.allCases) { $0.name } }
                 }

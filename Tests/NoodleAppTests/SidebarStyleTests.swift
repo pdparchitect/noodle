@@ -1,3 +1,4 @@
+import HubLink
 import XCTest
 import NoodleCore
 @testable import Noodle
@@ -9,9 +10,9 @@ import NoodleCore
     }
 
     func testTheSidebarIsAListUnlessIconsAreChosen() {
-        XCTAssertEqual(SidebarStyle.standard, .list)
-        XCTAssertEqual(SidebarStyle.key, "sidebarStyle")
-        XCTAssertEqual(SidebarStyle.allCases.map(\.name), ["As List", "As Icons"])
+        XCTAssertEqual(ConversationListStyle.standard, .list)
+        XCTAssertEqual(ConversationListStyle.key, "sidebarStyle")
+        XCTAssertEqual(ConversationListStyle.allCases.map(\.name), ["As List", "As Icons"])
     }
 
     func testIconLabelSaysWhyABotWaitsThenThatItWorksThenTheLine() {

@@ -1,3 +1,4 @@
+import HubLink
 import AppKit
 import SwiftUI
 import XCTest
@@ -87,9 +88,9 @@ import NoodleCore
     }
 
     private func useIcons() {
-        let previous = UserDefaults.standard.string(forKey: SidebarStyle.key)
-        UserDefaults.standard.set(SidebarStyle.icons.rawValue, forKey: SidebarStyle.key)
-        addTeardownBlock { UserDefaults.standard.set(previous, forKey: SidebarStyle.key) }
+        let previous = UserDefaults.standard.string(forKey: ConversationListStyle.key)
+        UserDefaults.standard.set(ConversationListStyle.icons.rawValue, forKey: ConversationListStyle.key)
+        addTeardownBlock { UserDefaults.standard.set(previous, forKey: ConversationListStyle.key) }
     }
 
     private func descendant<V: NSView>(_ type: V.Type, of root: NSView) -> V? {

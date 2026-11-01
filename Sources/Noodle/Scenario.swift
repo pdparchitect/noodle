@@ -1,4 +1,5 @@
 #if NOODLE_DEV_HOOKS
+import HubLink
 import AppKit
 import CryptoKit
 import Darwin
@@ -353,7 +354,7 @@ extension Scenario {
     /// on-device classifier never runs.
     @MainActor static var preferenceKeys: Set<String> {
         [ChatAttachmentLayout.defaultsKey, BotNameStyle.defaultsKey, FirstBotSetup.dismissedKey,
-         ComposerNameCompletion.descriptionsDefaultsKey, FloatingConversations.keepsOneDefaultsKey, SidebarStyle.key]
+         ComposerNameCompletion.descriptionsDefaultsKey, FloatingConversations.keepsOneDefaultsKey, ConversationListStyle.key]
     }
 
     /// Strict: a key the model does not know is an error, so a typo cannot silently change a screenshot.
