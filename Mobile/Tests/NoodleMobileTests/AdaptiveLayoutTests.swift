@@ -172,6 +172,8 @@ import Testing
         #expect(!MoreChoice.inMenu(.stackBesideBar))
         #expect(MoreChoice.allCases.map(\.title) == ["New Bot", "New Group", "Play", "Hubs", "Settings"])
         #expect(MoreChoice.allCases.map(\.systemImage) == ["person.badge.plus", "person.2", "gamecontroller", "server.rack", "gear"])
+        // The menu's groups hold each action once, in the same order.
+        #expect(MoreChoice.sections.flatMap { $0 } == MoreChoice.allCases)
     }
 
     /// Resizing an iPad window in Split View or Stage Manager, through every width from a third of the screen to

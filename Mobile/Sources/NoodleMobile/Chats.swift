@@ -2042,10 +2042,14 @@ struct AgentsView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if MoreChoice.inMenu(layout) {
                     Menu {
-                        ForEach(MoreChoice.allCases, id: \.self) { choice in
-                            Button(choice.title, systemImage: choice.systemImage) {
-                                chosen = choice
-                                openChosen()
+                        ForEach(MoreChoice.sections, id: \.self) { section in
+                            Section {
+                                ForEach(section, id: \.self) { choice in
+                                    Button(choice.title, systemImage: choice.systemImage) {
+                                        chosen = choice
+                                        openChosen()
+                                    }
+                                }
                             }
                         }
                     } label: {
@@ -2463,6 +2467,9 @@ enum MoreChoice: CaseIterable {
         case .settings: "gear"
         }
     }
+
+    /// The menu's groups, a line between each: making bots and groups, playing, then the Hubs and Settings.
+    static let sections: [[MoreChoice]] = [[.createBot, .createGroup], [.console], [.profiles, .settings]]
 
     /// On a phone they are in a short sheet from the bottom; on iPad and the unfolded iPhone Duo, in a menu
     /// from the button, as on the Mac.
