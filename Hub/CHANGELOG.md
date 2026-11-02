@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-11-02
+
+### Fixed
+
+- When the Hub's own Grok Build sign-in is missing, Settings › Harness now offers to sign in instead of saying the account check stopped or timed out.
+
 ## [0.46.0] - 2026-11-02
 
 ### Added

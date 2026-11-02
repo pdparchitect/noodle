@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.80.4] - 2026-11-02
+
 ### Fixed
 
 - When Noodle's own Grok Build sign-in is missing, Settings › Harness now offers to sign in instead of saying the account check stopped or timed out.
