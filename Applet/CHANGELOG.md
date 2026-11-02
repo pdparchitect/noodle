@@ -4,7 +4,7 @@
 
 ### Added
 
-- A noodlet can show videos and pages from sites it names, such as Vimeo players, inside its own window. Other sites still stay out, and an embedded site can't use the noodlet's data or secrets. Settings > Permissions lists the sites each noodlet embeds.
+- A noodlet can show videos and pages from sites it names, such as Vimeo players, inside its own window. Other sites still stay out, and an embedded site can't use the noodlet's data, secrets, camera or microphone, or save files. Settings > Permissions lists the sites each noodlet embeds.
 
 ## [0.33.6] - 2026-10-31
 

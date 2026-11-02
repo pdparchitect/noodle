@@ -145,6 +145,8 @@ public enum AppletGuidance {
         itself never leaves its package; an iframe shows a web page only from a site listed in the
         manifest's "embeds", whole https origins such as ["https://player.vimeo.com"], without noodle
         (YouTube's player refuses to play there with Error 153; link to the video instead).
+        Give an embed `sandbox="allow-scripts allow-same-origin allow-presentation"`, never
+        allow-top-navigation or allow-downloads, and check event.origin in message listeners.
         File dialogs, downloads and opened links need a
         visible window and a click; showSaveFilePicker and the rest of the File System
         Access API are not available in WebKit. The public web is always open:

@@ -17,14 +17,23 @@ public enum NoodletNavigation: Equatable, Sendable {
 
     /// `mainFrame` is whether the main page started it; `inFrame`, whether it loads into a frame
     /// inside the page rather than the page itself or a new window. Each step of a redirect is
-    /// asked again, so a listed site cannot bring an unlisted one into its frame.
+    /// asked again, so a listed site cannot bring an unlisted one into its frame. `sourceScheme`
+    /// is the protocol of the starting frame's security origin, nil when WebKit names no frame.
     public static func decide(_ url: URL, shouldPerformDownload: Bool, linkActivated: Bool,
-                              mainFrame: Bool, inFrame: Bool = false, embeds: [String]? = nil) -> NoodletNavigation {
+                              mainFrame: Bool, sourceScheme: String?, inFrame: Bool = false,
+                              embeds: [String]? = nil) -> NoodletNavigation {
         let scheme = url.scheme?.lowercased() ?? ""
         let local = NoodletPackageScheme.contains(url)
-        if shouldPerformDownload { return local || scheme == "blob" || scheme == "data" ? .download : .cancel }
-        if local || url.absoluteString == "about:blank" { return .allow }
-        if inFrame, NoodletManifest.mayEmbed(url, in: embeds ?? []) { return .allow }
+        let blank = url.absoluteString == "about:blank"
+        // Only the package saves files, moves the page or frames its own pages, which share the
+        // page's origin; an embedded site's frame does none of it, even after a click inside it.
+        let fromPackage = NoodletPackageScheme.isOrigin(sourceScheme)
+        if shouldPerformDownload { return fromPackage && (local || scheme == "blob" || scheme == "data") ? .download : .cancel }
+        if inFrame {
+            if blank || (local && fromPackage) || NoodletManifest.mayEmbed(url, in: embeds ?? []) { return .allow }
+        } else if (blank || local) && (mainFrame || fromPackage) {
+            return .allow
+        }
         if scheme == "http" || scheme == "https", linkActivated, mainFrame { return .openExternally }
         return .cancel
     }

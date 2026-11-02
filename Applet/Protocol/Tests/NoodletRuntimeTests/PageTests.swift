@@ -55,7 +55,8 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
 
     nonisolated func testThePageStaysOnItsPackageAndLeavesFilesAndLinksToThePerson() {
         let decide = { (url: String, download: Bool, link: Bool, main: Bool) in
-            NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: download, linkActivated: link, mainFrame: main)
+            NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: download, linkActivated: link, mainFrame: main,
+                                     sourceScheme: "noodlet-package")
         }
 
         // Its own files and a blank page load as before.
@@ -89,7 +90,7 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         let embeds = ["https://www.youtube-nocookie.com", "https://player.vimeo.com"]
         let decide = { (url: String, link: Bool, main: Bool, inFrame: Bool) in
             NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: false, linkActivated: link, mainFrame: main,
-                                     inFrame: inFrame, embeds: embeds)
+                                     sourceScheme: main ? "noodlet-package" : "https", inFrame: inFrame, embeds: embeds)
         }
 
         // Blake's videos load in their frames, from the page or from a frame inside a listed one.
@@ -109,10 +110,66 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(decide("https://example.com/", true, true, false), .openExternally)
         // Without embeds, frames stay as empty as before.
         XCTAssertEqual(NoodletNavigation.decide(URL(string: "https://player.vimeo.com/video/1")!, shouldPerformDownload: false,
-                                                linkActivated: false, mainFrame: true, inFrame: true), .cancel)
+                                                linkActivated: false, mainFrame: true, sourceScheme: "noodlet-package",
+                                                inFrame: true), .cancel)
         // A listed site's file is never saved for it.
         XCTAssertEqual(NoodletNavigation.decide(URL(string: "https://player.vimeo.com/video.mp4")!, shouldPerformDownload: true,
-                                                linkActivated: true, mainFrame: false, inFrame: true, embeds: embeds), .cancel)
+                                                linkActivated: true, mainFrame: false, sourceScheme: "https", inFrame: true,
+                                                embeds: embeds), .cancel)
+    }
+
+    /// An embedded site's frame neither saves files nor moves the page: what it offers to download
+    /// brings up no save panel under a name it picks, it cannot send the page to about:blank or
+    /// reload it at an address of its choosing, and it cannot frame the package's own pages, which
+    /// would share the page's origin. The package's own page and frames still do all of it.
+    nonisolated func testAnEmbeddedSiteNeitherSavesFilesNorMovesThePage() {
+        let decide = { (url: String, download: Bool, main: Bool, source: String?, inFrame: Bool) in
+            NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: download, linkActivated: true, mainFrame: main,
+                                     sourceScheme: source, inFrame: inFrame, embeds: ["https://player.vimeo.com"])
+        }
+        let blob = "blob:https://player.vimeo.com/4a1c2e0b-0000-4000-8000-000000000000"
+        let data = "data:application/octet-stream;base64,aGk="
+
+        // A listed site's frame offering "Noodle Update.command": no save panel.
+        XCTAssertEqual(decide(blob, true, false, "https", true), .cancel)
+        XCTAssertEqual(decide(data, true, false, "https", true), .cancel)
+        XCTAssertEqual(decide("noodlet-package://noodlet/notes.txt", true, false, "https", true), .cancel)
+        XCTAssertEqual(decide(blob, true, false, nil, true), .cancel)
+        // The package's page, or a frame of its own, still saves what it offers.
+        XCTAssertEqual(decide("blob:noodlet-package://noodlet/4a1c2e0b-0000-4000-8000-000000000000", true, true,
+                              "noodlet-package", false), .download)
+        XCTAssertEqual(decide(data, true, false, "noodlet-package", true), .download)
+
+        // A listed site's frame cannot empty the page or reload it at an address it picks.
+        XCTAssertEqual(decide("about:blank", false, false, "https", false), .cancel)
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html?mode=admin#start", false, false, "https", false), .cancel)
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html", false, false, nil, false), .cancel)
+        // The page itself, or a frame of its own, may.
+        XCTAssertEqual(decide("about:blank", false, true, "noodlet-package", false), .allow)
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html?level=2", false, true, "noodlet-package", false), .allow)
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html?level=2", false, false, "noodlet-package", false), .allow)
+
+        // A listed site cannot frame the package's pages, in its own frame or one inside it.
+        XCTAssertEqual(decide("noodlet-package://noodlet/index.html?x", false, false, "https", true), .cancel)
+        XCTAssertEqual(decide("noodlet-package://noodlet/inner.html", false, false, nil, true), .cancel)
+        // The package frames its own pages, and any frame may start blank.
+        XCTAssertEqual(decide("noodlet-package://noodlet/inner.html", false, true, "noodlet-package", true), .allow)
+        XCTAssertEqual(decide("noodlet-package://noodlet/inner.html", false, false, "noodlet-package", true), .allow)
+        XCTAssertEqual(decide("about:blank", false, false, "https", true), .allow)
+    }
+
+    /// The camera, microphone and screen go only to the package's own pages: a frame of an
+    /// embedded site never inherits what the noodlet declares, even with allow="camera".
+    nonisolated func testOnlyThePackageItselfMayCapture() {
+        let declared = ["camera", "microphone", "screen-capture"]
+        let package = NoodletPackageScheme.scheme
+        XCTAssertTrue(NoodletPage.mayCapture(["camera", "microphone"], permissions: declared, origin: package, frame: package))
+        XCTAssertTrue(NoodletPage.mayCapture(["screen-capture"], permissions: declared, origin: package, frame: package))
+        XCTAssertFalse(NoodletPage.mayCapture(["camera"], permissions: ["microphone"], origin: package, frame: package))
+        XCTAssertFalse(NoodletPage.mayCapture(["camera"], permissions: declared, origin: "https", frame: "https"))
+        XCTAssertFalse(NoodletPage.mayCapture(["microphone"], permissions: declared, origin: package, frame: "https"))
+        XCTAssertFalse(NoodletPage.mayCapture(["screen-capture"], permissions: declared, origin: "https", frame: package))
+        XCTAssertFalse(NoodletPage.mayCapture(["camera"], permissions: declared, origin: "", frame: ""))
     }
 
     /// The package's own files are saved when the page cannot show them, but an embedded site
@@ -386,6 +443,8 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(NoodletPackageScheme.mimeType("lib/engine.mjs"), "text/javascript")
         XCTAssertEqual(NoodletPackageScheme.mimeType("index.html"), "text/html")
         XCTAssertEqual(NoodletPackageScheme.mimeType("game.pck"), "application/octet-stream")
+        // Only the package frames its own pages, as testAFrameInsideThePageCannotUseTheBridge does.
+        XCTAssertEqual(NoodletPackageScheme.isolation["Content-Security-Policy"], "frame-ancestors 'self'")
     }
 
     /// A noodlet made for one look keeps it whatever the device's appearance; without a theme it
