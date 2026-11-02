@@ -210,6 +210,8 @@ public struct AppletResponse: Codable, Sendable {
     public var controls: Gamepad?
     /// The manifest's category, on `info`.
     public var category: String?
+    /// The sites the manifest lets its page show in frames, such as player.vimeo.com, on `info`.
+    public var embeds: [String]?
     /// The noodlet's manifest and the revision of its files, with an `archive`.
     public var manifest: NoodletManifest?
     public var revision: String?

@@ -207,6 +207,31 @@ import XCTest
         let resolved = try await runtime.handle(info, identity: AppletBuildIdentity.current.hubID).checked()
         XCTAssertEqual(resolved.category, "games")
     }
+    /// A bot sees which sites a noodlet shows in its frames; validate says what is wrong with one that is not a whole https site.
+    func testInfoSaysWhichSitesTheNoodletEmbeds() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "NoodletLinkTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        let runtime = AppletRuntime(library: botLibrary(root: root, defaults: defaults), defaults: defaults)
+        let path = try botNoodlet(try htmlNoodlet("Linked"), named: "Linked", owner: "author", root: root)
+        let manifest = URL(fileURLWithPath: path).appendingPathComponent("noodlet.json")
+        var validate = AppletRequest(.validate)
+        validate.path = path
+        validate.owner = "author"
+        try Data(#"{"version":1,"title":"Linked","runtime":"html","entry":"index.html","embeds":["https://www.youtube.com/embed"]}"#.utf8)
+            .write(to: manifest)
+        let refused = await runtime.handle(validate, identity: AppletBuildIdentity.current.hubID)
+        XCTAssertEqual(refused.error, "Embed https://www.youtube.com/embed is not a whole site. List only https://www.youtube.com.")
+
+        try Data(#"{"version":1,"title":"Linked","runtime":"html","entry":"index.html","embeds":["https://www.youtube-nocookie.com","https://player.vimeo.com"]}"#.utf8)
+            .write(to: manifest)
+        var info = AppletRequest(.info)
+        info.noodletID = try await runtime.handle(validate, identity: AppletBuildIdentity.current.hubID).checked().noodletID
+        info.owner = "author"
+        let resolved = try await runtime.handle(info, identity: AppletBuildIdentity.current.hubID).checked()
+        XCTAssertEqual(resolved.embeds, ["www.youtube-nocookie.com", "player.vimeo.com"])
+    }
     func testValidateRegistersWithoutRunningAndInfoEnforcesOwnership() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "NoodletLinkTests." + UUID().uuidString

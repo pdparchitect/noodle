@@ -142,7 +142,12 @@ public enum AppletGuidance {
         The person's own files use standard web file handling: `<a download>` to a package file, a
         blob or a data URL asks where to save it, `<input type=file>` opens the file picker,
         and http(s) links, including target=_blank, open in the person's browser. The page
-        itself never leaves its package. File dialogs, downloads and opened links need a
+        itself never leaves its package; an iframe shows a web page only from a site listed in the
+        manifest's "embeds", whole https origins such as ["https://player.vimeo.com"], without noodle
+        (YouTube's player refuses to play there with Error 153; link to the video instead).
+        Give an embed `sandbox="allow-scripts allow-same-origin allow-presentation"`, never
+        allow-top-navigation or allow-downloads, and check event.origin in message listeners.
+        File dialogs, downloads and opened links need a
         visible window and a click; showSaveFilePicker and the rest of the File System
         Access API are not available in WebKit. The public web is always open:
         remote resources and HTTP(S) `fetch()` / `noodle.fetch()`. This device, localhost and

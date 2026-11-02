@@ -10,8 +10,10 @@ import WebKit
     nonisolated static let scheme = "noodlet-package"
     nonisolated static let host = "noodlet"
     /// Isolation lets the page share memory between threads. Remote images, scripts and frames
-    /// still load: WebKit does not hold them to it on a scheme of the app's own.
-    nonisolated static let isolation = ["Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp"]
+    /// still load: WebKit does not hold them to it on a scheme of the app's own. Only the package
+    /// frames its own pages, which would hand an embedded site the page's origin.
+    nonisolated static let isolation = ["Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp",
+                                        "Content-Security-Policy": "frame-ancestors 'self'"]
     /// WebKit isolates such a page but leaves out the SharedArrayBuffer constructor, which engines'
     /// scripts look for by name. Shared memory's own buffer has it. An audio worklet has neither
     /// `self` nor `crossOriginIsolated`; it only runs inside a page that is isolated or not.
@@ -40,6 +42,11 @@ import WebKit
     /// Whether `url` is one of the package's own.
     nonisolated static func contains(_ url: URL) -> Bool {
         url.scheme?.lowercased() == scheme && url.host?.lowercased() == host
+    }
+
+    /// Whether `scheme`, a security origin's protocol, is the package's: its page or a frame of its own pages.
+    nonisolated static func isOrigin(_ scheme: String?) -> Bool {
+        scheme?.lowercased() == Self.scheme
     }
 
     /// Where the page reads `file`, a response to one of its web requests, which is gone once read.
