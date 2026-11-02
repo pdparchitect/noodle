@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An archived bot is no longer listed under a harness's Needs attention with Kick and New Session, and no longer marks the harness as needing attention.
+
 ## [0.46.1] - 2026-11-02
 
 ### Fixed

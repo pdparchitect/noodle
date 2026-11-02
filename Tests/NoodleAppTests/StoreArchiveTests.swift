@@ -22,6 +22,17 @@ import XCTest
         XCTAssertTrue(f.factory.processes.isEmpty)
     }
 
+    /// An archived bot on a missing harness is not a problem to kick in Settings.
+    func testAnArchivedBotHasNoIssueToKick() throws {
+        let f = try RuntimeCoordinatorFixture()
+        addTeardownBlock { @MainActor in f.cleanUp() }
+        let archived = try f.agent("Archived", harness: nil), active = try f.agent("Active", harness: nil)
+        f.runtime.archivedAgentIDs = [archived.id]
+        f.runtime.refresh(agents: [archived, active], repository: f.repository)
+        XCTAssertFalse(f.runtime.snapshot(for: archived.id).canKick)
+        XCTAssertTrue(f.runtime.snapshot(for: active.id).canKick)
+    }
+
     func testArchivingABotStopsItHidesItsChatAndKeepsEverything() throws {
         let f = try fixture(), group = try f.group()
         _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Keep this")

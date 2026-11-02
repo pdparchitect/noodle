@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- An archived bot is no longer listed under a harness's Needs attention with Kick and New Session, and no longer marks the harness as needing attention.
+
 ## [0.80.4] - 2026-11-02
 
 ### Fixed

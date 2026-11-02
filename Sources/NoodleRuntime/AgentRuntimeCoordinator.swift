@@ -728,6 +728,8 @@ public final class AgentRuntimeCoordinator {
                     harnessFallbacks[agent.id] = nil
                 }
             }
+            // Archived bots never run, so they have nothing to report until unarchived.
+            if archivedAgentIDs.contains(agent.id) || agent.archivedAt != nil { snapshots[agent.id] = nil; continue }
             if blockedRestarts.contains(agent.id) { continue }
             if blockedRecoveries.contains(agent.id), connectionRecoveryAttempts[agent.id] != nil { continue }
             if heldAgents[agent.id] != nil, processes[agent.id] == nil { hold(agent.id); continue }
