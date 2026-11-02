@@ -1,0 +1,87 @@
+name: Deploy Noodle Embed
+
+# Typechecks and tests the noodle-embed Worker on every change to Embed/, and deploys it from main to
+# embed.usenoodle.app.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Embed/**'
+      - '!Embed/**.md'
+      - '.github/workflows/embed.yml'
+  pull_request:
+    paths:
+      - 'Embed/**'
+      - '!Embed/**.md'
+      - '.github/workflows/embed.yml'
+  workflow_dispatch:
+
+# Every action is pinned by commit SHA, with its release in a comment. No job needs more than reading the
+# repository; checkout keeps no credentials behind.
+permissions:
+  contents: read
+
+# One deploy at a time, never cancelled halfway; pull requests only queue behind their own runs.
+concurrency:
+  group: embed-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Embed
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Typecheck the Worker
+        run: npx tsc --noEmit
+      - name: Test the Worker
+        run: npm test
+
+  deploy:
+    needs: [worker]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: embed-production
+    defaults:
+      run:
+        working-directory: Embed
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Deploy the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?Missing CLOUDFLARE_ACCOUNT_ID}"
+          npx wrangler deploy
+      - name: Check the page answers with its policy
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if headers="$(curl -fsSI --max-time 30 'https://embed.usenoodle.app/youtube?v=dQw4w9WgXcQ')"; then
+              printf '%s\n' "$headers"
+              grep -qi '^content-security-policy: ' <<< "$headers"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "embed.usenoodle.app/youtube did not answer after the deploy" >&2
+          exit 1

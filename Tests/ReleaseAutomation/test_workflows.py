@@ -509,6 +509,47 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(flow['jobs']['test-linux']['container'], bases, 'CI tests on the toolchain the image builds with')
         self.assertIn('--force-resolved-versions', dockerfile)
 
+    def test_embed_deploys_from_main_only_after_its_tests(self):
+        flow = workflow('embed.yml')
+        triggers = flow.get('on', flow.get('true'))
+        self.assertEqual(triggers['push']['branches'], ['main'])
+        self.assertIn('workflow_dispatch', triggers)
+        for event in ['push', 'pull_request']:
+            patterns = triggers[event]['paths']
+            for path in ['Embed/src/index.ts', 'Embed/test/index.test.mjs', 'Embed/wrangler.toml',
+                         'Embed/package-lock.json', '.github/workflows/embed.yml']:
+                self.assertTrue(matches_paths([path], patterns), f'{event}: {path}')
+            self.assertFalse(matches_paths(['Embed/README.md', 'Push/worker/src/index.ts'], patterns), event)
+        jobs = flow['jobs']
+        self.assertIn('npm test', json.dumps(jobs['worker']))
+        deploy = jobs['deploy']
+        self.assertEqual(deploy['environment'], 'embed-production')
+        self.assertEqual(deploy['needs'], ['worker'])
+        for event, ref, deploys in [('push', 'refs/heads/main', True), ('workflow_dispatch', 'refs/heads/main', True),
+                                    ('pull_request', 'refs/heads/main', False), ('workflow_dispatch', 'refs/heads/feature', False)]:
+            self.assertEqual(condition(deploy['if'], {'github.event_name': event, 'github.ref': ref}), deploys, (event, ref))
+        # Only the deploy step sees secrets, and only Cloudflare's: the Worker has none of its own.
+        for name, job in jobs.items():
+            if name != 'deploy':
+                self.assertNotIn('secrets.', json.dumps(job), name)
+        step = next(step for step in deploy['steps'] if 'wrangler deploy' in step.get('run', ''))
+        self.assertEqual(sorted(step['env']), ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'])
+        self.assertEqual([step for step in deploy['steps'] if 'secrets.' in json.dumps(step)], [step])
+
+    def test_embed_pins_what_it_runs_and_reads_only(self):
+        flow = workflow('embed.yml')
+        self.assertEqual(flow['permissions'], {'contents': 'read'})
+        self.assertIs(flow['concurrency']['cancel-in-progress'], False)
+        for name, job in flow['jobs'].items():
+            self.assertNotIn('permissions', job, name)
+            for step in job['steps']:
+                if 'uses' in step:
+                    self.assertRegex(step['uses'], r'^[\w.-]+/[\w.-]+@[0-9a-f]{40}$', name)
+                if step.get('uses', '').startswith('actions/checkout@'):
+                    self.assertIs(step['with']['persist-credentials'], False, name)
+                if 'npm ci' in step.get('run', ''):
+                    self.assertIn('--ignore-scripts', step['run'], name)
+
 def ci_scope(root=ROOT):
     spec = importlib.util.spec_from_file_location('ci_scope', root / 'scripts/ci-scope.py')
     module = importlib.util.module_from_spec(spec)
