@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting a Local Mac no longer takes over the Mac's hardware settings. macOS treated the Local Mac's account as the person at the screen, so AirPods disconnected, custom modifier keys stopped working, and Night Shift and True Tone followed that account until you logged out. Starting the updated app also corrects a Mac left in this state.
+
 ## [0.33.6] - 2026-11-01
 
 ### Added

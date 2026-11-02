@@ -6,6 +6,7 @@ import Security
 import Darwin
 import MachO
 import OSLog
+import SystemConfiguration
 
 private let executable: URL = {
     // launchd may provide a bundle-relative argv[0]. Resolve the running Mach-O
@@ -248,6 +249,7 @@ private final class Service: NSObject, NSXPCListenerDelegate {
     var retirement: LocalMacServiceRetirement
     private var updateMonitor: DispatchSourceTimer?
     private var sessionMonitor: DispatchSourceTimer?
+    private var consoleStore: SCDynamicStore?
     var orphans = LocalMacOrphanSweep()
     var restarting: Bool { retirement.restarting }
     var consoleMetadata: ConsoleMetadata?
@@ -284,6 +286,39 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         monitor.setEventHandler { [weak self] in self?.releaseOrphans() }
         sessionMonitor = monitor
         monitor.resume()
+    }
+    /// loginwindow publishes a background login as the console user, and macOS
+    /// then applies that account's settings to the shared hardware (see
+    /// LocalMacConsoleUser). Watching the record also repairs one left by an
+    /// earlier session or service, and any later republish by loginwindow.
+    func monitorConsoleUser() {
+        var context = SCDynamicStoreContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
+                                            retain: nil, release: nil, copyDescription: nil)
+        let changed: SCDynamicStoreCallBack = { _, _, info in
+            guard let info else { return }
+            Unmanaged<Service>.fromOpaque(info).takeUnretainedValue().repairConsoleUser()
+        }
+        guard let store = SCDynamicStoreCreate(nil, serviceID as CFString, changed, &context),
+              SCDynamicStoreSetNotificationKeys(store, [SCDynamicStoreKeyCreateConsoleUser(nil)] as CFArray, nil),
+              SCDynamicStoreSetDispatchQueue(store, queue) else {
+            log.error("Cannot watch the console user; it is repaired only on start and stop.")
+            queue.async { self.repairConsoleUser() }
+            return
+        }
+        consoleStore = store
+        queue.async { self.repairConsoleUser() }
+    }
+    /// Runs on the lifecycle queue.
+    func repairConsoleUser() {
+        var published: uid_t = 0
+        let current = SCDynamicStoreCopyConsoleUser(nil, &published, nil) == nil ? nil : UInt32(published)
+        let list = sessions()
+        guard let user = LocalMacConsoleUser.repair(published: current, sessions: list, managed: Set(accounts.all().map(\.uid))) else { return }
+        if NLMPublishConsoleUser(user.name, user.uid, user.gid, list) {
+            log.notice("Restored console user \(user.uid) after a background login.")
+        } else {
+            log.error("Cannot restore console user \(user.uid) after a background login.")
+        }
     }
     /// A desktop helper exits when the app's connection closes, but that connection bypasses
     /// this service, so a helper can outlive a previous service instance.
@@ -408,6 +443,7 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         guard !sessions().contains(where: { uid($0) == account.uid }) else { throw LocalMacError("The background session is still stopping. Its account has been retained.") }
         LocalMacLoginRecords.close(user: account.name)
         try restoreConsole(original)
+        repairConsoleUser()
     }
     func restoreConsole(_ original: [String: Any]) throws {
         let now = try console()
@@ -497,6 +533,7 @@ private final class Service: NSObject, NSXPCListenerDelegate {
             for _ in 0..<450 {
                 let foreground = try console()
                 guard sid(foreground) == sid(original), uid(foreground) == account.ownerUID else { throw LocalMacError("The active desktop changed during startup.") }
+                repairConsoleUser()
                 current = sessions().first { sid($0) == created }
                 if let current, (try? LocalMacSession(account: account, record: current)) != nil { break }
                 Thread.sleep(forTimeInterval: 0.2)
@@ -505,6 +542,7 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         guard let current else { throw LocalMacError("The account's background login is not ready. Retry Start; its setup has been retained.") }
         let session = try LocalMacSession(account: account, record: current)
         try restoreConsole(original)
+        repairConsoleUser()
         // The executable path is derived from this signed app, never from XPC.
         try stopDesktop(account.computerID)
         let (desktopEnd, appEnd) = try LocalMacWire.socketPair()
@@ -632,6 +670,7 @@ do {
     listener.resume()
     service.monitorUpdates()
     service.monitorSessions()
+    service.monitorConsoleUser()
     log.notice("Local Mac lifecycle service is ready.")
     RunLoop.current.run()
 } catch { log.error("Local Mac service startup failed: \(error.localizedDescription, privacy: .public)"); exit(1) }
