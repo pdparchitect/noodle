@@ -152,7 +152,9 @@ public enum AppletGuidance {
         {..., cmd:"seek", t} and {..., cmd:"load", v, t} from it.
         Give an embed `sandbox="allow-scripts allow-same-origin allow-presentation"` and
         `allow="autoplay; fullscreen; encrypted-media; picture-in-picture"`, never
-        allow-top-navigation or allow-downloads, and check event.origin in message listeners.
+        allow-top-navigation or allow-downloads. Before trusting a message from the YouTube page,
+        check event.origin === "https://embed.usenoodle.app" and that event.source is the
+        iframe's contentWindow; check other embeds' messages the same way.
         File dialogs, downloads and opened links need a
         visible window and a click; showSaveFilePicker and the rest of the File System
         Access API are not available in WebKit. The public web is always open:

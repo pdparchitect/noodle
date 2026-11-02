@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
+import vm from 'node:vm'
 import worker, { SCRIPT, STYLE } from '../src/index.ts'
 
 const ORIGIN = 'https://embed.usenoodle.app'
@@ -80,4 +81,44 @@ test('sends a strict policy that allows only the YouTube player', async () => {
 test('the page script still checks the id itself', () => {
   assert.ok(SCRIPT.includes('const ID = /^[A-Za-z0-9_-]{11}$/;'))
   assert.ok(SCRIPT.includes("if (e.source !== parent"))
+})
+
+test('the page obeys only well-formed commands from its parent', () => {
+  const calls = []
+  let listener
+  const parent = { postMessage: () => {} }
+  const context = {
+    parent,
+    location: { origin: ORIGIN },
+    document: {
+      getElementById: () => ({ dataset: { v: 'dQw4w9WgXcQ', t: '0', autoplay: '0' } }),
+      createElement: () => ({}),
+      head: { appendChild: () => {} },
+    },
+    addEventListener: (type, handler) => { if (type === 'message') listener = handler },
+    setInterval: () => 0,
+    clearInterval: () => {},
+    YT: { Player: class {
+      loadVideoById(options) { calls.push(['load', options]) }
+      seekTo(seconds) { calls.push(['seek', seconds]) }
+    } },
+  }
+  context.window = context
+  vm.runInNewContext(SCRIPT, context)
+  context.onYouTubeIframeAPIReady()
+  const post = (data, source = parent) => listener({ source, data: { source: 'noodle-embed', ...data } })
+
+  post({ cmd: 'load', v: ['dQw4w9WgXcQ'] })
+  post({ cmd: 'load', v: { toString: () => 'dQw4w9WgXcQ' } })
+  post({ cmd: 'load', v: 'dQw4w9WgXc' })
+  post({ cmd: 'load', v: 'dQw4w9WgXcQ' }, {})
+  post({ cmd: 'seek', t: '30' })
+  post({ cmd: 'load', v: 'dQw4w9WgXcQ', t: '30' })
+  post({ cmd: 'load', v: 'dQw4w9WgXcQ', t: 42 })
+  post({ cmd: 'seek', t: 7 })
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    ['load', { videoId: 'dQw4w9WgXcQ', startSeconds: 0 }],
+    ['load', { videoId: 'dQw4w9WgXcQ', startSeconds: 42 }],
+    ['seek', 7],
+  ])
 })

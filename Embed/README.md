@@ -7,8 +7,12 @@ YouTube's player, so a noodlet can show a YouTube video.
 
 A noodlet page loads from a custom URL scheme, so an iframe in it sends no http(s) `Referer`, and YouTube's
 player refuses to play without one (Error 153). A noodlet iframes this page instead; the player inside it
-sees `https://embed.usenoodle.app` as its referrer. It is a separate site, away from usenoodle.app, and
-keeps nothing: no cookies, no storage, no request logs.
+sees `https://embed.usenoodle.app` as its referrer. The page keeps nothing: no cookies, no storage, no
+request logs.
+
+embed.usenoodle.app is a separate host but the same site as usenoodle.app. YouTube's scripts run in its
+origin and could set cookies for `.usenoodle.app`. That is fine today, because neither the website nor
+Push uses cookies. If usenoodle.app ever does, move this page to a separate registrable domain.
 
 ## URL contract
 
@@ -39,7 +43,9 @@ The page talks to its parent with `postMessage`, every message carrying `source:
   `paused`, `buffering`, `cued`), `{type: "time", current, duration}` every second while playing, and
   `{type: "error", code, message}`.
 - It accepts, from its parent only, `{cmd: "play" | "pause" | "mute" | "unmute"}`, `{cmd: "seek", t}` and
-  `{cmd: "load", v, t}`.
+  `{cmd: "load", v, t}`, with `v` a string id and `t` a number of seconds; it ignores anything else.
+- A noodlet should trust a message only if `event.origin` is `"https://embed.usenoodle.app"` and
+  `event.source` is the iframe's `contentWindow`.
 
 ## Headers
 
@@ -61,5 +67,6 @@ npx wrangler dev
 
 `.github/workflows/embed.yml` tests every change to `Embed/` and deploys from `main` with
 `wrangler deploy`, from the `embed-production` environment's `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN` (a token that can edit Workers and the usenoodle.app zone's routes). The custom
-domain in `wrangler.toml` creates the DNS record and certificate on the first deploy.
+`CLOUDFLARE_API_TOKEN` (its own token, not Push's, that can only edit Workers scripts and the
+usenoodle.app zone's routes). The custom domain in
+`wrangler.toml` creates the DNS record and certificate on the first deploy.

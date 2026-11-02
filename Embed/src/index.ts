@@ -18,7 +18,8 @@ const SECONDS = /^[0-9]{1,9}$/
 //   {source:"noodle-embed", type:"state",  state: "unstarted"|"ended"|"playing"|"paused"|"buffering"|"cued"}
 //   {source:"noodle-embed", type:"time",   current, duration}   every second while playing
 //   {source:"noodle-embed", type:"error",  code, message}       YouTube's codes 2/5/100/101/150/153, "bad-id" or "api"
-// Parent to relay (postMessage to the iframe's contentWindow), accepted only from window.parent:
+// Parent to relay (postMessage to the iframe's contentWindow), accepted only from window.parent and
+// only with a string id and numeric seconds; anything else is ignored:
 //   {source:"noodle-embed", cmd:"play"|"pause"|"mute"|"unmute"}
 //   {source:"noodle-embed", cmd:"seek", t: seconds}
 //   {source:"noodle-embed", cmd:"load", v: VIDEO_ID, t?: seconds}
@@ -63,7 +64,7 @@ export const SCRIPT = `(() => {
       case 'mute': player.mute(); break;
       case 'unmute': player.unMute(); break;
       case 'seek': if (Number.isFinite(d.t)) player.seekTo(Math.max(0, d.t), true); break;
-      case 'load': if (ID.test(d.v || '')) player.loadVideoById({ videoId: d.v, startSeconds: Math.max(0, +d.t || 0) }); break;
+      case 'load': if (typeof d.v === 'string' && ID.test(d.v)) player.loadVideoById({ videoId: d.v, startSeconds: Number.isFinite(d.t) ? Math.max(0, d.t) : 0 }); break;
     }
   });
 
