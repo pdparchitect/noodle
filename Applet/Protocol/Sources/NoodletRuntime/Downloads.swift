@@ -4,9 +4,10 @@ import WebKit
 
 /// What a noodlet's page may do with a navigation it starts. The privileged page stays on its
 /// package; saving a file and following a web link are left to the person, who picks where the
-/// file goes or sees the link open in their browser.
+/// file goes or sees the link open in their browser. A frame inside the page may also show a site
+/// the manifest embeds, such as a video player; the bridge never answers a frame.
 public enum NoodletNavigation: Equatable, Sendable {
-    /// Load it in the page: the package's own files and about:blank.
+    /// Load it in the page: the package's own files and about:blank, and in a frame a site it embeds.
     case allow
     /// Save it as a file the person chooses: `<a download>` to a package file, a blob or a data URL.
     case download
@@ -14,14 +15,27 @@ public enum NoodletNavigation: Equatable, Sendable {
     case openExternally
     case cancel
 
+    /// `mainFrame` is whether the main page started it; `inFrame`, whether it loads into a frame
+    /// inside the page rather than the page itself or a new window. Each step of a redirect is
+    /// asked again, so a listed site cannot bring an unlisted one into its frame.
     public static func decide(_ url: URL, shouldPerformDownload: Bool, linkActivated: Bool,
-                              mainFrame: Bool) -> NoodletNavigation {
+                              mainFrame: Bool, inFrame: Bool = false, embeds: [String]? = nil) -> NoodletNavigation {
         let scheme = url.scheme?.lowercased() ?? ""
         let local = NoodletPackageScheme.contains(url)
         if shouldPerformDownload { return local || scheme == "blob" || scheme == "data" ? .download : .cancel }
         if local || url.absoluteString == "about:blank" { return .allow }
+        if inFrame, NoodletManifest.mayEmbed(url, in: embeds ?? []) { return .allow }
         if scheme == "http" || scheme == "https", linkActivated, mainFrame { return .openExternally }
         return .cancel
+    }
+
+    /// What becomes of a response to a navigation `decide` allowed: what WebKit cannot show, or
+    /// is sent as an attachment, is saved rather than shown. Only the package's own files are: an
+    /// embedded site never brings up a save panel.
+    public static func respond(to url: URL?, canShow: Bool, disposition: String) -> NoodletNavigation {
+        let attachment = disposition.lowercased().hasPrefix("attachment")
+        if canShow && !attachment { return .allow }
+        return url.map(NoodletPackageScheme.contains) == true ? .download : .cancel
     }
 }
 

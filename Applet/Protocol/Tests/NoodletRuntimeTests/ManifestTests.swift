@@ -68,6 +68,48 @@ final class ManifestTests: XCTestCase {
         }
     }
 
+    /// The sites a noodlet may show in a frame are whole https sites, written as their origin.
+    func testEmbedsAreHttpsSites() throws {
+        XCTAssertNil(try manifest("").embeds)
+        let linked = try manifest(#","embeds":["https://www.youtube-nocookie.com","https://Player.Vimeo.com/","https://example.com:8443"]"#)
+        XCTAssertEqual(linked.embeds, ["https://www.youtube-nocookie.com", "https://Player.Vimeo.com/", "https://example.com:8443"])
+        XCTAssertEqual(linked.embeddedSites, ["www.youtube-nocookie.com", "player.vimeo.com", "example.com:8443"])
+
+        // A frame's address belongs to a listed site by scheme, host and port, whatever its path.
+        for url in ["https://www.youtube-nocookie.com/embed/aircAruvnKk?autoplay=1", "https://player.vimeo.com/video/76979871",
+                    "https://PLAYER.vimeo.com:443/video/1", "https://example.com:8443/"] {
+            XCTAssertTrue(linked.mayEmbed(URL(string: url)!), url)
+        }
+        for url in ["http://player.vimeo.com/video/1", "https://vimeo.com/76979871", "https://www.youtube.com/embed/aircAruvnKk",
+                    "https://example.com/", "https://evil.player.vimeo.com/", "https://player.vimeo.com.evil.com/",
+                    "wss://player.vimeo.com/", "noodlet-package://noodlet/index.html"] {
+            XCTAssertFalse(linked.mayEmbed(URL(string: url)!), url)
+        }
+        XCTAssertFalse(try manifest("").mayEmbed(URL(string: "https://player.vimeo.com/video/1")!))
+
+        // validate says what is wrong with each kind of entry.
+        let refusals = [
+            "http://player.vimeo.com": "Embed http://player.vimeo.com must use https, such as https://player.vimeo.com.",
+            "player.vimeo.com": "Embed player.vimeo.com must use https, such as https://player.vimeo.com.",
+            "https://www.youtube.com/embed": "Embed https://www.youtube.com/embed is not a whole site. List only https://www.youtube.com.",
+            "https://www.youtube.com/?x=1": "Embed https://www.youtube.com/?x=1 is not a whole site. List only https://www.youtube.com.",
+            "https://*.vimeo.com": "Embed https://*.vimeo.com cannot use a wildcard. List each site, such as https://player.vimeo.com.",
+            "https://user@player.vimeo.com": "Embed https://user@player.vimeo.com is not a whole site. List only https://player.vimeo.com.",
+            "https://": "Embed https:// is not a site. Use one such as https://player.vimeo.com.",
+            " ": "An embed is empty. Use a site such as https://player.vimeo.com.",
+        ]
+        for (entry, message) in refusals {
+            XCTAssertThrowsError(try manifest(#","embeds":["\#(entry)"]"#), entry) {
+                XCTAssertEqual($0.localizedDescription, message)
+            }
+        }
+
+        // Written back, the list stays as the bot wrote it.
+        let again = try JSONDecoder().decode(NoodletManifest.self, from: try JSONEncoder().encode(linked))
+        XCTAssertEqual(again.embeds, linked.embeds)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(try manifest("")), as: UTF8.self).contains("embeds"))
+    }
+
     /// Written back, a noodlet keeps only the hints it gave.
     func testHintsRoundTrip() throws {
         let data = try JSONEncoder().encode(try manifest(#","layout":"adaptive","runs":"hub""#))

@@ -628,6 +628,8 @@ struct AppletIdleWatch {
     response.permissions = AppletPermissions.status(package, defaults: defaults)
     response.controls = package.manifest.controls
     response.category = package.manifest.category
+    let sites = package.manifest.embeddedSites
+    response.embeds = sites.isEmpty ? nil : sites
     response.state = "available"
     return response
   }

@@ -322,10 +322,13 @@ public typealias NoodletColor = UIColor
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
-        // Keep the privileged page on its package origin. Remote content belongs in a browser.
+        // Keep the privileged page on its package origin. Remote content belongs in a browser, or
+        // in a frame of the page when it is a site the manifest embeds.
+        let target: WKFrameInfo? = navigationAction.targetFrame
         switch NoodletNavigation.decide(url, shouldPerformDownload: navigationAction.shouldPerformDownload,
                                         linkActivated: navigationAction.navigationType == .linkActivated,
-                                        mainFrame: Self.fromMainFrame(navigationAction)) {
+                                        mainFrame: Self.fromMainFrame(navigationAction),
+                                        inFrame: target.map { !$0.isMainFrame } ?? false, embeds: manifest.embeds) {
         case .allow: decisionHandler(.allow)
         case .download where NoodletPackageScheme.contains(url):
             decisionHandler(.cancel)
@@ -342,13 +345,16 @@ public typealias NoodletColor = UIColor
         }
     }
 
-    /// What WebKit cannot show, or is sent as an attachment, is saved rather than shown.
     public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         let disposition = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition") ?? ""
-        let attachment = disposition.lowercased().hasPrefix("attachment")
-        decisionHandler(!navigationResponse.canShowMIMEType || attachment ? .download : .allow)
+        switch NoodletNavigation.respond(to: navigationResponse.response.url, canShow: navigationResponse.canShowMIMEType,
+                                         disposition: disposition) {
+        case .allow: decisionHandler(.allow)
+        case .download: decisionHandler(.download)
+        case .openExternally, .cancel: decisionHandler(.cancel)
+        }
     }
 
     public func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {

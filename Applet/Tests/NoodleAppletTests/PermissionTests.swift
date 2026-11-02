@@ -81,6 +81,18 @@ import XCTest
         XCTAssertEqual(later.failure, "Permission was not given.")
     }
 
+    /// Permissions settings list what each noodlet was allowed and the sites it embeds, which need no answer.
+    func testPermissionsListTheSitesANoodletEmbeds() {
+        let rows = AppletPermissions.rows(
+            grants: ["a": ["camera", "microphone"], "b": ["camera"]],
+            embeds: ["b": ["player.vimeo.com"], "c": ["www.youtube-nocookie.com", "player.vimeo.com"], "d": []])
+        XCTAssertEqual(rows, [
+            "a": "Camera, Microphone",
+            "b": "Camera\nEmbeds player.vimeo.com",
+            "c": "Embeds www.youtube-nocookie.com, player.vimeo.com",
+        ])
+    }
+
     func testGrantsAreListedAndRevoked() {
         let suite = "AppletPermissions." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!

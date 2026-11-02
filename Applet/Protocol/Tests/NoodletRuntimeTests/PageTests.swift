@@ -83,6 +83,89 @@ final class MemoryStore: NoodletStore, @unchecked Sendable {
         XCTAssertEqual(decide("noodlet-package://other/index.html", false, false, true), .cancel)
     }
 
+    /// A frame inside the page may show a site its manifest lists, and only that: the page itself
+    /// stays on its package, and a frame never shows a site it does not list.
+    nonisolated func testAFrameShowsOnlyTheSitesItsManifestEmbeds() {
+        let embeds = ["https://www.youtube-nocookie.com", "https://player.vimeo.com"]
+        let decide = { (url: String, link: Bool, main: Bool, inFrame: Bool) in
+            NoodletNavigation.decide(URL(string: url)!, shouldPerformDownload: false, linkActivated: link, mainFrame: main,
+                                     inFrame: inFrame, embeds: embeds)
+        }
+
+        // Blake's videos load in their frames, from the page or from a frame inside a listed one.
+        XCTAssertEqual(decide("https://www.youtube-nocookie.com/embed/aircAruvnKk?autoplay=1&rel=0", false, true, true), .allow)
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", false, true, true), .allow)
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", false, false, true), .allow)
+        // A site it does not list stays out of frames, including a redirect a listed site makes.
+        XCTAssertEqual(decide("https://example.com/", false, true, true), .cancel)
+        XCTAssertEqual(decide("https://www.youtube.com/embed/aircAruvnKk", false, false, true), .cancel)
+        XCTAssertEqual(decide("http://player.vimeo.com/video/76979871", false, true, true), .cancel)
+        // The page itself never leaves its package for a listed site; a click still opens it in the browser.
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", false, true, false), .cancel)
+        // Nor does a listed site's frame take over the page, or open a window, with one.
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", false, false, false), .cancel)
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", true, false, false), .cancel)
+        XCTAssertEqual(decide("https://player.vimeo.com/video/76979871", true, true, false), .openExternally)
+        XCTAssertEqual(decide("https://example.com/", true, true, false), .openExternally)
+        // Without embeds, frames stay as empty as before.
+        XCTAssertEqual(NoodletNavigation.decide(URL(string: "https://player.vimeo.com/video/1")!, shouldPerformDownload: false,
+                                                linkActivated: false, mainFrame: true, inFrame: true), .cancel)
+        // A listed site's file is never saved for it.
+        XCTAssertEqual(NoodletNavigation.decide(URL(string: "https://player.vimeo.com/video.mp4")!, shouldPerformDownload: true,
+                                                linkActivated: true, mainFrame: false, inFrame: true, embeds: embeds), .cancel)
+    }
+
+    /// The package's own files are saved when the page cannot show them, but an embedded site
+    /// never brings up a save panel: what it cannot show is not loaded.
+    nonisolated func testOnlyThePackagesOwnFilesAreSavedFromAResponse() {
+        let respond = { (url: String, showable: Bool, disposition: String) in
+            NoodletNavigation.respond(to: URL(string: url), canShow: showable, disposition: disposition)
+        }
+        XCTAssertEqual(respond("noodlet-package://noodlet/index.html", true, ""), .allow)
+        XCTAssertEqual(respond("noodlet-package://noodlet/notes.zip", false, ""), .download)
+        XCTAssertEqual(respond("noodlet-package://noodlet/notes.txt", true, "attachment; filename=notes.txt"), .download)
+        XCTAssertEqual(respond("https://player.vimeo.com/video/76979871", true, ""), .allow)
+        XCTAssertEqual(respond("https://player.vimeo.com/setup.zip", false, ""), .cancel)
+        XCTAssertEqual(respond("https://player.vimeo.com/notes.txt", true, "Attachment"), .cancel)
+    }
+
+    /// An embedded site's frame can see `webkit.messageHandlers.noodle`, as every frame can, but
+    /// the bridge answers only the noodlet's own main page.
+    nonisolated func testAnEmbeddedSiteIsNeverTrustedByTheBridge() {
+        for url in ["https://www.youtube-nocookie.com/embed/aircAruvnKk", "https://player.vimeo.com/video/76979871"] {
+            XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: false, url: URL(string: url)), url)
+            XCTAssertFalse(NoodletPage.isTrustedBridgeSource(isMainFrame: true, url: URL(string: url)), url)
+        }
+    }
+
+    /// In WebKit itself: a frame inside the page has no `noodle`, and its messages to the bridge are refused.
+    func testAFrameInsideThePageCannotUseTheBridge() async throws {
+        let (page, store, _) = try page(files: [
+            "index.html": "<title>Page</title>",
+            "inner.html": """
+                <script>
+                parent.postMessage(['noodle', typeof noodle], '*');
+                window.webkit.messageHandlers.noodle.postMessage({operation: 'write', path: 'a.txt', data: 'aGk='})
+                  .then(value => parent.postMessage(['answered', String(value)], '*'),
+                        error => parent.postMessage(['refused', String(error)], '*'));
+                </script>
+                """,
+        ])
+        try await page.load()
+        let heard = try await page.evaluate("""
+            const heard = [];
+            await new Promise(resolve => {
+              addEventListener('message', event => { heard.push(event.data); if (heard.length == 2) resolve(); });
+              const frame = document.createElement('iframe');
+              frame.src = 'inner.html';
+              document.body.append(frame);
+            });
+            return heard
+            """)
+        XCTAssertEqual(heard, #"[["noodle","undefined"],["refused","Error: The bridge is available only to the noodlet's main page."]]"#)
+        XCTAssertEqual(store.calls, [])
+    }
+
     nonisolated func testDownloadNamesStayPlainFileNames() {
         XCTAssertEqual(NoodletFiles.safeName("kitten.mp4"), "kitten.mp4")
         XCTAssertEqual(NoodletFiles.safeName("../../etc/passwd"), "passwd")
