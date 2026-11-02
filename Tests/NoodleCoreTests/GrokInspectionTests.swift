@@ -42,6 +42,17 @@ final class GrokInspectionTests: XCTestCase {
         try fixture.assertStopped()
     }
 
+    /// Signed out, grok starts its browser sign-in and never answers the cached-token request.
+    func testUnansweredAuthenticationReportsSignedOut() throws {
+        let fixture = try InspectionProcessFixture(script: "read_request\n" + reply(1, ["result": initialization])
+            + "\nread_request\nsleep 30", ignoreTermination: true)
+        let result = try inspect(fixture, timeout: 1)
+        XCTAssertFalse(result.authenticated)
+        XCTAssertEqual(result.executablePath, "/reported/grok")
+        XCTAssertEqual(result.models.count, 2)
+        try fixture.assertStopped()
+    }
+
     func testUnsupportedInitializationStopsBeforeAuthentication() throws {
         for result in [[String: Any](), ["protocolVersion": 2]] {
             let fixture = try InspectionProcessFixture(script: "read_request\n" + reply(1, ["result": result]))

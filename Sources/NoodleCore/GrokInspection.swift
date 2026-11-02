@@ -22,11 +22,12 @@ public enum GrokInspection {
                                           requestTimeout: requestTimeout, terminationGrace: terminationGrace)
         defer { wire.stop() }
         let initialization = try wire.request(1, "initialize", FxProtocol.initializeParameters)
-        guard let result = initialization["result"] as? [String: Any], result["protocolVersion"] as? Int == 1 else {
+        guard let result = initialization?["result"] as? [String: Any], result["protocolVersion"] as? Int == 1 else {
             throw HarnessSetupError("Grok Build returned an unsupported ACP version.")
         }
-        let auth = try wire.request(2, "authenticate", ["methodId": "cached_token"])
-        return .init(executablePath: installationPath, authenticated: auth["result"] is [String: Any],
+        // Signed out, grok starts its browser sign-in instead of answering, so silence is signed out.
+        let auth = try wire.request(2, "authenticate", ["methodId": "cached_token"], silenceIsAnswer: true)
+        return .init(executablePath: installationPath, authenticated: auth?["result"] is [String: Any],
                      models: try GrokProtocol.models(from: result))
     }
 }
@@ -73,7 +74,8 @@ private final class GrokInspectionWire: @unchecked Sendable {
         try? output.fileHandleForWriting.close()
     }
 
-    func request(_ id: Int, _ method: String, _ params: [String: Any]) throws -> [String: Any] {
+    /// `silenceIsAnswer` returns nil when a peer that is still running lets the request time out.
+    func request(_ id: Int, _ method: String, _ params: [String: Any], silenceIsAnswer: Bool = false) throws -> [String: Any]? {
         condition.lock(); defer { pendingID = nil; condition.unlock() }
         guard !ended else { throw HarnessSetupError("Grok Build account inspection stopped.") }
         pendingID = id
@@ -82,6 +84,7 @@ private final class GrokInspectionWire: @unchecked Sendable {
         let deadline = Date().addingTimeInterval(requestTimeout)
         while responses[id] == nil {
             guard !ended, condition.wait(until: deadline) else {
+                if silenceIsAnswer, !ended, responses[id] == nil { return nil }
                 throw HarnessSetupError("Grok Build account inspection stopped or timed out. Check grok in Terminal.")
             }
         }
