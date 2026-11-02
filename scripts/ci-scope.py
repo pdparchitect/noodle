@@ -39,6 +39,9 @@ EVERYTHING = ["checks", *SUITES]
 IGNORED = ["**.md", "docs/**", "website/**", "Scenarios/**", ".github/workflows/website.yml"]
 # The workflows, their own tests and the release scripts can break any suite or the release itself.
 EVERYWHERE = [".github/", "Tests/ReleaseAutomation/", "Tests/CoverageReporting/", "scripts/"]
+# Folders no suite builds: their own workflows test them (embed.yml for the Embed Worker), so here they
+# need only the checks.
+SEPARATE = ["Embed/"]
 # What the root package owns outside the other packages. Anything else at the top runs every suite.
 ROOT_FILES = ["Sources/", "Tests/", "Tools/", "Support/", "Package.swift", "Package.resolved", "Project.swift",
               "Tuist.swift", "VERSION"]
@@ -110,6 +113,8 @@ def affected(paths, nodes=None):
             continue
         if any(path.startswith(prefix) for prefix in EVERYWHERE):
             return list(EVERYTHING)
+        if any(path.startswith(prefix) for prefix in SEPARATE):
+            continue
         owners = {node for node in nodes if node and inside(path, node)}
         if not owners:
             if not any(path == prefix or path.startswith(prefix) for prefix in ROOT_FILES):

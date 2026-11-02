@@ -773,6 +773,9 @@ class PathScopeTests(unittest.TestCase):
             (['Computer/LocalMac/Sources/LocalMacCore/Account.swift'], ['checks', 'computer']),
             (['Computer/Images/desktop/Dockerfile'], ['checks', 'computer']),
             (['Push/Sources/PushCore/PushService.swift', 'Push/worker/src/index.ts'], ['checks', 'shared']),
+            # The Embed Worker has its own workflow; no suite builds it.
+            (['Embed/src/index.ts', 'Embed/package-lock.json'], ['checks']),
+            (['Embed/src/index.ts', 'Browser/Sources/NoodleBrowser/Tabs.swift'], ['checks', 'browser']),
             (['Sources/NoodleCore/Bot.swift'], root),
             (['Tests/NoodleAppTests/ScreenCaptureTests.swift'], root),
             (['Tools/Maps/Sources/NoodleMapsTools/Maps.swift'], root),
