@@ -322,10 +322,14 @@ public typealias NoodletColor = UIColor
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
-        // Keep the privileged page on its package origin. Remote content belongs in a browser.
+        // Keep the privileged page on its package origin. Remote content belongs in a browser, or
+        // in a frame of the page when it is a site the manifest embeds.
+        let target: WKFrameInfo? = navigationAction.targetFrame
         switch NoodletNavigation.decide(url, shouldPerformDownload: navigationAction.shouldPerformDownload,
                                         linkActivated: navigationAction.navigationType == .linkActivated,
-                                        mainFrame: Self.fromMainFrame(navigationAction)) {
+                                        mainFrame: Self.fromMainFrame(navigationAction),
+                                        sourceScheme: Self.sourceScheme(navigationAction),
+                                        inFrame: target.map { !$0.isMainFrame } ?? false, embeds: manifest.embeds) {
         case .allow: decisionHandler(.allow)
         case .download where NoodletPackageScheme.contains(url):
             decisionHandler(.cancel)
@@ -342,13 +346,16 @@ public typealias NoodletColor = UIColor
         }
     }
 
-    /// What WebKit cannot show, or is sent as an attachment, is saved rather than shown.
     public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         let disposition = (navigationResponse.response as? HTTPURLResponse)?
             .value(forHTTPHeaderField: "Content-Disposition") ?? ""
-        let attachment = disposition.lowercased().hasPrefix("attachment")
-        decisionHandler(!navigationResponse.canShowMIMEType || attachment ? .download : .allow)
+        switch NoodletNavigation.respond(to: navigationResponse.response.url, canShow: navigationResponse.canShowMIMEType,
+                                         disposition: disposition) {
+        case .allow: decisionHandler(.allow)
+        case .download: decisionHandler(.download)
+        case .openExternally, .cancel: decisionHandler(.cancel)
+        }
     }
 
     public func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
@@ -365,7 +372,8 @@ public typealias NoodletColor = UIColor
         // WebKit only asks for a window after a click, unless the page may open them itself, which it may not.
         if let url = navigationAction.request.url,
            NoodletNavigation.decide(url, shouldPerformDownload: false, linkActivated: true,
-                                    mainFrame: Self.fromMainFrame(navigationAction)) == .openExternally {
+                                    mainFrame: Self.fromMainFrame(navigationAction),
+                                    sourceScheme: Self.sourceScheme(navigationAction)) == .openExternally {
             openExternally(url)
         }
         return nil
@@ -381,6 +389,12 @@ public typealias NoodletColor = UIColor
     private static func fromMainFrame(_ action: WKNavigationAction) -> Bool {
         let source: WKFrameInfo? = action.sourceFrame
         return source?.isMainFrame ?? false
+    }
+
+    /// The scheme of the origin of the frame that started `action`, as `NoodletNavigation.decide` takes it.
+    private static func sourceScheme(_ action: WKNavigationAction) -> String? {
+        let source: WKFrameInfo? = action.sourceFrame
+        return source?.securityOrigin.protocol
     }
 
     #if os(macOS)
@@ -404,7 +418,15 @@ public typealias NoodletColor = UIColor
             case .cameraAndMicrophone: ["camera", "microphone"]
             @unknown default: ["unsupported"]
             }
-        return needed.isSubset(of: Set(manifest.permissions ?? [])) ? declaredCapture : .deny
+        return Self.mayCapture(needed, permissions: manifest.permissions, origin: origin.protocol,
+                               frame: frame.securityOrigin.protocol) ? declaredCapture : .deny
+    }
+
+    /// Whether a page may capture what `needed` names: the manifest declares it and the package
+    /// itself asks, never a frame of a site it embeds. `origin` and `frame` are the protocols of the
+    /// origin WebKit names and of the asking frame's own.
+    nonisolated static func mayCapture(_ needed: Set<String>, permissions: [String]?, origin: String, frame: String) -> Bool {
+        NoodletPackageScheme.isOrigin(origin) && NoodletPackageScheme.isOrigin(frame) && needed.isSubset(of: Set(permissions ?? []))
     }
 
     #if os(macOS)
@@ -424,13 +446,18 @@ public typealias NoodletColor = UIColor
     public func webView(_ webView: WKWebView, requestDisplayCapturePermissionFor origin: WKSecurityOrigin,
                         initiatedBy frame: WKFrameInfo, withSystemAudio: Bool,
                         decisionHandler: @escaping @convention(block) (Int) -> Void) {
-        let allowed = manifest.permissions?.contains("screen-capture") == true
-        log("permissions", "Screen capture \(allowed ? "offered to the user" : "denied; declare screen-capture in noodlet.json").")
+        let declared = manifest.permissions?.contains("screen-capture") == true
+        let allowed = Self.mayCapture(["screen-capture"], permissions: manifest.permissions, origin: origin.protocol,
+                                      frame: frame.securityOrigin.protocol)
+        log("permissions", allowed ? "Screen capture offered to the user."
+            : declared ? "Screen capture denied to a site the noodlet embeds."
+            : "Screen capture denied; declare screen-capture in noodlet.json.")
         decisionHandler(allowed ? 1 : 0)
     }
 
     // WebKit refuses a page's pointer lock, which games use to turn with the mouse, unless its app
     // agrees through this SPI. It asks only after a click in a focused page, and Escape releases it.
+    // The SPI names no frame, so the guidance has embeds sandboxed, which keeps them from asking.
     @objc(_webViewDidRequestPointerLock:completionHandler:)
     public func webView(_ webView: WKWebView, didRequestPointerLock completionHandler: @escaping @convention(block) (Bool) -> Void) {
         completionHandler(true)

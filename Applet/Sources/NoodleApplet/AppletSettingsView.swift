@@ -132,18 +132,22 @@ private struct AppletPermissionsSettingsView: View {
 
     var body: some View {
         let entries = noodletEntries(library)
-        let keys = grants.keys.sorted { noodletTitle($0, in: entries) < noodletTitle($1, in: entries) }
+        let rows = AppletPermissions.rows(grants: grants, embeds: entries.mapValues(\.package.manifest.embeddedSites))
+        let keys = rows.keys.sorted { noodletTitle($0, in: entries) < noodletTitle($1, in: entries) }
         SettingsListPanel(empty: "No noodlets have permissions.", isEmpty: keys.isEmpty) {
             ForEach(keys, id: \.self) { key in
                 SettingsListRow(
                     title: noodletTitle(key, in: entries),
-                    detail: (grants[key] ?? []).compactMap { AppletPermissions.titles[$0] }.joined(separator: ", "),
+                    detail: rows[key],
                     location: noodletLocation(key, in: entries),
                     divider: key != keys.last
                 ) {
-                    Button("Remove") {
-                        AppletPermissions.revoke(packageKey: key, defaults: .standard)
-                        grants = AppletPermissions.grants(defaults: .standard)
+                    // The sites it embeds come with it; only what the user allowed can be taken back.
+                    if grants[key] != nil {
+                        Button("Remove") {
+                            AppletPermissions.revoke(packageKey: key, defaults: .standard)
+                            grants = AppletPermissions.grants(defaults: .standard)
+                        }
                     }
                 }
             }

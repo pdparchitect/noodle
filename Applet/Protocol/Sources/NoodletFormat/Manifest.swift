@@ -27,6 +27,9 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   public var orientation: Orientation?
   /// A hex colour shown until the page paints its own, such as while it loads.
   public var backgroundColor: String?
+  /// Web sites the page may show in its frames, each an https origin such as
+  /// https://player.vimeo.com. The page itself always stays on its package.
+  public var embeds: [String]?
   public enum Layout: String, Codable, Sendable, CaseIterable {
     /// A window with a pointer, which a phone shows at desktop width.
     case desktop
@@ -98,7 +101,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
   }
   enum CodingKeys: String, CodingKey {
     case version, title, runtime, entry, summary, symbol, window, permissions, category, controls, layout, runs, theme
-    case display, orientation, backgroundColor
+    case display, orientation, backgroundColor, embeds
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -122,6 +125,57 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     if let colour = backgroundColor, !Self.isHexColour(colour) {
       throw AppletError("Unknown backgroundColor \(colour.prefix(40)). Use a hex colour such as #1d1d1f.")
     }
+    embeds = try c.decodeIfPresent([String].self, forKey: .embeds)
+  }
+  /// The sites it embeds as a person reads them: their hosts, with a port other than 443.
+  public var embeddedSites: [String] {
+    (embeds ?? []).compactMap(Self.embedOrigin).map { String($0.dropFirst("https://".count)) }
+  }
+  /// Whether its page may show `url` in a frame.
+  public func mayEmbed(_ url: URL) -> Bool { Self.mayEmbed(url, in: embeds ?? []) }
+  /// Whether `url` belongs to one of the sites `embeds` lists, by scheme, host and port, whatever
+  /// its path. A wildcard or a path never matches: each listed site is a whole https origin.
+  public static func mayEmbed(_ url: URL, in embeds: [String]) -> Bool {
+    guard let origin = origin(of: url) else { return false }
+    return embeds.contains { embedOrigin($0) == origin }
+  }
+  /// `url`'s https origin as embeds are compared: its host in lower case, and its port unless 443.
+  private static func origin(of url: URL) -> String? {
+    guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(), isSiteName(host) else { return nil }
+    return "https://" + host + (url.port.flatMap { $0 == 443 ? nil : ":\($0)" } ?? "")
+  }
+  /// An embeds entry as the origin it names, or nil unless it is a whole https site: no user,
+  /// path, query, fragment or wildcard.
+  private static func embedOrigin(_ entry: String) -> String? {
+    guard let url = URL(string: entry), let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil, ["", "/"].contains(parts.path)
+    else { return nil }
+    return origin(of: url)
+  }
+  /// A host as a name or address, with nothing that could stand for more than one.
+  private static func isSiteName(_ host: String) -> Bool {
+    !host.isEmpty && host.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") }
+  }
+  /// Says plainly what is wrong with an embeds entry that is not a whole https site.
+  private static func checkEmbed(_ entry: String) throws {
+    let text = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+    let shown = entry.prefix(80)
+    guard !text.isEmpty else { throw AppletError("An embed is empty. Use a site such as https://player.vimeo.com.") }
+    let scheme = text.range(of: "://").map { text[..<$0.lowerBound].lowercased() }
+    guard scheme == "https" else {
+      let rest = text.range(of: "://").map { text[$0.upperBound...] } ?? Substring(text)
+      let site = rest.prefix { !"/?#".contains($0) }
+      throw AppletError("Embed \(shown) must use https, such as https://\(site.prefix(80)).")
+    }
+    if text.contains("*") {
+      throw AppletError("Embed \(shown) cannot use a wildcard. List each site, such as https://player.vimeo.com.")
+    }
+    guard embedOrigin(entry) == nil else { return }
+    if let url = URL(string: text), let host = url.host?.lowercased(), isSiteName(host) {
+      let port = url.port.flatMap { $0 == 443 ? nil : ":\($0)" } ?? ""
+      throw AppletError("Embed \(shown) is not a whole site. List only https://\(host)\(port).")
+    }
+    throw AppletError("Embed \(shown) is not a site. Use one such as https://player.vimeo.com.")
   }
   public static func isHexColour(_ text: String) -> Bool {
     let digits = text.dropFirst()
@@ -152,6 +206,7 @@ public struct NoodletManifest: Codable, Sendable, Equatable {
     for permission in permissions ?? [] where !Self.knownPermissions.contains(permission) {
       throw AppletError("Unknown permission \(permission.prefix(40)). Use \(Self.knownPermissions.joined(separator: ", ")).")
     }
+    for entry in embeds ?? [] { try Self.checkEmbed(entry) }
     if let category, !Self.knownCategories.contains(category) {
       throw AppletError("Unknown category \(category.prefix(40)). Use \(Self.knownCategories.joined(separator: ", ")).")
     }

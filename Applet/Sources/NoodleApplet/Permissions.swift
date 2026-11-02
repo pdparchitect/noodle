@@ -51,6 +51,18 @@ import Speech
     }
     return grants
   }
+  /// What Permissions settings say for each noodlet listed there, by package key: what the user
+  /// allowed it, then the sites it embeds, which it shows without asking.
+  static func rows(grants: [String: [String]], embeds: [String: [String]]) -> [String: String] {
+    var rows: [String: String] = [:]
+    for key in Set(grants.keys).union(embeds.keys) {
+      let allowed = (grants[key] ?? []).compactMap { titles[$0] }.joined(separator: ", ")
+      let sites = embeds[key] ?? []
+      let lines = [allowed, sites.isEmpty ? "" : "Embeds " + sites.joined(separator: ", ")].filter { !$0.isEmpty }
+      if !lines.isEmpty { rows[key] = lines.joined(separator: "\n") }
+    }
+    return rows
+  }
   static func revoke(packageKey: String, defaults: UserDefaults) {
     defaults.removeObject(forKey: "permissions.\(packageKey)")
   }

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- A noodlet opened on your phone can show videos and pages from the sites it names, such as Vimeo players.
+
+### What to Test
+
+- Open a noodlet that embeds a Vimeo video on your phone: the video shows and plays inside the noodlet.
+
 ## [0.52.1] - 2026-11-01
 
 ### Fixed
