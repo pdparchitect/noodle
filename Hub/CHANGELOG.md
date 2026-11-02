@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-02
+
 ### Added
 
 - A plan can choose which computer types its users may make, such as Shell only. Noodle and Noodle Mobile offer them only those types, and the Hub turns down any other, also from older versions. Plans allow every type until you change them, and computers people already have keep working.

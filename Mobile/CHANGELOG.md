@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-02
+
 ### Added
 
 - A noodlet opened on your phone can show videos and pages from the sites it names, such as Vimeo players.
