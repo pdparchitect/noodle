@@ -1,0 +1,19 @@
+#:schema node_modules/wrangler/config-schema.json
+# The noodle-embed Worker: the page a noodlet iframes to show a YouTube video (src/index.ts).
+# Deployed by .github/workflows/embed.yml from the embed-production environment. It has no secrets,
+# bindings or storage.
+name = "noodle-embed"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# The usenoodle.app zone is in the same account, so DNS and the certificate come with the route.
+# Only this address: no workers.dev or preview copy of the page at another origin.
+routes = [
+  { pattern = "embed.usenoodle.app", custom_domain = true }
+]
+workers_dev = false
+preview_urls = false
+
+# Off, so Cloudflare keeps no request logs: an address names the video someone watches.
+[observability]
+enabled = false

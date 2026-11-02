@@ -143,9 +143,15 @@ public enum AppletGuidance {
         blob or a data URL asks where to save it, `<input type=file>` opens the file picker,
         and http(s) links, including target=_blank, open in the person's browser. The page
         itself never leaves its package; an iframe shows a web page only from a site listed in the
-        manifest's "embeds", whole https origins such as ["https://player.vimeo.com"], without noodle
-        (YouTube's player refuses to play there with Error 153; link to the video instead).
-        Give an embed `sandbox="allow-scripts allow-same-origin allow-presentation"`, never
+        manifest's "embeds", whole https origins such as ["https://player.vimeo.com"], without noodle.
+        YouTube's own embed addresses refuse to play in a noodlet (Error 153). To show a YouTube
+        video, list "https://embed.usenoodle.app" and "https://www.youtube-nocookie.com" in "embeds"
+        and iframe https://embed.usenoodle.app/youtube?v=VIDEO_ID (optional &t=SECONDS and
+        &autoplay=1). That page posts {source:"noodle-embed", type:"ready"|"state"|"time"|"error"}
+        to its parent and takes {source:"noodle-embed", cmd:"play"|"pause"|"mute"|"unmute"},
+        {..., cmd:"seek", t} and {..., cmd:"load", v, t} from it.
+        Give an embed `sandbox="allow-scripts allow-same-origin allow-presentation"` and
+        `allow="autoplay; fullscreen; encrypted-media; picture-in-picture"`, never
         allow-top-navigation or allow-downloads, and check event.origin in message listeners.
         File dialogs, downloads and opened links need a
         visible window and a click; showSaveFilePicker and the rest of the File System
