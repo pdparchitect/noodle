@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-03
+
 ### Added
 
 - Noodle Mobile can search every message in your conversations on the Hub, including ones your phone hasn't loaded.

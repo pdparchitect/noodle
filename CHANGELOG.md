@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-11-03
+
 ### Changed
 
 - Check for Updates now sits right under About in the app menu, with a separator before Settings.
