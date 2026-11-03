@@ -6,6 +6,16 @@
 
 - Search lists matching bots and groups first, then each message that mentions what you typed, with the words around it in bold. The Hub searches all your messages, including ones your phone hasn't loaded. A group is found by its name or by a bot in it. When what you typed is also a bot's or group's name, only the three newest mentions show until you tap Show All.
 
+### Fixed
+
+- Noodle Mobile on a Mac no longer quits when you click a search field.
+
+### What to Test
+
+- Search for a bot's name: it shows under Bots, and messages that mention it show under Messages with the name in bold. Tap Show All to see every mention.
+- Search for a word someone said long ago: the message is found even if you haven't scrolled back to it.
+- On a Mac, click the search field in the conversation list, Forward, Tools and a patch's file list: the app stays open and filters as you type.
+
 ## [0.53.0] - 2026-11-02
 
 ### Added

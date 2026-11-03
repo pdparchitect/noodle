@@ -124,7 +124,7 @@ struct ShareView: View {
                                            description: Text("Join a Noodle Hub in Noodle first."))
                 }
             }
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
+            .searchField(text: $search, placement: .navigationBarDrawer(displayMode: .always))
             .disabled(composer.isSending)
             .safeAreaInset(edge: .bottom) {
                 if composer.isSending {

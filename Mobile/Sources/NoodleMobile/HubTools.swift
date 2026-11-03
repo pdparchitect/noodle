@@ -768,7 +768,7 @@ private struct NewToolSheet: View {
                 }
             }
             .disabled(adding != nil)
-            .searchable(text: $search, prompt: "Search tools")
+            .searchField(text: $search, prompt: "Search tools")
             .navigationTitle("New Tool")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

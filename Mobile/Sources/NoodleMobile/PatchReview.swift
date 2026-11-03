@@ -245,7 +245,7 @@ struct PatchReviewScreen: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .searchable(text: $model.filter, prompt: "Filter Files")
+            .searchField(text: $model.filter, prompt: "Filter Files")
             .navigationTitle(model.patch.title(filename: request.attachment.filename))
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: String.self) { path in

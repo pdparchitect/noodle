@@ -2088,8 +2088,9 @@ struct AgentsView: View {
                 .listStyle(.plain)
             }
         }
-        // Over the list rather than in its place: replacing the view the search field belongs to makes UIKit lay
-        // its search out again, which asks for the screen and stops the app on a Mac.
+        // Emptied while searching, the list would shrink, and the results over it with it.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Over the list rather than in its place, so the search field keeps the list it belongs to.
         .overlay {
             if let search = listing.search {
                 // One list, whichever style is chosen, as on the Mac.
@@ -2123,8 +2124,7 @@ struct AgentsView: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Search")
-        .searchFocused($searchFocused)
+        .searchField(text: $search, focus: $searchFocused)
         .task(id: search) { await findMentions(rows) }
         .overlay {
             if searching && listing.bots.isEmpty && listing.groups.isEmpty && mentions?.shown.isEmpty == true && !rows.isEmpty {

@@ -90,7 +90,7 @@ struct ForwardSheet: View {
                     }
                 }
             }
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
+            .searchField(text: $search, placement: .navigationBarDrawer(displayMode: .always))
             .disabled(sending)
             .navigationTitle("Forward")
             .navigationBarTitleDisplayMode(.inline)
