@@ -74,7 +74,10 @@ import XCTest
 
         var record = AppletRequest(.recordStart)
         record.sessionID = sessionID
-        record.duration = 4
+        // Ask for exactly the three seconds recorded. A film stopped once its time is up finishes
+        // the frames a busy machine still owes it; one stopped early is cut where filming has
+        // reached, and its sound with it, which can leave less than three seconds.
+        record.duration = 3
         _ = try await runtime.handle(record, identity: AppletBuildIdentity.current.noodleID).checked()
         let clock = ContinuousClock(), start = clock.now
         try await during(session)
