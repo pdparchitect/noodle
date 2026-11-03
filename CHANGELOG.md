@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Search in the sidebar lists matching bots and groups first, then each message that mentions what you typed, with the words around it in bold. A group is found by its name or by a bot in it. When what you typed is also a bot's or group's name, only the three newest mentions show until you choose Show All. Search results use this list whatever sidebar style is chosen.
+
 ### Fixed
 
 - An archived bot is no longer listed under a harness's Needs attention with Kick and New Session, and no longer marks the harness as needing attention.

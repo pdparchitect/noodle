@@ -626,6 +626,22 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         return page
     }
 
+    /// Each message the user can read that says the term, newest first, as the Mac's sidebar finds them.
+    /// Read off the main actor, like a page.
+    public func searchMessages(_ request: LinkMessageSearch, for user: HubUser) async throws -> [LinkMessageMatch] {
+        guard let search = ConversationSearch(request.term) else { return [] }
+        let agents = try repository.loadAgents()
+        let readable = try repository.loadConversations().filter { isReadable($0, by: user, among: agents) }.map(\.id)
+        let repository = repository, limit = min(max(1, request.limit), LinkMessageSearch.maximumLimit)
+        return try await Task.detached(priority: .userInitiated) {
+            let conversations = try readable.map { id in (id: id, messages: try repository.loadMessages(conversationID: id)) }
+            return search.messageMatches(in: conversations, limit: limit) { message in
+                (message.id, message.createdAt,
+                 message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
+            }
+        }.value
+    }
+
     private func page(_ request: LinkMessagePage) throws -> LinkMessages {
         try Self.page(request, from: repository, pixelSizes: &pixelSizes)
     }
@@ -1788,13 +1804,17 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private func ownedConversation(_ id: UUID, by user: HubUser) throws -> (conversation: BotConversation, bots: [AgentRecord]) {
         let agents = try repository.loadAgents()
         guard let conversation = try repository.loadConversations().first(where: { $0.id == id }),
-              person(of: conversation, among: agents) == user.id else {
+              isReadable(conversation, by: user, among: agents) else {
             throw LinkError("There is no such conversation.")
         }
-        let bots = conversation.participantIDs.compactMap { id in agents.first { $0.id == id } }
+        return (conversation, conversation.participantIDs.compactMap { id in agents.first { $0.id == id } })
+    }
+
+    private func isReadable(_ conversation: BotConversation, by user: HubUser, among agents: [AgentRecord]) -> Bool {
+        guard person(of: conversation, among: agents) == user.id else { return false }
         // An archived bot is its owner's alone until they bring it back.
-        if conversation.guest != nil, bots.contains(where: { $0.archivedAt != nil }) { throw LinkError("There is no such conversation.") }
-        return (conversation, bots)
+        return conversation.guest == nil
+            || !conversation.participantIDs.contains { id in agents.first { $0.id == id }?.archivedAt != nil }
     }
 
     /// Whether the user can open a conversation now, for what they opened of it earlier.

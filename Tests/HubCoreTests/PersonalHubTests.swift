@@ -481,6 +481,25 @@ import XCTest
         XCTAssertNil(unmuted.first { $0.id == group.id }?.notifications)
     }
 
+    /// The phone searches every conversation it can open on the Hub, not only what it has fetched, and
+    /// never one it cannot open; markdown and the app's own notices are left out.
+    func testSearchingMessagesFindsWhatThePersonCanOpenNewestFirst() async throws {
+        let (f, made) = try await fixture(bots: ["Kai", "Eli"])
+        let conversations = try f.repository.loadConversations()
+        let kai = try XCTUnwrap(conversations.first { $0.participantIDs == [made[0].id] })
+        let eli = try XCTUnwrap(conversations.first { $0.participantIDs == [made[1].id] })
+        let guest = try f.repository.createGuestConversation(with: made[0], guest: ConversationGuest(id: UUID(), name: "Grace"))
+        _ = try f.repository.sendAgentMessage(agentID: made[0].id, conversationID: kai.id, body: "A **violet** notebook")
+        _ = try f.repository.sendAgentMessage(agentID: made[1].id, conversationID: eli.id, body: "Nothing here")
+        _ = try f.repository.sendUserMessage(conversationID: eli.id, body: "Violet ink, please")
+        _ = try f.repository.sendAgentMessage(agentID: made[0].id, conversationID: guest.id, body: "Violet for Grace")
+        guard case .messageMatches(let matches) = try await f.device.request(.searchMessages(LinkMessageSearch(term: " VIOLET ")))
+        else { return XCTFail("no matches") }
+        XCTAssertEqual(Set(matches.map(\.snippet)), ["Violet ink, please", "A violet notebook"])
+        XCTAssertEqual(Set(matches.map(\.conversationID)), [eli.id, kai.id])
+        XCTAssertEqual(matches.map(\.createdAt), matches.map(\.createdAt).sorted(by: >))
+    }
+
     /// A long conversation, well past what one answer may carry, arrives newest first and page by
     /// page as the person scrolls back; a device reading onward gets the rest the same way.
     func testALongConversationArrivesPageByPage() async throws {

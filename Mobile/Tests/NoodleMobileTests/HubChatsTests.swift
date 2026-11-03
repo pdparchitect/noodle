@@ -151,6 +151,8 @@ private actor FakeHub {
     var mostPagesInFlight = 0
     /// How long each page takes, as over a slow link.
     var pageDelay: Duration = .zero
+    /// The terms the phone searched the Hub for.
+    var searches: [String] = []
 
     func slowPages(_ delay: Duration) {
         pageDelay = delay
@@ -225,6 +227,14 @@ private actor FakeHub {
             }
             let end = min(page.before ?? messages.count, messages.count), start = max(0, end - page.limit)
             return .messages(LinkMessages(messages: Array(messages[start..<end]), count: messages.count, start: start))
+        case .success(.searchMessages(let request)):
+            searches.append(request.term)
+            let search = ConversationSearch(request.term)
+            return .messageMatches(messages.compactMap { message in
+                search?.snippet(of: message.body).map {
+                    LinkMessageMatch(conversationID: message.conversationID, messageID: message.id, createdAt: message.createdAt, snippet: $0)
+                }
+            })
         case .success(.pushTopic(let registration)):
             pushTopics.append(registration.topic)
             return .done
@@ -932,8 +942,8 @@ private actor RecordedSubscriptions: PushSubscriptions {
         #expect(order("other", members: []) == ["Atlas", "Nova", "Scout", "Zed"])
     }
 
-    /// As in the Mac sidebar: by name, description or what was said, ignoring case and accents.
-    @Test func searchFindsAgentsByNameDescriptionAndMessages() async throws {
+    /// As in the Mac sidebar: bots by name or description, ignoring case and accents; what was said is the Hub's to search.
+    @Test func searchFindsAgentsByNameAndDescription() async throws {
         let hub = FakeHub()
         let (chats, server) = try await paired(to: hub)
         defer { server.stop() }
@@ -942,13 +952,22 @@ private actor RecordedSubscriptions: PushSubscriptions {
         var draft = LinkBotDraft(name: "Zoë", provider: "codex")
         draft.publicDescription = "Keeps the garden"
         let zoe = try await chats.create(draft)
-        let cases: [(String, [UUID])] = [
-            ("zoe", [zoe.id]), ("SCOUT", [scout.id]), ("  garden ", [zoe.id]), ("hello", [scout.id]),
-            ("nobody", []), (" \n ", [zoe.id, scout.id])
-        ]
+        let cases: [(String, [UUID])] = [("zoe", [zoe.id]), ("SCOUT", [scout.id]), ("  garden ", [zoe.id]), ("hello", []), ("nobody", [])]
         for (query, expected) in cases {
-            #expect(chats.sortedThreads.filter { chats.matches($0, search: query) }.map(\.id) == expected, "\(query)")
+            let search = try #require(ConversationSearch(query))
+            #expect(search.sections(chats.sortedThreads.map { chats.searchCandidate($0, id: $0.id) }).bots == expected, "\(query)")
         }
+    }
+
+    /// The phone asks the Hub, which searches every conversation, and hands back what it found.
+    @Test func searchingMessagesAsksTheHub() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let matches = try await chats.searchMessages(try #require(ConversationSearch("hello")))
+        #expect(matches.map(\.snippet) == ["Hello"])
+        #expect(await hub.searches == ["hello"])
     }
 
     @Test func anEditedAgentShowsItsNewDetails() async throws {

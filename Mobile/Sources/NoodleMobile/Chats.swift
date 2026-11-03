@@ -667,13 +667,19 @@ final class ChatsCacheFile: @unchecked Sendable {
         }
     }
 
-    /// As the Mac sidebar searches: the name, the description or anything said that this phone holds,
-    /// ignoring case and accents. A blank search matches everything.
-    func matches(_ conversation: some HubConversation, search: String) -> Bool {
-        let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return term.isEmpty || conversation.name.localizedStandardContains(term)
-            || conversation.about.localizedStandardContains(term)
-            || messages(of: conversation).contains { $0.body.localizedStandardContains(term) }
+    /// A bot or group as the search sees it, as the Mac's sidebar does: a group is found by its bots' names too.
+    func searchCandidate<ID>(_ thread: HubThread, id: ID) -> ConversationSearch.Candidate<ID> {
+        .init(id: id, isGroup: thread.group != nil, name: thread.name, about: thread.about,
+              members: thread.group.map { members(of: $0).map(\.draft.name) } ?? [])
+    }
+
+    /// Each message in the person's conversations on this Hub that says the term, newest first. The Hub
+    /// searches, so it finds what this phone has not fetched.
+    func searchMessages(_ search: ConversationSearch) async throws -> [LinkMessageMatch] {
+        guard case .messageMatches(let matches) = try await pairing.request(.searchMessages(LinkMessageSearch(term: search.term))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        return matches
     }
 
     /// The bots and groups a space the person made holds: its pins first, in the order they were pinned, then newest
@@ -1779,6 +1785,10 @@ struct AgentsView: View {
     @State private var creating = false
     @State private var creatingGroup = false
     @State private var search = ""
+    /// Messages that say what was searched for, as the Hubs found them, for the search they belong to.
+    @State private var mentions: (term: String, found: [Mention])?
+    /// Show All under the mentions, until the search changes.
+    @State private var showsAllMentions = false
     /// Whether the search field has the keyboard, as Search Conversations gives it.
     @FocusState private var searchFocused: Bool
     @State private var editing: Row?
@@ -1791,6 +1801,13 @@ struct AgentsView: View {
         let chats: HubChats
         let thread: HubThread
         let id: ChatLink
+    }
+
+    /// A message found by a search, in the row of its conversation.
+    private struct Mention: Identifiable {
+        let row: Row
+        let match: LinkMessageMatch
+        var id: UUID { match.messageID }
     }
 
     private struct SpaceNaming {
@@ -1920,28 +1937,73 @@ struct AgentsView: View {
 
     /// The rows as the list shows them, in its sections.
     private struct Listing {
-        var searching = false
-        var found: [Row] = []
+        /// While searching, as on the Mac: the bots and groups that match, then each message that does.
+        var search: ConversationSearch?
+        var bots: [Row] = []
+        var groups: [Row] = []
         var pinned: [Row] = []
         var unread: [Row] = []
         var rest: [Row] = []
 
+        var searching: Bool { search != nil }
         /// Top to bottom, as Next and Previous Conversation go through them.
-        var order: [ChatLink] { (pinned + unread + rest).map(\.id) }
+        var order: [ChatLink] { (searching ? bots + groups : pinned + unread + rest).map(\.id) }
     }
 
     private func listing(_ rows: [Row]) -> Listing {
-        // As in Messages: pinned bots in circles above the rest, and one plain list of matches while searching.
-        var listing = Listing(searching: !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        listing.found = rows.filter { $0.chats.matches($0.thread, search: search) }
-        listing.pinned = listing.searching ? [] : listing.found.filter(isPinned)
-        let others = listing.searching ? listing.found : listing.found.filter { !isPinned($0) }
-        let order = listing.searching ? .newestFirst : ConversationOrder(rawValue: conversationOrder) ?? .standard
+        var listing = Listing(search: ConversationSearch(search))
+        if let search = listing.search {
+            let newest = rows.sorted { recency($0) > recency($1) }
+            let byID = Dictionary(newest.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let sections = search.sections(newest.map { $0.chats.searchCandidate($0.thread, id: $0.id) })
+            listing.bots = sections.bots.compactMap { byID[$0] }
+            listing.groups = sections.groups.compactMap { byID[$0] }
+            return listing
+        }
+        // As in Messages: pinned bots in circles above the rest.
+        listing.pinned = rows.filter(isPinned)
+        let others = rows.filter { !isPinned($0) }
+        let order = ConversationOrder(rawValue: conversationOrder) ?? .standard
         let isUnread = { (row: Row) in row.chats.countsAsUnread(row.thread) }
         let unread = order.unread(others, isUnread: isUnread)
         listing.unread = unread
         listing.rest = order.arranged(others.filter { row in !unread.contains { $0.id == row.id } }, isUnread: isUnread)
         return listing
+    }
+
+    private func recency(_ row: Row) -> Date {
+        row.chats.latestMessage(of: row.thread)?.createdAt ?? row.thread.createdAt
+    }
+
+    /// The mentions to list for this search, once its Hubs have answered; nil while they have not.
+    private func shownMentions(_ listing: Listing, rows: [Row]) -> (shown: [Mention], hidden: Int)? {
+        guard let search = listing.search, let mentions, mentions.term == search.term else { return nil }
+        let besideNames = rows.contains { search.matches($0.thread.name) }
+        return search.shown(mentions.found, besideNames: besideNames, showingAll: showsAllMentions)
+    }
+
+    /// Asks each Hub shown for the messages that say the term once typing pauses; a newer search cancels this one.
+    private func findMentions(_ rows: [Row]) async {
+        showsAllMentions = false
+        guard let search = ConversationSearch(search) else { mentions = nil; return }
+        try? await Task.sleep(for: .milliseconds(250))
+        guard !Task.isCancelled else { return }
+        let hubs = Dictionary(grouping: rows) { ObjectIdentifier($0.chats) }
+        var found: [Mention] = []
+        await withTaskGroup(of: [Mention].self) { group in
+            for hubRows in hubs.values {
+                guard let chats = hubRows.first?.chats else { continue }
+                let byConversation = Dictionary(hubRows.map { ($0.thread.conversationID, $0) }, uniquingKeysWith: { first, _ in first })
+                group.addTask {
+                    // A Hub out of reach finds nothing; the others still answer.
+                    let matches = (try? await chats.searchMessages(search)) ?? []
+                    return matches.compactMap { match in byConversation[match.conversationID].map { Mention(row: $0, match: match) } }
+                }
+            }
+            for await mentions in group { found += mentions }
+        }
+        guard !Task.isCancelled else { return }
+        mentions = (search.term, found.sorted { $0.match.createdAt > $1.match.createdAt })
     }
 
     /// What the keyboard's commands do here.
@@ -1976,7 +2038,8 @@ struct AgentsView: View {
 
     private func list(_ rows: [Row]) -> some View {
         let listing = listing(rows)
-        let (searching, found, pinned, unread, rest) = (listing.searching, listing.found, listing.pinned, listing.unread, listing.rest)
+        let (searching, pinned, unread, rest) = (listing.searching, listing.pinned, listing.unread, listing.rest)
+        let mentions = shownMentions(listing, rows: rows)
         return Group {
             if ConversationListStyle(rawValue: listStyle) == .icons {
                 // As on the Mac: each section a grid of pictures, with what each bot is doing under its name. Not a
@@ -2025,6 +2088,32 @@ struct AgentsView: View {
                 .listStyle(.plain)
             }
         }
+        // Over the list rather than in its place: replacing the view the search field belongs to makes UIKit lay
+        // its search out again, which asks for the screen and stops the app on a Mac.
+        .overlay {
+            if let search = listing.search {
+                // One list, whichever style is chosen, as on the Mac.
+                List {
+                    if !listing.bots.isEmpty { Section("Bots") { agentRows(listing.bots) } }
+                    if !listing.groups.isEmpty { Section("Groups") { agentRows(listing.groups) } }
+                    if let mentions, !mentions.shown.isEmpty {
+                        Section("Messages") {
+                            ForEach(mentions.shown) { mention in
+                                rowLink(mention.row, MentionRow(chats: mention.row.chats, thread: mention.row.thread,
+                                                                match: mention.match, snippet: search.highlighted(mention.match.snippet)))
+                                .contextMenu { menu(for: mention.row) } preview: { ConversationPeek(chats: mention.row.chats, thread: mention.row.thread) }
+                            }
+                            if mentions.hidden > 0 {
+                                Button("Show All \(mentions.shown.count + mentions.hidden)") { showsAllMentions = true }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color(uiColor: .systemBackground))
+            }
+        }
         .readingVerticalBar($verticalBar)
         // The saved chats still show while a Hub cannot be reached, so this says so above them.
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -2036,8 +2125,9 @@ struct AgentsView: View {
         }
         .searchable(text: $search, prompt: "Search")
         .searchFocused($searchFocused)
+        .task(id: search) { await findMentions(rows) }
         .overlay {
-            if searching && found.isEmpty && !rows.isEmpty {
+            if searching && listing.bots.isEmpty && listing.groups.isEmpty && mentions?.shown.isEmpty == true && !rows.isEmpty {
                 ContentUnavailableView.search(text: search)
             } else if rows.isEmpty {
                 if chats.isEmpty || chats.contains(where: { !$0.isLoaded && $0.error == nil }) {
@@ -2227,7 +2317,7 @@ struct AgentsView: View {
     /// A row pushes its conversation over the list in one column; in two it selects it, shown beside the list
     /// and marked in it, as on the Mac.
     @ViewBuilder
-    private func rowLink(_ row: Row, _ label: AgentRow) -> some View {
+    private func rowLink(_ row: Row, _ label: some View & Equatable) -> some View {
         if layout == .split {
             let selected = navigation.selection == row.id
             Button { navigation.open(row.id, in: layout) } label: { label.equatable().contentShape(.rect) }
@@ -2528,6 +2618,34 @@ struct MoreSheet: View {
 
 /// Equatable, as the Mac's sidebar rows are: a message or a status change draws again only the rows it changes.
 /// What it reads of `chats` itself it observes on its own.
+/// A message found by a search: the conversation it is in, when it was said and the words around the term.
+private struct MentionRow: View, Equatable {
+    let chats: HubChats
+    let thread: HubThread
+    let match: LinkMessageMatch
+    let snippet: AttributedString
+
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.chats === b.chats && a.thread == b.thread && a.match == b.match && a.snippet == b.snippet
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ThreadAvatar(chats: chats, thread: thread, size: 48)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(thread.name).font(.headline).lineLimit(1)
+                    Spacer()
+                    Text(match.createdAt, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Text(snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct AgentRow: View, Equatable {
     let chats: HubChats
     let thread: HubThread

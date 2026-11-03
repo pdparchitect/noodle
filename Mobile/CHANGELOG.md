@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Search lists matching bots and groups first, then each message that mentions what you typed, with the words around it in bold. The Hub searches all your messages, including ones your phone hasn't loaded. A group is found by its name or by a bot in it. When what you typed is also a bot's or group's name, only the three newest mentions show until you tap Show All.
+
 ## [0.53.0] - 2026-11-02
 
 ### Added

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Noodle Mobile can search every message in your conversations on the Hub, including ones your phone hasn't loaded.
+
 ### Fixed
 
 - An archived bot is no longer listed under a harness's Needs attention with Kick and New Session, and no longer marks the harness as needing attention.

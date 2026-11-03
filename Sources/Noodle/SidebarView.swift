@@ -47,13 +47,11 @@ private struct SidebarEmptyState: View {
     @Environment(NoodleStore.self) private var store
 
     var body: some View {
-        if !store.conversations.isEmpty && store.filteredConversations.isEmpty {
-            if store.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                // A space with nothing in it yet.
-                ContentUnavailableView("No Bots", systemImage: "square.stack")
-            } else {
-                ContentUnavailableView.search(text: store.searchText)
-            }
+        if let search = store.sidebarSearch {
+            if search.isEmpty { ContentUnavailableView.search(text: store.searchText) }
+        } else if !store.conversations.isEmpty && store.filteredConversations.isEmpty {
+            // A space with nothing in it yet.
+            ContentUnavailableView("No Bots", systemImage: "square.stack")
         }
     }
 }
@@ -69,6 +67,13 @@ private struct SidebarList: View {
     let searchIsFocused: Bool
     let focusComposer: () -> Void
     let focusRequest: UUID?
+    /// The message picked in the search results, so its row shows selected rather than its conversation's.
+    @State private var pickedMention: UUID?
+
+    /// A row of the search results: a bot or group, or one message in one.
+    private enum SearchPick: Hashable {
+        case conversation(UUID), mention(UUID)
+    }
 
     var body: some View {
         @Bindable var store = store
@@ -76,7 +81,9 @@ private struct SidebarList: View {
         let showsIcons = ConversationListStyle(rawValue: style) == .icons
         let sections = store.sidebarSections(ConversationOrder(rawValue: conversationOrder) ?? .standard)
         Group {
-            if showsIcons {
+            if let search = store.sidebarSearch {
+                searchResults(search)
+            } else if showsIcons {
                 // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -89,17 +96,11 @@ private struct SidebarList: View {
                     .padding(.bottom, 10)
                 }
             } else {
-                List(selection: Binding(get: { store.selectedConversationID }, set: { id in
-                    // A conversation clicked starts in its input; one reached with the arrow keys leaves the list focused.
-                    // Asked here, since the views showing it learn of the selection only after the click.
-                    let clicked = NSApp.currentEventIsClick
-                    if id != store.selectedConversationID { store.selectedConversationID = id }
-                    if clicked, id != nil { DispatchQueue.main.async(execute: focusComposer) }
-                })) {
-                    section("Pinned", sections.pinned)
-                    section("Unread", sections.unread)
-                    section("Bots", sections.bots)
-                    section("Groups", sections.groups)
+                List(selection: Binding(get: { store.selectedConversationID }, set: select)) {
+                    section("Pinned", sections.pinned) { $0 }
+                    section("Unread", sections.unread) { $0 }
+                    section("Bots", sections.bots) { $0 }
+                    section("Groups", sections.groups) { $0 }
                 }
                 .listStyle(.sidebar)
             }
@@ -115,8 +116,63 @@ private struct SidebarList: View {
         }
     }
 
+    /// A conversation clicked starts in its input; one reached with the arrow keys leaves the list focused.
+    /// Asked here, since the views showing it learn of the selection only after the click.
+    private func select(_ id: UUID?) {
+        let clicked = NSApp.currentEventIsClick
+        if id != store.selectedConversationID { store.selectedConversationID = id }
+        if clicked, id != nil { DispatchQueue.main.async(execute: focusComposer) }
+    }
+
+    /// One list, whichever style the sidebar has: the bots and groups that match, then each message that does.
+    private func searchResults(_ search: NoodleStore.SidebarSearch) -> some View {
+        List(selection: Binding<SearchPick?>(get: {
+            guard let id = store.selectedConversationID else { return nil }
+            if let pickedMention, search.mentions.contains(where: { $0.messageID == pickedMention && $0.conversationID == id }) {
+                return .mention(pickedMention)
+            }
+            return .conversation(id)
+        }, set: { pick in
+            switch pick {
+            case .conversation(let id):
+                pickedMention = nil
+                select(id)
+            case .mention(let messageID):
+                pickedMention = messageID
+                select(search.mentions.first { $0.messageID == messageID }?.conversationID)
+            case nil:
+                select(nil)
+            }
+        })) {
+            section("Bots", search.bots) { SearchPick.conversation($0) }
+            section("Groups", search.groups) { SearchPick.conversation($0) }
+            if !search.mentions.isEmpty, let term = ConversationSearch(store.searchText) {
+                Section("Messages") {
+                    ForEach(search.mentions, id: \.messageID) { match in
+                        if let conversation = store.conversations.first(where: { $0.id == match.conversationID }) {
+                            MentionRow(participants: store.shownParticipants(for: conversation), isGroup: conversation.kind == .group,
+                                       title: store.title(for: conversation), timestamp: SidebarTimestamp.text(for: match.createdAt),
+                                       snippet: term.highlighted(match.snippet))
+                                .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
+                                .listRowSeparator(.visible, edges: .bottom)
+                                .listRowSeparatorTint(Color.primary.opacity(0.12))
+                                .tag(SearchPick.mention(match.messageID))
+                                .contextMenu { menu(for: conversation) }
+                        }
+                    }
+                    if search.hiddenMentions > 0 {
+                        Button("Show All \(search.mentions.count + search.hiddenMentions)") { store.showsAllMentions = true }
+                            .buttonStyle(.link)
+                            .selectionDisabled()
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
     @ViewBuilder
-    private func section(_ title: String, _ conversations: [BotConversation]) -> some View {
+    private func section<Tag: Hashable>(_ title: String, _ conversations: [BotConversation], tag: @escaping (UUID) -> Tag) -> some View {
         if !conversations.isEmpty {
             Section(title) {
                 ForEach(conversations) { conversation in
@@ -128,7 +184,7 @@ private struct SidebarList: View {
                         .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
                         .listRowSeparator(.visible, edges: .bottom)
                         .listRowSeparatorTint(Color.primary.opacity(0.12))
-                        .tag(conversation.id)
+                        .tag(tag(conversation.id))
                         .contextMenu { menu(for: conversation) }
                 }
             }
@@ -375,6 +431,40 @@ private struct ConversationRow: View, Equatable {
         let muted = content.isMuted ? "Muted, " : ""
         let paused = pause.map { "\($0), " } ?? ""
         return "\(unread)\(muted)\(content.title), \(paused)\(detail)"
+    }
+}
+
+/// A message found by a search: the conversation it is in, when it was said and the words around the term.
+private struct MentionRow: View {
+    let participants: [AgentRecord]
+    let isGroup: Bool
+    let title: String
+    let timestamp: String
+    let snippet: AttributedString
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ConversationAvatar(participants: participants, isGroup: isGroup, size: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(timestamp)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                }
+                Text(snippet)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(height: 66)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -95,7 +95,7 @@ import XCTest
         XCTAssertEqual(f.store.composerUnavailableReason(for: group), "This group is archived")
 
         f.store.searchText = "Project"
-        XCTAssertTrue(f.store.filteredConversations.isEmpty)
+        XCTAssertEqual(f.store.sidebarSearch?.groups.isEmpty, true)
         f.store.searchText = ""
 
         XCTAssertTrue(f.store.setArchived(false, conversationID: group.id))

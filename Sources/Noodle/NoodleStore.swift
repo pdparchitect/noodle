@@ -128,7 +128,16 @@ final class NoodleStore {
         didSet { updateDockBadge() }
     }
     var selectedConversationID: UUID?
-    var searchText = ""
+    var searchText = "" {
+        didSet { if searchText != oldValue { findMentions() } }
+    }
+    /// Mentions of what was searched for, found off the main thread for the search they belong to.
+    private var mentionMatches: (term: String, matches: [LinkMessageMatch])?
+    private(set) var mentionSearch: Task<Void, Never>?
+    /// How long typing must pause before what was said is searched.
+    var mentionSearchDelay: Duration = .milliseconds(250)
+    /// Show All under the mentions, until the search changes.
+    var showsAllMentions = false
     private var drafts = ConversationDrafts()
     var draft: String {
         get { selectedConversationID.map { drafts[$0].text } ?? "" }
@@ -637,21 +646,69 @@ final class NoodleStore {
         shownSpaceConversationIDs?.contains(conversationID) != false
     }
 
+    /// The bots and groups the sidebar lists: those of the shown space that are not archived.
     var filteredConversations: [BotConversation] {
-        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let space = shownSpaceConversationIDs
-        let conversations = conversations.filter { !isArchived($0) && space?.contains($0.id) != false }
-        guard !term.isEmpty else { return conversations }
+        return conversations.filter { !isArchived($0) && space?.contains($0.id) != false }
+    }
 
-        return conversations.filter { conversation in
-            title(for: conversation).localizedCaseInsensitiveContains(term) ||
-                (conversation.publicDescription?.localizedCaseInsensitiveContains(term) ?? false) ||
-                participants(for: conversation).contains {
-                    $0.displayName.localizedCaseInsensitiveContains(term)
-                } ||
-                messages(for: conversation).contains {
-                    $0.body.localizedCaseInsensitiveContains(term)
+    /// What the sidebar shows while searching, whatever its style: bots and groups by name, then each message
+    /// that says the term.
+    struct SidebarSearch {
+        var bots: [BotConversation] = []
+        var groups: [BotConversation] = []
+        var mentions: [LinkMessageMatch] = []
+        /// How many more mentions Show All would list.
+        var hiddenMentions = 0
+        var isFindingMentions = false
+
+        var isEmpty: Bool { bots.isEmpty && groups.isEmpty && mentions.isEmpty && !isFindingMentions }
+    }
+
+    /// Nil while nothing is searched for.
+    var sidebarSearch: SidebarSearch? {
+        guard let search = ConversationSearch(searchText) else { return nil }
+        let listed = filteredConversations.sorted { lastMessageDate(of: $0) > lastMessageDate(of: $1) }
+        let byID = Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0) })
+        let sections = search.sections(listed.map { conversation in
+            ConversationSearch.Candidate(id: conversation.id, isGroup: conversation.kind == .group, name: title(for: conversation),
+                about: conversation.publicDescription ?? "",
+                members: conversation.kind == .group ? participants(for: conversation).map(\.displayName) : [])
+        })
+        var result = SidebarSearch(bots: sections.bots.compactMap { byID[$0] }, groups: sections.groups.compactMap { byID[$0] })
+        guard let found = mentionMatches, found.term == search.term else {
+            result.isFindingMentions = true
+            return result
+        }
+        let mentions = found.matches.filter { byID[$0.conversationID] != nil }
+        let besideNames = listed.contains { search.matches(title(for: $0)) }
+        (result.mentions, result.hiddenMentions) = search.shown(mentions, besideNames: besideNames, showingAll: showsAllMentions)
+        return result
+    }
+
+    /// Searches what was said in the listed bots and groups once typing pauses, off the main thread; a newer
+    /// search cancels this one.
+    private func findMentions() {
+        mentionSearch?.cancel()
+        showsAllMentions = false
+        guard let search = ConversationSearch(searchText) else {
+            mentionMatches = nil
+            mentionSearch = nil
+            return
+        }
+        let conversations = filteredConversations.map { (id: $0.id, messages: messages(for: $0)) }
+        let delay = mentionSearchDelay
+        mentionSearch = Task { [weak self] in
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            guard !Task.isCancelled else { return }
+            let matches = await Task.detached(priority: .userInitiated) {
+                search.messageMatches(in: conversations, limit: LinkMessageSearch.maximumLimit) { message in
+                    (message.id, message.createdAt,
+                     message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
                 }
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.mentionMatches = (search.term, matches)
         }
     }
 

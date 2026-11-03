@@ -114,11 +114,6 @@ import XCTest
         XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id, f.directB.id])
         XCTAssertEqual(f.store.directConversations.map(\.id), [f.directA.id])
         XCTAssertTrue(f.store.groupConversations.isEmpty)
-        f.store.searchText = "Grace"
-        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id, f.directB.id])
-        f.store.searchText = "Launch"
-        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id])
-        f.store.searchText = ""
         try f.repository.savePinnedConversationIDs(f.store.pinnedConversationIDs + [UUID()])
         f.store.reload()
         XCTAssertEqual(f.store.pinnedConversationIDs, [group.id, f.directB.id])
@@ -250,23 +245,59 @@ import XCTest
         XCTAssertEqual(section.groups.map(\.id), [])
     }
 
-    func testSearchFindsTitlesDescriptionsParticipantsAndMessageContent() throws {
+    func testSearchListsBotsAndGroupsByNameAndEachMentionWithItsText() async throws {
         let f = try fixture(), group = try f.group(name: "Launch team", description: "Quarterly planning")
+        f.store.setPinned(true, conversationID: group.id)
+        f.store.mentionSearchDelay = .zero
         _ = try f.repository.sendUserMessage(conversationID: f.directB.id, body: "A **violet** notebook")
+        _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Ask Grace first")
         f.store.refreshTranscripts()
-        let cases: [(String, Set<UUID>)] = [
-            ("launch", [group.id]), ("QUARTERLY", [group.id]), ("  Ada  ", [f.directA.id, group.id]),
-            ("violet", [f.directB.id]), ("unknown word", []), (" \n ", Set(f.store.conversations.map(\.id)))
+        let cases: [(String, [UUID], [UUID])] = [
+            ("launch", [], [group.id]), ("QUARTERLY", [], [group.id]), ("  Ada  ", [f.directA.id], [group.id]),
+            ("violet", [], []), ("unknown word", [], [])
         ]
-        for (query, expected) in cases {
+        for (query, bots, groups) in cases {
             f.store.searchText = query
-            XCTAssertEqual(Set(f.store.filteredConversations.map(\.id)), expected, query)
+            let search = try XCTUnwrap(f.store.sidebarSearch, query)
+            XCTAssertEqual(search.bots.map(\.id), bots, query)
+            XCTAssertEqual(search.groups.map(\.id), groups, query)
         }
+        f.store.searchText = " \n "
+        XCTAssertNil(f.store.sidebarSearch)
+
+        // What was said is found off the main thread, with the words around it.
+        f.store.searchText = "violet"
+        XCTAssertEqual(f.store.sidebarSearch?.isFindingMentions, true)
+        await f.store.mentionSearch?.value
+        XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.snippet), ["A violet notebook"])
+        XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.conversationID), [f.directB.id])
+        XCTAssertEqual(f.store.sidebarSearch?.isFindingMentions, false)
+
+        // Grace is a bot, so her mentions wait below her.
         f.store.searchText = "Grace"
-        XCTAssertEqual(f.store.directConversations.map(\.id), [f.directB.id])
-        XCTAssertEqual(f.store.groupConversations.map(\.id), [group.id])
-        XCTAssertEqual(f.store.preview(for: f.directA), "No messages yet")
+        await f.store.mentionSearch?.value
+        XCTAssertEqual(f.store.sidebarSearch?.bots.map(\.id), [f.directB.id])
+        XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.conversationID), [f.directA.id])
+
+        // The list itself stays as it is while searching.
+        XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id])
+        XCTAssertEqual(Set(f.store.directConversations.map(\.id)), [f.directA.id, f.directB.id])
         XCTAssertEqual(f.store.preview(for: f.directB), "A violet notebook")
+    }
+
+    func testOnlyTheNewestMentionsShowBesideAMatchingNameUntilAllAreAsked() async throws {
+        let f = try fixture()
+        f.store.mentionSearchDelay = .zero
+        for index in 1...5 { _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Grace \(index)") }
+        f.store.refreshTranscripts()
+        f.store.searchText = "Grace"
+        await f.store.mentionSearch?.value
+        XCTAssertEqual(f.store.sidebarSearch?.mentions.count, 3)
+        XCTAssertEqual(f.store.sidebarSearch?.hiddenMentions, 2)
+        f.store.showsAllMentions = true
+        XCTAssertEqual(f.store.sidebarSearch?.mentions.count, 5)
+        f.store.searchText = "Grac"
+        XCTAssertFalse(f.store.showsAllMentions, "A new search starts short again")
     }
     func testFailedAddedMemberInboxWriteRollsBackEarlierWritesAndRetryPreservesHistoryBoundary() throws {
         let f = try fixture(), third = try f.runtime.agent("Linus")

@@ -717,6 +717,8 @@ import os
             return .messages(try hubBots().messages(in: conversationID, after: after, for: try user(key)))
         case .messagePage(let page):
             return .messages(try await hubBots().page(page, for: try user(key)))
+        case .searchMessages(let search):
+            return .messageMatches(try await hubBots().searchMessages(search, for: try user(key)))
         case .send(let message):
             return .message(try hubBots().send(message.body, id: message.id, attachmentIDs: message.attachmentIDs,
                                                in: message.conversationID, for: try user(key)))

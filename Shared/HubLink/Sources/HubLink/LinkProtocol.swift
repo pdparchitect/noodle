@@ -145,6 +145,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// person scrolls back, or onward from where a device got to. Card pictures are left out;
     /// ask for each with `linkPreview` as its card comes into view.
     case messagePage(LinkMessagePage)
+    /// Each message in this user's conversations that says a term, newest first, with the text around it.
+    /// Answered with `messageMatches`.
+    case searchMessages(LinkMessageSearch)
     /// Sends as this user. Attachments are uploaded first.
     case send(LinkOutgoingMessage)
     /// One piece of a file for a conversation, starting at `offset`. Pieces go in order.
@@ -628,6 +631,7 @@ public enum LinkResponse: Codable, Equatable, Sendable {
     case groups([LinkGroup])
     case group(LinkGroup)
     case messages(LinkMessages)
+    case messageMatches([LinkMessageMatch])
     case message(LinkMessage)
     case connections([LinkConnection])
     case connection(LinkConnection)
