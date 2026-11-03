@@ -6,8 +6,6 @@ NSArray<NSDictionary *> *NLMCopySessions(void);
 NSDictionary *NLMCopyCurrentSession(void);
 int NLMCreateSession(NSData *payload, uint32_t *identifier);
 BOOL NLMReleaseSession(uint32_t identifier);
-/// Publishes the dynamic store's console user, as loginwindow does at login.
-BOOL NLMPublishConsoleUser(NSString *name, uid_t uid, gid_t gid, NSArray<NSDictionary *> *sessions);
 BOOL NLMPIDBelongsToUser(pid_t pid, uid_t uid);
 /// Re-exec this standard-user helper so TCC checks its own signed app identity.
 /// Returns zero when already responsible for itself, or an errno on failure.

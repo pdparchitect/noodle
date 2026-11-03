@@ -8,27 +8,44 @@ final class ConsoleUserTests: XCTestCase {
     private let background: [String: Any] = ["kCGSSessionIDKey": 296, "kCGSSessionUserIDKey": 503, "kCGSSessionGroupIDKey": 20,
         "kCGSSessionUserNameKey": "noodle_2836c01de6574432b316", "kCGSSessionOnConsoleKey": false]
 
-    func testBackgroundLoginPublishedAsConsoleUserIsReplacedByTheOwner() {
-        let repair = LocalMacConsoleUser.repair(published: 503, sessions: [background, owner], managed: [503])
-        XCTAssertEqual(repair, LocalMacConsoleUser(name: "pdp", uid: 501, gid: 20))
+    private func needsRepublish(_ published: UInt32?, _ sessions: [[String: Any]]) -> Bool {
+        LocalMacConsoleUser.needsRepublish(published: published, sessions: sessions, managed: [503])
     }
-    func testStaleRecordAfterTheBackgroundSessionEndedIsReplaced() {
-        XCTAssertEqual(LocalMacConsoleUser.repair(published: 503, sessions: [owner], managed: [503])?.uid, 501)
+
+    func testBackgroundLoginPublishedAsConsoleUserNeedsTheOwnerRepublished() {
+        XCTAssertTrue(needsRepublish(503, [background, owner]))
+    }
+    func testStaleRecordAfterTheBackgroundSessionEndedNeedsTheOwnerRepublished() {
+        XCTAssertTrue(needsRepublish(503, [owner]))
     }
     func testCorrectRecordIsLeftAlone() {
-        XCTAssertNil(LocalMacConsoleUser.repair(published: 501, sessions: [background, owner], managed: [503]))
+        XCTAssertFalse(needsRepublish(501, [background, owner]))
     }
     func testAnotherPersonsFastUserSwitchIsLeftAlone() {
-        XCTAssertNil(LocalMacConsoleUser.repair(published: 502, sessions: [background, owner], managed: [503]))
+        XCTAssertFalse(needsRepublish(502, [background, owner]))
     }
     func testManagedAccountBroughtOnConsoleIsLeftAlone() {
         var onConsole = background; onConsole["kCGSSessionOnConsoleKey"] = true
         var away = owner; away["kCGSSessionOnConsoleKey"] = false
-        XCTAssertNil(LocalMacConsoleUser.repair(published: 503, sessions: [onConsole, away], managed: [503]))
+        XCTAssertFalse(needsRepublish(503, [onConsole, away]))
     }
-    func testNothingIsPublishedWithoutAnOnConsoleUser() {
+    func testNothingIsRepublishedWithoutAnOnConsoleUser() {
         var away = owner; away["kCGSSessionOnConsoleKey"] = false
-        XCTAssertNil(LocalMacConsoleUser.repair(published: 503, sessions: [background, away], managed: [503]))
-        XCTAssertNil(LocalMacConsoleUser.repair(published: nil, sessions: [background, owner], managed: [503]))
+        XCTAssertFalse(needsRepublish(503, [background, away]))
+        XCTAssertFalse(needsRepublish(nil, [background, owner]))
+    }
+
+    func testFirstConfigdRestartRunsAtOnce() {
+        XCTAssertEqual(LocalMacConfigdRestart().wait(now: Date(timeIntervalSince1970: 100)), 0)
+    }
+    func testConfigdRestartWithinTheIntervalWaitsForTheRest() {
+        var restart = LocalMacConfigdRestart()
+        restart.ran(at: Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(restart.wait(now: Date(timeIntervalSince1970: 104)), LocalMacConfigdRestart.interval - 4, accuracy: 0.001)
+    }
+    func testConfigdRestartAfterTheIntervalRunsAtOnce() {
+        var restart = LocalMacConfigdRestart()
+        restart.ran(at: Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(restart.wait(now: Date(timeIntervalSince1970: 100 + LocalMacConfigdRestart.interval)), 0)
     }
 }

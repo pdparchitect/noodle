@@ -6,6 +6,10 @@
 
 - Check for Updates now sits right under About in the app menu, with a separator before Settings.
 
+### Fixed
+
+- Starting a Local Mac no longer leaves macOS treating it as the person at the screen, which kept AirPods, the camera, VPNs and display settings tied to the Local Mac account. Networking pauses for a moment while the Mac switches back.
+
 ## [0.33.7] - 2026-11-02
 
 ### Fixed

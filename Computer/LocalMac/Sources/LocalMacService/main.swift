@@ -250,6 +250,8 @@ private final class Service: NSObject, NSXPCListenerDelegate {
     private var updateMonitor: DispatchSourceTimer?
     private var sessionMonitor: DispatchSourceTimer?
     private var consoleStore: SCDynamicStore?
+    private var configdRestart = LocalMacConfigdRestart()
+    private var configdRestartPending = false
     var orphans = LocalMacOrphanSweep()
     var restarting: Bool { retirement.restarting }
     var consoleMetadata: ConsoleMetadata?
@@ -308,16 +310,29 @@ private final class Service: NSObject, NSXPCListenerDelegate {
         consoleStore = store
         queue.async { self.repairConsoleUser() }
     }
-    /// Runs on the lifecycle queue.
+    /// Runs on the lifecycle queue. Restarting configd makes the on-console loginwindow
+    /// republish its user (see LocalMacConsoleUser); launchd brings configd straight back.
     func repairConsoleUser() {
         var published: uid_t = 0
         let current = SCDynamicStoreCopyConsoleUser(nil, &published, nil) == nil ? nil : UInt32(published)
-        let list = sessions()
-        guard let user = LocalMacConsoleUser.repair(published: current, sessions: list, managed: Set(accounts.all().map(\.uid))) else { return }
-        if NLMPublishConsoleUser(user.name, user.uid, user.gid, list) {
-            log.notice("Restored console user \(user.uid) after a background login.")
-        } else {
-            log.error("Cannot restore console user \(user.uid) after a background login.")
+        guard LocalMacConsoleUser.needsRepublish(published: current, sessions: sessions(), managed: Set(accounts.all().map(\.uid))) else { return }
+        let wait = configdRestart.wait(now: Date())
+        guard wait == 0 else {
+            guard !configdRestartPending else { return }
+            configdRestartPending = true
+            queue.asyncAfter(deadline: .now() + wait) { self.configdRestartPending = false; self.repairConsoleUser() }
+            return
+        }
+        configdRestart.ran(at: Date())
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = ["kill", "SIGTERM", "system/com.apple.configd"]
+        do {
+            try process.run(); process.waitUntilExit()
+            guard process.terminationStatus == 0 else { throw LocalMacError("launchctl exited with \(process.terminationStatus)") }
+            log.notice("Restarted configd so the on-console user replaces background console user \(published).")
+        } catch {
+            log.error("Cannot restart configd to replace background console user \(published): \(error.localizedDescription, privacy: .public)")
         }
     }
     /// A desktop helper exits when the app's connection closes, but that connection bypasses

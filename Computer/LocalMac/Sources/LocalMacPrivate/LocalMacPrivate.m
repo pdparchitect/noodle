@@ -1,6 +1,5 @@
 #import "LocalMacPrivate.h"
 #include <dlfcn.h>
-#import <SystemConfiguration/SystemConfiguration.h>
 #include <libproc.h>
 #include <unistd.h>
 #include <spawn.h>
@@ -53,12 +52,6 @@ BOOL NLMReleaseSession(uint32_t identifier) {
     void (*release)(uint32_t) = library() ? dlsym(library(), "SLSSessionReleaseSessionID") : NULL;
     if (geteuid() != 0 || !release || !identifier) return NO;
     release(identifier); return YES;
-}
-BOOL NLMPublishConsoleUser(NSString *name, uid_t uid, gid_t gid, NSArray<NSDictionary *> *sessions) {
-    // loginwindow's own call. configd lets only root publish the console user.
-    Boolean (*publish)(SCDynamicStoreRef, const char *, uid_t, gid_t, CFArrayRef) = dlsym(RTLD_DEFAULT, "SCDynamicStoreSetConsoleInformation");
-    if (geteuid() != 0 || !publish || !name.length) return NO;
-    return publish(NULL, name.UTF8String, uid, gid, (__bridge CFArrayRef)sessions);
 }
 BOOL NLMPIDBelongsToUser(pid_t pid, uid_t uid) {
     struct proc_bsdinfo info = {0};
