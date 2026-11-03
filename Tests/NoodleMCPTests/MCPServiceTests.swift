@@ -258,6 +258,29 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertNil(vault.load(record.id)?.accessToken)
         XCTAssertNotNil(vault.load(record.id)?.clientID, "Retry must preserve registration even if authorization was cancelled")
     }
+    func testRefusedSignInShowsTheServiceReason() async throws {
+        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        func refuse(_ items: [URLQueryItem], sameState: Bool = true) async -> String {
+            do {
+                try await service(vault: TestVault()).signIn(record, redirectURI: redirect) { url in
+                    let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+                    var response = URLComponents(string: query.first { $0.name == "redirect_uri" }!.value!)!
+                    response.queryItems = items + [sameState ? query.first { $0.name == "state" }! : .init(name: "state", value: "forged")]
+                    return response.url!
+                }
+                XCTFail("Refused sign-in accepted")
+            } catch { return error.localizedDescription }
+            return ""
+        }
+        let described = await refuse([.init(name: "error", value: "invalid_scope"),
+                                      .init(name: "error_description", value: "Scope \"introspection\" is not allowed.\n")])
+        XCTAssertEqual(described, "The service refused the sign-in: Scope \"introspection\" is not allowed. (invalid_scope)")
+        let bare = await refuse([.init(name: "error", value: "access_denied")])
+        XCTAssertEqual(bare, "The service refused the sign-in (access_denied).")
+        let forged = await refuse([.init(name: "error", value: "access_denied")], sameState: false)
+        XCTAssertEqual(forged, MCPServiceError.invalidCallback.localizedDescription)
+        XCTAssertTrue(FixtureProtocol.state.tokenResources.isEmpty, "A refused sign-in must not exchange a code")
+    }
     func testPaginatedDiscoveryStructuredResultsAndRevocation() async throws {
         let vault = TestVault()
         let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)

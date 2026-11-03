@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - An archived bot is no longer listed under a harness's Needs attention with Kick and New Session, and no longer marks the harness as needing attention.
+- When a tool service such as PostHog turns down a sign-in, Settings › Tools now shows the service's reason instead of saying the sign-in response could not be verified.
 
 ## [0.80.4] - 2026-11-02
 

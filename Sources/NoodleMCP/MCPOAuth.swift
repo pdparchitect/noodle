@@ -219,8 +219,14 @@ struct MCPOAuth {
             throw MCPServiceError.invalidCallback
         }
         let values = Dictionary(grouping: actual.queryItems ?? [], by: \.name)
-        guard values["state"]?.count == 1, values["state"]?.first?.value == state,
-              values["error"] == nil, values["code"]?.count == 1,
+        guard values["state"]?.count == 1, values["state"]?.first?.value == state else { throw MCPServiceError.invalidCallback }
+        if let refusal = values["error"] {
+            // Only a callback carrying our state may put the service's words on screen.
+            guard refusal.count == 1, let code = Self.displayable(refusal.first?.value) else { throw MCPServiceError.invalidCallback }
+            throw MCPServiceError.authorizationRefused(code: code,
+                reason: values["error_description"]?.count == 1 ? Self.displayable(values["error_description"]?.first?.value) : nil)
+        }
+        guard values["code"]?.count == 1,
               let code = values["code"]?.first?.value, !code.isEmpty else { throw MCPServiceError.invalidCallback }
         var form = [
             "grant_type": "authorization_code", "code": code, "code_verifier": verifier,
@@ -229,6 +235,14 @@ struct MCPOAuth {
         if configuration?.usesResourceIndicator ?? true { form["resource"] = credentials.resource.absoluteString }
         let response = try await request(credentials.tokenEndpoint, form: form)
         return try updated(credentials, response: response, configuration: configuration)
+    }
+
+    /// One trimmed line of at most 300 characters, or nil when nothing printable is left.
+    static func displayable(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let line = value.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) ? " " : String($0) }.joined()
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return line.isEmpty ? nil : String(line.prefix(300))
     }
 
     func refresh(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration? = nil) async throws -> MCPCredentials {

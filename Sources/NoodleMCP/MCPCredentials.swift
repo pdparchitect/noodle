@@ -67,6 +67,8 @@ struct MCPCredentialStore: MCPCredentialStorage {
 public enum MCPServiceError: LocalizedError, Sendable {
     case credentialStorage, signInRequired, registrationUnsupported, invalidMetadata, invalidCallback
     case network(Int), timedOut, revoked, responseTooLarge
+    /// The service's own `error` and optional `error_description` from a callback whose state matched.
+    case authorizationRefused(code: String, reason: String?)
     case keychain(Int32)
     public var errorDescription: String? {
         switch self {
@@ -76,6 +78,8 @@ public enum MCPServiceError: LocalizedError, Sendable {
         case .registrationUnsupported: return "This MCP does not support automatic OAuth client registration."
         case .invalidMetadata: return "The server returned unsupported or inconsistent OAuth metadata."
         case .invalidCallback: return "The sign-in response could not be verified. Please try connecting again."
+        case .authorizationRefused(let code, nil): return "The service refused the sign-in (\(code))."
+        case .authorizationRefused(let code, let reason?): return "The service refused the sign-in: \(reason) (\(code))"
         case .network(401): return "The service rejected this sign-in (HTTP 401). Connect again to renew access."
         case .network(403): return "The service refused access (HTTP 403). Its administrator needs to check that the MCP API is enabled and this account has permission to use it."
         case .network(404): return "The MCP endpoint was not found (HTTP 404). Check the connection URL."
