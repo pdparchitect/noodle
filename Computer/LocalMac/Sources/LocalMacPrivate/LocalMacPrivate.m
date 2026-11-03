@@ -53,6 +53,20 @@ BOOL NLMReleaseSession(uint32_t identifier) {
     if (geteuid() != 0 || !release || !identifier) return NO;
     release(identifier); return YES;
 }
+pid_t NLMProcessIDForExecutable(NSString *path) {
+    int capacity = proc_listallpids(NULL, 0) + 64;
+    if (capacity <= 64) return 0;
+    pid_t *pids = calloc((size_t)capacity, sizeof(pid_t));
+    if (!pids) return 0;
+    int count = proc_listallpids(pids, capacity * (int)sizeof(pid_t));
+    pid_t found = 0;
+    char buffer[PROC_PIDPATHINFO_MAXSIZE];
+    for (int i = 0; i < count && !found; i++) {
+        if (pids[i] > 0 && proc_pidpath(pids[i], buffer, sizeof(buffer)) > 0 && strcmp(buffer, path.fileSystemRepresentation) == 0) found = pids[i];
+    }
+    free(pids);
+    return found;
+}
 BOOL NLMPIDBelongsToUser(pid_t pid, uid_t uid) {
     struct proc_bsdinfo info = {0};
     return pid > 0 && proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) == sizeof(info) && info.pbi_uid == uid;

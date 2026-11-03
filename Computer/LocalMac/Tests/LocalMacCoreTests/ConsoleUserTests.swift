@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import LocalMacCore
+import LocalMacPrivate
 
 final class ConsoleUserTests: XCTestCase {
     private let owner: [String: Any] = ["kCGSSessionIDKey": 257, "kCGSSessionUserIDKey": 501, "kCGSSessionGroupIDKey": 20,
@@ -35,6 +36,10 @@ final class ConsoleUserTests: XCTestCase {
         XCTAssertFalse(needsRepublish(nil, [background, owner]))
     }
 
+    func testConfigdIsFoundByItsExecutable() {
+        XCTAssertGreaterThan(NLMProcessIDForExecutable("/usr/libexec/configd"), 1)
+        XCTAssertEqual(NLMProcessIDForExecutable("/usr/libexec/no-such-daemon"), 0)
+    }
     func testFirstConfigdRestartRunsAtOnce() {
         XCTAssertEqual(LocalMacConfigdRestart().wait(now: Date(timeIntervalSince1970: 100)), 0)
     }

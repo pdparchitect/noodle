@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.33.9] - 2026-11-03
+
+### Fixed
+
+- Starting a Local Mac now really keeps you as the person at the screen. In 0.33.8 the switch back never happened, so AirPods, the camera and VPNs still followed the Local Mac account.
+
 ## [0.33.8] - 2026-11-03
 
 ### Changed

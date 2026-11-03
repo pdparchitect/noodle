@@ -324,15 +324,12 @@ private final class Service: NSObject, NSXPCListenerDelegate {
             return
         }
         configdRestart.ran(at: Date())
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        process.arguments = ["kill", "SIGTERM", "system/com.apple.configd"]
-        do {
-            try process.run(); process.waitUntilExit()
-            guard process.terminationStatus == 0 else { throw LocalMacError("launchctl exited with \(process.terminationStatus)") }
+        // launchctl refuses to signal Apple's daemons under SIP; a root kill(2) is allowed.
+        let pid = NLMProcessIDForExecutable("/usr/libexec/configd")
+        if pid > 1, kill(pid, SIGTERM) == 0 {
             log.notice("Restarted configd so the on-console user replaces background console user \(published).")
-        } catch {
-            log.error("Cannot restart configd to replace background console user \(published): \(error.localizedDescription, privacy: .public)")
+        } else {
+            log.error("Cannot restart configd (pid \(pid), errno \(errno)) to replace background console user \(published).")
         }
     }
     /// A desktop helper exits when the app's connection closes, but that connection bypasses

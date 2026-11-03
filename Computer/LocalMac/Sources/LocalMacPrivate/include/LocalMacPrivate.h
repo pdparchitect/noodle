@@ -7,6 +7,8 @@ NSDictionary *NLMCopyCurrentSession(void);
 int NLMCreateSession(NSData *payload, uint32_t *identifier);
 BOOL NLMReleaseSession(uint32_t identifier);
 BOOL NLMPIDBelongsToUser(pid_t pid, uid_t uid);
+/// The first running process whose executable is `path`, or 0 when none is.
+pid_t NLMProcessIDForExecutable(NSString *path);
 /// Re-exec this standard-user helper so TCC checks its own signed app identity.
 /// Returns zero when already responsible for itself, or an errno on failure.
 int NLMClaimDesktopResponsibility(NSString *executable, NSString *sessionPayload, BOOL reexecuted);
