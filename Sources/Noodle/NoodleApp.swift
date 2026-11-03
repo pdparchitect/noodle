@@ -142,7 +142,8 @@ struct NoodleApp: App {
                 Divider()
                 ConnectCommand(store: store)
             }
-            CommandGroup(after: .appSettings) {
+            // Sits with About so the group separator falls between it and Settings.
+            CommandGroup(after: .appInfo) {
                 CheckForUpdatesButton()
             }
             // "After Settings" draws above it; this section sits between Settings and Services.

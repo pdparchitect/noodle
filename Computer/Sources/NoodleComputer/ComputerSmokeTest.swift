@@ -21,6 +21,11 @@ import SwiftUI
               let settings = menu.items.firstIndex(where: { $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command) }) else {
             throw ComputerError("Application menu must expose About, Settings (⌘,) and Check for Updates")
         }
+        guard let update = titles.firstIndex(of: "Check for Updates"), update > 0, update + 1 < settings,
+              titles[update - 1] == "About \(ComputerAppIdentity.name)",
+              menu.items[(update + 1)..<settings].allSatisfy({ $0.isSeparatorItem }) else {
+            throw ComputerError("Check for Updates must follow About, with a separator before Settings")
+        }
         menu.performActionForItem(at: settings)
         try await Task.sleep(for: .milliseconds(800))
         guard let window = NSApp.windows.first(where: {

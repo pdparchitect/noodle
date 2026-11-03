@@ -58,11 +58,11 @@ struct NoodleBrowserApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             SidebarCommands()
-            CommandGroup(after: .appSettings) { BrowserCheckForUpdatesButton() }
             CommandGroup(replacing: .appInfo) {
                 Button("About \(BrowserBuildIdentity.current.appName)") {
                     NSApp.orderFrontStandardAboutPanel(options: [.applicationName: BrowserBuildIdentity.current.appName])
                 }
+                BrowserCheckForUpdatesButton()
             }
             CommandGroup(replacing: .help) {
                 Button("\(BrowserBuildIdentity.current.appName) Help") {

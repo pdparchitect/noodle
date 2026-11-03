@@ -44,11 +44,11 @@ struct NoodleAppletApp: App {
     .defaultSize(width: 1080, height: 720)
     .windowToolbarStyle(.unified(showsTitle: false))
     .commands {
-      CommandGroup(after: .appSettings) { AppletCheckForUpdatesButton() }
       CommandGroup(replacing: .appInfo) {
         Button("About \(AppletBuildIdentity.current.appName)") {
           NSApp.orderFrontStandardAboutPanel(options: [.applicationName: AppletBuildIdentity.current.appName])
         }
+        AppletCheckForUpdatesButton()
       }
       CommandGroup(replacing: .help) {
         Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }

@@ -42,6 +42,11 @@ import SwiftUI
             appMenu.update()
             guard appMenu.items.contains(where: { $0.title == "Check for Updates" }),
                   let settings = appMenu.items.firstIndex(where: { $0.keyEquivalent == "," }) else { throw BrowserError("Missing suite Settings or Check for Updates commands.") }
+            guard let update = appMenu.items.firstIndex(where: { $0.title == "Check for Updates" }), update > 0, update + 1 < settings,
+                  appMenu.items[update - 1].title == "About \(BrowserBuildIdentity.current.appName)",
+                  appMenu.items[(update + 1)..<settings].allSatisfy(\.isSeparatorItem) else {
+                throw BrowserError("Check for Updates must follow About, with a separator before Settings.")
+            }
             guard NSApp.mainMenu?.items.contains(where: { $0.title == "Browser" }) == true,
                   NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true,
                   NSApp.mainMenu?.items.contains(where: { $0.title == "Help" }) == true else { throw BrowserError("Missing standard browser/window/help menus.") }

@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Check for Updates now sits right under About in the app menu, with a separator before Settings.
 - Search in the sidebar lists matching bots and groups first, then each message that mentions what you typed, with the words around it in bold. A group is found by its name or by a bot in it. When what you typed is also a bot's or group's name, only the three newest mentions show until you choose Show All. Search results use this list whatever sidebar style is chosen.
 
 ### Fixed

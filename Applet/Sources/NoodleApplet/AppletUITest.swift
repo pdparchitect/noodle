@@ -234,7 +234,8 @@ import AppletCore
             throw AppletError(
                 "Application menu must expose About, Settings (⌘,) and Check for Updates")
         }
-        guard let update = titles.firstIndex(of: "Check for Updates"), update < settings,
+        guard let update = titles.firstIndex(of: "Check for Updates"), update > 0, update + 1 < settings,
+            titles[update - 1] == "About \(AppletBuildIdentity.current.appName)",
             menu.items[(update + 1)..<settings].allSatisfy({ $0.isSeparatorItem }),
             let help = NSApp.mainMenu?.items.first(where: { $0.title == "Help" })?.submenu,
             help.items.contains(where: { $0.title == "\(AppletBuildIdentity.current.appName) Help" })

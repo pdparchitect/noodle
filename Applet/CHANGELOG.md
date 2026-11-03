@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Check for Updates now sits right under About in the app menu, with a separator before Settings.
+
 ## [0.34.0] - 2026-11-02
 
 ### Added

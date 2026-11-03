@@ -34,11 +34,11 @@ struct NoodleComputerApp: App {
     .defaultSize(width: 1080, height: 720)
     .windowToolbarStyle(.unified(showsTitle: false))
     .commands {
-      CommandGroup(after: .appSettings) { ComputerCheckForUpdatesButton() }
       CommandGroup(replacing: .appInfo) {
         Button("About \(ComputerAppIdentity.name)") {
           NSApplication.shared.orderFrontStandardAboutPanel(options: [.applicationName: ComputerAppIdentity.name])
         }
+        ComputerCheckForUpdatesButton()
       }
       CommandGroup(replacing: .help) {
         Button("\(ComputerAppIdentity.name) Help") {
