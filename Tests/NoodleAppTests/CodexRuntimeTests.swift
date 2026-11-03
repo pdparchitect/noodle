@@ -124,6 +124,9 @@ import XCTest
         try await f.wait { wire.count("initialize") == 1 }; try wire.reply("initialize")
         try await f.wait { wire.count("thread/start") == 1 }
         try wire.reply("thread/start", result: ["thread": ["id": "unsaved"]])
+        // The reply is parsed off the main actor, so a fixed number of yields can run out before it
+        // is handled. Wait for the failure, then give any further startup work a chance to show.
+        try await f.wait { p.snapshot.phase == .failed }
         await f.drain()
         XCTAssertEqual(p.snapshot.phase, .failed)
         XCTAssertEqual(wire.count("thread/name/set"), 0)
