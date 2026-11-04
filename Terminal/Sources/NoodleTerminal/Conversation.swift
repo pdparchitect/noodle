@@ -15,9 +15,6 @@ struct ConversationView: View {
     let leave: @MainActor () -> Void
     /// A letter typed outside the message field starts a message with it.
     let typing: @MainActor @Sendable (KeyPress) -> KeyPressResult
-    @State private var attachPath = ""
-    @State private var attachProblem: String?
-
     /// How far Page Up and Page Down move.
     private static let page = 12
 
@@ -46,7 +43,8 @@ struct ConversationView: View {
                     if offset.y < state.offset.y { state.followsNewest = false }
                     state.offset = offset
                 })) {
-                    VStack(alignment: .leading, spacing: 0) {
+                    // Lazy: only the bubbles in view are built, so a long conversation costs no more each frame than a short one.
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         if chats.hasEarlier(thread) {
                             Text("Earlier messages: Load Earlier Messages in Control-K").foregroundStyle(.secondary).padding(.bottom, 1)
                         }
@@ -97,7 +95,7 @@ struct ConversationView: View {
                 }
             }
             Divider()
-            composer
+            Composer(row: row, app: app, state: state, focus: focus, leave: leave)
         }
         .onAppear { chats.markRead(thread) }
     }
@@ -141,6 +139,22 @@ struct ConversationView: View {
         case .failed: "Needs a Kick"
         }
     }
+}
+
+/// The line to write on, apart from the messages, so typing draws only this line again and not every bubble.
+struct Composer: View {
+    let row: TerminalHubs.Row
+    let app: AppState
+    let state: ConversationState
+    var focus: FocusState<Focus?>.Binding
+    let leave: @MainActor () -> Void
+    @State private var attachPath = ""
+    @State private var attachProblem: String?
+
+    private var chats: HubChats { row.chats }
+    private var thread: HubThread { row.thread }
+
+    var body: some View { composer }
 
     @ViewBuilder private var composer: some View {
         if let reason = chats.composerUnavailableReason(for: thread) {

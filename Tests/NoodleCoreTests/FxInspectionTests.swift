@@ -106,6 +106,62 @@ final class FxInspectionTests: XCTestCase {
         }
     }
 
+    func testTeamsListWithoutChangingTheSelectedTeam() throws {
+        let (executable, state, log) = try teamsFixture(selected: "acme")
+        let teams = try FxInspection.teams(executable: executable, environment: ["STATE": state.path, "COMMAND_LOG": log.path])
+        XCTAssertEqual(teams, [FxTeam(name: "Personal", slug: "me", isSelected: false),
+                               FxTeam(name: "Acme (Labs)", slug: "acme", isSelected: true)])
+        XCTAssertEqual(try String(contentsOf: state, encoding: .utf8), "acme")
+        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), "teams <>\n")
+    }
+
+    func testSelectingATeamAnswersWithItsNumberFromTheCurrentList() throws {
+        let (executable, state, log) = try teamsFixture(selected: "acme")
+        let teams = try FxInspection.selectTeam("me", executable: executable,
+                                                environment: ["STATE": state.path, "COMMAND_LOG": log.path])
+        XCTAssertEqual(teams.filter(\.isSelected).map(\.slug), ["me"])
+        XCTAssertEqual(try String(contentsOf: state, encoding: .utf8), "me")
+        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), "teams <>\nteams <1>\n")
+    }
+
+    func testSelectingAnUnlistedTeamChangesNothing() throws {
+        let (executable, state, log) = try teamsFixture(selected: "acme")
+        XCTAssertThrowsError(try FxInspection.selectTeam("gone", executable: executable,
+                                                         environment: ["STATE": state.path, "COMMAND_LOG": log.path]))
+        XCTAssertEqual(try String(contentsOf: state, encoding: .utf8), "acme")
+        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), "teams <>\n")
+    }
+
+    func testUnrecognizedTeamsOutputFails() throws {
+        let executable = try fixture(#"printf '%s\n' "$OUTPUT""#)
+        for output in ["", "Select a Vercel team for AI Gateway:", "  1. No slug here",
+                       "  1. One (one) (default)\n  2. Two (two) (default)", "  2. Skipped (two)"] {
+            XCTAssertThrowsError(try FxInspection.teams(executable: executable, environment: ["OUTPUT": output]), output)
+        }
+    }
+
+    /// Prints FX 0.0.16's `teams` dialogue: the list, then a prompt whose empty answer keeps the selection.
+    private func teamsFixture(selected: String) throws -> (URL, URL, URL) {
+        let state = root.appendingPathComponent("team"), log = root.appendingPathComponent("commands.log")
+        try Data(selected.utf8).write(to: state)
+        let executable = try fixture(#"""
+        [ "$*" = teams ] || exit 41
+        current=$(cat "$STATE")
+        printf '\nSelect a Vercel team for AI Gateway:\nModel requests will use the selected team.\n\n'
+        mark() { [ "$current" = "$1" ] && printf ' (default)'; }
+        printf '  1. Personal (me)%s\n' "$(mark me)"
+        printf '  2. Acme (Labs) (acme)%s\n' "$(mark acme)"
+        printf 'Team [%s]: ' "$([ "$current" = me ] && echo 1 || echo 2)"
+        read -r answer
+        printf 'teams <%s>\n' "$answer" >> "$COMMAND_LOG"
+        case "$answer" in 1) current=me ;; 2) current=acme ;; '') ;; *) exit 3 ;; esac
+        printf '%s' "$current" > "$STATE"
+        name=$([ "$current" = me ] && echo Personal || echo 'Acme (Labs)')
+        printf 'Selected Vercel team: %s (%s).\n' "$name" "$current"
+        """#)
+        return (executable, state, log)
+    }
+
     func testMissingExecutableThrows() {
         XCTAssertThrowsError(try FxInspection.status(executable: root.appendingPathComponent("missing"), environment: [:]))
     }

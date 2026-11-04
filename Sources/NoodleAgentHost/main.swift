@@ -788,6 +788,19 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func fxTeams(profileID: String, executablePath: String, selecting slug: String?,
+                 withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let account = try self.profileAccount(profileID, executablePath: executablePath)
+                guard account.provider == .fx else { throw HostError("Only FX sends model requests through a Vercel team.") }
+                let teams = try slug.map { try FxInspection.selectTeam($0, executable: account.executable, environment: account.environment) }
+                    ?? FxInspection.teams(executable: account.executable, environment: account.environment)
+                reply(try JSONEncoder().encode(teams), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func codexModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {

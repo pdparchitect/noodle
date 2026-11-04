@@ -1,6 +1,19 @@
 import Foundation
 
-/// Fixed read-only FX commands; never returns raw configuration or credentials.
+/// A Vercel team FX can send model requests through.
+public struct FxTeam: Codable, Equatable, Hashable, Sendable {
+    public let name: String
+    public let slug: String
+    public let isSelected: Bool
+
+    public init(name: String, slug: String, isSelected: Bool) {
+        self.name = name
+        self.slug = slug
+        self.isSelected = isSelected
+    }
+}
+
+/// Fixed FX commands, read-only apart from choosing a team; never returns raw configuration or credentials.
 public enum FxInspection {
     public static func status(executable: URL, environment: [String: String]) throws -> (authenticated: Bool, model: String?) {
         let data = try run(executable: executable, arguments: ["status", "--json"], environment: environment)
@@ -17,12 +30,42 @@ public enum FxInspection {
         return try FxProtocol.models(from: data, defaultModel: current.model)
     }
 
-    private static func run(executable: URL, arguments: [String], environment: [String: String]) throws -> Data {
+    /// `fx teams` has no machine-readable form. It lists the teams and asks for a
+    /// number; with no answer it keeps the selected team.
+    public static func teams(executable: URL, environment: [String: String]) throws -> [FxTeam] {
+        let output = String(decoding: try run(executable: executable, arguments: ["teams"], environment: environment), as: UTF8.self)
+        guard let teams = FxProtocol.teams(from: output) else {
+            throw HarnessSetupError("FX listed its teams in a way Noodle does not recognize. Choose the team with fx teams in Terminal.")
+        }
+        return teams
+    }
+
+    /// Answers with the team's number in the list as it stands, then checks FX's confirmation.
+    public static func selectTeam(_ slug: String, executable: URL, environment: [String: String]) throws -> [FxTeam] {
+        let teams = try teams(executable: executable, environment: environment)
+        guard let index = teams.firstIndex(where: { $0.slug == slug }) else {
+            throw HarnessSetupError("That team is no longer available to this sign-in.")
+        }
+        let output = String(decoding: try run(executable: executable, arguments: ["teams"], environment: environment,
+                                              input: Data("\(index + 1)\n".utf8)), as: UTF8.self)
+        guard output.components(separatedBy: .newlines).contains(where: {
+            $0.contains("Selected Vercel team: ") && $0.hasSuffix(" (\(slug)).")
+        }) else { throw HarnessSetupError("FX did not confirm the team change. Check it with fx teams in Terminal.") }
+        return teams.map { FxTeam(name: $0.name, slug: $0.slug, isSelected: $0.slug == slug) }
+    }
+
+    private static func run(executable: URL, arguments: [String], environment: [String: String], input: Data? = nil) throws -> Data {
         let process = Process(), output = Pipe(), finished = DispatchSemaphore(value: 0)
         BrowserlessLaunch.configure(process, executable: executable, arguments: arguments)
         process.environment = environment
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
-        process.standardInput = FileHandle.nullDevice
+        if let input {
+            // Small enough for the pipe's buffer; written before launch so an early exit cannot raise SIGPIPE here.
+            let answer = Pipe()
+            try answer.fileHandleForWriting.write(contentsOf: input)
+            try answer.fileHandleForWriting.close()
+            process.standardInput = answer
+        } else { process.standardInput = FileHandle.nullDevice }
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         let capture = BoundedOutput()

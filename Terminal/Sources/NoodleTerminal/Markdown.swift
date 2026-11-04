@@ -16,7 +16,24 @@ import SwiftTUI
         let content: String
     }
 
-    static func lines(of body: String) -> [Line] {
+    /// What was worked out for each text seen, so a message is parsed once rather than on every redraw. Emptied
+    /// when it grows past what a few long conversations hold.
+    private static var keptLines: [String: [Line]] = [:]
+    private static var keptInline: [String: Text] = [:]
+    private static var keptPlain: [String: String] = [:]
+    private static let keptLimit = 4000
+
+    private static func kept<Value>(_ store: inout [String: Value], _ key: String, _ make: () -> Value) -> Value {
+        if let value = store[key] { return value }
+        let value = make()
+        if store.count >= keptLimit { store.removeAll(keepingCapacity: true) }
+        store[key] = value
+        return value
+    }
+
+    static func lines(of body: String) -> [Line] { kept(&keptLines, body) { split(body) } }
+
+    private static func split(_ body: String) -> [Line] {
         var lines: [Line] = [], inCode = false
         for (index, raw) in body.components(separatedBy: "\n").enumerated() {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -49,7 +66,9 @@ import SwiftTUI
     }
 
     /// A line's inline markdown as styled text.
-    static func inline(_ text: String) -> Text {
+    static func inline(_ text: String) -> Text { kept(&keptInline, text) { styled(text) } }
+
+    private static func styled(_ text: String) -> Text {
         let attributed = parsed(text)
         var interpolation = Text.RichContent.StringInterpolation(literalCapacity: 0, interpolationCount: attributed.runs.count)
         for run in attributed.runs {
@@ -80,7 +99,9 @@ import SwiftTUI
     }
 
     /// The words alone, on one line, as a list row or preview shows them.
-    static func plain(_ body: String) -> String {
+    static func plain(_ body: String) -> String { kept(&keptPlain, body) { words(body) } }
+
+    private static func words(_ body: String) -> String {
         lines(of: body).filter { if case .blank = $0.kind { false } else { true } }
             .map { String(parsed($0.content).characters) }
             .joined(separator: " ")

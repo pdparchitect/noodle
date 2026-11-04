@@ -145,6 +145,10 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func fxModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.fxModels(executablePath: executablePath, withReply: reply)
     }
+    func fxTeams(profile: UUID, executablePath: String, selecting slug: String?, reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.fxTeams(profileID: profile.uuidString, executablePath: executablePath,
+                                                    selecting: slug, withReply: reply)
+    }
     func codexModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.codexModels(executablePath: executablePath, withReply: reply)
     }

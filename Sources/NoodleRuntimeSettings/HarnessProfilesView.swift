@@ -15,6 +15,7 @@ public struct HarnessProfilesView: View {
     /// The profile whose sign-in popover is open.
     @State private var showsSignIn: UUID?
     @State private var error: String?
+    @State private var fxTeams = FxTeams()
 
     private enum NamingRequest {
         case create, rename(HarnessProfile)
@@ -77,6 +78,10 @@ public struct HarnessProfilesView: View {
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .task { await controller.refresh(installation) }
+        .task(id: signedInFxProfiles) {
+            guard let path = installation.executablePath else { return }
+            for id in signedInFxProfiles where fxTeams.teams[id] == nil { await fxTeams.load(id, executablePath: path) }
+        }
         .onDisappear { controller.cancelAll() }
         .alert(namingTitle, isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Profile name", text: $name)
@@ -101,6 +106,12 @@ public struct HarnessProfilesView: View {
         } message: { _ in
             Text("Bots that use this profile pause until you sign in again.")
         }
+    }
+
+    /// FX logins whose Vercel team can be read: those signed in.
+    private var signedInFxProfiles: [UUID] {
+        guard installation.provider == .fx, installation.isAvailable else { return [] }
+        return profiles.filter { controller.authentication[$0.id] == .authenticated }.map(\.id)
     }
 
     private var namingTitle: String {
@@ -128,6 +139,13 @@ public struct HarnessProfilesView: View {
                     HarnessUsageRetryToggle(harnesses: store.runtime.harnesses,
                         target: HarnessFallbackTarget(provider: profile.provider, profile: profile.id))
                     Divider()
+                    if let path = installation.executablePath {
+                        FxTeamMenu(teams: fxTeams.teams[profile.id] ?? [], busy: fxTeams.busy.contains(profile.id)) { team in
+                            fxTeams.select(team, profile: profile.id, executablePath: path) { [store] in
+                                store.restartAgents(signedInWith: profile)
+                            }
+                        }
+                    }
                     if controller.activity[profile.id] == nil, controller.authentication[profile.id] == .authenticated, !waitingForSignIn {
                         // A login can be revoked on the server while still reading as signed in here.
                         Button("Sign In Again…") { controller.signIn(profile, installation: installation) }
@@ -153,7 +171,7 @@ public struct HarnessProfilesView: View {
             if let command = controller.terminalSignIns[profile.id] {
                 HarnessTerminalSignInView(command: command) { Task { await controller.refresh(installation) } }
             }
-            if let error = controller.errors[profile.id] {
+            if let error = controller.errors[profile.id] ?? fxTeams.errors[profile.id] {
                 Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -4,6 +4,16 @@ import XCTest
 /// Explicit opt-in: uses the installed account for two tiny model turns, only in
 /// a disposable Noodle repository. Never starts or changes the user's bots.
 final class FxLiveTests: XCTestCase {
+    /// Reads the signed-in account's Vercel teams, keeping the selected one.
+    func testInstalledFXListsItsTeams() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_FX_EXECUTABLE"] else {
+            throw XCTSkip("Set the FX executable path to run the live harness test.")
+        }
+        let executable = try FxExecutableTrust.executable(at: path, home: HarnessStorage.userHome)
+        let teams = try FxInspection.teams(executable: executable, environment: ProcessInfo.processInfo.environment)
+        XCTAssertEqual(teams.filter(\.isSelected).count, 1)
+    }
+
     func testInstalledFXMessengerAndSessionResume() throws {
         guard let path = ProcessInfo.processInfo.environment["NOODLE_TEST_FX_EXECUTABLE"],
               let messenger = ProcessInfo.processInfo.environment["NOODLE_TEST_MESSENGER_EXECUTABLE"] else {

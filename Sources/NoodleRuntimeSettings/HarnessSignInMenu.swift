@@ -90,3 +90,23 @@ public extension BotSettingsHost {
         for agent in agents(signedInWith: profile) { runtime.restart(agent: agent, repository: repository) }
     }
 }
+
+/// The Vercel team an FX login sends model requests through, as checkmark items;
+/// shown with its divider only when the login can choose between teams.
+struct FxTeamMenu: View {
+    let teams: [FxTeam]
+    let busy: Bool
+    let select: (FxTeam) -> Void
+
+    var body: some View {
+        if teams.count > 1 {
+            Menu("Vercel Team") {
+                ForEach(teams, id: \.slug) { team in
+                    Toggle(team.name, isOn: Binding(get: { team.isSelected }, set: { if $0 { select(team) } }))
+                }
+            }
+            .disabled(busy)
+            Divider()
+        }
+    }
+}

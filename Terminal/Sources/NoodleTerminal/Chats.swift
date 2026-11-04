@@ -21,7 +21,6 @@ struct SplitView: View {
         HStack(spacing: 0) {
             Sidebar(hubs: hubs, app: app, selection: $selection, focus: $focus, typing: startTyping)
                 .frame(width: 40)
-            Divider()
             if let row = hubs.row(selection) {
                 ConversationView(row: row, hubs: hubs, app: app, state: app.conversation(row.id), focus: $focus, leave: { focus = .list },
                                  typing: startTyping)

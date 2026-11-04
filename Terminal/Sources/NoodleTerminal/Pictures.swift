@@ -36,7 +36,11 @@ import TerminalCore
     static func png(for faces: [LinkBotDraft], dimmed: Bool = false, scale: Double = 1) -> [UInt8] {
         // The picture itself, not only its digest: a list names the picture before it arrives, and what is drawn
         // without it must not be kept for once it is here.
-        let key = faces.map { "\($0.avatarImageData.map { "\($0.count)-\($0.hashValue)" } ?? "none")|\($0.avatarSymbolName ?? "")|\($0.avatarColorIndex)" }
+        // By digest, which names the picture without reading all of it on every redraw.
+        let key = faces.map { face in
+            let picture = face.avatarImageData.map { "\(face.avatarImageDigest ?? "")-\($0.count)" } ?? "none"
+            return "\(picture)|\(face.avatarSymbolName ?? "")|\(face.avatarColorIndex)"
+        }
             .joined(separator: ",") + (dimmed ? "-dim" : "") + "@\(scale)"
         if let kept = made[key] { return kept }
         let image = NSImage(size: NSSize(width: pixels, height: pixels), flipped: false) { full in

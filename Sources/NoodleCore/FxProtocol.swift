@@ -74,6 +74,28 @@ public enum FxProtocol {
         }
     }
 
+    /// Reads the list `fx teams` prints, such as `  2. Acme (acme) (default)`,
+    /// where "(default)" marks the selected team. Nil unless every numbered
+    /// line reads that way, in order, with at most one selected.
+    public static func teams(from text: String) -> [FxTeam]? {
+        var teams: [FxTeam] = []
+        for line in text.components(separatedBy: .newlines) {
+            let line = line.trimmingCharacters(in: .whitespaces)
+            guard let dot = line.firstIndex(of: "."), let number = Int(line[..<dot]) else { continue }
+            guard number == teams.count + 1 else { return nil }
+            var rest = line[line.index(after: dot)...].trimmingCharacters(in: .whitespaces)
+            let selected = rest.hasSuffix(" (default)")
+            if selected { rest.removeLast(" (default)".count) }
+            guard rest.hasSuffix(")"), let open = rest.lastIndex(of: "(") else { return nil }
+            let slug = String(rest[rest.index(after: open)..<rest.index(before: rest.endIndex)])
+            let name = rest[..<open].trimmingCharacters(in: .whitespaces)
+            guard validIdentifier(slug), !name.isEmpty else { return nil }
+            teams.append(FxTeam(name: name, slug: slug, isSelected: selected))
+        }
+        guard !teams.isEmpty, teams.filter(\.isSelected).count <= 1 else { return nil }
+        return teams
+    }
+
     /// Restricted FX/Grok actions execute inside Agent Host's immutable OS
     /// sandbox. An ACP allow-once response cannot broaden that boundary.
     public static func permissionResponse(params: [String: Any], sessionID: String?, extendedAccess: Bool,

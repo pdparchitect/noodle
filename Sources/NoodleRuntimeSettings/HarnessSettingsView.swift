@@ -113,6 +113,7 @@ public struct HarnessInstallationRow: View {
     @State private var newSessionAgent: AgentRecord?
     @State private var showsAgentIssues = false
     @State private var confirmsSignOut = false
+    @State private var fxTeams = FxTeams()
     @Environment(\.openURL) private var openURL
 
     private var id: HarnessProvider { installation.provider }
@@ -176,6 +177,16 @@ public struct HarnessInstallationRow: View {
                         Menu {
                             HarnessUsageRetryToggle(harnesses: store.runtime.harnesses,
                                 target: HarnessFallbackTarget(provider: id))
+                            if let path = liveInstallation?.executablePath {
+                                Divider()
+                                FxTeamMenu(teams: fxTeams.teams[defaultLogin.id] ?? [], busy: fxTeams.busy.contains(defaultLogin.id)) { team in
+                                    fxTeams.select(team, profile: defaultLogin.id, executablePath: path) { [store, defaultLogin] in
+                                        store.restartAgents(signedInWith: defaultLogin)
+                                        // The model list comes from the Default login.
+                                        store.runtime.refreshCapabilities()
+                                    }
+                                }
+                            }
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
@@ -196,7 +207,7 @@ public struct HarnessInstallationRow: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                if let error = setup.errors[id] {
+                if let error = setup.errors[id] ?? fxTeams.errors[defaultLogin.id] {
                     Text(error).font(.caption).foregroundStyle(.red)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -260,6 +271,10 @@ public struct HarnessInstallationRow: View {
             }
         }
         .padding(.vertical, 6)
+        .task(id: readsFxTeams) {
+            if readsFxTeams, let path = liveInstallation?.executablePath { await fxTeams.load(defaultLogin.id, executablePath: path) }
+            else { fxTeams.forget(defaultLogin.id) }
+        }
         .modifier(AgentKickConfirmation(store: store, request: $kickRequest))
         .modifier(NewSessionConfirmation(store: store, agent: $newSessionAgent))
         .alert("Sign Out of \(id.displayName)?", isPresented: $confirmsSignOut) {
@@ -271,6 +286,13 @@ public struct HarnessInstallationRow: View {
         } message: {
             Text("Bots that use this sign-in pause until you sign in again. Your Terminal sign-in is kept.")
         }
+    }
+
+    private var defaultLogin: HarnessProfile { HarnessProfileStore.defaultRecord(id) }
+
+    /// Only a signed-in FX login has Vercel teams to read.
+    private var readsFxTeams: Bool {
+        id == .fx && liveInstallation?.isAvailable == true && setup.authentication[id] == .authenticated
     }
 
     /// The app's own Default login for the harness, offered from its status once nothing else is under way.
