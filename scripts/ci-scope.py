@@ -33,6 +33,7 @@ SUITES = {
     # The Hub builds on the root package, so whatever can affect the root package builds it too.
     "hub": (["Hub"], []),
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
+    "terminal": (["Terminal"], []),
 }
 EVERYTHING = ["checks", *SUITES]
 # The same files the workflow's trigger leaves out: they never start a run, so they never widen one.

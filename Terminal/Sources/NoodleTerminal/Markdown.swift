@@ -1,0 +1,123 @@
+import AppKit
+import Foundation
+import SwiftTUI
+
+/// The markdown bots write, as far as a terminal shows it: headings and strong text in bold, emphasis in italics,
+/// code in the accent colour, links underlined, lists with bullets, quotes with a bar, and code blocks dimmed.
+@MainActor enum Markdown {
+    /// One line of a message, as it is drawn.
+    struct Line: Identifiable {
+        enum Kind {
+            case text, heading, bullet(String), quote, code, blank
+        }
+
+        let id: Int
+        let kind: Kind
+        let content: String
+    }
+
+    static func lines(of body: String) -> [Line] {
+        var lines: [Line] = [], inCode = false
+        for (index, raw) in body.components(separatedBy: "\n").enumerated() {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                inCode.toggle()
+                continue
+            }
+            if inCode {
+                lines.append(Line(id: index, kind: .code, content: raw))
+            } else if trimmed.isEmpty {
+                lines.append(Line(id: index, kind: .blank, content: ""))
+            } else if let heading = trimmed.firstMatch(of: /^#{1,6}\s+(.*)$/) {
+                lines.append(Line(id: index, kind: .heading, content: String(heading.1)))
+            } else if let item = raw.firstMatch(of: /^(\s*)[-*+]\s+(.*)$/) {
+                lines.append(Line(id: index, kind: .bullet(String(item.1) + "• "), content: String(item.2)))
+            } else if let item = raw.firstMatch(of: /^(\s*)(\d+[.)])\s+(.*)$/) {
+                lines.append(Line(id: index, kind: .bullet("\(item.1)\(item.2) "), content: String(item.3)))
+            } else if let quote = trimmed.firstMatch(of: /^>\s?(.*)$/) {
+                lines.append(Line(id: index, kind: .quote, content: String(quote.1)))
+            } else {
+                lines.append(Line(id: index, kind: .text, content: raw))
+            }
+        }
+        return lines
+    }
+
+    private static func parsed(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
+    }
+
+    /// A line's inline markdown as styled text.
+    static func inline(_ text: String) -> Text {
+        let attributed = parsed(text)
+        var interpolation = Text.RichContent.StringInterpolation(literalCapacity: 0, interpolationCount: attributed.runs.count)
+        for run in attributed.runs {
+            var piece = Text(String(attributed[run.range].characters))
+            let intent = run.inlinePresentationIntent ?? []
+            if intent.contains(.stronglyEmphasized) { piece = piece.bold() }
+            if intent.contains(.emphasized) { piece = piece.italic() }
+            if intent.contains(.strikethrough) { piece = piece.strikethrough() }
+            if intent.contains(.code) || run.link != nil { piece = piece.foregroundStyle(.tint) }
+            if let url = run.link, isWeb(url) {
+                // A link of its own, so a click opens it.
+                interpolation.appendInterpolation(Link(piece.underline(), destination: LinkDestination(url.absoluteString)))
+            } else {
+                interpolation.appendInterpolation(run.link == nil ? piece : piece.underline())
+            }
+        }
+        return Text(Text.RichContent(stringInterpolation: interpolation))
+    }
+
+    /// Only web pages open from a message: a bot's words cannot open apps or other links on this Mac.
+    static func isWeb(_ url: URL) -> Bool { ["http", "https"].contains(url.scheme?.lowercased()) }
+
+    /// Opens a link clicked in a message, as a web page in the browser.
+    static let open = OpenLinkAction { destination in
+        guard let url = URL(string: destination.rawValue), isWeb(url) else { return false }
+        NSWorkspace.shared.open(url)
+        return true
+    }
+
+    /// The words alone, on one line, as a list row or preview shows them.
+    static func plain(_ body: String) -> String {
+        lines(of: body).filter { if case .blank = $0.kind { false } else { true } }
+            .map { String(parsed($0.content).characters) }
+            .joined(separator: " ")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// The web links a message's words hold, in order, each once.
+    static func links(in body: String) -> [URL] {
+        var seen: Set<URL> = [], found: [URL] = []
+        for line in lines(of: body) {
+            for run in parsed(line.content).runs {
+                guard let url = run.link, isWeb(url), seen.insert(url).inserted else { continue }
+                found.append(url)
+            }
+        }
+        return found
+    }
+}
+
+/// A message's words with their markdown shown.
+struct MarkdownText: View {
+    let body_: String
+
+    init(_ body: String) { body_ = body }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Markdown.lines(of: body_)) { line in
+                switch line.kind {
+                case .text: Markdown.inline(line.content)
+                case .heading: Markdown.inline(line.content).bold()
+                case .bullet(let marker): Text("\(marker)\(Markdown.inline(line.content))")
+                case .quote: Text("│ \(Markdown.inline(line.content))").foregroundStyle(.secondary)
+                case .code: Text(line.content.isEmpty ? " " : line.content).foregroundStyle(.secondary)
+                case .blank: Text(" ")
+                }
+            }
+        }
+    }
+}
