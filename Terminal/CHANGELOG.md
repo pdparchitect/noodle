@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- Noodle Terminal no longer serves itself to web browsers. The terminal framework it is built with started a hidden companion page on a local port whenever it ran, and any program running as you could get the page's address and control Noodle Terminal through it; with `--web --bind` it listened on every network interface. Neither is built in any more, whatever the options or environment say.
+
 ### Added
 
 - Noodle Terminal: chat with the bots and groups on your Noodle Hub from Terminal on your Mac. Join a Hub with an invitation, see your bots and groups with unread dots and pins, read and send messages, load earlier ones, and search bots, groups and messages.

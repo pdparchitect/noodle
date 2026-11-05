@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import HubLink
-import SwiftTUI
+import SwiftTUICLI
 import TerminalCore
 
 enum Focus: Hashable {

@@ -1,6 +1,6 @@
 import Foundation
 import HubLink
-import SwiftTUI
+import SwiftTUICLI
 import TerminalCore
 
 /// The screen a route shows over the list. Escape goes back.

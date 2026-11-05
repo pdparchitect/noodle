@@ -1,15 +1,41 @@
 import Foundation
 import HubLink
-import SwiftTUI
+import SwiftTUIArguments
+import SwiftTUICLI
 import TerminalCore
 
 @main
-struct NoodleTerminalApp: App {
+struct NoodleTerminalApp: App, SwiftTUICommand {
     nonisolated static let configuration = CommandConfiguration(
         commandName: "noodle", abstract: "Chat with the bots and groups on your Noodle Hub.")
 
+    @OptionGroup var swiftTUIOptions: SwiftTUIOptions
+
     var body: some Scene {
         WindowGroup("Noodle") { RootView() }
+    }
+
+    /// Runs in the terminal only. SwiftTUI's batteries-included entry point also starts its web host, which serves
+    /// the running app on a port to whoever has its URL, with everything the person's Hub lets them do: on loopback
+    /// by default, where any process of this user can ask for the URL, and on every interface with `--web --bind`.
+    /// This app does not link that host, so neither can start, whatever the flags or environment say.
+    static func main() async {
+        let app: Self
+        do { app = try parse() } catch { exit(withError: error) }
+        do {
+            try await TerminalRunner.run(app, configuration: app.terminalConfiguration())
+        } catch {
+            exit(withError: error)
+        }
+    }
+
+    /// The options and environment as SwiftTUI reads them, with its browser companion and web serving off too.
+    func terminalConfiguration(environment: [String: String] = ProcessInfo.processInfo.environment) -> RuntimeConfiguration {
+        var configuration = swiftTUIOptions.runtimeConfiguration(environment: environment, isStdoutTTY: isatty(STDOUT_FILENO) != 0)
+        configuration.companion = .off
+        configuration.web = nil
+        configuration.printCompanionURL = false
+        return configuration
     }
 }
 

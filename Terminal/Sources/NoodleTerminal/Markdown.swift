@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import SwiftTUI
+import SwiftTUICLI
 
 /// The markdown bots write, as far as a terminal shows it: headings and strong text in bold, emphasis in italics,
 /// code in the accent colour, links underlined, lists with bullets, quotes with a bar, and code blocks dimmed.

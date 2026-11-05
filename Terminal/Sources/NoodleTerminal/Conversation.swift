@@ -1,6 +1,6 @@
 import Foundation
 import HubLink
-import SwiftTUI
+import SwiftTUICLI
 import TerminalCore
 
 /// One bot's or group's conversation: its messages, newest at the bottom, and the composer under them. Moving

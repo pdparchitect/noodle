@@ -13,6 +13,8 @@ let package = Package(name: "NoodleTerminal", platforms: [.macOS("26.0")],
     targets: [
         .target(name: "TerminalCore", dependencies: [.product(name: "HubLink", package: "HubLink")]),
         .executableTarget(name: "NoodleTerminal", dependencies: ["TerminalCore", .product(name: "HubLink", package: "HubLink"),
-            .product(name: "SwiftTUI", package: "swift-tui")], swiftSettings: hooks),
+            // The terminal-only launcher: SwiftTUI's own product also links its web host, which serves the app on a port.
+            .product(name: "SwiftTUICLI", package: "swift-tui"), .product(name: "SwiftTUIArguments", package: "swift-tui")],
+            swiftSettings: hooks),
         .testTarget(name: "TerminalCoreTests", dependencies: ["TerminalCore", .product(name: "HubLink", package: "HubLink")])
     ], swiftLanguageModes: [.v6])
