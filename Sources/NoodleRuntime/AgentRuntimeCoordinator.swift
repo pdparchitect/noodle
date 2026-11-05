@@ -180,14 +180,36 @@ public final class AgentRuntimeCoordinator {
     private func neverStarts(_ id: UUID) -> Bool {
         remoteAgentIDs.contains(id) || archivedAgentIDs.contains(id) || suspendedAgentIDs.contains(id) || heldAgents[id] != nil
     }
-    /// Bots that may take no new turn for now, each with why, shown as its status: on a Hub, the bots of
-    /// someone who used up their plan's tokens. One at work finishes its turn, then stops; whoever lets
-    /// it go starts it again.
-    public var heldAgents: [UUID: String] = [:] {
+    /// What holds a bot back, so each keeps its own bots without letting go of another's.
+    public enum Hold: Int, CaseIterable, Sendable {
+        /// Someone suspended the bot for a while; it says so before any limit.
+        case suspension
+        /// On a Hub, its owner used up their plan's tokens.
+        case planLimit
+        /// It used up its own spending budget.
+        case budget
+    }
+    @ObservationIgnored private var holds: [Hold: [UUID: String]] = [:]
+    /// Bots that may take no new turn for now, each with why, shown as its status. One at work finishes
+    /// its turn, then stops; whoever lets it go starts it again. Set with `hold(_:for:)`.
+    public private(set) var heldAgents: [UUID: String] = [:] {
         didSet {
             for (id, reason) in heldAgents where oldValue[id] != reason { hold(id) }
             for id in oldValue.keys where heldAgents[id] == nil && processes[id] == nil { snapshots[id] = nil }
         }
+    }
+
+    /// Holds exactly these bots for this reason, each with what it shows. Answers the bots nothing holds
+    /// any more, for the caller to start again.
+    @discardableResult
+    public func hold(_ held: [UUID: String], for reason: Hold) -> Set<UUID> {
+        holds[reason] = held
+        var merged: [UUID: String] = [:]
+        for reason in Hold.allCases.reversed() { merged.merge(holds[reason] ?? [:]) { _, earlier in earlier } }
+        guard merged != heldAgents else { return [] }
+        let released = Set(heldAgents.keys).subtracting(merged.keys)
+        heldAgents = merged
+        return released
     }
 
     /// Stops a held bot unless it is at work, keeping what it was doing for when it starts again,

@@ -699,6 +699,9 @@ import os
         case .archive(let change):
             try hubBots().setArchived(change.archived, id: change.id, for: try user(key))
             return .done
+        case .suspend(let change):
+            try hubBots().setSuspended(until: change.until, id: change.id, for: try user(key))
+            return .done
         case .kick(let botID):
             return try hubBots().kick(botID, for: try user(key)).map(LinkResponse.kickConfirmation) ?? .done
         case .confirmKick(let botID, let confirmationID):
@@ -1120,7 +1123,8 @@ import os
                           userID: user?.id, avatar: user?.avatar, imageModel: bots?.imageModel, keepsAnnotations: bots != nil,
                           signsInToBrowsers: browsers != nil, ringsThroughPush: callPusher != nil && bots != nil,
                           callPushExpiresAt: device.callPush?.expiresAt, explainsPauses: bots != nil, mutesGroups: bots != nil,
-                          notifiesMentions: bots != nil, groupNotifications: user.flatMap { bots?.groupNotifications(for: $0) })
+                          notifiesMentions: bots != nil, groupNotifications: user.flatMap { bots?.groupNotifications(for: $0) },
+                          suspendsBots: bots != nil)
     }
 
     /// Opens the port on the router, then keeps it open.

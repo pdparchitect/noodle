@@ -501,6 +501,23 @@ final class ChatsCacheFile: @unchecked Sendable {
     /// Whether the Hub knows Mentions only; an older one only mutes.
     var notifiesMentions: Bool { pairing.status?.notifiesMentions == true }
 
+    /// Whether the Hub can suspend bots, so the menu offers it.
+    var suspendsBots: Bool { pairing.status?.suspendsBots == true }
+
+    /// Whether the bot is suspended now, as its Hub last listed it; one whose time ran out no longer is.
+    func isSuspended(_ bot: LinkBot, now: Date = Date()) -> Bool {
+        (agent(bot.id)?.suspendedUntil ?? bot.suspendedUntil).map { $0 > now } ?? false
+    }
+
+    /// Suspends a bot on the Hub until then, or unsuspends it when nil, for every device. It stays listed, grayed.
+    func setSuspended(until: Date?, _ bot: LinkBot) async throws {
+        guard case .done = try await pairing.request(.suspend(LinkSuspension(id: bot.id, until: until))) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+        if let index = agents.firstIndex(where: { $0.id == bot.id }) { agents[index].suspendedUntil = until }
+        saveCache()
+    }
+
     /// How the user's groups that keep the default notify them.
     var groupNotifications: LinkNotifications { pairing.status?.groupNotifications ?? .all }
 
@@ -2442,6 +2459,19 @@ struct AgentsView: View {
         // A bot someone shared is only talked with.
         if row.thread.bot?.owner == nil {
             Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
+            if let bot = row.thread.bot, row.chats.suspendsBots {
+                if row.chats.isSuspended(bot) {
+                    Button { suspend(bot, until: nil, row) } label: { Label("Unsuspend Bot", systemImage: "play.circle") }
+                } else {
+                    Menu {
+                        ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                            Button(choice.title) { suspend(bot, until: choice.until(), row) }
+                        }
+                    } label: {
+                        Label("Suspend Bot", systemImage: "pause.circle")
+                    }
+                }
+            }
             Button { archive(row) } label: { Label(row.thread.group == nil ? "Archive Bot" : "Archive Group", systemImage: "archivebox") }
         } else {
             Button { editing = row } label: { Label("Change Background…", systemImage: "photo") }
@@ -2458,6 +2488,13 @@ struct AgentsView: View {
     private func setNotifications(_ level: LinkNotifications, _ row: Row) {
         Task {
             do { try await row.chats.setNotifications(level, of: row.thread) }
+            catch { row.chats.error = error.localizedDescription }
+        }
+    }
+
+    private func suspend(_ bot: LinkBot, until: Date?, _ row: Row) {
+        Task {
+            do { try await row.chats.setSuspended(until: until, bot) }
             catch { row.chats.error = error.localizedDescription }
         }
     }
@@ -4743,7 +4780,9 @@ struct ThreadAvatar: View {
     var body: some View {
         switch thread {
         case .bot(let bot):
-            AgentAvatar(face: BotFace(bot), size: size, phase: chats.phase(of: bot))
+            let phase = chats.phase(of: bot)
+            // A suspended bot is grayed, as a stopped one is, while it does not finish a turn.
+            AgentAvatar(face: BotFace(bot), size: size, phase: chats.isSuspended(bot) && phase != .working ? .offline : phase)
         case .group(let group):
             let active = chats.activeMembers(of: group)
             let members = active.isEmpty ? chats.members(of: group) : active

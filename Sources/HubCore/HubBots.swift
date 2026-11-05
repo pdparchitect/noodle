@@ -49,6 +49,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public var imageGeneration: ImageGenerationController?
     /// Who used up their plan's tokens; their bots take no new turn. Nil where nobody is on a plan: on the owner's own Mac.
     public var tokenLimits: HubTokenLimits?
+    /// Whether this Hub holds its suspended bots itself. On the owner's own Mac, Noodle does, for every bot there.
+    public var appliesSuspensions = false
     /// The default image model's name, which devices show beside the tool. Nil while none is downloaded.
     public var imageModel: String? { imageGeneration?.currentModel?.name }
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
@@ -154,6 +156,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         try messenger.start(agents: agents)
         runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
         runtime.remoteAgentIDs.formUnion(agents.map(\.id).filter { access.host(ofBot: $0) != nil })
+        // Suspended before the Hub last quit, so they stay held from the start.
+        applySuspensions(agents)
         let now = Date()
         agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
         runtime.startAll(agents: agents, repository: repository)
@@ -172,6 +176,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                 if round.isMultiple(of: 60) { await self.checkIdleComputers(); await self.checkIdleBrowsers() }
                 self.tokenLimits?.checkExpired()
                 if let agents = try? self.repository.loadAgents() {
+                    self.applySuspensions(agents)
                     self.runtime.reconcile(agents: agents, repository: self.repository)
                 }
                 self.runtime.checkHeartbeats()
@@ -251,15 +256,49 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             guard let until = access.owner(ofBot: agent.id).flatMap({ tokenLimits.holds[$0] }) else { continue }
             held[agent.id] = HubTokenLimits.status(until: until)
         }
-        let released = Set(runtime.heldAgents.keys).subtracting(held.keys)
-        runtime.heldAgents = held
+        let released = runtime.hold(held, for: .planLimit)
         guard running || watching else { return }
         for agent in agents where released.contains(agent.id) { runtime.start(agent: agent, repository: repository) }
     }
 
-    /// Why a call or Organize cannot reach these bots now, as their owner used up their plan's tokens. Messages
-    /// still go through: they wait in the bots' inboxes until the period allows more.
+    /// Holds the suspended bots here and starts again those whose suspension ended. It only compares dates,
+    /// so it runs every second.
+    public func applySuspensions(_ agents: [AgentRecord]) {
+        guard appliesSuspensions else { return }
+        let released = runtime.hold(AgentRecord.suspensions(of: agents.filter { access.host(ofBot: $0.id) == nil }), for: .suspension)
+        guard running || watching else { return }
+        for agent in agents where released.contains(agent.id) && agent.archivedAt == nil { runtime.start(agent: agent, repository: repository) }
+    }
+
+    /// Suspends one of the user's bots until then, or unsuspends it when nil. It finishes a turn under way,
+    /// then takes no new one; messages to it wait. It stays listed, for its owner and the people it is shared with.
+    public func setSuspended(until: Date?, id: UUID, for user: HubUser) throws {
+        let agent = try owned(id, by: user)
+        // A device runs it and keeps it there.
+        guard access.host(ofBot: id) == nil else { throw LinkError("Suspend \(agent.displayName) on the Mac it runs on.") }
+        guard agent.suspendedUntil != until else { return }
+        try repository.setAgentSuspended(until: until, agentID: id)
+        applySuspensions(try repository.loadAgents())
+        onChange?(user.id, .botsChanged)
+        tellGuests(of: id)
+        onBotsEdited?()
+    }
+
+    /// The same, as whoever keeps the Hub does it in Settings, for the bot's owner.
+    public func setSuspended(until: Date?, id: UUID) throws {
+        guard let owner = access.owner(ofBot: id), let user = access.users.first(where: { $0.id == owner }) else {
+            throw LinkError("There is no such bot.")
+        }
+        try setSuspended(until: until, id: id, for: user)
+    }
+
+    /// Why a call or Organize cannot reach these bots now: one is suspended, or their owner used up their plan's
+    /// tokens. Messages still go through: they wait in the bots' inboxes until then.
     private func requireTokens(for agents: [AgentRecord], from user: HubUser) throws {
+        if let suspended = agents.first(where: { $0.isSuspended() }), let until = suspended.suspendedUntil {
+            throw LinkError("\(suspended.displayName) is suspended. " + (until == AgentRecord.indefinitely ? "Unsuspend it first."
+                : "It continues \(RelativeDateTimeFormatter().localizedString(for: until, relativeTo: Date())), or unsuspend it first."))
+        }
         guard let tokenLimits else { return }
         for agent in agents where access.host(ofBot: agent.id) == nil {
             guard let owner = access.owner(ofBot: agent.id) else { continue }
@@ -883,6 +922,11 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public func pause(of agent: AgentRecord, forOwner: Bool = true) -> LinkBotPause? {
         guard access.host(ofBot: agent.id) == nil,
               let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }) else { return nil }
+        if agent.isSuspended(), let until = agent.suspendedUntil {
+            let summary = AgentRecord.suspension(until: until)
+            return LinkBotPause(summary: summary, until: until == AgentRecord.indefinitely ? nil : until,
+                                detail: forOwner ? "\(summary). Messages wait for it until then, or until you unsuspend it." : nil)
+        }
         if let tokenLimits, let until = tokenLimits.holds[owner.id] {
             let detail = forOwner ? tokenLimits.refusal(for: owner) : tokenLimits.refusal(forGuestOf: agent.displayName, ownedBy: owner.id)
             return LinkBotPause(summary: "Paused: plan limit", until: until, detail: detail)
@@ -1879,7 +1923,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                        // On the owner's own Mac, those are people on another Hub.
                        sharedWith: access.isPersonal ? [] : direct.compactMap(\.guest?.id),
                        canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
-                       pinnedAt: pins[conversation.id], pause: pause(of: agent))
+                       pinnedAt: pins[conversation.id], pause: pause(of: agent),
+                       suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil)
     }
 
     /// A bot as someone it is shared with sees it: whose it is and whether it is working, nothing of how it works.
@@ -1893,7 +1938,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                        phase: LinkBotPhase(rawValue: phase(of: agent).rawValue),
                        readUpTo: readMarks[conversation.id], background: background(of: conversation.id), owner: owner.name,
                        canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
-                       pinnedAt: pins[conversation.id], pause: pause(of: agent, forOwner: false))
+                       pinnedAt: pins[conversation.id], pause: pause(of: agent, forOwner: false),
+                       suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil)
     }
 
     /// Pictures' sizes, read once each: a stored file never changes.

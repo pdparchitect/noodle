@@ -97,6 +97,7 @@ import NoodleRuntime
         }
         bots.imageGeneration = imageGeneration
         bots.tokenLimits = tokenLimits
+        bots.appliesSuspensions = true
         tokenLimits.onChange = { [weak bots] in bots?.applyTokenLimits() }
         // Whoever ran out before the Hub last quit stays held.
         tokenLimits.check()

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Bots can be suspended for a while, from Noodle, Noodle Mobile or the bot's profile in Settings › Bots. A suspended bot finishes its turn, then takes no new one until the time runs out or it is unsuspended; it stays listed, grayed, and messages wait for it.
+
 ## [0.47.1] - 2026-11-05
 
 ### Added

@@ -1,5 +1,6 @@
 import AppKit
 import HubCore
+import HubLink
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -16,6 +17,9 @@ struct HubBotProfileButton: View {
     var body: some View {
         Button { showsProfile = true } label: {
             BotAvatar(agent: agent, size: 32)
+                // Suspended bots stay listed, grayed, as in Noodle.
+                .grayscale(agent.isSuspended() ? 1 : 0)
+                .opacity(agent.isSuspended() ? 0.5 : 1)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -51,10 +55,26 @@ struct HubBotProfileButton: View {
             }
             if agent.archivedAt != nil {
                 ArchivedTag()
+            } else if let until = agent.suspendedUntil, agent.isSuspended() {
+                SettingsStatusLabel(title: AgentRecord.suspension(until: until), systemImage: "pause.circle.fill", color: .secondary)
+                    .help("Messages wait for \(agent.displayName) until then.")
             } else {
                 let phase = host.hub.bots.phase(of: agent)
                 SettingsStatusLabel(title: phase.title, systemImage: "circle.fill", color: phase.color)
                     .help(snapshot.detail)
+            }
+            // Its owner's Mac keeps one it hosts, and suspends it there.
+            if agent.archivedAt == nil, device == nil, owner != nil {
+                if agent.isSuspended() {
+                    Button("Unsuspend") { host.setSuspended(until: nil, id: agent.id) }
+                } else {
+                    Menu("Suspend") {
+                        ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                            Button(choice.title) { host.setSuspended(until: choice.until(), id: agent.id) }
+                        }
+                    }
+                    .fixedSize()
+                }
             }
             HStack(spacing: 8) {
                 Button {

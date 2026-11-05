@@ -924,6 +924,7 @@ final class NoodleStore {
             try AppleLocalModelStore(repository: repository.rootURL).keepSystemModelForExistingBots(agents)
             runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
             reloadBudgets()
+            applySuspensions()
             activityWindows.synchronize(agents: agents)
             runtime.reloadAccess()
             try repository.synchronizeAgentWorkspaces(agents)
@@ -1872,15 +1873,50 @@ final class NoodleStore {
 
     /// Holds the bots out of budget and starts again those that may continue.
     private func applyBudgets() {
-        let held = budgets.holds.mapValues(BotBudgets.status(until:))
-        guard held != runtime.heldAgents else { return }
-        let released = Set(runtime.heldAgents.keys).subtracting(held.keys)
-        runtime.heldAgents = held
+        start(runtime.hold(budgets.holds.mapValues(BotBudgets.status(until:)), for: .budget))
+    }
+
+    /// Holds the suspended bots here and starts again those whose suspension ended. It only compares
+    /// dates, so it can run every second.
+    private func applySuspensions() {
+        start(runtime.hold(AgentRecord.suspensions(of: agents.filter { runsHere($0.id) }), for: .suspension))
+    }
+
+    /// Starts again the bots no hold keeps any more.
+    private func start(_ released: Set<UUID>) {
         // Until then, startAgents starts them with everyone else.
-        guard agentsStarted else { return }
+        guard agentsStarted, !released.isEmpty else { return }
         for agent in agents where released.contains(agent.id) && runsHere(agent.id) && agent.archivedAt == nil {
             runtime.start(agent: agent, repository: repository)
         }
+    }
+
+    /// Suspends the bot until then, or unsuspends it when nil. It finishes a turn under way, then
+    /// takes no new one; messages wait for it. A Hub's bot is suspended there, for all its owner's devices.
+    func setSuspended(until: Date?, agentID: UUID) {
+        if let mirror = hubMirror(forAgent: agentID) {
+            Task {
+                do {
+                    try await mirror.setSuspended(until: until, localAgentID: agentID)
+                    reloadAgentRecord(agentID)
+                } catch { errorMessage = error.localizedDescription }
+            }
+            return
+        }
+        do {
+            let updated = try repository.setAgentSuspended(until: until, agentID: agentID)
+            if let index = agents.firstIndex(where: { $0.id == agentID }) { agents[index] = updated }
+            applySuspensions()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Reads one bot's record again after its Hub changed the copy here.
+    private func reloadAgentRecord(_ id: UUID) {
+        guard let updated = try? repository.loadAgents().first(where: { $0.id == id }),
+              let index = agents.firstIndex(where: { $0.id == id }) else { return }
+        agents[index] = updated
     }
 
     /// Sets how many tokens the bot may use per period, or lets it use any number when nil. It applies
@@ -2960,6 +2996,7 @@ final class NoodleStore {
                 self.runtime.reconcile(agents: self.agents, repository: self.repository)
                 self.runtime.checkHeartbeats()
                 self.budgets.checkExpired()
+                self.applySuspensions()
                 self.runtime.checkWakes(repository: self.repository)
                 if !self.ringingCalls.isEmpty { self.dropCallsOfGoneBots() }
                 if self.connectsServices { self.botWidgets.publish(self.widgetBots) }

@@ -377,6 +377,18 @@ import Observation
         onChange?()
     }
 
+    /// Whether the Hub can suspend its bots, as its last status said.
+    public var suspendsBots: Bool { pairing.status?.suspendsBots == true }
+
+    /// Suspends a bot on the Hub until then, or unsuspends it when nil, for every device, and its copy here.
+    public func setSuspended(until: Date?, localAgentID: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        guard suspendsBots else { throw LinkError("This Noodle Hub cannot suspend bots. Update Noodle Hub.") }
+        _ = try await pairing.request(.suspend(LinkSuspension(id: entry.remote, until: until)))
+        try repository.setAgentSuspended(until: until, agentID: localAgentID)
+        onChange?()
+    }
+
     public func setArchived(_ archived: Bool, conversation: UUID) async throws {
         guard let entry = groups.first(where: { $0.conversation == conversation }) else { throw LinkError("This group is not on the Hub.") }
         _ = try await pairing.request(.archive(LinkArchiveChange(id: entry.remote, archived: archived)))
@@ -1151,6 +1163,7 @@ import Observation
         // Shown in the bot's editor here; the Hub calls with it.
         if let voice = draft.voice { try repository.updateAgentVoice(agent, voice: voice) }
         if let archivedAt = bot.archivedAt { agent = try repository.setAgentArchived(true, agentID: agent.id, now: archivedAt) }
+        if let until = bot.suspendedUntil { agent = try repository.setAgentSuspended(until: until, agentID: agent.id) }
         // The Hub checked it when the bot set it.
         guard let status = bot.status, let withStatus = try? repository.setAgentStatus(status, agentID: agent.id) else {
             return agent
@@ -1163,6 +1176,10 @@ import Observation
         if agent.status != bot.status, (try? repository.setAgentStatus(bot.status, agentID: agent.id)) != nil { onChange?() }
         if (agent.archivedAt != nil) != (bot.archivedAt != nil) {
             try repository.setAgentArchived(bot.archivedAt != nil, agentID: agent.id, now: bot.archivedAt ?? Date())
+            onChange?()
+        }
+        if agent.suspendedUntil != bot.suspendedUntil {
+            try repository.setAgentSuspended(until: bot.suspendedUntil, agentID: agent.id)
             onChange?()
         }
         var draft = bot.draft

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Suspend a bot for a while: right-click it in the sidebar and choose Suspend Bot, then for 1 hour, 4 hours, until tomorrow, a week, or until you unsuspend it. A suspended bot finishes its turn, then takes no new one, and stays in the sidebar, grayed, saying until when. Messages wait for it. Choose Unsuspend Bot, or Unsuspend over its conversation, to let it continue straight away. This works for bots on a Noodle Hub too, for all your devices.
+
 ## [0.81.1] - 2026-11-05
 
 ### Added

@@ -126,6 +126,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case deleteGroup(id: UUID)
     /// Archives or brings back one of this user's bots or groups. Answers `done`.
     case archive(LinkArchiveChange)
+    /// Suspends one of this user's bots for a while, or unsuspends it. Answers `done`. Only for a Hub
+    /// whose status says `suspendsBots`.
+    case suspend(LinkSuspension)
     /// Starts a failed bot again, as Kick does in Noodle. Answers `done`, or `kickConfirmation`
     /// when the failure needs the person to agree first.
     case kick(botID: UUID)
@@ -1115,13 +1118,15 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var notifiesMentions: Bool
     /// How this user's groups that keep the default notify them. Nil for every reply.
     public var groupNotifications: LinkNotifications?
+    /// Whether the Hub takes `suspend` and lists each bot's `suspendedUntil`, so a device may offer to suspend one.
+    public var suspendsBots: Bool
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
                 protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false,
                 canShareBots: Bool = false, userID: UUID? = nil, avatar: LinkAvatar? = nil, imageModel: String? = nil,
                 keepsAnnotations: Bool = false, signsInToBrowsers: Bool = false, ringsThroughPush: Bool = false,
                 callPushExpiresAt: Date? = nil, explainsPauses: Bool = false, mutesGroups: Bool = false,
-                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil) {
+                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil, suspendsBots: Bool = false) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -1142,12 +1147,13 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.mutesGroups = mutesGroups
         self.notifiesMentions = notifiesMentions
         self.groupNotifications = groupNotifications
+        self.suspendsBots = suspendsBots
     }
 
     private enum CodingKeys: String, CodingKey {
         case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots, userID, avatar, imageModel,
              keepsAnnotations, signsInToBrowsers, ringsThroughPush, callPushExpiresAt, explainsPauses, mutesGroups,
-             notifiesMentions, groupNotifications
+             notifiesMentions, groupNotifications, suspendsBots
     }
 
     public init(from decoder: Decoder) throws {
@@ -1172,6 +1178,7 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         mutesGroups = try c.decode(.mutesGroups, or: false)
         notifiesMentions = try c.decode(.notifiesMentions, or: false)
         groupNotifications = try c.decodeIfPresent(LinkNotifications.self, forKey: .groupNotifications)
+        suspendsBots = try c.decode(.suspendsBots, or: false)
     }
 }
 
@@ -1368,10 +1375,13 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     /// Why it does not answer for now, while a limit holds it or it waits for Kick. Nil while it runs, and always
     /// from a Hub whose status does not say `explainsPauses`.
     public var pause: LinkBotPause?
+    /// Until when it is suspended: listed, but taking no new turn. Set with `suspend`; nil while it is not.
+    public var suspendedUntil: Date?
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
-                sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil) {
+                sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil,
+                suspendedUntil: Date? = nil) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1386,10 +1396,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.canCall = canCall
         self.pinnedAt = pinnedAt
         self.pause = pause
+        self.suspendedUntil = suspendedUntil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause
+        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
+             suspendedUntil
     }
 
     public init(from decoder: Decoder) throws {
@@ -1408,6 +1420,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         canCall = try c.decode(.canCall, or: false)
         pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         pause = (try? c.decodeIfPresent(LinkBotPause.self, forKey: .pause)) ?? nil
+        suspendedUntil = try c.decodeIfPresent(Date.self, forKey: .suspendedUntil)
     }
 }
 
@@ -1500,6 +1513,45 @@ public struct LinkNotificationsChange: Codable, Equatable, Sendable {
     public init(conversationID: UUID, notifications: LinkNotifications) {
         self.conversationID = conversationID
         self.notifications = notifications
+    }
+}
+
+/// One of a user's bots to suspend until a moment, or to unsuspend when `until` is nil.
+public struct LinkSuspension: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var until: Date?
+
+    public init(id: UUID, until: Date?) {
+        self.id = id
+        self.until = until
+    }
+}
+
+/// How long a bot may be suspended for, as Noodle and Noodle Mobile offer it.
+public enum LinkSuspensionChoice: CaseIterable, Sendable {
+    case hour, fourHours, tomorrow, week, indefinitely
+
+    public var title: String {
+        switch self {
+        case .hour: "For 1 Hour"
+        case .fourHours: "For 4 Hours"
+        case .tomorrow: "Until Tomorrow"
+        case .week: "For a Week"
+        case .indefinitely: "Until Unsuspended"
+        }
+    }
+
+    /// When the bot continues, worked out on the device so "tomorrow" is its person's: 9:00 the next day.
+    public func until(from now: Date = Date(), calendar: Calendar = .current) -> Date {
+        switch self {
+        case .hour: now.addingTimeInterval(3600)
+        case .fourHours: now.addingTimeInterval(4 * 3600)
+        case .tomorrow:
+            calendar.date(bySettingHour: 9, minute: 0, second: 0,
+                          of: calendar.date(byAdding: .day, value: 1, to: now) ?? now) ?? now.addingTimeInterval(86_400)
+        case .week: now.addingTimeInterval(7 * 86_400)
+        case .indefinitely: .distantFuture
+        }
     }
 }
 

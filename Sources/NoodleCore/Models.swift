@@ -21,6 +21,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public static let statusLimit = 60
     /// An archived bot keeps everything but never runs and is left out of lists until unarchived.
     public var archivedAt: Date?
+    /// A suspended bot stays listed but takes no new turn until then; `indefinitely` until someone unsuspends it.
+    public var suspendedUntil: Date?
 
     public init(
         id: UUID = UUID(),
@@ -36,7 +38,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         avatarColorIndex: Int? = nil,
         avatarImageData: Data? = nil,
         status: String? = nil,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        suspendedUntil: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -52,6 +55,29 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.avatarImageData = avatarImageData
         self.status = status
         self.archivedAt = archivedAt
+        self.suspendedUntil = suspendedUntil
+    }
+
+    /// Far enough off that the bot waits for someone to unsuspend it.
+    public static let indefinitely = Date.distantFuture
+
+    /// Whether it is suspended at `now`; a suspension that ran out no longer counts.
+    public func isSuspended(at now: Date = Date()) -> Bool { suspendedUntil.map { $0 > now } ?? false }
+
+    /// What a suspended bot shows: "Suspended until 14:20", "Suspended until 5 Nov at 09:00" or "Suspended".
+    public static func suspension(until: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        guard until < Date(timeIntervalSinceNow: 50 * 365 * 86_400) else { return "Suspended" }
+        let time = until.formatted(date: .omitted, time: .shortened)
+        if calendar.isDate(until, inSameDayAs: now) { return "Suspended until \(time)" }
+        return "Suspended until \(until.formatted(.dateTime.day().month(.abbreviated))) at \(time)"
+    }
+
+    /// The bots suspended at `now`, each with what it shows, for the runtime to hold.
+    public static func suspensions(of agents: [AgentRecord], now: Date = Date()) -> [UUID: String] {
+        Dictionary(uniqueKeysWithValues: agents.compactMap { agent in
+            guard agent.archivedAt == nil, let until = agent.suspendedUntil, until > now else { return nil }
+            return (agent.id, suspension(until: until, now: now))
+        })
     }
 }
 

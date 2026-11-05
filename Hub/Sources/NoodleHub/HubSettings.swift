@@ -84,6 +84,13 @@ struct HubSettingsProblem: Equatable {
         }
     }
 
+    /// Suspends a bot until then, or unsuspends it when nil, for its owner, on all their devices.
+    func setSuspended(until: Date?, id: UUID) {
+        do { try hub.bots.setSuspended(until: until, id: id) } catch {
+            problem = HubSettingsProblem(title: "Could Not Suspend", message: error.localizedDescription)
+        }
+    }
+
     func modelName(_ model: String, on harness: HubHarness) -> String {
         runtime.models(for: harness.provider.rawValue).first { $0.id == model }?.displayName ?? model
     }

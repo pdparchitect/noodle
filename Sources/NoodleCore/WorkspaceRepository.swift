@@ -565,6 +565,20 @@ public struct WorkspaceRepository: Sendable {
         return configuration.agent
     }
 
+    /// Suspends the bot until then, or unsuspends it when nil. Whole seconds, as agent.json keeps dates,
+    /// so a copy on another device compares equal.
+    @discardableResult
+    public func setAgentSuspended(until: Date?, agentID: UUID) throws -> AgentRecord {
+        let until = until.map { Date(timeIntervalSince1970: $0.timeIntervalSince1970.rounded(.down)) }
+        let layout = storage(for: agentID)
+        guard AgentStorageLayout.exists(layout.configuration) else { throw WorkspaceError.missingAgent(agentID) }
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard configuration.agent.suspendedUntil != until else { return configuration.agent }
+        configuration.agent.suspendedUntil = until
+        try configuration.save(to: layout)
+        return configuration.agent
+    }
+
     @discardableResult
     public func setConversationArchived(_ archived: Bool, conversationID: UUID, now: Date = Date()) throws -> BotConversation {
         guard FileManager.default.fileExists(atPath: conversationDirectory(id: conversationID).path) else {

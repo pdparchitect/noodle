@@ -194,9 +194,12 @@ extension NoodleStore {
     func pauseSummary(for conversation: BotConversation) -> String? {
         if let setAside = setAsideAgent(of: conversation) { return setAside.helpURL == nil ? "Can't start" : "Needs an upgrade" }
         let waiting = Set(agentsWaitingForKick(in: conversation).map(\.id))
-        let paused = shownParticipants(for: conversation).filter { waiting.contains($0.id) || hubPause(ofAgent: $0.id) != nil }
+        let paused = shownParticipants(for: conversation).filter {
+            waiting.contains($0.id) || $0.isSuspended() || hubPause(ofAgent: $0.id) != nil
+        }
         guard let first = paused.first else { return nil }
         guard conversation.kind == .group else {
+            if first.isSuspended(), let until = first.suspendedUntil { return AgentRecord.suspension(until: until) }
             return waiting.contains(first.id) ? runtime.snapshot(for: first.id).pauseSummary : hubPause(ofAgent: first.id)?.shown()
         }
         return "Paused: " + paused.map(\.displayName).joined(separator: ", ")
@@ -234,6 +237,10 @@ struct ConversationPauseControl: View {
                         openSettings()
                     }
                     .help("Sign in to the harness \(agent.displayName) uses")
+                } else if let agent = store.shownParticipants(for: conversation).first(where: { $0.isSuspended() }),
+                          store.canSuspend(agent.id) {
+                    Button("Unsuspend") { store.setSuspended(until: nil, agentID: agent.id) }
+                        .help("Let \(agent.displayName) take new turns again")
                 } else if let agent = store.agentsWaitingForKick(in: conversation).first {
                     Button("Kick") {
                         kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
@@ -717,5 +724,32 @@ struct MessageBubble: View {
 private extension NSColor {
     static let incomingBubble = NSColor(name: nil) {
         NSColor(white: $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.20 : 0.90, alpha: 1)
+    }
+}
+
+extension NoodleStore {
+    /// Whether this Mac may suspend the bot: one of its own, or one its Hub can suspend, not one shared with it.
+    func canSuspend(_ id: UUID) -> Bool {
+        guard !isShared(id) else { return false }
+        guard let mirror = hubMirror(forAgent: id) else { return runsHere(id) }
+        return mirror.suspendsBots
+    }
+}
+
+/// Suspend Bot's choices of how long, or Unsuspend Bot for one already suspended.
+struct SuspendBotMenu: View {
+    @Environment(NoodleStore.self) private var store
+    let agent: AgentRecord
+
+    var body: some View {
+        if agent.isSuspended() {
+            Button("Unsuspend Bot") { store.setSuspended(until: nil, agentID: agent.id) }
+        } else {
+            Menu("Suspend Bot") {
+                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                    Button(choice.title) { store.setSuspended(until: choice.until(), agentID: agent.id) }
+                }
+            }
+        }
     }
 }

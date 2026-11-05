@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Suspend a bot for a while: touch and hold it, choose Suspend Bot, and pick how long. It stays in the list, grayed, saying until when, and messages wait for it. Choose Unsuspend Bot to let it continue. Needs a Noodle Hub that can suspend bots.
+
+### What to Test
+
+- Touch and hold a bot, choose Suspend Bot › For 1 Hour: it stays in the list with a gray picture and says until when. Send it a message: it doesn't answer.
+- Touch and hold it again and choose Unsuspend Bot: it answers the message you sent.
+- Suspend a bot on your phone, then look at it in Noodle on your Mac: it is suspended there too.
+
 ## [0.54.0] - 2026-11-03
 
 ### Changed
