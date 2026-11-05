@@ -60,6 +60,15 @@ import XCTest
         XCTAssertEqual(seen, ["email": "ada@example.com", "password": "correct horse"])
     }
 
+    /// macOS 26 can report a page's view leaving its window, as a stopping tab's does, as a gesture error of
+    /// its own. The error is the system's, so it fails no sign-in test; any other failure still does.
+    func testTheSystemsGestureErrorWhenAPageLeavesItsWindowIsNotTheBrowsers() async throws {
+        let watched = try await Watched(fixture: "sign-in-shadow.html")
+        defer { watched.end() }
+        record(XCTIssue(type: .thrownError,
+                        compactDescription: #"caught error: "InvalidTransition { phase: idle targetPhase: failed(removedFromContainer) }""#))
+    }
+
     func testAFormInAFrameIsFoundAndSaysWhoseItIs() async throws {
         let watched = try await Watched(fixture: "sign-in-frame.html", frames: 2)
         defer { watched.end() }
@@ -221,6 +230,16 @@ import XCTest
     /// `beforeWatching` runs once the page has loaded, while bots may still use the browser.
     init(fixture name: String, frames: Int = 1, changing: (String, String)? = nil,
          beforeWatching: ((BrowserRuntime, UUID, BrowserTab) async throws -> Void)? = nil) async throws {
+        // The page's view goes into its tab's window while it loads and while someone watches, and out again
+        // after, and when the tab stops. macOS 26's gesture tracking now and then throws an InvalidTransition
+        // error of its own from inside that removal, which XCTest then reports against the test.
+        let systemGestures = XCTExpectedFailure.Options()
+        systemGestures.isStrict = false
+        systemGestures.issueMatcher = { issue in
+            let text = [issue.compactDescription, issue.detailedDescription ?? "", issue.associatedError.map { "\($0)" } ?? ""].joined()
+            return text.contains("InvalidTransition") && text.contains("removedFromContainer")
+        }
+        XCTExpectFailure("macOS gesture tracking failed while a page's view left its window", options: systemGestures)
         let library = BrowserLibrary(root: root)
         runtime = BrowserRuntime(library: library)
         browser = try library.create(name: "Sign in").id
