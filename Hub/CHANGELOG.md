@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-05
+
+### Added
+
+- When the Hub's FX sign-in belongs to more than one Vercel team, its actions menu in Settings › Harness, and each FX profile's, has a Vercel Team menu for choosing which team pays for model requests. Bots on that sign-in restart on the new team, and the FX model list follows the team.
+
 ## [0.47.0] - 2026-11-03
 
 ### Added
