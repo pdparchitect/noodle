@@ -1,6 +1,7 @@
 import AppKit
 import LocalMacCore
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class LocalMacWindowPreviewTests: XCTestCase {

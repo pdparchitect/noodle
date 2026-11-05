@@ -3,22 +3,26 @@ import Containerization
 import Foundation
 import Darwin
 
-struct GuestFile: Codable, Identifiable, Equatable, Sendable {
-    let name: String
-    let kind: String
-    let size: Int64
-    let modified: Int64
-    let version: String
-    var id: String { name }
-    var displayName: String { name.components(separatedBy: .newlines).joined(separator: " ").replacingOccurrences(of: "\t", with: " ") }
-    var directory: Bool { kind == "directory" }
-    var regular: Bool { kind == "file" }
+public struct GuestFile: Codable, Identifiable, Equatable, Sendable {
+    public let name: String
+    public let kind: String
+    public let size: Int64
+    public let modified: Int64
+    public let version: String
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(name: String, kind: String, size: Int64, modified: Int64, version: String) {
+        self.name = name; self.kind = kind; self.size = size; self.modified = modified; self.version = version
+    }
+    public var id: String { name }
+    public var displayName: String { name.components(separatedBy: .newlines).joined(separator: " ").replacingOccurrences(of: "\t", with: " ") }
+    public var directory: Bool { kind == "directory" }
+    public var regular: Bool { kind == "file" }
     var symbol: String { directory ? "folder.fill" : kind == "symlink" ? "link" : "doc" }
     static func validateName(_ name: String) throws {
         guard !name.isEmpty, name != ".", name != "..", !name.contains("/"),
               !name.utf8.contains(0), name.utf8.count <= 255 else { throw ComputerError("Choose a valid file name without slashes.") }
     }
-    static func path(_ folder: String, _ name: String) throws -> String {
+    public static func path(_ folder: String, _ name: String) throws -> String {
         try validateName(name)
         return folder == "/" ? "/" + name : folder + "/" + name
     }
@@ -141,10 +145,10 @@ extension ComputerFileService {
     }
 }
 
-actor GuestFiles: ComputerFileService {
+public actor GuestFiles: ComputerFileService {
     let runtime: ContainerComputer
     private var installation: Task<String, Error>?
-    init(runtime: ContainerComputer) { self.runtime = runtime }
+    public init(runtime: ContainerComputer) { self.runtime = runtime }
 
     func homeDirectory() async throws -> String {
         let data = try await run(arguments: ["/bin/sh", "-c", GuestHome.command], limit: 4096)
@@ -225,7 +229,7 @@ actor GuestFiles: ComputerFileService {
         }
     }
 
-    func list(_ path: String) async throws -> [GuestFile] {
+    public func list(_ path: String) async throws -> [GuestFile] {
         let helper = try await helper()
         let data = try await run(arguments: [helper, "list", path], limit: 4 * 1024 * 1024)
         let files = try JSONDecoder().decode([GuestFile].self, from: data)
@@ -237,7 +241,7 @@ actor GuestFiles: ComputerFileService {
         return files.sorted { a, b in a.directory != b.directory ? a.directory : a.name.localizedStandardCompare(b.name) == .orderedAscending }
     }
 
-    func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool,
+    public func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool,
               progress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
         let limit: Int64 = preview ? PreviewPolicy.fileLimit : 8 * 1024 * 1024 * 1024
         guard file.regular, file.size <= limit else { throw ComputerError(preview ? "This file is too large to preview." : "Only regular files up to 8 GB can be exported.") }
@@ -254,7 +258,7 @@ actor GuestFiles: ComputerFileService {
         return file.size
     }
 
-    func upload(_ source: URL, to path: String, progress: @escaping @Sendable (Int64) async -> Void = { _ in }) async throws {
+    public func upload(_ source: URL, to path: String, progress: @escaping @Sendable (Int64) async -> Void = { _ in }) async throws {
         let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize, size <= 8 * 1024 * 1024 * 1024 else {
             throw ComputerError("Choose a regular file up to 8 GB.")
@@ -263,7 +267,7 @@ actor GuestFiles: ComputerFileService {
         _ = try await run(arguments: [helper, "write", path, String(size)], input: FileInput(url: source, limit: Int64(size), progress: progress), limit: 4096, timeout: 300)
     }
 
-    func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileTransferProgress) async -> Void) async throws {
+    public func importItems(_ urls: [URL], to folder: String, progress: @escaping @Sendable (FileTransferProgress) async -> Void) async throws {
         let scoped = urls.filter { $0.startAccessingSecurityScopedResource() }
         defer { for url in scoped { url.stopAccessingSecurityScopedResource() } }
         let plan = try FileImportPlan.prepare(urls, folder: folder)
@@ -274,7 +278,7 @@ actor GuestFiles: ComputerFileService {
         try await change("mkdir", path: path)
     }
 
-    func change(_ operation: String, path: String, extra: [String] = []) async throws {
+    public func change(_ operation: String, path: String, extra: [String] = []) async throws {
         guard ["mkdir", "rename", "remove", "copy"].contains(operation) else { throw ComputerError("Unsupported file operation.") }
         let helper = try await helper()
         _ = try await run(arguments: [helper, operation, path] + extra, limit: 4096, timeout: 30)

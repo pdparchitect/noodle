@@ -5,11 +5,15 @@ import LocalMacCore
 import ServiceManagement
 import Surface
 
-struct LocalMacSetupRequired: LocalizedError {
+public struct LocalMacSetupRequired: LocalizedError {
     var registration: LocalMacRegistrationStatus = .unknown
     var retryAction = "Start"
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(registration: LocalMacRegistrationStatus = .unknown, retryAction: String = "Start") {
+        self.registration = registration; self.retryAction = retryAction
+    }
     private var setupName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.setupAppName ?? "Noodle Computer Setup" }
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch registration {
         case .notRegistered: "Enable Local Mac to create and start a separate account on this Mac."
         case .requiresApproval: "Allow \(setupName) in System Settings → General → Login Items & Extensions."
@@ -20,14 +24,14 @@ struct LocalMacSetupRequired: LocalizedError {
     }
 }
 
-@MainActor enum LocalMacSetup {
+@MainActor public enum LocalMacSetup {
     static var desktopApp: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacDesktop.app") }
-    static var controlPermissionName: String {
+    public static var controlPermissionName: String {
         if #available(macOS 27, *) { return "Device Control and Data Access" }
         return "Accessibility"
     }
-    static var desktopName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop" }
-    static func desktopForPermissions() throws -> URL {
+    public static var desktopName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop" }
+    public static func desktopForPermissions() throws -> URL {
         guard let providerID = Bundle.main.bundleIdentifier,
               let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else {
             throw ComputerError("Cannot identify the signed desktop helper.")
@@ -37,7 +41,7 @@ struct LocalMacSetupRequired: LocalizedError {
         return try LocalMacPermissionHelper.prepare(source: desktopApp, directory: directory,
                                                     providerID: providerID, team: team)
     }
-    static func registrationStatus() async -> LocalMacRegistrationStatus {
+    public static func registrationStatus() async -> LocalMacRegistrationStatus {
         let reported = await LocalMacRegistrationProbe.read(executable: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalMacSetup.app/Contents/MacOS/LocalMacSetup"))
         return await confirmed(reported) { (try? await serviceInfo()) != nil }
     }
@@ -50,11 +54,11 @@ struct LocalMacSetupRequired: LocalizedError {
         guard reported == .notRegistered else { return reported }
         return await serviceAnswers() ? .enabled : reported
     }
-    static func resolve(_ status: LocalMacRegistrationStatus) throws {
+    public static func resolve(_ status: LocalMacRegistrationStatus) throws {
         if status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
         else { try enable() }
     }
-    static func enable() throws {
+    public static func enable() throws {
         guard let identity = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier), identity.permitsAccountService else {
             throw ComputerError("Use the installed Noodle Computer app to enable Local Mac. Test builds cannot register the account service.")
         }
@@ -119,7 +123,7 @@ struct LocalMacSetupRequired: LocalizedError {
             }
         }
     }
-    static func stop(_ id: UUID, deleting: Bool = false) async throws {
+    public static func stop(_ id: UUID, deleting: Bool = false) async throws {
         // Resolve helper replacement before sending the new deletion selector.
         // Only the read-only handshake may retry; deletion itself is sent once.
         if deleting { try await check(retryAction: "Delete") }
@@ -165,10 +169,10 @@ private final class Once<T>: @unchecked Sendable {
     }
 }
 
-@MainActor final class LocalMacComputer: ObservableObject {
-    @Published var image: NSImage?
-    @Published var status: LocalMacStatus?
-    @Published var error: String?
+@MainActor public final class LocalMacComputer: ObservableObject {
+    @Published public var image: NSImage?
+    @Published public var status: LocalMacStatus?
+    @Published public var error: String?
     @Published var windowPreviews: [UUID: LocalMacWindowPreview] = [:]
     @Published private(set) var openingAllWindows = false
     lazy var windowPresenter = LocalMacWindowPreviewPresenter(runtime: self)
@@ -427,7 +431,7 @@ private final class Once<T>: @unchecked Sendable {
         if let inputFailure, error == inputFailure { error = nil }
         inputFailure = nil
     }
-    func refreshStatus() async {
+    public func refreshStatus() async {
         guard isConnected else { return }
         // receive() applies the same display guard to polled and pushed status.
         _ = try? await call(.init(.status))
@@ -437,8 +441,8 @@ private final class Once<T>: @unchecked Sendable {
     }
     /// A capture that failed in the helper stays requested, so polling never
     /// asks again; the person can.
-    var canRetryCapture: Bool { isConnected && captureStop == nil && status?.detail != nil && status?.displayID == nil }
-    func retryCapture() async {
+    public var canRetryCapture: Bool { isConnected && captureStop == nil && status?.detail != nil && status?.displayID == nil }
+    public func retryCapture() async {
         guard canRetryCapture else { return }
         streamRequested = false
         do { try await startCaptureIfPermitted() }

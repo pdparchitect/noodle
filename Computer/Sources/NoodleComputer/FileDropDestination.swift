@@ -1,3 +1,4 @@
+import ComputerEngine
 import Foundation
 
 /// Shared by icon and list views so highlighting, cursor feedback and execution agree.

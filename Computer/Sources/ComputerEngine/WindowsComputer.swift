@@ -16,7 +16,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
 /// The first start sets Windows up with no network, so its welcome screens skip Windows Update; once the Noodle
 /// agent says hello it shuts the guest down and boots it again, now set up, with the network.
 @available(macOS 27, *)
-@MainActor final class WindowsComputer: NSObject, ObservableObject, VZVirtualMachineDelegate {
+@MainActor public final class WindowsComputer: NSObject, ObservableObject, VZVirtualMachineDelegate {
     let computer: Computer
     let directory: URL
     @Published private(set) var status: String?
@@ -202,7 +202,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
         onStop = nil
     }
 
-    nonisolated func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+    public nonisolated func guestDidStop(_ virtualMachine: VZVirtualMachine) {
         Task { @MainActor in
             guard virtualMachine === self.machine, self.powerCycleState.handlesGuestStop(machineStopped: virtualMachine.state == .stopped) else { return }
             if self.settingUp || (!self.setUp && self.setupStops < 3) {
@@ -217,7 +217,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
         }
     }
 
-    nonisolated func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
+    public nonisolated func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
         Task { @MainActor in
             guard virtualMachine === self.machine else { return }
             self.finish(error)
@@ -550,21 +550,23 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
 
 /// The screen, with the Mac's mouse and keyboard going to Windows while it has focus.
 @available(macOS 27, *)
-struct WindowsDisplay: NSViewRepresentable {
+public struct WindowsDisplay: NSViewRepresentable {
     @ObservedObject var computer: WindowsComputer
-    func makeNSView(context: Context) -> WindowsScreenView {
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(computer: WindowsComputer) { self.computer = computer }
+    public func makeNSView(context: Context) -> WindowsScreenView {
         let view = WindowsScreenView()
         view.attach(computer)
         return view
     }
-    func updateNSView(_ view: WindowsScreenView, context: Context) {
+    public func updateNSView(_ view: WindowsScreenView, context: Context) {
         if view.computer !== computer { view.attach(computer) }
         view.setStatus(computer.status)
     }
 }
 
 @available(macOS 27, *)
-class WindowsScreenView: NSView {
+public class WindowsScreenView: NSView {
     private(set) weak var computer: WindowsComputer?
     private let label = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
@@ -622,7 +624,7 @@ class WindowsScreenView: NSView {
     // cursor, AppKit owns entry/exit so the Mac pointer returns over app controls.
     // Keep it in the letterbox margins and while there is no guest image.
     private let guestCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
-    override func resetCursorRects() {
+    public override func resetCursorRects() {
         guard layer?.contents != nil else { return }
         let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
         guard scale > 0 else { return }
@@ -630,8 +632,8 @@ class WindowsScreenView: NSView {
         addCursorRect(NSRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height), cursor: guestCursor)
     }
 
-    override var acceptsFirstResponder: Bool { true }
-    override func updateTrackingAreas() {
+    public override var acceptsFirstResponder: Bool { true }
+    public override func updateTrackingAreas() {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
         super.updateTrackingAreas()
@@ -653,24 +655,24 @@ class WindowsScreenView: NSView {
         WindowsPrivateVirtualization.pointer(machine, at: location(event), buttons: buttons)
     }
 
-    override func mouseMoved(with event: NSEvent) { pointer(event) }
-    override func mouseDragged(with event: NSEvent) { pointer(event) }
-    override func rightMouseDragged(with event: NSEvent) { pointer(event) }
-    override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 1; pointer(event) }
-    override func mouseUp(with event: NSEvent) { buttons &= ~1; pointer(event) }
-    override func rightMouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 2; pointer(event) }
-    override func rightMouseUp(with event: NSEvent) { buttons &= ~2; pointer(event) }
-    override func scrollWheel(with event: NSEvent) {
+    public override func mouseMoved(with event: NSEvent) { pointer(event) }
+    public override func mouseDragged(with event: NSEvent) { pointer(event) }
+    public override func rightMouseDragged(with event: NSEvent) { pointer(event) }
+    public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 1; pointer(event) }
+    public override func mouseUp(with event: NSEvent) { buttons &= ~1; pointer(event) }
+    public override func rightMouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 2; pointer(event) }
+    public override func rightMouseUp(with event: NSEvent) { buttons &= ~2; pointer(event) }
+    public override func scrollWheel(with event: NSEvent) {
         if let machine = computer?.machine, machine.state == .running { WindowsPrivateVirtualization.scroll(machine, event) }
     }
     private func key(_ event: NSEvent) {
         if let machine = computer?.machine, machine.state == .running { WindowsPrivateVirtualization.key(machine, event) }
     }
-    override func keyDown(with event: NSEvent) { key(event) }
-    override func keyUp(with event: NSEvent) { key(event) }
-    override func flagsChanged(with event: NSEvent) { key(event) }
+    public override func keyDown(with event: NSEvent) { key(event) }
+    public override func keyUp(with event: NSEvent) { key(event) }
+    public override func flagsChanged(with event: NSEvent) { key(event) }
     // ⌘-shortcuts go to Windows while it has focus, rather than to the Mac's menus.
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard window?.firstResponder === self, event.type == .keyDown else { return false }
         key(event)
         return true
@@ -857,7 +859,7 @@ private final class LockedData: @unchecked Sendable {
 // MARK: - Terminal and Files
 
 /// A PowerShell console in Windows, through the agent's ConPTY session.
-@MainActor final class WindowsTerminalConnection {
+@MainActor public final class WindowsTerminalConnection {
     let agent: WindowsAgent
     let terminal: GuestTerminal
     private var channel: UInt32?

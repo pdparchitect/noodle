@@ -4,14 +4,14 @@ import Virtualization
 
 /// Owns one VZ machine. All VZ calls and delegate callbacks use the main queue.
 @MainActor
-final class VirtualComputer: NSObject, VZVirtualMachineDelegate {
-    let machine: VZVirtualMachine
+public final class VirtualComputer: NSObject, VZVirtualMachineDelegate {
+    public let machine: VZVirtualMachine
     var onStop: ((Error?) -> Void)?
     private var installer: VZMacOSInstaller?
     private var progressObservation: NSKeyValueObservation?
     private var installationStarted = false
 
-    init(computer: Computer, directory: URL, bootInstaller: Bool) throws {
+    public init(computer: Computer, directory: URL, bootInstaller: Bool) throws {
         machine = VZVirtualMachine(
             configuration: try Self.configuration(computer, directory: directory, bootInstaller: bootInstaller))
         super.init()
@@ -127,10 +127,10 @@ final class VirtualComputer: NSObject, VZVirtualMachineDelegate {
         }
     }
 
-    nonisolated func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+    public nonisolated func guestDidStop(_ virtualMachine: VZVirtualMachine) {
         Task { @MainActor in onStop?(nil) }
     }
-    nonisolated func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
+    public nonisolated func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
         Task { @MainActor in onStop?(error) }
     }
 }

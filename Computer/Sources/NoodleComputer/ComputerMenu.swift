@@ -1,4 +1,5 @@
 import AppKit
+import ComputerEngine
 import NoodleSettingsUI
 import SwiftUI
 

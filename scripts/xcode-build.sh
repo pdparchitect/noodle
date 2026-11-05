@@ -22,9 +22,10 @@ esac
 tuist="$(zsh "$project_root/scripts/install-tuist.sh")"
 (cd "$folder" && "$tuist" generate --no-open >&2)
 # Not $folder/Derived: that is Tuist's, and generating empties it, which would rebuild everything each time.
+# Apple silicon only, as releases are: ARCHS on the command line also reaches the package dependencies.
 derived_data="$project_root/.build/DerivedData/$app"
 zsh "$project_root/scripts/build-priority.sh" xcodebuild -workspace "$folder/${name// /}.xcworkspace" -scheme "${name// /}" -configuration "$configuration" \
-    -derivedDataPath "$derived_data" -destination 'platform=macOS' -allowProvisioningUpdates \
+    -derivedDataPath "$derived_data" -destination 'platform=macOS' -allowProvisioningUpdates ARCHS=arm64 \
     -skipPackagePluginValidation -skipMacroValidation "$@" build >&2
 destination="$project_root/.build/$app_name.app"
 # Copied beside it and swapped in, so the previous build stays whole until the new one is: an

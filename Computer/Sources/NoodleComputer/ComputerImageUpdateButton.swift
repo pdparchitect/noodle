@@ -1,3 +1,4 @@
+import ComputerEngine
 import SwiftUI
 
 struct ComputerImageUpdateButton: View {

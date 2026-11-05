@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 import LocalMacCore
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class LocalMacPointerTests: XCTestCase {

@@ -20,7 +20,7 @@ import uuid
 def shell_command():
     # Read the raw Swift string used by both native and provider terminals so
     # this integration test executes the actual launcher rather than a copy.
-    source = Path(__file__).resolve().parents[1] / "Sources/NoodleComputer/GuestShell.swift"
+    source = Path(__file__).resolve().parents[1] / "Sources/ComputerEngine/GuestShell.swift"
     match = re.search(r'static let command = #"""\n(.*?)\n\s*"""#', source.read_text(), re.S)
     if not match:
         raise AssertionError("Could not read the guest shell launcher")

@@ -1,5 +1,6 @@
 import AppKit
 import ComputerCore
+import ComputerEngine
 import NoodleSettingsUI
 import SwiftUI
 import UniformTypeIdentifiers

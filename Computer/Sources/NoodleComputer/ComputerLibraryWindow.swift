@@ -1,4 +1,5 @@
 import AppKit
+import ComputerEngine
 import SwiftUI
 
 /// Document opens reuse the mounted library instead of asking SwiftUI to

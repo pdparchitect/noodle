@@ -7,6 +7,7 @@ import ContainerizationEXT4
 import ContainerizationOCI
 import CryptoKit
 import SystemPackage
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class StorageMaintenanceTests: XCTestCase {

@@ -2,28 +2,28 @@ import AppKit
 import ComputerCore
 import Foundation
 
-@MainActor final class ComputerFilesModel: ObservableObject {
+@MainActor public final class ComputerFilesModel: ObservableObject {
     let service: any ComputerFileService
     let computerID: UUID
     /// Where the browser first opens; nil opens the home folder, for computers without a workspace.
-    let workspace: String?
-    @Published var folder: String
+    public let workspace: String?
+    @Published public var folder: String
     @Published var files: [GuestFile] = []
-    @Published var selection: Set<String> = []
-    @Published var loading = false
-    @Published var busy = false
-    @Published var transferProgress: FileTransferProgress?
-    @Published var cancellingTransfer = false
-    @Published var status = ""
-    @Published var error: String?
-    @Published var previewURL: URL?
-    @Published var previewStatus = "Select a file to preview"
-    @Published var showHidden = false
-    @Published var iconView = true
-    @Published var previewEnabled = false
-    @Published var filter = ""
-    @Published var history: [String] = []
-    @Published var forwardHistory: [String] = []
+    @Published public var selection: Set<String> = []
+    @Published public var loading = false
+    @Published public var busy = false
+    @Published public var transferProgress: FileTransferProgress?
+    @Published public var cancellingTransfer = false
+    @Published public var status = ""
+    @Published public var error: String?
+    @Published public var previewURL: URL?
+    @Published public var previewStatus = "Select a file to preview"
+    @Published public var showHidden = false
+    @Published public var iconView = true
+    @Published public var previewEnabled = false
+    @Published public var filter = ""
+    @Published public var history: [String] = []
+    @Published public var forwardHistory: [String] = []
     private var listing: Task<Void, Never>?
     private var preview: Task<Void, Never>?
     private var transfer: Task<Void, Never>?
@@ -40,21 +40,21 @@ import Foundation
     }
 
     /// The browser is shown: its first folder the first time, else where it was.
-    func appear() {
+    public func appear() {
         if appeared || workspace != nil { navigate(folder, record: false) } else { goHome() }
         appeared = true
     }
     convenience init(runtime: ContainerComputer, computerID: UUID) { self.init(service: GuestFiles(runtime: runtime), computerID: computerID) }
     /// Only what is shown counts, so a search or hiding dotfiles cannot leave unseen items to be deleted.
-    var selectedFiles: [GuestFile] { visible.filter { selection.contains($0.name) } }
+    public var selectedFiles: [GuestFile] { visible.filter { selection.contains($0.name) } }
     /// The single chosen item, for actions that only make sense on one (rename, preview, Quick Look).
-    var selected: GuestFile? { let files = selectedFiles; return files.count == 1 ? files[0] : nil }
-    var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
-    var emptyFolder: EmptyFolder? { loading ? nil : EmptyFolder(files: files, showHidden: showHidden, filter: filter) }
-    var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }
+    public var selected: GuestFile? { let files = selectedFiles; return files.count == 1 ? files[0] : nil }
+    public var visible: [GuestFile] { files.filter { (showHidden || !$0.name.hasPrefix(".")) && (filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter)) } }
+    public var emptyFolder: EmptyFolder? { loading ? nil : EmptyFolder(files: files, showHidden: showHidden, filter: filter) }
+    public var parent: String { folder == "/" ? "/" : (folder as NSString).deletingLastPathComponent }
 
     /// Why the listing shows nothing, so the view can say so instead of looking blank.
-    enum EmptyFolder: Equatable {
+    public enum EmptyFolder: Equatable {
         case empty, hiddenOnly, noMatches
         init?(files: [GuestFile], showHidden: Bool, filter: String) {
             let shown = files.filter { showHidden || !$0.name.hasPrefix(".") }
@@ -65,12 +65,12 @@ import Foundation
         }
     }
 
-    func navigate(_ path: String, record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
+    public func navigate(_ path: String, record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         let destination: String
         do { destination = try GuestFile.normalize(path) } catch { self.error = error.localizedDescription; return }
         navigate(resolving: { destination }, record: record, selecting: selecting, clearStatus: clearStatus)
     }
-    func goHome() { navigate(resolving: { [service] in try await service.homeDirectory() }, record: appeared) }
+    public func goHome() { navigate(resolving: { [service] in try await service.homeDirectory() }, record: appeared) }
     private func navigate(resolving destination: @escaping () async throws -> String,
                           record: Bool = true, selecting: String? = nil, clearStatus: Bool = true) {
         listing?.cancel()
@@ -94,26 +94,26 @@ import Foundation
             if listingID == id { loading = false }
         }
     }
-    func goUp() { guard folder != "/" else { return }; navigate(parent, selecting: (folder as NSString).lastPathComponent) }
-    func back() { guard let path = history.popLast() else { return }; forwardHistory.append(folder); navigate(path, record: false) }
-    func forward() { guard let path = forwardHistory.popLast() else { return }; history.append(folder); navigate(path, record: false) }
-    func choose(_ file: GuestFile?) { select(file.map { [$0.name] } ?? []) }
-    func select(_ names: Set<String>) {
+    public func goUp() { guard folder != "/" else { return }; navigate(parent, selecting: (folder as NSString).lastPathComponent) }
+    public func back() { guard let path = history.popLast() else { return }; forwardHistory.append(folder); navigate(path, record: false) }
+    public func forward() { guard let path = forwardHistory.popLast() else { return }; history.append(folder); navigate(path, record: false) }
+    public func choose(_ file: GuestFile?) { select(file.map { [$0.name] } ?? []) }
+    public func select(_ names: Set<String>) {
         selection = names
         if previewEnabled { loadPreview() } else { stopPreview() }
     }
     /// Right-clicking outside the selection acts on the clicked item alone, as in Finder.
-    func prepareContextMenu(for file: GuestFile?) {
+    public func prepareContextMenu(for file: GuestFile?) {
         guard let file else { if !selection.isEmpty { select([]) }; return }
         if !selection.contains(file.name) { choose(file) }
     }
-    func open(_ file: GuestFile) { if file.directory, let path = try? GuestFile.path(folder, file.name) { navigate(path) } }
+    public func open(_ file: GuestFile) { if file.directory, let path = try? GuestFile.path(folder, file.name) { navigate(path) } }
 
-    func stopPreview() {
+    public func stopPreview() {
         previewID = UUID(); preview?.cancel(); preview = nil; previewURL = nil
         if let lease { self.lease = nil; Task { await FilePreviewCache.shared.release(lease) } }
     }
-    func loadPreview() {
+    public func loadPreview() {
         stopPreview()
         guard let file = selected else { previewStatus = "Select a file to preview"; return }
         guard file.regular else { previewStatus = file.directory ? "Folder" : "Preview unavailable for this item"; return }
@@ -157,13 +157,13 @@ import Foundation
             navigate(folder, record: false, clearStatus: false)
         }
     }
-    func cancelTransfer() {
+    public func cancelTransfer() {
         guard busy, !cancellingTransfer else { return }
         cancellingTransfer = true; status = "Cancelling…"; transfer?.cancel()
         let queued = queuedExports; queuedExports = []
         for export in queued { export.cancel() }
     }
-    func importFiles(_ urls: [URL], into destination: String? = nil) {
+    public func importFiles(_ urls: [URL], into destination: String? = nil) {
         guard !urls.isEmpty else { return }
         let folder = destination ?? folder
         perform("Preparing import…", cancellationMessage: "Import cancelled. Completed items were kept.") { [self] in
@@ -179,12 +179,12 @@ import Foundation
            progress.completedItems < previous.completedItems || progress.transferredBytes < previous.transferredBytes { return }
         transferProgress = progress; status = "\(verb) \(progress.currentPath)"
     }
-    func importPanel() {
+    public func importPanel() {
         let panel = NSOpenPanel(); panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
         panel.prompt = "Import"
         panel.begin { [weak self] response in if response == .OK { self?.importFiles(panel.urls) } }
     }
-    func exportPanel() {
+    public func exportPanel() {
         let files = selectedFiles.filter { $0.regular || $0.directory }
         if files.count > 1 {
             let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
@@ -233,7 +233,7 @@ import Foundation
             Task { @MainActor in self?.updateTransferProgress(progress, verb: "Exporting", id: id) }
         }
     }
-    func promisedExport(_ file: GuestFile, path: String, to destination: URL, completion: @escaping (Error?) -> Void) {
+    public func promisedExport(_ file: GuestFile, path: String, to destination: URL, completion: @escaping (Error?) -> Void) {
         // Dragging several items out promises each one separately; run them one after another.
         let start = { [weak self] in
             guard let self else { completion(CancellationError()); return }
@@ -244,18 +244,18 @@ import Foundation
         }
         if busy { queuedExports.append((start, { completion(CancellationError()) })) } else { start() }
     }
-    func createFolder(_ name: String) {
+    public func createFolder(_ name: String) {
         do { let path = try GuestFile.path(folder, name); perform("Creating folder…") { try await self.service.change("mkdir", path: path) } }
         catch { self.error = error.localizedDescription }
     }
-    func rename(_ name: String) {
+    public func rename(_ name: String) {
         guard let file = selected else { return }
         do {
             let old = try GuestFile.path(folder, file.name), new = try GuestFile.path(folder, name)
             perform("Renaming…") { try await self.service.change("rename", path: old, extra: [new]) }
         } catch { self.error = error.localizedDescription }
     }
-    func removeSelected() {
+    public func removeSelected() {
         let items = selectedFiles.compactMap { file in (try? GuestFile.path(folder, file.name)).map { (file, $0) } }
         guard !items.isEmpty else { return }
         perform("Deleting…") {
@@ -266,7 +266,7 @@ import Foundation
             for (_, path) in items { try await self.service.change("remove", path: path) }
         }
     }
-    func duplicateSelected() {
+    public func duplicateSelected() {
         do {
             let copies = try selectedFiles.filter(\.regular).map { file in
                 (source: try GuestFile.path(folder, file.name), version: file.version, destination: try GuestFile.path(folder, "Copy of " + file.name))
@@ -277,7 +277,7 @@ import Foundation
             }
         } catch { self.error = error.localizedDescription }
     }
-    func move(_ files: [GuestFile], intoFolder destinationFolder: String) {
+    public func move(_ files: [GuestFile], intoFolder destinationFolder: String) {
         do {
             let parent = try GuestFile.normalize(destinationFolder)
             guard parent != folder else { return }
@@ -290,12 +290,12 @@ import Foundation
             perform("Moving…") { for (source, destination) in moves { try await self.service.change("rename", path: source, extra: [destination]) } }
         } catch { self.error = error.localizedDescription }
     }
-    func disappear() { listing?.cancel(); stopPreview() }
+    public func disappear() { listing?.cancel(); stopPreview() }
     deinit { listing?.cancel(); preview?.cancel(); transfer?.cancel() }
 }
 
-@MainActor enum FileExportStaging {
-    static let root = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle File Exports", isDirectory: true)
+@MainActor public enum FileExportStaging {
+    public static let root = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle File Exports", isDirectory: true)
     private static var prepared = false
     static func prepare() throws {
         let fm = FileManager.default

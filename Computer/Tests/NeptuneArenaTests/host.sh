@@ -10,9 +10,9 @@ swiftc -module-cache-path "$build/cache" "$computer/Sources/NeptuneTransport/Nep
 clang -I "$computer/Sources/NeptunePOSIX/include" -c "$computer/Sources/NeptunePOSIX/NeptunePOSIX.c" -o "$build/posix.o"
 swiftc -module-cache-path "$build/cache" -I "$computer/Sources/NeptunePOSIX/include" "$computer/Sources/NeptuneTransport/NeptuneMemory.swift" "$here/memory.swift" "$build/posix.o" -o "$build/memory"
 "$build/memory"
-swiftc -module-cache-path "$build/cache" "$computer/Sources/NoodleComputer/WindowsGraphicsStartup.swift" "$here/startup.swift" -o "$build/startup"
+swiftc -module-cache-path "$build/cache" "$computer/Sources/ComputerEngine/WindowsGraphicsStartup.swift" "$here/startup.swift" -o "$build/startup"
 "$build/startup"
-swiftc -module-cache-path "$build/cache" "$computer/Sources/NoodleComputer/NeptuneScanout.swift" "$here/scanout.swift" -o "$build/scanout"
+swiftc -module-cache-path "$build/cache" "$computer/Sources/ComputerEngine/NeptuneScanout.swift" "$here/scanout.swift" -o "$build/scanout"
 "$build/scanout"
 mkdir -p "$build/Metadata.app/Contents/MacOS"
 cat > "$build/Metadata.app/Contents/Info.plist" <<'XML'

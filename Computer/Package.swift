@@ -14,7 +14,8 @@ let package = Package(
         .executable(name: "NoodleComputer", targets: ["NoodleComputer"]),
         .executable(name: "noodle-computer", targets: ["NoodleComputerCLI"]),
         .library(name: "ComputerCore", targets: ["ComputerCore"]),
-        .library(name: "ComputerExternal", targets: ["ComputerExternal"])],
+        .library(name: "ComputerExternal", targets: ["ComputerExternal"]),
+        .library(name: "ComputerEngine", targets: ["ComputerEngine"])],
     dependencies: [
         .package(path: "../Shared/ExternalTools"),
         .package(path: "../Shared/LaunchChecks"),
@@ -37,7 +38,24 @@ let package = Package(
         .target(name: "ComputerExternal", dependencies: [.product(name: "ComputerBridge", package: "Bridge"),
             .product(name: "NoodleExternalTools", package: "ExternalTools")]),
         .executableTarget(name: "NoodleComputerCLI", dependencies: ["ComputerExternal"]),
+        // Runs computers: Linux, macOS, Windows, SSH and Local Mac, their files and terminals, and serves
+        // them to Noodle. Every app that hosts computers builds on it; Noodle Computer adds its windows.
+        .target(name: "ComputerEngine", dependencies: [
+            "NeptuneTransport",
+            "ComputerCore",
+            .product(name: "ComputerBridge", package: "Bridge"),
+            .product(name: "LocalMacCore", package: "LocalMac"),
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
+            .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "NIOSSH", package: "swift-nio-ssh"),
+            .product(name: "Containerization", package: "containerization"),
+            .product(name: "ContainerizationEXT4", package: "containerization"),
+            .product(name: "ContainerizationExtras", package: "containerization"),
+            .product(name: "ContainerizationOCI", package: "containerization")
+        ], swiftSettings: appSettings),
         .executableTarget(name: "NoodleComputer", dependencies: [
+            "ComputerEngine",
             "NeptuneTransport",
             "ComputerCore",
             "ComputerExternal",
@@ -60,7 +78,7 @@ let package = Package(
         .testTarget(name: "NeptuneTransportTests", dependencies: ["NeptuneTransport"]),
         .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"]),
         .testTarget(name: "ComputerExternalTests", dependencies: ["ComputerExternal"]),
-        .testTarget(name: "ComputerStorageTests", dependencies: ["NoodleComputer", "ComputerExternal",
+        .testTarget(name: "ComputerStorageTests", dependencies: ["ComputerEngine", "NoodleComputer", "ComputerExternal",
             .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
             .product(name: "NIOSSH", package: "swift-nio-ssh")])
     ],

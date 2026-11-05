@@ -2,6 +2,7 @@ import AppKit
 import SwiftTerm
 import SwiftUI
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class TerminalKeyboardTests: XCTestCase {

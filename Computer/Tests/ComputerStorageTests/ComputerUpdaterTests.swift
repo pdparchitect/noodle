@@ -1,6 +1,7 @@
 import ComputerBridge
 import Sparkle
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class ComputerUpdaterTests: XCTestCase {

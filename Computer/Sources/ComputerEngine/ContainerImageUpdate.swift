@@ -8,7 +8,7 @@ import Foundation
 extension ContainerComputer {
     // Read the kernel's filesystem name; BusyBox stat may report the numeric
     // OverlayFS magic as UNKNOWN instead of the GNU stat name "overlayfs".
-    static let overlayCheckCommand = #"""
+    public static let overlayCheckCommand = #"""
         overlay_found=no
         while read -r source destination filesystem options rest; do
             if [ "$destination" = / ] && [ "$filesystem" = overlay ]; then overlay_found=yes; fi
@@ -138,7 +138,7 @@ extension ContainerComputer {
         }
     }
 
-    static func registryRequest<T>(reference: String, operation: () async throws -> T) async throws -> T {
+    public static func registryRequest<T>(reference: String, operation: () async throws -> T) async throws -> T {
         try validateImageReference(reference)
         do { return try await operation() }
         catch let error as RegistryClient.Error {

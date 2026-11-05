@@ -4,7 +4,7 @@ import Foundation
 import NIOCore
 
 /// A computer reached over SSH: one signed-in connection that terminals and files share.
-@MainActor final class SSHComputer {
+@MainActor public final class SSHComputer {
     let connection: SSHConnection
     var onDisconnect: ((String) -> Void)?
     private(set) var connected = true
@@ -27,7 +27,7 @@ import NIOCore
 }
 
 /// The terminal shown in the window: a login shell on the server.
-@MainActor final class SSHTerminalConnection {
+@MainActor public final class SSHTerminalConnection {
     let terminal: GuestTerminal
     private let connection: SSHConnection
     private var channel: Channel?

@@ -3,15 +3,15 @@ import AppKit
 import LocalMacCore
 import ServiceManagement
 
-enum LocalMacErrorRecovery: Equatable {
+public enum LocalMacErrorRecovery: Equatable {
     case fullDiskAccess, loginItems, setup, repair
-    var title: String {
+    public var title: String {
         switch self {
         case .fullDiskAccess: "Full Disk Access Required"
         case .loginItems, .setup, .repair: "Local Mac Helper Unavailable"
         }
     }
-    var actionTitle: String {
+    public var actionTitle: String {
         switch self {
         case .fullDiskAccess: "Open Full Disk Access"
         case .loginItems: "Open Login Items"
@@ -19,7 +19,7 @@ enum LocalMacErrorRecovery: Equatable {
         case .repair: "Repair Local Mac…"
         }
     }
-    @MainActor func open() throws {
+    @MainActor public func open() throws {
         switch self {
         case .fullDiskAccess: NSWorkspace.shared.open(LocalMacRemovalFailure.privacySettingsURL)
         case .loginItems: SMAppService.openSystemSettingsLoginItems()
@@ -29,7 +29,7 @@ enum LocalMacErrorRecovery: Equatable {
 }
 
 extension LocalMacRegistrationStatus {
-    var setupTitle: String {
+    public var setupTitle: String {
         switch self {
         case .notRegistered: "Enable Local Mac"
         case .requiresApproval: "Approval required"
@@ -38,7 +38,7 @@ extension LocalMacRegistrationStatus {
         case .unknown: "Setup status unavailable"
         }
     }
-    var setupActionTitle: String {
+    public var setupActionTitle: String {
         switch self {
         case .requiresApproval: "Open System Settings"
         case .notRegistered: "Enable Local Mac…"
@@ -50,7 +50,7 @@ extension LocalMacRegistrationStatus {
 extension ComputerSession {
     /// Refresh only the setup state. Returning from approval never creates or
     /// starts an account automatically, and cannot overwrite an in-flight start.
-    func refreshLocalMacSetup(read: () async -> LocalMacRegistrationStatus = { await LocalMacSetup.registrationStatus() }) async {
+    public func refreshLocalMacSetup(read: () async -> LocalMacRegistrationStatus = { await LocalMacSetup.registrationStatus() }) async {
         guard computer.kind == .localMac, phase.canStart else { return }
         let previous = phase
         let status = await read()

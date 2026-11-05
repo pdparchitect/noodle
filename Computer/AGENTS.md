@@ -20,3 +20,11 @@ generated project.
 
 README.md is for people using Computer; do not document code in it. Follow the
 `no-code-docs` skill.
+
+## Engine and app
+
+`Sources/ComputerEngine` runs computers: the library, every kind of computer, their displays,
+files and terminals, and the provider that serves them to Noodle. It is a library so other apps can
+host computers too. `Sources/NoodleComputer` is Noodle Computer's own app: its windows, settings,
+updater and launch checks. Put what a computer does in the engine and what the app shows around it
+in the app; the engine never depends on the app.

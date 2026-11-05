@@ -6,25 +6,25 @@ import SwiftTerm
 import SwiftUI
 
 /// Only transports bytes to a guest PTY. Never launches a shell on the Mac.
-final class GuestTerminalIO: ReaderStream, Writer, @unchecked Sendable {
+public final class GuestTerminalIO: ReaderStream, Writer, @unchecked Sendable {
     private let input = AsyncStream<Data>.makeStream()
     private let output = AsyncStream<Data>.makeStream()
-    func stream() -> AsyncStream<Data> { input.stream }
+    public func stream() -> AsyncStream<Data> { input.stream }
     var received: AsyncStream<Data> { output.stream }
-    func send(_ data: Data) { input.continuation.yield(data) }
-    func write(_ data: Data) throws { output.continuation.yield(data) }
-    func close() throws { output.continuation.finish() }
+    public func send(_ data: Data) { input.continuation.yield(data) }
+    public func write(_ data: Data) throws { output.continuation.yield(data) }
+    public func close() throws { output.continuation.finish() }
     func finish() { input.continuation.finish(); output.continuation.finish() }
 }
 
-@MainActor final class GuestTerminal: NSObject, ObservableObject, @preconcurrency TerminalViewDelegate {
-    private(set) var io = GuestTerminalIO()
-    let view = ComputerNativeTerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+@MainActor public final class GuestTerminal: NSObject, ObservableObject, @preconcurrency TerminalViewDelegate {
+    public private(set) var io = GuestTerminalIO()
+    public let view = ComputerNativeTerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
     var resize: ((Int, Int) -> Void)?
     var retryConnection: (() -> Void)?
     private var outputTask: Task<Void, Never>?
 
-    override init() {
+    public override init() {
         super.init()
         view.terminalDelegate = self
         view.nativeBackgroundColor = .black
@@ -50,42 +50,42 @@ final class GuestTerminalIO: ReaderStream, Writer, @unchecked Sendable {
         receiveOutput()
     }
     deinit { outputTask?.cancel(); io.finish() }
-    func send(source: TerminalView, data: ArraySlice<UInt8>) {
+    public func send(source: TerminalView, data: ArraySlice<UInt8>) {
         if let retryConnection {
             if data.contains(13) || data.contains(10) { retryConnection() }
             return
         }
         io.send(Data(data))
     }
-    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { resize?(newCols, newRows) }
-    func setTerminalTitle(source: TerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func scrolled(source: TerminalView, position: Double) {}
-    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+    public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { resize?(newCols, newRows) }
+    public func setTerminalTitle(source: TerminalView, title: String) {}
+    public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    public func scrolled(source: TerminalView, position: Double) {}
+    public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     // Guest escape sequences cannot open host files/apps or read/write its clipboard.
-    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
-    func clipboardCopy(source: TerminalView, content: Data) {}
-    func clipboardRead(source: TerminalView) -> Data? { nil }
+    public func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+    public func clipboardCopy(source: TerminalView, content: Data) {}
+    public func clipboardRead(source: TerminalView) -> Data? { nil }
 }
 
-final class ComputerNativeTerminalView: TerminalView {
+public final class ComputerNativeTerminalView: TerminalView {
     /// Where Copy puts the selection, as plain text.
     var pasteboard = NSPasteboard.general
 
-    override func copy(_ sender: Any) {
+    public override func copy(_ sender: Any) {
         guard let text = getSelection(), !text.isEmpty else { return }
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
     }
 
-    override func mouseDown(with event: NSEvent) {
+    public override func mouseDown(with event: NSEvent) {
         // A click does not focus this view inside its SwiftUI host, so the Edit
         // menu's Copy, Paste and Select All went to whatever had focus before.
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
     }
 
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if window?.firstResponder === self, modifiers == .command,
            event.charactersIgnoringModifiers?.lowercased() == "k" {
@@ -140,7 +140,7 @@ final class ComputerNativeTerminalView: TerminalView {
         needsDisplay = true
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
+    public override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         if !menu.items.isEmpty { menu.addItem(.separator()) }
         let interrupt = NSMenuItem(title: "Interrupt Command", action: #selector(interruptCommand(_:)), keyEquivalent: "c")
@@ -154,12 +154,12 @@ final class ComputerNativeTerminalView: TerminalView {
         return menu
     }
 
-    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+    public override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(clearTerminal(_:)) || item.action == #selector(interruptCommand(_:)) { return true }
         return super.validateUserInterfaceItem(item)
     }
 
-    override func viewWillDraw() {
+    public override func viewWillDraw() {
         super.viewWillDraw()
         // SwiftTerm's standalone NSScroller otherwise paints a full-height
         // disabled thumb. Preserve its reserved width to avoid reflow jumps.
@@ -170,15 +170,19 @@ final class ComputerNativeTerminalView: TerminalView {
     }
 }
 
-struct ComputerTerminalView: NSViewRepresentable {
+public struct ComputerTerminalView: NSViewRepresentable {
     let terminal: GuestTerminal
     var appearance = ComputerAppearance()
-    func makeNSView(context: Context) -> ComputerTerminalSurface {
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(terminal: GuestTerminal, appearance: ComputerAppearance = ComputerAppearance()) {
+        self.terminal = terminal; self.appearance = appearance
+    }
+    public func makeNSView(context: Context) -> ComputerTerminalSurface {
         let surface = ComputerTerminalSurface(terminal: terminal.view)
         apply(to: surface)
         return surface
     }
-    func updateNSView(_ surface: ComputerTerminalSurface, context: Context) { apply(to: surface) }
+    public func updateNSView(_ surface: ComputerTerminalSurface, context: Context) { apply(to: surface) }
     private func apply(to surface: ComputerTerminalSurface) {
         let view = surface.terminal
         view.nativeForegroundColor = computerColour(appearance.terminalForeground)
@@ -192,9 +196,9 @@ struct ComputerTerminalView: NSViewRepresentable {
 }
 
 /// One uniform background avoids stale/double-painted strips during resizing.
-final class ComputerTerminalSurface: NSView {
+public final class ComputerTerminalSurface: NSView {
     static let inset: CGFloat = 12
-    let terminal: TerminalView
+    public let terminal: TerminalView
 
     init(terminal: TerminalView) {
         self.terminal = terminal
@@ -210,5 +214,11 @@ final class ComputerTerminalSurface: NSView {
         ])
     }
     required init?(coder: NSCoder) { nil }
-    override var isOpaque: Bool { false }
+    public override var isOpaque: Bool { false }
+}
+
+public func computerColour(_ hex: String) -> NSColor {
+    let value = UInt32(hex, radix: 16) ?? 0
+    return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
+                   green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
 }

@@ -305,6 +305,7 @@ let project = Project(
             entitlements: .file(path: "Support/Computer.entitlements"),
             scripts: [checkKernel, buildGuestFiles, buildWimlib, buildVirglrenderer, buildWindowsRenderer, embedHelpers, embedCommandLineTool, trimSparkle],
             dependencies: [
+                .package(product: "ComputerEngine"),
                 .package(product: "ComputerCore"),
                 .package(product: "NeptuneTransport"),
                 .package(product: "NoodleLaunchChecks"),

@@ -6,6 +6,7 @@ import NIOCore
 import NIOPosix
 import NIOSSH
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 /// Against an SSH server in this process on the loopback address, with SFTP served from a temporary folder.

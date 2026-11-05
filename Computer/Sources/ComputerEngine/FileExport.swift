@@ -2,13 +2,13 @@ import ComputerCore
 import CoreServices
 import Foundation
 
-protocol FileExportSource: Sendable {
+public protocol FileExportSource: Sendable {
     func list(_ path: String) async throws -> [GuestFile]
     func read(_ file: GuestFile, path: String, to destination: URL, preview: Bool,
               progress: @escaping @Sendable (Int64) -> Void) async throws
 }
 
-struct FileExportPlan: Sendable {
+public struct FileExportPlan: Sendable {
     struct Item: Sendable {
         let file: GuestFile
         let guestPath: String
@@ -17,7 +17,7 @@ struct FileExportPlan: Sendable {
     let items: [Item]
     let totalBytes: Int64
 
-    static func prepare(_ file: GuestFile, path: String, source: any FileExportSource) async throws -> Self {
+    public static func prepare(_ file: GuestFile, path: String, source: any FileExportSource) async throws -> Self {
         var pending = [Item(file: file, guestPath: try GuestFile.normalize(path), components: [])]
         var items: [Item] = []
         var totalBytes: Int64 = 0
@@ -46,7 +46,7 @@ struct FileExportPlan: Sendable {
 
     /// Keep guest content in a private staging tree until every file is complete.
     /// Cancellation/failure removes the entire unpublished export.
-    func export(to destination: URL, source: any FileExportSource, stagingRoot: URL, replace: Bool,
+    public func export(to destination: URL, source: any FileExportSource, stagingRoot: URL, replace: Bool,
                 progress: @escaping @Sendable (FileTransferProgress) -> Void) async throws {
         try Task.checkCancellation()
         let fm = FileManager.default

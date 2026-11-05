@@ -2,11 +2,11 @@ import ComputerCore
 import Foundation
 
 extension ComputerStore {
-    var storageOperationsBusy: Bool {
+    public var storageOperationsBusy: Bool {
         creationStatus != nil || !imageUpdateTasks.isEmpty || sessions.contains { $0.phase.busy }
     }
 
-    func inspectStorage() {
+    public func inspectStorage() {
         guard !storageBusy else { return }
         guard !storageOperationsBusy else {
             storageError = "Wait for computer creation, startup or updates to finish, then refresh Storage."
@@ -22,12 +22,12 @@ extension ComputerStore {
     }
 
     /// Computers whose disks Free Up Space can only reach by stopping them.
-    var storageRunningSessions: [ComputerSession] {
+    public var storageRunningSessions: [ComputerSession] {
         sessions.filter { $0.container != nil || $0.virtual != nil }
     }
 
     /// Without `stopRunning`, running computers keep going and their disks are left alone.
-    func cleanStorage(preview: StorageReport, stopRunning: Bool = true) {
+    public func cleanStorage(preview: StorageReport, stopRunning: Bool = true) {
         guard !storageBusy, !storageOperationsBusy else {
             storageError = "Wait for computer creation, startup or updates to finish, then refresh Storage."
             return

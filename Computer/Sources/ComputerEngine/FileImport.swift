@@ -1,15 +1,15 @@
 import ComputerCore
 import Foundation
 
-struct FileTransferProgress: Sendable {
-    var completedItems = 0
-    let totalItems: Int
-    var transferredBytes: Int64 = 0
-    let totalBytes: Int64
-    var currentPath = ""
+public struct FileTransferProgress: Sendable {
+    public var completedItems = 0
+    public let totalItems: Int
+    public var transferredBytes: Int64 = 0
+    public let totalBytes: Int64
+    public var currentPath = ""
 
     // Give empty files and directories work units too; publication completes each item.
-    var fraction: Double {
+    public var fraction: Double {
         guard totalItems > 0 else { return 1 }
         return min(1, (Double(transferredBytes) + Double(completedItems)) / (Double(totalBytes) + Double(totalItems)))
     }

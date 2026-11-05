@@ -1,4 +1,5 @@
 import AppKit
+import ComputerEngine
 import SwiftUI
 
 /// A toolbar has its own hosting view, so focus is handed to the native field

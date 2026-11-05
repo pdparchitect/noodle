@@ -10,11 +10,15 @@ struct LocalMacWindowPreview {
     var error: String?
 }
 
-struct LocalMacFocusWindowButton: View {
+public struct LocalMacFocusWindowButton: View {
     @ObservedObject var runtime: LocalMacComputer
     var enabled: Bool
     var all = false
-    var body: some View {
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(runtime: LocalMacComputer, enabled: Bool, all: Bool = false) {
+        self.runtime = runtime; self.enabled = enabled; self.all = all
+    }
+    public var body: some View {
         Button {
             guard enabled else { return }
             Task {

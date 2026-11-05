@@ -1,7 +1,7 @@
 import ComputerCore
 import Foundation
 
-enum PreviewPolicy {
+public enum PreviewPolicy {
     static let fileLimit: Int64 = 20 * 1024 * 1024
     static let cacheLimit: Int64 = 100 * 1024 * 1024
     static func suffix(for name: String) -> String? {
@@ -13,7 +13,7 @@ enum PreviewPolicy {
         default: return nil
         }
     }
-    static func validate(_ url: URL) throws {
+    public static func validate(_ url: URL) throws {
         let data = try Data(contentsOf: url)
         let valid: Bool
         switch url.pathExtension {
@@ -29,9 +29,9 @@ enum PreviewPolicy {
 
 /// A session cache with explicit reservations, active leases and a short TTL.
 /// OS purging is optional; it is never needed to keep our disk use bounded.
-actor FilePreviewCache {
-    static let shared = FilePreviewCache()
-    struct Lease: Sendable { let id: UUID; let url: URL; let reused: Bool }
+public actor FilePreviewCache {
+    public static let shared = FilePreviewCache()
+    public struct Lease: Sendable { public let id: UUID; public let url: URL; public let reused: Bool }
     private struct Item {
         let url: URL
         let key: String
@@ -46,7 +46,7 @@ actor FilePreviewCache {
     private var sweeper: Task<Void, Never>?
     init(root: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Noodle File Previews", isDirectory: true)) { self.root = root }
 
-    func acquire(key: String, size: Int64, suffix: String, name: String = "Preview") throws -> Lease {
+    public func acquire(key: String, size: Int64, suffix: String, name: String = "Preview") throws -> Lease {
         guard size >= 0, size <= PreviewPolicy.fileLimit, ["txt", "pdf", "png", "jpg"].contains(suffix) else { throw ComputerError("Preview unavailable.") }
         if !prepared {
             // No cache survives an app session. Clear leftovers from crashes.
@@ -83,8 +83,8 @@ actor FilePreviewCache {
         items[id] = Item(url: url, key: key, size: size, touched: .now, users: 1, ready: false)
         return Lease(id: id, url: url, reused: false)
     }
-    func complete(_ lease: Lease) { items[lease.id]?.ready = true }
-    func release(_ lease: Lease) {
+    public func complete(_ lease: Lease) { items[lease.id]?.ready = true }
+    public func release(_ lease: Lease) {
         guard var item = items[lease.id] else { return }
         item.users = max(0, item.users - 1); item.touched = .now; items[lease.id] = item
         if !item.ready { discard(lease.id) }

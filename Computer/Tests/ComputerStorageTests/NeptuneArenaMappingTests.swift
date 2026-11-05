@@ -1,5 +1,6 @@
 #if DEBUG
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class NeptuneArenaMappingTests: XCTestCase {

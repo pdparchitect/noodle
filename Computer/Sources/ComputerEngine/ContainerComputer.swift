@@ -8,22 +8,24 @@ import ContainerizationExtras
 import ContainerizationOCI
 import Foundation
 
-final class ComputerOutput: Writer, @unchecked Sendable {
+public final class ComputerOutput: Writer, @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
-    func write(_ data: Data) throws {
+    public init() {}
+    public func write(_ data: Data) throws {
         lock.lock(); defer { lock.unlock() }
         buffer.append(data)
         if buffer.count > 262_144 { buffer.removeFirst(buffer.count - 262_144) }
     }
-    func close() throws {}
-    func text() -> String {
+    public func close() throws {}
+    public func text() -> String {
         lock.lock(); defer { lock.unlock() }
         return String(decoding: buffer, as: UTF8.self)
     }
 }
 
-actor ContainerComputer {
+public actor ContainerComputer {
+    public init() {}
     static let initReference = "ghcr.io/apple/containerization/vminit:0.43.0"
     private var pod: LinuxPod?
     private var commandProcess: LinuxProcess?
@@ -44,7 +46,7 @@ actor ContainerComputer {
         try state.activate(in: directory)
     }
 
-    func start(computer: Computer, directory: URL, cache: URL, kernel: URL,
+    public func start(computer: Computer, directory: URL, cache: URL, kernel: URL,
                preparedState: ContainerDiskState? = nil) async throws -> String {
         guard pod == nil else { throw ComputerError("This computer is already running.") }
         try Self.requireSupportedImage(computer)
@@ -278,12 +280,12 @@ actor ContainerComputer {
         await onExit()
     }
 
-    func resizeTerminal(columns: Int, rows: Int) async throws {
+    public func resizeTerminal(columns: Int, rows: Int) async throws {
         guard columns > 0, rows > 0 else { return }
         try await terminalProcess?.resize(to: .init(width: UInt16(clamping: columns), height: UInt16(clamping: rows)))
     }
 
-    func execute(_ command: String) async throws -> String {
+    public func execute(_ command: String) async throws -> String {
         guard let pod else { throw ComputerError("Start the computer first.") }
         guard commandProcess == nil else { throw ComputerError("A command is already running.") }
         let output = ComputerOutput()
@@ -342,7 +344,7 @@ actor ContainerComputer {
         }
     }
 
-    func stop() async throws {
+    public func stop() async throws {
         guard let pod else { return }
         // Invalidate before awaiting cleanup: an exiting shell must not reopen
         // itself while the computer is being stopped.

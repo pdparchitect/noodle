@@ -1,5 +1,6 @@
 import ComputerBridge
 import ComputerCore
+import ComputerEngine
 import ComputerExternal
 import Foundation
 import NoodleExternalToolsUI
@@ -31,8 +32,8 @@ import SwiftUI
     }
 
     /// Who an outside app is to the provider: terminals it opens are its own.
-    static func peer(_ caller: UUID) -> String { "external:" + caller.uuidString.lowercased() }
-    static func isPeer(_ peer: String) -> Bool { peer.hasPrefix("external:") }
+    static func peer(_ caller: UUID) -> String { ComputerExternalPeer.peer(caller) }
+    static func isPeer(_ peer: String) -> Bool { ComputerExternalPeer.isPeer(peer) }
 
     /// Starts serving the app's library, with the person answering the questions.
     static func start(store: ComputerStore) {

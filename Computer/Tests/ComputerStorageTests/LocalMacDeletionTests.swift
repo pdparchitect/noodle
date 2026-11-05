@@ -2,6 +2,7 @@ import ComputerCore
 import Foundation
 import LocalMacCore
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class LocalMacDeletionTests: XCTestCase {

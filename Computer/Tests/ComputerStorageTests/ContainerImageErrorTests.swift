@@ -1,6 +1,7 @@
 import XCTest
 import ComputerCore
 import ContainerizationOCI
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class ContainerImageErrorTests: XCTestCase {

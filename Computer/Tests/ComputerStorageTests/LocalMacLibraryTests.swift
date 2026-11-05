@@ -1,6 +1,7 @@
 import ComputerBridge
 import ComputerCore
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class LocalMacLibraryTests: XCTestCase {

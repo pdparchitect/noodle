@@ -16,7 +16,7 @@ private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category
 /// scanout is copied on the GPU into the surface the view shows. It needs macOS 27's custom Virtio devices; without
 /// them, or without the library, desktops keep VZ's own 2D GPU.
 @available(macOS 27, *)
-final class VirglGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZCustomVirtioDeviceDelegate, @unchecked Sendable {
+public final class VirglGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZCustomVirtioDeviceDelegate, @unchecked Sendable {
     static var isAvailable: Bool { Virgl.shared != nil }
 
     private struct Backing {
@@ -88,12 +88,12 @@ final class VirglGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZCus
         return configuration
     }
 
-    func customVirtioConfiguration(_ configuration: VZCustomVirtioDeviceConfiguration, didCreateDevice device: VZCustomVirtioDevice) {
+    public func customVirtioConfiguration(_ configuration: VZCustomVirtioDeviceConfiguration, didCreateDevice device: VZCustomVirtioDevice) {
         self.device = device
         device.delegate = self
     }
 
-    func customVirtioDeviceDidAcceptDriverOk(_ device: VZCustomVirtioDevice) {
+    public func customVirtioDeviceDidAcceptDriverOk(_ device: VZCustomVirtioDevice) {
         log.info("3D driver up, features \(device.negotiatedFeatures?.subset0 ?? 0, privacy: .public)")
         guard Virgl.shared?.start(fence: { [weak self] fence in self?.signalled = max(self?.signalled ?? 0, Int32(bitPattern: fence)) }) == true else {
             log.error("virglrenderer did not start")
@@ -112,10 +112,10 @@ final class VirglGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZCus
         self.frameTimer = frameTimer
     }
 
-    func customVirtioDeviceWillReset(_ device: VZCustomVirtioDevice) { reset() }
-    func customVirtioDeviceWillStop(_ device: VZCustomVirtioDevice) { reset() }
+    public func customVirtioDeviceWillReset(_ device: VZCustomVirtioDevice) { reset() }
+    public func customVirtioDeviceWillStop(_ device: VZCustomVirtioDevice) { reset() }
 
-    func customVirtioDevice(_ device: VZCustomVirtioDevice, didReceiveNotificationFor queue: VZVirtioQueue) {
+    public func customVirtioDevice(_ device: VZCustomVirtioDevice, didReceiveNotificationFor queue: VZVirtioQueue) {
         Virgl.shared?.restoreCurrent()
         while let element = queue.nextElement() {
             if queue.queueIndex == 0, let reply = control(element) {
@@ -618,25 +618,29 @@ final class Virgl: @unchecked Sendable {
 
 /// The desktop's frames, with the Mac's mouse and keyboard going to VZ's USB devices as for Windows.
 @available(macOS 27, *)
-struct VirglDisplay: NSViewRepresentable {
+public struct VirglDisplay: NSViewRepresentable {
     let gpu: VirglGPU
     let machine: VZVirtualMachine
     let queue: DispatchQueue
     var resizes = false
     var native: NativeDisplay?
-    func makeNSView(context: Context) -> VirglScreenView {
+    /// The memberwise initializer, which Swift keeps internal unless written out.
+    public init(gpu: VirglGPU, machine: VZVirtualMachine, queue: DispatchQueue, resizes: Bool = false, native: NativeDisplay? = nil) {
+        self.gpu = gpu; self.machine = machine; self.queue = queue; self.resizes = resizes; self.native = native
+    }
+    public func makeNSView(context: Context) -> VirglScreenView {
         let view = VirglScreenView(gpu: gpu, machine: machine, queue: queue)
         updateNSView(view, context: context)
         return view
     }
-    func updateNSView(_ view: VirglScreenView, context: Context) {
+    public func updateNSView(_ view: VirglScreenView, context: Context) {
         view.native = native
         view.resizes = resizes
     }
 }
 
 @available(macOS 27, *)
-final class VirglScreenView: NSView, DesktopDisplayView {
+public final class VirglScreenView: NSView, DesktopDisplayView {
     private let machine: VZVirtualMachine
     /// The VM runs on Containerization's queue and takes calls only there.
     private let queue: DispatchQueue
@@ -646,9 +650,9 @@ final class VirglScreenView: NSView, DesktopDisplayView {
     private var cursor = NSCursor.arrow
     var native: NativeDisplay?
     var resizes = false { didSet { if resizes != oldValue { applySize() } } }
-    var pasteboard = NSPasteboard.general
-    var displayedMachine: VZVirtualMachine? { machine }
-    var followsWindowSize: Bool { resizes }
+    public var pasteboard = NSPasteboard.general
+    public var displayedMachine: VZVirtualMachine? { machine }
+    public var followsWindowSize: Bool { resizes }
 
     init(gpu: VirglGPU, machine: VZVirtualMachine, queue: DispatchQueue) {
         self.machine = machine
@@ -667,12 +671,12 @@ final class VirglScreenView: NSView, DesktopDisplayView {
         if let (image, hotSpot) = gpu.lastCursor { setCursor(image, hotSpot: hotSpot) }
     }
 
-    override func setFrameSize(_ newSize: NSSize) {
+    public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         applySize()
         layoutScreen()
     }
-    override func viewDidMoveToWindow() {
+    public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applySize()
     }
@@ -695,7 +699,7 @@ final class VirglScreenView: NSView, DesktopDisplayView {
         window?.invalidateCursorRects(for: self)
         if let window, window.isKeyWindow, bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)) { cursor.set() }
     }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
+    public override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
 
     // ⌘C and ⌘V, and Copy and Paste in the Edit menu, copy and paste between the Mac and the guest.
     @objc func copy(_ sender: Any?) { transfer(copying: true) }
@@ -767,17 +771,17 @@ final class VirglScreenView: NSView, DesktopDisplayView {
         screen.magnificationFilter = exact ? .nearest : .linear
         screen.minificationFilter = exact ? .nearest : .trilinear
     }
-    override func layout() {
+    public override func layout() {
         super.layout()
         layoutScreen()
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    public override var acceptsFirstResponder: Bool { true }
     // Drags belong to the guest, not to moving the window, and the first click already reaches it.
-    override var mouseDownCanMoveWindow: Bool { false }
-    override var isOpaque: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func updateTrackingAreas() {
+    public override var mouseDownCanMoveWindow: Bool { false }
+    public override var isOpaque: Bool { true }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    public override func updateTrackingAreas() {
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
         super.updateTrackingAreas()
@@ -798,14 +802,14 @@ final class VirglScreenView: NSView, DesktopDisplayView {
         let location = location(event), buttons = buttons
         send { WindowsPrivateVirtualization.pointer($0, at: location, buttons: buttons) }
     }
-    override func mouseMoved(with event: NSEvent) { pointer(event) }
-    override func mouseDragged(with event: NSEvent) { pointer(event) }
-    override func rightMouseDragged(with event: NSEvent) { pointer(event) }
-    override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 1; pointer(event) }
-    override func mouseUp(with event: NSEvent) { buttons &= ~1; pointer(event) }
-    override func rightMouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 2; pointer(event) }
-    override func rightMouseUp(with event: NSEvent) { buttons &= ~2; pointer(event) }
-    override func scrollWheel(with event: NSEvent) {
+    public override func mouseMoved(with event: NSEvent) { pointer(event) }
+    public override func mouseDragged(with event: NSEvent) { pointer(event) }
+    public override func rightMouseDragged(with event: NSEvent) { pointer(event) }
+    public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 1; pointer(event) }
+    public override func mouseUp(with event: NSEvent) { buttons &= ~1; pointer(event) }
+    public override func rightMouseDown(with event: NSEvent) { window?.makeFirstResponder(self); buttons |= 2; pointer(event) }
+    public override func rightMouseUp(with event: NSEvent) { buttons &= ~2; pointer(event) }
+    public override func scrollWheel(with event: NSEvent) {
         nonisolated(unsafe) let event = event
         send { WindowsPrivateVirtualization.scroll($0, event) }
     }
@@ -813,12 +817,12 @@ final class VirglScreenView: NSView, DesktopDisplayView {
         nonisolated(unsafe) let event = event
         send { WindowsPrivateVirtualization.key($0, event) }
     }
-    override func keyDown(with event: NSEvent) {
+    public override func keyDown(with event: NSEvent) {
         if let copying = clipboardKey(event) { transfer(copying: copying) } else { key(event) }
     }
-    override func keyUp(with event: NSEvent) { key(event) }
-    override func flagsChanged(with event: NSEvent) { key(event) }
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    public override func keyUp(with event: NSEvent) { key(event) }
+    public override func flagsChanged(with event: NSEvent) { key(event) }
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard window?.firstResponder === self, event.type == .keyDown else { return false }
         if let copying = clipboardKey(event) { transfer(copying: copying) } else { key(event) }
         return true

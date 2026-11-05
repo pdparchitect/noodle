@@ -3,6 +3,7 @@ import Foundation
 import ComputerCore
 import Surface
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class DesktopSurfaceTests: XCTestCase {

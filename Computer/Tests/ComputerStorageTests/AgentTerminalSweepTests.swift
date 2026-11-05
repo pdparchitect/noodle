@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class AgentTerminalSweepTests: XCTestCase {

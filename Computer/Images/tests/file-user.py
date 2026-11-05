@@ -7,7 +7,7 @@ import sys
 import uuid
 
 runtime, *images = sys.argv[1:]
-source = Path(__file__).resolve().parents[2] / 'Sources/NoodleComputer/GuestFiles.swift'
+source = Path(__file__).resolve().parents[2] / 'Sources/ComputerEngine/GuestFiles.swift'
 match = re.search(r'let output = try await run\(arguments: \["/bin/sh", "-c", #"""\n(.*?)\n\s*"""#', source.read_text(), re.S)
 assert match, 'Production file helper installer was not found'
 installer = match.group(1)

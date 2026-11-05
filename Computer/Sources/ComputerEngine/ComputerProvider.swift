@@ -62,7 +62,13 @@ enum AgentTerminalSweep {
     }
 }
 
-@MainActor final class ComputerProvider {
+/// How an app outside Noodle is named as a peer, so it counts as an agent like a bot.
+public enum ComputerExternalPeer {
+    public static func peer(_ caller: UUID) -> String { "external:" + caller.uuidString.lowercased() }
+    public static func isPeer(_ peer: String) -> Bool { peer.hasPrefix("external:") }
+}
+
+@MainActor public final class ComputerProvider {
     private weak var store: ComputerStore?
     private var server: ComputerConnectionServer?
     private var terminals: [UUID: ProviderTerminal] = [:]
@@ -84,7 +90,7 @@ enum AgentTerminalSweep {
     var now: () -> Date = Date.init
 
     /// `listens` false answers only what `handle` is given, as in tests, which cannot sign a socket.
-    init(store: ComputerStore, socket: URL? = nil, listens: Bool = true) throws {
+    public init(store: ComputerStore, socket: URL? = nil, listens: Bool = true) throws {
         self.store = store
         let endpoint = try socket ?? ComputerConnection.socketURL()
         transferRoot = endpoint.deletingLastPathComponent()
@@ -115,14 +121,14 @@ enum AgentTerminalSweep {
         idle.started(session.id, caller: ComputerBuildIdentity.principal(for: peer), agentID: agentID, at: now())
     }
     /// What the app at `peer` is told once: computers its agents started and then left unused.
-    func idleNotices(for peer: String) -> [ComputerIdleNotice] {
+    public func idleNotices(for peer: String) -> [ComputerIdleNotice] {
         idle.due(for: ComputerBuildIdentity.principal(for: peer), at: now()) { id in
             guard let session = store?.sessions.first(where: { $0.id == id }), session.phase == .running else { return nil }
             return .init(name: session.computer.name, watched: isWatched(id))
         }
     }
     /// `stagingRoot` is where file transfers wait, when not beside the companion socket.
-    func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil, stagingRoot: URL? = nil) async throws -> ComputerResponse {
+    public func handle(_ request: ComputerRequest, peer: String, surface socket: SurfaceSocket? = nil, stagingRoot: URL? = nil) async throws -> ComputerResponse {
         guard let store else { throw ComputerBridgeError("Computer is closing.") }
         let owner = ComputerBuildIdentity.principal(for: peer) + ":" + (request.agentID?.uuidString ?? "human")
         if request.operation == .terminalResolve {
@@ -194,7 +200,7 @@ enum AgentTerminalSweep {
         store.note(session, usedBy: peer)
         // Bots name themselves; apps outside Noodle are agents too. A person's start is not watched.
         let agentStarts = request.operation == .start && session.phase.canStart
-            && (request.agentID != nil || ComputerExternalService.isPeer(peer))
+            && (request.agentID != nil || ComputerExternalPeer.isPeer(peer))
         defer { if agentStarts, session.phase == .running { started(session, peer: peer, agentID: request.agentID) } }
         if ![.start, .stop, .setOwner, .update, .revoke].contains(request.operation) { idle.used(session.id, at: now()) }
         if request.operation == .setOwner {
@@ -458,7 +464,7 @@ enum AgentTerminalSweep {
     }
 
     /// Windows needs macOS 27; on older systems its computers are not offered to clients.
-    static func served(_ kind: ComputerKind) -> Bool {
+    public static func served(_ kind: ComputerKind) -> Bool {
         if kind == .windows, #unavailable(macOS 27) { return false }
         return kind == .container || kind == .localMac || kind == .windows || kind == .ssh
     }

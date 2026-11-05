@@ -3,6 +3,7 @@ import ComputerCore
 import ComputerExternal
 import NoodleSettingsUI
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor private final class Answers: ExternalPrompting {

@@ -47,7 +47,7 @@ jobs:
 
       - name: Verify preview and terminal contracts
         run: |
-          swiftc Computer/Sources/NoodleComputer/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o "$RUNNER_TEMP/computer-snapshot-tests"
+          swiftc Computer/Sources/ComputerEngine/ComputerPreviewSnapshot.swift Computer/Tests/PreviewSnapshotTests.swift -o "$RUNNER_TEMP/computer-snapshot-tests"
           "$RUNNER_TEMP/computer-snapshot-tests"
           swift Computer/Tests/TerminalPromptTests.swift
 

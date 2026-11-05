@@ -6,6 +6,7 @@ import LocalMacCore
 import ComputerCore
 import Surface
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 /// Exercise the real client transport against a bounded pipe peer. These tests

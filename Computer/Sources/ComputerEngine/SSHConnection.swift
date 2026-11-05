@@ -7,7 +7,7 @@ import NIOSSH
 import Security
 
 /// What an SSH computer signs in with, besides asking for nothing first.
-enum SSHSecret: Equatable, Sendable {
+public enum SSHSecret: Equatable, Sendable {
     case key(SSHKey)
     case password(String)
 
@@ -17,12 +17,12 @@ enum SSHSecret: Equatable, Sendable {
 }
 
 /// A private key in a form the Keychain can keep and NIOSSH can sign with. RSA is not supported by NIOSSH.
-struct SSHKey: Equatable, Sendable {
-    enum Kind: String, Codable, Sendable { case ed25519, p256, p384, p521 }
+public struct SSHKey: Equatable, Sendable {
+    public enum Kind: String, Codable, Sendable { case ed25519, p256, p384, p521 }
     let kind: Kind
     let raw: Data
 
-    static func generate() -> SSHKey { SSHKey(kind: .ed25519, raw: Curve25519.Signing.PrivateKey().rawRepresentation) }
+    public static func generate() -> SSHKey { SSHKey(kind: .ed25519, raw: Curve25519.Signing.PrivateKey().rawRepresentation) }
 
     var privateKey: NIOSSHPrivateKey {
         get throws {
@@ -36,12 +36,12 @@ struct SSHKey: Equatable, Sendable {
     }
 
     /// The line to add to the server's `~/.ssh/authorized_keys`.
-    var publicLine: String {
+    public var publicLine: String {
         get throws { String(openSSHPublicKey: try privateKey.publicKey) + " noodle-computer" }
     }
 
     /// An unencrypted OpenSSH or PEM private key, as `ssh-keygen` writes it.
-    init(text: String) throws {
+    public init(text: String) throws {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains("BEGIN OPENSSH PRIVATE KEY") {
             self = try Self.openSSH(trimmed)
@@ -60,7 +60,7 @@ struct SSHKey: Equatable, Sendable {
         }
     }
 
-    init(kind: Kind, raw: Data) { self.kind = kind; self.raw = raw }
+    public init(kind: Kind, raw: Data) { self.kind = kind; self.raw = raw }
 
     private static func openSSH(_ text: String) throws -> SSHKey {
         let body = text.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("-") }.joined()
@@ -128,7 +128,7 @@ struct SSHWireReader {
 }
 
 /// The key or password for each SSH computer, in this app's Keychain.
-struct SSHSecretStore: Sendable {
+public struct SSHSecretStore: Sendable {
     var save: @Sendable (SSHSecret, UUID) throws -> Void
     var load: @Sendable (UUID) throws -> SSHSecret?
     var delete: @Sendable (UUID) -> Void
@@ -136,7 +136,7 @@ struct SSHSecretStore: Sendable {
     private struct Stored: Codable { var kind: String; var data: Data }
     private static let service = "Noodle Computer SSH"
 
-    static let keychain = SSHSecretStore(save: { secret, id in
+    public static let keychain = SSHSecretStore(save: { secret, id in
         let stored: Stored
         switch secret {
         case .key(let key): stored = Stored(kind: key.kind.rawValue, data: key.raw)

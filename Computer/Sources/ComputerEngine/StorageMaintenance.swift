@@ -5,15 +5,15 @@ import Containerization
 import ContainerizationOCI
 import Foundation
 
-struct StorageReport: Sendable {
-    let freeBytes: Int64
-    let cacheBytes: Int64
-    let runtimeBytes: Int64
-    let computerBytes: Int64
-    let sharedBytes: Int64
+public struct StorageReport: Sendable {
+    public let freeBytes: Int64
+    public let cacheBytes: Int64
+    public let runtimeBytes: Int64
+    public let computerBytes: Int64
+    public let sharedBytes: Int64
     /// Everything Free Up Space returns: unused images and installers, copies kept from
     /// before image updates, and free space inside computer disks.
-    let reclaimableBytes: Int64
+    public let reclaimableBytes: Int64
     /// The part of `reclaimableBytes` inside each computer's own folder.
     let computerReclaimableBytes: [UUID: Int64]
     let obsoleteImages: [String]
@@ -22,10 +22,10 @@ struct StorageReport: Sendable {
     let runtimeSnapshot: [String: StorageMaintenance.FileStamp]
     let protectedImages: Set<String>?
 
-    var canClean: Bool { reclaimableBytes > 0 }
+    public var canClean: Bool { reclaimableBytes > 0 }
 
     /// What cleaning frees while leaving these computers' disks alone.
-    func reclaimableBytes(skipping computers: Set<UUID>) -> Int64 {
+    public func reclaimableBytes(skipping computers: Set<UUID>) -> Int64 {
         reclaimableBytes - computers.compactMap { computerReclaimableBytes[$0] }.reduce(0, +)
     }
 }

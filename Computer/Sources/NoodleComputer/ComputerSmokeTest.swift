@@ -1,6 +1,7 @@
 import AppKit
 import ComputerCore
 import ComputerBridge
+import ComputerEngine
 import CryptoKit
 import Foundation
 import Virtualization

@@ -5,6 +5,6 @@ here="${0:A:h}"
 repo="${here:h:h:h}"
 output="$(mktemp -d)"
 trap 'rm -rf "$output"' EXIT
-swiftc -DNOODLE_DEV_HOOKS "$repo/Computer/Sources/NoodleComputer/NeptuneScanout.swift" \
+swiftc -DNOODLE_DEV_HOOKS "$repo/Computer/Sources/ComputerEngine/NeptuneScanout.swift" \
     "$here/scanout.swift" -o "$output/scanout-test"
 "$output/scanout-test"

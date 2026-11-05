@@ -1,4 +1,5 @@
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 @MainActor final class FileSelectionTests: XCTestCase {

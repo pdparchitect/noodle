@@ -2,8 +2,8 @@ import AppKit
 
 /// Best-effort historical thumbnail, never a readiness signal for agent work.
 /// A desktop that is still starting yields nil so Noodle can show its normal computer-icon card.
-@MainActor enum ComputerPreviewSnapshot {
-    static func capture(timeout: TimeInterval = 8, valid: () -> Bool = { true },
+@MainActor public enum ComputerPreviewSnapshot {
+    public static func capture(timeout: TimeInterval = 8, valid: () -> Bool = { true },
                         frame: () async throws -> CGImage) async -> Data? {
         let deadline = ProcessInfo.processInfo.systemUptime + max(0, min(timeout, 8))
         while valid(), !Task.isCancelled, ProcessInfo.processInfo.systemUptime < deadline {

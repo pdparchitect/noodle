@@ -9,14 +9,14 @@ import Virtualization
 /// Gives a Linux desktop's VM a virtio GPU with USB keyboard and pointer. On macOS 27 that is the app's own 3D GPU,
 /// shown by VirglDisplay; before it, VZ's 2D GPU in a VZVirtualMachineView. Agents and remote viewers use `surface`
 /// either way, because neither view can be captured.
-final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
+public final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
     static let fixedSize = CGSize(width: 1920, height: 1200)
-    let surface: DesktopSurface
+    public let surface: DesktopSurface
     private let lock = NSLock()
     private var created: (machine: VZVirtualMachine, queue: DispatchQueue)?
-    var machine: VZVirtualMachine? { lock.withLock { created?.machine } }
+    public var machine: VZVirtualMachine? { lock.withLock { created?.machine } }
     /// The queue every call to `machine` must run on.
-    var machineQueue: DispatchQueue? { lock.withLock { created?.queue } }
+    public var machineQueue: DispatchQueue? { lock.withLock { created?.queue } }
 
     /// Brings the display to the size the setting asks for now, rather than at the
     /// view's next resize: the view's size while resizing, else the fixed size. The VM
@@ -38,7 +38,7 @@ final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
         surface = DesktopSurface(dial: dial)
     }
 
-    func configureVZ(_ config: inout VZVirtualMachineConfiguration, allocator: any AddressAllocator<Character>,
+    public func configureVZ(_ config: inout VZVirtualMachineConfiguration, allocator: any AddressAllocator<Character>,
                      storageDeviceCount: Int, mountsByID: [String: [Containerization.Mount]]) throws {
         config.keyboards = [VZUSBKeyboardConfiguration()]
         config.pointingDevices = [VZUSBScreenCoordinatePointingDeviceConfiguration()]
@@ -57,9 +57,9 @@ final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
     }
     private var renderer: AnyObject?
     @available(macOS 27, *)
-    var virgl: VirglGPU? { lock.withLock { renderer as? VirglGPU } }
+    public var virgl: VirglGPU? { lock.withLock { renderer as? VirglGPU } }
 
-    func didCreate(_ instance: VZVirtualMachineInstance) throws {
+    public func didCreate(_ instance: VZVirtualMachineInstance) throws {
         lock.withLock { created = (instance.vzVirtualMachine, instance.vmQueue) }
     }
 }
@@ -67,7 +67,7 @@ final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
 /// Client of the image's desktop-surface helper, which serves the X screen and takes
 /// input on a guest vsock port. It sends only the tiles that changed; the canvas here
 /// keeps the rest. Requests are serialized: one connection, one request at a time.
-final class DesktopSurface: @unchecked Sendable {
+public final class DesktopSurface: @unchecked Sendable {
     static let port: UInt32 = 5100
     private let dial: @Sendable () async throws -> FileHandle
     private let queue = DispatchQueue(label: "com.pdparchitect.noodle.computer.desktop-surface")
@@ -76,11 +76,11 @@ final class DesktopSurface: @unchecked Sendable {
 
     init(dial: @escaping @Sendable () async throws -> FileHandle) { self.dial = dial }
 
-    func frame() async throws -> (image: CGImage, size: CGSize) {
+    public func frame() async throws -> (image: CGImage, size: CGSize) {
         try await perform { try self.readFrame($0) }
     }
 
-    func send(_ input: SurfaceInput) async throws {
+    public func send(_ input: SurfaceInput) async throws {
         // The desktop takes whole key presses, so a held key is pressed once and its release dropped.
         if case .hold(_, pressed: false) = input { return }
         let request = Self.request(for: input)

@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'Computer/Images/**'
-      - 'Computer/Sources/NoodleComputer/ContainerComputer.swift'
+      - 'Computer/Sources/ComputerEngine/ContainerComputer.swift'
       - '.github/workflows/computer-images.yml'
       - '!**.md'
       - 'Computer/Images/CHANGELOG.md'

@@ -2,7 +2,7 @@ import Foundation
 
 /// Run from the repository root with `swift Computer/Tests/TerminalPromptTests.swift`.
 /// Exercise the actual configured prompt with sh, dash and Bash, without a guest.
-let source = try String(contentsOfFile: "Computer/Sources/NoodleComputer/GuestShell.swift", encoding: .utf8)
+let source = try String(contentsOfFile: "Computer/Sources/ComputerEngine/GuestShell.swift", encoding: .utf8)
 let expression = try NSRegularExpression(pattern: #"PS1='([^']+)'"#)
 let matches = expression.matches(in: source, range: NSRange(source.startIndex..., in: source))
 guard matches.count == 2 else {

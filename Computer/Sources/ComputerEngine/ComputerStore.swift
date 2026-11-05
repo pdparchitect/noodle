@@ -5,11 +5,11 @@ import Darwin
 import LocalMacCore
 import Virtualization
 
-enum ComputerPhase: Equatable {
+public enum ComputerPhase: Equatable {
     case stopped, starting, running, stopping, updating
     case setupRequired(LocalMacRegistrationStatus)
     case failed(String)
-    var label: String {
+    public var label: String {
         switch self {
         case .stopped: "Stopped"
         case .starting: "Starting…"
@@ -20,52 +20,52 @@ enum ComputerPhase: Equatable {
         case .failed: "Needs attention"
         }
     }
-    var busy: Bool { self == .starting || self == .stopping || self == .updating }
-    var canStart: Bool {
+    public var busy: Bool { self == .starting || self == .stopping || self == .updating }
+    public var canStart: Bool {
         switch self { case .stopped, .failed, .setupRequired: true; default: false }
     }
-    var startFailureDescription: String {
+    public var startFailureDescription: String {
         if case .failed(let reason) = self { return "Computer did not start: \(reason)" }
         if case .setupRequired(let status) = self { return LocalMacSetupRequired(registration: status).localizedDescription }
         return "Computer did not start: \(label)"
     }
 }
 
-enum ComputerDisplayMode: String {
+public enum ComputerDisplayMode: String {
     case desktop = "Desktop", terminal = "Terminal", files = "Files"
-    var symbol: String {
+    public var symbol: String {
         switch self { case .desktop: "desktopcomputer"; case .terminal: "terminal"; case .files: "folder" }
     }
 }
 
-@MainActor final class ComputerSession: ObservableObject, Identifiable {
-    nonisolated let id: UUID
-    @Published var computer: Computer
-    @Published var phase = ComputerPhase.stopped {
+@MainActor public final class ComputerSession: ObservableObject, Identifiable {
+    public nonisolated let id: UUID
+    @Published public var computer: Computer
+    @Published public var phase = ComputerPhase.stopped {
         didSet { if case .failed = phase {} else { localMacSetupStatus = nil } }
     }
-    @Published var localMacSetupStatus: LocalMacRegistrationStatus?
-    var localMacSetupRequired: Bool { localMacSetupStatus != nil }
-    @Published var console = ""
-    @Published var commandRunning = false
-    @Published var updateResult: String?
-    @Published var imageUpdateAvailable = false
-    var offersImageUpgrade: Bool { computer.kind == .container && imageUpdateAvailable }
-    @Published var updateStatus: String?
-    @Published var updateProgress: Double?
-    @Published var display: NativeDisplay?
-    @Published var terminal: GuestTerminal?
-    @Published var showingTerminal = false
-    @Published var showingFiles = false
-    @Published var openingTerminal = false
-    var displayMode: ComputerDisplayMode {
+    @Published public var localMacSetupStatus: LocalMacRegistrationStatus?
+    public var localMacSetupRequired: Bool { localMacSetupStatus != nil }
+    @Published public var console = ""
+    @Published public var commandRunning = false
+    @Published public var updateResult: String?
+    @Published public var imageUpdateAvailable = false
+    public var offersImageUpgrade: Bool { computer.kind == .container && imageUpdateAvailable }
+    @Published public var updateStatus: String?
+    @Published public var updateProgress: Double?
+    @Published public var display: NativeDisplay?
+    @Published public var terminal: GuestTerminal?
+    @Published public var showingTerminal = false
+    @Published public var showingFiles = false
+    @Published public var openingTerminal = false
+    public var displayMode: ComputerDisplayMode {
         if showingFiles { return .files }
         return computer.hasDisplay && !showingTerminal ? .desktop : .terminal
     }
-    var availableDisplayModes: [ComputerDisplayMode] {
+    public var availableDisplayModes: [ComputerDisplayMode] {
         computer.hasDisplay ? [.desktop, .terminal, .files] : [.terminal, .files]
     }
-    var canDelete: Bool {
+    public var canDelete: Bool {
         // A failed Local Mac connection does not prove that its account logged
         // out. The lifecycle service stops and verifies it before removal.
         if computer.kind == .localMac { return !phase.busy }
@@ -75,9 +75,9 @@ enum ComputerDisplayMode: String {
         if case .failed = phase { idle = true } else { idle = phase == .stopped }
         return idle && virtual == nil && container == nil && localMac == nil && windowsRuntime == nil && sshRuntime == nil
     }
-    var virtual: VirtualComputer?
+    public var virtual: VirtualComputer?
     /// A WindowsComputer, which needs macOS 27; see `windows`.
-    var windowsRuntime: AnyObject? {
+    public var windowsRuntime: AnyObject? {
         didSet {
             guard oldValue !== windowsRuntime else { return }
             fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
@@ -88,11 +88,11 @@ enum ComputerDisplayMode: String {
             }
         }
     }
-    @available(macOS 27, *) var windows: WindowsComputer? { windowsRuntime as? WindowsComputer }
+    @available(macOS 27, *) public var windows: WindowsComputer? { windowsRuntime as? WindowsComputer }
     /// Windows is running but its agent, which Terminal and Files need, is not there yet.
-    @Published var waitingForWindows = false
-    var windowsTerminal: WindowsTerminalConnection?
-    @Published var localMac: LocalMacComputer? {
+    @Published public var waitingForWindows = false
+    public var windowsTerminal: WindowsTerminalConnection?
+    @Published public var localMac: LocalMacComputer? {
         didSet {
             guard oldValue !== localMac else { return }
             // A retry replaces the runtime directly, without passing through nil.
@@ -101,8 +101,8 @@ enum ComputerDisplayMode: String {
             localTerminal?.close(); localTerminal = nil; terminal = nil
         }
     }
-    var localTerminal: LocalMacTerminalConnection?
-    var sshRuntime: SSHComputer? {
+    public var localTerminal: LocalMacTerminalConnection?
+    public var sshRuntime: SSHComputer? {
         didSet {
             guard oldValue !== sshRuntime else { return }
             fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
@@ -110,53 +110,53 @@ enum ComputerDisplayMode: String {
             if sshRuntime == nil { showingTerminal = false; showingFiles = false }
         }
     }
-    var sshTerminal: SSHTerminalConnection?
+    public var sshTerminal: SSHTerminalConnection?
     /// What the server asked to show the person while signing in, such as Tailscale's check link.
-    @Published var sshNotice: String?
-    var container: ContainerComputer? {
+    @Published public var sshNotice: String?
+    public var container: ContainerComputer? {
         didSet { if container == nil { fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil } }
     }
     private var fileBrowser: ComputerFilesModel?
-    func filesModel(for runtime: ContainerComputer) -> ComputerFilesModel {
+    public func filesModel(for runtime: ContainerComputer) -> ComputerFilesModel {
         if let fileBrowser { return fileBrowser }
         let model = ComputerFilesModel(runtime: runtime, computerID: id)
         fileBrowser = model
         return model
     }
-    func filesModel(for runtime: LocalMacComputer) -> ComputerFilesModel {
+    public func filesModel(for runtime: LocalMacComputer) -> ComputerFilesModel {
         if let fileBrowser { return fileBrowser }
         let model = ComputerFilesModel(service: LocalMacFileService(runtime: runtime), computerID: id)
         fileBrowser = model
         return model
     }
-    func filesModel(for runtime: SSHComputer) -> ComputerFilesModel {
+    public func filesModel(for runtime: SSHComputer) -> ComputerFilesModel {
         if let fileBrowser { return fileBrowser }
         let model = ComputerFilesModel(service: SSHFileService(connection: runtime.connection), computerID: id, workspace: nil)
         fileBrowser = model
         return model
     }
     @available(macOS 27, *)
-    func filesModel(for runtime: WindowsComputer) -> ComputerFilesModel {
+    public func filesModel(for runtime: WindowsComputer) -> ComputerFilesModel {
         if let fileBrowser { return fileBrowser }
         let model = ComputerFilesModel(service: WindowsFileService { [weak runtime] in runtime?.agent }, computerID: id, workspace: nil)
         fileBrowser = model
         return model
     }
-    init(_ computer: Computer) {
+    public init(_ computer: Computer) {
         self.id = computer.id
         self.computer = computer
     }
-    func sshDisconnected(_ runtime: SSHComputer, reason: String) {
+    public func sshDisconnected(_ runtime: SSHComputer, reason: String) {
         guard sshRuntime === runtime, phase == .running else { return }
         sshRuntime = nil
         phase = .failed(reason)
     }
-    func localMacDisconnected(_ runtime: LocalMacComputer, reason: String) {
+    public func localMacDisconnected(_ runtime: LocalMacComputer, reason: String) {
         guard localMac === runtime, phase == .running || phase == .starting else { return }
         phase = .failed(reason)
     }
-    func append(_ text: String) { console = String((console + text).suffix(262_144)) }
-    func recordStartupFailure(_ error: Error) {
+    public func append(_ text: String) { console = String((console + text).suffix(262_144)) }
+    public func recordStartupFailure(_ error: Error) {
         if let setup = error as? LocalMacSetupRequired, setup.registration.needsSetup {
             phase = .setupRequired(setup.registration)
             return
@@ -165,9 +165,9 @@ enum ComputerDisplayMode: String {
         localMacSetupStatus = (error as? LocalMacSetupRequired)?.registration
         append("\n\(error.localizedDescription)\n")
     }
-    static let outOfSpaceMessage = "This Mac is out of free space. Free some in Settings → Storage, then start again."
+    public static let outOfSpaceMessage = "This Mac is out of free space. Free some in Settings → Storage, then start again."
     /// Whether the error, or one it wraps, is the disk running out of space.
-    static func outOfSpace(_ error: Error) -> Bool {
+    public static func outOfSpace(_ error: Error) -> Bool {
         var next: NSError? = error as NSError
         while let current = next {
             if current.domain == NSPOSIXErrorDomain, current.code == Int(ENOSPC) { return true }
@@ -180,39 +180,39 @@ enum ComputerDisplayMode: String {
 
 /// One owner for the library and all live machines. No provider discovery,
 /// TCP listener, Noodle agent connection, shared host folders, or clipboard bridge.
-@MainActor final class ComputerStore: ObservableObject {
-    var provider: ComputerProvider?
-    @Published var sessions: [ComputerSession] = []
-    @Published var selection: UUID?
-    @Published var creationStatus: String?
-    @Published var creationProgress: Double?
-    @Published var creationDetail: String?
-    @Published var creationName = ""
-    @Published var creationLastActivity = Date()
-    @Published var creationStartedAt = Date()
-    @Published var creationCancelling = false
-    private(set) var creationWasCancelled = false
+@MainActor public final class ComputerStore: ObservableObject {
+    public var provider: ComputerProvider?
+    @Published public var sessions: [ComputerSession] = []
+    @Published public var selection: UUID?
+    @Published public var creationStatus: String?
+    @Published public var creationProgress: Double?
+    @Published public var creationDetail: String?
+    @Published public var creationName = ""
+    @Published public var creationLastActivity = Date()
+    @Published public var creationStartedAt = Date()
+    @Published public var creationCancelling = false
+    public private(set) var creationWasCancelled = false
     private var creationTask: Task<Bool, Never>?
     private var creationID: UUID?
-    var imageUpdateTasks: [UUID: Task<Void, Never>] = [:]
-    @Published var storageReport: StorageReport?
-    @Published var storageBusy = false
-    @Published var storageCleaning = false
+    public var imageUpdateTasks: [UUID: Task<Void, Never>] = [:]
+    @Published public var storageReport: StorageReport?
+    @Published public var storageBusy = false
+    @Published public var storageCleaning = false
     /// What Free Up Space is doing now and how far along it is.
-    @Published var storageProgress: (label: String, fraction: Double)?
-    @Published var storageError: String?
-    var storageTask: Task<Void, Never>?
-    @Published var error: String? {
+    @Published public var storageProgress: (label: String, fraction: Double)?
+    @Published public var storageError: String?
+    public var storageTask: Task<Void, Never>?
+    @Published public var error: String? {
         didSet { errorRecovery = nil }
     }
-    @Published private(set) var errorRecovery: LocalMacErrorRecovery?
-    let library: ComputerLibrary
-    let cache: URL
+    @Published public private(set) var errorRecovery: LocalMacErrorRecovery?
+    public let library: ComputerLibrary
+    public let cache: URL
     private let removeLocalMacAccount: (UUID) async throws -> Void
-    let sshSecrets: SSHSecretStore
+    public let sshSecrets: SSHSecretStore
     private var lease: Int32 = -1
 
-    init(root: URL? = nil, removeLocalMacAccount: @escaping (UUID) async throws -> Void = {
+    public init(root: URL? = nil, removeLocalMacAccount: @escaping (UUID) async throws -> Void = {
         try await LocalMacSetup.stop($0, deleting: true)
     }, sshSecrets: SSHSecretStore = .keychain) throws {
         self.removeLocalMacAccount = removeLocalMacAccount
@@ -253,15 +253,15 @@ enum ComputerDisplayMode: String {
     /// A background login can outlive a crashed or interrupted app, and an
     /// updated service may not be running. The read-only handshake starts it,
     /// so it can sign out logins that no desktop helper serves.
-    func wakeLocalMacService() {
+    public func wakeLocalMacService() {
         guard sessions.contains(where: { $0.computer.kind == .localMac }) else { return }
         Task { try? await LocalMacSetup.check() }
     }
 
-    var selected: ComputerSession? { sessions.first { $0.id == selection } }
+    public var selected: ComputerSession? { sessions.first { $0.id == selection } }
     /// Reference files identify a computer; the normal library owns its UI and
     /// current terminal. Historical terminal IDs do not create another viewer.
-    func selectComputer(_ id: UUID, view: String?) throws -> ComputerSession {
+    public func selectComputer(_ id: UUID, view: String?) throws -> ComputerSession {
         guard let session = sessions.first(where: { $0.id == id }) else {
             throw ComputerError("This computer is no longer in your library.")
         }
@@ -270,10 +270,10 @@ enum ComputerDisplayMode: String {
         if view == "web" { session.showingTerminal = false }
         return session
     }
-    var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }
+    public var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }
 
     /// `selects` false for computers agents and the Hub make: the person stays where they are.
-    func create(_ requested: Computer, source: URL?, sshSecret: SSHSecret? = nil, selects: Bool = true) async -> Bool {
+    public func create(_ requested: Computer, source: URL?, sshSecret: SSHSecret? = nil, selects: Bool = true) async -> Bool {
         guard !storageCleaning, creationTask == nil else { return false }
         creationID = requested.id
         creationName = requested.name
@@ -292,7 +292,7 @@ enum ComputerDisplayMode: String {
         }
     }
 
-    func cancelCreation() {
+    public func cancelCreation() {
         guard creationTask != nil, !creationCancelling else { return }
         creationCancelling = true
         creationTask?.cancel()
@@ -532,12 +532,12 @@ enum ComputerDisplayMode: String {
         try file.truncate(atOffset: UInt64(gib) * 1_073_741_824)
     }
 
-    func start(_ session: ComputerSession) async {
+    public func start(_ session: ComputerSession) async {
         guard !storageCleaning else { return }
         await startComputer(session)
     }
 
-    func startComputer(_ session: ComputerSession) async {
+    public func startComputer(_ session: ComputerSession) async {
         guard !session.phase.busy, session.phase != .running else { return }
         session.showingTerminal = false
         session.showingFiles = false
@@ -636,12 +636,12 @@ enum ComputerDisplayMode: String {
         }
     }
 
-    func stop(_ session: ComputerSession, force: Bool = false) async {
+    public func stop(_ session: ComputerSession, force: Bool = false) async {
         guard !storageCleaning else { return }
         await stopComputer(session, force: force)
     }
 
-    func stopComputer(_ session: ComputerSession, force: Bool = false) async {
+    public func stopComputer(_ session: ComputerSession, force: Bool = false) async {
         guard !session.phase.busy else { return }
         if #available(macOS 27, *), let windows = session.windows {
             // Windows' own runtime reports the stop, which leaves the session stopped.
@@ -686,7 +686,7 @@ enum ComputerDisplayMode: String {
         }
     }
 
-    static func shutDownGuest(
+    public static func shutDownGuest(
         kind: ComputerKind, request: () throws -> Void, wait: () async -> Void,
         stillRunning: () -> Bool, forceStop: () async -> Void
     ) async throws {
@@ -698,7 +698,7 @@ enum ComputerDisplayMode: String {
         if stillRunning() { await forceStop() }
     }
 
-    func execute(_ text: String, in session: ComputerSession) async {
+    public func execute(_ text: String, in session: ComputerSession) async {
         guard session.phase == .running, !session.commandRunning, let runtime = session.container else { return }
         session.commandRunning = true
         session.append("\n$ \(text)\n")
@@ -709,7 +709,7 @@ enum ComputerDisplayMode: String {
     }
 
     /// Select an available surface without replacing its existing session.
-    func selectDisplay(_ mode: ComputerDisplayMode, in session: ComputerSession) async {
+    public func selectDisplay(_ mode: ComputerDisplayMode, in session: ComputerSession) async {
         if let runtime = session.localMac, session.phase == .running {
             guard !session.openingTerminal else { return }
             do {
@@ -781,7 +781,7 @@ enum ComputerDisplayMode: String {
 
     /// A separate guest PTY, independent of the desktop processes.
     /// Keep it alive when returning to the desktop so commands/history survive.
-    func toggleTerminal(_ session: ComputerSession) async {
+    public func toggleTerminal(_ session: ComputerSession) async {
         guard session.computer.hasDesktop, session.phase == .running,
               !session.openingTerminal, let runtime = session.container else { return }
         if session.showingTerminal {
@@ -877,7 +877,7 @@ enum ComputerDisplayMode: String {
 
     /// Signs in with the new address and sign-in before keeping them, so a mistake leaves the old ones.
     /// A different host or port is a different server, whose key is trusted afresh.
-    func changeSignIn(_ session: ComputerSession, to address: SSHDestination, secret: SSHSecret?, keepSaved: Bool = false) async throws {
+    public func changeSignIn(_ session: ComputerSession, to address: SSHDestination, secret: SSHSecret?, keepSaved: Bool = false) async throws {
         guard let current = session.computer.ssh else { throw ComputerError("This computer has no address.") }
         var destination = address
         destination.hostKey = destination.host == current.host && destination.port == current.port ? current.hostKey : nil
@@ -899,13 +899,13 @@ enum ComputerDisplayMode: String {
     }
 
     /// Trusts whatever key the server presents at its next sign-in.
-    func forgetServerKey(_ session: ComputerSession) {
+    public func forgetServerKey(_ session: ComputerSession) {
         var computer = session.computer
         computer.ssh?.hostKey = nil
         do { session.computer = try library.save(computer) } catch { self.error = error.localizedDescription }
     }
 
-    func finishInstallation(_ session: ComputerSession) {
+    public func finishInstallation(_ session: ComputerSession) {
         guard session.phase == .stopped else { return }
         var computer = session.computer
         computer.installationComplete = true
@@ -916,7 +916,7 @@ enum ComputerDisplayMode: String {
 
     /// Marks a computer Noodle Hub made or uses. The Hub only reaches computers it made, so
     /// one it uses that says otherwise was made before computers recorded it.
-    func note(_ session: ComputerSession, usedBy caller: String) {
+    public func note(_ session: ComputerSession, usedBy caller: String) {
         guard caller == ComputerBuildIdentity.current.hubID, session.computer.hub != true else { return }
         var computer = session.computer
         computer.hub = true
@@ -924,7 +924,7 @@ enum ComputerDisplayMode: String {
     }
 
     /// Noodle Hub saying whom one of its computers is kept for, or nobody. Only the Hub says.
-    func setHubOwner(_ session: ComputerSession, _ owner: HubOwner?, from caller: String) throws {
+    public func setHubOwner(_ session: ComputerSession, _ owner: HubOwner?, from caller: String) throws {
         guard caller == ComputerBuildIdentity.current.hubID else {
             throw ComputerBridgeError("Only Noodle Hub says whom its computers are for.")
         }
@@ -936,14 +936,14 @@ enum ComputerDisplayMode: String {
     }
 
     /// The Hub's computers under the people they are kept for, by name, then those it names nobody for.
-    static func hubGroups(_ sessions: [ComputerSession]) -> (people: [(owner: HubOwner, sessions: [ComputerSession])], unowned: [ComputerSession]) {
+    public static func hubGroups(_ sessions: [ComputerSession]) -> (people: [(owner: HubOwner, sessions: [ComputerSession])], unowned: [ComputerSession]) {
         let owners = sessions.compactMap(\.computer.hubOwner).reduce(into: [UUID: HubOwner]()) { $0[$1.id] = $1 }
         let people = owners.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             .map { owner in (owner: owner, sessions: sessions.filter { $0.computer.hubOwner?.id == owner.id }) }
         return (people, sessions.filter { $0.computer.hubOwner == nil })
     }
 
-    func rename(_ session: ComputerSession, name: String, description: String? = nil, appearance: ComputerAppearance? = nil,
+    public func rename(_ session: ComputerSession, name: String, description: String? = nil, appearance: ComputerAppearance? = nil,
                 resizesDesktop: Bool? = nil) {
         var computer = session.computer
         computer.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -956,7 +956,7 @@ enum ComputerDisplayMode: String {
     }
 
     /// What a stopped computer runs with; it takes effect at the next start.
-    func changeResources(_ session: ComputerSession, cpus: Int, memoryGiB: Int, networkEnabled: Bool) throws {
+    public func changeResources(_ session: ComputerSession, cpus: Int, memoryGiB: Int, networkEnabled: Bool) throws {
         guard ![.localMac, .ssh].contains(session.computer.kind), session.phase == .stopped,
               session.virtual == nil, session.container == nil, session.windowsRuntime == nil else {
             throw ComputerError("Stop the computer before changing its resources.")
@@ -977,7 +977,7 @@ enum ComputerDisplayMode: String {
         }
     }
 
-    func remove(_ session: ComputerSession) {
+    public func remove(_ session: ComputerSession) {
         guard !storageCleaning, session.canDelete else { return }
         if session.computer.kind == .localMac {
             let previousPhase = session.phase
@@ -1008,7 +1008,7 @@ enum ComputerDisplayMode: String {
         } catch { self.error = error.localizedDescription }
     }
 
-    func recordRemovalFailure(_ failure: Error) {
+    public func recordRemovalFailure(_ failure: Error) {
         if let removal = failure as? LocalMacRemovalFailure {
             let name = LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.build.appName ?? "Noodle Computer"
             error = removal.message(appName: name)
@@ -1025,7 +1025,7 @@ enum ComputerDisplayMode: String {
         } else { error = failure.localizedDescription }
     }
 
-    func shutdown() async {
+    public func shutdown() async {
         storageTask?.cancel()
         await storageTask?.value
         cancelCreation()

@@ -1,6 +1,7 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerCore
+import ComputerEngine
 import Containerization
 import ContainerizationExtras
 import ContainerizationOCI

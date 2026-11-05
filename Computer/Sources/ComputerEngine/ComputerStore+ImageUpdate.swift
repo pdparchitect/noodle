@@ -2,7 +2,7 @@ import ComputerCore
 import Foundation
 
 extension ComputerStore {
-    func updateImage(_ session: ComputerSession) async {
+    public func updateImage(_ session: ComputerSession) async {
         guard !storageCleaning, session.computer.kind == .container, !session.phase.busy,
               imageUpdateTasks[session.id] == nil else { return }
         error = nil
@@ -15,7 +15,7 @@ extension ComputerStore {
 
     /// Marks container computers whose registry has a newer image. Failures
     /// leave the mark alone; the Update button still reports them when used.
-    func checkImageUpdates() async {
+    public func checkImageUpdates() async {
         for session in sessions where session.computer.kind == .container && imageUpdateTasks[session.id] == nil {
             let current = try? await ContainerComputer.imageIsCurrent(
                 computer: session.computer, directory: library.directory(for: session.id), cache: cache)
@@ -23,7 +23,7 @@ extension ComputerStore {
         }
     }
 
-    func cancelImageUpdate(_ session: ComputerSession) {
+    public func cancelImageUpdate(_ session: ComputerSession) {
         imageUpdateTasks[session.id]?.cancel()
     }
 

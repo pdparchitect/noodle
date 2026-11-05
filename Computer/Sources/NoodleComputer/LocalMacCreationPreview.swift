@@ -1,6 +1,7 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
 import ComputerCore
+import ComputerEngine
 import SwiftUI
 
 /// An isolated native form preview. It never presses Create, starts a desktop,

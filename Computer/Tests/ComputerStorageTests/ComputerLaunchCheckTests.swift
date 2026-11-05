@@ -5,11 +5,15 @@ import XCTest
 /// Verification runs pass plain argument names; the app may only know their digests.
 final class ComputerLaunchCheckTests: XCTestCase {
     func testEveryDigestMatchesTheNameWrittenBesideIt() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Sources/NoodleComputer")
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources")
         let line = try NSRegularExpression(pattern: #"static let \w+ = "([0-9a-f]{64})"\s+// (--[a-z-]+)$"#, options: .anchorsMatchLines)
         var names: [String] = []
-        for file in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) where file.pathExtension == "swift" {
+        // The app and the engine it runs on: neither may spell a launch argument.
+        let files = try ["NoodleComputer", "ComputerEngine"].flatMap {
+            try FileManager.default.contentsOfDirectory(at: sources.appendingPathComponent($0), includingPropertiesForKeys: nil)
+        }
+        for file in files where file.pathExtension == "swift" {
             let source = try String(contentsOf: file, encoding: .utf8)
             let text = source as NSString
             for match in line.matches(in: source, range: NSRange(location: 0, length: text.length)) {

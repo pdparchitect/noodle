@@ -1,6 +1,7 @@
 import AppKit
 import ComputerCore
 import XCTest
+@testable import ComputerEngine
 @testable import NoodleComputer
 
 final class ComputerDisplayModeTests: XCTestCase {

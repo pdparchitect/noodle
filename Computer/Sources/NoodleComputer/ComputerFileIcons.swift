@@ -1,4 +1,5 @@
 import AppKit
+import ComputerEngine
 import SwiftUI
 import UniformTypeIdentifiers
 

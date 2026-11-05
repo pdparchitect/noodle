@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import ComputerCore
+import ComputerEngine
 import NoodleWallpaper
 import SwiftUI
 import NoodleSettingsUI
@@ -167,12 +168,6 @@ struct ComputerAppearanceSheet: View {
                 Int(round(rgb.greenComponent * 255)), Int(round(rgb.blueComponent * 255)))
         })
     }
-}
-
-func computerColour(_ hex: String) -> NSColor {
-    let value = UInt32(hex, radix: 16) ?? 0
-    return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
-                   green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
 }
 
 typealias ComputerWindowCompositing = ConversationWindowCompositing
