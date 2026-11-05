@@ -25,6 +25,8 @@ import XCTest
     func remove(_ provider: HarnessProvider) throws { try store.remove(provider) }
     func versions(_ provider: HarnessProvider) -> [String] { store.versions(provider).map(\.text) }
     func remove(_ provider: HarnessProvider, version: String) throws { try store.remove(provider, version: version) }
+    func isPreferred(_ provider: HarnessProvider) -> Bool { store.isPreferred(provider) }
+    func setPreferred(_ preferred: Bool, for provider: HarnessProvider) throws { try store.setPreferred(preferred, for: provider) }
 }
 
 /// Reports the version folder as installed, 1.2.3 as the vendor's latest, and optionally refuses one version.
@@ -186,6 +188,59 @@ import XCTest
         await controller.operations[.fx]?.value
         XCTAssertNil(controller.errors[.fx])
         XCTAssertEqual(controller.snapshots[.fx]?.installation.isAvailable, true)
+    }
+
+    /// The person's own FX, which the test makes visible to the simulated discovery.
+    private func placeOwnFx() async throws -> String {
+        let own = root.appendingPathComponent(".local/bin/fx")
+        try FileManager.default.createDirectory(at: own.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\n".utf8).write(to: own)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: own.path)
+        await runtime.checkExternalInstallation(.fx)
+        XCTAssertEqual(runtime.installations.first { $0.provider == .fx }?.executablePath, own.path)
+        return own.path
+    }
+
+    func testSwitchingToNoodlesCopyInstallsItThenBackToTheUsersOwn() async throws {
+        let own = try await placeOwnFx()
+        var switches = 0
+        XCTAssertFalse(controller.prefersManaged(.fx))
+        controller.setPrefersManaged(true, .fx, runtime: runtime) { switches += 1 }
+        XCTAssertTrue(controller.prefersManaged(.fx))
+        let installing = try XCTUnwrap(controller.operations[.fx])
+        try await clock.waitUntil { self.installer.calls == 1 }
+        installer.gate.resolve(.success(()))
+        await installing.value
+        let managed = try XCTUnwrap(runtime.installations.first { $0.provider == .fx })
+        XCTAssertTrue(controller.isManaged(managed))
+        XCTAssertEqual(switches, 1, "The bots restart on the copy now in use")
+
+        controller.setPrefersManaged(false, .fx, runtime: runtime) { switches += 1 }
+        await controller.operations[.fx]?.value
+        XCTAssertFalse(controller.prefersManaged(.fx))
+        XCTAssertEqual(runtime.installations.first { $0.provider == .fx }?.executablePath, own)
+        XCTAssertEqual(switches, 2)
+        XCTAssertNil(controller.activity[.fx])
+
+        // Chosen again with the copy still there, it switches without downloading.
+        controller.setPrefersManaged(true, .fx, runtime: runtime) { switches += 1 }
+        await controller.operations[.fx]?.value
+        XCTAssertEqual(installer.calls, 1)
+        XCTAssertEqual(switches, 3)
+        XCTAssertTrue(controller.isManaged(try XCTUnwrap(runtime.installations.first { $0.provider == .fx })))
+    }
+
+    func testAFailedInstallOfTheChosenCopyKeepsTheUsersOwn() async throws {
+        let own = try await placeOwnFx()
+        var switched = false
+        controller.setPrefersManaged(true, .fx, runtime: runtime) { switched = true }
+        let installing = try XCTUnwrap(controller.operations[.fx])
+        installer.gate.resolve(.failure(HarnessSetupError("FX’s Vercel signature could not be verified.")))
+        await installing.value
+        XCTAssertEqual(controller.errors[.fx], "FX’s Vercel signature could not be verified.")
+        XCTAssertFalse(controller.prefersManaged(.fx), "There is nothing of Noodle's to run")
+        XCTAssertFalse(switched)
+        XCTAssertEqual(runtime.installations.first { $0.provider == .fx }?.executablePath, own)
     }
 
     func testCancelledInstallClearsTheRowWithoutAnError() async throws {

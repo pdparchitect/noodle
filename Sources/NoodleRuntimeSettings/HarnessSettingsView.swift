@@ -175,6 +175,10 @@ public struct HarnessInstallationRow: View {
                     statusLabel
                     if id.supportsProfiles {
                         Menu {
+                            if choosesInstallation {
+                                installationMenu
+                                Divider()
+                            }
                             HarnessUsageRetryToggle(harnesses: store.runtime.harnesses,
                                 target: HarnessFallbackTarget(provider: id))
                             if let path = liveInstallation?.executablePath {
@@ -290,6 +294,37 @@ public struct HarnessInstallationRow: View {
 
     private var defaultLogin: HarnessProfile { HarnessProfileStore.defaultRecord(id) }
 
+    /// Whether the person can choose which copy of the harness runs.
+    private var choosesInstallation: Bool {
+        setup.canInstall(id) && (installation.isAvailable || setup.prefersManaged(id))
+    }
+
+    /// Which copy of the harness runs: the person's own, or the one Noodle installs and keeps
+    /// up to date. Bots on the harness restart on the one chosen.
+    @ViewBuilder private var installationMenu: some View {
+        let live = liveInstallation ?? installation
+        let managed = live.isAvailable && setup.isManaged(live)
+        let chosen = setup.prefersManaged(id)
+        // Noodle's copy runs without being chosen only when the person has no installation of their own.
+        let ownFound = !managed || chosen
+        Menu("Installation") {
+            Toggle(ownFound ? "Your Own" : "Your Own (None Found)",
+                   isOn: Binding(get: { !managed }, set: { if $0 { chooseInstallation(managed: false) } }))
+                .disabled(!ownFound)
+            // Chosen while it already runs, it stays once the person installs their own.
+            Toggle("Managed by Noodle", isOn: Binding(get: { managed }, set: { if $0 || !chosen { chooseInstallation(managed: true) } }))
+        }
+        .disabled(setup.activity[id] != nil)
+    }
+
+    private func chooseInstallation(managed: Bool) {
+        setup.setPrefersManaged(managed, id, runtime: store.runtime) { [store, id] in
+            for agent in store.agents where agent.harnessIdentifier == id.rawValue {
+                store.runtime.restart(agent: agent, repository: store.repository)
+            }
+        }
+    }
+
     /// Only a signed-in FX login has Vercel teams to read.
     private var readsFxTeams: Bool {
         id == .fx && liveInstallation?.isAvailable == true && setup.authentication[id] == .authenticated
@@ -391,7 +426,7 @@ public struct HarnessInstallationRow: View {
     /// Where the harness lives, shown on the version line once it is installed.
     @ViewBuilder private var locationText: some View {
         if let path = installation.executablePath {
-            Text(id == .apple ? "Local" : (setup.isManaged(installation) ? "Installed by Noodle" : path))
+            Text(id == .apple ? "Local" : (setup.isManaged(installation) ? "Managed by Noodle" : path))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)

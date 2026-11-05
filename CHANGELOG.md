@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Choose who looks after a harness you installed yourself: in Settings › Harness, its ⋯ menu has Installation › Your Own or Managed by Noodle. Managed by Noodle installs the vendor's current release into Noodle's storage if it isn't there yet, checks its signature, and keeps it up to date, while the copy in your home folder is left alone for you to use in Terminal. The harness's bots restart on the copy you choose. Before, Noodle's copy was used only when you had none of your own, and removed once you installed one. Your Own switches back, and Noodle's unused copy goes the next time Noodle opens. A harness Noodle installed now reads Managed by Noodle instead of Installed by Noodle.
 - Suspend a bot for a while: right-click it in the sidebar and choose Suspend Bot, then for 1 hour, 4 hours, until tomorrow, a week, or until you unsuspend it. A suspended bot finishes its turn, then takes no new one, and stays in the sidebar, grayed, saying until when. Messages wait for it. Choose Unsuspend Bot, or Unsuspend over its conversation, to let it continue straight away. This works for bots on a Noodle Hub too, for all your devices.
 
 ## [0.81.1] - 2026-11-05

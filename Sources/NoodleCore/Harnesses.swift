@@ -208,21 +208,31 @@ public struct HarnessDiscovery: Sendable {
         // Apple's harness ships inside the app, so even a Mac without harnesses has it.
         if simulateNoHarnesses, provider != .apple {
             // Noodle's own copy stays visible: simulation is how its install flow is exercised.
-            let executable = (externalInstallChecks.contains(provider)
-                ? standaloneCandidates(for: provider).first(where: isExecutable) : nil) ?? managedHarnesses?.executable(provider)
+            let own = externalInstallChecks.contains(provider) && managedHarnesses?.isPreferred(provider) != true
+                ? standaloneCandidates(for: provider).first(where: isExecutable) : nil
+            let executable = own ?? managedHarnesses?.executable(provider)
             return HarnessInstallation(provider: provider, executablePath: executable?.path)
         }
         #endif
-        // The user's own installation always wins over the copy Noodle installed.
-        let executable = executableCandidates(for: provider).first(where: isExecutable) ?? managedHarnesses?.executable(provider)
+        // The person's own installation wins over the copy Noodle installed, unless they chose Noodle's.
+        if managedHarnesses?.isPreferred(provider) == true, let managed = managedHarnesses?.executable(provider) {
+            return HarnessInstallation(provider: provider, executablePath: managed.path)
+        }
+        let executable = ownExecutable(provider) ?? managedHarnesses?.executable(provider)
         return HarnessInstallation(provider: provider, executablePath: executable?.path)
     }
 
-    /// Two versions must never share one account home, so Noodle's copy goes
-    /// once the user installs their own. Call before any bot starts.
+    /// The person's own installation, where this process can see it. The sandboxed app sees
+    /// only some vendors' locations; the Agent Host reports the others.
+    public func ownExecutable(_ provider: HarnessProvider) -> URL? {
+        executableCandidates(for: provider).first(where: isExecutable)
+    }
+
+    /// Noodle's copy goes once the person installs their own, unless they chose to keep
+    /// Noodle's. Call before any bot starts, so none is running from it.
     public func removeSupersededManagedHarnesses() {
         guard let managedHarnesses else { return }
-        for provider in HarnessProvider.allCases where managedHarnesses.executable(provider) != nil {
+        for provider in HarnessProvider.allCases where managedHarnesses.executable(provider) != nil && !managedHarnesses.isPreferred(provider) {
             if discover(provider).isAvailable, !managedHarnesses.manages(discover(provider)) {
                 try? managedHarnesses.remove(provider)
             }

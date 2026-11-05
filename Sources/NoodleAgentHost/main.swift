@@ -549,7 +549,8 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let result = try GrokInspection.inspect(home: HostPaths.home, environment: HostPaths.defaultEnvironment(.grokBuild),
-                                                        managed: HostPaths.managedExecutable(.grokBuild))
+                                                        managed: HostPaths.managedExecutable(.grokBuild),
+                                                        prefersManaged: HostPaths.managedHarnesses.isPreferred(.grokBuild))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -561,7 +562,8 @@ private final class HostSession: NSObject, AgentHostService {
                 let result = try OpenCodeInspection.inspect(home: HostPaths.home,
                                                             loginHome: HostPaths.profiles.loginHome(HostPaths.profiles.defaultProfile(.openCode)),
                                                             application: HostPaths.application,
-                                                            managed: HostPaths.managedExecutable(.openCode))
+                                                            managed: HostPaths.managedExecutable(.openCode),
+                                                            prefersManaged: HostPaths.managedHarnesses.isPreferred(.openCode))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -571,7 +573,8 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let result = try MuseInspection.inspect(home: HostPaths.home, environment: HostPaths.defaultEnvironment(.muse),
-                                                        managed: HostPaths.managedExecutable(.muse))
+                                                        managed: HostPaths.managedExecutable(.muse),
+                                                        prefersManaged: HostPaths.managedHarnesses.isPreferred(.muse))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -581,7 +584,8 @@ private final class HostSession: NSObject, AgentHostService {
         queue.async {
             do {
                 let result = try AntigravityInspection.inspect(home: HostPaths.home, environment: HostPaths.defaultEnvironment(.antigravity),
-                                                               managed: HostPaths.managedExecutable(.antigravity))
+                                                               managed: HostPaths.managedExecutable(.antigravity),
+                                                               prefersManaged: HostPaths.managedHarnesses.isPreferred(.antigravity))
                 reply(try JSONEncoder().encode(result), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
@@ -701,7 +705,8 @@ private final class HostSession: NSObject, AgentHostService {
             switch provider {
             case .grokBuild:
                 return try GrokInspection.inspect(home: HostPaths.home, environment: environment,
-                                                  managed: HostPaths.managedExecutable(.grokBuild)).authenticated
+                                                  managed: HostPaths.managedExecutable(.grokBuild),
+                                                  prefersManaged: HostPaths.managedHarnesses.isPreferred(.grokBuild)).authenticated
             case .muse:
                 guard !profiles.loginIsShared(profile) else {
                     throw HostError("This Muse Code version saved the sign-in to the shared Keychain item, so it cannot be kept as a separate profile.")

@@ -671,6 +671,16 @@ public final class AgentRuntimeCoordinator {
         return installation
     }
 
+    /// Looks for one harness again after Noodle changed its files or which copy it prefers,
+    /// asking the Agent Host too where only it can see the person's own installation.
+    @discardableResult
+    public func rediscover(_ provider: HarnessProvider) async -> HarnessInstallation {
+        let installation = refreshInstallation(provider)
+        guard HarnessHostInspection.providers.contains(provider) else { return installation }
+        await refreshHostCapabilities(provider)
+        return installations.first { $0.provider == provider } ?? installation
+    }
+
     /// Turning a harness on looks for it again and asks for its models; its bots start when next started.
     public func setHarness(_ provider: HarnessProvider, on: Bool) {
         guard harnesses.isOn(provider) != on else { return }

@@ -41,6 +41,30 @@ public struct ManagedHarnessStore: Sendable {
         return folder(provider, version: version).appendingPathComponent(distribution.executablePath)
     }
 
+    static let preferenceName = ".preferred"
+
+    /// Whether the person chose Noodle's copy over their own installation. Kept beside the
+    /// copy, so the app, the Hub and the Agent Host read the same choice, and removing the
+    /// copy returns the harness to the person's own.
+    public func isPreferred(_ provider: HarnessProvider) -> Bool {
+        HarnessDistribution(provider) != nil
+            && FileManager.default.fileExists(atPath: folder(provider).appendingPathComponent(Self.preferenceName).path)
+    }
+
+    public func setPreferred(_ preferred: Bool, for provider: HarnessProvider) throws {
+        let marker = folder(provider).appendingPathComponent(Self.preferenceName)
+        guard preferred else {
+            if FileManager.default.fileExists(atPath: marker.path) { try FileManager.default.removeItem(at: marker) }
+            return
+        }
+        guard HarnessDistribution(provider) != nil else {
+            throw HarnessSetupError("Noodle cannot install \(provider.displayName) itself.")
+        }
+        try FileManager.default.createDirectory(at: folder(provider), withIntermediateDirectories: true)
+        try AgentStorageLayout.requireDirectory(folder(provider))
+        try Data().write(to: marker)
+    }
+
     public func manages(_ installation: HarnessInstallation) -> Bool {
         installation.executablePath.map(contains) ?? false
     }

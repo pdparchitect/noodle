@@ -152,6 +152,39 @@ final class ManagedHarnessTests: XCTestCase {
         XCTAssertNil(store.executable(.fx))
     }
 
+    func testChosenCopyWinsOverTheUsersOwnAndStaysUntilUnchosenOrRemoved() throws {
+        let home = root.appendingPathComponent("home", isDirectory: true)
+        let own = home.appendingPathComponent(".local/bin/fx")
+        try executable(at: own)
+        func discovery() -> HarnessDiscovery {
+            HarnessDiscovery(homeDirectory: home, applicationsDirectory: root, executableSearchDirectories: [],
+                             applicationBundleURL: root, managedHarnesses: store, environment: [:])
+        }
+        // Chosen before Noodle's copy is installed, the person's own still runs.
+        try store.setPreferred(true, for: .fx)
+        XCTAssertTrue(store.isPreferred(.fx))
+        XCTAssertEqual(discovery().discover(.fx).executablePath, own.path)
+        XCTAssertTrue(store.versions(.fx).isEmpty, "The choice is not mistaken for a version")
+
+        try place(.fx, version: "0.0.10")
+        XCTAssertTrue(store.manages(discovery().discover(.fx)))
+        XCTAssertEqual(discovery().ownExecutable(.fx), own)
+        discovery().removeSupersededManagedHarnesses()
+        XCTAssertNotNil(store.executable(.fx), "A chosen copy is kept beside the person's own")
+        XCTAssertFalse(store.isPreferred(.codex), "Each harness chooses for itself")
+
+        try store.setPreferred(false, for: .fx)
+        XCTAssertEqual(discovery().discover(.fx).executablePath, own.path)
+        discovery().removeSupersededManagedHarnesses()
+        XCTAssertNil(store.executable(.fx), "Unchosen, it goes as before")
+
+        try place(.fx, version: "0.0.10")
+        try store.setPreferred(true, for: .fx)
+        try store.remove(.fx)
+        XCTAssertFalse(store.isPreferred(.fx), "Removing Noodle's copy returns the harness to the person's own")
+        XCTAssertThrowsError(try store.setPreferred(true, for: .apple))
+    }
+
     func testTrustIgnoresOtherPathsAndRejectsUnsignedOrRedirectedCopies() throws {
         XCTAssertNil(try store.trustedExecutable(at: "/usr/local/bin/fx", provider: .fx))
         try place(.fx, version: "0.0.10")

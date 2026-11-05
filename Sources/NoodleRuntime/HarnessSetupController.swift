@@ -10,6 +10,14 @@ import NoodleCore
     /// Installed versions, oldest first.
     func versions(_ provider: HarnessProvider) -> [String]
     func remove(_ provider: HarnessProvider, version: String) throws
+    /// Whether the person chose Noodle's copy over their own installation.
+    func isPreferred(_ provider: HarnessProvider) -> Bool
+    func setPreferred(_ preferred: Bool, for provider: HarnessProvider) throws
+}
+
+public extension HarnessInstalling {
+    func isPreferred(_ provider: HarnessProvider) -> Bool { false }
+    func setPreferred(_ preferred: Bool, for provider: HarnessProvider) throws {}
 }
 
 @MainActor @Observable
@@ -304,11 +312,53 @@ public final class HarnessSetupController {
         }
     }
 
+    /// Bumped when a harness changes between Noodle's copy and the person's own, which is kept in files.
+    private var preferenceRevision = 0
+
+    /// Whether the harness runs on the copy Noodle installed and updates, even beside the person's own.
+    public func prefersManaged(_ id: HarnessProvider) -> Bool {
+        _ = preferenceRevision
+        return installer?.isPreferred(id) ?? false
+    }
+
+    /// Runs the harness on Noodle's copy, installing it first when there is none, or back on the
+    /// person's own installation. `then` runs once the harness found has changed, so its bots
+    /// can restart on it; Noodle's copy, once unused, goes when Noodle next opens.
+    public func setPrefersManaged(_ managed: Bool, _ id: HarnessProvider, runtime: AgentRuntimeCoordinator,
+                                  then done: @escaping @MainActor () -> Void = {}) {
+        guard operations[id] == nil, let installer, canInstall(id), prefersManaged(id) != managed else { return }
+        let before = runtime.installations.first { $0.provider == id }?.executablePath
+        do { try installer.setPreferred(managed, for: id) } catch {
+            errors[id] = error.localizedDescription
+            return
+        }
+        preferenceRevision += 1
+        errors[id] = nil
+        let changed: @MainActor () -> Void = {
+            if runtime.installations.first(where: { $0.provider == id })?.executablePath != before { done() }
+        }
+        if managed, installer.versions(id).isEmpty {
+            install(id, runtime: runtime) { succeeded in if succeeded { changed() } }
+            return
+        }
+        retireStatusCheck(id)
+        activity[id] = "Switching…"
+        operations[id] = Task { [weak self] in
+            guard let self else { return }
+            await self.refreshAfterChange(id, runtime: runtime)
+            self.activity[id] = nil
+            self.operations[id] = nil
+            changed()
+        }
+    }
+
     public func canInstall(_ id: HarnessProvider) -> Bool { installer != nil && id.supportsManagedInstallation }
     public func isManaged(_ installation: HarnessInstallation) -> Bool { installer?.manages(installation) ?? false }
 
     /// Installs the vendor's current release, or updates the copy Noodle installed.
-    public func install(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) {
+    /// `then` reports whether it succeeded.
+    public func install(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator,
+                        then done: @escaping @MainActor (Bool) -> Void = { _ in }) {
         guard operations[id] == nil, let installer, canInstall(id) else { return }
         retireStatusCheck(id)
         let token = UUID()
@@ -354,8 +404,15 @@ public final class HarnessSetupController {
                 guard self.installs[id] == token else { return }
                 failure = "\(id.displayName) \(newest) does not work with this version of Noodle. The previous version was kept."
             }
+            if failure != nil, installer.versions(id).isEmpty, installer.isPreferred(id) {
+                // Nothing of Noodle's to run, so the person's own installation stays in use.
+                try? installer.setPreferred(false, for: id)
+                self.preferenceRevision += 1
+                await self.refreshAfterChange(id, runtime: runtime)
+            }
             self.finishInstall(id)
             if let failure { self.errors[id] = failure }
+            done(failure == nil)
         }
     }
 
@@ -375,7 +432,7 @@ public final class HarnessSetupController {
     private func refreshAfterChange(_ id: HarnessProvider, runtime: AgentRuntimeCoordinator) async {
         changes[id, default: 0] += 1
         retireStatusCheck(id)
-        let installation = runtime.refreshInstallation(id)
+        let installation = await runtime.rediscover(id)
         await refresh([installation])
         await refreshVersions([installation], forceLatest: true)
     }

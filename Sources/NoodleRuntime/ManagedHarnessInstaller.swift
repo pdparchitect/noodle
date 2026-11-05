@@ -42,6 +42,8 @@ import OSLog
     public func remove(_ provider: HarnessProvider) throws { try store.remove(provider) }
     public func versions(_ provider: HarnessProvider) -> [String] { store.versions(provider).map(\.text) }
     public func remove(_ provider: HarnessProvider, version: String) throws { try store.remove(provider, version: version) }
+    public func isPreferred(_ provider: HarnessProvider) -> Bool { store.isPreferred(provider) }
+    public func setPreferred(_ preferred: Bool, for provider: HarnessProvider) throws { try store.setPreferred(preferred, for: provider) }
 }
 
 @MainActor private final class HarnessPublishOperation {
