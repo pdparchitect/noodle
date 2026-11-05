@@ -90,8 +90,13 @@ public enum ComputerExternalPeer {
     var now: () -> Date = Date.init
 
     /// `listens` false answers only what `handle` is given, as in tests, which cannot sign a socket.
+    /// Only Noodle Computer's own builds serve its socket: its channel trusts Noodle's apps, so another
+    /// product's app that hosts the engine passes a `socket` of its own, or answers only `handle`.
     public init(store: ComputerStore, socket: URL? = nil, listens: Bool = true) throws {
         self.store = store
+        if socket == nil, ComputerBuildIdentity.provider(Bundle.main.bundleIdentifier) == nil {
+            throw ComputerBridgeError("Only \(ComputerBuildIdentity.production.appName) serves computers to Noodle. Give the provider a socket of this app's own.")
+        }
         let endpoint = try socket ?? ComputerConnection.socketURL()
         transferRoot = endpoint.deletingLastPathComponent()
         guard listens else { return }
@@ -102,7 +107,7 @@ public enum ComputerExternalPeer {
                 await self.sweepTerminals()
             }
         }
-        let clients = socket == nil ? ComputerConnection.clientIDs : ComputerConnection.clientIDs + ["com.pdparchitect.noodle.integration"]
+        let clients = socket == nil ? ComputerConnection.clientIDs : ComputerConnection.clientIDs + [ComputerBuildIdentity.testing.noodleIDs[0]]
         server = try ComputerConnectionServer(socket: endpoint, team: ComputerConnection.signingTeam(), clientIDs: clients, handler: {
             [weak self] request, peer in
             guard let self else { return .init(error: "Computer is closing.") }

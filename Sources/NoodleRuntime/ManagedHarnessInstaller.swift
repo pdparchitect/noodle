@@ -1,12 +1,13 @@
 import Foundation
 import NoodleCore
 import OSLog
+import ProductIdentity
 
 /// The sandboxed app downloads and unpacks. It cannot make the result runnable:
 /// the Agent Host checks the vendor's signature and moves it into place.
 @MainActor public final class ManagedHarnessInstaller: HarnessInstalling {
     private let store: ManagedHarnessStore
-    private let log = Logger(subsystem: "com.pdparchitect.noodle", category: "HarnessInstall")
+    private let log = Logger(subsystem: ProductIdentity.current.identifier, category: "HarnessInstall")
     public init(store: ManagedHarnessStore) { self.store = store }
 
     public func manages(_ installation: HarnessInstallation) -> Bool { store.manages(installation) }

@@ -1,9 +1,10 @@
 import Foundation
 import OSLog
+import ProductIdentity
 
 /// Diagnostics only: no messages, tool arguments, names, paths, or raw errors.
 public enum RuntimeDiagnostics {
-    public static let subsystem = "com.pdparchitect.noodle.runtime"
+    public static let subsystem = ProductIdentity.current.identifier("runtime")
     private static let logger = Logger(subsystem: subsystem, category: "lifecycle")
 
     public enum Event: String {

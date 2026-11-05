@@ -222,7 +222,7 @@ public enum ComputerDisplayMode: String {
         let location =
             root
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Noodle Computer", isDirectory: true)
+            .appendingPathComponent(ComputerAppIdentity.libraryFolder, isDirectory: true)
         library = try ComputerLibrary(root: location)
         cache = location.appendingPathComponent("Runtime", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)

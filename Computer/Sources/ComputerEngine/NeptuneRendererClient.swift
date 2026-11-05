@@ -3,7 +3,7 @@ import Foundation
 import NeptuneTransport
 import os
 
-private let rendererLog = Logger(subsystem: "com.pdparchitect.noodle.computer", category: "WindowsRendererClient")
+private let rendererLog = Logger(subsystem: ComputerAppIdentity.subsystem, category: "WindowsRendererClient")
 
 /// One child, pipe pair and shared arena per Windows GPU. No renderer library is loaded in the app.
 final class NeptuneLibrary: @unchecked Sendable {

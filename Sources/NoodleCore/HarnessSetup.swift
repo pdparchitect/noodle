@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public enum HarnessAuthenticationStatus: String, Codable, Equatable, Sendable {
     case authenticated, unauthenticated, notRequired, managedExternally
@@ -79,12 +80,12 @@ public enum HarnessStorage {
         return systemHome
     }
 
-    /// Noodle's storage in its Application Support folder: bots, harnesses it installed, profiles.
+    /// The product's storage in its Application Support folder, named after it: bots, harnesses it installed, profiles.
     public static func dataRoot(applicationSupport: URL) -> URL {
         #if NOODLE_DEV_HOOKS
         if let rehearsal = Rehearsal.folder(in: applicationSupport) { return Rehearsal.dataRoot(rehearsal) }
         #endif
-        return applicationSupport.appendingPathComponent("Noodle", isDirectory: true)
+        return applicationSupport.appendingPathComponent(ProductIdentity.current.name, isDirectory: true)
     }
 }
 

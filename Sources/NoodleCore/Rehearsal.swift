@@ -1,5 +1,6 @@
 #if NOODLE_DEV_HOOKS
 import Foundation
+import ProductIdentity
 
 /// Development builds only: Noodle as on a Mac that has never had it or any harness, to
 /// walk through first-run setup with real downloads and real sign-ins. The app and its
@@ -14,7 +15,7 @@ public enum Rehearsal {
     }
 
     public static func home(_ folder: URL) -> URL { folder.appendingPathComponent("Home", isDirectory: true) }
-    public static func dataRoot(_ folder: URL) -> URL { folder.appendingPathComponent("Noodle", isDirectory: true) }
+    public static func dataRoot(_ folder: URL) -> URL { folder.appendingPathComponent(ProductIdentity.current.name, isDirectory: true) }
 
     /// Starts afresh, discarding whatever the previous rehearsal downloaded or signed in to.
     public static func begin(in applicationSupport: URL) throws {

@@ -4,7 +4,7 @@ import Foundation
 import os
 import Virtualization
 
-private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category: "WindowsNeptune")
+private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "WindowsNeptune")
 
 /// Direct3D for Windows on the Mac's GPU. UTM's viogpu3d driver and its Neptune user-mode driver send
 /// Direct3D calls through virtio-gpu contexts of capset 7; virglrenderer's Neptune runs them on DXMT over Metal.

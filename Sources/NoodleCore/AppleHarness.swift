@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import Security
 import Darwin
 
@@ -123,7 +124,7 @@ public enum AppleAgentSandbox {
         // URL.resolvingSymlinksInPath can retain /var on this SDK; Seatbelt
         // evaluates the real /private/var path. Use realpath for the OS parent.
         return URL(fileURLWithPath: canonical(String(cString: buffer)), isDirectory: true)
-            .appendingPathComponent("com.pdparchitect.noodle.apple-agent", isDirectory: true)
+            .appendingPathComponent(ProductIdentity.current.identifier("apple-agent"), isDirectory: true)
     }
 
     private static func canonical(_ path: String) -> String {

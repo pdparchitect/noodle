@@ -70,7 +70,7 @@ public final class NativeDisplay: VZInstanceExtension, @unchecked Sendable {
 public final class DesktopSurface: @unchecked Sendable {
     static let port: UInt32 = 5100
     private let dial: @Sendable () async throws -> FileHandle
-    private let queue = DispatchQueue(label: "com.pdparchitect.noodle.computer.desktop-surface")
+    private let queue = DispatchQueue(label: ComputerAppIdentity.subsystem + ".desktop-surface")
     private let connecting = Connector()
     private var canvas: CGContext?
 

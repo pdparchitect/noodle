@@ -1,18 +1,19 @@
 import Foundation
+import ProductIdentity
 import Security
 
 public enum AgentHostIdentity {
     public static var service: String {
         configuredIdentifier(
             key: "NoodleAgentHostService",
-            fallback: "com.pdparchitect.noodle.agent-host"
+            fallback: ProductIdentity.current.identifier("agent-host")
         )
     }
 
     public static var application: String {
         configuredIdentifier(
             key: "NoodleApplicationIdentifier",
-            fallback: "com.pdparchitect.noodle"
+            fallback: ProductIdentity.current.identifier
         )
     }
 

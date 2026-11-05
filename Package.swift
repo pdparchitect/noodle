@@ -83,12 +83,13 @@ let package = Package(
         // Stable Diffusion XL in MLX, for the Images tool. Not released as a version.
         .package(url: "https://github.com/ml-explore/mlx-swift-examples", revision: "378f2449c257788c5067b9f8b086731d76b39b33"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
+        .package(path: "Shared/Product"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1"),
         // WebRTC for calls, built with a custom audio device, which Google's own Apple builds lack on macOS.
         .package(url: "https://github.com/livekit/webrtc-xcframework", exact: "150.7871.03")
     ],
     targets: [
-        .target(name: "NoodleAgentBridge"),
+        .target(name: "NoodleAgentBridge", dependencies: [.product(name: "ProductIdentity", package: "Product")]),
         .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
         .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
         .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore",
@@ -100,7 +101,7 @@ let package = Package(
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
-        .target(name: "NoodleCore", dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
+        .target(name: "NoodleCore", dependencies: [.product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks),
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
@@ -110,7 +111,7 @@ let package = Package(
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.
-        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "AppletBridge", package: "Protocol")],
+        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "ProductIdentity", package: "Product"), .product(name: "AppletBridge", package: "Protocol")],
                 swiftSettings: developmentHooks),
         /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
         .target(name: "NoodleHubClient", dependencies: ["NoodleCore", .product(name: "HubLink", package: "HubLink")]),
@@ -156,7 +157,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleCoreTests",
-            dependencies: ["NoodleCore"]
+            dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product")]
         ),
         .testTarget(
             name: "NoodleAppTests",

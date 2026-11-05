@@ -6,7 +6,7 @@ import os
 import SwiftUI
 import Virtualization
 
-private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category: "Windows")
+private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Windows")
 
 /// Owns one Windows virtual machine. Windows runs on VZ only with two things VZ does not offer publicly:
 /// emulated performance counters, without which its boot manager never finishes, and a display VZ's own
@@ -338,7 +338,7 @@ final class WindowsGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate, VZC
         var pixels: UnsafeMutableRawPointer
         var backing: [VZGuestMemoryMapping] = []
     }
-    private let queue = DispatchQueue(label: "com.pdparchitect.noodle.computer.windows-gpu")
+    private let queue = DispatchQueue(label: ComputerAppIdentity.subsystem + ".windows-gpu")
     private weak var device: VZCustomVirtioDevice?
     private var resources: [UInt32: Resource] = [:]
     private var scanout: UInt32 = 0

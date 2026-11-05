@@ -10,7 +10,7 @@ import os
 import SwiftUI
 import Virtualization
 
-private let log = Logger(subsystem: "com.pdparchitect.noodle.computer", category: "GPU3D")
+private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "GPU3D")
 
 /// A Linux desktop's virtio-gpu with 3D: the guest's OpenGL runs on the Mac's GPU through virglrenderer, and the
 /// scanout is copied on the GPU into the surface the view shows. It needs macOS 27's custom Virtio devices; without
@@ -23,7 +23,7 @@ public final class VirglGPU: NSObject, VZCustomVirtioDeviceConfigurationDelegate
         var mappings: [VZGuestMemoryMapping]
         var iovecs: UnsafeMutablePointer<iovec>
     }
-    private let queue = DispatchQueue(label: "com.pdparchitect.noodle.computer.virgl-gpu")
+    private let queue = DispatchQueue(label: ComputerAppIdentity.subsystem + ".virgl-gpu")
     private var device: VZCustomVirtioDevice?
     private var backings: [UInt32: Backing] = [:]
     private var contexts: Set<UInt32> = []

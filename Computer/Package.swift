@@ -21,6 +21,7 @@ let package = Package(
         .package(path: "../Shared/LaunchChecks"),
         .package(path: "../Shared/SettingsUI"),
         .package(path: "../Shared/Wallpaper"),
+        .package(path: "../Shared/Product"),
         .package(path: "Bridge"),
         .package(path: "LocalMac"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
@@ -42,6 +43,7 @@ let package = Package(
         // them to Noodle. Every app that hosts computers builds on it; Noodle Computer adds its windows.
         .target(name: "ComputerEngine", dependencies: [
             "NeptuneTransport",
+            .product(name: "ProductIdentity", package: "Product"),
             "ComputerCore",
             .product(name: "ComputerBridge", package: "Bridge"),
             .product(name: "LocalMacCore", package: "LocalMac"),

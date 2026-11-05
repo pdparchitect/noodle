@@ -70,4 +70,6 @@ public enum ComputerBuildIdentity: String, CaseIterable, Sendable {
         }
     }
     public static var current: Self { identify(Bundle.main.bundleIdentifier) ?? .production }
+    /// The channel whose provider this app is, if it is a Noodle Computer build at all.
+    public static func provider(_ bundleIdentifier: String?) -> Self? { allCases.first { $0.providerID == bundleIdentifier } }
 }
