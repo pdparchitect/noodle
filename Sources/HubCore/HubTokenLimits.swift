@@ -81,12 +81,6 @@ import Observation
 
     /// When the oldest tokens leaving the period take the rest below the limit; nil while already below it.
     static func resumption(of spending: [UsageSpend], limit: HubTokenLimit) -> Date? {
-        var total = spending.reduce(0) { $0 + $1.tokens }
-        guard total >= limit.tokens else { return nil }
-        for spend in spending {
-            total -= spend.tokens
-            if total < limit.tokens { return spend.date.addingTimeInterval(limit.period) }
-        }
-        return nil
+        limit.resumption(of: spending)
     }
 }

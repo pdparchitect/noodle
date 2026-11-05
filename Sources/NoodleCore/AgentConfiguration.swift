@@ -27,13 +27,15 @@ struct AgentConfiguration: Codable {
     var owner: AgentOwner?
     /// The harness voice the bot speaks with on calls.
     var voice: String?
+    /// How many tokens the bot may use before it waits; nil for any number.
+    var budget: BotBudget?
 
     init(agent: AgentRecord, backstory: String) {
         self.agent = agent
         self.backstory = backstory
     }
 
-    private enum CodingKeys: String, CodingKey { case backstory, folders, groupFolders, harnessProfile, owner, voice }
+    private enum CodingKeys: String, CodingKey { case backstory, folders, groupFolders, harnessProfile, owner, voice, budget }
 
     init(from decoder: Decoder) throws {
         agent = try AgentRecord(from: decoder)
@@ -46,6 +48,7 @@ struct AgentConfiguration: Codable {
         harnessProfile = try values.decodeIfPresent(UUID.self, forKey: .harnessProfile)
         owner = try values.decodeIfPresent(AgentOwner.self, forKey: .owner)
         voice = try values.decodeIfPresent(String.self, forKey: .voice)
+        budget = try values.decodeIfPresent(BotBudget.self, forKey: .budget)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -57,6 +60,7 @@ struct AgentConfiguration: Codable {
         try values.encodeIfPresent(harnessProfile, forKey: .harnessProfile)
         try values.encodeIfPresent(owner, forKey: .owner)
         try values.encodeIfPresent(voice, forKey: .voice)
+        try values.encodeIfPresent(budget, forKey: .budget)
     }
 
     func requireBackstory() throws -> String {

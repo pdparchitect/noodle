@@ -121,6 +121,7 @@ public final class UsageLedger: @unchecked Sendable {
             }
             try execute("CREATE INDEX IF NOT EXISTS usage_session ON usage(session)")
             try execute("CREATE INDEX IF NOT EXISTS usage_owner ON usage(owner, time)")
+            try execute("CREATE INDEX IF NOT EXISTS usage_agent ON usage(agent_id, time)")
         } catch {
             sqlite3_close(db)
             throw error
@@ -214,10 +215,19 @@ public final class UsageLedger: @unchecked Sendable {
     /// counts: input and output, as the Usage window shows them, cache writes included. Cache reads
     /// repeat input already counted when it was written. Samples from before owners were kept belong to nobody.
     public func spending(owner: UUID, after start: Date) throws -> [UsageSpend] {
+        try spending(where: "owner", is: owner, after: start)
+    }
+
+    /// Each sample of one bot after `start`, oldest first, counted as `spending(owner:after:)` counts them.
+    public func spending(agent: UUID, after start: Date) throws -> [UsageSpend] {
+        try spending(where: "agent_id", is: agent, after: start)
+    }
+
+    private func spending(where column: String, is id: UUID, after start: Date) throws -> [UsageSpend] {
         try withStatement("""
-            SELECT time, input + cache_write + output FROM usage WHERE owner = ? AND time > ? ORDER BY time
+            SELECT time, input + cache_write + output FROM usage WHERE \(column) = ? AND time > ? ORDER BY time
             """) { statement in
-            bind(owner.uuidString, to: statement, at: 1)
+            bind(id.uuidString, to: statement, at: 1)
             sqlite3_bind_double(statement, 2, start.timeIntervalSince1970)
             var spending: [UsageSpend] = []
             while sqlite3_step(statement) == SQLITE_ROW {

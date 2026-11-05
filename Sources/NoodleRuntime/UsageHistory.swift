@@ -30,6 +30,11 @@ public final class UsageHistory {
         (try? ledger?.spending(owner: owner, after: start)) ?? []
     }
 
+    /// What one bot used after `start`, oldest first, as its spending budget counts it.
+    public func spending(agent: UUID, after start: Date) -> [UsageSpend] {
+        (try? ledger?.spending(agent: agent, after: start)) ?? []
+    }
+
     public func days(from start: Date, to end: Date, agentID: UUID?) -> [UsageDay] {
         queries += 1
         return (try? ledger?.days(from: start, to: end, agentID: agentID)) ?? []

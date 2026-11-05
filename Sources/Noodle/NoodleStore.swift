@@ -230,6 +230,8 @@ final class NoodleStore {
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
     let usage: UsageHistory
+    /// The bots here given a spending budget, and those that used it up.
+    let budgets: BotBudgets
     /// The Noodle Hubs this Mac joined.
     let hubs: HubMemberships
     /// This Mac serving its owner's devices, as a Noodle Hub of its own.
@@ -251,6 +253,8 @@ final class NoodleStore {
     let harnessSetup: HarnessSetupController
     let connectsServices: Bool
     private var transcriptRefreshTask: Task<Void, Never>?
+    /// Whether startAgents ran, so bots let go of their budget hold start again by themselves.
+    private var agentsStarted = false
     private var harnessUpdateTask: Task<Void, Never>?
     private var hubCheckInTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
@@ -294,7 +298,11 @@ final class NoodleStore {
         self.runtime.remoteModels = RemoteModelAccountStore(repository: self.repository.rootURL)
         self.runtime.harnessProfiles = self.repository.harnessProfiles
         usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))
-        self.runtime.onUsage = { [usage] in usage.record($0) }
+        budgets = BotBudgets(usage: usage)
+        self.runtime.onUsage = { [usage, budgets] sample in
+            usage.record(sample)
+            budgets.check()
+        }
         self.runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         hubs = HubMemberships(directory: self.repository.rootURL.appendingPathComponent("Hubs", isDirectory: true),
                               deviceName: Host.current().localizedName ?? "Mac")
@@ -915,6 +923,7 @@ final class NoodleStore {
             // TODO(0.62.0): remove with AppleLocalModelStore.keepSystemModelForExistingBots. Milestone: 0.61.0.
             try AppleLocalModelStore(repository: repository.rootURL).keepSystemModelForExistingBots(agents)
             runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
+            reloadBudgets()
             activityWindows.synchronize(agents: agents)
             runtime.reloadAccess()
             try repository.synchronizeAgentWorkspaces(agents)
@@ -1851,6 +1860,52 @@ final class NoodleStore {
     @ObservationIgnored var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
 
     func voice(for agent: AgentRecord) -> String? { try? repository.loadAgentVoice(agent) }
+
+    /// Reads every bot's budget from its agent.json, so one changed elsewhere applies too.
+    private func reloadBudgets() {
+        budgets.onChange = { [weak self] in self?.applyBudgets() }
+        budgets.replace(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in
+            (try? repository.loadAgentBudget(agent)).flatMap { $0 }.map { (agent.id, $0) }
+        }))
+        applyBudgets()
+    }
+
+    /// Holds the bots out of budget and starts again those that may continue.
+    private func applyBudgets() {
+        let held = budgets.holds.mapValues(BotBudgets.status(until:))
+        guard held != runtime.heldAgents else { return }
+        let released = Set(runtime.heldAgents.keys).subtracting(held.keys)
+        runtime.heldAgents = held
+        // Until then, startAgents starts them with everyone else.
+        guard agentsStarted else { return }
+        for agent in agents where released.contains(agent.id) && runsHere(agent.id) && agent.archivedAt == nil {
+            runtime.start(agent: agent, repository: repository)
+        }
+    }
+
+    /// Sets how many tokens the bot may use per period, or lets it use any number when nil. It applies
+    /// straight away, to tokens already used in the period too, unless they were used before a reset.
+    func setBudget(_ limit: TokenLimit?, for agent: AgentRecord) {
+        let current = budgets.budgets[agent.id]
+        let budget = limit.map { BotBudget(limit: $0, resetAt: current?.resetAt) }
+        save(budget, for: agent)
+    }
+
+    /// Forgets the tokens the bot used so far, so it may use its whole budget again from now.
+    func resetBudget(for agent: AgentRecord) {
+        guard var budget = budgets.budgets[agent.id] else { return }
+        budget.resetAt = budgets.now()
+        save(budget, for: agent)
+    }
+
+    private func save(_ budget: BotBudget?, for agent: AgentRecord) {
+        do {
+            try repository.updateAgentBudget(agent, budget: budget)
+            budgets.set(budget, for: agent.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 
     /// What a bot with this name sounds like until a voice is chosen for it.
     func defaultVoice(forBotNamed name: String, harnessIdentifier: String) async -> String? {
@@ -2869,6 +2924,7 @@ final class NoodleStore {
 
     func startAgents() {
         guard storageReady else { return }
+        agentsStarted = true
         for agent in agents {
             let conversationIDs = Set(conversations.filter {
                 $0.participantIDs.contains(agent.id)
@@ -2903,6 +2959,7 @@ final class NoodleStore {
                 guard !Task.isCancelled else { break }
                 self.runtime.reconcile(agents: self.agents, repository: self.repository)
                 self.runtime.checkHeartbeats()
+                self.budgets.checkExpired()
                 self.runtime.checkWakes(repository: self.repository)
                 if !self.ringingCalls.isEmpty { self.dropCallsOfGoneBots() }
                 if self.connectsServices { self.botWidgets.publish(self.widgetBots) }

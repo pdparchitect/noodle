@@ -65,42 +65,8 @@ public struct HubPlan: Identifiable, Codable, Hashable, Sendable {
     public var isDefault: Bool { id == Self.defaultID }
 }
 
-/// How many tokens each user's bots may use in any period of the same length up to now: a rolling
-/// window, so tokens count again for nobody until they are older than the period.
-public struct HubTokenLimit: Codable, Hashable, Sendable {
-    public enum Unit: String, Codable, CaseIterable, Sendable {
-        case hours, days, weeks, months
-
-        /// A month is 30 days, so every period is as long as the last.
-        var seconds: TimeInterval {
-            switch self {
-            case .hours: 3600
-            case .days: 86_400
-            case .weeks: 7 * 86_400
-            case .months: 30 * 86_400
-            }
-        }
-
-        /// "hour" or "hours".
-        public func name(count: Int) -> String { count == 1 ? String(rawValue.dropLast()) : rawValue }
-    }
-
-    public var tokens: Int
-    /// How many units the period lasts.
-    public var length: Int
-    public var unit: Unit
-
-    public init(tokens: Int, length: Int = 1, unit: Unit = .weeks) {
-        self.tokens = max(1, tokens)
-        self.length = max(1, length)
-        self.unit = unit
-    }
-
-    public var period: TimeInterval { Double(length) * unit.seconds }
-
-    /// What follows "per": "7 days", "month".
-    public var periodName: String { length == 1 ? unit.name(count: 1) : "\(length) \(unit.name(count: length))" }
-}
+/// How many tokens each user's bots may use in any period of the same length up to now.
+public typealias HubTokenLimit = TokenLimit
 
 /// A person the Hub lends harnesses to. Each user is on exactly one plan.
 public struct HubUser: Identifiable, Codable, Hashable, Sendable {

@@ -417,6 +417,19 @@ public struct WorkspaceRepository: Sendable {
         try configuration.save(to: layout)
     }
 
+    public func loadAgentBudget(_ agent: AgentRecord) throws -> BotBudget? {
+        try AgentConfiguration.load(from: storage(for: agent.id)).budget
+    }
+
+    /// Writes only when the budget changed.
+    public func updateAgentBudget(_ agent: AgentRecord, budget: BotBudget?) throws {
+        let layout = storage(for: agent.id)
+        var configuration = try AgentConfiguration.load(from: layout)
+        guard configuration.budget != budget else { return }
+        configuration.budget = budget
+        try configuration.save(to: layout)
+    }
+
     public func loadAgentOwner(_ agent: AgentRecord) throws -> AgentOwner? {
         try AgentConfiguration.load(from: storage(for: agent.id)).owner
     }

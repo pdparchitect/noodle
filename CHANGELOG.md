@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - When Noodle's FX sign-in belongs to more than one Vercel team, its actions menu in Settings › Harness, and each FX profile's, has a Vercel Team menu for choosing which team pays for model requests. Bots on that sign-in restart on the new team, and the FX model list follows the team.
+- Each bot can have its own spending budget: in Edit Bot › Harness, Spending Budget sets how many tokens it may use per hour, day, week or month, as a Hub plan does for each person. Once the bot uses them up, it finishes its turn and stops; messages wait for it until its oldest tokens leave the period, or until you choose Reset Budget in the same sheet.
 
 ## [0.81.0] - 2026-11-03
 
