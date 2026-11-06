@@ -995,6 +995,8 @@ private final class HostDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
+// A harness that exits while it is being written to is an error for its session, never the end of every bot.
+signal(SIGPIPE, SIG_IGN)
 private let delegate = HostDelegate()
 let listener = NSXPCListener.service()
 listener.delegate = delegate

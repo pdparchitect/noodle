@@ -630,6 +630,8 @@ public enum RestrictedHarnessStorage {
         process.standardInput = input
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
+        // A tool that exits early reports EPIPE, not SIGPIPE.
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         try process.run()
         input.fileHandleForWriting.write(Data("add-generic-password -U -a \"\(account)\" -s \"\(service)\" -X \"\(hex)\"\n".utf8))
         try input.fileHandleForWriting.close()

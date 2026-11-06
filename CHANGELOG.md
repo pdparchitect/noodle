@@ -15,6 +15,7 @@ All notable changes to Noodle are documented here, following
 
 - A bot on an FX profile is offered that profile's models in Edit Bot › Harness. Each FX sign-in sends requests through its own Vercel team, and the list used to come from the Default sign-in's team, so it could offer models the profile's team doesn't have. Switching a profile's team updates its list.
 - Muse Code sign-ins each keep their own sessions. Every Muse sign-in in Noodle, and the Muse Code you use in Terminal, shared one place for sessions and for the background processes that serve them, so one sign-in's bots could reach another's. A bot whose saved Muse session can no longer be found now pauses with Recover Bot, which starts a new session from the conversation, instead of stopping with "rejected a session request".
+- Starting a Local Mac computer no longer quits Noodle. Starting one briefly restarts part of macOS's network configuration, and a connection that closed while Noodle was writing to it ended the app instead of reporting an error. Noodle's Agent Host is protected the same way, so one harness exiting mid-message can't end every bot.
 
 ## [0.81.1] - 2026-11-05
 

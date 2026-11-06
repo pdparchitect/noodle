@@ -130,6 +130,8 @@ public actor ImageGenerationHelper {
                 process.arguments = ["--generate-image"]
                 let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
                 process.standardInput = stdin; process.standardOutput = stdout; process.standardError = stderr
+                // A helper that exits early reports EPIPE, not SIGPIPE.
+                _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
                 try process.run()
                 try stdin.fileHandleForWriting.write(contentsOf: input)
                 try stdin.fileHandleForWriting.close()
