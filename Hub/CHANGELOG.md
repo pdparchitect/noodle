@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-06
+
 ### Added
 
 - Choose who looks after a harness you installed yourself: in Settings › Harness, its ⋯ menu has Installation › Your Own or Managed by Noodle. Managed by Noodle installs the vendor's current release into Noodle's storage if it isn't there yet, checks its signature, and keeps it up to date, while the copy in your home folder is left alone for you to use in Terminal. The harness's bots restart on the copy you choose. Before, Noodle's copy was used only when you had none of your own, and removed once you installed one. Your Own switches back, and Noodle's unused copy goes the next time the Hub opens. A harness Noodle installed now reads Managed by Noodle instead of Installed by Noodle.
