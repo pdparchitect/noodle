@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-11-06
+
 ### Added
 
 - Suspend a bot for a while: touch and hold it, choose Suspend Bot, and pick how long. It stays in the list, grayed, saying until when, and messages wait for it. Choose Unsuspend Bot to let it continue. Needs a Noodle Hub that can suspend bots.
