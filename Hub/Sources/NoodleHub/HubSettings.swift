@@ -92,7 +92,7 @@ struct HubSettingsProblem: Equatable {
     }
 
     func modelName(_ model: String, on harness: HubHarness) -> String {
-        runtime.models(for: harness.provider.rawValue).first { $0.id == model }?.displayName ?? model
+        runtime.models(for: harness.provider.rawValue, profile: harness.profile).first { $0.id == model }?.displayName ?? model
     }
 
     /// Moves each bot to `model`, for its owner, on all their devices; returns why one could not move.

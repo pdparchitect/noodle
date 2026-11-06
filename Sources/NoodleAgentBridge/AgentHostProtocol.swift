@@ -74,7 +74,8 @@ public enum AgentHostIdentity {
                        withReply reply: @escaping (Bool, String?) -> Void)
     /// Removes the profile's login, files and Keychain item alike; replies with why it could not.
     func signOutProfile(profileID: String, withReply reply: @escaping (String?) -> Void)
-    func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    /// The models an FX login offers through its Vercel team, JSON-encoded: a profile's, or with none the Default login's.
+    func fxModels(profileID: String?, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     /// The Vercel teams an FX profile's login can use, JSON-encoded; with a slug, that team is selected first.
     func fxTeams(profileID: String, executablePath: String, selecting slug: String?,
                  withReply reply: @escaping (Data?, String?) -> Void)

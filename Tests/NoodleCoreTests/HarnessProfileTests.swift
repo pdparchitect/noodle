@@ -146,6 +146,8 @@ final class HarnessProfileTests: XCTestCase {
         XCTAssertEqual(store.environment(codex), ["CODEX_HOME": store.loginHome(codex).appendingPathComponent(".codex").path])
         XCTAssertEqual(store.environment(grok), ["GROK_HOME": store.loginHome(grok).appendingPathComponent(".grok").path])
         XCTAssertEqual(store.environment(muse), ["XDG_CONFIG_HOME": store.loginHome(muse).appendingPathComponent(".config").path,
+                                                 "XDG_DATA_HOME": store.loginHome(muse).appendingPathComponent(".local/share").path,
+                                                 "XDG_STATE_HOME": store.loginHome(muse).appendingPathComponent(".local/state").path,
                                                  "TBH_CREDENTIAL_BACKEND": "file"])
         XCTAssertEqual(store.environment(claude), ["CLAUDE_CONFIG_DIR": store.loginHome(claude).appendingPathComponent(".claude").path])
         XCTAssertEqual(store.accountHome(muse).path, store.loginHome(muse).appendingPathComponent(".config/muse").path)

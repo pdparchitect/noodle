@@ -16,6 +16,8 @@ import XCTest
     var finishBeforeAcknowledgement = false
     var invalidAcknowledgement = false
     var invalidWorkspace = false
+    /// Answers session/resume as a Muse whose saved session is gone.
+    var missingSession = false
     /// The workspace a resumed session reports, when it is not this one.
     /// Rejects every turn/start with a JSON-RPC error.
     var failTurn = false
@@ -44,6 +46,8 @@ import XCTest
             switch method {
             case "initialize":
                 result = ["schema": ["version": 1], "serverInfo": ["name": "muse"], "sessionDurability": "durable"]
+            case "session/resume" where missingSession:
+                return emit(["id": id, "error": ["code": -32602, "message": "session not found"]])
             case "session/start", "session/resume":
                 session = method == "session/resume" ? try XCTUnwrap(params["sessionId"] as? String) : UUID().uuidString
                 let root = workspace.path

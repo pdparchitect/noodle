@@ -143,6 +143,8 @@ public struct HarnessProfilesView: View {
                         FxTeamMenu(teams: fxTeams.teams[profile.id] ?? [], busy: fxTeams.busy.contains(profile.id)) { team in
                             fxTeams.select(team, profile: profile.id, executablePath: path) { [store] in
                                 store.restartAgents(signedInWith: profile)
+                                // The team decides the models this login offers.
+                                store.runtime.refreshFxModels(profile: profile.id)
                             }
                         }
                     }

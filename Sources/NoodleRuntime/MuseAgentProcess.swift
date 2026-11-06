@@ -73,7 +73,8 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
     private var requests: [Int: Purpose] = [:]
     private var startupTimeout: Task<Void, Never>?
     private struct State: Codable {
-        let sessionID: String
+        /// None once someone chose to recover a session that was gone: the next one starts from history.
+        let sessionID: String?
         var workspaceRoot: String? = nil
         var modelIdentifier: String? = nil
         var modelRecorded: Bool? = nil
@@ -107,8 +108,12 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
-           UUID(uuidString: state.sessionID) != nil {
-            sessionID = state.sessionID
+           state.sessionID == nil, state.needsHistoryRecovery == true {
+            previousSessionIDs = state.previousSessionIDs ?? []
+            needsHistoryRecovery = true
+        } else if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
+           let saved = state.sessionID, UUID(uuidString: saved) != nil {
+            sessionID = saved
             previousSessionIDs = state.previousSessionIDs ?? []
             projectionRecoveryAttempted = state.projectionRecoveryAttempted ?? false
             needsHistoryRecovery = state.needsHistoryRecovery ?? false
@@ -116,7 +121,7 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
             // but start fresh when the user explicitly changes the selected model.
             if (state.modelRecorded == true && state.modelIdentifier != agent.modelIdentifier) ||
                 (state.workspaceRoot != nil && state.workspaceRoot != workspaceURL.path) {
-                previousSessionIDs.append(state.sessionID)
+                previousSessionIDs.append(saved)
                 sessionID = nil
                 needsHistoryRecovery = true
                 projectionRecoveryAttempted = false
@@ -306,6 +311,13 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
                 sendPending()
                 return
             }
+            if case .open = purpose, openingExistingSession, let sessionID {
+                // Its saved session is gone, as when its login moved to a folder of its own: start
+                // anew from the conversation once someone chooses Kick.
+                pause("Muse Code could not resume this bot's saved session. Choose Kick to recover from conversation history.",
+                      failure: .missingSession(sessionID))
+                return
+            }
             terminated("Muse Code rejected a session request. Check muse login and the selected model in Terminal, then choose Kick in Settings → Harness. Unfinished work is preserved.")
             return
         }
@@ -419,14 +431,14 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         }
         openSession()
     }
-    private func pause(_ detail: String) {
+    private func pause(_ detail: String, failure: AgentRuntimeFailure? = nil) {
         steeringTimeout?.cancel()
         paused = true; stopped = true; running = false; turnIsActive = false
         startupTimeout?.cancel()
         requests.removeAll(); earlyCompletions.removeAll()
         connection?.invalidate(); connection = nil
         trace.finish(.turnFailed)
-        update(.failed, detail)
+        update(.failed, detail, failure: failure)
     }
     private func terminated(_ detail: String) {
         steeringTimeout?.cancel()
@@ -439,8 +451,8 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         update(.failed, detail)
         onUnexpectedTermination(self, detail, needsRecovery)
     }
-    private func update(_ phase: AgentRuntimePhase, _ detail: String) {
-        snapshot = .init(agentID: configuration.id, phase: phase, detail: detail, processIdentifier: pid)
+    private func update(_ phase: AgentRuntimePhase, _ detail: String, failure: AgentRuntimeFailure? = nil) {
+        snapshot = .init(agentID: configuration.id, phase: phase, detail: detail, processIdentifier: pid, failure: failure)
         onSnapshot(snapshot)
     }
 }

@@ -173,8 +173,12 @@ public struct HarnessProfileStore: Sendable {
         case .codex: ["CODEX_HOME": accountHome(profile).path]
         case .grokBuild: ["GROK_HOME": accountHome(profile).path]
         case .muse:
-            // Muse otherwise keeps every login in one Keychain item per user.
+            // Muse otherwise keeps every login in one Keychain item per user. Its sessions, their index
+            // and the sockets its processes find each other by are in the data folder, so each login
+            // keeps its own: shared, one login's bots would reach another's sessions, and the person's.
             ["XDG_CONFIG_HOME": loginHome(profile).appendingPathComponent(".config", isDirectory: true).path,
+             "XDG_DATA_HOME": loginHome(profile).appendingPathComponent(".local/share", isDirectory: true).path,
+             "XDG_STATE_HOME": loginHome(profile).appendingPathComponent(".local/state", isDirectory: true).path,
              "TBH_CREDENTIAL_BACKEND": "file"]
         // Antigravity has no setting for its folder. A different home also puts the
         // user's Keychain out of reach, so the CLI keeps this login in a file here.

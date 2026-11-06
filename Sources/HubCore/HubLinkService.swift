@@ -1097,7 +1097,7 @@ import os
                 guard let profile = profiles.profile(id) else { return nil }
                 profileName = profile.displayName
             }
-            let known = bots?.models(for: harness.provider) ?? []
+            let known = bots?.models(for: harness.provider, profile: harness.profile) ?? []
             var models = known.map {
                 LinkModel(id: $0.id, name: $0.displayName,
                           efforts: $0.supportedEfforts.map { LinkEffort(id: $0.id, name: $0.displayName) },

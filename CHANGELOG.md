@@ -11,6 +11,11 @@ All notable changes to Noodle are documented here, following
 - Choose who looks after a harness you installed yourself: in Settings › Harness, its ⋯ menu has Installation › Your Own or Managed by Noodle. Managed by Noodle installs the vendor's current release into Noodle's storage if it isn't there yet, checks its signature, and keeps it up to date, while the copy in your home folder is left alone for you to use in Terminal. The harness's bots restart on the copy you choose. Before, Noodle's copy was used only when you had none of your own, and removed once you installed one. Your Own switches back, and Noodle's unused copy goes the next time Noodle opens. A harness Noodle installed now reads Managed by Noodle instead of Installed by Noodle.
 - Suspend a bot for a while: right-click it in the sidebar and choose Suspend Bot, then for 1 hour, 4 hours, until tomorrow, a week, or until you unsuspend it. A suspended bot finishes its turn, then takes no new one, and stays in the sidebar, grayed, saying until when. Messages wait for it. Choose Unsuspend Bot, or Unsuspend over its conversation, to let it continue straight away. This works for bots on a Noodle Hub too, for all your devices.
 
+### Fixed
+
+- A bot on an FX profile is offered that profile's models in Edit Bot › Harness. Each FX sign-in sends requests through its own Vercel team, and the list used to come from the Default sign-in's team, so it could offer models the profile's team doesn't have. Switching a profile's team updates its list.
+- Muse Code sign-ins each keep their own sessions. Every Muse sign-in in Noodle, and the Muse Code you use in Terminal, shared one place for sessions and for the background processes that serve them, so one sign-in's bots could reach another's. A bot whose saved Muse session can no longer be found now pauses with Recover Bot, which starts a new session from the conversation, instead of stopping with "rejected a session request".
+
 ## [0.81.1] - 2026-11-05
 
 ### Added

@@ -56,7 +56,7 @@ struct AgentConfigurationFields: View {
 
     private var models: [HarnessModel] {
         guard hubChoice != nil else {
-            let shared = store.runtime.models(for: selectedHarnessIdentifier)
+            let shared = store.runtime.models(for: selectedHarnessIdentifier, profile: selectedProfileID)
             guard selectedProvider == .openCode, let workspace else { return shared }
             // Read on demand: the file is small and the bot or a person may edit it at any time.
             let configuration = try? WorkspaceMailbox(workspace: workspace, path: "").read("opencode.json", limit: 1_048_576)
@@ -218,6 +218,12 @@ struct AgentConfigurationFields: View {
             if !model.supportedEfforts.contains(where: { $0.id == selectedEffort }) {
                 selectedEffort = model.defaultEffort
             }
+        }
+        // An FX profile offers its own team's models; one made since they were last read is read now.
+        .task(id: selectedProfileID) {
+            guard hubChoice == nil, selectedProvider == .fx, let profile = selectedProfileID,
+                  store.runtime.fxProfileModels[profile] == nil else { return }
+            store.runtime.refreshFxModels(profile: profile)
         }
     }
 

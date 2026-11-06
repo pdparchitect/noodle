@@ -303,6 +303,14 @@ public final class AgentRuntimeCoordinator {
     private var runtimeIDs: [UUID: UUID] = [:]
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
+    /// The models of each FX profile other than Default: every login sends requests through its own
+    /// Vercel team, and the team decides which models it may use.
+    public private(set) var fxProfileModels: [UUID: [HarnessModel]] = [:]
+    @ObservationIgnored private var fxProfileTasks: [UUID: Task<Void, Never>] = [:]
+    /// Lists one FX profile's models; tests answer without the Agent Host.
+    @ObservationIgnored public var loadFxProfileModels: @MainActor (UUID, String) async throws -> [HarnessModel] = { profile, path in
+        try await FxModelProbe.load(path: path, profile: profile)
+    }
     private var codexCapabilityTask: Task<Void, Never>?
     private var hostCapabilityTasks: [HarnessProvider: Task<Void, Never>] = [:]
     /// What the Agent Host last reported, which outranks the app's own discovery.
@@ -712,6 +720,37 @@ public final class AgentRuntimeCoordinator {
         return modelsByProvider[provider, default: []]
     }
 
+    /// The models a bot on this login can use: an FX profile's own, which follow its Vercel team,
+    /// and otherwise the harness's.
+    public func models(for harnessIdentifier: String?, profile: UUID?) -> [HarnessModel] {
+        guard harnessIdentifier == HarnessProvider.fx.rawValue, let profile,
+              profile != HarnessProfileStore.defaultID(.fx) else { return models(for: harnessIdentifier) }
+        return fxProfileModels[profile, default: []]
+    }
+
+    /// Reads an FX profile's models again, as when it has signed in or changed team.
+    public func refreshFxModels(profile: UUID) {
+        guard profile != HarnessProfileStore.defaultID(.fx) else { return refreshCapabilities() }
+        fxProfileTasks[profile]?.cancel()
+        guard let path = availableInstallations.first(where: { $0.provider == .fx })?.executablePath else {
+            fxProfileModels[profile] = []
+            return
+        }
+        let load = loadFxProfileModels
+        fxProfileTasks[profile] = Task { [weak self] in
+            do {
+                let models = try await load(profile, path)
+                guard !Task.isCancelled else { return }
+                self?.fxProfileModels[profile] = models
+            } catch {
+                // A login that is signed out, or that FX cannot read, offers no models until it can.
+                guard !Task.isCancelled else { return }
+                self?.fxProfileModels[profile] = []
+            }
+            self?.fxProfileTasks[profile] = nil
+        }
+    }
+
     public func snapshot(for agentID: UUID) -> AgentRuntimeSnapshot {
         snapshots[agentID] ?? AgentRuntimeSnapshot(
             agentID: agentID,
@@ -825,6 +864,9 @@ public final class AgentRuntimeCoordinator {
                 }
             }
         } else { modelsByProvider[.fx] = [] }
+        let fxProfiles = ((try? harnessProfiles?.load()) ?? []).filter { $0.provider == .fx }.map(\.id)
+        for gone in fxProfileModels.keys where !fxProfiles.contains(gone) { fxProfileModels[gone] = nil }
+        for profile in fxProfiles { refreshFxModels(profile: profile) }
         capabilityProbe?.stop()
         capabilityProbe = nil
         capabilityErrors.removeAll()
@@ -1240,6 +1282,7 @@ public final class AgentRuntimeCoordinator {
     public func stopAll() {
         messageDelivery.cancelAll()
         fxCapabilityTask?.cancel()
+        fxProfileTasks.values.forEach { $0.cancel() }
         hostCapabilityTasks.values.forEach { $0.cancel() }
         isStoppingAll = true
         lifecycleID = UUID()

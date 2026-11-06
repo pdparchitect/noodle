@@ -492,7 +492,7 @@ struct HubPlanEditor: View {
 
     /// A link naming the models the harness lends, opening a popover to choose them.
     @ViewBuilder private func modelList(_ harness: HubHarness, in plan: HubPlan) -> some View {
-        let known = host.runtime.models(for: harness.provider.rawValue)
+        let known = host.runtime.models(for: harness.provider.rawValue, profile: harness.profile)
         let allowed = plan.models[harness]
         let ids = known.map(\.id) + (allowed ?? []).subtracting(known.map(\.id)).sorted()
         if !ids.isEmpty {

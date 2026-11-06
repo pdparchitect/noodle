@@ -352,7 +352,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public func isOn(_ provider: HarnessProvider) -> Bool { runtime.harnesses.isOn(provider) }
 
     /// The models the Hub's own copy of the harness offers.
-    public func models(for provider: HarnessProvider) -> [HarnessModel] { runtime.models(for: provider.rawValue) }
+    /// The models a harness offers through one login: an FX profile has its own, through its Vercel team.
+    public func models(for provider: HarnessProvider, profile: UUID? = nil) -> [HarnessModel] {
+        runtime.models(for: provider.rawValue, profile: profile)
+    }
 
     /// The user's own bots, then those shared with them.
     public func bots(for user: HubUser) throws -> [LinkBot] {

@@ -41,6 +41,35 @@ import XCTest
         XCTAssertEqual(next.count("session/setModel"), 1)
     }
 
+    /// As when its login moved to a folder of its own: the bot waits to be recovered from history.
+    func testASavedSessionThatIsGoneOffersRecovery() async throws {
+        let f = try fixture(), (first, wire) = f.make()
+        first.start()
+        try await f.waitUntil { first.snapshot.phase == .ready }
+        first.stop { XCTAssertTrue($0) }
+        let (second, next) = f.make()
+        next.missingSession = true
+        second.start()
+        try await f.waitUntil { second.snapshot.phase == .failed }
+        XCTAssertEqual(second.snapshot.failure, .missingSession(wire.session))
+        XCTAssertTrue(second.snapshot.detail.contains("Choose Kick to recover"), second.snapshot.detail)
+        XCTAssertEqual(next.count("session/start"), 0, "Nothing starts anew until someone chooses to recover")
+
+        // Recover, as the runtime does on Kick: a new session whose next turn carries the conversation's context.
+        try ACPSessionState.prepareRecovery(at: f.state(), replacing: wire.session)
+        let (third, recovered) = f.make()
+        third.start()
+        try await f.waitUntil { third.snapshot.phase == .ready }
+        XCTAssertEqual(recovered.count("session/resume"), 0)
+        XCTAssertEqual(recovered.count("session/start"), 1)
+        XCTAssertNotEqual(recovered.session, wire.session)
+        XCTAssertEqual(try f.saved()["previousSessionIDs"] as? [String], [wire.session])
+        third.notify()
+        try await f.waitUntil { recovered.count("turn/start") == 1 }
+        let inputs = try XCTUnwrap(recovered.calls.first { $0.0 == "turn/start" }?.1["input"] as? [[String: String]])
+        XCTAssertTrue(inputs[0]["text"]?.contains(MessengerDocumentation.recoveredModelContext) == true)
+    }
+
     func testCompletionBeforeAcknowledgementFinishesExactlyOneTurn() async throws {
         let f = try fixture(), (process, wire) = f.make()
         wire.finishBeforeAcknowledgement = true

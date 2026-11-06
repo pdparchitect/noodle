@@ -11,12 +11,13 @@ public enum FxSetupProvider {
 
 @MainActor
 public enum FxModelProbe {
-    /// Codex only when the app cannot run it itself: a copy Noodle installed.
-    static func load(path: String, provider: HarnessProvider = .fx) async throws -> [HarnessModel] {
+    /// Codex only when the app cannot run it itself: a copy Noodle installed. For FX, `profile`
+    /// lists that login's models rather than the Default login's.
+    static func load(path: String, provider: HarnessProvider = .fx, profile: UUID? = nil) async throws -> [HarnessModel] {
         try await AgentHostRequest().load(timeout: .seconds(65), noReply: "\(provider.displayName) returned no models.",
             timedOut: "\(provider.displayName) model discovery timed out.") {
             if provider == .codex { $0.codexModels(executablePath: path, reply: $1) }
-            else { $0.fxModels(executablePath: path, reply: $1) }
+            else { $0.fxModels(profile: profile, executablePath: path, reply: $1) }
         }
     }
 }

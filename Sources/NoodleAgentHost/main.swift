@@ -785,11 +785,20 @@ private final class HostSession: NSObject, AgentHostService {
 
     private var accountEnvironment: [String: String] { HostPaths.accountEnvironment }
 
-    func fxModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
+    func fxModels(profileID: String?, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
-                let executable = try HostPaths.executable(executablePath, provider: .fx)
-                reply(try JSONEncoder().encode(FxInspection.models(executable: executable, environment: HostPaths.defaultEnvironment(.fx))), nil)
+                let models: [HarnessModel]
+                if let profileID {
+                    // Each login sends requests through its own team, which decides the models.
+                    let account = try self.profileAccount(profileID, executablePath: executablePath)
+                    guard account.provider == .fx else { throw HostError("Only FX lists models for a profile.") }
+                    models = try FxInspection.models(executable: account.executable, environment: account.environment)
+                } else {
+                    let executable = try HostPaths.executable(executablePath, provider: .fx)
+                    models = try FxInspection.models(executable: executable, environment: HostPaths.defaultEnvironment(.fx))
+                }
+                reply(try JSONEncoder().encode(models), nil)
             } catch { reply(nil, error.localizedDescription) }
         }
     }

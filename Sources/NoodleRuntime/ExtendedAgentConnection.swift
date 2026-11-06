@@ -142,8 +142,8 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     public func signInChallenge(_ url: String, code: String) { onSignInChallenge?(url, code) }
     public func accountUsage(_ data: Data) { onAccountUsage?(data) }
     public func accountName(_ name: String) { onAccountName?(name) }
-    func fxModels(executablePath: String, reply: @escaping (Data?, String?) -> Void) {
-        proxy(failure: { reply(nil, $0) })?.fxModels(executablePath: executablePath, withReply: reply)
+    func fxModels(profile: UUID?, executablePath: String, reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.fxModels(profileID: profile?.uuidString, executablePath: executablePath, withReply: reply)
     }
     func fxTeams(profile: UUID, executablePath: String, selecting slug: String?, reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.fxTeams(profileID: profile.uuidString, executablePath: executablePath,
