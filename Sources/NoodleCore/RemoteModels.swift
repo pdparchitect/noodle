@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import Security
 
 /// A remote model as a bot selects it: `remote/<provider>/<account>/<model>`.
@@ -443,7 +444,7 @@ public struct RemoteModelAccess: Equatable, Sendable {
     }
 
     public init(_ wire: [String: Any]) throws {
-        guard let key = wire["apiKey"] as? String else { throw HarnessSetupError("Noodle did not pass this bot the account’s API key.") }
+        guard let key = wire["apiKey"] as? String else { throw HarnessSetupError("\(ProductIdentity.current.name) did not pass this bot the account’s API key.") }
         apiKey = key
         model = try wire["model"].map { try JSONDecoder().decode(RemoteModelInfo.self, from: JSONSerialization.data(withJSONObject: $0)) }
         baseURL = (wire["baseURL"] as? String).flatMap(URL.init(string:))
@@ -459,7 +460,7 @@ public protocol RemoteModelSecrets: Sendable {
 /// API keys live in the login Keychain, readable by the app that saved them.
 /// The app passes a key to the bot's Apple harness when a session starts.
 public struct RemoteModelKeychain: RemoteModelSecrets {
-    private let service = "Noodle remote model account"
+    private let service = "\(ProductIdentity.current.name) remote model account"
     public init() {}
 
     private func query(_ account: UUID) -> [String: Any] {
@@ -484,7 +485,7 @@ public struct RemoteModelKeychain: RemoteModelSecrets {
         if status == errSecItemNotFound {
             var addition = query(account)
             addition[kSecValueData as String] = data
-            addition[kSecAttrLabel as String] = "Noodle remote model account"
+            addition[kSecAttrLabel as String] = "\(ProductIdentity.current.name) remote model account"
             let added = SecItemAdd(addition as CFDictionary, nil)
             guard added == errSecSuccess else { throw Self.failure(added) }
         } else if status != errSecSuccess { throw Self.failure(status) }
@@ -496,7 +497,7 @@ public struct RemoteModelKeychain: RemoteModelSecrets {
     }
 
     private static func failure(_ status: OSStatus) -> HarnessSetupError {
-        HarnessSetupError("macOS did not allow Noodle to use the API key (\(status)). Unlock the login keychain, then try again.")
+        HarnessSetupError("macOS did not allow \(ProductIdentity.current.name) to use the API key (\(status)). Unlock the login keychain, then try again.")
     }
 }
 
@@ -526,7 +527,7 @@ public struct RemoteModelAccountStore: Sendable {
     @discardableResult
     public func add(providerID: String, name: String, apiKey: String, models: [RemoteModelInfo]? = nil,
                     baseURL: URL? = nil) throws -> RemoteModelAccount {
-        guard let provider = RemoteProviders.provider(id: providerID) else { throw HarnessSetupError("Noodle does not support this provider.") }
+        guard let provider = RemoteProviders.provider(id: providerID) else { throw HarnessSetupError("\(ProductIdentity.current.name) does not support this provider.") }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw HarnessSetupError("Enter a name for the account.") }
@@ -560,7 +561,7 @@ public struct RemoteModelAccountStore: Sendable {
 
     public func setModel(_ modelID: String, enabled: Bool, account id: UUID) throws {
         let account = try account(id)
-        guard account.models.contains(where: { $0.id == modelID }) else { throw HarnessSetupError("Noodle does not offer this model.") }
+        guard account.models.contains(where: { $0.id == modelID }) else { throw HarnessSetupError("\(ProductIdentity.current.name) does not offer this model.") }
         try update(id) { account in
             account.enabledModels.removeAll { $0 == modelID }
             if enabled { account.enabledModels.append(modelID) }
@@ -575,7 +576,7 @@ public struct RemoteModelAccountStore: Sendable {
     /// and offers it to bots.
     public func saveModel(_ model: RemoteModelInfo, replacing previous: String? = nil, account id: UUID) throws {
         let account = try account(id)
-        guard account.provider?.describesModels == true else { throw HarnessSetupError("Noodle describes this provider’s models itself.") }
+        guard account.provider?.describesModels == true else { throw HarnessSetupError("\(ProductIdentity.current.name) describes this provider’s models itself.") }
         guard RemoteModelID("remote/\(account.providerID)/\(id.uuidString.lowercased())/\(model.id)") != nil else {
             throw HarnessSetupError("Enter the model’s ID as the server names it, without spaces.")
         }
@@ -601,7 +602,7 @@ public struct RemoteModelAccountStore: Sendable {
     }
 
     public func removeModel(_ modelID: String, account id: UUID) throws {
-        guard try account(id).provider?.describesModels == true else { throw HarnessSetupError("Noodle describes this provider’s models itself.") }
+        guard try account(id).provider?.describesModels == true else { throw HarnessSetupError("\(ProductIdentity.current.name) describes this provider’s models itself.") }
         try update(id) { account in
             account.foundModels?.removeAll { $0.id == modelID }
             account.enabledModels.removeAll { $0 == modelID }

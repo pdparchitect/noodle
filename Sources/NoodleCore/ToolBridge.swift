@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProductIdentity
 
 /// Runs inside the agent's sandbox. Identity comes from the workspace session the
 /// app wrote, never from a flag; the app authorizes every request again.
@@ -17,7 +18,7 @@ public enum ToolBridgeClient {
         do {
             mailbox = try WorkspaceMailbox(workspace: workspace, path: ToolBroker.path)
             session = try JSONDecoder().decode(MCPBridgeSession.self, from: mailbox.read("session.json", limit: 4096))
-        } catch { throw ToolProviderError("Noodle's tool bridge is unavailable. Open Noodle and restart the bot.") }
+        } catch { throw ToolProviderError("\(ProductIdentity.current.name)'s tool bridge is unavailable. Open \(ProductIdentity.current.name) and restart the bot.") }
         let request = ToolBridgeRequest(session: session.token, action: action, provider: provider, tool: tool, arguments: arguments,
                                         currentDirectory: String(current.dropFirst(root.count + 1)))
         let stem = request.id.uuidString.lowercased()
@@ -33,7 +34,7 @@ public enum ToolBridgeClient {
                 return result
             }
             if kill(session.processID, 0) != 0, errno != EPERM {
-                throw ToolProviderError("Noodle stopped during the tool call. Verify any action before retrying.")
+                throw ToolProviderError("\(ProductIdentity.current.name) stopped during the tool call. Verify any action before retrying.")
             }
             Thread.sleep(forTimeInterval: 0.05)
         }

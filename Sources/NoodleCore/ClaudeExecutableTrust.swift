@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import Security
 
 /// Both access modes accept only Anthropic's signed native Claude Code install.
@@ -7,7 +8,7 @@ public enum ClaudeExecutableTrust {
         let officialLink = home.appendingPathComponent(".local/bin/claude").standardizedFileURL
         let requested = URL(fileURLWithPath: path).standardizedFileURL
         guard requested == officialLink else {
-            throw HarnessSetupError("Noodle requires Claude Code’s official native installation.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) requires Claude Code’s official native installation.")
         }
 
         let executable = requested.resolvingSymlinksInPath()

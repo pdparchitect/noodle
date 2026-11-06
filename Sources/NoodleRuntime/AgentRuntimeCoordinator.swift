@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import OSLog
 import NoodleCore
+import ProductIdentity
 
 /// What the Agent Host reports about a harness the sandboxed app cannot inspect itself.
 public struct HarnessHostInspection {
@@ -96,13 +97,13 @@ public struct AgentKickRequest: Identifiable {
     public var message: String {
         switch failure {
         case .missingSession:
-            return "The previous session is unavailable. Noodle can start a replacement and help \(agent.displayName) continue using your conversation history.\n\nYour messages, files, and bot settings will be kept. Details remembered only within the previous session may be lost."
+            return "The previous session is unavailable. \(ProductIdentity.current.name) can start a replacement and help \(agent.displayName) continue using your conversation history.\n\nYour messages, files, and bot settings will be kept. Details remembered only within the previous session may be lost."
         case .usageLimit:
             return "The harness's usage limit has been reached. The bot resumes by itself once usage is available again. Retry now only if usage is already back. Your session and unfinished work will be kept."
         case .authenticationRequired:
             return "The harness needs you to sign in again. Open Harness settings for sign-in options, then retry. Your session and unfinished work will be kept."
         case .recoveryFailed:
-            return "Noodle will retry recovery using your conversation history. Your messages and files will be kept."
+            return "\(ProductIdentity.current.name) will retry recovery using your conversation history. Your messages and files will be kept."
         case .safetyStop:
             return "The model's safeguards stopped a response. Resume continues the same session. New Session starts with a fresh context and keeps the workspace, memory and messages."
         }

@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// A Vercel team FX can send model requests through.
 public struct FxTeam: Codable, Equatable, Hashable, Sendable {
@@ -35,7 +36,7 @@ public enum FxInspection {
     public static func teams(executable: URL, environment: [String: String]) throws -> [FxTeam] {
         let output = String(decoding: try run(executable: executable, arguments: ["teams"], environment: environment), as: UTF8.self)
         guard let teams = FxProtocol.teams(from: output) else {
-            throw HarnessSetupError("FX listed its teams in a way Noodle does not recognize. Choose the team with fx teams in Terminal.")
+            throw HarnessSetupError("FX listed its teams in a way \(ProductIdentity.current.name) does not recognize. Choose the team with fx teams in Terminal.")
         }
         return teams
     }

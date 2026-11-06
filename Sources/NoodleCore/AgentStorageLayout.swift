@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// The copyable agent package contains app-owned configuration and state beside
 /// the harness's working directory. Paths do not depend on the display name.
@@ -145,8 +146,8 @@ public struct AgentStorageError: LocalizedError {
     /// For a bot made before `version`, an update milestone whose conversion later releases no longer
     /// carry: that release converts it, and its successors follow one update at a time.
     static func madeBefore(_ version: String) -> Self {
-        Self("This bot was made by a Noodle version older than \(version). To upgrade it, back up your Noodle data, "
-            + "install Noodle \(version) from https://github.com/pdparchitect/noodle/releases/tag/v\(version), "
+        Self("This bot was made by a \(ProductIdentity.current.name) version older than \(version). To upgrade it, back up your \(ProductIdentity.current.name) data, "
+            + "install \(ProductIdentity.current.name) \(version) from https://github.com/pdparchitect/noodle/releases/tag/v\(version), "
             + "open it, and accept each update it offers.", helpURL: upgradeStepsURL)
     }
 }

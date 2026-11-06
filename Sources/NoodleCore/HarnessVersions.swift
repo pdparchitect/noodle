@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public struct HarnessVersion: Comparable, Equatable, Sendable {
     public let text: String
@@ -173,7 +174,7 @@ public enum HarnessVersionPolicy {
         let command: String, link: String
         switch installation.provider {
         case .apple:
-            return .init(command: nil, instructions: "The Apple harness is included with Noodle. Update or reinstall Noodle to update this executable. Enable Apple Intelligence in System Settings to use its on-device model.", documentationURL: URL(string: "https://support.apple.com/121115")!)
+            return .init(command: nil, instructions: "The Apple harness is included with Noodle. Update or reinstall \(ProductIdentity.current.name) to update this executable. Enable Apple Intelligence in System Settings to use its on-device model.", documentationURL: URL(string: "https://support.apple.com/121115")!)
         case .codex:
             command = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
             link = "https://developers.openai.com/codex/cli/"

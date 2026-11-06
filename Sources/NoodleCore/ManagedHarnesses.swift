@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import ProductIdentity
 
 /// Harnesses Noodle installs for a user who has none of their own. Each version
 /// lives in `Harnesses/<harness>/<version>/` inside Noodle's storage. The
@@ -58,7 +59,7 @@ public struct ManagedHarnessStore: Sendable {
             return
         }
         guard HarnessDistribution(provider) != nil else {
-            throw HarnessSetupError("Noodle cannot install \(provider.displayName) itself.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) cannot install \(provider.displayName) itself.")
         }
         try FileManager.default.createDirectory(at: folder(provider), withIntermediateDirectories: true)
         try AgentStorageLayout.requireDirectory(folder(provider))
@@ -115,7 +116,7 @@ public struct ManagedHarnessStore: Sendable {
               let version = versions(provider).first(where: {
                   folder(provider, version: $0).appendingPathComponent(distribution.executablePath).path == url.path
               }) else {
-            throw HarnessSetupError("This \(provider.displayName) installation is not one Noodle installed.")
+            throw HarnessSetupError("This \(provider.displayName) installation is not one \(ProductIdentity.current.name) installed.")
         }
         let package = folder(provider, version: version)
         for folder in [directory, folder(provider), package] { try AgentStorageLayout.requireDirectory(folder) }
@@ -128,7 +129,7 @@ public struct ManagedHarnessStore: Sendable {
     public func publish(_ provider: HarnessProvider, version text: String, staging id: UUID,
                         running: () -> [String] = ManagedHarnessStore.runningExecutables) throws -> URL {
         guard let distribution = HarnessDistribution(provider), let version = HarnessVersion(text) else {
-            throw HarnessSetupError("Noodle cannot install this harness version.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) cannot install this harness version.")
         }
         let staged = staging(id)
         for folder in [directory, staged.deletingLastPathComponent(), staged] { try AgentStorageLayout.requireDirectory(folder) }
@@ -336,7 +337,7 @@ public struct HarnessDownloader: Sendable {
     public func stage(_ provider: HarnessProvider, into store: ManagedHarnessStore,
                       progress: @escaping @Sendable (HarnessDownloadProgress) -> Void = { _ in }) async throws -> StagedHarness? {
         guard let distribution = HarnessDistribution(provider) else {
-            throw HarnessSetupError("Noodle cannot install \(provider.displayName). Install it from Terminal.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) cannot install \(provider.displayName). Install it from Terminal.")
         }
         try Task.checkCancellation()
         guard let release = distribution.release(from: try await fetchData(distribution.latest, distribution)) else {

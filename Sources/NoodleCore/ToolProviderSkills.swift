@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// One generated skill per active provider, so bots find tools the way they find
 /// every other skill. The text comes from the provider's manifest and tool list.
@@ -19,7 +20,7 @@ public enum ToolProviderSkills {
         ---
         # \(line(manifest.title))
 
-        Run `\(command) TOOL [--OPTION VALUE ...]` in this bot's workspace. Noodle must be running. `\(command)` lists the tools and `\(command) TOOL --help` returns one tool's full schema. Use `--input JSON` for values options cannot express. File options take a path inside your workspace. Results are JSON; a tool error exits 1. Never automatically repeat a call that timed out: the action may already have happened. To chain this with other tools in one script, see `tool --run` in the Messenger skill.
+        Run `\(command) TOOL [--OPTION VALUE ...]` in this bot's workspace. \(ProductIdentity.current.name) must be running. `\(command)` lists the tools and `\(command) TOOL --help` returns one tool's full schema. Use `--input JSON` for values options cannot express. File options take a path inside your workspace. Results are JSON; a tool error exits 1. Never automatically repeat a call that timed out: the action may already have happened. To chain this with other tools in one script, see `tool --run` in the Messenger skill.
         """
         if !manifest.instructions.isEmpty { text += "\n\n" + manifest.instructions }
         text += "\n\n## Tools\n"
@@ -97,7 +98,7 @@ public enum ToolProviderSkills {
                 if let native = try? WorkspaceMailbox(workspace: workspace, path: ".claude/skills"), !native.contains(name) {
                     try? native.symlink(name, destination: "../../.agents/skills/" + name)
                 }
-            } catch { NSLog("Noodle could not write the %@ tool skill: %@", name, error.localizedDescription) }
+            } catch { NSLog("\(ProductIdentity.current.name) could not write the %@ tool skill: %@", name, error.localizedDescription) }
         }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 // A provider-neutral request and event stream. The Apple harness converts its
 // transcript to a `RemoteRequest`; each wire format turns that into HTTP and
@@ -104,7 +105,7 @@ public enum RemoteModelError: Error, Equatable, LocalizedError {
         case .authentication(let message): "the provider rejected the account’s API key (\(message)); update it in Settings › Harnesses › Apple Intelligence › Remote Models"
         case .rateLimited: "the provider is limiting requests; try again shortly"
         case .provider(let status, let message): "the provider returned an error (\(status)): \(message)"
-        case .invalidStream(let detail): "the provider sent a response Noodle could not read (\(detail))"
+        case .invalidStream(let detail): "the provider sent a response \(ProductIdentity.current.name) could not read (\(detail))"
         }
     }
 }

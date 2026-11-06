@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import NoodleCore
+import ProductIdentity
 
 @MainActor public protocol HarnessInstalling {
     func manages(_ installation: HarnessInstallation) -> Bool
@@ -392,7 +393,7 @@ public final class HarnessSetupController {
             guard self.installs[id] == token else { return }
             if failure == nil, runtime.installations.first(where: { $0.provider == id })?.isAvailable != true {
                 // Never end silently on Not installed after reporting no error.
-                failure = "\(id.displayName) was downloaded, but Noodle cannot find the installed harness."
+                failure = "\(id.displayName) was downloaded, but \(ProductIdentity.current.name) cannot find the installed harness."
                 self.installFailures[id] = failure
             }
             let installed = installer.versions(id)

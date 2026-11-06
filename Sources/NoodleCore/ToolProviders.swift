@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProductIdentity
 
 /// One contract for every agent tool source: built-in commands, MCP connections
 /// and bundled app extensions. Tool payloads stay MCP-shaped (`tools/list`,
@@ -86,7 +87,7 @@ public struct ToolPost: Sendable, Equatable {
               !filename.contains("/"), !filename.utf8.contains(0), filename != ".", filename != "..",
               let mediaType = attachment["mediaType"] as? String, !mediaType.isEmpty, mediaType.utf8.count <= 255,
               let encoded = attachment["data"] as? String, let data = Data(base64Encoded: encoded), data.count <= Self.maximumBytes else {
-            throw ToolProviderError("The tool returned an attachment Noodle cannot post.")
+            throw ToolProviderError("The tool returned an attachment \(ProductIdentity.current.name) cannot post.")
         }
         message = (object["message"] as? String).map { String($0.prefix(10_000)) }
         self.filename = filename; self.mediaType = mediaType; self.data = data
@@ -109,7 +110,7 @@ public struct ToolHostServices: Sendable {
                 isPosted: @escaping @Sendable (URL, UUID, UUID) -> Bool = { _, _, _ in false }) {
         self.isMember = isMember; self.post = post; self.revoked = revoked; self.isPosted = isPosted
     }
-    public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This Noodle cannot post for tools.") })
+    public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This \(ProductIdentity.current.name) cannot post for tools.") })
 }
 
 /// What a provider declares about itself. Extensions send this as JSON.

@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import ProductIdentity
 
 /// Persistent ACP transport. Agent output stays in the harness; Messenger is
 /// the sole author of user-visible messages, just as for Codex and Claude.
@@ -331,7 +332,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             if provider == .openCode {
                 guard let info = result["agentInfo"] as? [String: Any],
                       let version = info["version"] as? String, OpenCodeProtocol.supportsVersion(version) else {
-                    terminated("Noodle requires OpenCode v2. Run the v2 installer in Terminal, then check again.")
+                    terminated("\(ProductIdentity.current.name) requires OpenCode v2. Run the v2 installer in Terminal, then check again.")
                     return
                 }
             }

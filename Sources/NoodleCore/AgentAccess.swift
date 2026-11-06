@@ -127,10 +127,11 @@ public struct CodexRuntimeRequest {
                 ? ["action": "accept", "content": [String: Any]()]
                 : ["action": "decline", "content": NSNull()]
         default:
-            return ["id": requestID.json, "error": ["code": -32601, "message": "Noodle does not support this request; no permission was granted."]]
+            return ["id": requestID.json, "error": ["code": -32601, "message": "\(ProductIdentity.current.name) does not support this request; no permission was granted."]]
         }
         return ["id": requestID.json, "result": result]
     }
 }
 
 import CoreFoundation
+import ProductIdentity

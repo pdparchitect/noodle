@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// One tool connection a person added, as a provider. Its tools come from a remote server,
 /// so everything it returns is cleaned of Noodle's own markers, and the connection as a
@@ -25,7 +26,7 @@ public struct ConnectionToolProvider: ToolProvider {
     static func guidance(id: String, userInstructions: String) -> String {
         let command = "./.agents/skills/messenger/messenger tool \(id)"
         var text = """
-        This skill uses the account connection Noodle assigned to it. Never substitute another account or configure the harness's native MCP support. Noodle holds the OAuth credentials. Do not search for, read, or export credentials.
+        This skill uses the account connection \(ProductIdentity.current.name) assigned to it. Never substitute another account or configure the harness's native MCP support. \(ProductIdentity.current.name) holds the OAuth credentials. Do not search for, read, or export credentials.
 
         Inspect a tool's schema with --help before calling it. Arguments can be given as options or as one JSON object with --input; `--input -` reads that object from standard input, for large or awkward-to-quote values. Results are structured JSON, including MCP content, structuredContent and isError. Binary image, audio and resource blocks are saved automatically under .noodle/tool-attachments in your workspace; their blocks then have type=file, sourceType, an absolute path, mimeType and bytes. --raw returns the original MCP JSON without saving files. Resource links are not fetched automatically: list them with \(Self.resourcesTool) and read only what the task needs with \(Self.readResourceTool) --uri URI.
 

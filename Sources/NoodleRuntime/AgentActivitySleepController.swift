@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 @MainActor
 public final class AgentActivitySleepController {
@@ -8,7 +9,7 @@ public final class AgentActivitySleepController {
         if shouldPreventIdleSleep, activity == nil {
             activity = ProcessInfo.processInfo.beginActivity(
                 options: [.idleSystemSleepDisabled],
-                reason: "Noodle agents are working"
+                reason: "\(ProductIdentity.current.name) agents are working"
             )
         } else if !shouldPreventIdleSleep, let activity {
             ProcessInfo.processInfo.endActivity(activity)

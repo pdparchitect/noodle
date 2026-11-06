@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// A user-chosen folder outside the bot's workspace. Stored privately in
 /// agent.json. Agent Host rereads and revalidates the list before every
@@ -47,7 +48,7 @@ public struct AgentFolder: Codable, Hashable, Sendable, Identifiable {
             for location in protected {
                 let locations = [location.standardizedFileURL.path, RestrictedAgentSandbox.sandboxPath(location.path)]
                 guard !spellings.contains(where: { spelling in locations.contains { overlaps(spelling, $0) } }) else {
-                    throw AgentStorageError("“\(path)” overlaps Noodle's own storage and cannot be shared with a bot.")
+                    throw AgentStorageError("“\(path)” overlaps \(ProductIdentity.current.name)'s own storage and cannot be shared with a bot.")
                 }
             }
             // One generated list item per folder: keep the note on a single line.

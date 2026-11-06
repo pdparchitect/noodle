@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import UniformTypeIdentifiers
 
 public struct MessengerCommandResult: Codable, Sendable {
@@ -187,7 +188,7 @@ public enum MessengerCLI {
                 return MessengerCommandResult(exitCode: 0, standardOutput: help + "\n")
 
             case .tool:
-                throw HarnessSetupError("Tool commands use Noodle's tool bridge, not the Messenger broker.")
+                throw HarnessSetupError("Tool commands use \(ProductIdentity.current.name)'s tool bridge, not the Messenger broker.")
             }
         } catch { return .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
     }

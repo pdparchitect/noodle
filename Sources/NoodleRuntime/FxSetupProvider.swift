@@ -1,10 +1,11 @@
 import Foundation
 import Observation
 import NoodleCore
+import ProductIdentity
 
 public enum FxSetupProvider {
     public static let installationGuide = HarnessInstallationGuide(command: "curl -fsSL https://fx.sh/setup.sh | bash",
-        instructions: "Run Vercel’s official FX installer in Terminal, then check the installation here and sign in with Vercel. Noodle keeps its own sign-in, separate from the one fx uses in Terminal.",
+        instructions: "Run Vercel’s official FX installer in Terminal, then check the installation here and sign in with Vercel. \(ProductIdentity.current.name) keeps its own sign-in, separate from the one fx uses in Terminal.",
         documentationURL: URL(string: "https://fx.sh/docs")!)
 }
 

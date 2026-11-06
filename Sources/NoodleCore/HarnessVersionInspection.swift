@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import ProductIdentity
 
 /// The signed host validates the executable before invoking these fixed, read-only probes.
 public enum HarnessVersionInspection {
@@ -25,7 +26,7 @@ public enum HarnessVersionInspection {
             if report.compatibilityIssue == nil { report.checkError = "Could not verify command compatibility." }
         }
         if provider == .openCode, let text = report.installedVersion, !OpenCodeProtocol.supportsVersion(text) {
-            report.compatibilityIssue = "Noodle requires OpenCode v2. Run the v2 installer in Terminal, then check again."
+            report.compatibilityIssue = "\(ProductIdentity.current.name) requires OpenCode v2. Run the v2 installer in Terminal, then check again."
         }
         return report
     }

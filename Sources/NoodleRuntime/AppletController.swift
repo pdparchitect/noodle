@@ -3,6 +3,7 @@ import AppletBridge
 import Foundation
 import NoodleCore
 import Observation
+import ProductIdentity
 
 /// Noodle's side of Noodle Applet: opening noodlets for the person, and the requests the applet
 /// tool sends for bots. Noodle Applet trusts this signed process to name the bot a request is for.
@@ -139,7 +140,7 @@ import Observation
                         let url = AppletApplication.locate()
                     else {
                         throw AppletError(
-                            "Install \(AppletBuildIdentity.current.appName) to run noodlets. See Noodle Settings → Companion Apps."
+                            "Install \(AppletBuildIdentity.current.appName) to run noodlets. See \(ProductIdentity.current.name) Settings → Companion Apps."
                         )
                     }
                     try await AppletLaunch.openInBackground(at: url)

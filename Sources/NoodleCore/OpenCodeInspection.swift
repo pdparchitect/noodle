@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public enum OpenCodeInspection {
     /// `managed` is the copy Noodle installed, already verified by the caller,
@@ -29,7 +30,7 @@ public enum OpenCodeInspection {
             environment: environment, profile: profile, timeout: 8)
         guard let parsed = HarnessVersion.parseOutput(String(decoding: version, as: UTF8.self)),
               OpenCodeProtocol.supportsVersion(parsed.text) else {
-            throw HarnessSetupError("Noodle requires OpenCode v2. Run the v2 installer in Terminal, then check again.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) requires OpenCode v2. Run the v2 installer in Terminal, then check again.")
         }
         let authenticated = try OpenCodeStorage.seed(workspace: layout.workspace, loginHome: loginHome ?? home,
             executable: executable, environment: environment, profile: profile)

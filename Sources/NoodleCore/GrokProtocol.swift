@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public enum GrokProtocol {
     public static let efforts: Set<String> = ["low", "medium", "high", "xhigh"]
@@ -10,7 +11,7 @@ public enum GrokProtocol {
         let data = error["data"] as? [String: Any]
         guard data?["code"] as? String == "FS_NOT_FOUND" ||
                 error["message"] as? String == "Session not found" else { return nil }
-        return "Grok Build could not find this bot's saved session. Choose Kick to recover using conversation history. Noodle will ask before replacing the session. Automatic retries are paused; unfinished work is preserved."
+        return "Grok Build could not find this bot's saved session. Choose Kick to recover using conversation history. \(ProductIdentity.current.name) will ask before replacing the session. Automatic retries are paused; unfinished work is preserved."
     }
 
     public static func authenticationFailureDescription(_ error: [String: Any]) -> String? {

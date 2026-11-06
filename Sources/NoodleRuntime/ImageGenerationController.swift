@@ -1,6 +1,7 @@
 import Foundation
 import NoodleCore
 import Observation
+import ProductIdentity
 
 /// The Images tool's models and which bots have it. Models are kept once for every bot;
 /// the default is what a bot gets unless it names another.
@@ -123,7 +124,7 @@ public actor ImageGenerationHelper {
         return try await withTaskCancellationHandler {
             try await Task.detached {
                 guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-                    throw ToolProviderError("This Noodle build has no image generation helper.")
+                    throw ToolProviderError("This \(ProductIdentity.current.name) build has no image generation helper.")
                 }
                 process.executableURL = executable
                 process.arguments = ["--generate-image"]

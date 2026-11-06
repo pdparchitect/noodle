@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public struct ShareDestination: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -31,7 +32,7 @@ public enum SharedInboxError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unavailable: return "Sharing is unavailable in this build. Open the signed Noodle app once, then try again."
+        case .unavailable: return "Sharing is unavailable in this build. Open the signed \(ProductIdentity.current.name) app once, then try again."
         case .invalidRequest: return "The shared item could not be read safely. Please share it again."
         case .emptyContent: return "Choose text, a web page, or files to send."
         }

@@ -1,9 +1,10 @@
 import Foundation
 import NoodleCore
+import ProductIdentity
 
 public enum AntigravitySetupProvider {
     public static let installationGuide = HarnessInstallationGuide(command: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-        instructions: "Run Google’s official Antigravity installer in Terminal, then return here, choose Check Again and sign in. Noodle keeps its own sign-in, separate from the one agy uses in Terminal.",
+        instructions: "Run Google’s official Antigravity installer in Terminal, then return here, choose Check Again and sign in. \(ProductIdentity.current.name) keeps its own sign-in, separate from the one agy uses in Terminal.",
         documentationURL: URL(string: "https://antigravity.google/docs/cli/install")!)
 
     /// Antigravity signs in from its interactive prompt. A copy Noodle installed is

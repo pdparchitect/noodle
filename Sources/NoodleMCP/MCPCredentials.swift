@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import Security
 
 struct MCPCredentials: Codable, Sendable {
@@ -53,7 +54,7 @@ struct MCPCredentialStore: MCPCredentialStorage {
             // kSecAttrAccess lets Keychain create its default calling-app ACL;
             // no deprecated SecAccess/SecTrustedApplication setup is needed.
             // Updates above change only the data, preserving existing item ACLs.
-            addition[kSecAttrLabel as String] = "Noodle MCP connection"
+            addition[kSecAttrLabel as String] = "\(ProductIdentity.current.name) MCP connection"
             let added = SecItemAdd(addition as CFDictionary, nil)
             guard added == errSecSuccess else { throw MCPServiceError.keychain(added) }
         } else if status != errSecSuccess { throw MCPServiceError.keychain(status) }

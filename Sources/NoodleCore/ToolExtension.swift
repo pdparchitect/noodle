@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 /// NSXPC contract between Noodle and a tool extension. Payloads are the same JSON
 /// as `ToolProvider`; files cross the sandbox boundary as handles, never as paths.
@@ -78,10 +79,10 @@ public final class ToolExtensionService: NSObject, ToolExtensionXPC, @unchecked 
         let host = host
         return ToolCallContext(agentID: caller.agent, workspace: URL(fileURLWithPath: "/"), assignments: caller.assignments, authorize: {
             // No answer is a refusal: a checkpoint never passes because Noodle could not be reached.
-            guard let call = caller.call, let connection = host.connection else { throw ToolProviderError("Noodle could not confirm this call is still allowed.") }
+            guard let call = caller.call, let connection = host.connection else { throw ToolProviderError("\(ProductIdentity.current.name) could not confirm this call is still allowed.") }
             let refusal: String? = try await withCheckedThrowingContinuation { continuation in
-                let proxy = connection.remoteObjectProxyWithErrorHandler { continuation.resume(throwing: ToolProviderError("Noodle could not confirm this call is still allowed: \($0.localizedDescription)")) }
-                guard let noodle = proxy as? ToolHostXPC else { return continuation.resume(throwing: ToolProviderError("Noodle could not confirm this call is still allowed.")) }
+                let proxy = connection.remoteObjectProxyWithErrorHandler { continuation.resume(throwing: ToolProviderError("\(ProductIdentity.current.name) could not confirm this call is still allowed: \($0.localizedDescription)")) }
+                guard let noodle = proxy as? ToolHostXPC else { return continuation.resume(throwing: ToolProviderError("\(ProductIdentity.current.name) could not confirm this call is still allowed.")) }
                 noodle.authorize(call.uuidString) { continuation.resume(returning: $0) }
             }
             if let refusal { throw ToolProviderError(refusal) }
@@ -213,7 +214,7 @@ public final class ToolExtensionConnection: ToolProvider, @unchecked Sendable {
                 continuation.resume(throwing: ToolProviderError("The tool extension stopped: \($0.localizedDescription)"))
             }
             guard let remote = proxy as? ToolExtensionXPC else {
-                return continuation.resume(throwing: ToolProviderError("The extension does not provide Noodle tools."))
+                return continuation.resume(throwing: ToolProviderError("The extension does not provide \(ProductIdentity.current.name) tools."))
             }
             body(remote) { data, error in
                 if let data, error == nil { continuation.resume(returning: data) }

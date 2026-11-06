@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import NoodleCore
+import ProductIdentity
 
 private let noodleAppVersion = Bundle.main.object(
     forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -520,7 +521,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         let botName = configuration.displayName
             .split(whereSeparator: \Character.isWhitespace)
             .joined(separator: " ")
-        let name = botName.isEmpty ? "Noodle · Bot" : "Noodle · \(botName)"
+        let name = botName.isEmpty ? "\(ProductIdentity.current.name) · Bot" : "\(ProductIdentity.current.name) · \(botName)"
         do {
             try request(
                 .setThreadName,

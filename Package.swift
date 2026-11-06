@@ -91,7 +91,7 @@ let package = Package(
     targets: [
         .target(name: "NoodleAgentBridge", dependencies: [.product(name: "ProductIdentity", package: "Product")]),
         .target(name: "NoodleAudioCapture", cSettings: [.unsafeFlags(["-fobjc-arc"])]),
-        .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge"]),
+        .executableTarget(name: "NoodleAgentHost", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "ProductIdentity", package: "Product")]),
         .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore",
             .product(name: "MLXFoundationModels", package: "mlx-swift-lm"),
             .product(name: "MLXLLM", package: "mlx-swift-lm"),
@@ -106,7 +106,7 @@ let package = Package(
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
-        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "MCP", package: "swift-sdk")]),
+        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the

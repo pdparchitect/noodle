@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public struct KeyBinding: Codable, Hashable, Sendable {
     public struct Modifiers: OptionSet, Codable, Hashable, Sendable {
@@ -84,7 +85,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .call: "Call the bot in the current chat, or end the call in progress."
         case .capture: "Open the window picker or focus the existing capture preview."
         case .annotateSelection: "Comment on selected conversation or preview text; select a region for images."
-        case .annotateRegion: "Mark a region of the Noodle window, an attachment preview, or a live capture."
+        case .annotateRegion: "Mark a region of the \(ProductIdentity.current.name) window, an attachment preview, or a live capture."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
         case .chooseConversation: "From any app, pick a bot or group to float over your work."
         case .showUsage: "Show token usage and cost for every bot."

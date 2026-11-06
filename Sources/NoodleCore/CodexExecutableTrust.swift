@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 import Security
 
 /// Agent launches accept only known installation locations and OpenAI-signed code.
@@ -11,7 +12,7 @@ public enum CodexExecutableTrust {
             "/usr/local/bin/codex", "/opt/homebrew/bin/codex"
         ]
         guard bundled.contains(path) || standalone.contains(path) else {
-            throw HarnessSetupError("Noodle requires an official Codex installation.")
+            throw HarnessSetupError("\(ProductIdentity.current.name) requires an official Codex installation.")
         }
         let requested = URL(fileURLWithPath: path)
         let executable = requested.resolvingSymlinksInPath()

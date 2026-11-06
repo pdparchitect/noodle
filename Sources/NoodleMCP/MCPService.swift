@@ -1,6 +1,7 @@
 import Foundation
 import MCP
 import NoodleCore
+import ProductIdentity
 
 public actor MCPService {
     private let credentials: any MCPCredentialStorage
@@ -93,7 +94,7 @@ public actor MCPService {
             }
             if stored == nil {
                 stored = try await oauth.discoverAndRegister(endpoint: connection.endpoint, redirect: redirectURI,
-                                                             clientName: "Noodle — " + connection.name,
+                                                             clientName: "\(ProductIdentity.current.name) — " + connection.name,
                                                              authorizationServer: Self.authorizationServer(for: connection.endpoint),
                                                              progress: progress)
                 try checkActive(connection.id, epoch: epoch)

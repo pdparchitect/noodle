@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import ProductIdentity
 
 /// A narrow transport boundary; the default implementation retains the signed
 /// helper and its distinct restricted/autonomous launch entrypoints.
@@ -275,7 +276,7 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
             if method == "approval/requested" || method == "approval/request" || method == "approval/updated" {
                 guard let decision = MuseProtocol.approvalParameters(params, sessionID: sessionID,
                                                                     extendedAccess: extendedAccess, restrictedAccess: !extendedAccess) else {
-                    terminated("Muse Code requires an approval Noodle cannot safely resolve. Open the session in Muse Terminal."); return
+                    terminated("Muse Code requires an approval \(ProductIdentity.current.name) cannot safely resolve. Open the session in Muse Terminal."); return
                 }
                 let stage = "\(decision["approvalId"]!):\((decision["requirementId"] as! [String: Any])["sourceIndex"]!)"
                 guard approvalStages.insert(stage).inserted else { return }

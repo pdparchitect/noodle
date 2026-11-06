@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import ProductIdentity
 import SQLite3
 
 /// V2 keeps credentials and conversations in one database. The host reads only
@@ -138,7 +139,7 @@ public enum OpenCodeStorage {
             let value = literal(row["value"] as! String)
             let active = (row["active"] as? NSNumber)?.intValue ?? 0
             let created = (row["created"] as? NSNumber)?.int64Value ?? 0
-            sql += "INSERT INTO credential (id,integration_id,label,value,active,time_created,time_updated) VALUES (\(id),\(integration),'Noodle',\(value),\(active == 1 ? 1 : 0),\(created),\(created));\n"
+            sql += "INSERT INTO credential (id,integration_id,label,value,active,time_created,time_updated) VALUES (\(id),\(integration),'\(ProductIdentity.current.name)',\(value),\(active == 1 ? 1 : 0),\(created),\(created));\n"
         }
         sql += "COMMIT;\n"
         _ = try OpenCodeCommand.run(URL(fileURLWithPath: "/usr/bin/sqlite3"),

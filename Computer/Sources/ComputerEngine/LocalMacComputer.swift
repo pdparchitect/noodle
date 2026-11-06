@@ -2,6 +2,7 @@ import AppKit
 import ComputerCore
 import Foundation
 import LocalMacCore
+import ProductIdentity
 import ServiceManagement
 import Surface
 
@@ -30,7 +31,7 @@ public struct LocalMacSetupRequired: LocalizedError {
         if #available(macOS 27, *) { return "Device Control and Data Access" }
         return "Accessibility"
     }
-    public static var desktopName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.desktopAppName ?? "Noodle Local Mac Desktop" }
+    public static var desktopName: String { LocalMacIdentity(providerID: Bundle.main.bundleIdentifier)?.desktopAppName ?? "\(ProductIdentity.current.name) Local Mac Desktop" }
     public static func desktopForPermissions() throws -> URL {
         guard let providerID = Bundle.main.bundleIdentifier,
               let team = Bundle.main.object(forInfoDictionaryKey: "NoodleSigningTeam") as? String else {

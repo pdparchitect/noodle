@@ -1,4 +1,5 @@
 import Foundation
+import ProductIdentity
 
 public enum VoiceCallSpeaker: String, Codable, Hashable, Sendable {
     case person, bot
@@ -98,8 +99,8 @@ public enum VoiceCallDocumentation {
     /// thread rather than through Messenger, so it needs to know where they come from.
     public static func startInstructions(conversationID: UUID, personName: String, answeredCallReason: String? = nil) -> String {
         let start = answeredCallReason.map {
-            "\(personName) answered the voice call you placed from Noodle conversation \(conversationID.uuidString.lowercased()). You called about: \($0). Start by saying why you called."
-        } ?? "\(personName) started a voice call with you from Noodle conversation \(conversationID.uuidString.lowercased())."
+            "\(personName) answered the voice call you placed from \(ProductIdentity.current.name) conversation \(conversationID.uuidString.lowercased()). You called about: \($0). Start by saying why you called."
+        } ?? "\(personName) started a voice call with you from \(ProductIdentity.current.name) conversation \(conversationID.uuidString.lowercased())."
         return """
         \(start) Requests spoken on the call arrive here directly, not through Messenger. Your final message for a spoken request is read aloud on the call, so keep it brief and conversational, without Markdown, lists, links or code. During the call \(personName) may also type messages or share files in that conversation; they arrive through Messenger as usual and belong to the same discussion. Send files, links and anything that is better read than heard to the conversation through Messenger, and mention on the call that you sent them.
         """

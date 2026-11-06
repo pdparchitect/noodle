@@ -123,7 +123,7 @@ public enum HarnessStorage {
     public var installationGuide: HarnessInstallationGuide {
         HarnessInstallationGuide(
             command: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
-            instructions: "Run OpenAI’s official installer in Terminal, then return here and check the installation. It installs Codex outside Noodle, available to other apps and your shell. Follow any prompts shown by the installer.",
+            instructions: "Run OpenAI’s official installer in Terminal, then return here and check the installation. It installs Codex outside \(ProductIdentity.current.name), available to other apps and your shell. Follow any prompts shown by the installer.",
             documentationURL: URL(string: "https://learn.chatgpt.com/docs/codex/cli")!
         )
     }

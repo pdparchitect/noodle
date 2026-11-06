@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import LocalAuthentication
 import OSLog
+import ProductIdentity
 import Security
 
 /// The trusted host copies login material only. Native histories, settings,
@@ -578,7 +579,7 @@ public enum RestrictedHarnessStorage {
 
     /// Worded so the runtime recognises it as a sign-in failure and waits for one.
     private static func missing(_ provider: HarnessProvider) -> HarnessSetupError {
-        HarnessSetupError("Not logged in: Noodle has no \(provider.displayName) login for this bot. Please sign in to the harness in Settings, then retry startup.")
+        HarnessSetupError("Not logged in: \(ProductIdentity.current.name) has no \(provider.displayName) login for this bot. Please sign in to the harness in Settings, then retry startup.")
     }
 
     public static func readSecret(service: String, account: String) throws -> Data? {

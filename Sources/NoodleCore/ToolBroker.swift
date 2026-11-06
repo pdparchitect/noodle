@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProductIdentity
 
 public enum ToolBridgeAction: String, Codable, Sendable { case providers, tools, inspect, call }
 
@@ -155,7 +156,7 @@ public enum ToolBroker {
         if let kind = provider.activation.resource, descriptor.resourceList?.kind != kind, !used.contains(where: { $0.kind == kind }) {
             throw ToolProviderError(descriptor.resourceParameters.contains { $0.kind == kind }
                 ? "Specify which assigned \(kind) to use."
-                : "The \(descriptor.name) tool does not declare which \(kind) it uses, so Noodle will not run it.")
+                : "The \(descriptor.name) tool does not declare which \(kind) it uses, so \(ProductIdentity.current.name) will not run it.")
         }
         return (try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), used)
     }
@@ -193,7 +194,7 @@ public enum ToolBroker {
               let requested = meta["noodle/post"] else { return result }
         if object["isError"] as? Bool == true { return result }
         guard let conversation, let payload = requested as? [String: Any] else {
-            throw ToolProviderError("The \(descriptor.name) tool tried to post without a conversation Noodle verified.")
+            throw ToolProviderError("The \(descriptor.name) tool tried to post without a conversation \(ProductIdentity.current.name) verified.")
         }
         let post = try ToolPost(payload)
         guard host.isMember(agent, conversation) else { throw ToolProviderError("You are no longer a participant in that conversation.") }
@@ -217,7 +218,7 @@ public enum ToolBroker {
         }
         if object["isError"] as? Bool == true { return result }
         guard var structured = object["structuredContent"] as? [String: Any], let entries = structured[list.path] as? [[String: Any]] else {
-            throw ToolProviderError("The \(descriptor.name) tool did not return its \(list.kind) list in a form Noodle can filter.")
+            throw ToolProviderError("The \(descriptor.name) tool did not return its \(list.kind) list in a form \(ProductIdentity.current.name) can filter.")
         }
         let permitted = entries.filter { ($0["id"] as? String).flatMap { assignments.assigned($0, kind: list.kind) } != nil }
         structured = [list.path: permitted]

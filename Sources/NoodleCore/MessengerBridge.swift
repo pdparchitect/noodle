@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import AppletBridge
+import ProductIdentity
 
 public struct MessengerBridgeRequest: Codable, Sendable {
     public let id: UUID
@@ -24,7 +25,7 @@ public enum MessengerBridgeClient {
         do {
             mailbox = try WorkspaceMailbox(workspace: workspace, path: path)
             session = try JSONDecoder().decode(MCPBridgeSession.self, from: mailbox.read("session.json", limit: 4096))
-        } catch { throw HarnessSetupError("Noodle's Messenger bridge is unavailable. Open Noodle and restart the bot.") }
+        } catch { throw HarnessSetupError("\(ProductIdentity.current.name)'s Messenger bridge is unavailable. Open \(ProductIdentity.current.name) and restart the bot.") }
         let request = MessengerBridgeRequest(session: session.token, action: action)
         let data = try JSONEncoder().encode(request)
         guard data.count <= maxRequestBytes else { throw HarnessSetupError("The Messenger request is too large.") }
@@ -37,7 +38,7 @@ public enum MessengerBridgeClient {
                 return try JSONDecoder().decode(MessengerCommandResult.self, from: data)
             }
             if kill(session.processID, 0) != 0, errno != EPERM {
-                throw HarnessSetupError("Noodle stopped during the Messenger request. Check the conversation before retrying a send.")
+                throw HarnessSetupError("\(ProductIdentity.current.name) stopped during the Messenger request. Check the conversation before retrying a send.")
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
