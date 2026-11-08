@@ -210,6 +210,23 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertNil(try status(of: agent.id))
     }
 
+    /// A status says when it was set, so an old one does not read as current.
+    func testAStatusRemembersWhenItWasSet() throws {
+        func saved() throws -> AgentRecord { try XCTUnwrap(repository.loadAgents().first { $0.id == agent.id }) }
+        let before = Date().timeIntervalSince1970.rounded(.down)
+        XCTAssertEqual(try call(.setStatus("Reviewing PR 42")).exitCode, 0)
+        let setAt = try XCTUnwrap(try saved().statusSetAt)
+        XCTAssertGreaterThanOrEqual(setAt.timeIntervalSince1970, before)
+        XCTAssertEqual(setAt.timeIntervalSince1970, setAt.timeIntervalSince1970.rounded(.down), "agent.json keeps whole seconds")
+        // An edit made from a copy read before the status keeps when it was set.
+        _ = try repository.renameAgent(agent, to: "Renamed")
+        XCTAssertEqual(try saved().statusSetAt, setAt)
+        XCTAssertTrue(try saved().isStatusStale(at: setAt.addingTimeInterval(3_601), after: 3_600))
+        XCTAssertFalse(try saved().isStatusStale(at: setAt.addingTimeInterval(3_599), after: 3_600))
+        XCTAssertEqual(try call(.setStatus(nil)).exitCode, 0)
+        XCTAssertNil(try saved().statusSetAt)
+    }
+
     /// A status is one short line, so it fits the bubble over a pinned bot.
     func testAStatusIsOneShortLine() throws {
         XCTAssertEqual(try call(.setStatus(String(repeating: "a", count: 60))).exitCode, 0)

@@ -39,14 +39,26 @@ struct AgentProfileSheet: View {
                     .padding(.vertical, 6)
                     .background(.quaternary, in: Capsule())
             } else if let status = agent.status {
-                Text(status)
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
-                    .accessibilityLabel("Status: \(status)")
+                // Older than a heartbeat, the bot has had its chance to update it, so it may no longer hold.
+                let current = store.agents.first { $0.id == agent.id } ?? agent
+                let stale = current.isStatusStale(after: TimeInterval(store.runtime.heartbeatConfiguration.intervalMinutes * 60))
+                VStack(spacing: 4) {
+                    Text(status)
+                        .font(.callout)
+                        .foregroundStyle(stale ? .secondary : .primary)
+                        .multilineTextAlignment(.center)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                    if let setAt = current.statusSetAt {
+                        Text(setAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Status: \(status)")
             }
             ScrollView {
                 Text(description)

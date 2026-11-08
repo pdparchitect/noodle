@@ -1164,8 +1164,8 @@ import Observation
         if let voice = draft.voice { try repository.updateAgentVoice(agent, voice: voice) }
         if let archivedAt = bot.archivedAt { agent = try repository.setAgentArchived(true, agentID: agent.id, now: archivedAt) }
         if let until = bot.suspendedUntil { agent = try repository.setAgentSuspended(until: until, agentID: agent.id) }
-        // The Hub checked it when the bot set it.
-        guard let status = bot.status, let withStatus = try? repository.setAgentStatus(status, agentID: agent.id) else {
+        // The Hub checked it when the bot set it, and does not say when.
+        guard let status = bot.status, let withStatus = try? repository.setAgentStatus(status, agentID: agent.id, setAt: nil) else {
             return agent
         }
         return withStatus
@@ -1173,7 +1173,7 @@ import Observation
 
     private func apply(_ bot: LinkBot, to entry: Entry) throws {
         guard let agent = try repository.loadAgents().first(where: { $0.id == entry.agent }) else { return }
-        if agent.status != bot.status, (try? repository.setAgentStatus(bot.status, agentID: agent.id)) != nil { onChange?() }
+        if agent.status != bot.status, (try? repository.setAgentStatus(bot.status, agentID: agent.id, setAt: nil)) != nil { onChange?() }
         if (agent.archivedAt != nil) != (bot.archivedAt != nil) {
             try repository.setAgentArchived(bot.archivedAt != nil, agentID: agent.id, now: bot.archivedAt ?? Date())
             onChange?()

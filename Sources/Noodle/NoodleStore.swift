@@ -1273,6 +1273,7 @@ final class NoodleStore {
         guard let index = agents.firstIndex(where: { $0.id == id }),
               let saved = try? repository.loadAgents().first(where: { $0.id == id }) else { return }
         agents[index].status = saved.status
+        agents[index].statusSetAt = saved.statusSetAt
     }
 
     private func hubBotsChanged() {

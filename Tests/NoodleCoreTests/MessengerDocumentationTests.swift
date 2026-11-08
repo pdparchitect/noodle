@@ -43,6 +43,18 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertTrue(guidance.contains("assignments.md"))
     }
 
+    /// Nothing else asks a bot to touch its status, so every wake that may start or end work reminds it.
+    func testEveryWorkingWakeRemindsTheBotToKeepItsStatusCurrent() {
+        for reason in [AgentWakeReason.inboxChanged, .heartbeat, .wake, .runtimeRecovered] {
+            let guidance = reason.reference.guidance
+            XCTAssertTrue(guidance.contains("--set-status"), reason.rawValue)
+            XCTAssertTrue(guidance.contains("--clear-status"), reason.rawValue)
+        }
+        let help = MessengerCommandKind.setStatus.guidance
+        XCTAssertTrue(help.contains("present tense"), help)
+        XCTAssertTrue(help.contains("waiting on"), help)
+    }
+
     /// Bots in several groups need a rule for where each message goes, or they post work where it does not belong.
     func testMessagesSayWhichConversationToUse() {
         let guidance = MessengerDeliveryKind.message.reference.guidance

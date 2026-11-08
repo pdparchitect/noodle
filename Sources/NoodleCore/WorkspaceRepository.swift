@@ -362,9 +362,10 @@ public struct WorkspaceRepository: Sendable {
         return String(decoding: try files.read("preferences.md", limit: 4 * 1_048_576), as: UTF8.self)
     }
 
-    /// Sets or, with nil, clears the status the bot shows. Nothing else changes, not even when it was edited.
+    /// Sets or, with nil, clears the status the bot shows, with when it was set: `setAt`, in whole seconds as
+    /// agent.json keeps dates, or nil when that is unknown. Nothing else changes, not even when it was edited.
     @discardableResult
-    public func setAgentStatus(_ rawStatus: String?, agentID: UUID) throws -> AgentRecord {
+    public func setAgentStatus(_ rawStatus: String?, agentID: UUID, setAt: Date? = Date()) throws -> AgentRecord {
         let status = rawStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let status, status.isEmpty || status.count > AgentRecord.statusLimit || status.contains(where: \.isNewline) {
             throw WorkspaceError.invalidStatus
@@ -372,6 +373,7 @@ public struct WorkspaceRepository: Sendable {
         let layout = storage(for: agentID)
         var configuration = try AgentConfiguration.load(from: layout)
         configuration.agent.status = status
+        configuration.agent.statusSetAt = status == nil ? nil : setAt.map { Date(timeIntervalSince1970: $0.timeIntervalSince1970.rounded(.down)) }
         try configuration.save(to: layout)
         return configuration.agent
     }
@@ -548,9 +550,11 @@ public struct WorkspaceRepository: Sendable {
         var configuration = try AgentConfiguration.load(from: layout)
         // Only the bot sets its status, so an edit from an older copy keeps the one it has now.
         // Archiving has its own call for the same reason.
-        let status = configuration.agent.status, archivedAt = configuration.agent.archivedAt
+        let status = configuration.agent.status, statusSetAt = configuration.agent.statusSetAt
+        let archivedAt = configuration.agent.archivedAt
         configuration.agent = agent
         configuration.agent.status = status
+        configuration.agent.statusSetAt = statusSetAt
         configuration.agent.archivedAt = archivedAt
         try configuration.save(to: layout)
     }

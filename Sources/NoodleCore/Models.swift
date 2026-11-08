@@ -17,6 +17,8 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public var avatarImageData: Data?
     /// One short line the bot sets itself through Messenger, such as what it is busy with.
     public var status: String?
+    /// When the bot last set its status; nil without one, or when nobody knows, as for a bot mirrored from a Hub.
+    public var statusSetAt: Date?
     /// Short enough for the bubble over a pinned bot.
     public static let statusLimit = 60
     /// An archived bot keeps everything but never runs and is left out of lists until unarchived.
@@ -56,6 +58,11 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
         self.status = status
         self.archivedAt = archivedAt
         self.suspendedUntil = suspendedUntil
+    }
+
+    /// Whether its status was set longer than `interval` ago, so it may no longer hold.
+    public func isStatusStale(at now: Date = Date(), after interval: TimeInterval) -> Bool {
+        statusSetAt.map { now.timeIntervalSince($0) > interval } ?? false
     }
 
     /// Far enough off that the bot waits for someone to unsuspend it.
