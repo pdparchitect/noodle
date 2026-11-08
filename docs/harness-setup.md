@@ -187,6 +187,13 @@ harnesses uses the new harness's default model. Its saved profile stays the same
 and it returns there when usage is available again and the bot is idle. If every
 choice is unavailable, the bot pauses until usage returns or you choose **Kick**.
 
+Claude Code bots run headless, like `claude -p`. A
+[report on Claude Code's issue tracker](https://github.com/anthropics/claude-code/issues/97074)
+found that headless runs used about 1.8 to 2.9 times as much of a Pro or Max
+plan's five-hour limit as the same work in interactive Claude Code. The report
+is open with no confirmed cause or fix, so a Claude Code bot may reach its limit
+sooner than you expect.
+
 ## Apple Intelligence and local models
 
 Apple Intelligence is experimental. Its on-device model can respond slowly, miss
