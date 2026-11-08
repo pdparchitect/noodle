@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-11-08
+
 ### Changed
 
 - Bots keep their status current: when they wake for messages, a heartbeat or a scheduled wake, they're reminded to update their status or clear it once nothing is in progress.
