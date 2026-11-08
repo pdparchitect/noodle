@@ -3336,8 +3336,18 @@ struct ChatView: View {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 8)
                         .task(id: messages.first?.id) { try? await chats.loadEarlier(thread) }
                 }
-                ForEach(messages) { message in
+                // Indices give each row the message before it, which decides whether its time shows.
+                ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                     VStack(spacing: Bubble.rowSpacing) {
+                        // Part of the message's row, so a row kept in place by ID keeps its time with it.
+                        if let caption = TranscriptTimestamp.caption(for: message.createdAt,
+                                                                     after: index > 0 ? messages[index - 1].createdAt : nil) {
+                            Text(caption)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 6)
+                        }
                         if let record = message.call {
                             CallCardRow(name: thread.name, message: message, record: record, live: liveCard == message.id ? call : nil)
                         } else {

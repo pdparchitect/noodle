@@ -1,5 +1,6 @@
 import AppKit
 import AppletBridge
+import HubLink
 import PhotosUI
 import SwiftUI
 import NoodleCore
@@ -578,15 +579,27 @@ private struct ConversationTranscript: View {
                     .task(id: first) { firstShownID = all[max(first - Self.pageSize, 0)].id }
             }
 
-            ForEach(messages) { message in
-                MessageBubble(
-                    message: message,
-                    hasConversationBackground: !store.background(for: conversation).isDefault,
-                    selectedAttachmentID: $selectedAttachmentID,
-                    previewAttachment: previewAttachment,
-                    showAgentProfile: showAgentProfile,
-                    spokenBlock: spoken[message.id]
-                )
+            // Indices into all, so the first shown row knows the message before it even when that one is not loaded.
+            ForEach(Array(zip(messages.indices, messages)), id: \.1.id) { index, message in
+                // Part of the message's own row, so the reading position, kept by message, never lands between the two.
+                VStack(spacing: 6) {
+                    if let caption = TranscriptTimestamp.caption(for: message.createdAt,
+                                                                 after: index > 0 ? all[index - 1].createdAt : nil) {
+                        Text(caption)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 8)
+                    }
+                    MessageBubble(
+                        message: message,
+                        hasConversationBackground: !store.background(for: conversation).isDefault,
+                        selectedAttachmentID: $selectedAttachmentID,
+                        previewAttachment: previewAttachment,
+                        showAgentProfile: showAgentProfile,
+                        spokenBlock: spoken[message.id]
+                    )
+                }
                 .transition(MessageBubble.insertion(for: message))
                 .id(TranscriptScrollTarget.message(message.id))
             }
