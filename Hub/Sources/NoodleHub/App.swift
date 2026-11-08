@@ -13,6 +13,9 @@ let hubAppName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName")
 /// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
 @main enum NoodleHubEntry {
     static func main() {
+        // A pipe or socket whose other end closed is an error for its writer, never the end of the Hub.
+        // Starting a Local Mac computer briefly restarts macOS's configuration daemon, and one did end it.
+        signal(SIGPIPE, SIG_IGN)
         AppInstance.claim()
         NoodleHubApp.main()
     }

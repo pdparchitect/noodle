@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting a Local Mac computer no longer quits the Hub. Starting one briefly restarts part of macOS's network configuration, and a connection that closed while the Hub was writing to it ended the app instead of reporting an error.
+
 ## [0.48.0] - 2026-11-06
 
 ### Added
