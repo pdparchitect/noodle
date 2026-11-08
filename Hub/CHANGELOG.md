@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- When a bot lists who is in a group, it sees which bots are suspended and until when, so it doesn't wait on one that won't answer. Archived bots are no longer listed.
+
 ### Fixed
 
 - Starting a Local Mac computer no longer quits the Hub. Starting one briefly restarts part of macOS's network configuration, and a connection that closed while the Hub was writing to it ended the app instead of reporting an error.

@@ -1537,14 +1537,16 @@ public struct WorkspaceRepository: Sendable {
 
         let me = MessengerIdentity(handle: .me, agentID: agentID, displayName: readingAgent.displayName)
         let participants = conversation.participantIDs.compactMap { participantID -> MessengerParticipantStatus? in
-            guard let agent = agentsByID[participantID] else { return nil }
+            // An archived bot never runs, so it is no one to address.
+            guard let agent = agentsByID[participantID], participantID == agentID || agent.archivedAt == nil else { return nil }
             let identity = participantID == agentID
                 ? me
                 : MessengerIdentity(handle: .bot, agentID: participantID, displayName: agent.displayName)
             return MessengerParticipantStatus(
                 participant: identity,
                 publicDescription: agent.publicDescription,
-                lastActiveAt: lastActivity[participantID]
+                lastActiveAt: lastActivity[participantID],
+                suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil
             )
         }.sorted {
             if $0.participant.handle == .me { return true }

@@ -357,15 +357,19 @@ public struct MessengerParticipantStatus: Codable, Hashable, Sendable {
     public let participant: MessengerIdentity
     public let publicDescription: String?
     public let lastActiveAt: Date?
+    /// Set while the bot is suspended: it takes no new turn until then, and messages wait for it.
+    public let suspendedUntil: Date?
 
     public init(
         participant: MessengerIdentity,
         publicDescription: String?,
-        lastActiveAt: Date?
+        lastActiveAt: Date?,
+        suspendedUntil: Date? = nil
     ) {
         self.participant = participant
         self.publicDescription = publicDescription
         self.lastActiveAt = lastActiveAt
+        self.suspendedUntil = suspendedUntil
     }
 }
 

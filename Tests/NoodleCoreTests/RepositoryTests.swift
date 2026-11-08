@@ -928,6 +928,42 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(roster.participants.map(\.lastActiveAt), [firstActivity, secondActivity])
     }
 
+    func testMessengerParticipantsSaySuspendedUntilAndLeaveOutArchivedBots() throws {
+        let reader = try repository.createAgent(named: "Research Bot")
+        let suspended = try repository.createAgent(named: "Build Bot")
+        let lapsed = try repository.createAgent(named: "Copy Bot")
+        let archived = try repository.createAgent(named: "Old Bot")
+        let agents = [reader.agent, suspended.agent, lapsed.agent, archived.agent]
+        let group = try repository.createGroup(
+            named: "Launch Room",
+            publicDescription: nil,
+            participantIDs: agents.map(\.id),
+            existingAgents: agents
+        )
+        let until = Date(timeIntervalSinceNow: 3_600)
+        try repository.setAgentSuspended(until: until, agentID: suspended.agent.id)
+        try repository.setAgentSuspended(until: Date(timeIntervalSinceNow: -3_600), agentID: lapsed.agent.id)
+        try repository.setAgentArchived(true, agentID: archived.agent.id)
+
+        let command = repository.directory(for: reader.agent)
+            .appendingPathComponent(".agents/skills/messenger/messenger")
+        let result = MessengerCLI.runDirect(arguments: [
+            command.path,
+            "--list-participants",
+            "--conversation", group.id.uuidString
+        ])
+
+        struct Entry: Decodable { let participant: MessengerIdentity; let suspendedUntil: Date? }
+        struct Roster: Decodable { let participants: [Entry] }
+        XCTAssertEqual(result.exitCode, 0)
+        let participants = try decode(Roster.self, from: result.standardOutput).participants
+        XCTAssertEqual(participants.map(\.participant.displayName), ["Research Bot", "Build Bot", "Copy Bot"])
+        XCTAssertEqual(
+            participants.map { $0.suspendedUntil?.timeIntervalSince1970 },
+            [nil, until.timeIntervalSince1970.rounded(.down), nil]
+        )
+    }
+
     func testGroupDescriptionUpdateNotifiesEveryCurrentMember() throws {
         let first = try repository.createAgent(named: "Research Bot")
         let second = try repository.createAgent(named: "Build Bot")

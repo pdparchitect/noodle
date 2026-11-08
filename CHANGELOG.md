@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- When a bot lists who is in a group, it sees which bots are suspended and until when, so it doesn't wait on one that won't answer. Archived bots are no longer listed.
+
 ## [0.82.0] - 2026-11-06
 
 ### Added
