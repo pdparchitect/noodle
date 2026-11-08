@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.82.1] - 2026-11-08
+
 ### Changed
 
 - Conversations show when each stretch of talk began, as Messages does: a small time such as "Yesterday 05:55" over the first message, the first of each day, and any message after an hour's quiet.
