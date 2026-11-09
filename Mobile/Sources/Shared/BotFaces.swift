@@ -117,14 +117,16 @@ struct GroupAvatar: View {
     let size: CGFloat
     /// The members' status together, as `phase(of:)` works it out. Nil shows none.
     var phase: LinkBotPhase? = nil
+    /// The members shown gray among the others, as suspended ones are.
+    var grayFaces: Set<UUID> = []
 
-    /// As on the Mac: a working member wins, then one waiting for Kick, then all ready; anything else is idle.
+    /// As on the Mac: a working member wins, then one waiting for Kick, then any that can answer; otherwise idle.
     static func phase(of members: [LinkBotPhase?]) -> LinkBotPhase? {
         let known = members.compactMap { $0 }
         if known.isEmpty { return nil }
         if known.contains(.working) { return .working }
         if known.contains(.failed) { return .failed }
-        return known.allSatisfy { $0 == .ready } ? .ready : .offline
+        return known.contains(.ready) ? .ready : .offline
     }
 
     var body: some View {
@@ -148,6 +150,8 @@ struct GroupAvatar: View {
                 Circle().fill(.quaternary)
                 ForEach(Array(shown.enumerated()), id: \.offset) { index, face in
                     AgentAvatar(face: face, size: size * (shown.count == 2 ? 0.6 : 0.62))
+                        // Gray but opaque: the faces overlap, and a group nobody can answer in is dimmed as a whole.
+                        .grayscale(grayFaces.contains(face.id) ? 1 : 0)
                         // Thinner on a small picture, where a fixed border would cover much of each face.
                         .overlay { Circle().stroke(Color(.systemBackground), lineWidth: max(1, size * 0.04)) }
                         .offset(Self.offset(index, of: shown.count, size: size))

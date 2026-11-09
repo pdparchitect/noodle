@@ -323,7 +323,7 @@ private struct ConversationRowContent: Equatable {
         participants = store.shownParticipants(for: conversation)
         title = store.title(for: conversation)
         timestamp = SidebarTimestamp.text(for: conversation.updatedAt)
-        pause = store.pauseSummary(for: conversation)
+        pause = store.sidebarPauseSummary(for: conversation)
         self.detail = store.sidebarDetail(for: conversation, showing: detail)
         runtimeStatus = store.runtimeStatus(for: conversation)
         runtimeHelp = store.runtimeHelp(for: conversation)

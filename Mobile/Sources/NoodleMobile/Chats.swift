@@ -427,6 +427,12 @@ final class ChatsCacheFile: @unchecked Sendable {
         Self.pauseSummary(for: thread, members: thread.group.map(members(of:)) ?? [], pause: pause(of:), now: now)
     }
 
+    /// What a conversation's row says. Suspending a bot was deliberate, so only its own row mentions it, not a group's.
+    func rowPauseSummary(for thread: HubThread, now: Date = Date()) -> String? {
+        let members = thread.group.map(members(of:))?.filter { !isSuspended($0, now: now) } ?? []
+        return Self.pauseSummary(for: thread, members: members, pause: pause(of:), now: now)
+    }
+
     /// A bot's own conversation says why it waits and when it continues; a group names the bots that wait.
     static func pauseSummary(for thread: HubThread, members: [LinkBot], pause: (LinkBot) -> LinkBotPause?,
                              now: Date = Date()) -> String? {
@@ -2724,7 +2730,7 @@ private struct AgentRow: View, Equatable {
                     }
                 }
                 // Why its bots do not answer takes the preview's first line, as on the Mac, so the row keeps its height.
-                let pause = chats.pauseSummary(for: thread)
+                let pause = chats.rowPauseSummary(for: thread)
                 if let pause {
                     Text(pause).font(.subheadline).foregroundStyle(.red).lineLimit(1)
                 }
@@ -2792,7 +2798,7 @@ private struct AgentIcon: View {
     let selected: Bool
 
     var body: some View {
-        let pause = chats.pauseSummary(for: thread)
+        let pause = chats.rowPauseSummary(for: thread)
         VStack(spacing: 4) {
             ThreadAvatar(chats: chats, thread: thread, size: 60)
                 .overlay(alignment: .topLeading) {
@@ -4787,16 +4793,21 @@ struct ThreadAvatar: View {
     let thread: HubThread
     let size: CGFloat
 
+    /// A suspended bot is grayed, as a stopped one is, while it does not finish a turn.
+    private func shownPhase(of bot: LinkBot) -> LinkBotPhase? {
+        let phase = chats.phase(of: bot)
+        return chats.isSuspended(bot) && phase != .working ? .offline : phase
+    }
+
     var body: some View {
         switch thread {
         case .bot(let bot):
-            let phase = chats.phase(of: bot)
-            // A suspended bot is grayed, as a stopped one is, while it does not finish a turn.
-            AgentAvatar(face: BotFace(bot), size: size, phase: chats.isSuspended(bot) && phase != .working ? .offline : phase)
+            AgentAvatar(face: BotFace(bot), size: size, phase: shownPhase(of: bot))
         case .group(let group):
             let active = chats.activeMembers(of: group)
             let members = active.isEmpty ? chats.members(of: group) : active
-            GroupAvatar(faces: members.map(BotFace.init), size: size, phase: GroupAvatar.phase(of: members.map(chats.phase(of:))))
+            GroupAvatar(faces: members.map(BotFace.init), size: size, phase: GroupAvatar.phase(of: members.map(shownPhase(of:))),
+                        grayFaces: Set(members.filter { chats.isSuspended($0) }.map(\.id)))
         }
     }
 }

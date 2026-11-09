@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
+
+### What to Test
+
+- Suspend one bot in a group of up to three: only its face turns gray, the group's other faces keep their color, and the group's row doesn't mention it. Open the group: the bar at the top still names it.
+- Suspend every bot in a group: the whole group picture turns gray.
+
 ## [0.55.1] - 2026-11-08
 
 ### Changed

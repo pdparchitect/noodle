@@ -57,6 +57,8 @@ struct ConversationAvatar: View {
 
     private func member(_ agent: AgentRecord, in frame: CGRect) -> some View {
         BotAvatar(agent: agent, size: frame.width, showsShadow: false)
+            // Gray but opaque: the faces overlap, and a group nobody can answer in is dimmed as a whole.
+            .grayscale(agent.isSuspended() ? 1 : 0)
             // Thinner on a small picture, where a fixed border would cover much of each face.
             .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: max(1, size * 0.04)))
             .offset(x: frame.minX, y: frame.minY)
@@ -92,14 +94,14 @@ struct ConversationAvatar: View {
     }
 }
 
-/// One status for a whole conversation: a working bot wins, then a failed one, then all ready.
+/// One status for a whole conversation: a working bot wins, then a failed one, then any that can answer.
 enum ConversationRuntimeStatus: Equatable {
     case working, failed, ready, idle
 
     init(phases: [AgentRuntimePhase]) {
         if phases.contains(.working) { self = .working }
         else if phases.contains(.failed) { self = .failed }
-        else if !phases.isEmpty, phases.allSatisfy({ $0 == .ready }) { self = .ready }
+        else if phases.contains(.ready) { self = .ready }
         else { self = .idle }
     }
 
@@ -192,6 +194,15 @@ extension NoodleStore {
 
     /// A bot's own conversation says why it waits; a group names the bots that wait.
     func pauseSummary(for conversation: BotConversation) -> String? {
+        pauseSummary(for: conversation, namingSuspended: true)
+    }
+
+    /// What a conversation's row says. Suspending a bot was deliberate, so only its own row mentions it, not a group's.
+    func sidebarPauseSummary(for conversation: BotConversation) -> String? {
+        pauseSummary(for: conversation, namingSuspended: false)
+    }
+
+    private func pauseSummary(for conversation: BotConversation, namingSuspended: Bool) -> String? {
         if let setAside = setAsideAgent(of: conversation) { return setAside.helpURL == nil ? "Can't start" : "Needs an upgrade" }
         let waiting = Set(agentsWaitingForKick(in: conversation).map(\.id))
         let paused = shownParticipants(for: conversation).filter {
@@ -202,7 +213,8 @@ extension NoodleStore {
             if first.isSuspended(), let until = first.suspendedUntil { return AgentRecord.suspension(until: until) }
             return waiting.contains(first.id) ? runtime.snapshot(for: first.id).pauseSummary : hubPause(ofAgent: first.id)?.shown()
         }
-        return "Paused: " + paused.map(\.displayName).joined(separator: ", ")
+        let named = namingSuspended ? paused : paused.filter { !$0.isSuspended() }
+        return named.isEmpty ? nil : "Paused: " + named.map(\.displayName).joined(separator: ", ")
     }
 
     /// The full message behind the pause shown over a conversation.

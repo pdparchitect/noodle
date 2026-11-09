@@ -30,4 +30,10 @@ import Testing
         #expect(HubChats.pauseSummary(for: .group(group), members: [kai, ada, theo], pause: \.pause, now: now) == "Paused: Kai, Theo")
         #expect(HubChats.pauseSummary(for: .group(group), members: [ada], pause: \.pause, now: now) == nil)
     }
+
+    @Test func aGroupIsGrayOnlyWhenNoBotCanAnswer() {
+        #expect(GroupAvatar.phase(of: [.ready, .offline]) == .ready)
+        #expect(GroupAvatar.phase(of: [.working, .offline]) == .working)
+        #expect(GroupAvatar.phase(of: [.offline, .starting]) == .offline)
+    }
 }

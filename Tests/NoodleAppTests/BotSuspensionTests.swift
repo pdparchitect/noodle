@@ -43,6 +43,20 @@ import XCTest
         XCTAssertNil(f.store.pauseSummary(for: f.directA))
     }
 
+    func testAGroupRowLeavesOutASuspendedBotButNamesOneThatWaits() throws {
+        let f = try fixture()
+        let group = try f.group()
+        f.store.setSuspended(until: Date().addingTimeInterval(3600), agentID: f.a.id)
+
+        XCTAssertNil(f.store.sidebarPauseSummary(for: group), "Suspending it was deliberate")
+        XCTAssertEqual(f.store.pauseSummary(for: group), "Paused: Ada", "Over the conversation it is still named")
+        XCTAssertTrue(f.store.sidebarPauseSummary(for: f.directA)?.hasPrefix("Suspended until") == true, "Its own row says so")
+
+        let grace = try f.runtime.start(f.b)
+        grace.transition(.failed, failure: .recoveryFailed)
+        XCTAssertEqual(f.store.sidebarPauseSummary(for: group), "Paused: Grace")
+    }
+
     func testASuspensionSavedEarlierHoldsTheBotWhenNoodleOpensUntilItRunsOut() throws {
         let f = try fixture()
         try f.repository.setAgentSuspended(until: AgentRecord.indefinitely, agentID: f.a.id)
