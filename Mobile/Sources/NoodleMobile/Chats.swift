@@ -4097,7 +4097,7 @@ private struct Bubble: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     content(foreground: .white, background: .accentColor)
                     if let delivery {
-                        Text(delivery).font(.caption2).foregroundStyle(failed == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                        DeliveryCaption(delivery: delivery, failed: failed != nil)
                     }
                 }
             }
