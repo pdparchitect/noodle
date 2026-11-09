@@ -17,7 +17,7 @@ public struct AgentRecord: Identifiable, Codable, Hashable, Sendable {
     public var avatarImageData: Data?
     /// One short line the bot sets itself through Messenger, such as what it is busy with.
     public var status: String?
-    /// When the bot last set its status; nil without one, or when nobody knows, as for a bot mirrored from a Hub.
+    /// When the bot last set its status; nil without one, or when nobody knows, as for a bot mirrored from a Hub that does not say.
     public var statusSetAt: Date?
     /// Short enough for the bubble over a pinned bot.
     public static let statusLimit = 60

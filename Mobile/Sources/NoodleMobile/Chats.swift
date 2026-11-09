@@ -3526,7 +3526,8 @@ struct ChatView: View {
         .sheet(item: $profile, onDismiss: finishProfileChoice) { bot in
             AgentProfile(bot: bot, actions: AgentProfile.actions(for: bot, canOpen: openThread != nil,
                                                                 inCall: chats.calls.call?.threadID == bot.id,
-                                                                canCallNow: chats.canCallNow(chats.agent(bot.id) ?? bot))) { action in
+                                                                canCallNow: chats.canCallNow(chats.agent(bot.id) ?? bot)),
+                         heartbeatMinutes: chats.pairing.status?.heartbeatMinutes) { action in
                 profileChoice = (action, bot)
                 profile = nil
             }
@@ -3954,7 +3955,17 @@ struct AgentProfile: View {
     enum Action: Hashable { case reply, message, call, edit }
     let bot: LinkBot
     let actions: [Action]
+    /// How often the bots on its Hub get a heartbeat, in minutes, when it says.
+    var heartbeatMinutes: Int?
     let choose: (Action) -> Void
+
+    /// When its status was set and whether that is old enough to dim it, as on the Mac. Nil without a status,
+    /// for an archived bot, and from a Hub that does not say when.
+    static func statusAge(of bot: LinkBot, heartbeatMinutes: Int?, at now: Date = Date()) -> (setAt: Date, stale: Bool)? {
+        guard bot.archivedAt == nil, bot.status != nil, let setAt = bot.statusSetAt else { return nil }
+        // A Hub that does not say has the usual half hour.
+        return (setAt, bot.isStatusStale(at: now, after: TimeInterval((heartbeatMinutes ?? 30) * 60)))
+    }
 
     /// Its conversation and a call need somewhere to open them; a bot someone shared is only talked with, and one
     /// not running now is not called.
@@ -3976,12 +3987,23 @@ struct AgentProfile: View {
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
             if let note = bot.archivedAt == nil ? bot.status : "Archived" {
-                Text(note)
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
+                // Older than a heartbeat, the bot has had its chance to update it, so it may no longer hold.
+                let age = Self.statusAge(of: bot, heartbeatMinutes: heartbeatMinutes)
+                VStack(spacing: 4) {
+                    Text(note)
+                        .font(.callout)
+                        .foregroundStyle(age?.stale == true ? .secondary : .primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                    if let age {
+                        Text(age.setAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
             }
             let about = bot.draft.publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
             let description = Text(about.isEmpty ? "No description yet." : about)

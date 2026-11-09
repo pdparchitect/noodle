@@ -660,6 +660,27 @@ import XCTest
         XCTAssertEqual(stored.task, TaskReference(task, agentID: bot.id))
     }
 
+    /// Devices hear when a status was set, and that the same status was set again, which refreshes its age.
+    func testBotsCarryWhenTheirStatusWasSet() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let first = Date(timeIntervalSince1970: 1_800_000_000), second = first.addingTimeInterval(60)
+        _ = try f.hub.repository.setAgentStatus("Reviewing PR 42", agentID: bot.id, setAt: first)
+        f.hub.bots.checkForChanges()
+        guard case .bots(let listed) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(listed.first?.statusSetAt, first)
+        guard case .status(let status) = try await f.device.request(.status) else { return XCTFail("no status") }
+        XCTAssertEqual(status.heartbeatMinutes, f.hub.runtime.heartbeatConfiguration.intervalMinutes)
+        let events = try await f.device.subscribe()
+        // A round trip, so the Hub has the subscription before anything changes.
+        _ = try await f.device.request(.bots)
+        _ = try f.hub.repository.setAgentStatus("Reviewing PR 42", agentID: bot.id, setAt: second)
+        f.hub.bots.checkForChanges()
+        try await expect("that the status was set again", in: events) { if case .botsChanged = $0 { true } else { false } }
+        guard case .bots(let again) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(again.first?.statusSetAt, second)
+    }
+
     func testOtherUsersCannotReachABot() async throws {
         let f = try await fixture()
         let bot = try await createBot(f)

@@ -53,6 +53,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public var appliesSuspensions = false
     /// The default image model's name, which devices show beside the tool. Nil while none is downloaded.
     public var imageModel: String? { imageGeneration?.currentModel?.name }
+    /// How often bots get a heartbeat, in minutes: older than that, a status is shown dimmed.
+    public var heartbeatMinutes: Int { runtime.heartbeatConfiguration.intervalMinutes }
     /// Serves bots the tools their owners assigned them from the Hub's own connections.
     private var toolBroker: ToolBridgeBroker?
     private let messenger: MessengerBroker
@@ -81,8 +83,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private var backgrounds: [UUID: ConversationBackground] = [:]
     /// What each bot was last reported doing.
     private var phases: [UUID: AgentRuntimePhase] = [:]
-    /// Each bot's status when last checked; an absent bot has not been checked yet.
-    private var statuses: [UUID: String?] = [:]
+    /// Each bot's status and when it was set, when last checked; an absent bot has not been checked yet.
+    private var statuses: [UUID: (String?, Date?)] = [:]
     /// Why each bot was last reported paused; an absent bot has not been checked yet.
     private var pauses: [UUID: LinkBotPause?] = [:]
     /// How many checks have been applied, so a check read in the background yields to one made meanwhile.
@@ -1451,9 +1453,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                 for person in [owner] + guests { onChange?(person, .botPhase(botID: agent.id, phase: link)) }
             }
             phases[agent.id] = phase
-            // A bot sets its status through Messenger; devices list the bots again to see it.
-            if let known = statuses[agent.id], known != agent.status { restated.insert(owner) }
-            statuses[agent.id] = .some(agent.status)
+            // A bot sets its status through Messenger; devices list the bots again to see it. Setting the same
+            // one again is news too: it refreshes the age they show.
+            if let known = statuses[agent.id], known != (agent.status, agent.statusSetAt) { restated.insert(owner) }
+            statuses[agent.id] = (agent.status, agent.statusSetAt)
             // Devices list the bots again to see why one paused, or that it no longer is; its guests too.
             // Its detail may say "in 5 hours", which changes by itself.
             var pause = self.pause(of: agent)
@@ -1939,7 +1942,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         draft.imageGeneration = imageGeneration?.isAssigned(agent.id) ?? false
         return LinkBot(id: agent.id, conversationID: conversation.id, draft: draft, createdAt: agent.createdAt,
                        phase: LinkBotPhase(rawValue: phase(of: agent).rawValue), readUpTo: readMarks[conversation.id],
-                       status: agent.status, archivedAt: agent.archivedAt, background: background(of: conversation.id),
+                       status: agent.status, statusSetAt: agent.statusSetAt, archivedAt: agent.archivedAt,
+                       background: background(of: conversation.id),
                        // On the owner's own Mac, those are people on another Hub.
                        sharedWith: access.isPersonal ? [] : direct.compactMap(\.guest?.id),
                        canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,

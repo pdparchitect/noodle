@@ -355,6 +355,21 @@ import XCTest
         XCTAssertEqual(try f.local.loadTasks(agentID: agent.id), [], "Only open tasks come over.")
     }
 
+    /// A bot on the Hub shows here when its status was set there, and setting the same one again refreshes it.
+    func testABotShowsItsStatusAgeFromTheHub() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let remote = try f.hub.bots.create(LinkBotDraft(name: "Jeeves", provider: "claude-code"), for: f.ada)
+        let first = Date(timeIntervalSince1970: 1_800_000_000)
+        _ = try f.hub.repository.setAgentStatus("Polishing silver", agentID: remote.id, setAt: first)
+        await mirror.sync()
+        XCTAssertEqual(try f.local.loadAgents().first?.statusSetAt, first)
+        let second = first.addingTimeInterval(60)
+        _ = try f.hub.repository.setAgentStatus("Polishing silver", agentID: remote.id, setAt: second)
+        await mirror.sync()
+        XCTAssertEqual(try f.local.loadAgents().first?.statusSetAt, second)
+    }
+
     /// A conversation longer than one answer may carry comes over page by page.
     func testALongConversationComesOverWhole() async throws {
         let f = try await fixture()

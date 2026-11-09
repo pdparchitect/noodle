@@ -1120,13 +1120,16 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var groupNotifications: LinkNotifications?
     /// Whether the Hub takes `suspend` and lists each bot's `suspendedUntil`, so a device may offer to suspend one.
     public var suspendsBots: Bool
+    /// How often its bots get a heartbeat, in minutes: a status older than that is shown dimmed. Nil from a Hub that does not say.
+    public var heartbeatMinutes: Int?
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
                 protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false,
                 canShareBots: Bool = false, userID: UUID? = nil, avatar: LinkAvatar? = nil, imageModel: String? = nil,
                 keepsAnnotations: Bool = false, signsInToBrowsers: Bool = false, ringsThroughPush: Bool = false,
                 callPushExpiresAt: Date? = nil, explainsPauses: Bool = false, mutesGroups: Bool = false,
-                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil, suspendsBots: Bool = false) {
+                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil, suspendsBots: Bool = false,
+                heartbeatMinutes: Int? = nil) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -1148,12 +1151,13 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.notifiesMentions = notifiesMentions
         self.groupNotifications = groupNotifications
         self.suspendsBots = suspendsBots
+        self.heartbeatMinutes = heartbeatMinutes
     }
 
     private enum CodingKeys: String, CodingKey {
         case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots, userID, avatar, imageModel,
              keepsAnnotations, signsInToBrowsers, ringsThroughPush, callPushExpiresAt, explainsPauses, mutesGroups,
-             notifiesMentions, groupNotifications, suspendsBots
+             notifiesMentions, groupNotifications, suspendsBots, heartbeatMinutes
     }
 
     public init(from decoder: Decoder) throws {
@@ -1179,6 +1183,7 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         notifiesMentions = try c.decode(.notifiesMentions, or: false)
         groupNotifications = try c.decodeIfPresent(LinkNotifications.self, forKey: .groupNotifications)
         suspendsBots = try c.decode(.suspendsBots, or: false)
+        heartbeatMinutes = try c.decodeIfPresent(Int.self, forKey: .heartbeatMinutes)
     }
 }
 
@@ -1359,6 +1364,8 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var readUpTo: Date?
     /// The one line the bot set itself, such as what it is busy with. Not part of the draft: devices never set it.
     public var status: String?
+    /// When the bot last set it. Nil without one, or from a Hub that does not say.
+    public var statusSetAt: Date?
     /// When it was archived: it keeps everything but does not run or take messages. Set with `archive`.
     public var archivedAt: Date?
     /// Its conversation's background. Nil from a Hub that does not keep backgrounds.
@@ -1381,7 +1388,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var tasks: [LinkTask]
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
-                readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
+                readUpTo: Date? = nil, status: String? = nil, statusSetAt: Date? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
                 sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil,
                 suspendedUntil: Date? = nil, tasks: [LinkTask] = []) {
         self.id = id
@@ -1391,6 +1398,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.phase = phase
         self.readUpTo = readUpTo
         self.status = status
+        self.statusSetAt = statusSetAt
         self.archivedAt = archivedAt
         self.background = background
         self.sharedWith = sharedWith
@@ -1403,7 +1411,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
+        case id, conversationID, draft, createdAt, phase, readUpTo, status, statusSetAt, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
              suspendedUntil, tasks
     }
 
@@ -1416,6 +1424,7 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         phase = try c.decodeIfPresent(String.self, forKey: .phase).flatMap(LinkBotPhase.init(rawValue:))
         readUpTo = try c.decodeIfPresent(Date.self, forKey: .readUpTo)
         status = try c.decodeIfPresent(String.self, forKey: .status)
+        statusSetAt = try c.decodeIfPresent(Date.self, forKey: .statusSetAt)
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         background = try c.decodeIfPresent(LinkBackground.self, forKey: .background)
         sharedWith = try c.decodeIfPresent([UUID].self, forKey: .sharedWith) ?? []
@@ -1425,6 +1434,11 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         pause = (try? c.decodeIfPresent(LinkBotPause.self, forKey: .pause)) ?? nil
         suspendedUntil = try c.decodeIfPresent(Date.self, forKey: .suspendedUntil)
         tasks = try c.decode(.tasks, or: [])
+    }
+
+    /// Whether its status was set longer than `interval` ago, so it may no longer hold: the rule for a bot on the Mac.
+    public func isStatusStale(at now: Date = Date(), after interval: TimeInterval) -> Bool {
+        statusSetAt.map { now.timeIntervalSince($0) > interval } ?? false
     }
 }
 

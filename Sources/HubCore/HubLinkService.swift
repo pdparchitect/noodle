@@ -1124,7 +1124,7 @@ import os
                           signsInToBrowsers: browsers != nil, ringsThroughPush: callPusher != nil && bots != nil,
                           callPushExpiresAt: device.callPush?.expiresAt, explainsPauses: bots != nil, mutesGroups: bots != nil,
                           notifiesMentions: bots != nil, groupNotifications: user.flatMap { bots?.groupNotifications(for: $0) },
-                          suspendsBots: bots != nil)
+                          suspendsBots: bots != nil, heartbeatMinutes: bots?.heartbeatMinutes)
     }
 
     /// Opens the port on the router, then keeps it open.

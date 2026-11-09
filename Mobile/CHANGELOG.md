@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A bot's profile shows how long ago it set its status, and dims it once it's old, as on the Mac.
+
 ## [0.56.0] - 2026-11-10
 
 ### Added
