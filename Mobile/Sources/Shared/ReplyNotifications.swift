@@ -124,7 +124,7 @@ enum ReplyNotification {
         }
         guard case .messages(let page)? = try? await pairing.request(.messagePage(LinkMessagePage(conversationID: route.conversation, limit: 10))),
               let reply = page.messages.last(where: { if case .bot = $0.author { true } else { false } }) else { return nil }
-        let text = reply.body.isEmpty ? (reply.attachments.first?.filename ?? "Attachment") : MessageSegment.previewText(reply.body)
+        let text = reply.body.isEmpty ? (reply.attachments.first?.filename ?? "Attachment") : MessageSegment.notificationText(reply.body)
         var speaker: LinkBot?
         if case .bot(let id) = reply.author { speaker = bots.first { $0.id == id } }
         let body = target.isGroup && speaker != nil ? "\(speaker!.draft.name): \(text)" : text

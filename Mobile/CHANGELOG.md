@@ -11,11 +11,13 @@
 ### Fixed
 
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
+- Notifications show bot messages as clean text: bold, code, link and heading markup no longer appear in banners, links show their words, and list items keep their numbers or bullets.
 
 ### What to Test
 
 - Suspend one bot in a group of up to three: only its face turns gray, the group's other faces keep their color, and the group's row doesn't mention it. Open the group: the bar at the top still names it.
 - Suspend every bot in a group: the whole group picture turns gray.
+- Ask a bot for a reply with **bold** words, `code` and a numbered list while the app is in the background: the notification shows the words without asterisks or backticks, and the list keeps its numbers.
 - In Settings › Conversation List, set Tasks to All Open. Ask a bot for something that takes a while, such as finding a few options to choose from: a task for it appears at the top of the list, and moves to the top, saying "Waiting on you", when it asks you to choose.
 - Tap that task, write your answer and tap Send: the message appears in the bot's conversation with the task's name above it, and the bot carries on and marks the task done.
 - Set Tasks to Waiting on Me: only tasks waiting on you are listed. Switch to a space without that bot: its tasks aren't listed.

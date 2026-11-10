@@ -67,6 +67,45 @@ extension MessageSegment {
         let text = segments.compactMap { if case .text(let text) = $0 { text } else { nil } }.joined(separator: "\n\n")
         return text.isEmpty ? "Sent a table" : text
     }
+
+    /// What a notification says: the preview as clean words, since notifications take plain text only. Markup goes,
+    /// a link keeps its text, list items keep their number or a bullet, each line stays a line, and code blocks are
+    /// left out.
+    public static func notificationText(_ body: String) -> String {
+        let preview = previewText(body)
+        var lines: [String] = []
+        var inCode = false, hadCode = false
+        for raw in preview.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") || line.hasPrefix("~~~") {
+                inCode.toggle()
+                hadCode = true
+                continue
+            }
+            guard !inCode, !line.isEmpty else { continue }
+            var rest = Substring(line), marker = ""
+            if let heading = rest.firstMatch(of: #/^#{1,6}\s+/#) { rest = rest[heading.range.upperBound...] }
+            while rest.hasPrefix(">") { rest = rest.dropFirst().drop(while: \.isWhitespace) }
+            if let bullet = rest.firstMatch(of: #/^[-*+]\s+/#) {
+                marker = "• "
+                rest = rest[bullet.range.upperBound...]
+            } else if let number = rest.firstMatch(of: #/^(\d+)[.)]\s+/#) {
+                marker = "\(number.1). "
+                rest = rest[number.range.upperBound...]
+            }
+            lines.append(marker + inlineText(String(rest)))
+        }
+        if lines.isEmpty { return hadCode ? "Sent code" : preview }
+        return lines.joined(separator: "\n")
+    }
+
+    /// One line without its emphasis, code and link markup.
+    private static func inlineText(_ line: String) -> String {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace,
+                                                              failurePolicy: .returnPartiallyParsedIfPossible)
+        guard let parsed = try? AttributedString(markdown: line, options: options) else { return line }
+        return String(parsed.characters)
+    }
 }
 
 /// How a message's prose is broken into bubbles; dense replies read easier in smaller pieces.

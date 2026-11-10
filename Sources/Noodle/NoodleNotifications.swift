@@ -49,7 +49,7 @@ enum NoodleNotifications {
         if conversation.kind == .group {
             content.subtitle = conversation.displayName
         }
-        content.body = MessageSegment.previewText(message.body)
+        content.body = MessageSegment.notificationText(message.body)
         content.userInfo = [conversationIDKey: conversation.id.uuidString, messageIDKey: message.id.uuidString]
         return content
     }
@@ -86,7 +86,7 @@ enum NoodleNotifications {
     static func ring(_ call: AgentCallRequest, from agent: AgentRecord) {
         let content = UNMutableNotificationContent()
         content.title = agent.displayName
-        content.body = call.reason
+        content.body = MessageSegment.notificationText(call.reason)
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         content.userInfo = [conversationIDKey: call.conversationID.uuidString, callKey: call.id.uuidString]
