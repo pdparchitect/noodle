@@ -44,7 +44,7 @@ public struct ManagedKey: Equatable, Sendable {
     public let deprecated: Bool
 
     init(_ name: String, _ type: ValueType, title: String, description: String, defaultValue: ManagedValue?,
-         choices: [ManagedChoice]? = nil, since: String = "0.83.0", deprecated: Bool = false) {
+         choices: [ManagedChoice]? = nil, since: String = "0.84.0", deprecated: Bool = false) {
         self.name = name
         self.type = type
         self.title = title

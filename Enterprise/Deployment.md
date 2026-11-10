@@ -83,23 +83,23 @@ read this domain.
 
 | Key | Type | Default | Since | What it does |
 | --- | --- | --- | --- | --- |
-| `AllowedHarnesses` | Array of strings | All | 0.83.0 | The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. |
-| `AllowUnrestrictedAccess` | Boolean | `true` | 0.83.0 | Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. |
-| `AllowMCP` | Boolean | `true` | 0.83.0 | Whether people can sign in to and bots can use MCP tool connections at all. When false, every connection stops working; none is deleted. |
-| `MCPAllowList` | Array of strings | Not set | 0.83.0 | The only connections from Noodle's catalogue people can use, by catalogue ID. Missing: all of them. Does not apply to custom connections. |
-| `MCPDenyList` | Array of strings | Not set | 0.83.0 | Connections from Noodle's catalogue people can't use, by catalogue ID. Wins over the allowed list. |
-| `AllowCustomMCP` | Boolean | `true` | 0.83.0 | Whether people can use MCP servers they add by URL, not from the catalogue. |
-| `CustomMCPAllowList` | Array of strings | Not set | 0.83.0 | The only custom MCP servers people can use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Missing: any server. |
-| `CustomMCPDenyList` | Array of strings | Not set | 0.83.0 | Custom MCP servers people can't use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Wins over the allowed list. |
-| `AllowBrowser` | Boolean | `true` | 0.83.0 | Whether people and their bots can use Noodle Browser's browsers from Noodle. |
-| `AllowComputers` | Boolean | `true` | 0.83.0 | Whether people and their bots can use Noodle Computer's computers from Noodle. |
-| `AllowHubHosting` | Boolean | `true` | 0.83.0 | Whether people can turn on Let My Devices Reach This Mac in Settings › Hub, which serves their own devices from this Mac as a Hub does. When false, a Hub already on stops; the setting comes back when allowed again. |
-| `AllowHubConnections` | Boolean | `true` | 0.83.0 | Whether people can join and use Noodle Hubs from this Mac. When false, joined Hubs are disconnected; none is left. |
-| `HubAllowList` | Array of strings | Not set | 0.83.0 | The only Hub addresses Noodle connects to. Each entry is a host name or IP address, or a domain with its subdomains, such as *.example.com. Missing: any address. |
-| `HubDenyList` | Array of strings | Not set | 0.83.0 | Hub addresses Noodle never connects to, in the same form. Wins over the allowed list. |
-| `AllowUpdates` | Boolean | `true` | 0.83.0 | Whether Noodle checks for and installs its own updates. Set false to leave updates to your MDM. |
-| `AutomaticUpdateChecks` | Boolean | `true` | 0.83.0 | Fixes Settings › Update › Automatically check for updates on or off. |
-| `AutomaticUpdateInstalls` | Boolean | `false` | 0.83.0 | Fixes Settings › Update › Automatically download and install updates on or off. |
+| `AllowedHarnesses` | Array of strings | All | 0.84.0 | The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. |
+| `AllowUnrestrictedAccess` | Boolean | `true` | 0.84.0 | Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. |
+| `AllowMCP` | Boolean | `true` | 0.84.0 | Whether people can sign in to and bots can use MCP tool connections at all. When false, every connection stops working; none is deleted. |
+| `MCPAllowList` | Array of strings | Not set | 0.84.0 | The only connections from Noodle's catalogue people can use, by catalogue ID. Missing: all of them. Does not apply to custom connections. |
+| `MCPDenyList` | Array of strings | Not set | 0.84.0 | Connections from Noodle's catalogue people can't use, by catalogue ID. Wins over the allowed list. |
+| `AllowCustomMCP` | Boolean | `true` | 0.84.0 | Whether people can use MCP servers they add by URL, not from the catalogue. |
+| `CustomMCPAllowList` | Array of strings | Not set | 0.84.0 | The only custom MCP servers people can use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Missing: any server. |
+| `CustomMCPDenyList` | Array of strings | Not set | 0.84.0 | Custom MCP servers people can't use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Wins over the allowed list. |
+| `AllowBrowser` | Boolean | `true` | 0.84.0 | Whether people and their bots can use Noodle Browser's browsers from Noodle. |
+| `AllowComputers` | Boolean | `true` | 0.84.0 | Whether people and their bots can use Noodle Computer's computers from Noodle. |
+| `AllowHubHosting` | Boolean | `true` | 0.84.0 | Whether people can turn on Let My Devices Reach This Mac in Settings › Hub, which serves their own devices from this Mac as a Hub does. When false, a Hub already on stops; the setting comes back when allowed again. |
+| `AllowHubConnections` | Boolean | `true` | 0.84.0 | Whether people can join and use Noodle Hubs from this Mac. When false, joined Hubs are disconnected; none is left. |
+| `HubAllowList` | Array of strings | Not set | 0.84.0 | The only Hub addresses Noodle connects to. Each entry is a host name or IP address, or a domain with its subdomains, such as *.example.com. Missing: any address. |
+| `HubDenyList` | Array of strings | Not set | 0.84.0 | Hub addresses Noodle never connects to, in the same form. Wins over the allowed list. |
+| `AllowUpdates` | Boolean | `true` | 0.84.0 | Whether Noodle checks for and installs its own updates. Set false to leave updates to your MDM. |
+| `AutomaticUpdateChecks` | Boolean | `true` | 0.84.0 | Fixes Settings › Update › Automatically check for updates on or off. |
+| `AutomaticUpdateInstalls` | Boolean | `false` | 0.84.0 | Fixes Settings › Update › Automatically download and install updates on or off. |
 
 Values for `AllowedHarnesses`:
 

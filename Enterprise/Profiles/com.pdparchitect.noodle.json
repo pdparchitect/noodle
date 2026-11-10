@@ -3,21 +3,21 @@
   "properties" : {
     "AllowBrowser" : {
       "default" : true,
-      "description" : "Whether people and their bots can use Noodle Browser's browsers from Noodle. Since Noodle 0.83.0.",
+      "description" : "Whether people and their bots can use Noodle Browser's browsers from Noodle. Since Noodle 0.84.0.",
       "property_order" : 45,
       "title" : "Allow Noodle Browser",
       "type" : "boolean"
     },
     "AllowComputers" : {
       "default" : true,
-      "description" : "Whether people and their bots can use Noodle Computer's computers from Noodle. Since Noodle 0.83.0.",
+      "description" : "Whether people and their bots can use Noodle Computer's computers from Noodle. Since Noodle 0.84.0.",
       "property_order" : 50,
       "title" : "Allow Noodle Computer",
       "type" : "boolean"
     },
     "AllowCustomMCP" : {
       "default" : true,
-      "description" : "Whether people can use MCP servers they add by URL, not from the catalogue. Since Noodle 0.83.0.",
+      "description" : "Whether people can use MCP servers they add by URL, not from the catalogue. Since Noodle 0.84.0.",
       "property_order" : 30,
       "title" : "Allow custom tool connections",
       "type" : "boolean"
@@ -33,7 +33,7 @@
         "antigravity",
         "apple"
       ],
-      "description" : "The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. Since Noodle 0.83.0.",
+      "description" : "The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. Since Noodle 0.84.0.",
       "items" : {
         "enum" : [
           "codex",
@@ -65,55 +65,55 @@
     },
     "AllowHubConnections" : {
       "default" : true,
-      "description" : "Whether people can join and use Noodle Hubs from this Mac. When false, joined Hubs are disconnected; none is left. Since Noodle 0.83.0.",
+      "description" : "Whether people can join and use Noodle Hubs from this Mac. When false, joined Hubs are disconnected; none is left. Since Noodle 0.84.0.",
       "property_order" : 60,
       "title" : "Allow joining Noodle Hubs",
       "type" : "boolean"
     },
     "AllowHubHosting" : {
       "default" : true,
-      "description" : "Whether people can turn on Let My Devices Reach This Mac in Settings › Hub, which serves their own devices from this Mac as a Hub does. When false, a Hub already on stops; the setting comes back when allowed again. Since Noodle 0.83.0.",
+      "description" : "Whether people can turn on Let My Devices Reach This Mac in Settings › Hub, which serves their own devices from this Mac as a Hub does. When false, a Hub already on stops; the setting comes back when allowed again. Since Noodle 0.84.0.",
       "property_order" : 55,
       "title" : "Allow Let My Devices Reach This Mac",
       "type" : "boolean"
     },
     "AllowMCP" : {
       "default" : true,
-      "description" : "Whether people can sign in to and bots can use MCP tool connections at all. When false, every connection stops working; none is deleted. Since Noodle 0.83.0.",
+      "description" : "Whether people can sign in to and bots can use MCP tool connections at all. When false, every connection stops working; none is deleted. Since Noodle 0.84.0.",
       "property_order" : 15,
       "title" : "Allow tool connections (MCP)",
       "type" : "boolean"
     },
     "AllowUnrestrictedAccess" : {
       "default" : true,
-      "description" : "Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. Since Noodle 0.83.0.",
+      "description" : "Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. Since Noodle 0.84.0.",
       "property_order" : 10,
       "title" : "Allow unrestricted access",
       "type" : "boolean"
     },
     "AllowUpdates" : {
       "default" : true,
-      "description" : "Whether Noodle checks for and installs its own updates. Set false to leave updates to your MDM. Since Noodle 0.83.0.",
+      "description" : "Whether Noodle checks for and installs its own updates. Set false to leave updates to your MDM. Since Noodle 0.84.0.",
       "property_order" : 75,
       "title" : "Allow Noodle updates",
       "type" : "boolean"
     },
     "AutomaticUpdateChecks" : {
       "default" : true,
-      "description" : "Fixes Settings › Update › Automatically check for updates on or off. Since Noodle 0.83.0.",
+      "description" : "Fixes Settings › Update › Automatically check for updates on or off. Since Noodle 0.84.0.",
       "property_order" : 80,
       "title" : "Check for updates automatically",
       "type" : "boolean"
     },
     "AutomaticUpdateInstalls" : {
       "default" : false,
-      "description" : "Fixes Settings › Update › Automatically download and install updates on or off. Since Noodle 0.83.0.",
+      "description" : "Fixes Settings › Update › Automatically download and install updates on or off. Since Noodle 0.84.0.",
       "property_order" : 85,
       "title" : "Download and install updates automatically",
       "type" : "boolean"
     },
     "CustomMCPAllowList" : {
-      "description" : "The only custom MCP servers people can use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Missing: any server. Since Noodle 0.83.0.",
+      "description" : "The only custom MCP servers people can use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Missing: any server. Since Noodle 0.84.0.",
       "items" : {
         "type" : "string"
       },
@@ -122,7 +122,7 @@
       "type" : "array"
     },
     "CustomMCPDenyList" : {
-      "description" : "Custom MCP servers people can't use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Wins over the allowed list. Since Noodle 0.83.0.",
+      "description" : "Custom MCP servers people can't use. Each entry is a host name, such as mcp.example.com, a domain with its subdomains, such as *.example.com, or a URL prefix starting with https://. Wins over the allowed list. Since Noodle 0.84.0.",
       "items" : {
         "type" : "string"
       },
@@ -131,7 +131,7 @@
       "type" : "array"
     },
     "HubAllowList" : {
-      "description" : "The only Hub addresses Noodle connects to. Each entry is a host name or IP address, or a domain with its subdomains, such as *.example.com. Missing: any address. Since Noodle 0.83.0.",
+      "description" : "The only Hub addresses Noodle connects to. Each entry is a host name or IP address, or a domain with its subdomains, such as *.example.com. Missing: any address. Since Noodle 0.84.0.",
       "items" : {
         "type" : "string"
       },
@@ -140,7 +140,7 @@
       "type" : "array"
     },
     "HubDenyList" : {
-      "description" : "Hub addresses Noodle never connects to, in the same form. Wins over the allowed list. Since Noodle 0.83.0.",
+      "description" : "Hub addresses Noodle never connects to, in the same form. Wins over the allowed list. Since Noodle 0.84.0.",
       "items" : {
         "type" : "string"
       },
@@ -149,7 +149,7 @@
       "type" : "array"
     },
     "MCPAllowList" : {
-      "description" : "The only connections from Noodle's catalogue people can use, by catalogue ID. Missing: all of them. Does not apply to custom connections. Since Noodle 0.83.0.",
+      "description" : "The only connections from Noodle's catalogue people can use, by catalogue ID. Missing: all of them. Does not apply to custom connections. Since Noodle 0.84.0.",
       "items" : {
         "enum" : [
           "agentmail",
@@ -360,7 +360,7 @@
       "type" : "array"
     },
     "MCPDenyList" : {
-      "description" : "Connections from Noodle's catalogue people can't use, by catalogue ID. Wins over the allowed list. Since Noodle 0.83.0.",
+      "description" : "Connections from Noodle's catalogue people can't use, by catalogue ID. Wins over the allowed list. Since Noodle 0.84.0.",
       "items" : {
         "enum" : [
           "agentmail",
