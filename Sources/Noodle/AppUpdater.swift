@@ -31,6 +31,11 @@ final class AppUpdater: NSObject, ObservableObject {
         updater.publisher(for: \.automaticallyDownloadsUpdates).assign(to: &$automaticallyDownloads)
         updater.publisher(for: \.allowsAutomaticUpdates).assign(to: &$allowsAutomaticUpdates)
         controller.startUpdater()
+        // Straight after an update, as through each migration milestone, the next step is looked for at once.
+        if UpdateFollowUp.justUpdated(to: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
+           controller.updater.automaticallyChecksForUpdates {
+            controller.updater.checkForUpdatesInBackground()
+        }
     }
 
     func checkForUpdates() {

@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- After an update, Noodle looks for the next one as soon as it opens instead of a day later. An old version updates in steps, through each version that moves your data on, so from now on those steps follow one another and end on the latest version.
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
 - Notifications show bot messages as clean text: bold, code, link and heading markup no longer appear in banners, links show their words, and list items keep their numbers or bullets.
 

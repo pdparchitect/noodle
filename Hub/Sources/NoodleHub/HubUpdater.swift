@@ -31,6 +31,11 @@ import SwiftUI
         controller.updater.publisher(for: \.automaticallyDownloadsUpdates).assign(to: &$automaticallyDownloads)
         controller.updater.publisher(for: \.allowsAutomaticUpdates).assign(to: &$allowsAutomaticUpdates)
         controller.startUpdater()
+        // Straight after an update, as through each migration milestone, the next step is looked for at once.
+        if UpdateFollowUp.justUpdated(to: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
+           controller.updater.automaticallyChecksForUpdates {
+            controller.updater.checkForUpdatesInBackground()
+        }
     }
 
     func check() { if started { controller.checkForUpdates(nil) } }

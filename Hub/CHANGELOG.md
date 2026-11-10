@@ -8,6 +8,10 @@
 
 - Bots keep a short task list, each task linked to the conversation it came from and marked in progress, waiting or done as they work. Their owners see the open tasks in Noodle and Noodle Mobile, and can write to a bot about one of its tasks; the message is marked with the task so the bot knows which one it's about.
 
+### Fixed
+
+- After an update, the Hub looks for the next one as soon as it opens instead of a day later. An old Hub updates in steps, through each version that moves its data on, so from now on those steps follow one another and end on the latest version.
+
 ## [0.48.1] - 2026-11-08
 
 ### Changed
