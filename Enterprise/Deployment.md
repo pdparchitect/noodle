@@ -41,8 +41,10 @@ Settings › Update whether it checks and whether it downloads and installs upda
 
 - To fix automatic checking, set `AutomaticUpdateChecks`. To fix automatic downloading and
   installing, set `AutomaticUpdateInstalls`. Settings shows the switch as managed.
-- To leave updates to your MDM, set `AllowUpdates` to `false`. Noodle then never checks for,
-  downloads or installs an update, and Check for Updates is unavailable.
+- To leave updates to your MDM, set `AllowUpdates` to `false`. Noodle then turns off both
+  automatic settings and never checks for an update by itself, and Check for Updates is
+  unavailable.
+- Removing a key puts back the person's own update settings.
 - The companion apps update themselves too; they have no managed keys yet. Restrict them with
   your MDM, or deploy only the apps your people need.
 - Noodle installs and updates some harnesses itself when the person chooses Managed by Noodle in

@@ -226,11 +226,17 @@ struct TestOrganisationPolicy: OrganisationPolicy {
 
     func testSparkleMayNotCheckWhenTheOrganisationLeavesUpdatesToItsMDM() throws {
         let updater = AppUpdater()
-        XCTAssertTrue(updater.responds(to: #selector(SPUUpdaterDelegate.updater(_:mayPerform:))))
         XCTAssertTrue(updater.updatesAllowed)
         TestOrganisationPolicy.enforce { $0 == .updates }
         XCTAssertFalse(updater.updatesAllowed)
         XCTAssertFalse(updater.canCheckForUpdates)
+        // Sparkle checks by itself only while its own setting is on, so that is turned off, and back after.
+        XCTAssertEqual(updater.fixedValue(of: .automaticUpdateChecks), false)
+        XCTAssertEqual(updater.fixedValue(of: .automaticUpdateInstalls), false)
+        // Nothing may veto Sparkle; see UpdateRelaunchTests.
+        XCTAssertFalse(updater.responds(to: #selector(SPUUpdaterDelegate.updater(_:mayPerform:))))
+        Organisation.enforce(UnmanagedPolicy())
+        XCTAssertNil(updater.fixedValue(of: .automaticUpdateChecks))
     }
 
     func testFixedAutomaticUpdateSettingsWinOverThePersons() {

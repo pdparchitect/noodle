@@ -26,9 +26,14 @@ final class AppUpdater: NSObject, ObservableObject {
     /// Whether the organisation lets Noodle update itself; one that leaves updates to its MDM doesn't.
     var updatesAllowed: Bool { OrganisationStatus.shared.allows(.updates) }
     var canCheckForUpdates: Bool { sparkleCanCheck && updatesAllowed }
+    /// What the organisation fixed one of Sparkle's automatic settings to: both off while it leaves updates to its MDM,
+    /// since Sparkle checks by itself only while its own setting is on; nothing may veto Sparkle itself.
+    func fixedValue(of setting: OrganisationSetting) -> Bool? {
+        updatesAllowed ? OrganisationStatus.shared.value(of: setting) : false
+    }
     /// The organisation fixed whether Sparkle checks, or downloads and installs, by itself.
-    var checksAreManaged: Bool { OrganisationStatus.shared.value(of: .automaticUpdateChecks) != nil || !updatesAllowed }
-    var downloadsAreManaged: Bool { OrganisationStatus.shared.value(of: .automaticUpdateInstalls) != nil || !updatesAllowed }
+    var checksAreManaged: Bool { fixedValue(of: .automaticUpdateChecks) != nil }
+    var downloadsAreManaged: Bool { fixedValue(of: .automaticUpdateInstalls) != nil }
 
     /// The organisation's fixed value wins over the person's own.
     static func effective(person: Bool, fixed: Bool?) -> Bool { fixed ?? person }
@@ -49,7 +54,7 @@ final class AppUpdater: NSObject, ObservableObject {
         controller.startUpdater()
         // Straight after an update, as through each migration milestone, the next step is looked for at once.
         if UpdateFollowUp.justUpdated(to: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
-           controller.updater.automaticallyChecksForUpdates {
+           updatesAllowed, controller.updater.automaticallyChecksForUpdates {
             controller.updater.checkForUpdatesInBackground()
         }
     }
@@ -65,13 +70,13 @@ final class AppUpdater: NSObject, ObservableObject {
     private static let keptDownloadsKey = "Noodle.updates.personsAutomaticDownloads"
 
     /// Sets Sparkle's own settings to what the organisation fixed, and puts the person's back once it no longer
-    /// does. Leaving updates to the MDM changes neither: Sparkle may then not check at all.
+    /// does.
     private func applyOrganisationPolicy() {
         objectWillChange.send()
         let updater = controller.updater
-        let checks = settle(updater.automaticallyChecksForUpdates, fixed: OrganisationStatus.shared.value(of: .automaticUpdateChecks),
+        let checks = settle(updater.automaticallyChecksForUpdates, fixed: fixedValue(of: .automaticUpdateChecks),
                             key: Self.keptChecksKey)
-        let downloads = settle(updater.automaticallyDownloadsUpdates, fixed: OrganisationStatus.shared.value(of: .automaticUpdateInstalls),
+        let downloads = settle(updater.automaticallyDownloadsUpdates, fixed: fixedValue(of: .automaticUpdateInstalls),
                                key: Self.keptDownloadsKey)
         if updater.automaticallyChecksForUpdates != checks { updater.automaticallyChecksForUpdates = checks }
         if updater.automaticallyDownloadsUpdates != downloads { updater.automaticallyDownloadsUpdates = downloads }
@@ -114,14 +119,6 @@ extension AppUpdater: SPUUpdaterDelegate {
         MainActor.assumeIsolated { availableVersion = nil }
     }
 
-    /// Where every check, scheduled or chosen, asks first: none while the organisation leaves updates to its MDM.
-    nonisolated func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-        let allowed = MainActor.assumeIsolated { updatesAllowed }
-        guard allowed else {
-            throw NSError(domain: "NoodleUpdates", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Your organisation manages updates to Noodle."])
-        }
-    }
 }
 
 struct CheckForUpdatesButton: View {
@@ -153,14 +150,14 @@ struct UpdatesSettingsView: View {
             Section {
                 Toggle("Automatically check for updates", isOn: Binding(
                     get: { AppUpdater.effective(person: updater.automaticallyChecks,
-                                                fixed: updater.updatesAllowed ? OrganisationStatus.shared.value(of: .automaticUpdateChecks) : false) },
+                                                fixed: updater.fixedValue(of: .automaticUpdateChecks)) },
                     set: updater.setAutomaticChecks
                 ))
                 .disabled(updater.checksAreManaged)
                 .help(updater.checksAreManaged ? Organisation.managedText : "")
                 Toggle("Automatically download and install updates", isOn: Binding(
                     get: { AppUpdater.effective(person: updater.automaticallyDownloads,
-                                                fixed: updater.updatesAllowed ? OrganisationStatus.shared.value(of: .automaticUpdateInstalls) : false) },
+                                                fixed: updater.fixedValue(of: .automaticUpdateInstalls)) },
                     set: updater.setAutomaticDownloads
                 ))
                 .disabled(!updater.allowsAutomaticUpdates || updater.downloadsAreManaged)
