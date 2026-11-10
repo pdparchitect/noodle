@@ -23,6 +23,11 @@
     .feature .meta { margin-top: 48px; }
     .download.alt .dl { background: var(--bg); }
     .download.alt .dl:hover { background: var(--raised); }
+    @media (min-width: 901px) {
+      .policies { grid-template-columns: repeat(8, 1fr); }
+      .policies > div { grid-column: span 2; }
+      .policies > div:nth-child(5) { grid-column: 2 / span 2; }
+    }
     @media (max-width: 734px) { .policies { row-gap: 28px; } }
   </style>
 </head>
