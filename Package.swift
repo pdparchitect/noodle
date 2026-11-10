@@ -48,6 +48,7 @@ let package = Package(
         .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
         .library(name: "NoodleRuntimeSettings", targets: ["NoodleRuntimeSettings"]),
         .library(name: "NoodleHubClient", targets: ["NoodleHubClient"]),
+        .library(name: "NoodleEnterprise", targets: ["NoodleEnterprise"]),
         .library(name: "HubCore", targets: ["HubCore"]),
         .library(name: "NoodleAgentBridge", targets: ["NoodleAgentBridge"]),
         .library(name: "NoodleToolScripting", targets: ["NoodleToolScripting"]),
@@ -103,6 +104,12 @@ let package = Package(
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
         .target(name: "NoodleCore", dependencies: [.product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks),
+        /// Noodle Enterprise: managed preferences from a configuration profile. Source-available under
+        /// Enterprise/LICENSE, not Apache-2.0; the rest of Noodle reaches it only through NoodleCore's
+        /// OrganisationPolicy.
+        .target(name: "NoodleEnterprise", dependencies: ["NoodleCore"], path: "Enterprise/Sources/NoodleEnterprise"),
+        .executableTarget(name: "NoodleEnterpriseFiles", dependencies: ["NoodleEnterprise"], path: "Enterprise/Sources/NoodleEnterpriseFiles"),
+        .testTarget(name: "NoodleEnterpriseTests", dependencies: ["NoodleEnterprise", "NoodleCore"], path: "Enterprise/Tests/NoodleEnterpriseTests"),
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
@@ -137,7 +144,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

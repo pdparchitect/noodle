@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadContent</key>
+			<dict>
+				<key>com.pdparchitect.noodle</key>
+				<dict>
+					<key>Forced</key>
+					<array>
+						<dict>
+							<key>mcx_preference_settings</key>
+							<dict>
+								<key>AllowBrowser</key>
+								<true/>
+								<key>AllowComputers</key>
+								<true/>
+								<key>AllowCustomMCP</key>
+								<true/>
+								<key>AllowHubConnections</key>
+								<true/>
+								<key>AllowHubHosting</key>
+								<true/>
+								<key>AllowMCP</key>
+								<true/>
+								<key>AllowUnrestrictedAccess</key>
+								<true/>
+								<key>AllowUpdates</key>
+								<true/>
+								<key>AllowedHarnesses</key>
+								<array>
+									<string>codex</string>
+									<string>claude-code</string>
+									<string>muse</string>
+									<string>grok-build</string>
+									<string>fx</string>
+									<string>opencode</string>
+									<string>antigravity</string>
+									<string>apple</string>
+								</array>
+								<key>AutomaticUpdateChecks</key>
+								<true/>
+								<key>AutomaticUpdateInstalls</key>
+								<false/>
+								<key>CustomMCPDenyList</key>
+								<array/>
+								<key>HubDenyList</key>
+								<array/>
+								<key>MCPDenyList</key>
+								<array/>
+							</dict>
+						</dict>
+					</array>
+				</dict>
+			</dict>
+			<key>PayloadDisplayName</key>
+			<string>Noodle</string>
+			<key>PayloadIdentifier</key>
+			<string>com.pdparchitect.noodle.managed.preferences</string>
+			<key>PayloadType</key>
+			<string>com.apple.ManagedClient.preferences</string>
+			<key>PayloadUUID</key>
+			<string>6E0F5B7C-2A47-4C1B-9E39-2B6C1F0D7A11</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Sets every Noodle key to its default. Change the values your organisation needs before deploying.</string>
+	<key>PayloadDisplayName</key>
+	<string>Noodle managed settings (sample)</string>
+	<key>PayloadIdentifier</key>
+	<string>com.pdparchitect.noodle.managed</string>
+	<key>PayloadOrganization</key>
+	<string>Your organisation</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>3B1E2C4D-8F6A-4E2B-A1C7-5D9E0F2B4C63</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

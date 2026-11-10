@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import SwiftUI
 import NoodleCore
+import NoodleEnterprise
 import NoodleLaunchChecks
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -105,6 +106,8 @@ struct NoodleApp: App {
             Rehearsal.end(in: applicationSupport)
         }
         #endif
+        // Before any bot starts: an organisation's configuration profile decides what may.
+        ManagedPreferences.shared.start()
         let store = NoodleStore()
         store.startMonitoring()
         _store = State(initialValue: store)

@@ -206,6 +206,7 @@ let project = Project(
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "HubLink"),
                 .package(product: "NoodleHubClient"),
+                .package(product: "NoodleEnterprise"),
                 .package(product: "NoodletRuntime"),
                 .package(product: "NoodleWallpaper"),
                 .package(product: "NoodleBrand"),

@@ -1,0 +1,33 @@
+DRAFT – pending legal review, not final
+
+Noodle Enterprise Licence
+Copyright 2026 Petko D. Petkov (pdp)
+
+This licence covers everything in the Enterprise/ folder of the Noodle repository
+("the Enterprise Software"). Everything outside that folder is licensed under the
+Apache License 2.0 and is not affected by this licence.
+
+1. Reading, changing, building and testing. You may read, copy, modify, build and
+   test the Enterprise Software, and share your changes, for any purpose except the
+   one in section 2.
+
+2. Deploying in an organisation. Using the Enterprise Software to deploy, configure
+   or manage Noodle for the people of a company, school, government body or other
+   organisation, for example with a configuration profile delivered by a device
+   management system, requires a valid Noodle enterprise licence from the authors.
+   You can ask for one through the Noodle project at
+   https://github.com/pdparchitect/noodle.
+
+3. No licence checks. The Enterprise Software contains no licence keys and does not
+   check for a licence. That it works without one does not grant you a licence.
+
+4. Notices. Keep this licence and the copyright notice with any copy or modified
+   version of the Enterprise Software.
+
+5. Contributions. Contributions to the Enterprise/ folder are accepted only under
+   terms that let the authors license them under this licence and under enterprise
+   licences they grant.
+
+6. No warranty. The Enterprise Software is provided "as is", without warranty of any
+   kind, express or implied. In no event shall the authors be liable for any claim,
+   damages or other liability arising from it or its use.

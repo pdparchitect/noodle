@@ -3,5 +3,7 @@ Copyright 2026 Petko D. Petkov (pdp)
 
 Licensed under Apache License 2.0. See LICENSE for terms.
 
-Except for Incubator/, whose tools are each licensed under the PolyForm Noncommercial
-License 1.0.0. See the LICENSE.md and NOTICE in each tool's folder.
+Except for Enterprise/, which is licensed under the Noodle Enterprise Licence in
+Enterprise/LICENSE (see ENTERPRISE.md), and Incubator/, whose tools are each
+licensed under the PolyForm Noncommercial License 1.0.0. See the LICENSE.md and
+NOTICE in each tool's folder.

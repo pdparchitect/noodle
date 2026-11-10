@@ -1,0 +1,17 @@
+AllowBrowser
+AllowComputers
+AllowCustomMCP
+AllowHubConnections
+AllowHubHosting
+AllowMCP
+AllowUnrestrictedAccess
+AllowUpdates
+AllowedHarnesses
+AutomaticUpdateChecks
+AutomaticUpdateInstalls
+CustomMCPAllowList
+CustomMCPDenyList
+HubAllowList
+HubDenyList
+MCPAllowList
+MCPDenyList
