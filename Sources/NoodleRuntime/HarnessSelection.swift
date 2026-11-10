@@ -66,7 +66,11 @@ public final class HarnessSelection {
             .compactMap(HarnessFallbackTarget.init(identifier:)).filter { $0.provider.supportsProfiles })
     }
 
-    public func isOn(_ provider: HarnessProvider) -> Bool { choices[provider.rawValue] ?? provider.isOnByDefault }
+    /// One the organisation doesn't allow is off whatever the person chose, and their choice comes
+    /// back once it is allowed again.
+    public func isOn(_ provider: HarnessProvider) -> Bool {
+        OrganisationStatus.shared.allows(.harness(provider)) && (choices[provider.rawValue] ?? provider.isOnByDefault)
+    }
 
     public func set(_ provider: HarnessProvider, on: Bool) {
         guard isOn(provider) != on else { return }

@@ -67,8 +67,20 @@ public final class ToolAssignmentStore: @unchecked Sendable {
     public func replace(_ kind: String, with assigned: [UUID: Set<String>]) {
         lock.withLock { kinds[kind] = assigned.filter { !$0.value.isEmpty } }
     }
+    /// Leaves out what the organisation turned off, read at each call, so a bot loses it at once and gets
+    /// it back once allowed again.
     public func assignments(for agent: UUID) -> ToolAssignments {
-        lock.withLock { ToolAssignments(kinds.compactMapValues { $0[agent] }) }
+        let policy = Organisation.policy
+        return lock.withLock { ToolAssignments(kinds.filter { Self.allows($0.key, policy) }.compactMapValues { $0[agent] }) }
+    }
+
+    private static func allows(_ kind: String, _ policy: any OrganisationPolicy) -> Bool {
+        switch kind {
+        case "browser": policy.allows(.browsers)
+        case "computer": policy.allows(.computers)
+        case ConnectionToolProvider.grantKind: policy.allows(.toolConnections)
+        default: true
+        }
     }
 }
 

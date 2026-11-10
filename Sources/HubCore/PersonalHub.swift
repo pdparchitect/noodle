@@ -1,3 +1,5 @@
+import BrowserBridge
+import ComputerBridge
 import Foundation
 import HubLink
 import NoodleComputerTools
@@ -48,10 +50,26 @@ import NoodleRuntime
         // a Noodle Hub keeps them beside its own. Noodle's broker serves them to bots; this one serves nothing.
         let tools = ToolProviderRegistry(), assignments = ToolAssignmentStore()
         connections = HubConnections(root: repository.rootURL, access: access, service: service, tools: tools, assignments: assignments)
+        // The owner's devices reach Noodle Computer and Noodle Browser only while the organisation allows them.
+        let computer = computer ?? ComputerToolProvider.liveTransport(), browser = browser ?? BrowserToolProvider.liveTransport()
         computers = HubComputers(root: repository.rootURL, access: access, tools: tools, assignments: assignments,
-                                 call: computer ?? ComputerToolProvider.liveTransport())
+                                 call: { request in
+                                     guard Organisation.allows(.computers) else { throw ComputerBridgeError("Your organisation doesn't allow Noodle Computer.") }
+                                     return try await computer(request)
+                                 },
+                                 surface: { request in
+                                     guard Organisation.allows(.computers) else { throw ComputerBridgeError("Your organisation doesn't allow Noodle Computer.") }
+                                     return try await ComputerConnection.openSurface(request, socket: ComputerConnection.socketURL(), team: ComputerConnection.signingTeam())
+                                 })
         browsers = HubBrowsers(root: repository.rootURL, access: access, tools: tools, assignments: assignments,
-                               call: browser ?? BrowserToolProvider.liveTransport())
+                               call: { request in
+                                   guard Organisation.allows(.browsers) else { throw BrowserError("Your organisation doesn't allow Noodle Browser.") }
+                                   return try await browser(request)
+                               },
+                               surface: { request in
+                                   guard Organisation.allows(.browsers) else { throw BrowserError("Your organisation doesn't allow Noodle Browser.") }
+                                   return try await BrowserConnection.openSurface(request, socket: BrowserConnection.socketURL(), team: BrowserConnection.signingTeam())
+                               })
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
                        browsers: browsers, applets: applets, uploads: directory.appendingPathComponent("Uploads", isDirectory: true),
                        readMarks: directory.appendingPathComponent("read.json"), pins: nil, notifications: nil)

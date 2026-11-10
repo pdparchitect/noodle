@@ -68,6 +68,8 @@ struct MCPCredentialStore: MCPCredentialStorage {
 public enum MCPServiceError: LocalizedError, Sendable {
     case credentialStorage, signInRequired, registrationUnsupported, invalidMetadata, invalidCallback
     case network(Int), timedOut, revoked, responseTooLarge
+    /// The organisation managing this Mac doesn't allow the connection.
+    case notAllowed
     /// The service's own `error` and optional `error_description` from a callback whose state matched.
     case authorizationRefused(code: String, reason: String?)
     case keychain(Int32)
@@ -89,6 +91,7 @@ public enum MCPServiceError: LocalizedError, Sendable {
         case .timedOut: return "The MCP request timed out. A remote action may have completed; verify before retrying."
         case .revoked: return "This connection was removed or disconnected."
         case .responseTooLarge: return "The MCP response exceeded the supported size."
+        case .notAllowed: return "Your organisation doesn't allow this tool connection."
         }
     }
 }
