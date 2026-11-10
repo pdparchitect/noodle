@@ -84,4 +84,53 @@ final class ManagedFilesTests: XCTestCase {
         for key in ManagedKeys.all { XCTAssertTrue(guide.contains("| `\(key.name)` |"), key.name) }
         XCTAssertTrue(guide.contains(ManagedKeys.domain))
     }
+
+    /// What in `settings` the Jamf schema would not accept: keys it doesn't have, values of the wrong
+    /// type and list entries of the wrong type or outside its choices.
+    private func schemaViolations(_ settings: [String: Any]) throws -> [String] {
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(committed(ManagedFiles.schemaPath).utf8)) as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]])
+        var violations: [String] = []
+        for (key, value) in settings.sorted(by: { $0.key < $1.key }) {
+            guard let property = properties[key] else {
+                violations.append("\(key) is not in the schema")
+                continue
+            }
+            switch property["type"] as? String {
+            case "boolean":
+                if (value as? NSNumber).map({ CFGetTypeID($0) == CFBooleanGetTypeID() }) != true { violations.append("\(key) is not a boolean") }
+            case "array":
+                guard let entries = value as? [Any] else {
+                    violations.append("\(key) is not an array")
+                    continue
+                }
+                let items = property["items"] as? [String: Any]
+                XCTAssertEqual(items?["type"] as? String, "string", key)
+                let choices = items?["enum"] as? [String]
+                for entry in entries {
+                    guard let text = entry as? String else {
+                        violations.append("\(key) has an entry that is not a string")
+                        continue
+                    }
+                    if let choices, !choices.contains(text) { violations.append("\(key) has \(text), not one of its choices") }
+                }
+            case let type:
+                violations.append("\(key) has an unsupported type \(type ?? "none")")
+            }
+        }
+        return violations
+    }
+
+    func testTheSampleProfileMatchesTheJamfSchema() throws {
+        XCTAssertEqual(try schemaViolations(RestrictiveProfile.sampleSettings()), [])
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(committed(ManagedFiles.schemaPath).utf8)) as? [String: Any])
+        let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]])
+        XCTAssertEqual(try schemaViolations(properties.compactMapValues { $0["default"] }), [], "Every default fits its own key")
+        // The real-profile test's settings break the schema only where they mean to.
+        XCTAssertEqual(try schemaViolations(RestrictiveProfile.settings()), [
+            "\(ManagedKeys.allowedHarnesses) has \(RestrictiveProfile.unknownHarness), not one of its choices",
+            "\(ManagedKeys.customMCPAllowList) has an entry that is not a string",
+            "\(RestrictiveProfile.unknownKey) is not in the schema",
+        ])
+    }
 }
