@@ -104,6 +104,8 @@ struct Scenario: Codable {
         var status: Status?
         var unrestricted: Bool?
         var autoReplies: [String]?
+        /// The bot's tasks as the scenario starts, oldest first.
+        var tasks: [TaskEntry]?
 
         struct Avatar: Codable {
             var image: String?
@@ -147,6 +149,18 @@ struct Scenario: Codable {
             /// The same, for a wallpaper that moves.
             var video: String?
         }
+    }
+
+    /// A bot's task. `in` is a conversation key, the bot's own conversation when left out; `on` is
+    /// "user" or a bot key, for a waiting task. In the timeline, a key seen before moves that task on.
+    struct TaskEntry: Codable {
+        var key: String?
+        var title: String?
+        var `in`: String?
+        var state: AgentTask.State?
+        var on: String?
+        var note: String?
+        var at: String?
     }
 
     struct Message: Codable {
@@ -256,6 +270,7 @@ struct Scenario: Codable {
         var agent: String?
         var `in`: String?
         var status: Status?
+        var task: TaskEntry?
         var reply: Content?
         var say: Content?
         var type: Typing?
@@ -306,7 +321,7 @@ struct Scenario: Codable {
         }
 
         var actions: Int {
-            [status != nil, reply != nil, say != nil, type != nil, react != nil, stream != nil, toolCall != nil, error != nil,
+            [status != nil, task != nil, reply != nil, say != nil, type != nil, react != nil, stream != nil, toolCall != nil, error != nil,
              focus != nil, waitFor != nil, present != nil, capture != nil].filter { $0 }.count
         }
     }
@@ -354,7 +369,8 @@ extension Scenario {
     /// on-device classifier never runs.
     @MainActor static var preferenceKeys: Set<String> {
         [ChatAttachmentLayout.defaultsKey, BotNameStyle.defaultsKey, FirstBotSetup.dismissedKey,
-         ComposerNameCompletion.descriptionsDefaultsKey, FloatingConversations.keepsOneDefaultsKey, ConversationListStyle.key]
+         ComposerNameCompletion.descriptionsDefaultsKey, FloatingConversations.keepsOneDefaultsKey, ConversationListStyle.key,
+         SidebarTaskFilter.key]
     }
 
     /// Strict: a key the model does not know is an error, so a typo cannot silently change a screenshot.
@@ -505,6 +521,7 @@ extension Scenario {
             if let image = agent.avatar?.image { _ = try media(image) }
             try require(Self.tints.contains(agent.avatar?.tint ?? "none"), "\(agent.key): a tint is white or black.")
             try Self.check(agent.status, of: agent.key)
+            for task in agent.tasks ?? [] { try self.check(task, of: agent.key, name: agent.key, new: true) }
         }
 
         var messageKeys = Set<String>()
@@ -613,6 +630,12 @@ extension Scenario {
             try require((step.wait ?? 0) >= 0, "\(name) waits a negative time.")
             if let agent = step.agent { try require(agents.contains { $0.key == agent }, "\(name) names the bot \"\(agent)\", which does not exist.") }
             if let key = step.in { try require(members[key] != nil, "\(name) names the conversation \"\(key)\", which does not exist.") }
+            if let task = step.task {
+                try require(step.agent != nil && task.key != nil, "\(name): a task step names its bot and the task's key.")
+                let known = agents.first { $0.key == step.agent }?.tasks?.contains { $0.key == task.key } == true
+                    || (timeline ?? [])[..<index].contains { $0.agent == step.agent && $0.task?.key == task.key }
+                try self.check(task, of: step.agent ?? "", name: name, new: !known)
+            }
             let needsAgent = step.status != nil || step.reply != nil || step.stream != nil || step.toolCall != nil || step.waitFor == .userMessage
             try require(!needsAgent || step.agent != nil, "\(name) needs a bot.")
             try require(step.say == nil && step.type == nil || step.in != nil, "\(name) needs the conversation to speak in.")
@@ -653,6 +676,38 @@ extension Scenario {
         try JSONEncoder().encode(background).write(to: metadata, options: .atomic)
     }
 
+    private func check(_ task: TaskEntry, of agent: String, name: String, new: Bool) throws {
+        func require(_ condition: Bool, _ message: String) throws { if !condition { throw ScenarioError(message) } }
+        try require(!new || !(task.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(name): a new task has a title.")
+        if let key = task.in {
+            try require(conversations?.first { $0.key == key }?.group?.members.contains(agent) == true
+                        || conversations?.first { $0.key == key }?.direct == agent, "\(name): \(agent) is not in \(key).")
+        }
+        if let on = task.on {
+            try require(on == "user" || agents.contains { $0.key == on }, "\(name): on is \"user\" or a bot key.")
+            try require((task.state ?? .waiting) == .waiting, "\(name): only a waiting task waits on someone.")
+        }
+    }
+
+    /// Adds a task the first time its key is seen and moves it on after that, as the bot would through Messenger.
+    func apply(_ task: TaskEntry, of agentKey: String, seeded: Seeded, taskIDs: inout [String: UUID],
+               repository: WorkspaceRepository, now: Date) throws {
+        guard let agent = seeded.agents[agentKey] else { return }
+        let waitingOn = task.on.map { $0 == "user" ? MessageAuthor.user : .agent(seeded.agents[$0]!.id) }
+        let id: UUID
+        if let key = task.key, let known = taskIDs[agentKey + "/" + key] {
+            id = known
+        } else {
+            let conversation = task.in.flatMap { seeded.conversations[$0] } ?? seeded.directs[agentKey]
+            id = try repository.addTask(agentID: agent.id, title: task.title ?? "", conversationID: conversation?.id,
+                                        note: task.note, now: now).id
+            if let key = task.key { taskIDs[agentKey + "/" + key] = id }
+            guard task.state != nil || waitingOn != nil else { return }
+        }
+        _ = try repository.updateTask(agentID: agent.id, id: id, state: task.state ?? (waitingOn != nil ? .waiting : nil),
+                                      waitingOn: waitingOn, title: task.title, note: task.note, now: now)
+    }
+
     private static func check(_ status: Status?, of owner: String) throws {
         guard let status else { return }
         if status.phase == .failed, status.detail?.isEmpty != false { throw ScenarioError("\(owner): a failed status says why in detail.") }
@@ -671,6 +726,8 @@ extension Scenario {
         /// Every bot's direct conversation, by the bot's key, whether the scenario describes it or not.
         var directs: [String: BotConversation] = [:]
         var messages: [String: ChatMessage] = [:]
+        /// Task IDs by "bot key/task key".
+        var tasks: [String: UUID] = [:]
         var models: [HarnessProvider: [HarnessModel]] = [:]
         var executables: [HarnessProvider: URL] = [:]
         let discovery: HarnessDiscovery
@@ -786,6 +843,12 @@ extension Scenario {
             if let key = entry.direct { seeded.directs[key] = conversation }
         }
         try repository.saveUnreadConversationIDs(unread)
+        for agent in agents {
+            for task in agent.tasks ?? [] {
+                try apply(task, of: agent.key, seeded: seeded, taskIDs: &seeded.tasks, repository: repository,
+                          now: try task.at.map { try ScenarioSupport.date($0, clock: seeded.clock) } ?? seeded.clock)
+            }
+        }
         if let columns = present?.columns {
             defaults.set(MainWindowLayout.columns.rawValue, forKey: MainWindowLayout.key)
             defaults.set(["": columns.compactMap { seeded.conversations[$0]?.id.uuidString }], forKey: ColumnsModel.key)
@@ -889,6 +952,8 @@ extension Scenario {
 
     let scenario: Scenario
     let seeded: Scenario.Seeded
+    /// The seeded tasks and those the timeline added, by "bot key/task key".
+    private lazy var taskIDs = seeded.tasks
     let repository: WorkspaceRepository
     let runtime: AgentRuntimeCoordinator
     private(set) var store: NoodleStore!
@@ -1082,6 +1147,10 @@ extension Scenario {
         let conversation = step.in.flatMap { seeded.conversations[$0] } ?? step.agent.flatMap { seeded.directs[$0] }
         if let status = step.status, let agent {
             process(for: step.agent ?? "")?.transition(scenario.snapshot(status, for: agent))
+        }
+        if let task = step.task, let agent {
+            try scenario.apply(task, of: step.agent ?? "", seeded: seeded, taskIDs: &taskIDs, repository: repository, now: now)
+            store.reloadTasks(of: agent.id)
         }
         if let reply = step.reply, let agent, let conversation {
             let date = now

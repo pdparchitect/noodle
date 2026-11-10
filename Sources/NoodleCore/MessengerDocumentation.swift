@@ -56,7 +56,7 @@ extension AgentWakeReason {
             guidance = "An inbox-changed notification means the inbox may have changed; it never contains the user's message. Immediately check Messenger once and prioritize unread deliveries. A notification can arrive during ongoing work, or after \(ProductIdentity.current.name) interrupts a turn to deliver it. Apply corrections, pauses, and changes of direction before continuing; preserve relevant unfinished work and verify completed actions before repeating them. If the inbox is empty, continue any existing work or finish quietly if there is none. Never reply to the notification text itself. --get-latest consumes the inbox, so do not call it repeatedly for one notification. " + Self.statusReminder
         case .heartbeat:
             guidance = """
-            A `heartbeat` event is an inactivity wake-up, not a user message. First check Messenger once for unread messages and prioritize them. Then reread assignments.md. Each item there is a standing assignment: do its next round in full now, within the access and approvals it was given, even when the last rounds found nothing new. Work you were asked to do regularly or keep doing until told otherwise that is not in assignments.md yet is a standing assignment too; move it there. Also review memory.md and previously assigned work for a useful authorized follow-up. A heartbeat does not authorize new projects, broader access, destructive operations, publishing, or other external actions. If nothing needs doing, finish silently; never send a heartbeat acknowledgement or invent work to fill the interval. Send meaningful progress, results, or a required question through Messenger to the relevant conversation only when useful. \(Self.statusReminder)
+            A `heartbeat` event is an inactivity wake-up, not a user message. First check Messenger once for unread messages and prioritize them. Then reread assignments.md. Each item there is a standing assignment: do its next round in full now, within the access and approvals it was given, even when the last rounds found nothing new. Work you were asked to do regularly or keep doing until told otherwise that is not in assignments.md yet is a standing assignment too; move it there. Also review memory.md, previously assigned work and --list-tasks for a useful authorized follow-up; finish or drop tasks that no longer hold. A heartbeat does not authorize new projects, broader access, destructive operations, publishing, or other external actions. If nothing needs doing, finish silently; never send a heartbeat acknowledgement or invent work to fill the interval. Send meaningful progress, results, or a required question through Messenger to the relevant conversation only when useful. \(Self.statusReminder)
             """
         case .wake:
             guidance = """
@@ -75,7 +75,7 @@ extension AgentWakeReason {
     }
 
     /// Nothing else asks a bot to touch its status, and the person reads it as what the bot is doing now.
-    static let statusReminder = "Before you finish, if your status no longer says what you are doing or waiting on, update it with --set-status, or remove it with --clear-status when nothing is in progress or awaited."
+    static let statusReminder = "Before you finish, if your status no longer says what you are doing or waiting on, update it with --set-status, or remove it with --clear-status when nothing is in progress or awaited. Keep your tasks current too: mark each one waiting, done or dropped as it changes."
 }
 
 /// These are the actual system changes emitted by group updates, not new wire types.
@@ -156,6 +156,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
     case setStatus = "--set-status", clearStatus = "--clear-status"
     case wakeIn = "--wake-in", wakeAt = "--wake-at", wakeEvery = "--wake-every", listWakes = "--list-wakes", cancelWake = "--cancel-wake"
     case call = "--call"
+    case addTask = "--add-task", updateTask = "--update-task", listTasks = "--list-tasks"
     /// A command only as the first word; elsewhere `tool` is ordinary text.
     case tool
 
@@ -178,6 +179,9 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listWakes: return "--list-wakes"
         case .cancelWake: return "--cancel-wake <uuid>"
         case .call: return "--call --reason <text>"
+        case .addTask: return "--add-task <title> [--conversation <uuid>] [--note <text>]"
+        case .updateTask: return "--update-task <uuid> [--state open|waiting|done|dropped] [--on user|<bot-uuid>] [--title <text>] [--note <text>]"
+        case .listTasks: return "--list-tasks"
         case .send: return "--send --conversation <uuid> [--body <text> | --body-percent-encoded <utf8> | --body-base64 <utf8-base64>] [--attach <file-path-or-url> ...]"
         }
     }
@@ -201,6 +205,9 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listWakes: return "Return { due, pending }: due holds wakes that fired since you last listed them, with your notes, and is cleared by listing; pending holds wakes still scheduled, soonest first."
         case .cancelWake: return "Cancel one of your pending wakes and return it."
         case .call: return "Call your person: \(ProductIdentity.current.name) rings them where you run, showing your name and --reason, and returns the call as { id, agentID, conversationID, reason, requestedAt, expiresAt }. Call only when something needs them now and a message would not do, such as a problem you cannot solve alone or a decision you are blocked on; never for routine updates, greetings or anything that can wait. If they answer, the call starts and you speak with them as on any call; start by saying why you called. If they decline or do not answer within \(Int(AgentCallLimits.ringing)) seconds, a missed call card appears in your conversation with them and you get a wake event whose note says so; then write to them instead of calling again. Only bots whose harness takes voice calls can call. At most one call rings at a time. When they wrote to you in your conversation with them in the last \(Int(AgentCallLimits.askedWithin / 60)) minutes and after your last call, such as to ask you to call, the call counts as asked for and you can call right away; otherwise calls are at least \(Int(AgentCallLimits.cooldown / 60)) minutes apart and at most \(AgentCallLimits.perDay) can be placed in 24 hours. --reason is one line of at most \(AgentCallLimits.reasonLength) characters."
+        case .addTask: return "Add a task to your task list and return it as { id, title, state, conversationID?, note?, createdAt, updatedAt }. Your user sees your open tasks, so add one for each piece of work you take on that will not be finished in this turn, such as \"Find a venue for the offsite\", in the conversation it came from; leave out --conversation only for work of your own, such as a standing assignment. Keep the title to one line of at most \(AgentTaskLimits.titleLength) characters saying the outcome; do not add tasks for steps of a task. New tasks are open. At most \(AgentTaskLimits.open) can be open or waiting at once."
+        case .updateTask: return "Move one of your own tasks on as you work and return it. --state waiting with --on says who you wait on: user for your owner, or the UUID of a bot in the task's conversation; leave out --on when you wait on something outside \(ProductIdentity.current.name), and say what in --note. Mark a task done when it is finished and dropped when it no longer needs doing; finished tasks are cleared after \(Int(AgentTaskLimits.finishedKept / 86_400)) days. Marking a task waiting does not tell anyone: ask in its conversation as well. Only you can change your tasks; others answer in the conversation, and a message about a task carries it in message.task. --note replaces the note, an empty one removes it; --title renames the task."
+        case .listTasks: return "Return { mine, waitingOnMe }: mine holds your tasks, oldest first; waitingOnMe holds other bots' tasks waiting on you, each with ownerID, ownerName and task. You cannot change those; answer in their conversation."
         case .send: return "Send text, files, links, or a mixture and return the saved ChatMessage with a `next` field saying what to do next; follow it before finishing. --attach is repeatable: plain paths and file:/// URLs attach local files; relative paths resolve from the working directory (normally the bot workspace). noodlet://UUID (production) and noodlet-dev://UUID (development) URLs create live Applet link attachments; share one with the applet tool's present command, which sets its preview and attaches it; a noodlet with no preview yet is refused here and nothing is sent. \(ProductIdentity.current.name) opens the live registered creation in Noodle Applet when clicked, without copying it into the conversation. These links work on this Mac and become unavailable if the package is deleted. Public http:// and https:// URLs create link attachments with the native attachment preview; private/local web hosts, embedded credentials and other schemes are rejected. Files are copied into the conversation. Links store a small .webloc bookmark, not downloaded page content; macOS Quick Look supplies the preview, with a file-icon fallback when no thumbnail is available. With no body, an attachment summary is supplied. Use one body encoding; do not edit conversation JSON directly."
         }
     }
@@ -247,6 +254,7 @@ public enum MessengerDocumentation {
         ("attachmentIDs", "Optional UUIDs linked to conversation-owned files or link bookmarks."),
         ("reactions", "Optional stored reactions with id, author, emoji and createdAt."),
         ("reactionChanges", "Optional stored change log with id, conversationID, messageID, sequence, author, emoji, removed and createdAt."),
+        ("task", "Optional task the user wrote this message about: id, agentID (the bot that owns it) and title. If you own it, read the message as feedback on that task and move it on with --update-task; otherwise it is context."),
         ("call", "Optional record of a voice call the user had with a bot: agentID, endedAt (absent while the call is on, or if \(ProductIdentity.current.name) quit during it) and lines, each with speaker (person or bot), text and an optional at timestamp of when it was said; messages sent during the call fall between lines by time. A call the bot placed with --call that nobody answered has no lines, unanswered (missed or declined) and reason, why the bot called. Call records are never unread deliveries, because the bot was on the call; they appear in --list-messages as the conversation's history.")
     ]
 

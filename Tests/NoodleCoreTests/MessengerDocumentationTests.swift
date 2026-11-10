@@ -101,6 +101,7 @@ final class MessengerDocumentationTests: XCTestCase {
         message.reactionChanges = [MessageReactionChange(id: UUID(), conversationID: conversation.id,
             messageID: message.id, sequence: 1, author: .agent(botID), emoji: "✅", removed: false, createdAt: Date())]
         message.call = VoiceCallRecord(agentID: botID, endedAt: Date(), lines: [.init(.person, "Hello")])
+        message.task = TaskReference(id: UUID(), agentID: botID, title: "Find a venue")
         var delivery = MessengerDelivery(me: me, conversation: conversation, participants: [me],
             sender: .init(handle: .user, displayName: "User"), message: message, attachments: [])
         delivery.reactions = [.init(emoji: "✅", sender: me)]
@@ -210,7 +211,7 @@ final class MessengerDocumentationTests: XCTestCase {
         try repository.append(message)
         let prefix = ["messenger", "--agent-directory", repository.directory(for: bot.agent).path]
         let conversation = ["--conversation", bot.conversation.id.uuidString]
-        var wakeID = ""
+        var wakeID = "", taskID = ""
         for command in MessengerCommandKind.allCases {
             let options: [String]
             switch command {
@@ -227,11 +228,17 @@ final class MessengerDocumentationTests: XCTestCase {
             case .wakeEvery: options = ["0 9 * * *", "--note", "Daily"]
             case .cancelWake: options = [wakeID]
             case .call: options = ["--reason", "Checking in"]
+            case .addTask: options = ["Write the notes"] + conversation
+            case .updateTask: options = [taskID, "--state", "waiting", "--on", "user"]
+            case .listTasks: options = []
             }
             let result = MessengerCLI.runDirect(arguments: prefix + [command.rawValue] + options, environment: [:])
             XCTAssertEqual(result.exitCode, 0, "\(command): \(result.standardError)")
             if command == .wakeIn {
                 wakeID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
+            }
+            if command == .addTask {
+                taskID = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(result.standardOutput.utf8)) as? [String: Any])?["id"] as? String)
             }
             if command == .help {
                 XCTAssertEqual(result.standardOutput, MessengerDocumentation.cliHelp + "\n")

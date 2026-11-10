@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "title": "Answering a bot from its task",
+  "clock": "10:00",
+  "settings": { "Noodle.firstBotSetup.dismissed": true, "sidebarTasks": "waitingOnMe" },
+  "harnesses": { "claude-code": { "models": "builtin" } },
+  "agents": [
+    { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "opus",
+      "description": "Personal assistant", "avatar": { "image": "face:masculine-02" },
+      "tasks": [
+        { "key": "venue", "title": "Find an offsite venue for 20 people", "at": "09:40",
+          "state": "waiting", "on": "user", "note": "Three options sent; pick one" } ] },
+    { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
+      "description": "Research", "avatar": { "image": "face:feminine-07" } }
+  ],
+  "conversations": [
+    { "key": "alfred", "direct": "alfred", "messages": [
+      { "at": "09:30", "from": "user", "text": "Find a venue for the team offsite, about 20 people, early December." },
+      { "at": "09:40", "from": "alfred", "text": "Three options:\n\n1. **The Old Mill**, £1,800\n2. **Harbour House**, £1,950\n3. **Elm Lodge**, £2,400\n\nWhich one should I book?" } ] },
+    { "key": "sol", "direct": "sol", "messages": [
+      { "at": "09:00", "from": "sol", "text": "Morning." } ] }
+  ],
+  "present": { "window": { "size": [1240, 820] }, "select": "sol" },
+  "timeline": [
+    { "waitFor": "userMessage", "agent": "alfred" },
+    { "wait": 1.0, "agent": "alfred", "task": { "key": "venue", "state": "open", "note": "Booking Harbour House" } },
+    { "wait": 2.0, "agent": "alfred", "reply": { "text": "Booked **Harbour House** for 4 December. Confirmation is in your inbox." } },
+    { "wait": 0.5, "agent": "alfred", "task": { "key": "venue", "state": "done", "note": "" } }
+  ]
+}

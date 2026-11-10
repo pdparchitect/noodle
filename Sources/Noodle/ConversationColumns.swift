@@ -573,11 +573,12 @@ struct MainWindowLayoutCommands: View {
     }
 }
 
-/// View › Sidebar: how the sidebar shows bots and groups, the line under each name, and their order.
+/// View › Sidebar: how the sidebar shows bots and groups, the line under each name, their order, and which tasks it lists.
 struct SidebarCommands: View {
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
+    @AppStorage(SidebarTaskFilter.key) private var tasks = SidebarTaskFilter.standard
 
     var body: some View {
         Menu("Sidebar") {
@@ -595,6 +596,12 @@ struct SidebarCommands: View {
             Divider()
             Picker("Order", selection: $order) {
                 ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            Divider()
+            Picker("Tasks", selection: $tasks) {
+                ForEach(SidebarTaskFilter.allCases) { Text($0.menuName).tag($0) }
             }
             .pickerStyle(.inline)
             .labelsHidden()

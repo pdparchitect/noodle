@@ -1671,6 +1671,7 @@ public struct WorkspaceRepository: Sendable {
         conversationID: UUID,
         body: String,
         attachmentIDs: [UUID] = [],
+        task: TaskReference? = nil,
         id: UUID = UUID(),
         now: Date = Date()
     ) throws -> ChatMessage {
@@ -1679,7 +1680,7 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.missingConversation(conversationID)
         }
         try requireActive(conversation)
-        let message = ChatMessage(
+        var message = ChatMessage(
             id: id,
             conversationID: conversationID,
             author: .user,
@@ -1688,6 +1689,7 @@ public struct WorkspaceRepository: Sendable {
             delivery: .queued,
             attachmentIDs: attachmentIDs
         )
+        message.task = task
         try append(message)
         conversation.updatedAt = now
         try updateConversation(conversation)

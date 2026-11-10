@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "title": "Tasks across bots",
+  "clock": "10:00",
+  "settings": { "Noodle.firstBotSetup.dismissed": true, "sidebarTasks": "allOpen" },
+  "harnesses": { "claude-code": { "models": "builtin" } },
+  "agents": [
+    { "key": "alfred", "name": "Alfred", "harness": "claude-code", "model": "opus",
+      "description": "Personal assistant", "avatar": { "image": "face:masculine-02" },
+      "tasks": [
+        { "key": "venue", "title": "Find an offsite venue for 20 people", "at": "-1d 16:00",
+          "state": "waiting", "on": "user", "note": "Three options sent; pick one" },
+        { "key": "dentist", "title": "Book the dentist", "at": "09:10", "state": "done" }
+      ] },
+    { "key": "christmas", "name": "Christmas", "harness": "claude-code", "model": "sonnet",
+      "description": "Plans the holidays", "avatar": { "image": "face:feminine-04" },
+      "tasks": [ { "key": "gifts", "title": "Draft the family gift list", "at": "-1d 11:00" } ] },
+    { "key": "oscar", "name": "Oscar", "harness": "claude-code", "model": "sonnet",
+      "description": "Keeps the books", "avatar": { "image": "face:any-02" },
+      "tasks": [
+        { "key": "tax", "title": "Summarise Q3 expenses for the accountant", "at": "08:30" },
+        { "key": "invoices", "title": "Chase two unpaid invoices", "at": "-2d 10:00",
+          "state": "waiting", "note": "Waiting on replies from the clients" }
+      ] },
+    { "key": "sol", "name": "Sol", "harness": "claude-code", "model": "sonnet",
+      "description": "Research", "avatar": { "image": "face:feminine-07" } }
+  ],
+  "conversations": [
+    { "key": "alfred", "direct": "alfred", "messages": [
+      { "at": "-1d 15:40", "from": "user", "text": "Find a venue for the team offsite, about 20 people, early December." },
+      { "at": "-1d 16:00", "from": "alfred", "text": "Three options:\n\n1. **The Old Mill**, £1,800\n2. **Harbour House**, £1,950\n3. **Elm Lodge**, £2,400\n\nWhich one should I book?" } ] },
+    { "key": "christmas", "direct": "christmas", "messages": [
+      { "at": "-1d 10:50", "from": "user", "text": "Can you start a gift list for the family?" } ] },
+    { "key": "oscar", "direct": "oscar", "messages": [
+      { "at": "08:25", "from": "user", "text": "The accountant needs Q3 expenses by Friday." } ] },
+    { "key": "sol", "direct": "sol", "messages": [
+      { "at": "09:00", "from": "sol", "text": "Morning. Nothing on my plate." } ] }
+  ],
+  "present": { "window": { "size": [1240, 820] }, "select": "sol" },
+  "timeline": [
+    { "wait": 3.0, "agent": "christmas", "task": { "key": "gifts", "state": "waiting", "on": "user", "note": "Budget per person?" } },
+    { "wait": 3.0, "agent": "oscar", "task": { "key": "tax", "state": "done" } },
+    { "wait": 3.0, "agent": "sol", "task": { "key": "flights", "title": "Compare flights to Lisbon in March" } },
+    { "wait": 3.0, "agent": "oscar", "task": { "key": "invoices", "state": "open", "note": "One client paid; chasing the other" } }
+  ]
+}

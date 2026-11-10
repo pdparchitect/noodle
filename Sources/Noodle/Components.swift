@@ -451,6 +451,13 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: Self.contentSpacing) {
+                // Written from a task in the sidebar.
+                if let task = message.task {
+                    Label(task.title, systemImage: "checklist")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if showsTextBubble(attachments: attachments) {
                     // Tables and the long message layout split the text into separate bubbles;
                     // reactions mark the first.

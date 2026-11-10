@@ -60,6 +60,8 @@ public final class MessengerBroker: @unchecked Sendable {
     public var onAgentChanged: (@Sendable (UUID) -> Void)?
     /// Called on the broker's queue when a bot scheduled or cancelled one of its wakes.
     public var onWakesChanged: (@Sendable (UUID) -> Void)?
+    /// Called on the broker's queue when a bot added or changed one of its tasks.
+    public var onTasksChanged: (@Sendable (UUID) -> Void)?
     /// Called on the broker's queue when a bot placed a call, which then waits in its package for
     /// the app to ring it. Without one, nothing here can ring, so bots are told calls are unavailable.
     public var onCallRequested: (@Sendable (UUID) -> Void)?
@@ -150,6 +152,7 @@ public final class MessengerBroker: @unchecked Sendable {
         switch request.action {
         case .scheduleWake, .scheduleRecurringWake, .cancelWake: if response.exitCode == 0 { onWakesChanged?(agent.id) }
         case .requestCall: if response.exitCode == 0 { onCallRequested?(agent.id) }
+        case .addTask, .updateTask: if response.exitCode == 0 { onTasksChanged?(agent.id) }
         default: break
         }
         return response

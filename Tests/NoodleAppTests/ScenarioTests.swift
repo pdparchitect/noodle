@@ -299,6 +299,44 @@ import XCTest
         XCTAssertNil(session.runtime.snapshot(for: rex.id).failure)
     }
 
+    func testTasksListWaitingOnMeFirstAndTimelineStepsMoveThem() async throws {
+        let timeline = """
+        [ { "agent": "ada", "task": { "key": "fix", "state": "waiting", "on": "user", "note": "Which branch?" } },
+          { "agent": "rex", "task": { "key": "triage", "title": "Triage new reports" } } ]
+        """
+        let tasks = """
+        , "tasks": [ { "key": "fix", "title": "Fix the tokenizer", "at": "09:30" },
+                     { "key": "old", "title": "Review the parser", "at": "-1d 17:10", "state": "done" } ]
+        """
+        let session = try session(try Scenario.load(from: try fixture(timeline: timeline, botExtra: tasks)))
+        let store = try XCTUnwrap(session.store)
+        XCTAssertEqual(store.openTasks(waitingOnMeOnly: false).map(\.task.title), ["Fix the tokenizer"])
+        XCTAssertTrue(store.openTasks(waitingOnMeOnly: true).isEmpty)
+
+        try await session.play()
+        XCTAssertEqual(store.openTasks(waitingOnMeOnly: false).map(\.task.title), ["Fix the tokenizer", "Triage new reports"],
+                       "Waiting on the person comes first.")
+        let waiting = try XCTUnwrap(store.openTasks(waitingOnMeOnly: true).first)
+        XCTAssertEqual(waiting.task.note, "Which branch?")
+        XCTAssertEqual(waiting.task.conversationID, session.seeded.directs["ada"]?.id)
+    }
+
+    func testFeedbackOnATaskGoesToItsConversationWithTheTask() async throws {
+        let tasks = """
+        , "tasks": [ { "key": "fix", "title": "Fix the tokenizer", "at": "09:30", "state": "waiting", "on": "user" } ]
+        """
+        let session = try session(try Scenario.load(from: try fixture(botExtra: tasks)))
+        let store = try XCTUnwrap(session.store)
+        let entry = try XCTUnwrap(store.openTasks(waitingOnMeOnly: true).first)
+        try store.sendFeedback("Use main", on: entry.task, of: entry.agent.id)
+
+        let direct = try XCTUnwrap(session.seeded.directs["ada"])
+        let sent = try XCTUnwrap(store.repository.loadMessages(conversationID: direct.id).last)
+        XCTAssertEqual(sent.body, "Use main")
+        XCTAssertEqual(sent.task, TaskReference(entry.task, agentID: entry.agent.id))
+        XCTAssertEqual(store.openTasks(waitingOnMeOnly: true).first?.task.state, .waiting, "Only the bot moves its task.")
+    }
+
     func testAMessageToAStoppedBotStaysSent() async throws {
         let timeline = "[ { \"in\": \"rex\", \"say\": { \"text\": \"Are you there?\" } }, { \"in\": \"ada\", \"say\": { \"text\": \"Morning.\" } } ]"
         let session = try session(try Scenario.load(from: try fixture(timeline: timeline)))

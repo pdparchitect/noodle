@@ -181,6 +181,16 @@ public enum MessengerCLI {
             case .requestCall(let reason):
                 return .json(try repository.requestCall(agentID: agentID, reason: reason))
 
+            case .addTask(let title, let conversationID, let note):
+                return .json(try repository.addTask(agentID: agentID, title: title, conversationID: conversationID, note: note))
+
+            case .updateTask(let id, let state, let waitingOn, let title, let note):
+                return .json(try repository.updateTask(agentID: agentID, id: id, state: state, waitingOn: waitingOn,
+                                                       title: title, note: note))
+
+            case .listTasks:
+                return .json(try repository.listTasks(agentID: agentID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -337,6 +347,34 @@ public enum MessengerCLI {
             case .call:
                 guard let reason = Self.option("--reason", in: values) else { throw MessengerCLIError.invalidArguments }
                 action = .requestCall(reason: reason)
+            case .addTask:
+                guard let title = Self.option("--add-task", in: values) else { throw MessengerCLIError.invalidArguments }
+                var conversationID: UUID?
+                if let raw = Self.option("--conversation", in: values) {
+                    guard let id = UUID(uuidString: raw) else { throw MessengerCLIError.invalidArguments }
+                    conversationID = id
+                }
+                action = .addTask(title: title, conversationID: conversationID, note: Self.option("--note", in: values))
+            case .updateTask:
+                guard let raw = Self.option("--update-task", in: values), let id = UUID(uuidString: raw) else {
+                    throw MessengerCLIError.invalidArguments
+                }
+                var state: AgentTask.State?
+                if let rawState = Self.option("--state", in: values) {
+                    guard let value = AgentTask.State(rawValue: rawState) else { throw MessengerCLIError.invalidArguments }
+                    state = value
+                }
+                var waitingOn: MessageAuthor?
+                if let rawOn = Self.option("--on", in: values) {
+                    if rawOn == "user" { waitingOn = .user }
+                    else if let bot = UUID(uuidString: rawOn) { waitingOn = .agent(bot) }
+                    else { throw MessengerCLIError.invalidArguments }
+                }
+                let title = Self.option("--title", in: values), note = Self.option("--note", in: values)
+                guard state != nil || waitingOn != nil || title != nil || note != nil else { throw MessengerCLIError.invalidArguments }
+                action = .updateTask(id: id, state: state, waitingOn: waitingOn, title: title, note: note)
+            case .listTasks:
+                action = .listTasks
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -548,6 +586,10 @@ public enum MessengerAction: Codable, Sendable {
         case cancelWake(UUID)
         /// Rings the bot's person; see `AgentCallLimits`.
         case requestCall(reason: String)
+        case addTask(title: String, conversationID: UUID?, note: String?)
+        /// Nil fields stay as they are; see `WorkspaceRepository.updateTask`.
+        case updateTask(id: UUID, state: AgentTask.State?, waitingOn: MessageAuthor?, title: String?, note: String?)
+        case listTasks
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

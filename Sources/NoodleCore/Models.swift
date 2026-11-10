@@ -168,6 +168,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var reactions: [MessageReaction]?
     public var reactionChanges: [MessageReactionChange]?
     public var call: VoiceCallRecord?
+    /// The task a person's message is about, when they wrote from the task.
+    public var task: TaskReference?
 
     public init(
         id: UUID = UUID(),

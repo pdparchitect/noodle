@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "title": "Bots waiting on each other in a group",
+  "clock": "14:00",
+  "settings": { "Noodle.firstBotSetup.dismissed": true, "sidebarTasks": "allOpen" },
+  "harnesses": { "claude-code": { "models": "builtin" } },
+  "agents": [
+    { "key": "ada", "name": "Ada", "harness": "claude-code", "model": "opus",
+      "description": "Writes the copy", "avatar": { "image": "face:feminine-04" } },
+    { "key": "ben", "name": "Ben", "harness": "claude-code", "model": "sonnet",
+      "description": "Builds the landing page", "avatar": { "image": "face:masculine-05" } }
+  ],
+  "conversations": [
+    { "key": "launch", "group": { "name": "Launch", "description": "Ada and Ben", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "13:30", "from": "user", "text": "Ada, write the launch copy. Ben, build the landing page with it." },
+        { "at": "13:35", "from": "ben", "text": "Layout is ready. Ada, I need the headline and three bullets before I can finish." } ] }
+  ],
+  "present": { "window": { "size": [1240, 820] }, "select": "launch" },
+  "timeline": [
+    { "wait": 1.0, "agent": "ada", "task": { "key": "copy", "title": "Write the launch copy", "in": "launch" } },
+    { "wait": 1.0, "agent": "ben", "task": { "key": "page", "title": "Build the landing page", "in": "launch",
+        "state": "waiting", "on": "ada", "note": "Headline and three bullets" } },
+    { "wait": 3.0, "agent": "ada", "in": "launch", "reply": { "text": "**Ship faster, worry less.**\n\n- One click deploys\n- Rollback in seconds\n- Logs that make sense" } },
+    { "wait": 0.5, "agent": "ada", "task": { "key": "copy", "state": "done" } },
+    { "wait": 1.5, "agent": "ben", "task": { "key": "page", "state": "open", "note": "Copy in; finishing the page" } },
+    { "wait": 3.0, "agent": "ben", "task": { "key": "page", "state": "waiting", "on": "user", "note": "Preview ready; approve to publish" } },
+    { "wait": 0.5, "agent": "ben", "in": "launch", "reply": { "text": "The page is ready for review. Shall I publish it?" } }
+  ]
+}

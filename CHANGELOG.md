@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- See what your bots are working on. Bots keep a short task list, each task linked to the conversation it came from and marked in progress, waiting or done as they work. Choose View › Sidebar › Show Tasks Waiting on Me or Show All Open Tasks to list them at the top of the sidebar, with the ones waiting on you first. Click a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Finished tasks are cleared after a week. Tasks are hidden until you choose to show them.
+
 ### Fixed
 
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.

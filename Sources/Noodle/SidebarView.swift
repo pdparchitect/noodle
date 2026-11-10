@@ -62,6 +62,7 @@ private struct SidebarList: View {
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
+    @AppStorage(SidebarTaskFilter.key) private var taskFilter = SidebarTaskFilter.standard
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
     let searchIsFocused: Bool
@@ -87,6 +88,7 @@ private struct SidebarList: View {
                 // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        SidebarTasks(filter: taskFilter, inList: false)
                         grid("Pinned", sections.pinned)
                         grid("Unread", sections.unread)
                         grid("Bots", sections.bots)
@@ -97,6 +99,7 @@ private struct SidebarList: View {
                 }
             } else {
                 List(selection: Binding(get: { store.selectedConversationID }, set: select)) {
+                    SidebarTasks(filter: taskFilter, inList: true)
                     section("Pinned", sections.pinned) { $0 }
                     section("Unread", sections.unread) { $0 }
                     section("Bots", sections.bots) { $0 }

@@ -49,6 +49,8 @@ final class NoodleStore {
     }
 
     private(set) var agents: [AgentRecord] = []
+    /// Each bot's tasks here, as it keeps them through Messenger.
+    private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
     private(set) var conversations: [BotConversation] = [] {
         didSet {
             let old = conversationsByID
@@ -394,6 +396,7 @@ final class NoodleStore {
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
+        messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
         messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         // A call from a bot here was answered, declined or missed on the owner's phone.
@@ -945,6 +948,7 @@ final class NoodleStore {
                 applets.start(agents: agents)
             }
             conversations = try repository.loadConversations().filter(\.isShownHere)
+            tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
             })
@@ -1266,6 +1270,46 @@ final class NoodleStore {
         hubs.leave(pairing)
         refreshHubMirrors()
         reload()
+    }
+
+    /// A bot added or moved one of its tasks through Messenger.
+    func reloadTasks(of id: UUID) {
+        tasksByAgent[id] = (try? repository.currentTasks(agentID: id)) ?? []
+    }
+
+    /// Open tasks of bots that are not archived, in the shown space: those waiting on the person first,
+    /// then the ones in progress, then those waiting on someone else, the most recently changed first
+    /// within each. A task is in the space when its conversation is.
+    func openTasks(waitingOnMeOnly: Bool) -> [(agent: AgentRecord, task: AgentTask)] {
+        func rank(_ task: AgentTask) -> Int { task.waitingOn == .user ? 0 : task.state == .open ? 1 : 2 }
+        return agents.filter { $0.archivedAt == nil }.flatMap { agent in
+            (tasksByAgent[agent.id] ?? []).filter { waitingOnMeOnly ? $0.state == .waiting && $0.waitingOn == .user : !$0.state.isFinished }
+                .filter { task in conversationID(for: task, of: agent.id).map(spaceHolds) ?? false }
+                .map { (agent: agent, task: $0) }
+        }.sorted { (rank($0.task), $1.task.updatedAt) < (rank($1.task), $0.task.updatedAt) }
+    }
+
+    /// Where a task's conversation is: its own, or else the person's direct one with its bot.
+    func conversationID(for task: AgentTask, of agentID: UUID) -> UUID? {
+        if let id = task.conversationID, conversations.contains(where: { $0.id == id }) { return id }
+        return conversations.first { $0.kind == .direct && $0.participantIDs == [agentID] }?.id
+    }
+
+    /// Sends the person's words about a task to its conversation, carrying the task so its bot knows
+    /// which one to move on. Only the bot changes the task.
+    func sendFeedback(_ text: String, on task: AgentTask, of agentID: UUID) throws {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty, let conversationID = conversationID(for: task, of: agentID),
+              let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
+        let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
+                                                     task: TaskReference(task, agentID: agentID))
+        messagesByConversation[conversationID, default: []].append(message)
+        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[index].updatedAt = message.createdAt
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+        }
+        runtime.notify(participants(for: conversation), repository: repository)
+        sendToHub(conversationID)
     }
 
     /// A bot set its status through Messenger.
