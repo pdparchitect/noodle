@@ -47,12 +47,12 @@ enum RestrictiveProfile {
     }
 }
 
-/// Installs a profile's settings where macOS keeps the managed preferences an MDM delivers, for a
-/// test-only domain, and reads them back through the reader and policy the app uses. Writing there
-/// needs passwordless sudo, as GitHub's macOS runners have; elsewhere the test is skipped.
+/// Installs a profile's settings where macOS keeps the managed preferences a System-scope profile
+/// delivers, for a test-only domain, and reads them back through the reader and policy the app uses.
+/// Writing there needs passwordless sudo, as GitHub's macOS runners have; elsewhere the test is skipped.
 @MainActor final class ManagedProfileTests: XCTestCase {
     nonisolated static let domain = "com.pdparchitect.noodle.managed-test"
-    nonisolated static var folder: URL { URL(fileURLWithPath: "/Library/Managed Preferences").appendingPathComponent(NSUserName()) }
+    nonisolated static let folder = URL(fileURLWithPath: "/Library/Managed Preferences")
     nonisolated static var file: URL { folder.appendingPathComponent("\(domain).plist") }
     /// Folders the test made, removed again when empty.
     nonisolated(unsafe) static var createdFolders: [URL] = []
@@ -180,7 +180,9 @@ enum RestrictiveProfile {
             guard Date() < deadline else {
                 let listing = Self.run("/bin/ls", ["-l", Self.folder.path]).output
                 let seen = Self.run("/usr/bin/defaults", ["read", Self.domain]).output
-                throw Failure("Timed out after \(Int(timeout)) s waiting until \(what). \(Self.folder.path): \(listing)\ndefaults read \(Self.domain): \(seen)")
+                let enrollment = Self.run("/usr/bin/sudo", ["-n", "/usr/bin/profiles", "status", "-type", "enrollment"]).output
+                let system = Self.run("/usr/bin/sw_vers", []).output
+                throw Failure("Timed out after \(Int(timeout)) s waiting until \(what). \(Self.folder.path): \(listing)\ndefaults read \(Self.domain): \(seen)\nprofiles status -type enrollment: \(enrollment)\nsw_vers: \(system)")
             }
             try await Task.sleep(for: .milliseconds(250))
         }
@@ -192,7 +194,7 @@ enum RestrictiveProfile {
         let staged = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).plist")
         try PropertyListSerialization.data(fromPropertyList: settings, format: .xml, options: 0).write(to: staged)
         defer { try? FileManager.default.removeItem(at: staged) }
-        for directory in [Self.folder.deletingLastPathComponent(), Self.folder] where !FileManager.default.fileExists(atPath: directory.path) {
+        for directory in [Self.folder] where !FileManager.default.fileExists(atPath: directory.path) {
             try sudo("/usr/bin/install", "-d", "-o", "root", "-g", "wheel", "-m", "0755", directory.path)
             createdFolders.insert(directory, at: 0)
         }
