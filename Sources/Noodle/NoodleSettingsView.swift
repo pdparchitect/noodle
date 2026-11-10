@@ -136,6 +136,18 @@ struct GeneralSettingsView: View {
             } footer: {
                 Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
             }
+            // Only on a Mac whose organisation set policies with a configuration profile.
+            if OrganisationStatus.shared.isManaged {
+                Section {
+                    ForEach(OrganisationStatus.shared.policy.rules, id: \.self) { rule in
+                        LabeledContent(rule.title, value: rule.value)
+                    }
+                } header: {
+                    Text(Organisation.managedText)
+                } footer: {
+                    Link("Enterprise feature", destination: Organisation.enterpriseURL)
+                }
+            }
         }
         .formStyle(.grouped)
     }

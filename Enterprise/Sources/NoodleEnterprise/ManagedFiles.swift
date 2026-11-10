@@ -120,7 +120,7 @@ public enum ManagedFiles {
         var lines = ["| Key | Type | Default | Since | What it does |", "| --- | --- | --- | --- | --- |"]
         for key in ManagedKeys.all {
             let type = key.type == .boolean ? "Boolean" : "Array of strings"
-            lines.append("| `\(key.name)` | \(type) | \(defaultText(key)) | \(key.since) | \(describe(key)) |")
+            lines.append("| `\(key.name)` | \(type) | \(defaultText(key)) | \(key.since) | \(key.deprecated ? "Deprecated. " : "")\(key.description) |")
         }
         for key in ManagedKeys.all {
             guard let choices = key.choices, ManagedKeys.all.first(where: { $0.choices == choices })?.name == key.name else { continue }

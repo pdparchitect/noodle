@@ -6,9 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Organisations can manage Noodle with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM: which harnesses people can use, whether bots can run without the sandbox, which tool connections are allowed, whether Noodle Browser, Noodle Computer and Noodle Hubs can be used, and how Noodle updates. Changes apply while Noodle runs, and removing the profile brings back your own settings. Settings the profile sets say Managed by your organisation, and Settings › General lists them. This is Noodle Enterprise, with a Jamf Pro schema, a sample profile and a deployment guide in the `Enterprise/` folder; see ENTERPRISE.md. Without a profile nothing changes.
+
 ### Changed
 
 - When an update changes what bots are told about using Noodle, each bot is asked once to reread it, so bots that were already running pick up new features such as tasks without being restarted.
+
 
 ## [0.83.0] - 2026-11-10
 
