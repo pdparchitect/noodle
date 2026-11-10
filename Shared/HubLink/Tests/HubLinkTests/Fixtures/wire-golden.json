@@ -1,0 +1,3167 @@
+{
+  "callEvent.ended" : {
+    "ended" : {
+
+    }
+  },
+  "callEvent.ended.error" : {
+    "ended" : {
+      "_0" : "The bot hung up."
+    }
+  },
+  "callEvent.line" : {
+    "line" : {
+      "_0" : {
+        "at" : 721692800,
+        "speaker" : "bot",
+        "text" : "Hello"
+      }
+    }
+  },
+  "callEvent.line.noTime" : {
+    "line" : {
+      "_0" : {
+        "speaker" : "you",
+        "text" : "Hi"
+      }
+    }
+  },
+  "callEvent.started" : {
+    "started" : {
+
+    }
+  },
+  "callPushCaller.full" : {
+    "botID" : "00000000-0000-0000-0000-000000000001",
+    "botName" : "Ada",
+    "conversationID" : "00000000-0000-0000-0000-000000000011",
+    "expiresAt" : 1700000045
+  },
+  "callPushCaller.noExpiry" : {
+    "botID" : "00000000-0000-0000-0000-000000000001",
+    "botName" : "Ada",
+    "conversationID" : "00000000-0000-0000-0000-000000000011"
+  },
+  "endpoint" : {
+    "host" : "100.64.0.1",
+    "port" : 38415
+  },
+  "event.backgroundChanged" : {
+    "backgroundChanged" : {
+      "background" : {
+        "media" : "00000000-0000-0000-0000-000000000030.jpg",
+        "mediaKind" : "image",
+        "preset" : "sunset"
+      },
+      "conversationID" : "00000000-0000-0000-0000-000000000011"
+    }
+  },
+  "event.botPhase" : {
+    "botPhase" : {
+      "botID" : "00000000-0000-0000-0000-000000000001",
+      "phase" : "failed"
+    }
+  },
+  "event.botsChanged" : {
+    "botsChanged" : {
+
+    }
+  },
+  "event.browsersChanged" : {
+    "browsersChanged" : {
+
+    }
+  },
+  "event.callRinging" : {
+    "callRinging" : {
+      "_0" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "id" : "00000000-0000-0000-0000-0000000000E9",
+        "reason" : "Your meeting starts soon",
+        "secondsLeft" : 45
+      }
+    }
+  },
+  "event.callStopped" : {
+    "callStopped" : {
+      "id" : "00000000-0000-0000-0000-0000000000E9"
+    }
+  },
+  "event.computerCreated" : {
+    "computerCreated" : {
+      "computer" : {
+        "botIDs" : [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "colour" : 3,
+        "description" : "Linux box",
+        "icon" : "iVBORw==",
+        "iconDigest" : "abababababababababababababababababababababababababababababababab",
+        "id" : "00000000-0000-0000-0000-0000000000A0",
+        "kind" : "linux",
+        "name" : "Box",
+        "state" : "running",
+        "symbol" : "desktopcomputer"
+      },
+      "requestID" : "00000000-0000-0000-0000-0000000000A9"
+    }
+  },
+  "event.computerCreated.failed" : {
+    "computerCreated" : {
+      "error" : "No space left.",
+      "requestID" : "00000000-0000-0000-0000-0000000000A9"
+    }
+  },
+  "event.computersChanged" : {
+    "computersChanged" : {
+
+    }
+  },
+  "event.connectionsChanged" : {
+    "connectionsChanged" : {
+
+    }
+  },
+  "event.conversationChanged" : {
+    "conversationChanged" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000011",
+      "count" : 42
+    }
+  },
+  "event.effectWaiting" : {
+    "effectWaiting" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000011"
+    }
+  },
+  "event.groupNotificationsChanged" : {
+    "groupNotificationsChanged" : {
+      "notifications" : "mentions"
+    }
+  },
+  "event.groupsChanged" : {
+    "groupsChanged" : {
+
+    }
+  },
+  "event.messageChanged" : {
+    "messageChanged" : {
+      "_0" : {
+        "attachments" : [
+          {
+            "annotation" : {
+              "comment" : "Shorter, please.",
+              "quote" : "the plan",
+              "region" : {
+                "height" : 0.375,
+                "width" : 0.125,
+                "x" : 0.25,
+                "y" : 0.5
+              },
+              "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+              "sourceFilename" : "plan.pdf",
+              "sourceMessageID" : "00000000-0000-0000-0000-000000000081",
+              "version" : 1
+            },
+            "byteCount" : 2048,
+            "card" : {
+              "capturedAt" : 1700000050,
+              "colour" : 2,
+              "detail" : "A game",
+              "icon" : "BAU=",
+              "image" : "AQID",
+              "isGame" : true,
+              "symbol" : "square.grid.2x2",
+              "title" : "Counter"
+            },
+            "filename" : "voice.m4a",
+            "id" : "00000000-0000-0000-0000-000000000070",
+            "mediaType" : "audio/mp4",
+            "pixelSize" : {
+              "height" : 480,
+              "width" : 640
+            },
+            "url" : "https://example.com/a?b=c",
+            "voice" : {
+              "duration" : 2.5,
+              "localeIdentifier" : "en_GB",
+              "transcript" : "Hello there",
+              "waveform" : [
+                0,
+                0.25,
+                0.5,
+                1
+              ]
+            }
+          },
+          {
+            "byteCount" : 10,
+            "filename" : "plan.pdf",
+            "id" : "00000000-0000-0000-0000-000000000071",
+            "mediaType" : "application/pdf"
+          },
+          {
+            "annotation" : {
+              "comment" : "Nice",
+              "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+              "sourceFilename" : "plan.pdf",
+              "version" : 1
+            },
+            "byteCount" : 99,
+            "filename" : "comment.png",
+            "id" : "00000000-0000-0000-0000-000000000072",
+            "mediaType" : "image/png"
+          },
+          {
+            "byteCount" : 5,
+            "filename" : "memo.m4a",
+            "id" : "00000000-0000-0000-0000-000000000073",
+            "mediaType" : "audio/mp4",
+            "voice" : {
+              "duration" : 1,
+              "waveform" : [
+
+              ]
+            }
+          }
+        ],
+        "author" : {
+          "bot" : {
+            "_0" : "00000000-0000-0000-0000-000000000001"
+          }
+        },
+        "body" : "Here it is.",
+        "call" : {
+          "botID" : "00000000-0000-0000-0000-000000000001",
+          "endedAt" : 1700000600,
+          "lines" : [
+            {
+              "at" : 1700000500,
+              "speaker" : "you",
+              "text" : "Hi"
+            },
+            {
+              "speaker" : "bot",
+              "text" : "Hello"
+            }
+          ],
+          "reason" : "A reminder",
+          "unanswered" : "declined"
+        },
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "createdAt" : 1700000000,
+        "delivered" : true,
+        "id" : "00000000-0000-0000-0000-000000000080",
+        "reactions" : [
+          {
+            "author" : {
+              "you" : {
+
+              }
+            },
+            "emoji" : "👍"
+          },
+          {
+            "author" : {
+              "bot" : {
+                "_0" : "00000000-0000-0000-0000-000000000002"
+              }
+            },
+            "emoji" : "🎉"
+          },
+          {
+            "author" : {
+              "system" : {
+
+              }
+            },
+            "emoji" : "!"
+          }
+        ],
+        "task" : {
+          "botID" : "00000000-0000-0000-0000-000000000001",
+          "id" : "00000000-0000-0000-0000-000000000040",
+          "title" : "Write the report"
+        }
+      }
+    }
+  },
+  "event.notificationsChanged" : {
+    "notificationsChanged" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000060",
+      "notifications" : "all"
+    }
+  },
+  "event.pinChanged" : {
+    "pinChanged" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000011",
+      "pinnedAt" : 1700000088
+    }
+  },
+  "event.pinChanged.unpinned" : {
+    "pinChanged" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000011"
+    }
+  },
+  "event.readChanged" : {
+    "readChanged" : {
+      "conversationID" : "00000000-0000-0000-0000-000000000011",
+      "upTo" : 1700000077
+    }
+  },
+  "event.signInPage" : {
+    "signInPage" : {
+      "connectionID" : "00000000-0000-0000-0000-000000000090",
+      "url" : "https://auth.example.com/authorize?x=1"
+    }
+  },
+  "event.surfaceControls" : {
+    "surfaceControls" : {
+      "controls" : {
+        "buttons" : [
+          {
+            "key" : "space",
+            "label" : "Jump"
+          },
+          {
+            "key" : "x"
+          }
+        ],
+        "menu" : "escape",
+        "pads" : [
+          {
+            "down" : "down",
+            "left" : "left",
+            "right" : "right",
+            "stick" : true,
+            "up" : "up"
+          },
+          {
+            "left" : "a",
+            "right" : "d"
+          }
+        ]
+      }
+    }
+  },
+  "event.surfaceControls.empty" : {
+    "surfaceControls" : {
+      "controls" : {
+        "buttons" : [
+
+        ],
+        "pads" : [
+
+        ]
+      }
+    }
+  },
+  "event.surfaceFailed" : {
+    "surfaceFailed" : {
+      "reason" : "The noodlet stopped."
+    }
+  },
+  "event.surfaceOpened" : {
+    "surfaceOpened" : {
+      "sessionID" : "00000000-0000-0000-0000-000000000099"
+    }
+  },
+  "event.usersChanged" : {
+    "usersChanged" : {
+
+    }
+  },
+  "invitationLink.standard" : {
+    "endpoints" : [
+      {
+        "host" : "hub.local",
+        "port" : 38415
+      }
+    ],
+    "expires" : 1700000900,
+    "hubKey" : "BG/wO5SSQc4drdQ1GeaWDgqFtBppoFwygQOqK84VlMoWPE91OlW/AdxT9sCwx+7ni0DG/30lqW4igrmJzvccFEo=",
+    "hubName" : "Home Hub",
+    "joinKey" : "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+    "userName" : "Ada",
+    "version" : 1
+  },
+  "publicKey" : "BG/wO5SSQc4drdQ1GeaWDgqFtBppoFwygQOqK84VlMoWPE91OlW/AdxT9sCwx+7ni0DG/30lqW4igrmJzvccFEo=",
+  "request.addUser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "addUser" : {
+        "_0" : {
+          "canPairDevices" : true,
+          "isSuspended" : false,
+          "name" : "Bea",
+          "plan" : "00000000-0000-0000-0000-0000000000C9"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.addUser.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "addUser" : {
+        "_0" : {
+
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.archive" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "archive" : {
+        "_0" : {
+          "archived" : true,
+          "id" : "00000000-0000-0000-0000-000000000001"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.assignBrowsers" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "assignBrowsers" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "browserIDs" : [
+
+        ]
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.assignComputers" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "assignComputers" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "computerIDs" : [
+          "00000000-0000-0000-0000-0000000000A0"
+        ]
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.assignConnections" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "assignConnections" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "connectionIDs" : [
+          "00000000-0000-0000-0000-000000000090",
+          "00000000-0000-0000-0000-000000000091"
+        ]
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.attachmentPreview" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "attachmentPreview" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "pixels" : 256
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.backgroundMedia" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "backgroundMedia" : {
+        "_0" : {
+          "compact" : true,
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "media" : "00000000-0000-0000-0000-000000000030.jpg",
+          "offset" : 0
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.bots" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "bots" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.browsers" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "browsers" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.callPush" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "callPush" : {
+        "_0" : {
+          "callKey" : "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+          "grant" : {
+            "deviceKey" : "BFUPRxAD89+Xw99QaseX9nIfsaH7e49vg9IkSYplyI4kE2CT1wEuUJpzcVy9CwCjzA/0tcAbP/oZarH7MnA2uOY=",
+            "exp" : 1701209600,
+            "hubKey" : "BG/wO5SSQc4drdQ1GeaWDgqFtBppoFwygQOqK84VlMoWPE91OlW/AdxT9sCwx+7ni0DG/30lqW4igrmJzvccFEo=",
+            "sealed" : "AQID",
+            "sig" : "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWg=="
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.callPush.stop" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "callPush" : {
+        "_0" : {
+
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.computers" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "computers" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.computerTemplates" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "computerTemplates" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.confirmKick" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "confirmKick" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "confirmationID" : "00000000-0000-0000-0000-000000000009"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.connections" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "connections" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.createBot" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "createBot" : {
+        "_0" : {
+          "avatarColorIndex" : 4,
+          "avatarImageData" : "iVBORw==",
+          "avatarImageDigest" : "abababababababababababababababababababababababababababababababab",
+          "avatarSymbolName" : "book",
+          "backstory" : "Grew up in a library.",
+          "imageGeneration" : true,
+          "model" : "opus",
+          "name" : "Ada",
+          "profile" : "00000000-0000-0000-0000-000000000020",
+          "provider" : "claude",
+          "publicDescription" : "Helps with research.",
+          "reasoningEffort" : "high",
+          "voice" : "marin"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.createBot.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "createBot" : {
+        "_0" : {
+          "avatarColorIndex" : 0,
+          "backstory" : "",
+          "imageGeneration" : false,
+          "name" : "Bo",
+          "provider" : "codex",
+          "publicDescription" : ""
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.createBrowser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "createBrowser" : {
+        "_0" : {
+          "colour" : 5,
+          "description" : "For work",
+          "name" : "Work",
+          "symbol" : "briefcase"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.createComputer" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "createComputer" : {
+        "_1" : {
+          "colour" : 3,
+          "description" : "Linux box",
+          "name" : "Box",
+          "symbol" : "desktopcomputer",
+          "template" : "linux"
+        },
+        "requestID" : "00000000-0000-0000-0000-0000000000A9"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.createGroup" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "createGroup" : {
+        "_0" : {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002"
+          ],
+          "name" : "Team",
+          "publicDescription" : "All of us"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.declineCall" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "declineCall" : {
+        "id" : "00000000-0000-0000-0000-0000000000E9"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.deleteBot" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "deleteBot" : {
+        "id" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.deleteBrowser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "deleteBrowser" : {
+        "id" : "00000000-0000-0000-0000-0000000000B0"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.deleteComputer" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "deleteComputer" : {
+        "id" : "00000000-0000-0000-0000-0000000000A0"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.deleteConnection" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "deleteConnection" : {
+        "id" : "00000000-0000-0000-0000-000000000090"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.deleteGroup" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "deleteGroup" : {
+        "id" : "00000000-0000-0000-0000-000000000060"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.download" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "download" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "offset" : 524288
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.enroll" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "enroll" : {
+        "deviceKey" : "BFUPRxAD89+Xw99QaseX9nIfsaH7e49vg9IkSYplyI4kE2CT1wEuUJpzcVy9CwCjzA/0tcAbP/oZarH7MnA2uOY=",
+        "deviceName" : "Ada's iPhone",
+        "proof" : "qrvM"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.fillSignIn" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "fillSignIn" : {
+        "_0" : {
+          "attachmentID" : "00000000-0000-0000-0000-000000000070",
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "newPassword" : "newer",
+          "oneTimeCode" : "123456",
+          "password" : "secret",
+          "submit" : true,
+          "token" : "00000000-0000-0000-0000-0000000000F0",
+          "username" : "ada"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.fillSignIn.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "fillSignIn" : {
+        "_0" : {
+          "attachmentID" : "00000000-0000-0000-0000-000000000070",
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "submit" : false,
+          "token" : "00000000-0000-0000-0000-0000000000F0"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.finishSignIn" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "finishSignIn" : {
+        "callback" : "noodle://sign-in?code=abc&state=x%2Fy",
+        "connectionID" : "00000000-0000-0000-0000-000000000090"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.groups" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "groups" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.bots" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "bots" : {
+
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.delivered" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "delivered" : {
+            "conversationID" : "00000000-0000-0000-0000-000000000015",
+            "messageIDs" : [
+              "00000000-0000-0000-0000-000000000087",
+              "00000000-0000-0000-0000-000000000088"
+            ]
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.download" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "download" : {
+            "attachmentID" : "00000000-0000-0000-0000-000000000075",
+            "conversationID" : "00000000-0000-0000-0000-000000000015",
+            "offset" : 0
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.effect" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "effect" : {
+            "conversationID" : "00000000-0000-0000-0000-000000000015",
+            "id" : "00000000-0000-0000-0000-000000000089",
+            "kind" : "confetti"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.messagePage" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "messagePage" : {
+            "_0" : {
+              "before" : 40,
+              "conversationID" : "00000000-0000-0000-0000-000000000015",
+              "limit" : 10
+            }
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.phase" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "phase" : {
+            "botID" : "00000000-0000-0000-0000-000000000005",
+            "phase" : "working"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.publish" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "publish" : {
+            "_1" : {
+              "avatarColorIndex" : 4,
+              "avatarImageData" : "iVBORw==",
+              "avatarImageDigest" : "abababababababababababababababababababababababababababababababab",
+              "avatarSymbolName" : "book",
+              "backstory" : "Grew up in a library.",
+              "imageGeneration" : true,
+              "model" : "opus",
+              "name" : "Ada",
+              "profile" : "00000000-0000-0000-0000-000000000020",
+              "provider" : "claude",
+              "publicDescription" : "Helps with research.",
+              "reasoningEffort" : "high",
+              "voice" : "marin"
+            },
+            "id" : "00000000-0000-0000-0000-000000000005"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.react" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "react" : {
+            "_0" : {
+              "conversationID" : "00000000-0000-0000-0000-000000000015",
+              "emoji" : "❤️",
+              "messageID" : "00000000-0000-0000-0000-000000000087",
+              "present" : false
+            }
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.reply" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "reply" : {
+            "_0" : {
+              "attachmentIDs" : [
+                "00000000-0000-0000-0000-000000000071"
+              ],
+              "body" : "Done.",
+              "conversationID" : "00000000-0000-0000-0000-000000000015",
+              "id" : "00000000-0000-0000-0000-000000000085",
+              "links" : [
+                {
+                  "byteCount" : 0,
+                  "filename" : "Example",
+                  "id" : "00000000-0000-0000-0000-000000000076",
+                  "mediaType" : "text/html",
+                  "url" : "https://example.com"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.reply.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "reply" : {
+            "_0" : {
+              "attachmentIDs" : [
+
+              ],
+              "body" : "",
+              "conversationID" : "00000000-0000-0000-0000-000000000015",
+              "id" : "00000000-0000-0000-0000-000000000086",
+              "links" : [
+
+              ]
+            }
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.host.upload" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "host" : {
+        "_0" : {
+          "upload" : {
+            "attachment" : {
+              "byteCount" : 10,
+              "filename" : "plan.pdf",
+              "id" : "00000000-0000-0000-0000-000000000071",
+              "mediaType" : "application/pdf"
+            },
+            "conversationID" : "00000000-0000-0000-0000-000000000015",
+            "data" : "AQ==",
+            "offset" : 0
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.hubSharing" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "hubSharing" : {
+        "botID" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.introduce" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "introduce" : {
+        "conversationID" : "00000000-0000-0000-0000-000000000060"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.invite" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "invite" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.inviteUser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "inviteUser" : {
+        "id" : "00000000-0000-0000-0000-0000000000C1"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.kick" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "kick" : {
+        "botID" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.leave" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "leave" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.linkCard" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "linkCard" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.linkPreview" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "linkPreview" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.markRead" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "markRead" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "messageID" : "00000000-0000-0000-0000-000000000080"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.messagePage" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "messagePage" : {
+        "_0" : {
+          "before" : 100,
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "limit" : 20
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.messagePage.after" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "messagePage" : {
+        "_0" : {
+          "after" : 5,
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "limit" : 50
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.messagePage.newest" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "messagePage" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "limit" : 50
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.messages" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "messages" : {
+        "after" : 10,
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.newSession" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "newSession" : {
+        "botID" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.noodlet" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "noodlet" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.noodletArchive" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "noodletArchive" : {
+        "grant" : "00000000-0000-0000-0000-0000000000AB",
+        "offset" : 1048576
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.noodletCall" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "noodletCall" : {
+        "_0" : {
+          "data" : "AQID",
+          "grant" : "00000000-0000-0000-0000-0000000000AB",
+          "id" : "00000000-0000-0000-0000-0000000000AC",
+          "offset" : 0,
+          "total" : 3
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.openSurface" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "openSurface" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.organize" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "organize" : {
+        "botID" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.people" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "people" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.picture.bot" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "picture" : {
+        "_0" : {
+          "bot" : {
+            "_0" : "00000000-0000-0000-0000-000000000001"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.picture.browser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "picture" : {
+        "_0" : {
+          "browser" : {
+            "_0" : "00000000-0000-0000-0000-0000000000B0"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.picture.computer" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "picture" : {
+        "_0" : {
+          "computer" : {
+            "_0" : "00000000-0000-0000-0000-0000000000A0"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.picture.connection" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "picture" : {
+        "_0" : {
+          "connection" : {
+            "_0" : "00000000-0000-0000-0000-000000000090"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.picture.person" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "picture" : {
+        "_0" : {
+          "person" : {
+            "_0" : "00000000-0000-0000-0000-0000000000C0"
+          }
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.pin" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "pin" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "pinned" : false
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.pushTopic" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "pushTopic" : {
+        "_0" : {
+          "topic" : "topic-1"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.pushTopic.stop" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "pushTopic" : {
+        "_0" : {
+
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.react" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "react" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "emoji" : "👍",
+          "messageID" : "00000000-0000-0000-0000-000000000080",
+          "present" : true
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.removeDevice" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "removeDevice" : {
+        "id" : "00000000-0000-0000-0000-0000000000D1"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.removeUser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "removeUser" : {
+        "id" : "00000000-0000-0000-0000-0000000000C1"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.saveConnection" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "saveConnection" : {
+        "_0" : {
+          "description" : "Issues",
+          "endpoint" : "https://mcp.linear.app/sse",
+          "id" : "00000000-0000-0000-0000-000000000090",
+          "instructions" : "Use for tickets.",
+          "name" : "Linear"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.searchMessages" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "searchMessages" : {
+        "_0" : {
+          "limit" : 50,
+          "term" : "hello"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.send" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "send" : {
+        "_0" : {
+          "attachmentIDs" : [
+            "00000000-0000-0000-0000-000000000070"
+          ],
+          "body" : "Hi",
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "id" : "00000000-0000-0000-0000-000000000083",
+          "taskID" : "00000000-0000-0000-0000-000000000040"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.send.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "send" : {
+        "_0" : {
+          "attachmentIDs" : [
+
+          ],
+          "body" : "Plain",
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "id" : "00000000-0000-0000-0000-000000000084"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setAvatar" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setAvatar" : {
+        "_0" : {
+          "colour" : 3,
+          "image" : "iVBORw==",
+          "imageDigest" : "abababababababababababababababababababababababababababababababab",
+          "symbol" : "star"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setAvatar.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setAvatar" : {
+        "_0" : {
+          "colour" : 0
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setAvatar.none" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setAvatar" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setBackground" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setBackground" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "preset" : "sunset"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setBackground.none" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setBackground" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setGroupNotifications" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setGroupNotifications" : {
+        "_0" : "mentions"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setNotifications" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setNotifications" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000060",
+          "notifications" : "muted"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.setNotifications.default" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "setNotifications" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000060",
+          "notifications" : "default"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.shareBot" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "shareBot" : {
+        "id" : "00000000-0000-0000-0000-000000000001",
+        "people" : [
+          "00000000-0000-0000-0000-000000000050",
+          "00000000-0000-0000-0000-000000000051"
+        ]
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.shareOnHub" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "shareOnHub" : {
+        "botID" : "00000000-0000-0000-0000-000000000001",
+        "hub" : "hub-one",
+        "people" : [
+          "00000000-0000-0000-0000-000000000050"
+        ]
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.signIn" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "signIn" : {
+        "connectionID" : "00000000-0000-0000-0000-000000000090",
+        "redirect" : "noodle://sign-in"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.signInForm" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "signInForm" : {
+        "attachmentID" : "00000000-0000-0000-0000-000000000070",
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.startCall" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "startCall" : {
+        "_0" : {
+          "conversationID" : "00000000-0000-0000-0000-000000000011"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.startCall.answering" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "startCall" : {
+        "_0" : {
+          "answering" : "00000000-0000-0000-0000-0000000000E9",
+          "conversationID" : "00000000-0000-0000-0000-000000000011"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.status" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "status" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.subscribe" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "subscribe" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.suspend" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "suspend" : {
+        "_0" : {
+          "id" : "00000000-0000-0000-0000-000000000001",
+          "until" : 1700003600
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.suspend.lift" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "suspend" : {
+        "_0" : {
+          "id" : "00000000-0000-0000-0000-000000000001"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.takeEffect" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "takeEffect" : {
+        "conversationID" : "00000000-0000-0000-0000-000000000011"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.toolCatalog" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "toolCatalog" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.updateBot" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "updateBot" : {
+        "_1" : {
+          "avatarColorIndex" : 4,
+          "avatarImageData" : "iVBORw==",
+          "avatarImageDigest" : "abababababababababababababababababababababababababababababababab",
+          "avatarSymbolName" : "book",
+          "backstory" : "Grew up in a library.",
+          "imageGeneration" : true,
+          "model" : "opus",
+          "name" : "Ada",
+          "profile" : "00000000-0000-0000-0000-000000000020",
+          "provider" : "claude",
+          "publicDescription" : "Helps with research.",
+          "reasoningEffort" : "high",
+          "voice" : "marin"
+        },
+        "id" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.updateBrowser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "updateBrowser" : {
+        "_1" : {
+          "name" : "Renamed"
+        },
+        "id" : "00000000-0000-0000-0000-0000000000B0"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.updateComputer" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "updateComputer" : {
+        "_1" : {
+          "name" : "Renamed"
+        },
+        "id" : "00000000-0000-0000-0000-0000000000A0"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.updateGroup" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "updateGroup" : {
+        "_1" : {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001"
+          ],
+          "name" : "Pair",
+          "publicDescription" : ""
+        },
+        "id" : "00000000-0000-0000-0000-000000000060"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.updateUser" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "updateUser" : {
+        "_1" : {
+          "isSuspended" : true
+        },
+        "id" : "00000000-0000-0000-0000-0000000000C1"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.upload" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "upload" : {
+        "attachment" : {
+          "annotation" : {
+            "comment" : "Shorter, please.",
+            "quote" : "the plan",
+            "region" : {
+              "height" : 0.375,
+              "width" : 0.125,
+              "x" : 0.25,
+              "y" : 0.5
+            },
+            "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+            "sourceFilename" : "plan.pdf",
+            "sourceMessageID" : "00000000-0000-0000-0000-000000000081",
+            "version" : 1
+          },
+          "byteCount" : 2048,
+          "card" : {
+            "capturedAt" : 1700000050,
+            "colour" : 2,
+            "detail" : "A game",
+            "icon" : "BAU=",
+            "image" : "AQID",
+            "isGame" : true,
+            "symbol" : "square.grid.2x2",
+            "title" : "Counter"
+          },
+          "filename" : "voice.m4a",
+          "id" : "00000000-0000-0000-0000-000000000070",
+          "mediaType" : "audio/mp4",
+          "pixelSize" : {
+            "height" : 480,
+            "width" : 640
+          },
+          "url" : "https://example.com/a?b=c",
+          "voice" : {
+            "duration" : 2.5,
+            "localeIdentifier" : "en_GB",
+            "transcript" : "Hello there",
+            "waveform" : [
+              0,
+              0.25,
+              0.5,
+              1
+            ]
+          }
+        },
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "data" : "CQgH",
+        "offset" : 0
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.upload.minimal" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "upload" : {
+        "attachment" : {
+          "byteCount" : 10,
+          "filename" : "plan.pdf",
+          "id" : "00000000-0000-0000-0000-000000000071",
+          "mediaType" : "application/pdf"
+        },
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "data" : "",
+        "offset" : 524288
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.uploadBackground" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "uploadBackground" : {
+        "_0" : {
+          "byteCount" : 6,
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "data" : "BAUG",
+          "filename" : "photo.heic",
+          "offset" : 3,
+          "upload" : "00000000-0000-0000-0000-000000000031"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "request.users" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "users" : {
+
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
+  "response.background" : {
+    "background" : {
+      "_0" : {
+        "media" : "00000000-0000-0000-0000-000000000030.jpg",
+        "mediaKind" : "image",
+        "preset" : "sunset"
+      }
+    }
+  },
+  "response.background.none" : {
+    "background" : {
+      "_0" : {
+
+      }
+    }
+  },
+  "response.bot" : {
+    "bot" : {
+      "_0" : {
+        "archivedAt" : 1700000200,
+        "background" : {
+          "media" : "00000000-0000-0000-0000-000000000030.jpg",
+          "mediaKind" : "image",
+          "preset" : "sunset"
+        },
+        "canCall" : true,
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "createdAt" : 1700000000,
+        "draft" : {
+          "avatarColorIndex" : 4,
+          "avatarImageData" : "iVBORw==",
+          "avatarImageDigest" : "abababababababababababababababababababababababababababababababab",
+          "avatarSymbolName" : "book",
+          "backstory" : "Grew up in a library.",
+          "imageGeneration" : true,
+          "model" : "opus",
+          "name" : "Ada",
+          "profile" : "00000000-0000-0000-0000-000000000020",
+          "provider" : "claude",
+          "publicDescription" : "Helps with research.",
+          "reasoningEffort" : "high",
+          "voice" : "marin"
+        },
+        "id" : "00000000-0000-0000-0000-000000000001",
+        "pause" : {
+          "detail" : "The plan's weekly limit was reached.",
+          "kickable" : true,
+          "summary" : "Paused: plan limit",
+          "until" : 1700003600
+        },
+        "phase" : "ready",
+        "pinnedAt" : 1700000300,
+        "readUpTo" : 1700000100,
+        "sharedWith" : [
+          "00000000-0000-0000-0000-000000000050",
+          "00000000-0000-0000-0000-000000000051"
+        ],
+        "status" : "Reading papers",
+        "suspendedUntil" : 1700000400,
+        "tasks" : [
+          {
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "id" : "00000000-0000-0000-0000-000000000040",
+            "state" : "open",
+            "title" : "Write the report",
+            "updatedAt" : 1700000010
+          },
+          {
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "id" : "00000000-0000-0000-0000-000000000041",
+            "note" : "Needs your eyes",
+            "state" : "waiting",
+            "title" : "Review the draft",
+            "updatedAt" : 1700000020,
+            "waitingOn" : {
+              "you" : {
+
+              }
+            }
+          },
+          {
+            "conversationID" : "00000000-0000-0000-0000-000000000012",
+            "id" : "00000000-0000-0000-0000-000000000042",
+            "state" : "waiting",
+            "title" : "Ask Bo",
+            "updatedAt" : 1700000030,
+            "waitingOn" : {
+              "bot" : {
+                "_0" : "00000000-0000-0000-0000-000000000002"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "response.bot.minimal" : {
+    "bot" : {
+      "_0" : {
+        "canCall" : false,
+        "conversationID" : "00000000-0000-0000-0000-000000000012",
+        "createdAt" : 1700000000,
+        "draft" : {
+          "avatarColorIndex" : 0,
+          "backstory" : "",
+          "imageGeneration" : false,
+          "name" : "Bo",
+          "provider" : "codex",
+          "publicDescription" : ""
+        },
+        "id" : "00000000-0000-0000-0000-000000000002",
+        "sharedWith" : [
+
+        ],
+        "tasks" : [
+
+        ]
+      }
+    }
+  },
+  "response.bots" : {
+    "bots" : {
+      "_0" : [
+        {
+          "archivedAt" : 1700000200,
+          "background" : {
+            "media" : "00000000-0000-0000-0000-000000000030.jpg",
+            "mediaKind" : "image",
+            "preset" : "sunset"
+          },
+          "canCall" : true,
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "createdAt" : 1700000000,
+          "draft" : {
+            "avatarColorIndex" : 4,
+            "avatarImageData" : "iVBORw==",
+            "avatarImageDigest" : "abababababababababababababababababababababababababababababababab",
+            "avatarSymbolName" : "book",
+            "backstory" : "Grew up in a library.",
+            "imageGeneration" : true,
+            "model" : "opus",
+            "name" : "Ada",
+            "profile" : "00000000-0000-0000-0000-000000000020",
+            "provider" : "claude",
+            "publicDescription" : "Helps with research.",
+            "reasoningEffort" : "high",
+            "voice" : "marin"
+          },
+          "id" : "00000000-0000-0000-0000-000000000001",
+          "pause" : {
+            "detail" : "The plan's weekly limit was reached.",
+            "kickable" : true,
+            "summary" : "Paused: plan limit",
+            "until" : 1700003600
+          },
+          "phase" : "ready",
+          "pinnedAt" : 1700000300,
+          "readUpTo" : 1700000100,
+          "sharedWith" : [
+            "00000000-0000-0000-0000-000000000050",
+            "00000000-0000-0000-0000-000000000051"
+          ],
+          "status" : "Reading papers",
+          "suspendedUntil" : 1700000400,
+          "tasks" : [
+            {
+              "conversationID" : "00000000-0000-0000-0000-000000000011",
+              "id" : "00000000-0000-0000-0000-000000000040",
+              "state" : "open",
+              "title" : "Write the report",
+              "updatedAt" : 1700000010
+            },
+            {
+              "conversationID" : "00000000-0000-0000-0000-000000000011",
+              "id" : "00000000-0000-0000-0000-000000000041",
+              "note" : "Needs your eyes",
+              "state" : "waiting",
+              "title" : "Review the draft",
+              "updatedAt" : 1700000020,
+              "waitingOn" : {
+                "you" : {
+
+                }
+              }
+            },
+            {
+              "conversationID" : "00000000-0000-0000-0000-000000000012",
+              "id" : "00000000-0000-0000-0000-000000000042",
+              "state" : "waiting",
+              "title" : "Ask Bo",
+              "updatedAt" : 1700000030,
+              "waitingOn" : {
+                "bot" : {
+                  "_0" : "00000000-0000-0000-0000-000000000002"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "canCall" : false,
+          "conversationID" : "00000000-0000-0000-0000-000000000012",
+          "createdAt" : 1700000000,
+          "draft" : {
+            "avatarColorIndex" : 0,
+            "backstory" : "",
+            "imageGeneration" : false,
+            "name" : "Bo",
+            "provider" : "codex",
+            "publicDescription" : ""
+          },
+          "id" : "00000000-0000-0000-0000-000000000002",
+          "sharedWith" : [
+
+          ],
+          "tasks" : [
+
+          ]
+        },
+        {
+          "canCall" : true,
+          "conversationID" : "00000000-0000-0000-0000-000000000013",
+          "createdAt" : 1700000000,
+          "draft" : {
+            "avatarColorIndex" : 0,
+            "backstory" : "",
+            "imageGeneration" : false,
+            "name" : "Cy",
+            "provider" : "",
+            "publicDescription" : "Shared with you."
+          },
+          "id" : "00000000-0000-0000-0000-000000000003",
+          "owner" : "Dee",
+          "phase" : "working",
+          "sharedWith" : [
+
+          ],
+          "tasks" : [
+
+          ]
+        }
+      ]
+    }
+  },
+  "response.browser" : {
+    "browser" : {
+      "_0" : {
+        "botIDs" : [
+          "00000000-0000-0000-0000-000000000001",
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "colour" : 5,
+        "description" : "Signed in to work",
+        "icon" : "iVBORw==",
+        "iconDigest" : "abababababababababababababababababababababababababababababababab",
+        "id" : "00000000-0000-0000-0000-0000000000B0",
+        "name" : "Work",
+        "paused" : true,
+        "symbol" : "briefcase"
+      }
+    }
+  },
+  "response.browsers" : {
+    "browsers" : {
+      "_0" : [
+        {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002"
+          ],
+          "colour" : 5,
+          "description" : "Signed in to work",
+          "icon" : "iVBORw==",
+          "iconDigest" : "abababababababababababababababababababababababababababababababab",
+          "id" : "00000000-0000-0000-0000-0000000000B0",
+          "name" : "Work",
+          "paused" : true,
+          "symbol" : "briefcase"
+        },
+        {
+          "botIDs" : [
+
+          ],
+          "colour" : 0,
+          "id" : "00000000-0000-0000-0000-0000000000B1",
+          "name" : "Plain",
+          "paused" : false,
+          "symbol" : "globe"
+        }
+      ]
+    }
+  },
+  "response.chunk" : {
+    "chunk" : {
+      "data" : "AQIDBA==",
+      "total" : 10
+    }
+  },
+  "response.chunk.packing" : {
+    "chunk" : {
+      "data" : "",
+      "total" : 0
+    }
+  },
+  "response.computer" : {
+    "computer" : {
+      "_0" : {
+        "botIDs" : [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "colour" : 3,
+        "description" : "Linux box",
+        "icon" : "iVBORw==",
+        "iconDigest" : "abababababababababababababababababababababababababababababababab",
+        "id" : "00000000-0000-0000-0000-0000000000A0",
+        "kind" : "linux",
+        "name" : "Box",
+        "state" : "running",
+        "symbol" : "desktopcomputer"
+      }
+    }
+  },
+  "response.computers" : {
+    "computers" : {
+      "_0" : [
+        {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001"
+          ],
+          "colour" : 3,
+          "description" : "Linux box",
+          "icon" : "iVBORw==",
+          "iconDigest" : "abababababababababababababababababababababababababababababababab",
+          "id" : "00000000-0000-0000-0000-0000000000A0",
+          "kind" : "linux",
+          "name" : "Box",
+          "state" : "running",
+          "symbol" : "desktopcomputer"
+        },
+        {
+          "botIDs" : [
+
+          ],
+          "colour" : 0,
+          "id" : "00000000-0000-0000-0000-0000000000A1",
+          "kind" : "mac",
+          "name" : "Mac",
+          "state" : "stopped",
+          "symbol" : "laptopcomputer"
+        }
+      ]
+    }
+  },
+  "response.computerTemplates" : {
+    "computerTemplates" : {
+      "_0" : [
+        {
+          "description" : "A Linux computer",
+          "id" : "linux",
+          "name" : "Linux",
+          "symbol" : "terminal"
+        }
+      ]
+    }
+  },
+  "response.connection" : {
+    "connection" : {
+      "_0" : {
+        "botIDs" : [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "draft" : {
+          "description" : "Issues",
+          "endpoint" : "https://mcp.linear.app/sse",
+          "id" : "00000000-0000-0000-0000-000000000090",
+          "instructions" : "Use for tickets.",
+          "name" : "Linear"
+        },
+        "iconData" : "iVBORw==",
+        "iconDigest" : "abababababababababababababababababababababababababababababababab",
+        "problem" : "Token expired",
+        "signedIn" : true
+      }
+    }
+  },
+  "response.connections" : {
+    "connections" : {
+      "_0" : [
+        {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001"
+          ],
+          "draft" : {
+            "description" : "Issues",
+            "endpoint" : "https://mcp.linear.app/sse",
+            "id" : "00000000-0000-0000-0000-000000000090",
+            "instructions" : "Use for tickets.",
+            "name" : "Linear"
+          },
+          "iconData" : "iVBORw==",
+          "iconDigest" : "abababababababababababababababababababababababababababababababab",
+          "problem" : "Token expired",
+          "signedIn" : true
+        },
+        {
+          "botIDs" : [
+
+          ],
+          "draft" : {
+            "description" : "",
+            "endpoint" : "https://example.com/mcp",
+            "id" : "00000000-0000-0000-0000-000000000091",
+            "instructions" : "",
+            "name" : "Bare"
+          },
+          "signedIn" : false
+        }
+      ]
+    }
+  },
+  "response.done" : {
+    "done" : {
+
+    }
+  },
+  "response.effect" : {
+    "effect" : {
+      "_0" : {
+        "id" : "00000000-0000-0000-0000-000000000089",
+        "kind" : "confetti"
+      }
+    }
+  },
+  "response.effect.none" : {
+    "effect" : {
+
+    }
+  },
+  "response.failure" : {
+    "failure" : {
+      "_0" : "Something went wrong."
+    }
+  },
+  "response.group" : {
+    "group" : {
+      "_0" : {
+        "archivedAt" : 1700000020,
+        "background" : {
+          "media" : "00000000-0000-0000-0000-000000000030.jpg",
+          "mediaKind" : "image",
+          "preset" : "sunset"
+        },
+        "createdAt" : 1700000000,
+        "draft" : {
+          "botIDs" : [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002"
+          ],
+          "name" : "Team",
+          "publicDescription" : "All of us"
+        },
+        "id" : "00000000-0000-0000-0000-000000000060",
+        "notifications" : "mentions",
+        "pinnedAt" : 1700000030,
+        "readUpTo" : 1700000010
+      }
+    }
+  },
+  "response.groups" : {
+    "groups" : {
+      "_0" : [
+        {
+          "archivedAt" : 1700000020,
+          "background" : {
+            "media" : "00000000-0000-0000-0000-000000000030.jpg",
+            "mediaKind" : "image",
+            "preset" : "sunset"
+          },
+          "createdAt" : 1700000000,
+          "draft" : {
+            "botIDs" : [
+              "00000000-0000-0000-0000-000000000001",
+              "00000000-0000-0000-0000-000000000002"
+            ],
+            "name" : "Team",
+            "publicDescription" : "All of us"
+          },
+          "id" : "00000000-0000-0000-0000-000000000060",
+          "notifications" : "mentions",
+          "pinnedAt" : 1700000030,
+          "readUpTo" : 1700000010
+        },
+        {
+          "createdAt" : 1700000000,
+          "draft" : {
+            "botIDs" : [
+              "00000000-0000-0000-0000-000000000001"
+            ],
+            "name" : "Pair",
+            "publicDescription" : ""
+          },
+          "id" : "00000000-0000-0000-0000-000000000061"
+        }
+      ]
+    }
+  },
+  "response.hostedBot" : {
+    "hostedBot" : {
+      "_0" : {
+        "conversations" : [
+
+        ],
+        "id" : "00000000-0000-0000-0000-000000000005"
+      }
+    }
+  },
+  "response.hostedBots" : {
+    "hostedBots" : {
+      "_0" : [
+        {
+          "conversations" : [
+            {
+              "id" : "00000000-0000-0000-0000-000000000015",
+              "name" : "Dee",
+              "person" : "00000000-0000-0000-0000-000000000050"
+            }
+          ],
+          "id" : "00000000-0000-0000-0000-000000000005"
+        },
+        {
+          "conversations" : [
+
+          ],
+          "id" : "00000000-0000-0000-0000-000000000006"
+        }
+      ]
+    }
+  },
+  "response.hubSharing" : {
+    "hubSharing" : {
+      "_0" : [
+        {
+          "id" : "hub-one",
+          "name" : "Home Hub",
+          "people" : [
+            {
+              "id" : "00000000-0000-0000-0000-000000000050",
+              "name" : "Dee"
+            }
+          ],
+          "sharedWith" : [
+            "00000000-0000-0000-0000-000000000050"
+          ]
+        }
+      ]
+    }
+  },
+  "response.invitation" : {
+    "invitation" : {
+      "_0" : {
+        "endpoints" : [
+          {
+            "host" : "hub.local",
+            "port" : 38415
+          }
+        ],
+        "expires" : 1700000900,
+        "hubKey" : "BG/wO5SSQc4drdQ1GeaWDgqFtBppoFwygQOqK84VlMoWPE91OlW/AdxT9sCwx+7ni0DG/30lqW4igrmJzvccFEo=",
+        "hubName" : "Home Hub",
+        "joinKey" : "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+        "userName" : "Ada",
+        "version" : 1
+      }
+    }
+  },
+  "response.kickConfirmation" : {
+    "kickConfirmation" : {
+      "_0" : {
+        "confirmTitle" : "Kick",
+        "id" : "00000000-0000-0000-0000-000000000009",
+        "message" : "Recovery was interrupted.",
+        "offersNewSession" : true,
+        "title" : "Kick Ada?"
+      }
+    }
+  },
+  "response.linkCard" : {
+    "linkCard" : {
+      "_0" : {
+        "capturedAt" : 1700000050,
+        "colour" : 2,
+        "detail" : "A game",
+        "icon" : "BAU=",
+        "image" : "AQID",
+        "isGame" : true,
+        "symbol" : "square.grid.2x2",
+        "title" : "Counter"
+      }
+    }
+  },
+  "response.linkCard.minimal" : {
+    "linkCard" : {
+      "_0" : {
+        "title" : "Tab"
+      }
+    }
+  },
+  "response.linkCard.none" : {
+    "linkCard" : {
+
+    }
+  },
+  "response.message" : {
+    "message" : {
+      "_0" : {
+        "attachments" : [
+          {
+            "annotation" : {
+              "comment" : "Shorter, please.",
+              "quote" : "the plan",
+              "region" : {
+                "height" : 0.375,
+                "width" : 0.125,
+                "x" : 0.25,
+                "y" : 0.5
+              },
+              "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+              "sourceFilename" : "plan.pdf",
+              "sourceMessageID" : "00000000-0000-0000-0000-000000000081",
+              "version" : 1
+            },
+            "byteCount" : 2048,
+            "card" : {
+              "capturedAt" : 1700000050,
+              "colour" : 2,
+              "detail" : "A game",
+              "icon" : "BAU=",
+              "image" : "AQID",
+              "isGame" : true,
+              "symbol" : "square.grid.2x2",
+              "title" : "Counter"
+            },
+            "filename" : "voice.m4a",
+            "id" : "00000000-0000-0000-0000-000000000070",
+            "mediaType" : "audio/mp4",
+            "pixelSize" : {
+              "height" : 480,
+              "width" : 640
+            },
+            "url" : "https://example.com/a?b=c",
+            "voice" : {
+              "duration" : 2.5,
+              "localeIdentifier" : "en_GB",
+              "transcript" : "Hello there",
+              "waveform" : [
+                0,
+                0.25,
+                0.5,
+                1
+              ]
+            }
+          },
+          {
+            "byteCount" : 10,
+            "filename" : "plan.pdf",
+            "id" : "00000000-0000-0000-0000-000000000071",
+            "mediaType" : "application/pdf"
+          },
+          {
+            "annotation" : {
+              "comment" : "Nice",
+              "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+              "sourceFilename" : "plan.pdf",
+              "version" : 1
+            },
+            "byteCount" : 99,
+            "filename" : "comment.png",
+            "id" : "00000000-0000-0000-0000-000000000072",
+            "mediaType" : "image/png"
+          },
+          {
+            "byteCount" : 5,
+            "filename" : "memo.m4a",
+            "id" : "00000000-0000-0000-0000-000000000073",
+            "mediaType" : "audio/mp4",
+            "voice" : {
+              "duration" : 1,
+              "waveform" : [
+
+              ]
+            }
+          }
+        ],
+        "author" : {
+          "bot" : {
+            "_0" : "00000000-0000-0000-0000-000000000001"
+          }
+        },
+        "body" : "Here it is.",
+        "call" : {
+          "botID" : "00000000-0000-0000-0000-000000000001",
+          "endedAt" : 1700000600,
+          "lines" : [
+            {
+              "at" : 1700000500,
+              "speaker" : "you",
+              "text" : "Hi"
+            },
+            {
+              "speaker" : "bot",
+              "text" : "Hello"
+            }
+          ],
+          "reason" : "A reminder",
+          "unanswered" : "declined"
+        },
+        "conversationID" : "00000000-0000-0000-0000-000000000011",
+        "createdAt" : 1700000000,
+        "delivered" : true,
+        "id" : "00000000-0000-0000-0000-000000000080",
+        "reactions" : [
+          {
+            "author" : {
+              "you" : {
+
+              }
+            },
+            "emoji" : "👍"
+          },
+          {
+            "author" : {
+              "bot" : {
+                "_0" : "00000000-0000-0000-0000-000000000002"
+              }
+            },
+            "emoji" : "🎉"
+          },
+          {
+            "author" : {
+              "system" : {
+
+              }
+            },
+            "emoji" : "!"
+          }
+        ],
+        "task" : {
+          "botID" : "00000000-0000-0000-0000-000000000001",
+          "id" : "00000000-0000-0000-0000-000000000040",
+          "title" : "Write the report"
+        }
+      }
+    }
+  },
+  "response.messageMatches" : {
+    "messageMatches" : {
+      "_0" : [
+        {
+          "conversationID" : "00000000-0000-0000-0000-000000000011",
+          "createdAt" : 1700000000,
+          "messageID" : "00000000-0000-0000-0000-000000000080",
+          "snippet" : "…said hello…"
+        }
+      ]
+    }
+  },
+  "response.messages" : {
+    "messages" : {
+      "_0" : {
+        "count" : 3,
+        "messages" : [
+          {
+            "attachments" : [
+              {
+                "annotation" : {
+                  "comment" : "Shorter, please.",
+                  "quote" : "the plan",
+                  "region" : {
+                    "height" : 0.375,
+                    "width" : 0.125,
+                    "x" : 0.25,
+                    "y" : 0.5
+                  },
+                  "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+                  "sourceFilename" : "plan.pdf",
+                  "sourceMessageID" : "00000000-0000-0000-0000-000000000081",
+                  "version" : 1
+                },
+                "byteCount" : 2048,
+                "card" : {
+                  "capturedAt" : 1700000050,
+                  "colour" : 2,
+                  "detail" : "A game",
+                  "icon" : "BAU=",
+                  "image" : "AQID",
+                  "isGame" : true,
+                  "symbol" : "square.grid.2x2",
+                  "title" : "Counter"
+                },
+                "filename" : "voice.m4a",
+                "id" : "00000000-0000-0000-0000-000000000070",
+                "mediaType" : "audio/mp4",
+                "pixelSize" : {
+                  "height" : 480,
+                  "width" : 640
+                },
+                "url" : "https://example.com/a?b=c",
+                "voice" : {
+                  "duration" : 2.5,
+                  "localeIdentifier" : "en_GB",
+                  "transcript" : "Hello there",
+                  "waveform" : [
+                    0,
+                    0.25,
+                    0.5,
+                    1
+                  ]
+                }
+              },
+              {
+                "byteCount" : 10,
+                "filename" : "plan.pdf",
+                "id" : "00000000-0000-0000-0000-000000000071",
+                "mediaType" : "application/pdf"
+              },
+              {
+                "annotation" : {
+                  "comment" : "Nice",
+                  "sourceAttachmentID" : "00000000-0000-0000-0000-000000000071",
+                  "sourceFilename" : "plan.pdf",
+                  "version" : 1
+                },
+                "byteCount" : 99,
+                "filename" : "comment.png",
+                "id" : "00000000-0000-0000-0000-000000000072",
+                "mediaType" : "image/png"
+              },
+              {
+                "byteCount" : 5,
+                "filename" : "memo.m4a",
+                "id" : "00000000-0000-0000-0000-000000000073",
+                "mediaType" : "audio/mp4",
+                "voice" : {
+                  "duration" : 1,
+                  "waveform" : [
+
+                  ]
+                }
+              }
+            ],
+            "author" : {
+              "bot" : {
+                "_0" : "00000000-0000-0000-0000-000000000001"
+              }
+            },
+            "body" : "Here it is.",
+            "call" : {
+              "botID" : "00000000-0000-0000-0000-000000000001",
+              "endedAt" : 1700000600,
+              "lines" : [
+                {
+                  "at" : 1700000500,
+                  "speaker" : "you",
+                  "text" : "Hi"
+                },
+                {
+                  "speaker" : "bot",
+                  "text" : "Hello"
+                }
+              ],
+              "reason" : "A reminder",
+              "unanswered" : "declined"
+            },
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "createdAt" : 1700000000,
+            "delivered" : true,
+            "id" : "00000000-0000-0000-0000-000000000080",
+            "reactions" : [
+              {
+                "author" : {
+                  "you" : {
+
+                  }
+                },
+                "emoji" : "👍"
+              },
+              {
+                "author" : {
+                  "bot" : {
+                    "_0" : "00000000-0000-0000-0000-000000000002"
+                  }
+                },
+                "emoji" : "🎉"
+              },
+              {
+                "author" : {
+                  "system" : {
+
+                  }
+                },
+                "emoji" : "!"
+              }
+            ],
+            "task" : {
+              "botID" : "00000000-0000-0000-0000-000000000001",
+              "id" : "00000000-0000-0000-0000-000000000040",
+              "title" : "Write the report"
+            }
+          },
+          {
+            "attachments" : [
+
+            ],
+            "author" : {
+              "you" : {
+
+              }
+            },
+            "body" : "",
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "createdAt" : 1700000001,
+            "delivered" : false,
+            "id" : "00000000-0000-0000-0000-000000000081",
+            "reactions" : [
+
+            ]
+          },
+          {
+            "attachments" : [
+
+            ],
+            "author" : {
+              "system" : {
+
+              }
+            },
+            "body" : "Call started",
+            "call" : {
+              "botID" : "00000000-0000-0000-0000-000000000001",
+              "lines" : [
+
+              ]
+            },
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "createdAt" : 1700000002,
+            "delivered" : true,
+            "id" : "00000000-0000-0000-0000-000000000082",
+            "reactions" : [
+
+            ]
+          }
+        ],
+        "start" : 0
+      }
+    }
+  },
+  "response.messages.noStart" : {
+    "messages" : {
+      "_0" : {
+        "count" : 0,
+        "messages" : [
+
+        ]
+      }
+    }
+  },
+  "response.noodlet" : {
+    "noodlet" : {
+      "_0" : {
+        "byteCount" : 4096,
+        "grant" : "00000000-0000-0000-0000-0000000000AB",
+        "manifest" : "eyJuYW1lIjoiQ291bnRlciJ9",
+        "noodletID" : "00000000-0000-0000-0000-0000000000AD",
+        "revision" : "r1"
+      }
+    }
+  },
+  "response.noodletAnswer" : {
+    "noodletAnswer" : {
+      "_0" : "e30="
+    }
+  },
+  "response.people" : {
+    "people" : {
+      "_0" : [
+        {
+          "avatar" : {
+            "colour" : 3,
+            "image" : "iVBORw==",
+            "imageDigest" : "abababababababababababababababababababababababababababababababab",
+            "symbol" : "star"
+          },
+          "id" : "00000000-0000-0000-0000-000000000050",
+          "name" : "Dee"
+        },
+        {
+          "id" : "00000000-0000-0000-0000-000000000051",
+          "name" : "Eve"
+        }
+      ]
+    }
+  },
+  "response.picture" : {
+    "picture" : {
+      "_0" : "iVBORw=="
+    }
+  },
+  "response.picture.none" : {
+    "picture" : {
+
+    }
+  },
+  "response.signInForm" : {
+    "signInForm" : {
+      "_0" : {
+        "crossOrigin" : true,
+        "fields" : [
+          {
+            "kind" : "username",
+            "label" : "User"
+          },
+          {
+            "kind" : "email"
+          },
+          {
+            "kind" : "password",
+            "label" : "Password"
+          },
+          {
+            "kind" : "new-password"
+          },
+          {
+            "kind" : "one-time-code",
+            "label" : "Code",
+            "length" : 6
+          }
+        ],
+        "host" : "accounts.example.com",
+        "pageHost" : "example.com",
+        "secure" : true,
+        "token" : "00000000-0000-0000-0000-0000000000F0"
+      }
+    }
+  },
+  "response.status" : {
+    "status" : {
+      "_0" : {
+        "avatar" : {
+          "colour" : 3,
+          "image" : "iVBORw==",
+          "imageDigest" : "abababababababababababababababababababababababababababababababab",
+          "symbol" : "star"
+        },
+        "callPushExpiresAt" : 1700086400,
+        "canPairDevices" : true,
+        "canShareBots" : true,
+        "endpoints" : [
+          {
+            "host" : "hub.local",
+            "port" : 38415
+          },
+          {
+            "host" : "fd7a:115c:a1e0::1",
+            "port" : 38416
+          }
+        ],
+        "explainsPauses" : true,
+        "groupNotifications" : "mentions",
+        "harnesses" : [
+          {
+            "models" : [
+              {
+                "defaultEffort" : "high",
+                "efforts" : [
+                  {
+                    "id" : "high",
+                    "name" : "High"
+                  },
+                  {
+                    "id" : "low",
+                    "name" : "Low"
+                  }
+                ],
+                "id" : "opus",
+                "name" : "Opus"
+              },
+              {
+                "efforts" : [
+
+                ],
+                "id" : "haiku",
+                "name" : "Haiku"
+              }
+            ],
+            "profile" : "00000000-0000-0000-0000-0000000000E0",
+            "profileName" : "Work",
+            "provider" : "claude",
+            "providerName" : "Claude",
+            "restrictsModels" : true,
+            "voices" : [
+              {
+                "id" : "marin",
+                "name" : "Marin",
+                "presentation" : "feminine"
+              },
+              {
+                "id" : "cedar",
+                "name" : "Cedar",
+                "presentation" : "masculine"
+              }
+            ]
+          },
+          {
+            "models" : [
+
+            ],
+            "provider" : "codex",
+            "providerName" : "Codex",
+            "restrictsModels" : false,
+            "voices" : [
+
+            ]
+          }
+        ],
+        "hubName" : "Home Hub",
+        "imageModel" : "flux",
+        "isAdmin" : true,
+        "keepsAnnotations" : true,
+        "mutesGroups" : true,
+        "notifiesMentions" : true,
+        "planName" : "Family",
+        "protocolVersion" : 1,
+        "ringsThroughPush" : true,
+        "signsInToBrowsers" : true,
+        "suspendsBots" : true,
+        "userID" : "00000000-0000-0000-0000-0000000000C0",
+        "userName" : "Ada"
+      }
+    }
+  },
+  "response.status.minimal" : {
+    "status" : {
+      "_0" : {
+        "canPairDevices" : false,
+        "canShareBots" : false,
+        "endpoints" : [
+
+        ],
+        "explainsPauses" : false,
+        "harnesses" : [
+
+        ],
+        "hubName" : "Hub",
+        "isAdmin" : false,
+        "keepsAnnotations" : false,
+        "mutesGroups" : false,
+        "notifiesMentions" : false,
+        "planName" : "",
+        "protocolVersion" : 1,
+        "ringsThroughPush" : false,
+        "signsInToBrowsers" : false,
+        "suspendsBots" : false,
+        "userName" : ""
+      }
+    }
+  },
+  "response.toolCatalog" : {
+    "toolCatalog" : {
+      "_0" : [
+        {
+          "badge" : "Experimental",
+          "endpoint" : "https://mcp.linear.app/sse",
+          "icon" : "iVBORw==",
+          "id" : "linear",
+          "instructions" : "Use for tickets.",
+          "name" : "Linear",
+          "summary" : "Issues"
+        },
+        {
+          "endpoint" : "https://example.com/mcp",
+          "id" : "bare",
+          "instructions" : "",
+          "name" : "Bare",
+          "summary" : ""
+        }
+      ]
+    }
+  },
+  "response.user" : {
+    "user" : {
+      "_0" : {
+        "avatar" : {
+          "colour" : 3,
+          "image" : "iVBORw==",
+          "imageDigest" : "abababababababababababababababababababababababababababababababab",
+          "symbol" : "star"
+        },
+        "canPairDevices" : true,
+        "devices" : [
+          {
+            "id" : "00000000-0000-0000-0000-0000000000D0",
+            "isConnected" : true,
+            "lastSeen" : 1700001000,
+            "name" : "iPhone",
+            "paired" : 1700000000
+          },
+          {
+            "id" : "00000000-0000-0000-0000-0000000000D1",
+            "isConnected" : false,
+            "name" : "Mac",
+            "paired" : 1700000005
+          }
+        ],
+        "id" : "00000000-0000-0000-0000-0000000000C0",
+        "isAdmin" : true,
+        "isSuspended" : true,
+        "name" : "Ada",
+        "plan" : "00000000-0000-0000-0000-0000000000C9"
+      }
+    }
+  },
+  "response.users" : {
+    "users" : {
+      "_0" : {
+        "plans" : [
+          {
+            "id" : "00000000-0000-0000-0000-0000000000C9",
+            "name" : "Family"
+          }
+        ],
+        "users" : [
+          {
+            "avatar" : {
+              "colour" : 3,
+              "image" : "iVBORw==",
+              "imageDigest" : "abababababababababababababababababababababababababababababababab",
+              "symbol" : "star"
+            },
+            "canPairDevices" : true,
+            "devices" : [
+              {
+                "id" : "00000000-0000-0000-0000-0000000000D0",
+                "isConnected" : true,
+                "lastSeen" : 1700001000,
+                "name" : "iPhone",
+                "paired" : 1700000000
+              },
+              {
+                "id" : "00000000-0000-0000-0000-0000000000D1",
+                "isConnected" : false,
+                "name" : "Mac",
+                "paired" : 1700000005
+              }
+            ],
+            "id" : "00000000-0000-0000-0000-0000000000C0",
+            "isAdmin" : true,
+            "isSuspended" : true,
+            "name" : "Ada",
+            "plan" : "00000000-0000-0000-0000-0000000000C9"
+          },
+          {
+            "canPairDevices" : false,
+            "devices" : [
+
+            ],
+            "id" : "00000000-0000-0000-0000-0000000000C1",
+            "isAdmin" : false,
+            "isSuspended" : false,
+            "name" : "Bo",
+            "plan" : "00000000-0000-0000-0000-0000000000C9"
+          }
+        ]
+      }
+    }
+  }
+}

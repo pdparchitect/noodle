@@ -1,8 +1,6 @@
-import CloudKit
 import CryptoKit
 import Foundation
-import ImageIO
-@_exported import Surface
+import SurfaceWire
 
 /// The version of the requests below. A Hub serves the versions it knows and names the app
 /// to update for any other, rather than failing mid-conversation. Adding a request, an event
@@ -83,13 +81,13 @@ public enum LinkProtocol {
         var request: LinkRequest
     }
 
-    static var encoder: JSONEncoder {
+    package static var encoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .secondsSince1970
         return encoder
     }
 
-    static var decoder: JSONDecoder {
+    package static var decoder: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
         return decoder
@@ -525,7 +523,7 @@ public enum LinkPicture {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    static func isDigest(_ text: String) -> Bool {
+    package static func isDigest(_ text: String) -> Bool {
         text.count == 64 && text.allSatisfy { $0.isHexDigit && !$0.isUppercase }
     }
 }
@@ -1639,21 +1637,6 @@ public enum LinkPush {
         let digest = SHA256.hash(data: Data("\(topic)\n\(conversation.uuidString)".utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
-
-    /// The same for every write about one device and conversation, so each replaces the last.
-    public static func recordID(topic: String, conversation: UUID) -> CKRecord.ID {
-        CKRecord.ID(recordName: recordName(topic: topic, conversation: conversation))
-    }
-
-    /// What the Hub writes about one device and conversation. It lives here, beside the fields, so that
-    /// scripts/verify-push-setup.sh can check it against CloudKit's schema while building only this package.
-    public static func record(topic: String, conversation: UUID, unread: Int) -> CKRecord {
-        let record = CKRecord(recordType: recordType, recordID: recordID(topic: topic, conversation: conversation))
-        record[topicField] = topic
-        record[conversationField] = conversation.uuidString
-        record[unreadField] = Int64(unread)
-        return record
-    }
 }
 
 /// How far a device has read a conversation: up to and including a message. It names the message
@@ -1872,17 +1855,6 @@ public struct LinkPixelSize: Codable, Equatable, Sendable {
         guard (1...Self.limit).contains(width), (1...Self.limit).contains(height) else { return nil }
         self.width = width
         self.height = height
-    }
-
-    /// Reads only the file's header; nil for anything that is not a picture.
-    public init?(pictureAt url: URL) {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
-              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else { return nil }
-        // Orientations 5 to 8 turn the picture a quarter.
-        let turned = (5...8).contains((properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1)
-        self.init(width: turned ? height : width, height: turned ? width : height)
     }
 
     private enum CodingKeys: String, CodingKey { case width, height }
