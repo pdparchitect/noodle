@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- When an update changes what bots are told about using the Hub, each bot is asked once to reread it, so bots that were already running pick up new features such as tasks without being restarted.
+
 ## [0.49.0] - 2026-11-10
 
 ### Added

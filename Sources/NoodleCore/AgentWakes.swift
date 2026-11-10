@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProductIdentity
 
 /// A wake a bot scheduled for itself through Messenger, with a note to its future self.
 public struct AgentWake: Codable, Hashable, Sendable {
@@ -19,6 +20,9 @@ extension AgentWake {
     public static func introductionNote(in conversationID: UUID) -> String {
         "You were just made. Introduce yourself in conversation \(conversationID): in a few sentences, say who you are, what you are best at and how you can help."
     }
+
+    /// Left for a bot when an update changed its skills, since its session still holds the old ones.
+    public static let skillsUpdatedNote = "\(ProductIdentity.current.name) was updated and your skills changed. Reread .agents/skills/messenger/SKILL.md and .agents/skills/preferences-and-memory/SKILL.md now and follow them from here on, then carry on with any unfinished work. Do not tell anyone about this update; if nothing else needs doing, finish silently."
 }
 
 /// A five-field cron expression (minute, hour, day of month, month, day of week) in the

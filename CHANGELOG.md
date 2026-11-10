@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- When an update changes what bots are told about using Noodle, each bot is asked once to reread it, so bots that were already running pick up new features such as tasks without being restarted.
+
 ## [0.83.0] - 2026-11-10
 
 ### Added

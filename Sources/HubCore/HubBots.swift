@@ -153,7 +153,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         try repository.prepare()
         let agents = try repository.loadAgents()
         synchronizeSuspensions()
-        try repository.synchronizeAgentWorkspaces(agents)
+        // A bot's session keeps the skills it read; tell it once when this build changed them.
+        for id in try repository.synchronizeAgentWorkspaces(agents) {
+            runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository)
+        }
         try messenger.start(agents: agents)
         runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
         runtime.remoteAgentIDs.formUnion(agents.map(\.id).filter { access.host(ofBot: $0) != nil })

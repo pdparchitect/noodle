@@ -961,7 +961,10 @@ final class NoodleStore {
             applySuspensions()
             activityWindows.synchronize(agents: agents)
             runtime.reloadAccess()
-            try repository.synchronizeAgentWorkspaces(agents)
+            // A bot's session keeps the skills it read; tell it once when this build changed them.
+            for id in try repository.synchronizeAgentWorkspaces(agents) {
+                runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository)
+            }
             if connectsServices {
                 try messenger.start(agents: agents)
                 // Provider skills appear after discovery; a bot's AGENTS.md lists them once they do.

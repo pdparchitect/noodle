@@ -1,5 +1,6 @@
 import Darwin
 import AppletBridge
+import CryptoKit
 import ComputerBridge
 import BrowserBridge
 import Foundation
@@ -307,13 +308,16 @@ public struct WorkspaceRepository: Sendable {
         return agent
     }
 
-    public func synchronizeAgentWorkspaces(_ agents: [AgentRecord]) throws {
-        for agent in agents {
-            try synchronizeAgentWorkspace(agent)
-        }
+    /// Returns the bots whose skills this build changed, to be told to reread them.
+    @discardableResult
+    public func synchronizeAgentWorkspaces(_ agents: [AgentRecord]) throws -> [UUID] {
+        try agents.filter { try synchronizeAgentWorkspace($0) }.map(\.id)
     }
 
-    public func synchronizeAgentWorkspace(_ agent: AgentRecord) throws {
+    /// Returns whether the bot's skills changed since it last had them; a new bot reads them fresh, and an
+    /// archived one is told once it is back.
+    @discardableResult
+    public func synchronizeAgentWorkspace(_ agent: AgentRecord) throws -> Bool {
         try storage(for: agent.id).validate()
         let directory = directory(for: agent)
         guard FileManager.default.fileExists(atPath: directory.path) else {
@@ -344,12 +348,26 @@ public struct WorkspaceRepository: Sendable {
         try AgentTips.synchronize(workspace: directory)
         _ = try synchronizeClaudeSkillLinks(in: directory)
 
+        let skillsChanged = agent.archivedAt == nil ? try recordSkills(of: agent, hadSkills: messengerFiles.contains("SKILL.md")) : false
         try messengerFiles.writeData(Data(Self.messengerSkill.utf8), named: "SKILL.md")
         try WorkspaceMailbox(workspace: directory, path: ".agents/skills/preferences-and-memory", create: true)
             .writeData(Data(Self.preferencesAndMemorySkill.utf8), named: "SKILL.md")
         if let launcherExecutableURL {
             try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
         }
+        return skillsChanged
+    }
+
+    /// Keeps a digest of the skills a bot was last given beside its workspace, where the bot cannot change it,
+    /// and says whether they differ from this build's. A bot from before digests were kept counts as changed.
+    private func recordSkills(of agent: AgentRecord, hadSkills: Bool) throws -> Bool {
+        let url = storage(for: agent.id).package.appendingPathComponent("skills.sha256")
+        let digest = SHA256.hash(data: Data((Self.messengerSkill + Self.preferencesAndMemorySkill).utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        let previous = try? String(contentsOf: url, encoding: .utf8)
+        guard previous != digest else { return false }
+        try Data(digest.utf8).write(to: url, options: .atomic)
+        return hadSkills
     }
 
     public func loadAgentBackstory(_ agent: AgentRecord) throws -> String {
