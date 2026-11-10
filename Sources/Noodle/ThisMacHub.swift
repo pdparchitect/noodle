@@ -72,8 +72,19 @@ import Observation
         if defaults.bool(forKey: Self.enabledKey) { await setOn(true) }
     }
 
+    /// The person's choice; never on while the organisation forbids it.
     func setOn(_ on: Bool) async {
+        guard !on || Organisation.allows(.hubHosting) else { return }
         defaults.set(on, forKey: Self.enabledKey)
+        await serve(on)
+    }
+
+    /// Stops while the organisation forbids it and comes back after if the person had it on, keeping their choice.
+    func applyOrganisationPolicy() async {
+        await serve(Organisation.allows(.hubHosting) && defaults.bool(forKey: Self.enabledKey))
+    }
+
+    private func serve(_ on: Bool) async {
         if on, hub == nil {
             let hub = PersonalHub(name: Host.current().localizedName ?? "My Mac", directory: placement.directory, repository: repository,
                                   runtime: runtime, applets: applets, profiles: profiles, service: service,

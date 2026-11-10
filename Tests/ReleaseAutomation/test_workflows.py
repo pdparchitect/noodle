@@ -820,6 +820,7 @@ class PathScopeTests(unittest.TestCase):
             (['Sources/NoodleCore/Bot.swift'], root),
             (['Tests/NoodleAppTests/ScreenCaptureTests.swift'], root),
             (['Tools/Maps/Sources/NoodleMapsTools/Maps.swift'], root),
+            (['Enterprise/Sources/NoodleEnterprise/ManagedPolicy.swift', 'Enterprise/Profiles/Noodle.mobileconfig'], root),
             (['Package.swift', 'Package.resolved', 'VERSION'], root),
             # Mobile bundles the voice previews from the root's Support folder.
             (['Support/VoicePreviews/ava.m4a'], root + ['mobile']),

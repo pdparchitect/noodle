@@ -44,7 +44,7 @@ EVERYWHERE = [".github/", "Tests/ReleaseAutomation/", "Tests/CoverageReporting/"
 # need only the checks.
 SEPARATE = ["Embed/"]
 # What the root package owns outside the other packages. Anything else at the top runs every suite.
-ROOT_FILES = ["Sources/", "Tests/", "Tools/", "Support/", "Package.swift", "Package.resolved", "Project.swift",
+ROOT_FILES = ["Sources/", "Tests/", "Tools/", "Support/", "Enterprise/", "Package.swift", "Package.resolved", "Project.swift",
               "Tuist.swift", "VERSION"]
 
 

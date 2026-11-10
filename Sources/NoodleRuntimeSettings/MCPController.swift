@@ -64,6 +64,7 @@ public final class MCPController {
         }
     }
     func save(_ record: MCPConnectionRecord) throws {
+        guard Organisation.allows(Organisation.action(for: record)) else { throw MCPServiceError.notAllowed }
         try requireReadableRegistry()
         var next = registry
         if let index = next.connections.firstIndex(where: { $0.id == record.id }) { next.connections[index] = record }
@@ -201,14 +202,18 @@ public final class MCPController {
     }
     /// Call after every change to `registry`. A connection that cannot be read grants nothing.
     private func synchronizeProviders() {
-        let connections = registryReadable ? registry.connections : []
+        // What the organisation blocks reaches no bot; nothing is deleted, so it comes back once allowed.
+        let allowed = Set(registry.connections.filter { Organisation.allows(Organisation.action(for: $0)) }.map(\.id))
+        let connections = registryReadable ? registry.connections.filter { allowed.contains($0.id) } : []
         providers?.synchronize(connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
         let granted = registryReadable ? registry.assignments : [:]
         onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
-            UUID(uuidString: key).map { ($0, Set(ids.map(\.uuidString))) }
+            UUID(uuidString: key).map { ($0, Set(ids.filter(allowed.contains).map(\.uuidString))) }
         }))
     }
     private nonisolated static func safeError(_ error: Error) -> String { MCPConnectionProviders.safeError(error) }
+    /// Puts a changed organisation policy in force: blocked connections leave the bots that had them.
+    public func applyOrganisationPolicy() { synchronizeProviders() }
 }
 
 // Open an ordinary default-browser tab, retaining normal profiles and extensions.

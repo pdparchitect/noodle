@@ -64,6 +64,7 @@ public actor MCPService {
     public func signIn(_ connection: MCPConnectionRecord, redirectURI: URL,
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -120,6 +121,8 @@ public actor MCPService {
 
     public func perform(_ request: MCPBridgeRequest, connection: MCPConnectionRecord,
                         authorized: @escaping @Sendable () async -> Bool = { true }) async throws -> Data {
+        // Every call asks, so a connection the organisation blocks stops at once, whoever calls.
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
         try Task.checkCancellation()
         guard Date() < request.expiresAt else { throw MCPServiceError.timedOut }
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }

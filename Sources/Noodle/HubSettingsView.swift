@@ -1,6 +1,7 @@
 import AppKit
 import HubCore
 import HubLink
+import NoodleCore
 import NoodleHubClient
 import NoodleRuntimeSettings
 import SwiftUI
@@ -30,8 +31,11 @@ private struct ThisMacRows: View {
         let thisMac = store.thisMac
         Toggle(isOn: Binding(get: { thisMac.isOn }, set: { on in Task { await thisMac.setOn(on) } })) {
             Text("Let My Devices Reach This Mac")
-            Text("Your phone and other Macs talk to the bots here as they would a Noodle Hub’s. The Mac stays awake while this is on.")
+            Text(OrganisationStatus.shared.allows(.hubHosting)
+                 ? "Your phone and other Macs talk to the bots here as they would a Noodle Hub’s. The Mac stays awake while this is on."
+                 : Organisation.managedText)
         }
+        .disabled(!OrganisationStatus.shared.allows(.hubHosting))
         if let hub = thisMac.hub {
             HubLinkRows(link: hub.link)
             ForEach(hub.access.devices) { device in deviceRow(device, hub: hub) }
@@ -98,7 +102,9 @@ private struct JoinedHubRows: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Noodle Hub").fontWeight(.semibold)
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Use the harnesses a Noodle Hub lends you, such as a friend’s or one of your own Macs.")
+                    Text(OrganisationStatus.shared.allows(.hubConnections)
+                         ? "Use the harnesses a Noodle Hub lends you, such as a friend’s or one of your own Macs."
+                         : Organisation.managedText)
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
@@ -108,6 +114,7 @@ private struct JoinedHubRows: View {
                     }
                     .buttonStyle(.link)
                     .help("Join a Noodle Hub with an invitation")
+                    .disabled(!OrganisationStatus.shared.allows(.hubConnections))
                 }
             }
         }

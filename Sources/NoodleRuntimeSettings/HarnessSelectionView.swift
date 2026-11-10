@@ -30,13 +30,16 @@ struct HarnessSelectionView: View {
                                     .frame(width: 20, height: 20)
                                     .accessibilityHidden(true)
                                 Text(provider.displayName)
-                                if provider.isExperimental {
+                                if !OrganisationStatus.shared.allows(.harness(provider)) {
+                                    Text(Organisation.managedText).font(.caption).foregroundStyle(.secondary)
+                                } else if provider.isExperimental {
                                     Text("Experimental").font(.caption).foregroundStyle(.orange)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .toggleStyle(.switch)
+                        .disabled(!OrganisationStatus.shared.allows(.harness(provider)))
                     }
                 }
             }

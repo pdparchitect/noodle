@@ -43,7 +43,7 @@ public struct MCPSettingsView: View {
                                 HStack(spacing: 12) {
                                     Button(store.mcp.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.mcp.connect(connection) }
                                         .buttonStyle(.link)
-                                        .disabled(store.mcp.signingIn != nil)
+                                        .disabled(store.mcp.signingIn != nil || !allows(connection))
                                     Button("Edit…") { editing = connection }
                                         .buttonStyle(.link)
                                     Button("Remove") { removing = connection }
@@ -73,9 +73,13 @@ public struct MCPSettingsView: View {
             .padding(20)
             Divider()
             HStack {
+                if !OrganisationStatus.shared.allows(.toolConnections) {
+                    Text(Organisation.managedText).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button { showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
-                    .help("Add a service or another account")
+                    .help(OrganisationStatus.shared.allows(.toolConnections) ? "Add a service or another account" : Organisation.managedText)
+                    .disabled(!OrganisationStatus.shared.allows(.toolConnections))
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
@@ -96,8 +100,14 @@ public struct MCPSettingsView: View {
         } message: { Text(store.mcp.errorMessage ?? "") }
     }
 
+    private func allows(_ connection: MCPConnectionRecord) -> Bool {
+        OrganisationStatus.shared.allows(Organisation.action(for: connection))
+    }
+
     @ViewBuilder private func connectionStatus(_ connection: MCPConnectionRecord) -> some View {
-        if store.mcp.signingIn == connection.id {
+        if !allows(connection) {
+            SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
+        } else if store.mcp.signingIn == connection.id {
             Text(store.mcp.signInStage.isEmpty ? "Signing in…" : store.mcp.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.mcp.signInStage)

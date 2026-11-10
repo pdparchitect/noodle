@@ -92,6 +92,7 @@ import SwiftUI
         await refresh()
     }
     func openLibrary() async throws {
+        try Self.requireAllowed()
         guard let url = BrowserApplication.locate() else { throw BrowserError("Build or install \(BrowserBuildIdentity.current.appName) first.") }
         let configuration = NSWorkspace.OpenConfiguration(); configuration.activates = true
         configuration.allowsRunningApplicationSubstitution = false
@@ -99,6 +100,7 @@ import SwiftUI
     }
     /// Opens a browser link in Noodle Browser, which shows that browser and tab.
     func open(_ link: URL) async throws {
+        try Self.requireAllowed()
         guard BrowserLink.build(in: link) == .current, BrowserLink.target(in: link) != nil else {
             throw BrowserError("This browser belongs to the other environment and is unavailable in \(BrowserBuildIdentity.current.appName).")
         }
@@ -108,7 +110,12 @@ import SwiftUI
         configuration.allowsRunningApplicationSubstitution = false
         _ = try await NSWorkspace.shared.open([link], withApplicationAt: app, configuration: configuration)
     }
+    /// Checked before Noodle reaches Noodle Browser for the person or a bot.
+    static func requireAllowed() throws {
+        guard Organisation.allows(.browsers) else { throw BrowserError("Your organisation doesn't allow Noodle Browser.") }
+    }
     private func call(_ request: BrowserRequest, launchIfNeeded: Bool = true, authorize: () throws -> Void = {}) async throws -> BrowserResponse {
+        try Self.requireAllowed()
         try authorize()
         if let connection { return try await connection(request) }
         let socket = try BrowserConnection.socketURL(), team = try BrowserConnection.signingTeam()

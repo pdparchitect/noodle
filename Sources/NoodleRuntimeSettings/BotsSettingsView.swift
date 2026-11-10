@@ -174,7 +174,9 @@ public struct BotsSettingsView: View {
             .labelsHidden()
             .controlSize(.mini)
             .accessibilityLabel("\(agent.displayName), unrestricted access")
-            .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived)
+            .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived
+                      || !OrganisationStatus.shared.allows(.unrestrictedAccess))
+            .help(OrganisationStatus.shared.allows(.unrestrictedAccess) ? "" : Organisation.managedText)
             .frame(width: accessColumnWidth)
 
             if provider?.supportsAccountApps == true {

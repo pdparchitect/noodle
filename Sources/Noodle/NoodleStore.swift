@@ -259,6 +259,7 @@ final class NoodleStore {
     private var agentsStarted = false
     private var harnessUpdateTask: Task<Void, Never>?
     private var hubCheckInTask: Task<Void, Never>?
+    @ObservationIgnored private var organisationObserver: NSObjectProtocol?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
     private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
     @ObservationIgnored private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
@@ -452,7 +453,27 @@ final class NoodleStore {
         if connectsServices {
             spaceSync = SpaceCloudSync.ifEntitled(list: spaceList, stateFile: self.repository.rootURL.appendingPathComponent("spaces-sync.json"))
         }
+        // Every Hub request goes only to addresses the organisation allows.
+        HubPairing.allowsEndpoint = { Organisation.allows(.hubConnections) && Organisation.allows(.hubAddress($0.host)) }
+        HubPairing.refusal = "Your organisation doesn't allow this Noodle Hub."
+        organisationObserver = NotificationCenter.default.addObserver(forName: Organisation.didChangeNotification, object: nil,
+                                                                      queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyOrganisationPolicy() }
+        }
         Self.active = self
+    }
+
+    /// Puts a changed organisation policy in force at once, keeping everything for when it allows it again.
+    private func applyOrganisationPolicy() {
+        if agentsStarted { runtime.reconcile(agents: agents, repository: repository, immediately: true) }
+        mcp.applyOrganisationPolicy()
+        tools.synchronizeSkills()
+        Task { await thisMac.applyOrganisationPolicy() }
+        // Open streams to joined Hubs end, and follow again through the policy: a Hub it blocks stays disconnected.
+        for task in hubMirrorTasks.values { task.cancel() }
+        hubMirrorTasks = [:]
+        for pairing in hubs.hubs { pairing.reconnect() }
+        refreshHubMirrors()
     }
 
     /// The Mac hears of iCloud changes only when it asks, so it asks whenever Noodle comes to the front.

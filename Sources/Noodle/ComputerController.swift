@@ -90,6 +90,7 @@ import SwiftUI
     }
     func call(_ request: ComputerRequest, launchIfNeeded: Bool = true,
               authorize: () throws -> Void = {}) async throws -> ComputerResponse {
+        try Self.requireAllowed()
         // Check before each action, including after a provider relaunch/update.
         // This inexpensive local handshake never replays the requested mutation.
         var handshake = ComputerRequest(.list)
@@ -103,6 +104,10 @@ import SwiftUI
         try authorize()
         if request.operation == .list { return discovery }
         return try await connect(request, launchIfNeeded: false)
+    }
+    /// Checked before Noodle reaches Noodle Computer for the person or a bot.
+    static func requireAllowed() throws {
+        guard Organisation.allows(.computers) else { throw ComputerBridgeError("Your organisation doesn't allow Noodle Computer.") }
     }
     /// The kinds of computer Computer can make.
     /// Never launches Noodle Computer: a computer only runs while it is open.
@@ -168,6 +173,7 @@ import SwiftUI
     }
     /// Explicit user action: bring the library forward instead of quiet discovery.
     func openLibrary() async throws {
+        try Self.requireAllowed()
         if let launch { try await launch.value }
         guard let url = applicationLookup() else {
             throw ComputerBridgeError("Install \(ComputerBuildIdentity.current.appName) to create a computer.")
@@ -182,6 +188,7 @@ import SwiftUI
     /// This does not use the agent broker or depend on any bot assignment.
     /// Opens a computer link in Noodle Computer, which selects and starts that computer.
     func open(_ link: URL) async throws {
+        try Self.requireAllowed()
         guard ComputerLink.build(in: link) == .current, ComputerLink.target(in: link) != nil else {
             throw ComputerBridgeError("This computer belongs to the other environment and is unavailable in \(ComputerBuildIdentity.current.appName).")
         }

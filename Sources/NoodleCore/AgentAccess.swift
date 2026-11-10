@@ -13,7 +13,14 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
 
     /// A provider's requirements never grant access. The app records the user's
     /// harness selection separately from mutable/imported agent configuration.
+    /// An organisation that doesn't allow unrestricted access keeps every bot sandboxed, without
+    /// forgetting the person's grants.
     public func isExtended(for agent: AgentRecord) -> Bool {
+        isGranted(for: agent) && Organisation.allows(.unrestrictedAccess)
+    }
+
+    /// What the person granted, whatever the organisation allows.
+    public func isGranted(for agent: AgentRecord) -> Bool {
         if let provider = HarnessProvider(rawValue: agent.harnessIdentifier ?? ""),
            !provider.supportsRestrictedAccess {
             return requiredHarnessGrants[agent.id.uuidString]?.contains(provider.rawValue) == true

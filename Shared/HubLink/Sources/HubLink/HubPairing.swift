@@ -136,6 +136,18 @@ import Observation
 
     public static let checkInInterval: Duration = .seconds(60)
 
+    /// The addresses this device may reach Hubs at, as whoever manages the device decides. Joining,
+    /// every request and stream, and leaving use only the addresses it allows, so the check can't be
+    /// gone around; a Hub with none of its addresses allowed is refused with `refusal`.
+    public static var allowsEndpoint: (LinkEndpoint) -> Bool = { _ in true }
+    public static var refusal = "This Noodle Hub isn't allowed on this device."
+
+    static func allowed(_ endpoints: [LinkEndpoint]) throws -> [LinkEndpoint] {
+        let allowed = endpoints.filter(allowsEndpoint)
+        guard !allowed.isEmpty || endpoints.isEmpty else { throw LinkError(refusal) }
+        return allowed
+    }
+
     /// Checks in with the Hub until cancelled, which is how the Hub knows this device is connected.
     public func stayConnected() async {
         while !Task.isCancelled {
@@ -171,7 +183,7 @@ import Observation
               let identity = try? LinkIdentity.loadOrCreate(at: folder.appendingPathComponent(keyName)),
               let request = try? LinkProtocol.encode(.leave) else { return true }
         do {
-            _ = try await LinkClient.exchange(request, identity: identity, hubKey: hub.key, endpoints: hub.endpoints)
+            _ = try await LinkClient.exchange(request, identity: identity, hubKey: hub.key, endpoints: try allowed(hub.endpoints))
             return true
         } catch {
             return false
@@ -368,7 +380,7 @@ import Observation
         var video = false
         if case .openSurface = request { video = true }
         let channel = try await LinkClient.channel(try LinkProtocol.encode(request), identity: try identity(),
-                                                   hubKey: hub.key, endpoints: hub.endpoints, ownConnection: video)
+                                                   hubKey: hub.key, endpoints: try Self.allowed(hub.endpoints), ownConnection: video)
         return channel
     }
 
@@ -377,7 +389,7 @@ import Observation
     public func stream(_ request: LinkRequest) async throws -> AsyncThrowingStream<LinkEvent, Error> {
         guard let hub else { throw LinkError("This Mac has not joined a Noodle Hub.") }
         let subscription = try await LinkClient.subscribe(try LinkProtocol.encode(request), identity: try identity(),
-                                                          hubKey: hub.key, endpoints: hub.endpoints)
+                                                          hubKey: hub.key, endpoints: try Self.allowed(hub.endpoints))
         do {
             try await subscription.heard()
         } catch {
@@ -415,7 +427,7 @@ import Observation
     private func send(_ request: LinkRequest, as identity: LinkIdentity, key: LinkPublicKey,
                       endpoints: [LinkEndpoint]) async throws -> LinkResponse {
         let (data, endpoint) = try await LinkClient.exchange(try LinkProtocol.encode(request), identity: identity,
-                                                             hubKey: key, endpoints: endpoints)
+                                                             hubKey: key, endpoints: try Self.allowed(endpoints))
         // Set only when it changed: every bot's dot and every open conversation reads it.
         if self.endpoint != endpoint { self.endpoint = endpoint }
         let response = try LinkProtocol.decodeResponse(data)

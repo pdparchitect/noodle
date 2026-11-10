@@ -175,12 +175,16 @@ struct NewBotSheet: View {
                 case .browsers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubBrowserPicker(mirror: mirror, bot: name, selectedIDs: $browserIDs)
+                    } else if !OrganisationStatus.shared.allows(.browsers) {
+                        Text(Organisation.managedText).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         BrowserAssignmentPicker(controller: store.browsers, bot: name, selectedIDs: $browserIDs)
                     }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubComputerPicker(mirror: mirror, bot: name, selectedIDs: $computerIDs)
+                    } else if !OrganisationStatus.shared.allows(.computers) {
+                        Text(Organisation.managedText).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }
@@ -440,12 +444,16 @@ struct EditBotSheet: View {
                 case .browsers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubBrowserPicker(mirror: mirror, bot: name, selectedIDs: $browserIDs)
+                    } else if !OrganisationStatus.shared.allows(.browsers) {
+                        Text(Organisation.managedText).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         BrowserAssignmentPicker(controller: store.browsers, bot: name, selectedIDs: $browserIDs)
                     }
                 case .computers:
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubComputerPicker(mirror: mirror, bot: name, selectedIDs: $computerIDs)
+                    } else if !OrganisationStatus.shared.allows(.computers) {
+                        Text(Organisation.managedText).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ComputerAssignmentPicker(controller: store.computers, bot: name, selectedIDs: $computerIDs)
                     }

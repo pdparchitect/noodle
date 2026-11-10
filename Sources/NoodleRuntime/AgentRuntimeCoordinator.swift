@@ -146,6 +146,11 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored private var heartbeatTurns: Set<UUID> = []
     public private(set) var accessConfiguration: AgentAccessConfiguration
     public private(set) var changingAccess: Set<UUID> = []
+    /// Whether the organisation allowed unrestricted access when the running bots started, so a
+    /// change restarts those it grants to with the access allowed now.
+    @ObservationIgnored private var unrestrictedAccessAllowed = Organisation.allows(.unrestrictedAccess)
+    /// The harnesses the organisation allowed when they were last looked for.
+    @ObservationIgnored private var allowedHarnesses = Set(HarnessProvider.allCases.filter { Organisation.allows(.harness($0)) })
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
     /// Bots that live on a Noodle Hub. They run there, so they never start here, and one
     /// that was running here stops when it moves.
@@ -428,7 +433,8 @@ public final class AgentRuntimeCoordinator {
 
     public func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
-        guard (!required || enabled), accessConfiguration.isExtended(for: agent) != enabled else { return }
+        guard (!required || enabled), !enabled || Organisation.allows(.unrestrictedAccess),
+              accessConfiguration.isExtended(for: agent) != enabled else { return }
         changeAccess(enabled, agent: agent, repository: repository) { configuration in
             if required { configuration.authorizeSelectedHarness(for: agent) }
             else { configuration.setExtended(enabled, for: agent.id) }
@@ -703,6 +709,7 @@ public final class AgentRuntimeCoordinator {
         guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) else {
             return agent.harnessIdentifier == nil ? "Choose a harness in Edit Bot" : "The configured harness is not installed"
         }
+        if !Organisation.allows(.harness(provider)) { return "Your organisation doesn't allow \(provider.displayName)." }
         return harnesses.isOn(provider)
             ? "The configured harness is not installed"
             : "\(provider.displayName) is turned off. Turn it on in Settings → Harness."
@@ -711,7 +718,7 @@ public final class AgentRuntimeCoordinator {
     public func installation(for agent: AgentRecord) -> HarnessInstallation? {
         guard let identifier = agent.harnessIdentifier,
               let provider = HarnessProvider(rawValue: identifier) else { return nil }
-        return installations.first { $0.provider == provider && $0.isAvailable }
+        return installations.first { $0.provider == provider && $0.isAvailable && harnesses.isOn(provider) }
     }
 
     public func models(for harnessIdentifier: String?) -> [HarnessModel] {
@@ -1315,6 +1322,7 @@ public final class AgentRuntimeCoordinator {
 
     public func reconcile(agents: [AgentRecord], repository: WorkspaceRepository, immediately: Bool = false) {
         guard !isStoppingAll else { return }
+        applyOrganisationPolicy(agents: agents, repository: repository)
         for agent in agents where installation(for: runningAgent(agent)) != nil && !neverStarts(agent.id) {
             // A bot waiting on the person for a reported failure keeps it until Kick; restarting
             // cannot answer a safety stop. A sign-in or usage coming back restarts it by itself.
@@ -1353,6 +1361,38 @@ public final class AgentRuntimeCoordinator {
         }
         checkSessionRollovers(agents: agents, repository: repository)
         checkFallbackReturns(agents: agents, repository: repository)
+    }
+
+    /// Stops what the organisation's policy no longer allows, keeping everything for when it does again: a bot
+    /// on a harness it blocks stops at once, and one running with unrestricted access restarts with the access
+    /// allowed now. `reconcile` starts them again once allowed.
+    private func applyOrganisationPolicy(agents: [AgentRecord], repository: WorkspaceRepository) {
+        let unrestricted = Organisation.allows(.unrestrictedAccess)
+        let accessChanged = unrestricted != unrestrictedAccessAllowed
+        unrestrictedAccessAllowed = unrestricted
+        let allowed = Set(HarnessProvider.allCases.filter { Organisation.allows(.harness($0)) })
+        if allowed != allowedHarnesses {
+            // Pickers and Settings list only what is allowed; one allowed again is looked for and asked for its models.
+            let added = !allowed.subtracting(allowedHarnesses).isEmpty
+            allowedHarnesses = allowed
+            installationChanges += 1
+            installations = discoveredInstallations()
+            if added { refreshCapabilities() }
+        }
+        for agent in agents {
+            if let fallback = harnessFallbacks[agent.id], !allowed.contains(fallback.current) { harnessFallbacks[agent.id] = nil }
+            guard let process = processes[agent.id], !changingAccess.contains(agent.id) else { continue }
+            if let provider = HarnessProvider(rawValue: process.configuration.harnessIdentifier ?? ""), !allowed.contains(provider) {
+                runtimeIDs[agent.id] = nil
+                cancelSupervision(for: agent.id)
+                processes[agent.id] = nil
+                if process.hasInterruptedWork { recoveryPending.insert(agent.id) }
+                process.stop { _ in }
+                snapshots[agent.id] = .init(agentID: agent.id, phase: .failed, detail: unstartableDetail(runningAgent(agent)))
+            } else if accessChanged, accessConfiguration.isGranted(for: process.configuration) {
+                restart(agent: agent, repository: repository, sessionRecovery: nil)
+            }
+        }
     }
 
     /// A profile switch keeps the bot's model and effort; a harness switch uses the new defaults.
