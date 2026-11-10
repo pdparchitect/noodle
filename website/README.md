@@ -6,6 +6,7 @@ Plain HTML, CSS and a few lines of JavaScript. There's no build step. Copy the f
 - `computer/index.html`: the Noodle Computer page, linked from the main page's Computer section; it shares `styles.css`, `app.js` and `assets/`
 - `browser/index.html`: the Noodle Browser page, built the same way and linked from the Browser section
 - `applet/index.html`: the Noodle Applet page, led by games, linked from the Applet section
+- `enterprise/index.html`: the Noodle Enterprise page, for organisations that manage Noodle on their Macs, linked from every page's footer
 - `styles.css`: all styles, including dark mode and phone layouts
 - `app.js`: fades the nav logo and Download button in once you scroll past the hero buttons
 - `assets/`: the app symbols, AI harness logos, favicon, the screenshots, `stage-wallpaper.avif`, the blurred wallpaper behind the hero (the other screenshots sit on muted tiles drawn in `styles.css`), `social-card.jpg`, the link preview for X, Slack and others, and `social-card-computer.jpg`, `social-card-browser.jpg` and `social-card-applet.jpg`, the previews for the three app pages. Screenshots and photos are AVIF; the link previews stay JPEG, 2400 × 1260 and under 150 KB. `favicon.png` stays PNG at 1024 px, because `oauth/client.json` points sign-in services at it; the pages' tab icon is the 32 px `favicon-32.png`. Give each AVIF even width and height: Chrome shows nothing for a large one with an odd side
