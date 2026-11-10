@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#131519" media="(prefers-color-scheme: dark)" />
-  <meta name="description" content="Manage Noodle on your organisation's Macs with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM. Free for individuals and small businesses." />
+  <meta name="description" content="Manage Noodle on your organisation's Macs with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM. Free for small businesses." />
   <title>Noodle Enterprise - Manage Noodle across your organisation.</title>
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Noodle" />
   <meta property="og:url" content="https://usenoodle.app/enterprise/" />
   <meta property="og:title" content="Noodle Enterprise - Manage Noodle across your organisation." />
-  <meta property="og:description" content="Manage Noodle on your organisation's Macs with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM. Free for individuals and small businesses." />
+  <meta property="og:description" content="Manage Noodle on your organisation's Macs with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM. Free for small businesses." />
   <meta property="og:image" content="https://usenoodle.app/assets/social-card.jpg" />
   <meta property="og:image:width" content="2400" />
   <meta property="og:image:height" content="1260" />
@@ -20,7 +20,6 @@
   <link rel="stylesheet" href="../styles.css" />
   <style>
     .policies { row-gap: 44px; }
-    .feature .meta { margin-top: 48px; }
     .download.alt .dl { background: var(--bg); }
     .download.alt .dl:hover { background: var(--raised); }
     @media (min-width: 901px) {
@@ -69,40 +68,37 @@
       <div class="wrap facts-grid">
         <div><h3>Applies while Noodle runs</h3><p>Install, change or remove a profile and Noodle follows within a minute, without a restart.</p></div>
         <div><h3>Removed cleanly</h3><p>What a profile forbids stops, but nothing is deleted. Remove the profile and everyone's own settings come back.</p></div>
-        <div><h3>Clear in the app</h3><p>A setting your profile sets says Managed by your organisation, and Settings lists every policy in force.</p></div>
+        <div><h3>Clear in the app</h3><p>Every setting your profile controls is marked Managed by your organisation, and Settings lists every policy in force.</p></div>
       </div>
     </section>
     <section class="feature alt" id="policies">
       <div class="wrap narrow">
         <h2>Seven things you control.</h2>
-        <p class="lead">Every setting is optional and only ever narrows what's allowed. Without a profile, Noodle works as it always does.</p>
+        <p class="lead">Every setting is optional. Without a profile, Noodle works as it always does.</p>
       </div>
       <div class="wrap priv-grid policies">
-        <div><h3>Harnesses</h3><p>Choose which harnesses people can use. Bots set to any other don't start.</p></div>
-        <div><h3>Unrestricted access</h3><p>Decide whether bots may run outside the macOS sandbox. When you don't allow it, every bot runs sandboxed.</p></div>
+        <div><h3>Harnesses</h3><p>Choose which harnesses people can use. Agents set to any other don't start.</p></div>
+        <div><h3>Unrestricted access</h3><p>Decide whether agents may run outside the macOS sandbox. When you don't allow it, every agent runs sandboxed.</p></div>
         <div><h3>Tool connections</h3><p>Turn MCP tool connections off, or allow and block them by catalogue entry and by server address.</p></div>
-        <div><h3>Browsers and computers</h3><p>Decide whether people and their bots can use Noodle Browser and Noodle Computer from Noodle.</p></div>
+        <div><h3>Browsers and computers</h3><p>Decide whether people and their agents can use Noodle Browser and Noodle Computer from Noodle.</p></div>
         <div><h3>Hosting a Hub</h3><p>Decide whether people can turn on Let My Devices Reach This Mac, which serves their own devices from their Mac.</p></div>
         <div><h3>Connecting to Hubs</h3><p>Decide whether people can join Noodle Hubs, and limit Noodle to your own Hub's addresses.</p></div>
         <div><h3>Updates</h3><p>Fix automatic checks and installs on or off, or turn off Noodle's own updates and leave them to your MDM.</p></div>
       </div>
-      <div class="wrap narrow">
-        <p class="meta">Not covered yet: Noodle Mobile on iPhone and iPad, Noodle Hub and the other companion apps have no managed settings, and a profile can't set a default people can change.</p>
-      </div>
     </section>
     <section class="feature" id="licence">
       <div class="wrap narrow">
-        <h2>Free for individuals and small businesses.</h2>
+        <h2>Free for small businesses.</h2>
         <p class="lead">Noodle Enterprise is under the PolyForm Small Business License 1.0.0. The rest of Noodle stays free and open source under the Apache 2.0 licence.</p>
       </div>
       <div class="wrap facts-grid kinds">
-        <div><h3>Small businesses use it free</h3><p>Individuals use it free, and so do businesses with fewer than 100 people and under the licence's revenue limit.</p></div>
-        <div><h3>Larger organisations ask us</h3><p>They need a licence from us. For now we grant it free or on favourable terms, so there's no risk in deploying Noodle now or later.</p></div>
-        <div><h3>No keys, no checks</h3><p>Noodle never checks for a licence and never limits managed settings without one.</p></div>
+        <div><h3>Small businesses use it free</h3><p>Businesses with fewer than 100 people, employees and contractors together, and under US$1 million in revenue the year before (2019 dollars, adjusted for inflation) use it free.</p></div>
+        <div><h3>Larger organisations ask us</h3><p>Larger organisations need a licence from us to manage Noodle with profiles. For now we grant it free or on favourable terms, so there's no risk in deploying Noodle now or later.</p></div>
+        <div><h3>No keys, no checks</h3><p>Noodle doesn't check for a licence or limit managed settings without one.</p></div>
       </div>
       <div class="wrap narrow">
         <div class="ctas">
-          <a class="btn" href="https://github.com/pdparchitect/noodle/issues/new">Ask for a licence</a>
+          <a class="btn" href="mailto:pdp@gnucitizen.org?subject=Noodle%20Enterprise%20licence">Ask for a licence</a>
           <a class="link" href="https://github.com/pdparchitect/noodle/blob/main/Enterprise/LICENSE">Read the licence <span aria-hidden="true">›</span></a>
         </div>
       </div>
@@ -122,7 +118,7 @@
 
   <footer class="foot">
     <div class="wrap foot-in">
-      <p>Noodle is free and open source under the Apache 2.0 licence.</p>
+      <p>Noodle is free and open source under the Apache 2.0 licence, apart from <a href="./">Noodle Enterprise</a>.</p>
       <nav aria-label="Footer">
         <a href="https://github.com/pdparchitect/noodle">GitHub</a>
         <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Documentation</a>

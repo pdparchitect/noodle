@@ -21,9 +21,9 @@ stays Apache-2.0.
 - **Individuals and small businesses can use it free.** The licence counts a business as small
   when it has fewer than 100 people, employees and contractors together, and less than
   1,000,000 US dollars (2019, adjusted for inflation) in revenue the year before.
-- **Larger organisations need a commercial licence from us.** To ask for one, open an issue or a
-  discussion on the [Noodle project](https://github.com/pdparchitect/noodle) and tell us about
-  your organisation.
+- **Larger organisations need a commercial licence from us.** To ask for one, email
+  [pdp@gnucitizen.org](mailto:pdp@gnucitizen.org?subject=Noodle%20Enterprise%20licence) and tell
+  us about your organisation.
 
 **For now we grant commercial licences free of charge or on favourable terms**, so your
 organisation takes no risk by deploying Noodle now or later.

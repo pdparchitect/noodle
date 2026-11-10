@@ -178,7 +178,7 @@ figure { margin: 0; }
 .foot { background: var(--bg-alt); border-top: 1px solid rgba(0,0,0,.06); padding: 22px 0 30px; font-size: 12px; line-height: 1.33337; letter-spacing: -0.01em; color: var(--gray); }
 .foot-in { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .foot nav { display: flex; gap: 20px; flex-wrap: wrap; }
-.foot nav a:hover { color: var(--ink); text-decoration: underline; }
+.foot a:hover { color: var(--ink); text-decoration: underline; }
 @media (prefers-color-scheme: dark) { .foot { border-top-color: rgba(255,255,255,.08); } }
 
 /* ---------- Computer page ---------- */
