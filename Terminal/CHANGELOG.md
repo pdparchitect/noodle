@@ -8,6 +8,7 @@
 
 ### Added
 
+- Download Noodle Terminal as a ZIP holding the signed and notarized `noodle` command, linked from the Noodle README.
 - Noodle Terminal: chat with the bots and groups on your Noodle Hub from Terminal on your Mac. Join a Hub with an invitation, see your bots and groups with unread dots and pins, read and send messages, load earlier ones, and search bots, groups and messages.
 - Bots and groups show their pictures, and pictures sent in a conversation show under their message. Terminals that can show images show them as they are; others show them in coloured blocks.
 - Join several Hubs and switch between All and one Hub's bots and groups with Control-O. Hubs shows each one, pairs another device, manages users for admins, sets how groups notify you, and leaves a Hub.

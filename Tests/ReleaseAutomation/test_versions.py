@@ -161,6 +161,12 @@ class VersionTests(unittest.TestCase):
                     f'[Download DMG for Apple silicon]({base}.dmg) · [ZIP]({base}.zip)\n\n' + suite_link +
                     '### Fixed\n\n- A release change.\n')
                 self.assertEqual(self.module.notes(product), '### Fixed\n\n- A release change.\n')
+        # The terminal app is one command-line binary, shipped as a ZIP only.
+        self.write_version('terminal', '1.2.3', body='- A release change.')
+        result = run('python3', 'scripts/release-versions.py', 'notes', 'terminal', cwd=self.root)
+        self.assertEqual(result.stdout,
+            '[Download ZIP for Apple silicon](https://github.com/pdparchitect/noodle/releases/download/'
+            'terminal-v1.2.3/Noodle-Terminal-arm64.zip)\n\n- A release change.\n')
         # Container images and the phone app have no macOS app installer.
         for product in ['images', 'mobile']:
             with self.subTest(product=product):

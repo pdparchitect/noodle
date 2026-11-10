@@ -9,8 +9,22 @@ the right, each in its own bubble.
 Pictures show as they are in terminals that can show images, such as Ghostty, kitty,
 WezTerm and iTerm2. Other terminals, including Terminal, show them in coloured blocks.
 
-It is not released yet. To try it, build it from this repository with Xcode 27
-installed, then run it:
+## Installing
+
+Noodle Terminal needs macOS 26 on a Mac with Apple silicon.
+[Download Noodle-Terminal-arm64.zip](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)
+and open it to get the `noodle` command. Move it to a folder on your `PATH`, then run it:
+
+```
+mkdir -p ~/.local/bin
+mv ~/Downloads/noodle ~/.local/bin/
+noodle
+```
+
+If `~/.local/bin` isn't on your `PATH` yet, add `export PATH="$HOME/.local/bin:$PATH"`
+to `~/.zshrc`. To update, download the ZIP again and replace the command.
+
+To build it from this repository instead, with Xcode 27 installed:
 
 ```
 swift build -c release --package-path Terminal

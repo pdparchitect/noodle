@@ -16,6 +16,7 @@ PRODUCTS = {
     "browser": ("Browser/VERSION", "Browser/CHANGELOG.md", "browser-v"),
     "hub": ("Hub/VERSION", "Hub/CHANGELOG.md", "hub-v"),
     "mobile": ("Mobile/VERSION", "Mobile/CHANGELOG.md", "mobile-v"),
+    "terminal": ("Terminal/VERSION", "Terminal/CHANGELOG.md", "terminal-v"),
     "images": ("Computer/Images/VERSION", "Computer/Images/CHANGELOG.md", "computer-images-v"),
 }
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -59,6 +60,9 @@ def release_notes(product):
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else f'Noodle-{product.title()}'
     download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
+    # The terminal app is one command-line binary, shipped as a ZIP only.
+    if product == 'terminal':
+        return f'[Download ZIP for Apple silicon]({download}.zip)\n\n' + body
     links = f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
     if product == 'noodle':
         links += ('[Download Suite (macOS 26+)](https://github.com/pdparchitect/noodle/releases/download/'

@@ -52,6 +52,7 @@ jobs:
       browser: ${{ steps.versions.outputs.browser }}
       hub: ${{ steps.versions.outputs.hub }}
       mobile: ${{ steps.versions.outputs.mobile }}
+      terminal: ${{ steps.versions.outputs.terminal }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -432,8 +433,14 @@ jobs:
     uses: ./.github/workflows/mobile-release.yml
     secrets: inherit
 
+  prepare-terminal:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.terminal == 'true'
+    uses: ./.github/workflows/terminal-release.yml
+    secrets: inherit
+
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -449,6 +456,7 @@ jobs:
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.test-mobile.result == 'success') &&
+      (needs.versions.outputs.terminal != 'true' || needs.test-terminal.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
@@ -456,6 +464,7 @@ jobs:
       (needs.versions.outputs.browser != 'true' || needs.prepare-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.prepare-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.prepare-mobile.result == 'success') &&
+      (needs.versions.outputs.terminal != 'true' || needs.prepare-terminal.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -618,6 +627,29 @@ jobs:
           cd ../..
           zsh scripts/publish-xcode-release.sh Hub "$HUB_VERSION" "dist/hub-$HUB_VERSION/release-notes.md"
 
+  publish-terminal:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.terminal == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Read Terminal version
+        run: echo "TERMINAL_VERSION=$(cat Terminal/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: terminal-release-assets
+          path: dist/terminal-${{ env.TERMINAL_VERSION }}
+      - name: Publish the verified Terminal archive and download channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zsh scripts/publish-terminal-release.sh "$TERMINAL_VERSION" "dist/terminal-$TERMINAL_VERSION/release-notes.md"
+
   # TestFlight is the phone app's release channel; automatic distribution hands each build to testers.
   publish-mobile:
     needs: [versions, tag]
@@ -691,7 +723,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-mobile, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-mobile, publish-terminal, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -704,6 +736,7 @@ jobs:
           BROWSER_RESULT: ${{ needs.publish-browser.result }}
           HUB_RESULT: ${{ needs.publish-hub.result }}
           MOBILE_RESULT: ${{ needs.publish-mobile.result }}
+          TERMINAL_RESULT: ${{ needs.publish-terminal.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'

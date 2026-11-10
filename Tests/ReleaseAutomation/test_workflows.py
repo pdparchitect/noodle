@@ -58,21 +58,21 @@ class WorkflowTests(unittest.TestCase):
             'needs.workflow-lint.result': 'success',
             'needs.test-noodle-macos27.result': 'success',
             **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'applet-rendering', 'browser', 'hub', 'mobile', 'bridge', 'terminal']},
-            **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images']},
-            **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images']},
+            **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images']},
+            **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images']},
         }
 
     def test_tag_gate_blocks_failed_cancelled_or_skipped_selected_products(self):
         gate = self.jobs['tag']['if']
-        for selected in itertools.product([False, True], repeat=7):
+        for selected in itertools.product([False, True], repeat=8):
             if not any(selected):
                 continue
             values = self.base()
-            for product, active in zip(['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images'], selected):
+            for product, active in zip(['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images'], selected):
                 values[f'needs.versions.outputs.{product}'] = str(active).lower()
                 values[f'needs.prepare-{product}.result'] = 'success' if active else 'skipped'
             self.assertTrue(condition(gate, values))
-            for product, active in zip(['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images'], selected):
+            for product, active in zip(['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images'], selected):
                 if active:
                     for failure in ['failure', 'cancelled', 'skipped']:
                         self.assertFalse(condition(gate, {**values, f'needs.prepare-{product}.result': failure}))
@@ -145,6 +145,11 @@ class WorkflowTests(unittest.TestCase):
         for result in ['failure', 'cancelled', 'skipped']:
             self.assertFalse(condition(mobile['if'], {**values, 'needs.tag.result': result}))
         self.assertFalse(condition(mobile['if'], {**values, 'needs.versions.outputs.mobile': 'false'}))
+        terminal = self.jobs['publish-terminal']
+        self.assertTrue(condition(terminal['if'], values))
+        for result in ['failure', 'cancelled', 'skipped']:
+            self.assertFalse(condition(terminal['if'], {**values, 'needs.tag.result': result}))
+        self.assertFalse(condition(terminal['if'], {**values, 'needs.versions.outputs.terminal': 'false'}))
 
     def test_suites_run_independently_of_version_changes(self):
         # Only scripts/ci-scope.py's suites decide whether a suite runs; it runs them all for a release. Release
@@ -251,10 +256,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('always()', complete['if'])
         step = complete['steps'][0]
         source = step['run'].split("\n", 1)[1].rsplit("\nPY", 1)[0]
-        for selected in [['noodle'], ['computer', 'images'], ['applet'], ['browser'], ['hub'], ['mobile'], ['noodle', 'applet', 'browser', 'hub', 'mobile'], ['images']]:
+        for selected in [['noodle'], ['computer', 'images'], ['applet'], ['browser'], ['hub'], ['mobile'], ['terminal'], ['noodle', 'applet', 'browser', 'hub', 'mobile', 'terminal'], ['images']]:
             environment = {**os.environ, 'RELEASE_PRODUCTS': json.dumps(selected),
                            **{p.upper() + '_RESULT': 'success' if p in selected else 'skipped'
-                              for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'images']}}
+                              for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images']}}
             passed = subprocess.run(['python3', '-c', source], env=environment, capture_output=True)
             self.assertEqual(passed.returncode, 0, passed.stderr)
             for product in selected:
@@ -297,14 +302,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('python3 scripts/testflight.py', json.dumps(job))
 
     def test_preparation_is_read_only_and_publication_uses_artifacts(self):
-        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'computer-images.yml']:
+        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'terminal-release.yml', 'computer-images.yml']:
             prepare = workflow(name)
             self.assertEqual(prepare['permissions'], {'contents': 'read'})
             rendered = json.dumps(prepare)
             for write in ['gh release create', 'docker push', 'git push']:
                 self.assertNotIn(write, rendered)
             self.assertIn('actions/upload-artifact@v6', rendered)
-        for job in ['publish-noodle', 'publish-computer', 'publish-applet', 'publish-browser', 'publish-hub', 'publish-mobile', 'publish-images']:
+        for job in ['publish-noodle', 'publish-computer', 'publish-applet', 'publish-browser', 'publish-hub', 'publish-mobile', 'publish-terminal', 'publish-images']:
             self.assertIn('tag', self.jobs[job]['needs'])
             self.assertIn('actions/download-artifact@v7', json.dumps(self.jobs[job]))
 
@@ -372,12 +377,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(triggers['push']['branches'], ['main'])
         self.assertNotIn('tags', triggers['push'])
         self.assertIn('workflow_dispatch', triggers)
-        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'computer-images.yml']:
+        for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'terminal-release.yml', 'computer-images.yml']:
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
             'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-applet-rendering', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge', 'test-terminal',
-            'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-browser', 'prepare-hub', 'prepare-mobile', 'prepare-images'])
+            'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-browser', 'prepare-hub', 'prepare-mobile', 'prepare-terminal', 'prepare-images'])
 
     def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):
         triggers = self.flow.get('on', self.flow.get('true'))
