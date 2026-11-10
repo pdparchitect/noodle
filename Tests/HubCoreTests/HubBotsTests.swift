@@ -625,6 +625,41 @@ import XCTest
         XCTAssertEqual(listed.first?.status, "Reviewing PR 42")
     }
 
+    /// A bot's open tasks reach its owner's devices with the bot, and they hear when they change.
+    func testBotsCarryTheirOpenTasks() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        XCTAssertEqual(bot.tasks, [])
+        let events = try await f.device.subscribe()
+        _ = try await f.device.request(.bots)
+        let venue = try f.hub.repository.addTask(agentID: bot.id, title: "Find a venue", conversationID: bot.conversationID)
+        _ = try f.hub.repository.updateTask(agentID: bot.id, id: venue.id, state: .waiting, waitingOn: .user, note: "Pick one")
+        let done = try f.hub.repository.addTask(agentID: bot.id, title: "Book the dentist")
+        _ = try f.hub.repository.updateTask(agentID: bot.id, id: done.id, state: .done)
+        f.hub.bots.tasksChanged(of: bot.id)
+        for try await event in events { if case .botsChanged = event { break } }
+
+        guard case .bots(let listed) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        let tasks = try XCTUnwrap(listed.first?.tasks)
+        XCTAssertEqual(tasks.map(\.title), ["Find a venue"], "Finished tasks stay on the Hub.")
+        XCTAssertEqual(tasks.first?.state, .waiting)
+        XCTAssertEqual(tasks.first?.waitingOn, .you)
+        XCTAssertEqual(tasks.first?.note, "Pick one")
+        XCTAssertEqual(tasks.first?.conversationID, bot.conversationID)
+    }
+
+    /// Writing from a task carries it to the bot, and back to devices for the label.
+    func testAMessageAboutATaskCarriesIt() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let task = try f.hub.repository.addTask(agentID: bot.id, title: "Find a venue", conversationID: bot.conversationID)
+        guard case .message(let sent) = try await f.device.request(.send(LinkOutgoingMessage(
+            conversationID: bot.conversationID, id: UUID(), body: "The second one", taskID: task.id))) else { return XCTFail("not sent") }
+        XCTAssertEqual(sent.task, LinkTaskReference(id: task.id, botID: bot.id, title: "Find a venue"))
+        let stored = try XCTUnwrap(f.hub.repository.loadMessages(conversationID: bot.conversationID).last)
+        XCTAssertEqual(stored.task, TaskReference(task, agentID: bot.id))
+    }
+
     func testOtherUsersCannotReachABot() async throws {
         let f = try await fixture()
         let bot = try await createBot(f)

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- See what your bots are working on. In Settings › Conversation List, set Tasks to Waiting on Me or All Open to list your bots' tasks at the top of the conversation list, with the ones waiting on you first. Tap a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Tasks are hidden until you choose to show them.
+
 ### Fixed
 
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
@@ -10,6 +14,9 @@
 
 - Suspend one bot in a group of up to three: only its face turns gray, the group's other faces keep their color, and the group's row doesn't mention it. Open the group: the bar at the top still names it.
 - Suspend every bot in a group: the whole group picture turns gray.
+- In Settings › Conversation List, set Tasks to All Open. Ask a bot for something that takes a while, such as finding a few options to choose from: a task for it appears at the top of the list, and moves to the top, saying "Waiting on you", when it asks you to choose.
+- Tap that task, write your answer and tap Send: the message appears in the bot's conversation with the task's name above it, and the bot carries on and marks the task done.
+- Set Tasks to Waiting on Me: only tasks waiting on you are listed. Switch to a space without that bot: its tasks aren't listed.
 
 ## [0.55.1] - 2026-11-08
 

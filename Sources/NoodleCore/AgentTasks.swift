@@ -125,6 +125,15 @@ extension WorkspaceRepository {
         try updateTasks(agentID: agentID, now: now) { $0 }
     }
 
+    /// Puts a copy of a bot's tasks in place, as a Hub lists them for a bot it runs. Returns whether they changed.
+    @discardableResult
+    public func replaceTasks(agentID: UUID, with tasks: [AgentTask], now: Date = Date()) throws -> Bool {
+        try updateTasks(agentID: agentID, now: now) { current in
+            defer { current = tasks }
+            return current != tasks
+        }
+    }
+
     /// The bot's tasks as stored, oldest first, without clearing anything.
     public func loadTasks(agentID: UUID) throws -> [AgentTask] {
         let url = tasksURL(agentID: agentID)

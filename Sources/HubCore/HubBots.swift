@@ -127,6 +127,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
+        messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.tasksChanged(of: id) } }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         browsers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
@@ -854,7 +855,14 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         return (try handle.read(upToCount: LinkProtocol.chunkSize) ?? Data(), Int(attachment.byteCount))
     }
 
-    public func send(_ body: String, id: UUID, attachmentIDs: [UUID] = [], in conversationID: UUID,
+    /// A bot added or moved one of its tasks; its owner's devices list the bots again to see it.
+    public func tasksChanged(of agentID: UUID) {
+        guard let owner = access.owner(ofBot: agentID) else { return }
+        onChange?(owner, .botsChanged)
+    }
+
+    /// `taskID` names a task of one of the conversation's bots that the message is about.
+    public func send(_ body: String, id: UUID, attachmentIDs: [UUID] = [], taskID: UUID? = nil, in conversationID: UUID,
                      for user: HubUser) throws -> LinkMessage {
         let (conversation, bots) = try ownedConversation(conversationID, by: user)
         let files = try attachments(in: conversationID)
@@ -875,8 +883,14 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             }
             return (try? requireLends(agent, to: user)) != nil
         }
+        let task = taskID.flatMap { taskID in
+            bots.lazy.compactMap { bot in
+                ((try? self.repository.loadTasks(agentID: bot.id)) ?? []).first { $0.id == taskID }
+                    .map { TaskReference($0, agentID: bot.id) }
+            }.first
+        }
         let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
-                                                     attachmentIDs: attachmentIDs, id: id)
+                                                     attachmentIDs: attachmentIDs, task: task, id: id)
         if running || watching { runtime.notify(reached, repository: repository) }
         // The bot reads it from its inbox; the call hears about it here.
         if let call = calls[conversationID] {
@@ -1927,7 +1941,29 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                        sharedWith: access.isPersonal ? [] : direct.compactMap(\.guest?.id),
                        canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
                        pinnedAt: pins[conversation.id], pause: pause(of: agent),
-                       suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil)
+                       suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil,
+                       tasks: tasks(of: agent, direct: conversation.id, conversations: conversations))
+    }
+
+    /// The bot's open and waiting tasks, each with the conversation to write about it in.
+    private func tasks(of agent: AgentRecord, direct: UUID, conversations: [BotConversation]) -> [LinkTask] {
+        let threads = Set(conversations.filter { $0.guest == nil }.map(\.id))
+        return ((try? repository.currentTasks(agentID: agent.id)) ?? []).compactMap { task in
+            let state: LinkTask.State
+            switch task.state {
+            case .open: state = .open
+            case .waiting: state = .waiting
+            case .done, .dropped: return nil
+            }
+            let waitingOn: LinkTask.Waiting? = switch task.waitingOn {
+            case .user: .you
+            case .agent(let id): .bot(id)
+            case .system, nil: nil
+            }
+            return LinkTask(id: task.id, title: task.title, state: state, waitingOn: waitingOn, note: task.note,
+                            conversationID: task.conversationID.flatMap { threads.contains($0) ? $0 : nil } ?? direct,
+                            updatedAt: task.updatedAt)
+        }
     }
 
     /// A bot as someone it is shared with sees it: whose it is and whether it is working, nothing of how it works.
@@ -2000,7 +2036,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         }
         return LinkMessage(id: message.id, conversationID: message.conversationID, author: author, body: message.body,
                            createdAt: message.createdAt, delivered: message.delivery == .delivered, attachments: attachments,
-                           reactions: reactions, call: call)
+                           reactions: reactions, call: call, task: message.task.map { LinkTaskReference(id: $0.id, botID: $0.agentID, title: $0.title) })
     }
 }
 

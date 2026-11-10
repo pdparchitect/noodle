@@ -1125,6 +1125,7 @@ struct SettingsView: View {
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationListStyle.key) private var listStyle = ConversationListStyle.standard.rawValue
+    @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
     @AppStorage(WebLinkPreview.key) private var previewsLinks = true
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var noodlets = NoodletGrants().all
@@ -1142,6 +1143,9 @@ struct SettingsView: View {
                     }
                     Picker("Sort Conversations", selection: $conversationOrder) {
                         ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
+                    }
+                    Picker("Tasks", selection: $tasks) {
+                        ForEach(TaskListFilter.allCases) { Text($0.name).tag($0) }
                     }
                 } header: {
                     Text("Conversation List")

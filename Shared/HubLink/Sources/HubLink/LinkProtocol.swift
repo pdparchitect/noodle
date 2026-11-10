@@ -1377,11 +1377,13 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var pause: LinkBotPause?
     /// Until when it is suspended: listed, but taking no new turn. Set with `suspend`; nil while it is not.
     public var suspendedUntil: Date?
+    /// For its owner: the tasks it has open or waiting, oldest first. Empty for someone it is shared with.
+    public var tasks: [LinkTask]
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
                 sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil,
-                suspendedUntil: Date? = nil) {
+                suspendedUntil: Date? = nil, tasks: [LinkTask] = []) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1397,11 +1399,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.pinnedAt = pinnedAt
         self.pause = pause
         self.suspendedUntil = suspendedUntil
+        self.tasks = tasks
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
-             suspendedUntil
+             suspendedUntil, tasks
     }
 
     public init(from decoder: Decoder) throws {
@@ -1421,7 +1424,41 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         pause = (try? c.decodeIfPresent(LinkBotPause.self, forKey: .pause)) ?? nil
         suspendedUntil = try c.decodeIfPresent(Date.self, forKey: .suspendedUntil)
+        tasks = try c.decode(.tasks, or: [])
     }
+}
+
+/// A piece of work a bot keeps, as its owner's devices show it. Only the bot changes it; a device
+/// writes about it with `LinkOutgoingMessage.taskID`.
+public struct LinkTask: Codable, Equatable, Identifiable, Sendable {
+    public enum State: String, Codable, Sendable { case open, waiting }
+    public enum Waiting: Codable, Hashable, Sendable { case you, bot(UUID) }
+
+    public var id: UUID
+    public var title: String
+    public var state: State
+    /// Who a waiting task waits on; nil while it waits on something outside Noodle, or is open.
+    public var waitingOn: Waiting?
+    public var note: String?
+    /// Where to write about it: the conversation it came from, or the bot's own.
+    public var conversationID: UUID
+    public var updatedAt: Date
+
+    public init(id: UUID, title: String, state: State, waitingOn: Waiting? = nil, note: String? = nil,
+                conversationID: UUID, updatedAt: Date) {
+        self.id = id; self.title = title; self.state = state; self.waitingOn = waitingOn; self.note = note
+        self.conversationID = conversationID; self.updatedAt = updatedAt
+    }
+}
+
+/// The task a message was written about, for its label.
+public struct LinkTaskReference: Codable, Equatable, Sendable {
+    public var id: UUID
+    /// The bot whose task it is.
+    public var botID: UUID
+    public var title: String
+
+    public init(id: UUID, botID: UUID, title: String) { self.id = id; self.botID = botID; self.title = title }
 }
 
 /// What a device sets on a group it makes or edits on the Hub.
@@ -1739,9 +1776,13 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
     public var reactions: [LinkReaction]
     /// Set on the message that marks where a voice call started.
     public var call: LinkCallRecord?
+    /// Set when its user wrote it from one of a bot's tasks.
+    public var task: LinkTaskReference?
 
     public init(id: UUID, conversationID: UUID, author: Author, body: String, createdAt: Date, delivered: Bool,
-                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = [], call: LinkCallRecord? = nil) {
+                attachments: [LinkAttachment] = [], reactions: [LinkReaction] = [], call: LinkCallRecord? = nil,
+                task: LinkTaskReference? = nil) {
+        self.task = task
         self.attachments = attachments
         self.reactions = reactions
         self.call = call
@@ -1753,7 +1794,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         self.delivered = delivered
     }
 
-    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions, call }
+    private enum CodingKeys: String, CodingKey { case id, conversationID, author, body, createdAt, delivered, attachments, reactions, call, task }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1766,6 +1807,7 @@ public struct LinkMessage: Codable, Equatable, Identifiable, Sendable {
         attachments = try c.decode(.attachments, or: [])
         reactions = try c.decode(.reactions, or: [])
         call = try c.decodeIfPresent(LinkCallRecord.self, forKey: .call)
+        task = try c.decodeIfPresent(LinkTaskReference.self, forKey: .task)
     }
 }
 
@@ -1941,15 +1983,18 @@ public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
     public var id: UUID
     public var body: String
     public var attachmentIDs: [UUID]
+    /// One of a bot's tasks the message is about; the Hub carries it to the bot.
+    public var taskID: UUID?
 
-    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = []) {
+    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [], taskID: UUID? = nil) {
         self.conversationID = conversationID
         self.id = id
         self.body = body
         self.attachmentIDs = attachmentIDs
+        self.taskID = taskID
     }
 
-    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs }
+    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, taskID }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1957,6 +2002,7 @@ public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
         id = try c.decode(UUID.self, forKey: .id)
         body = try c.decode(String.self, forKey: .body)
         attachmentIDs = try c.decode(.attachmentIDs, or: [])
+        taskID = try c.decodeIfPresent(UUID.self, forKey: .taskID)
     }
 }
 

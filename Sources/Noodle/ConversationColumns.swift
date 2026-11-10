@@ -578,7 +578,7 @@ struct SidebarCommands: View {
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
-    @AppStorage(SidebarTaskFilter.key) private var tasks = SidebarTaskFilter.standard
+    @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
 
     var body: some View {
         Menu("Sidebar") {
@@ -601,7 +601,7 @@ struct SidebarCommands: View {
             .labelsHidden()
             Divider()
             Picker("Tasks", selection: $tasks) {
-                ForEach(SidebarTaskFilter.allCases) { Text($0.menuName).tag($0) }
+                ForEach(TaskListFilter.allCases) { Text($0.menuName).tag($0) }
             }
             .pickerStyle(.inline)
             .labelsHidden()

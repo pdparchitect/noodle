@@ -1333,8 +1333,10 @@ final class ChatsCacheFile: @unchecked Sendable {
 
     private func isNewest(_ message: LinkMessage) -> Bool { observedMessages(of: message.conversationID)?.last?.id == message.id }
 
-    func send(_ body: String, files: [OutgoingFile] = [], to conversation: some HubConversation) async throws {
-        let id = try queue(body, files: files, to: conversation)
+    /// `task` is one of the bots' tasks the message is about; the Hub carries it to the bot.
+    func send(_ body: String, files: [OutgoingFile] = [], to conversation: some HubConversation,
+              task: LinkTaskReference? = nil) async throws {
+        let id = try queue(body, files: files, to: conversation, task: task)
         await deliver(id)
     }
 
@@ -1355,8 +1357,10 @@ final class ChatsCacheFile: @unchecked Sendable {
     }
 
     /// Shows a message at once and keeps it, files included, until it is delivered.
-    private func queue(_ body: String, files: [OutgoingFile], to conversation: some HubConversation) throws -> UUID {
-        let (outgoing, attachments) = try OutgoingMessages.make(body, files: files, to: conversation.conversationID)
+    private func queue(_ body: String, files: [OutgoingFile], to conversation: some HubConversation,
+                       task: LinkTaskReference? = nil) throws -> UUID {
+        var (outgoing, attachments) = try OutgoingMessages.make(body, files: files, to: conversation.conversationID)
+        outgoing.taskID = task?.id
         let text = outgoing.body
         // Kept first, files included, so a message that does not go through can go later.
         for (file, attachment) in zip(files, attachments) { try keep(file.url, as: attachment) }
@@ -1364,7 +1368,7 @@ final class ChatsCacheFile: @unchecked Sendable {
         saveUnsent()
         // Shown at once; the Hub's copy replaces it.
         merge([LinkMessage(id: outgoing.id, conversationID: conversation.conversationID, author: .you, body: text,
-                           createdAt: Date(), delivered: false, attachments: attachments)], into: conversation.conversationID)
+                           createdAt: Date(), delivered: false, attachments: attachments, task: task)], into: conversation.conversationID)
         saveCache()
         return outgoing.id
     }
@@ -1804,6 +1808,10 @@ struct AgentsView: View {
     @State private var chosen: MoreChoice?
     @State private var showingProfile = false
     @State private var showingSettings = false
+    @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
+    /// The task being written about, from the Tasks section.
+    @State private var feedbackTask: TaskEntry?
+    @State private var showsAllTasks = false
     @State private var showingConsole = false
     @State private var creating = false
     @State private var creatingGroup = false
@@ -2063,6 +2071,7 @@ struct AgentsView: View {
         let listing = listing(rows)
         let (searching, pinned, unread, rest) = (listing.searching, listing.pinned, listing.unread, listing.rest)
         let mentions = shownMentions(listing, rows: rows)
+        let tasks = TaskEntry.listed(in: rows.map { (chats: $0.chats, thread: $0.thread) }, filter: taskFilter)
         return Group {
             if ConversationListStyle(rawValue: listStyle) == .icons {
                 // As on the Mac: each section a grid of pictures, with what each bot is doing under its name. Not a
@@ -2070,6 +2079,15 @@ struct AgentsView: View {
                 // first one's menu and preview.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        if !tasks.isEmpty {
+                            Text("Tasks")
+                                .font(.headline)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 8)
+                            VStack(spacing: 10) { taskRows(tasks) }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                        }
                         if layout.pinsInList { iconSection(unread.isEmpty && rest.isEmpty ? nil : "Pinned", pinned) }
                         if unread.isEmpty {
                             iconSection(nil, rest)
@@ -2083,6 +2101,7 @@ struct AgentsView: View {
                 }
             } else {
                 List {
+                    if !tasks.isEmpty { Section("Tasks") { taskRows(tasks) } }
                     if !pinned.isEmpty, layout.pinsInList {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
                             ForEach(pinned) { row in
@@ -2240,6 +2259,11 @@ struct AgentsView: View {
             }
             .sheet(isPresented: $showingProfile) { HubsView(chats: chats).formSheetSizing() }
             .sheet(isPresented: $showingSettings) { SettingsView(chats: chats).formSheetSizing() }
+            .sheet(item: $feedbackTask) { entry in
+                TaskFeedbackSheet(entry: entry) {
+                    navigation.open(ChatLink(hub: CurrentHub.name(of: entry.chats.pairing), thread: entry.thread.id), in: layout)
+                }
+            }
             .fullScreenCover(isPresented: $showingConsole) { ConsoleView(hubs: chats) }
             // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
@@ -2382,6 +2406,19 @@ struct AgentsView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    /// A few tasks, then a button for the rest. Tapping one writes to its bot about it.
+    @ViewBuilder
+    private func taskRows(_ tasks: [TaskEntry]) -> some View {
+        let collapsed = 5
+        ForEach(showsAllTasks ? tasks : Array(tasks.prefix(collapsed))) { entry in
+            Button { feedbackTask = entry } label: { TaskListRow(entry: entry) }
+                .buttonStyle(.plain)
+        }
+        if tasks.count > collapsed {
+            Button(showsAllTasks ? "Show Fewer" : "Show All \(tasks.count)") { showsAllTasks.toggle() }
         }
     }
 
@@ -3353,6 +3390,14 @@ struct ChatView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 6)
+                        }
+                        // Written from one of the bot's tasks.
+                        if let task = message.task {
+                            Label(task.title, systemImage: "checklist")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: message.author == .you ? .trailing : .leading)
                         }
                         if let record = message.call {
                             CallCardRow(name: thread.name, message: message, record: record, live: liveCard == message.id ? call : nil)

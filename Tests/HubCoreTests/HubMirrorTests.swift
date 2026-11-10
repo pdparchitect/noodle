@@ -329,6 +329,32 @@ import XCTest
         XCTAssertNil(try f.local.loadAgents().first?.status)
     }
 
+    /// A bot on the Hub shows here the tasks it keeps there, and writing from one carries it back.
+    func testABotShowsItsTasksFromTheHubAndFeedbackCarriesThem() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let agent = try await mirror.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))
+        let remoteBot = try XCTUnwrap(f.hub.repository.loadAgents().first)
+        let remote = try conversation(of: remoteBot.id, in: f.hub.repository)
+        let task = try f.hub.repository.addTask(agentID: remoteBot.id, title: "Find a venue", conversationID: remote.id)
+        _ = try f.hub.repository.updateTask(agentID: remoteBot.id, id: task.id, state: .waiting, waitingOn: .user)
+        await mirror.sync()
+
+        let local = try conversation(of: agent.id, in: f.local)
+        let copy = try XCTUnwrap(f.local.loadTasks(agentID: agent.id).first)
+        XCTAssertEqual(copy.id, task.id)
+        XCTAssertEqual(copy.conversationID, local.id)
+        XCTAssertEqual(copy.waitingOn, .user)
+
+        _ = try f.local.sendUserMessage(conversationID: local.id, body: "The second one", task: TaskReference(copy, agentID: agent.id))
+        await mirror.pushPending()
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: remote.id).last?.task, TaskReference(task, agentID: remoteBot.id))
+
+        _ = try f.hub.repository.updateTask(agentID: remoteBot.id, id: task.id, state: .done)
+        await mirror.sync()
+        XCTAssertEqual(try f.local.loadTasks(agentID: agent.id), [], "Only open tasks come over.")
+    }
+
     /// A conversation longer than one answer may carry comes over page by page.
     func testALongConversationComesOverWhole() async throws {
         let f = try await fixture()

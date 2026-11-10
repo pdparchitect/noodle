@@ -78,6 +78,8 @@ import Observation
     private var phases: [UUID: AgentRuntimePhase] = [:]
     /// Why each bot on the Hub does not answer for now, by its stand-in here, as the Hub last listed it.
     private var pauses: [UUID: LinkBotPause] = [:]
+    /// Each bot's open tasks as the Hub last listed them, by its ID there.
+    @ObservationIgnored private var listedTasks: [UUID: [LinkTask]] = [:]
     /// Computers being made, waiting for the Hub to say they are done.
     @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
@@ -685,6 +687,8 @@ import Observation
             do { try await syncGroups() } catch {
                 // A Hub from before groups says it does not know the request; it has none to copy.
             }
+            // After the groups, whose conversations tasks may be in.
+            copyTasks()
             // Effects sent while this Mac was away were heard of by nobody here, whatever else fails to sync.
             waitingEffects.formUnion(threads.map(\.local))
             try await syncConnections()
@@ -793,6 +797,7 @@ import Observation
         guard case .bots(let listed) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
         await pairing.fetchPictures(listed)
         let bots = pairing.keptPictures(listed)
+        listedTasks = Dictionary(bots.map { ($0.id, $0.tasks) }, uniquingKeysWith: { first, _ in first })
         var changed = false
         for bot in bots {
             if let entry = entries.first(where: { $0.remote == bot.id }) {
@@ -816,6 +821,26 @@ import Observation
         for bot in bots {
             if let upTo = bot.readUpTo, let entry = entries.first(where: { $0.remote == bot.id }) { onRead?(entry.conversation, upTo) }
         }
+    }
+
+    /// Puts each bot's tasks, as last listed, beside its copy here, in this Mac's conversations and bots.
+    private func copyTasks() {
+        var changed = false
+        for entry in entries {
+            let tasks = (listedTasks[entry.remote] ?? []).map { task in
+                AgentTask(id: task.id, title: task.title, state: task.state == .waiting ? .waiting : .open,
+                          conversationID: localConversation(remote: task.conversationID) ?? entry.conversation,
+                          waitingOn: task.waitingOn.map { waiting in
+                              switch waiting {
+                              case .you: .user
+                              case .bot(let bot): .agent(entries.first { $0.remote == bot }?.agent ?? bot)
+                              }
+                          },
+                          note: task.note, createdAt: task.updatedAt)
+            }
+            if (try? repository.replaceTasks(agentID: entry.agent, with: tasks)) == true { changed = true }
+        }
+        if changed { onChange?() }
     }
 
     private func syncGroups() async throws {
@@ -948,6 +973,9 @@ import Observation
                                    createdAt: message.createdAt, delivery: message.delivered ? .delivered : .queued,
                                    attachmentIDs: message.attachments.map(\.id))
             copy.call = message.call.map(callRecord)
+            copy.task = message.task.map { task in
+                TaskReference(id: task.id, agentID: entries.first { $0.remote == task.botID }?.agent ?? task.botID, title: task.title)
+            }
             try repository.append(copy)
             known.insert(message.id)
             latest = message.createdAt
@@ -999,7 +1027,7 @@ import Observation
                 }
                 let sent = (message.attachmentIDs ?? []).filter { files[$0]?.url == nil }
                 _ = try await pairing.request(.send(LinkOutgoingMessage(conversationID: thread.remote, id: message.id, body: message.body,
-                                                    attachmentIDs: sent)))
+                                                    attachmentIDs: sent, taskID: message.task?.id)))
                 acknowledged.insert(message.id)
             }
         }

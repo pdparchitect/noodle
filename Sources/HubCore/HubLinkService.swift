@@ -724,7 +724,7 @@ import os
             return .messageMatches(try await hubBots().searchMessages(search, for: try user(key)))
         case .send(let message):
             return .message(try hubBots().send(message.body, id: message.id, attachmentIDs: message.attachmentIDs,
-                                               in: message.conversationID, for: try user(key)))
+                                               taskID: message.taskID, in: message.conversationID, for: try user(key)))
         case .upload(let conversationID, let attachment, let offset, let data):
             // Refused at the first piece, before any of the file is kept.
             try checkUploadSize(attachment.byteCount)

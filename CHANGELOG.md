@@ -8,7 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- See what your bots are working on. Bots keep a short task list, each task linked to the conversation it came from and marked in progress, waiting or done as they work. Choose View › Sidebar › Show Tasks Waiting on Me or Show All Open Tasks to list them at the top of the sidebar, with the ones waiting on you first. Click a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Finished tasks are cleared after a week. Tasks are hidden until you choose to show them.
+- See what your bots are working on. Bots keep a short task list, each task linked to the conversation it came from and marked in progress, waiting or done as they work. Choose View › Sidebar › Show Tasks Waiting on Me or Show All Open Tasks to list them at the top of the sidebar, with the ones waiting on you first. Click a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Finished tasks are cleared after a week. Bots on a Noodle Hub show their tasks too, and so do your Mac's bots in Noodle Mobile when this Mac is your Hub. Tasks are hidden until you choose to show them.
 
 ### Fixed
 

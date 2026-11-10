@@ -1,29 +1,13 @@
 import SwiftUI
+import HubLink
 import NoodleCore
 import NoodleRuntimeSettings
-
-/// View › Sidebar: which of the bots' tasks the sidebar lists above the conversations, if any.
-enum SidebarTaskFilter: String, CaseIterable, Identifiable {
-    case hidden, waitingOnMe, allOpen
-
-    static let key = "sidebarTasks"
-    static let standard = Self.hidden
-    var id: String { rawValue }
-
-    var menuName: String {
-        switch self {
-        case .hidden: "Hide Tasks"
-        case .waitingOnMe: "Show Tasks Waiting on Me"
-        case .allOpen: "Show All Open Tasks"
-        }
-    }
-}
 
 /// The sidebar's Tasks section: a few tasks, then a link to the rest. Clicking a task opens a
 /// popover for writing to its bot about it, never a control that changes the task.
 struct SidebarTasks: View {
     @Environment(NoodleStore.self) private var store
-    let filter: SidebarTaskFilter
+    let filter: TaskListFilter
     /// In a list, a collapsible section; in the icon grid, plain rows under a title.
     let inList: Bool
     @State private var isExpanded = true

@@ -62,7 +62,7 @@ private struct SidebarList: View {
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
-    @AppStorage(SidebarTaskFilter.key) private var taskFilter = SidebarTaskFilter.standard
+    @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
     let searchIsFocused: Bool

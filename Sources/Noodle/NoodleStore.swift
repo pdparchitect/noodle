@@ -396,7 +396,10 @@ final class NoodleStore {
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
-        messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
+        messenger.onTasksChanged = { [weak self] id in
+            // Devices this Mac serves list its bots again to see the change.
+            Task { @MainActor in self?.reloadTasks(of: id); self?.thisMac.hub?.bots.tasksChanged(of: id) }
+        }
         messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         // A call from a bot here was answered, declined or missed on the owner's phone.

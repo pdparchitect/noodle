@@ -40,6 +40,7 @@ struct NoodleCommands: Commands {
     @AppStorage(ConversationListStyle.key) private var listStyle = ConversationListStyle.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
+    @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard.rawValue
     @AppStorage(AttachmentLayout.key) private var attachmentLayout = AttachmentLayout.standard.rawValue
     @AppStorage(MessageTextLayout.key) private var textLayout = MessageTextLayout.standard.rawValue
 
@@ -57,6 +58,7 @@ struct NoodleCommands: Commands {
                     Section { choices($listStyle, ConversationListStyle.allCases) { $0.name } }
                     Section { choices($rowDetail, ConversationRowDetail.allCases) { "Show \($0.name)" } }
                     Section { choices($conversationOrder, ConversationOrder.allCases) { $0.name } }
+                    Section { choices($taskFilter, TaskListFilter.allCases) { $0.menuName } }
                 }
                 Menu("Conversation") {
                     Section("Attachments") { choices($attachmentLayout, AttachmentLayout.allCases) { $0.name } }
