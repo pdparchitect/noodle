@@ -1871,7 +1871,8 @@ private actor RecordedSubscriptions: PushSubscriptions {
         await hub.botSays("Numbers:\n\n| Day | Messages |\n|---|---|\n| Sep 1 | 4 |\n\nAll quiet.")
         let conversation = await hub.bot.conversationID
         let route = NotificationRoute(topic: PushTopic.topic(for: chats.pairing), conversation: conversation)
-        #expect(await ReplyNotification.content(for: route, hubs: hubs)?.body == "Numbers:\n\nAll quiet.")
+        // Notifications take plain text only, one line per paragraph.
+        #expect(await ReplyNotification.content(for: route, hubs: hubs)?.body == "Numbers:\nAll quiet.")
         try await chats.reload()
         #expect(chats.note(for: .bot(try #require(chats.agents.first))) == .unread("Numbers: All quiet."))
 
