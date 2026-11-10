@@ -16,11 +16,14 @@ enum RestrictiveProfile {
     static let unknownKey = "NotANoodleKey"
     static let notAString = 7
 
+    static func sampleProfile() throws -> [String: Any] {
+        let data = try Data(contentsOf: root.appendingPathComponent(ManagedFiles.profilePath))
+        return try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+    }
+
     /// What the sample profile forces in Noodle's domain, without its Payload keys.
     static func sampleSettings() throws -> [String: Any] {
-        let data = try Data(contentsOf: root.appendingPathComponent(ManagedFiles.profilePath))
-        let profile = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
-        let payloads = try XCTUnwrap(profile["PayloadContent"] as? [[String: Any]])
+        let payloads = try XCTUnwrap(sampleProfile()["PayloadContent"] as? [[String: Any]])
         let domain = try XCTUnwrap(payloads.lazy.compactMap { ($0["PayloadContent"] as? [String: Any])?[ManagedKeys.domain] as? [String: Any] }.first)
         let settings = try XCTUnwrap((domain["Forced"] as? [[String: Any]])?.first?["mcx_preference_settings"] as? [String: Any])
         return settings.filter { !$0.key.hasPrefix("Payload") }
@@ -47,59 +50,74 @@ enum RestrictiveProfile {
     }
 }
 
-/// Installs a profile's settings where macOS keeps the managed preferences a System-scope profile
-/// delivers, for a test-only domain, and reads them back through the reader and policy the app uses.
-/// Writing there needs passwordless sudo, as GitHub's macOS runners have; elsewhere the test is skipped.
-@MainActor final class ManagedProfileTests: XCTestCase {
-    nonisolated static let domain = "com.pdparchitect.noodle.managed-test"
-    nonisolated static let folder = URL(fileURLWithPath: "/Library/Managed Preferences")
-    nonisolated static var file: URL { folder.appendingPathComponent("\(domain).plist") }
-    /// Folders the test made, removed again when empty.
-    nonisolated(unsafe) static var createdFolders: [URL] = []
-
-    struct Failure: LocalizedError {
-        let errorDescription: String?
-        init(_ message: String) { errorDescription = message }
+/// The committed sample profile, checked as a configuration profile, then its settings, made
+/// restrictive, fed as forced values through the reader, policy and live observer the app uses.
+/// This does not go through macOS's managed-preferences layer: GitHub's macOS runners ignore
+/// managed preferences files written without an MDM, so installing a real profile is checked by hand.
+@MainActor final class SampleProfileTests: XCTestCase {
+    /// Everything in the suite counts as forced, as a profile's values would.
+    private struct ForcedSuite: ManagedPreferenceSource, @unchecked Sendable {
+        let defaults: UserDefaults
+        func forcedValue(forKey key: String) -> Any? { defaults.object(forKey: key) }
     }
 
-    override func setUp() async throws {
-        let check = Self.run("/usr/bin/sudo", ["-n", "true"])
-        guard check.status == 0 else {
-            throw XCTSkip("Installing a managed preferences file needs passwordless sudo, as GitHub's macOS runners have: \(check.output)")
-        }
-        try Self.removeProfile()
-    }
-
-    /// Runs after a failure too, so no run leaves a managed file behind.
     override func tearDown() async throws {
-        try Self.removeProfile()
         await MainActor.run { Organisation.enforce(UnmanagedPolicy()) }
     }
 
-    func testAProfileInstalledChangedAndRemovedGoesThroughMacOSManagedPreferences() async throws {
-        let domain = Self.domain as CFString
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: Self.domain))
-        func forced(_ key: String) -> Bool { CFPreferencesAppValueIsForced(key as CFString, domain) }
-        XCTAssertFalse(ManagedKeys.all.contains { forced($0.name) }, "Nothing is managed before the profile")
+    func testTheSampleProfileIsAValidConfigurationProfileForNoodlesDomain() throws {
+        let path = RestrictiveProfile.root.appendingPathComponent(ManagedFiles.profilePath).path
+        let lint = Process()
+        lint.executableURL = URL(fileURLWithPath: "/usr/bin/plutil")
+        lint.arguments = ["-lint", path]
+        lint.standardOutput = FileHandle.nullDevice
+        try lint.run()
+        lint.waitUntilExit()
+        XCTAssertEqual(lint.terminationStatus, 0, "plutil -lint \(ManagedFiles.profilePath)")
 
-        let preferences = ManagedPreferences(defaults: defaults)
+        let profile = try RestrictiveProfile.sampleProfile()
+        XCTAssertEqual(profile["PayloadType"] as? String, "Configuration")
+        XCTAssertEqual(profile["PayloadVersion"] as? Int, 1)
+        let payloads = try XCTUnwrap(profile["PayloadContent"] as? [[String: Any]])
+        XCTAssertEqual(payloads.count, 1)
+        let payload = try XCTUnwrap(payloads.first)
+        // The custom settings payload: macOS writes its Forced settings into the domain it names.
+        XCTAssertEqual(payload["PayloadType"] as? String, "com.apple.ManagedClient.preferences")
+        XCTAssertEqual(payload["PayloadVersion"] as? Int, 1)
+        XCTAssertEqual((payload["PayloadContent"] as? [String: Any]).map { Array($0.keys) }, [ManagedKeys.domain])
+        for item in [profile, payload] {
+            XCTAssertNotNil((item["PayloadUUID"] as? String).flatMap(UUID.init(uuidString:)), "PayloadUUID")
+            XCTAssertTrue((item["PayloadIdentifier"] as? String)?.hasPrefix(ManagedKeys.domain) == true, "PayloadIdentifier")
+        }
+        XCTAssertNotEqual(profile["PayloadUUID"] as? String, payload["PayloadUUID"] as? String)
+
+        let settings = try RestrictiveProfile.sampleSettings()
+        let known = Set(ManagedKeys.all.map(\.name))
+        XCTAssertEqual(Set(settings.keys).subtracting(known), [], "Every key is in the registry")
+        XCTAssertEqual(try ManagedFilesTests.schemaViolations(settings), [])
+        XCTAssertTrue(ManagedPolicy(reading: ForcedValues(values: settings)).problems.isEmpty)
+    }
+
+    func testTheSampleProfileInstalledChangedAndRemovedWhileTheAppRuns() async throws {
+        let name = "Noodle.SampleProfileTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = ManagedPreferences(defaults: defaults, source: ForcedSuite(defaults: defaults))
         var notices = 0
         let observer = NotificationCenter.default.addObserver(forName: Organisation.didChangeNotification, object: nil, queue: nil) { _ in notices += 1 }
         defer { NotificationCenter.default.removeObserver(observer) }
-        preferences.start(rereadingEvery: 0.5)
+        preferences.start(rereadingEvery: nil)
         defer { preferences.stop() }
         XCTAssertTrue(preferences.policy.values.isEmpty)
 
-        // Installed: every key is forced, and every policy decides as the profile says.
+        // Installed: every policy decides as the profile says, and invalid entries are left out.
         let profile = try RestrictiveProfile.settings()
-        try Self.install(profile)
-        try await waitUntil("the profile's values are forced") { profile.keys.allSatisfy(forced) }
-        for key in profile.keys {
-            XCTAssertTrue(defaults.objectIsForced(forKey: key), key)
+        for (key, value) in profile { defaults.set(value, forKey: key) }
+        try await waitUntil("the running observer puts the profile in force") {
+            preferences.policy.values.count == ManagedKeys.all.count && !Organisation.allows(.updates)
         }
-        try await waitUntil("the running observer puts the profile in force") { notices > 0 && !Organisation.allows(.browsers) }
+        XCTAssertGreaterThan(notices, 0)
         var policy = preferences.policy
-        XCTAssertEqual(Set(policy.values.keys), Set(ManagedKeys.all.map(\.name)))
         XCTAssertEqual(policy.problems.count, 3, "\(policy.problems)")
         for key in [ManagedKeys.allowedHarnesses, ManagedKeys.customMCPAllowList, ManagedKeys.hubDenyList] {
             XCTAssertTrue(policy.problems.contains { $0.hasPrefix(key) }, "\(key): \(policy.problems)")
@@ -129,18 +147,15 @@ enum RestrictiveProfile {
         XCTAssertTrue(OrganisationStatus.shared.isManaged)
 
         // Changed while running: the new values apply, and a value of the wrong type is ignored.
-        var changed = profile
-        changed[ManagedKeys.allowMCP] = false
-        changed[ManagedKeys.allowHubConnections] = false
-        changed[ManagedKeys.allowComputers] = "false"
         let installed = notices
-        try Self.install(changed)
+        defaults.set(false, forKey: ManagedKeys.allowMCP)
+        defaults.set(false, forKey: ManagedKeys.allowHubConnections)
+        defaults.set("false", forKey: ManagedKeys.allowComputers)
         try await waitUntil("the running observer puts the changed profile in force") {
             notices > installed && !Organisation.allows(.toolConnections) && !Organisation.allows(.hubConnections)
                 && Organisation.allows(.computers)
         }
         policy = preferences.policy
-        XCTAssertTrue(forced(ManagedKeys.allowComputers))
         XCTAssertTrue(policy.problems.contains { $0.hasPrefix(ManagedKeys.allowComputers) }, "\(policy.problems)")
         XCTAssertFalse(policy.allows(catalogueConnection("linear")))
         XCTAssertFalse(policy.allows(customConnection("https://mcp.corp.test/mcp")))
@@ -148,10 +163,9 @@ enum RestrictiveProfile {
         XCTAssertTrue(policy.allows(.computers))
         XCTAssertFalse(policy.allows(.browsers))
 
-        // Removed: nothing is forced and everything is allowed again.
+        // Removed: everything is allowed again.
         let beforeRemoval = notices
-        try Self.removeProfile()
-        try await waitUntil("the removed profile's values are no longer forced") { !profile.keys.contains(where: forced) }
+        for key in profile.keys { defaults.removeObject(forKey: key) }
         try await waitUntil("the running observer lifts the policy") { notices > beforeRemoval && preferences.policy.values.isEmpty }
         XCTAssertTrue(HarnessProvider.allCases.allSatisfy { Organisation.allows(.harness($0)) })
         for action: OrganisationAction in [.unrestrictedAccess, .toolConnections, catalogueConnection("asana"),
@@ -173,70 +187,12 @@ enum RestrictiveProfile {
         .toolConnection(catalogueID: nil, endpoint: URL(string: url)!)
     }
 
-    /// Polls until `condition` holds; macOS takes a moment to read managed preferences again.
-    private func waitUntil(_ what: String, timeout: TimeInterval = 60, _ condition: () -> Bool) async throws {
+    /// Polls until `condition` holds; the observer applies each change on the main queue.
+    private func waitUntil(_ what: String, timeout: TimeInterval = 10, _ condition: () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {
-            guard Date() < deadline else {
-                let listing = Self.run("/bin/ls", ["-l", Self.folder.path]).output
-                let seen = Self.run("/usr/bin/defaults", ["read", Self.domain]).output
-                let enrollment = Self.run("/usr/bin/sudo", ["-n", "/usr/bin/profiles", "status", "-type", "enrollment"]).output
-                let system = Self.run("/usr/bin/sw_vers", []).output
-                throw Failure("Timed out after \(Int(timeout)) s waiting until \(what). \(Self.folder.path): \(listing)\ndefaults read \(Self.domain): \(seen)\nprofiles status -type enrollment: \(enrollment)\nsw_vers: \(system)")
-            }
-            try await Task.sleep(for: .milliseconds(250))
+            guard Date() < deadline else { return XCTFail("Timed out after \(Int(timeout)) s waiting until \(what).") }
+            try await Task.sleep(for: .milliseconds(50))
         }
-    }
-
-    /// Writes `settings` as the managed preferences file for the test domain, as an MDM profile
-    /// would leave it: owned by root, readable by all.
-    nonisolated static func install(_ settings: [String: Any]) throws {
-        let staged = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).plist")
-        try PropertyListSerialization.data(fromPropertyList: settings, format: .xml, options: 0).write(to: staged)
-        defer { try? FileManager.default.removeItem(at: staged) }
-        for directory in [Self.folder] where !FileManager.default.fileExists(atPath: directory.path) {
-            try sudo("/usr/bin/install", "-d", "-o", "root", "-g", "wheel", "-m", "0755", directory.path)
-            createdFolders.insert(directory, at: 0)
-        }
-        try sudo("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0644", staged.path, file.path)
-        reloadPreferences()
-    }
-
-    nonisolated static func removeProfile() throws {
-        if FileManager.default.fileExists(atPath: file.path) {
-            try sudo("/bin/rm", "-f", file.path)
-            reloadPreferences()
-        }
-        for folder in createdFolders { _ = run("/usr/bin/sudo", ["-n", "/bin/rmdir", folder.path]) }
-        createdFolders = []
-    }
-
-    /// cfprefsd keeps managed preferences cached; restarting the person's and the system's makes
-    /// them read the files again.
-    nonisolated static func reloadPreferences() {
-        run("/usr/bin/killall", ["cfprefsd"])
-        run("/usr/bin/sudo", ["-n", "/usr/bin/killall", "cfprefsd"])
-    }
-
-    @discardableResult nonisolated static func sudo(_ arguments: String...) throws -> String {
-        let result = run("/usr/bin/sudo", ["-n"] + arguments)
-        guard result.status == 0 else {
-            throw Failure("sudo \(arguments.joined(separator: " ")) failed with \(result.status): \(result.output)")
-        }
-        return result.output
-    }
-
-    @discardableResult nonisolated static func run(_ path: String, _ arguments: [String]) -> (status: Int32, output: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch { return (-1, error.localizedDescription) }
-        let output = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(decoding: output, as: UTF8.self))
     }
 }

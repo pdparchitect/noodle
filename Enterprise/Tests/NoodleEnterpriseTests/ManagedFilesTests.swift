@@ -87,8 +87,9 @@ final class ManagedFilesTests: XCTestCase {
 
     /// What in `settings` the Jamf schema would not accept: keys it doesn't have, values of the wrong
     /// type and list entries of the wrong type or outside its choices.
-    private func schemaViolations(_ settings: [String: Any]) throws -> [String] {
-        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(committed(ManagedFiles.schemaPath).utf8)) as? [String: Any])
+    static func schemaViolations(_ settings: [String: Any]) throws -> [String] {
+        let data = try Data(contentsOf: RestrictiveProfile.root.appendingPathComponent(ManagedFiles.schemaPath))
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]])
         var violations: [String] = []
         for (key, value) in settings.sorted(by: { $0.key < $1.key }) {
@@ -122,12 +123,12 @@ final class ManagedFilesTests: XCTestCase {
     }
 
     func testTheSampleProfileMatchesTheJamfSchema() throws {
-        XCTAssertEqual(try schemaViolations(RestrictiveProfile.sampleSettings()), [])
+        XCTAssertEqual(try Self.schemaViolations(RestrictiveProfile.sampleSettings()), [])
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(committed(ManagedFiles.schemaPath).utf8)) as? [String: Any])
         let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]])
-        XCTAssertEqual(try schemaViolations(properties.compactMapValues { $0["default"] }), [], "Every default fits its own key")
-        // The real-profile test's settings break the schema only where they mean to.
-        XCTAssertEqual(try schemaViolations(RestrictiveProfile.settings()), [
+        XCTAssertEqual(try Self.schemaViolations(properties.compactMapValues { $0["default"] }), [], "Every default fits its own key")
+        // The restrictive settings break the schema only where they mean to.
+        XCTAssertEqual(try Self.schemaViolations(RestrictiveProfile.settings()), [
             "\(ManagedKeys.allowedHarnesses) has \(RestrictiveProfile.unknownHarness), not one of its choices",
             "\(ManagedKeys.customMCPAllowList) has an entry that is not a string",
             "\(RestrictiveProfile.unknownKey) is not in the schema",
