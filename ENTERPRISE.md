@@ -15,22 +15,34 @@ That management is Noodle Enterprise. It lives in the [`Enterprise/`](Enterprise
 ## Licence
 
 `Enterprise/` is licensed under the
-[PolyForm Small Business License 1.0.0](Enterprise/LICENSE). Everything outside `Enterprise/`
-stays Apache-2.0.
+[PolyForm Small Business License 1.0.0](Enterprise/LICENSE), with the additional permissions below.
+Everything outside `Enterprise/` stays Apache-2.0.
 
-- **Individuals and small businesses can use it free.** The licence counts a business as small
-  when it has fewer than 100 people, employees and contractors together, and less than
-  1,000,000 US dollars (2019, adjusted for inflation) in revenue the year before.
-- **Larger organisations need a commercial licence from us.** To ask for one, email
+- **Personal use and small businesses are free.** The licence counts a business as small when it
+  has fewer than 100 people, employees and contractors together, and less than 1,000,000 US dollars
+  (2019, adjusted for inflation) in revenue the year before.
+- **Running Noodle without a configuration profile never needs a licence**, whatever the size of
+  your organisation.
+- **Larger organisations need a commercial licence from us to manage Noodle with configuration
+  profiles.** To ask for one, email
   [pdp@gnucitizen.org](mailto:pdp@gnucitizen.org?subject=Noodle%20Enterprise%20licence) and tell
   us about your organisation.
 
-**For now we grant commercial licences free of charge or on favourable terms**, so your
-organisation takes no risk by deploying Noodle now or later.
+**For now we grant commercial licences free of charge or on favourable terms**, so you can deploy
+Noodle today without worrying about licence costs.
 
-There are no licence keys and Noodle never checks for a licence: the app never blocks or limits
+There are no licence keys and Noodle doesn't check for a licence: the app never blocks or limits
 managed settings. The licence is how organisations that rely on Noodle help keep the project going;
 it isn't meant to limit who can use Noodle.
+
+### Additional permissions
+
+In addition to the PolyForm Small Business License 1.0.0, the licensor gives everyone permission to
+use the software in `Enterprise/`:
+
+1. for personal purposes, not for the benefit of a company, whatever the size of the company you
+   work for; and
+2. as part of Noodle on any Mac where Noodle is not managed by a configuration profile.
 
 ## Contributing
 
