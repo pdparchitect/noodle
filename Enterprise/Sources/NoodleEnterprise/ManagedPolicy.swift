@@ -92,10 +92,10 @@ public struct ManagedPolicy: OrganisationPolicy, Equatable {
         case .toolConnection(let catalogueID, let endpoint):
             guard bool(ManagedKeys.allowMCP) != false else { return false }
             if let catalogueID {
-                return admits(catalogueID, deny: ManagedKeys.mcpDenyList, allow: ManagedKeys.mcpAllowList) { $0 == catalogueID }
+                return admits(deny: ManagedKeys.mcpDenyList, allow: ManagedKeys.mcpAllowList) { $0 == catalogueID }
             }
             guard bool(ManagedKeys.allowCustomMCP) != false, let host = endpoint.host else { return false }
-            return admits(host, deny: ManagedKeys.customMCPDenyList, allow: ManagedKeys.customMCPAllowList) {
+            return admits(deny: ManagedKeys.customMCPDenyList, allow: ManagedKeys.customMCPAllowList) {
                 ManagedPattern.matches($0, host: host, url: endpoint)
             }
         case .browsers: return bool(ManagedKeys.allowBrowser) ?? true
@@ -104,7 +104,7 @@ public struct ManagedPolicy: OrganisationPolicy, Equatable {
         case .hubConnections: return bool(ManagedKeys.allowHubConnections) ?? true
         case .hubAddress(let host):
             guard bool(ManagedKeys.allowHubConnections) != false else { return false }
-            return admits(host, deny: ManagedKeys.hubDenyList, allow: ManagedKeys.hubAllowList) {
+            return admits(deny: ManagedKeys.hubDenyList, allow: ManagedKeys.hubAllowList) {
                 ManagedPattern.matches($0, host: host, url: nil)
             }
         case .updates: return bool(ManagedKeys.allowUpdates) ?? true
@@ -112,7 +112,7 @@ public struct ManagedPolicy: OrganisationPolicy, Equatable {
     }
 
     /// Deny first, then the allow list if there is one.
-    private func admits(_ subject: String, deny: String, allow: String, matches: (String) -> Bool) -> Bool {
+    private func admits(deny: String, allow: String, matches: (String) -> Bool) -> Bool {
         if strings(deny)?.contains(where: matches) == true { return false }
         guard let allowed = strings(allow) else { return true }
         return allowed.contains(where: matches)

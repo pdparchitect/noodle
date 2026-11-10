@@ -54,15 +54,34 @@ final class AppUpdater: NSObject, ObservableObject {
         }
     }
 
-    /// Sets Sparkle's own settings to what the organisation fixed. Sparkle keeps them, so removing the profile
-    /// leaves them as they were last fixed until the person changes them.
+    /// What one of Sparkle's settings becomes, and what is kept of the person's own: a fixed value replaces it
+    /// and keeps theirs aside, once; without one, theirs comes back.
+    static func settle(current: Bool, fixed: Bool?, kept: Bool?) -> (value: Bool, kept: Bool?) {
+        if let fixed { return (fixed, kept ?? current) }
+        return (kept ?? current, nil)
+    }
+
+    private static let keptChecksKey = "Noodle.updates.personsAutomaticChecks"
+    private static let keptDownloadsKey = "Noodle.updates.personsAutomaticDownloads"
+
+    /// Sets Sparkle's own settings to what the organisation fixed, and puts the person's back once it no longer
+    /// does. Leaving updates to the MDM changes neither: Sparkle may then not check at all.
     private func applyOrganisationPolicy() {
         objectWillChange.send()
         let updater = controller.updater
-        let checks = updatesAllowed ? OrganisationStatus.shared.value(of: .automaticUpdateChecks) : false
-        let downloads = updatesAllowed ? OrganisationStatus.shared.value(of: .automaticUpdateInstalls) : false
-        if let checks, updater.automaticallyChecksForUpdates != checks { updater.automaticallyChecksForUpdates = checks }
-        if let downloads, updater.automaticallyDownloadsUpdates != downloads { updater.automaticallyDownloadsUpdates = downloads }
+        let checks = settle(updater.automaticallyChecksForUpdates, fixed: OrganisationStatus.shared.value(of: .automaticUpdateChecks),
+                            key: Self.keptChecksKey)
+        let downloads = settle(updater.automaticallyDownloadsUpdates, fixed: OrganisationStatus.shared.value(of: .automaticUpdateInstalls),
+                               key: Self.keptDownloadsKey)
+        if updater.automaticallyChecksForUpdates != checks { updater.automaticallyChecksForUpdates = checks }
+        if updater.automaticallyDownloadsUpdates != downloads { updater.automaticallyDownloadsUpdates = downloads }
+    }
+
+    private func settle(_ current: Bool, fixed: Bool?, key: String) -> Bool {
+        let defaults = UserDefaults.standard
+        let settled = Self.settle(current: current, fixed: fixed, kept: defaults.object(forKey: key) as? Bool)
+        if let kept = settled.kept { defaults.set(kept, forKey: key) } else { defaults.removeObject(forKey: key) }
+        return settled.value
     }
 
     func checkForUpdates() {

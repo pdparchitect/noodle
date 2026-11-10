@@ -238,4 +238,17 @@ struct TestOrganisationPolicy: OrganisationPolicy {
         XCTAssertFalse(AppUpdater.effective(person: true, fixed: false))
         XCTAssertTrue(AppUpdater.effective(person: false, fixed: true))
     }
+
+    func testTheProfileReplacesThePersonsUpdateSettingAndRemovingItPutsTheirsBack() {
+        var settled = AppUpdater.settle(current: true, fixed: false, kept: nil)
+        XCTAssertEqual(settled.value, false)
+        XCTAssertEqual(settled.kept, true)
+        settled = AppUpdater.settle(current: settled.value, fixed: false, kept: settled.kept)
+        XCTAssertEqual(settled.kept, true, "Their own is kept once, not replaced by the fixed value")
+        settled = AppUpdater.settle(current: settled.value, fixed: nil, kept: settled.kept)
+        XCTAssertEqual(settled.value, true)
+        XCTAssertNil(settled.kept)
+        settled = AppUpdater.settle(current: false, fixed: nil, kept: nil)
+        XCTAssertEqual(settled.value, false, "Without a profile the person's setting is left alone")
+    }
 }
