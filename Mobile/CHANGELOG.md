@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-10
+
 ### Added
 
 - See what your bots are working on. In Settings › Conversation List, set Tasks to Waiting on Me or All Open to list your bots' tasks at the top of the conversation list, with the ones waiting on you first. Tap a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Tasks are hidden until you choose to show them.

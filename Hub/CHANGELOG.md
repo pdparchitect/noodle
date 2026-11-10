@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-10
+
 ### Added
 
 - Bots keep a short task list, each task linked to the conversation it came from and marked in progress, waiting or done as they work. Their owners see the open tasks in Noodle and Noodle Mobile, and can write to a bot about one of its tasks; the message is marked with the task so the bot knows which one it's about.
