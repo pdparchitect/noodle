@@ -2,12 +2,13 @@
 
 > **Enterprise feature.** Managing Noodle with a configuration profile is part of Noodle
 > Enterprise. Its code, this guide, the Jamf schema and the sample profile are in the
-> `Enterprise/` folder under the [Noodle Enterprise licence](LICENSE): you may read, change,
-> build and test them, but deploying Noodle in an organisation with them needs a Noodle
-> enterprise licence. Everything outside `Enterprise/` is Apache-2.0. For now we grant
-> enterprise licences free of charge or on favourable terms, so your organisation takes no risk
-> by deploying Noodle now or later. To ask for one, open an issue or discussion on the
-> [Noodle project](https://github.com/pdparchitect/noodle). See [ENTERPRISE.md](../ENTERPRISE.md).
+> `Enterprise/` folder under the [PolyForm Small Business License 1.0.0](LICENSE): individuals
+> and small businesses (fewer than 100 people and under the licence's revenue threshold) can use
+> them free; larger organisations need a commercial licence from us. For now we grant those free
+> of charge or on favourable terms, so your organisation takes no risk by deploying Noodle now or
+> later. To ask for one, open an issue or discussion on the
+> [Noodle project](https://github.com/pdparchitect/noodle). Everything outside `Enterprise/` is
+> Apache-2.0. See [ENTERPRISE.md](../ENTERPRISE.md).
 >
 > Noodle never checks for a licence and never limits the feature without one.
 

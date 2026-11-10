@@ -14,21 +14,26 @@ That management is Noodle Enterprise. It lives in the [`Enterprise/`](Enterprise
 
 ## Licence
 
-`Enterprise/` has its own [licence](Enterprise/LICENSE), which is a draft pending legal review.
-Anyone can read, change, build and test that code. Using it to deploy Noodle in an organisation
-needs a Noodle enterprise licence from us. Everything outside `Enterprise/` stays Apache-2.0.
+`Enterprise/` is licensed under the
+[PolyForm Small Business License 1.0.0](Enterprise/LICENSE). Everything outside `Enterprise/`
+stays Apache-2.0.
+
+- **Individuals and small businesses can use it free.** The licence counts a business as small
+  when it has fewer than 100 people, employees and contractors together, and less than
+  1,000,000 US dollars (2019, adjusted for inflation) in revenue the year before.
+- **Larger organisations need a commercial licence from us.** To ask for one, open an issue or a
+  discussion on the [Noodle project](https://github.com/pdparchitect/noodle) and tell us about
+  your organisation.
+
+**For now we grant commercial licences free of charge or on favourable terms**, so your
+organisation takes no risk by deploying Noodle now or later.
 
 There are no licence keys and Noodle never checks for a licence: the app never blocks or limits
 managed settings. The licence is how organisations that rely on Noodle help keep the project going;
 it isn't meant to limit who can use Noodle.
 
-**For now we grant enterprise licences free of charge or on favourable terms**, so your
-organisation takes no risk by deploying Noodle now or later.
-
-To ask for a licence, open an issue or a discussion on the
-[Noodle project](https://github.com/pdparchitect/noodle) and tell us about your organisation.
-
 ## Contributing
 
-Contributions to `Enterprise/` are welcome, on terms that let us license them under the
-Enterprise licence as well. Contributions everywhere else are Apache-2.0, as before.
+Contributions to `Enterprise/` are welcome, on terms that let us license them under the PolyForm
+Small Business License and under the commercial licences we grant. Contributions everywhere else
+are Apache-2.0, as before.

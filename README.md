@@ -147,9 +147,10 @@ can add an address of your own.
 
 Deploying Noodle to your organisation's Macs? Manage it with a configuration profile from Jamf Pro,
 Kandji, Intune or another MDM: choose the harnesses, tools, browsers, computers, Hubs and updates
-your people can use. This is Noodle Enterprise, in the `Enterprise/` folder under its own licence;
-the rest of Noodle stays Apache 2.0. For now enterprise licences are free or on favourable terms.
-See [ENTERPRISE.md](ENTERPRISE.md) and the [deployment guide](Enterprise/Deployment.md).
+your people can use. This is Noodle Enterprise, in the `Enterprise/` folder under the PolyForm
+Small Business License 1.0.0: free for individuals and small businesses, while larger organisations
+need a commercial licence, which for now we grant free or on favourable terms. The rest of Noodle
+stays Apache 2.0. See [ENTERPRISE.md](ENTERPRISE.md) and the [deployment guide](Enterprise/Deployment.md).
 
 ## Project
 
