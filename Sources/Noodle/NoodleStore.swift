@@ -531,6 +531,34 @@ final class NoodleStore {
         setSpace(id.uuidString)
     }
 
+    /// A space to show, as the Spaces menu and the sidebar's picker offer it.
+    enum SpaceChoice: Hashable {
+        case all, thisMac, hub(String), custom(UUID)
+    }
+
+    /// All, This Mac's beside a Hub, each joined Hub's in the person's order, then the spaces the person made.
+    var spaceChoices: [(choice: SpaceChoice, title: String)] {
+        [(.all, "All")] + (hubMirrors.isEmpty ? [] : [(.thisMac, "This Mac")])
+            + spaceMirrors.compactMap { mirror in Self.spaceKey(of: mirror).map { (.hub($0), mirror.pairing.hub?.name ?? "Noodle Hub") } }
+            + customSpaces.map { (.custom($0.id), $0.name) }
+    }
+
+    var shownSpace: SpaceChoice {
+        if showsThisMac { return .thisMac }
+        if let mirror = spaceMirror, let key = Self.spaceKey(of: mirror) { return .hub(key) }
+        if let custom = shownCustomSpace { return .custom(custom.id) }
+        return .all
+    }
+
+    func show(_ choice: SpaceChoice) {
+        switch choice {
+        case .all: setSpace(nil)
+        case .thisMac: showThisMac()
+        case .hub(let key): setSpace(key)
+        case .custom(let id): showSpace(custom: id)
+        }
+    }
+
     private func setSpace(_ space: String?) {
         self.space = space
         UserDefaults.standard.set(space, forKey: Self.spaceKey)

@@ -573,12 +573,14 @@ struct MainWindowLayoutCommands: View {
     }
 }
 
-/// View › Sidebar: how the sidebar shows bots and groups, the line under each name, their order, and which tasks it lists.
+/// View › Sidebar: how the sidebar shows bots and groups, the line under each name, their order, which tasks it lists,
+/// and whether it has a space picker.
 struct SidebarCommands: View {
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
     @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
+    @AppStorage(SidebarSpacePicker.key) private var showsSpacePicker = false
 
     var body: some View {
         Menu("Sidebar") {
@@ -605,6 +607,8 @@ struct SidebarCommands: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
+            Divider()
+            Toggle("Space Picker", isOn: $showsSpacePicker)
         }
     }
 }

@@ -398,6 +398,7 @@ struct RootView: View {
     /// Column items are hidden with the sidebar; the system toggle and the window
     /// toolbar's Create return then. Toolbar spacers need macOS 26.
     private var sidebarOwnsToolbar: Bool { columnVisibility != .detailOnly }
+    @AppStorage(SidebarSpacePicker.key) private var showsSpacePicker = false
 
     private var createMenu: some View {
         Menu {
@@ -420,6 +421,12 @@ struct RootView: View {
 
     @ToolbarContentBuilder private var sidebarToolbar: some ToolbarContent {
         if sidebarOwnsToolbar {
+            // Beside the window's buttons, while there is a space to switch to.
+            if showsSpacePicker, store.spaceChoices.count > 1 {
+                // Read as a title, so without the glass a toolbar button sits on.
+                ToolbarItem { SidebarSpacePicker() }
+                    .sharedBackgroundVisibility(.hidden)
+            }
             ToolbarSpacer(.flexible)
             ToolbarItem {
                 Button { withAnimation { columnVisibility = .detailOnly } } label: {

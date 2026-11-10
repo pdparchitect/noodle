@@ -596,3 +596,34 @@ enum SidebarTimestamp {
     }
 }
 
+
+/// View › Sidebar › Space Picker: the shown space in the sidebar's toolbar, beside the window's buttons, to
+/// switch without the Spaces menu. The toolbar shows it only while there is more than one space.
+struct SidebarSpacePicker: View {
+    static let key = "sidebarSpacePicker"
+    @Environment(NoodleStore.self) private var store
+
+    var body: some View {
+        let choices = store.spaceChoices
+        Menu {
+            SpaceChoiceItems(store: store, choices: choices)
+            Divider()
+            SpaceEditingItems(store: store)
+        } label: {
+            HStack(spacing: 4) {
+                Text(choices.first { $0.choice == store.shownSpace }?.title ?? "All")
+                    .font(.headline)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Space")
+    }
+}

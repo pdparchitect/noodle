@@ -140,38 +140,44 @@ struct SpaceCommands: Commands {
 
     var body: some Commands {
         // Nothing to choose until a Hub is joined or a space made; a conversation's menu makes the first.
-        if !store.hubMirrors.isEmpty || !store.customSpaces.isEmpty {
+        let choices = store.spaceChoices
+        if choices.count > 1 {
             CommandMenu("Spaces") {
-                Toggle("All", isOn: Binding(get: { store.isShowingAll }, set: { if $0 { store.showSpace(nil) } }))
-                    .keyboardShortcut("1")
-                // Only beside a Hub: with none it would be the same as All.
-                if !store.hubMirrors.isEmpty {
-                    Toggle("This Mac", isOn: Binding(get: { store.showsThisMac }, set: { if $0 { store.showThisMac() } }))
-                        .keyboardShortcut("2")
-                }
-                ForEach(Array(store.spaceMirrors.enumerated()), id: \.element.pairing.directory) { index, mirror in
-                    Toggle(mirror.pairing.hub?.name ?? "Noodle Hub",
-                           isOn: Binding(get: { store.spaceMirror === mirror }, set: { if $0 { store.showSpace(mirror) } }))
-                        .keyboardShortcut(Self.shortcut(1 + index))
-                }
-                if !store.customSpaces.isEmpty { Divider() }
-                ForEach(Array(store.customSpaces.enumerated()), id: \.element.id) { index, space in
-                    Toggle(space.name, isOn: Binding(get: { store.shownCustomSpace?.id == space.id },
-                                                     set: { if $0 { store.showSpace(custom: space.id) } }))
-                        .keyboardShortcut(Self.shortcut((store.hubMirrors.isEmpty ? 0 : store.hubMirrors.count + 1) + index))
-                }
+                SpaceChoiceItems(store: store, choices: choices)
                 Divider()
-                Button("New Space…") { store.spaceNaming = .init() }
-                if !store.customSpaces.isEmpty || store.hubMirrors.count > 1 {
-                    Button("Edit Spaces…") { store.editsSpaces = true }
-                }
+                SpaceEditingItems(store: store)
             }
         }
     }
+}
 
-    /// ⌘2 to ⌘9, after All.
-    private static func shortcut(_ index: Int) -> KeyboardShortcut? {
-        index < 8 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 2)"))) : nil
+/// Each space as a checkmark item, its own spaces after a divider; ⌘1 is All, ⌘2 to ⌘9 the rest.
+struct SpaceChoiceItems: View {
+    let store: NoodleStore
+    let choices: [(choice: NoodleStore.SpaceChoice, title: String)]
+
+    var body: some View {
+        ForEach(Array(choices.enumerated()), id: \.element.choice) { index, entry in
+            if index > 0, Self.isCustom(entry.choice), !Self.isCustom(choices[index - 1].choice) { Divider() }
+            Toggle(entry.title, isOn: Binding(get: { store.shownSpace == entry.choice }, set: { if $0 { store.show(entry.choice) } }))
+                .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
+        }
+    }
+
+    private static func isCustom(_ choice: NoodleStore.SpaceChoice) -> Bool {
+        if case .custom = choice { true } else { false }
+    }
+}
+
+/// Making a space, and editing them once there is something to put in order.
+struct SpaceEditingItems: View {
+    let store: NoodleStore
+
+    var body: some View {
+        Button("New Space…") { store.spaceNaming = .init() }
+        if !store.customSpaces.isEmpty || store.hubMirrors.count > 1 {
+            Button("Edit Spaces…") { store.editsSpaces = true }
+        }
     }
 }
 
