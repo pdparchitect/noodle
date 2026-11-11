@@ -168,7 +168,7 @@ struct Composer: View {
                     }
                 }
                 if state.attaching {
-                    TextField("Path of a file on this Mac, then Return", text: $attachPath)
+                    TextField("Path of a file on \(Desktop.computer), then Return", text: $attachPath)
                         .focused(focus, equals: .composer)
                         .onSubmit { attach() }
                         .onKeyPress(.escape) { _ in

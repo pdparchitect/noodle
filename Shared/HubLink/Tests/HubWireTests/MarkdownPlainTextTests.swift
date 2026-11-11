@@ -72,4 +72,39 @@ final class InlineMarkdownTests: XCTestCase {
         }
     }
     #endif
+
+    /// Each piece of a line with how it is styled, for a screen that draws them where Foundation cannot read
+    /// markdown.
+    func testRunsCarryTheirStyleAndLinks() {
+        typealias Run = InlineMarkdown.Run
+        XCTAssertEqual(InlineMarkdown.runs("Some **bold**, *it*, ~~gone~~, `code` and [a link](https://x.com/a_(b)) or <https://y.com>"), [
+            Run("Some "), Run("bold", strong: true), Run(", "), Run("it", emphasis: true), Run(", "),
+            Run("gone", strikethrough: true), Run(", "), Run("code", code: true), Run(" and "),
+            Run("a link", link: "https://x.com/a_(b)"), Run(" or "), Run("https://y.com", link: "https://y.com"),
+        ])
+        XCTAssertEqual(InlineMarkdown.runs("***both*** and *outer **inner***"), [
+            Run("both", strong: true, emphasis: true), Run(" and "), Run("outer ", emphasis: true),
+            Run("inner", strong: true, emphasis: true),
+        ])
+        XCTAssertEqual(InlineMarkdown.runs("Plain."), [Run("Plain.")])
+        for (markdown, text) in inline {
+            XCTAssertEqual(InlineMarkdown.runs(markdown).map(\.text).joined(), text, markdown)
+        }
+    }
+
+    #if canImport(Darwin)
+    func testRunsAgreeWithFoundationsParser() throws {
+        let samples = inline.map(\.0) + ["***both*** and *outer **inner***", "[a link](https://x.com) and <https://y.com>"]
+        for markdown in samples {
+            let parsed = try AttributedString(markdown: markdown, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+            let expected = parsed.runs.map { run -> InlineMarkdown.Run in
+                let intent = run.inlinePresentationIntent ?? []
+                return InlineMarkdown.Run(String(parsed[run.range].characters), strong: intent.contains(.stronglyEmphasized),
+                                          emphasis: intent.contains(.emphasized), strikethrough: intent.contains(.strikethrough),
+                                          code: intent.contains(.code), link: run.link?.absoluteString)
+            }
+            XCTAssertEqual(InlineMarkdown.runs(markdown), expected, markdown)
+        }
+    }
+    #endif
 }

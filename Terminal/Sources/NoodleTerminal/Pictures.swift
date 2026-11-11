@@ -1,22 +1,21 @@
+#if canImport(AppKit)
 import AppKit
+#endif
+import Foundation
 import HubLink
 import TerminalCore
 
 /// Bots' and groups' pictures as the Mac and phone draw them, made into PNGs the terminal shows: the bot's own
 /// picture, or its symbol on its colour, in a circle; a group's first bots together. A terminal that can show
-/// pictures shows them as they are; any other shows them in coloured blocks.
+/// pictures shows them as they are; any other shows them in coloured blocks. Where there is no AppKit, the
+/// colours are drawn without the symbol, and a bot's own picture is shown as it is.
 @MainActor enum Pictures {
-    /// The same gradients as the Mac's bot avatars, indexed the same way.
-    private static let gradients: [[NSColor]] = [
-        [.systemBlue, .systemCyan], [.systemPurple, .systemPink], [.systemOrange, .systemYellow], [.systemMint, .systemTeal],
-        [.systemIndigo, .systemBlue], [.systemPink, .systemOrange],
-    ]
     static let colourNames = ["Blue", "Purple", "Orange", "Mint", "Indigo", "Pink"]
     private static var made: [String: [UInt8]] = [:]
     private static let pixels = 48
 
     /// Bots may store any integer; it wraps onto the palette.
-    static func colourIndex(_ colour: Int) -> Int { Int(colour.magnitude % UInt(gradients.count)) }
+    static func colourIndex(_ colour: Int) -> Int { Int(colour.magnitude % UInt(colourNames.count)) }
 
     /// `scale` draws the picture smaller within its square, with clear space around it, so it shrinks without the
     /// terminal stretching it out of shape.
@@ -43,6 +42,19 @@ import TerminalCore
         }
             .joined(separator: ",") + (dimmed ? "-dim" : "") + "@\(scale)"
         if let kept = made[key] { return kept }
+        let png = draw(faces, dimmed: dimmed, scale: scale)
+        made[key] = png
+        return png
+    }
+
+    #if canImport(AppKit)
+    /// The same gradients as the Mac's bot avatars, indexed the same way.
+    private static let gradients: [[NSColor]] = [
+        [.systemBlue, .systemCyan], [.systemPurple, .systemPink], [.systemOrange, .systemYellow], [.systemMint, .systemTeal],
+        [.systemIndigo, .systemBlue], [.systemPink, .systemOrange],
+    ]
+
+    private static func draw(_ faces: [LinkBotDraft], dimmed: Bool, scale: Double) -> [UInt8] {
         let image = NSImage(size: NSSize(width: pixels, height: pixels), flipped: false) { full in
             let side = full.width * scale
             let rect = NSRect(x: full.midX - side / 2, y: full.midY - side / 2, width: side, height: side)
@@ -61,9 +73,7 @@ import TerminalCore
             }
             return true
         }
-        let png = encode(image, dimmed: dimmed)
-        made[key] = png
-        return png
+        return encode(image, dimmed: dimmed)
     }
 
     private static func draw(_ face: LinkBotDraft?, in rect: NSRect) {
@@ -114,4 +124,12 @@ import TerminalCore
         NSGraphicsContext.restoreGraphicsState()
         return [UInt8](bitmap.representation(using: .png, properties: [:]) ?? Data())
     }
+    #else
+    private static func draw(_ faces: [LinkBotDraft], dimmed: Bool, scale: Double) -> [UInt8] {
+        if faces.count == 1, let data = faces[0].avatarImageData, AvatarDrawing.isShowable(data) { return [UInt8](data) }
+        let picture = AvatarDrawing.picture(colours: faces.map { colourIndex($0.avatarColorIndex) }, dimmed: dimmed,
+                                            scale: scale, side: pixels)
+        return AvatarDrawing.png(picture)
+    }
+    #endif
 }

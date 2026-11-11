@@ -57,7 +57,7 @@ class WorkflowTests(unittest.TestCase):
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
             'needs.test-noodle-macos27.result': 'success',
-            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'applet-rendering', 'browser', 'hub', 'mobile', 'bridge', 'terminal', 'server', 'server-linux']},
+            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'applet-rendering', 'browser', 'hub', 'mobile', 'bridge', 'terminal', 'terminal-linux', 'server', 'server-linux']},
             **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'server', 'images']},
             **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'server', 'images']},
         }
@@ -386,7 +386,7 @@ class WorkflowTests(unittest.TestCase):
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-applet-rendering', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge', 'test-terminal', 'test-server', 'test-server-linux',
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-applet-rendering', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge', 'test-terminal', 'test-terminal-linux', 'test-server', 'test-server-linux',
             'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-browser', 'prepare-hub', 'prepare-mobile', 'prepare-terminal', 'prepare-server', 'prepare-images'])
 
     def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):
@@ -835,8 +835,8 @@ class PathScopeTests(unittest.TestCase):
             # Mobile bundles the voice previews from the root's Support folder.
             (['Support/VoicePreviews/ava.m4a'], ['checks', 'noodle', 'noodle-macos27', 'hub', 'mobile', 'server', 'server-linux']),
             (['Shared/ExternalTools/Sources/NoodleExternalTools/Access.swift'], ['checks', 'shared', 'computer', 'browser']),
-            (['Shared/HubLink/Sources/HubLink/Pairing.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'terminal', 'server', 'server-linux']),
-            (['Terminal/Sources/NoodleTerminal/App.swift', 'Terminal/Package.swift'], ['checks', 'terminal']),
+            (['Shared/HubLink/Sources/HubLink/Pairing.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'terminal', 'terminal-linux', 'server', 'server-linux']),
+            (['Terminal/Sources/NoodleTerminal/App.swift', 'Terminal/Package.swift'], ['checks', 'terminal', 'terminal-linux']),
             (['Shared/Patch/Sources/NoodlePatch/Patch.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'server', 'server-linux']),
             (['Computer/Bridge/Sources/ComputerBridge/Bridge.swift'],
              ['checks', 'noodle', 'noodle-macos27', 'computer', 'bridge', 'hub', 'server', 'server-linux']),
@@ -845,7 +845,7 @@ class PathScopeTests(unittest.TestCase):
             (['Browser/BrowserProtocol/Sources/BrowserBridge/Bridge.swift'],
              ['checks', 'noodle', 'noodle-macos27', 'browser', 'hub', 'server', 'server-linux']),
             (['Shared/SettingsUI/Sources/NoodleSettingsUI/Window.swift'],
-             [suite for suite in self.everything if suite not in ['bridge', 'mobile', 'terminal']]),
+             [suite for suite in self.everything if suite not in ['bridge', 'mobile', 'terminal', 'terminal-linux']]),
             # Every protocol is built on the live views.
             (['Shared/Surface/Sources/NoodleSurface/Surface.swift'], self.everything),
             (['scripts/mobile.sh'], ['checks', 'mobile']),

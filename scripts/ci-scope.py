@@ -34,6 +34,7 @@ SUITES = {
     "hub": (["Hub"], []),
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
     "terminal": (["Terminal"], []),
+    "terminal-linux": (["Terminal"], []),
     # Noodle Server, on macOS and on Linux with the Hub engine and the wire it builds on there.
     "server": (["Server"], []),
     "server-linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),

@@ -110,7 +110,7 @@ private struct HubRow: View {
                 if status?.isAdmin == true { Button("Users…") { app.push(.users(chats.id)) } }
                 Button("Leave…") {
                     app.confirming = Confirmation(title: "Leave \(chats.hubName)?",
-                        message: "This Mac stops showing its bots and groups. They stay on the Hub, and you can join again with a new invitation.",
+                        message: "\(Desktop.Computer) stops showing its bots and groups. They stay on the Hub, and you can join again with a new invitation.",
                         button: "Leave") {
                         hubs.leave(chats)
                         if hubs.chats.isEmpty { app.path = [] }
@@ -142,7 +142,7 @@ struct PairDeviceView: View {
                 Text("On the other device, join a Hub and paste this link. It works once, until \(invitation.expires.formatted(date: .omitted, time: .shortened)).")
                 Text(invitation.url().absoluteString)
                 Button("Copy Link") {
-                    NSPasteboardWriter.copy(invitation.url().absoluteString)
+                    Desktop.copy(invitation.url().absoluteString)
                 }
             } else if let problem {
                 Text(problem).foregroundStyle(.red)
@@ -281,7 +281,7 @@ struct UserView: View {
                     if let invitation {
                         Text("On \(user.name)'s device, join a Hub and paste this link. It works once.")
                         Text(invitation.url().absoluteString)
-                        Button("Copy Link") { NSPasteboardWriter.copy(invitation.url().absoluteString) }
+                        Button("Copy Link") { Desktop.copy(invitation.url().absoluteString) }
                     }
                 }
                 Text("Devices").bold().padding(.top, 1)
@@ -580,11 +580,42 @@ struct SharingView: View {
     }
 }
 
+#if canImport(AppKit)
 import AppKit
+#endif
 
-enum NSPasteboardWriter {
-    @MainActor static func copy(_ text: String) {
+/// What Terminal hands the system: a link or file to open, text to copy. On a Mac through AppKit;
+/// elsewhere links and files open with xdg-open, and copies go through the terminal itself, which
+/// works over SSH too.
+@MainActor enum Desktop {
+    /// How the screens name the computer Terminal runs on, in a sentence and starting one.
+    #if os(macOS)
+    static let computer = "this Mac", Computer = "This Mac"
+    #else
+    static let computer = "this computer", Computer = "This computer"
+    #endif
+
+    static func open(_ url: URL) {
+        #if canImport(AppKit)
+        NSWorkspace.shared.open(url)
+        #else
+        let opener = Process()
+        opener.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        opener.arguments = ["xdg-open", url.isFileURL ? url.path : url.absoluteString]
+        opener.standardInput = FileHandle.nullDevice
+        opener.standardOutput = FileHandle.nullDevice
+        opener.standardError = FileHandle.nullDevice
+        try? opener.run()
+        #endif
+    }
+
+    static func copy(_ text: String) {
+        #if canImport(AppKit)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        #else
+        // The terminal's own clipboard request, which it passes to the clipboard of the computer it shows on.
+        FileHandle.standardOutput.write(Data("\u{1B}]52;c;\(Data(text.utf8).base64EncodedString())\u{07}".utf8))
+        #endif
     }
 }

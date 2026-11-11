@@ -1,7 +1,9 @@
 import Foundation
 import HubLink
 import Observation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 /// A bot's own conversation or a group's, as the list shows it.
 public enum HubThread: Equatable, Sendable {
@@ -477,8 +479,23 @@ public enum HubThread: Equatable, Sendable {
     }
 
     static func mediaType(of url: URL) -> String {
+        #if canImport(UniformTypeIdentifiers)
         UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        #else
+        mediaTypes[url.pathExtension.lowercased()] ?? "application/octet-stream"
+        #endif
     }
+
+    #if !canImport(UniformTypeIdentifiers)
+    /// The kinds of file people send most, as the Mac names them, where there are no system file types to ask.
+    private static let mediaTypes = [
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "heic": "image/heic",
+        "webp": "image/webp", "svg": "image/svg+xml", "pdf": "application/pdf", "txt": "text/plain",
+        "md": "text/markdown", "json": "application/json", "html": "text/html", "htm": "text/html", "csv": "text/csv",
+        "xml": "application/xml", "zip": "application/zip", "gz": "application/gzip", "tar": "application/x-tar",
+        "mp4": "video/mp4", "mov": "video/quicktime", "m4a": "audio/x-m4a", "mp3": "audio/mpeg", "wav": "audio/wav",
+    ]
+    #endif
 
     /// Tries a message that did not go through again, if nothing newer has come since.
     public func tryAgain(_ message: LinkMessage) async {

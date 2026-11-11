@@ -49,13 +49,24 @@ import Observation
 
     /// Where this terminal keeps each Hub's folder and key, readable only by this user.
     public static var standardDirectory: URL {
+        #if os(macOS)
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Noodle Terminal/Hubs", isDirectory: true)
+        #else
+        // Where Linux keeps an app's own data.
+        (ProcessInfo.processInfo.environment["XDG_DATA_HOME"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/share", isDirectory: true))
+            .appendingPathComponent("noodle-terminal/Hubs", isDirectory: true)
+        #endif
     }
 
     /// What the Hub lists this terminal as among the person's devices.
     public static var standardDeviceName: String {
+        #if os(macOS)
         let computer = Host.current().localizedName ?? "Mac"
+        #else
+        let computer = ProcessInfo.processInfo.hostName
+        #endif
         return "\(computer) Terminal"
     }
 

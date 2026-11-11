@@ -11,6 +11,8 @@ WezTerm and iTerm2. Other terminals, including Terminal, show them in coloured b
 
 ## Installing
 
+### On a Mac
+
 Noodle Terminal needs macOS 26 on a Mac with Apple silicon.
 [Download Noodle-Terminal-arm64.zip](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)
 and open it to get the `noodle` command. Move it to a folder on your `PATH`, then run it:
@@ -24,7 +26,34 @@ noodle
 If `~/.local/bin` isn't on your `PATH` yet, add `export PATH="$HOME/.local/bin:$PATH"`
 to `~/.zshrc`. To update, download the ZIP again and replace the command.
 
-To build it from this repository instead, with Xcode 27 installed:
+### On Linux
+
+Noodle Terminal runs on Linux on arm64 or x86_64, in any terminal, and over SSH too. Download it for
+[arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz)
+or [x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz).
+It needs msquic, from Microsoft's packages; on Ubuntu 24.04:
+
+```
+sudo apt install curl
+curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/microsoft.deb
+sudo dpkg -i /tmp/microsoft.deb && sudo apt update && sudo apt install libmsquic
+```
+
+Then put the `noodle` command on your `PATH` and run it:
+
+```
+tar xzf Noodle-Terminal-linux-*.tar.gz
+mkdir -p ~/.local/bin
+mv noodle ~/.local/bin/
+noodle
+```
+
+Bots show their colours, without the symbols they have on a Mac. Copying puts text on the clipboard
+of the computer the terminal shows on, where the terminal allows it.
+
+### Building it
+
+To build it from this repository instead, with Swift 6.4 (on a Mac, Xcode 27):
 
 ```
 swift build -c release --package-path Terminal

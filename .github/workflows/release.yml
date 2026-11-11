@@ -380,6 +380,25 @@ jobs:
       - name: Test the terminal app
         run: swift test --disable-sandbox --package-path Terminal --scratch-path .build/terminal
 
+  test-terminal-linux:
+    needs: [versions]
+    if: contains(fromJSON(needs.versions.outputs.suites), 'terminal-linux')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The toolchain image Noodle Push builds with.
+    container: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install msquic for the Hub's link
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/microsoft.deb
+          dpkg -i /tmp/microsoft.deb && apt-get update && apt-get install -y --no-install-recommends libmsquic
+      - name: Test the terminal app on Linux
+        run: swift test --package-path Terminal --scratch-path .build/terminal-linux
+
   test-server:
     needs: [versions]
     if: contains(fromJSON(needs.versions.outputs.suites), 'server')
@@ -422,7 +441,7 @@ jobs:
   # One check for main's ruleset to require: every test job passed or was skipped.
   ci-passed:
     name: CI passed
-    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal, test-server, test-server-linux]
+    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal, test-terminal-linux, test-server, test-server-linux]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -485,7 +504,7 @@ jobs:
     uses: ./.github/workflows/server-release.yml
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-server, test-server-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-terminal-linux, test-server, test-server-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -501,7 +520,7 @@ jobs:
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.test-mobile.result == 'success') &&
-      (needs.versions.outputs.terminal != 'true' || needs.test-terminal.result == 'success') &&
+      (needs.versions.outputs.terminal != 'true' || (needs.test-terminal.result == 'success' && needs.test-terminal-linux.result == 'success')) &&
       (needs.versions.outputs.server != 'true' || (needs.test-server.result == 'success' && needs.test-server-linux.result == 'success')) &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
@@ -692,6 +711,11 @@ jobs:
         with:
           name: terminal-release-assets
           path: dist/terminal-${{ env.TERMINAL_VERSION }}
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: terminal-release-linux-*
+          path: dist
+          merge-multiple: true
       - name: Publish the verified Terminal archive and download channel
         env:
           GH_TOKEN: ${{ github.token }}

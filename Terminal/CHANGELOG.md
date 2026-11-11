@@ -8,6 +8,7 @@
 
 ### Added
 
+- Noodle Terminal for Linux, on arm64 and x86_64: the same chats as on the Mac, from any terminal, over SSH too. Copying uses the terminal's own clipboard, links and files open with the system's default apps, and bots show their colours without the Mac's symbols.
 - Download Noodle Terminal as a ZIP holding the signed and notarized `noodle` command, linked from the Noodle README.
 - Noodle Terminal: chat with the bots and groups on your Noodle Hub from Terminal on your Mac. Join a Hub with an invitation, see your bots and groups with unread dots and pins, read and send messages, load earlier ones, and search bots, groups and messages.
 - Bots and groups show their pictures, and pictures sent in a conversation show under their message. Terminals that can show images show them as they are; others show them in coloured blocks.

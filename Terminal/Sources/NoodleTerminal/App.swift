@@ -1,5 +1,6 @@
 import Foundation
 import HubLink
+import Observation
 import SwiftTUIArguments
 import SwiftTUICLI
 import TerminalCore

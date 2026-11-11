@@ -3,7 +3,7 @@ import HubLink
 @testable import TerminalCore
 import XCTest
 
-/// A Hub on this Mac's loopback that keeps one bot's conversation and answers what the terminal asks.
+/// A Hub on this computer's loopback that keeps one bot's conversation and answers what the terminal asks.
 final class FakeHub: @unchecked Sendable {
     let identity = LinkIdentity()
     let botID = UUID(), conversationID = UUID()
@@ -14,7 +14,7 @@ final class FakeHub: @unchecked Sendable {
     private var marks: [LinkReadMark] = []
     private var refusesSending = false
     private var portNumber: UInt16 = 0
-    private var server: LinkServer?
+    private var server: (any LinkListening)?
     private var received: [LinkRequest] = []
     private var answers: (@Sendable (LinkRequest) -> LinkResponse?)?
     private var uploaded: [UUID: (attachment: LinkAttachment, data: Data)] = [:]
@@ -52,7 +52,13 @@ final class FakeHub: @unchecked Sendable {
     var port: UInt16 { lock.withLock { portNumber } }
 
     func start() async throws {
-        let server = try LinkServer(identity: identity, port: 0, admits: { _ in true }) { [self] _, data in
+        // The Hub's own link on each system: Network.framework's on a Mac, msquic's on Linux.
+        #if os(Linux)
+        let listen = QUICListener.listen(certificates: FileManager.default.temporaryDirectory.appendingPathComponent("hub-\(UUID())"))
+        #else
+        let listen = LinkServer.listen
+        #endif
+        let server = try listen(identity, 0, { _ in true }) { [self] _, data in
             .response(LinkProtocol.encode(answer(data)))
         }
         try await server.start()

@@ -84,3 +84,27 @@ jobs:
           if [[ -f "$RUNNER_TEMP/terminal-signing.keychain-db" ]]; then
             security delete-keychain "$RUNNER_TEMP/terminal-signing.keychain-db"
           fi
+
+  # The `noodle` command for Linux, one archive for each processor.
+  linux:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    # The toolchain image Noodle Push builds with, which has the Swift 6.4 SwiftTUI needs.
+    container: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build and pack
+        run: bash scripts/package-terminal-linux-release.sh
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: terminal-release-linux-${{ matrix.runner }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

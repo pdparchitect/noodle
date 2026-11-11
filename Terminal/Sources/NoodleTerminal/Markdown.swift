@@ -1,5 +1,5 @@
-import AppKit
 import Foundation
+import HubLink
 import SwiftTUICLI
 
 /// The markdown bots write, as far as a terminal shows it: headings and strong text in bold, emphasis in italics,
@@ -60,25 +60,37 @@ import SwiftTUICLI
         return lines
     }
 
-    private static func parsed(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
+    /// A line's pieces and their styles: as Foundation reads markdown on a Mac, and elsewhere as the Hub's own
+    /// reader does, which gives the same pieces.
+    private static func runs(_ text: String) -> [InlineMarkdown.Run] {
+        #if canImport(Darwin)
+        guard let parsed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) else {
+            return [InlineMarkdown.Run(text)]
+        }
+        return parsed.runs.map { run in
+            let intent = run.inlinePresentationIntent ?? []
+            return InlineMarkdown.Run(String(parsed[run.range].characters), strong: intent.contains(.stronglyEmphasized),
+                                      emphasis: intent.contains(.emphasized), strikethrough: intent.contains(.strikethrough),
+                                      code: intent.contains(.code), link: run.link?.absoluteString)
+        }
+        #else
+        return InlineMarkdown.runs(text)
+        #endif
     }
 
     /// A line's inline markdown as styled text.
     static func inline(_ text: String) -> Text { kept(&keptInline, text) { styled(text) } }
 
     private static func styled(_ text: String) -> Text {
-        let attributed = parsed(text)
-        var interpolation = Text.RichContent.StringInterpolation(literalCapacity: 0, interpolationCount: attributed.runs.count)
-        for run in attributed.runs {
-            var piece = Text(String(attributed[run.range].characters))
-            let intent = run.inlinePresentationIntent ?? []
-            if intent.contains(.stronglyEmphasized) { piece = piece.bold() }
-            if intent.contains(.emphasized) { piece = piece.italic() }
-            if intent.contains(.strikethrough) { piece = piece.strikethrough() }
-            if intent.contains(.code) || run.link != nil { piece = piece.foregroundStyle(.tint) }
-            if let url = run.link, isWeb(url) {
+        let runs = runs(text)
+        var interpolation = Text.RichContent.StringInterpolation(literalCapacity: 0, interpolationCount: runs.count)
+        for run in runs {
+            var piece = Text(run.text)
+            if run.strong { piece = piece.bold() }
+            if run.emphasis { piece = piece.italic() }
+            if run.strikethrough { piece = piece.strikethrough() }
+            if run.code || run.link != nil { piece = piece.foregroundStyle(.tint) }
+            if let url = run.link.flatMap(URL.init(string:)), isWeb(url) {
                 // A link of its own, so a click opens it.
                 interpolation.appendInterpolation(Link(piece.underline(), destination: LinkDestination(url.absoluteString)))
             } else {
@@ -94,7 +106,7 @@ import SwiftTUICLI
     /// Opens a link clicked in a message, as a web page in the browser.
     static let open = OpenLinkAction { destination in
         guard let url = URL(string: destination.rawValue), isWeb(url) else { return false }
-        NSWorkspace.shared.open(url)
+        Desktop.open(url)
         return true
     }
 
@@ -103,7 +115,7 @@ import SwiftTUICLI
 
     private static func words(_ body: String) -> String {
         lines(of: body).filter { if case .blank = $0.kind { false } else { true } }
-            .map { String(parsed($0.content).characters) }
+            .map { runs($0.content).map(\.text).joined() }
             .joined(separator: " ")
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
@@ -112,8 +124,8 @@ import SwiftTUICLI
     static func links(in body: String) -> [URL] {
         var seen: Set<URL> = [], found: [URL] = []
         for line in lines(of: body) {
-            for run in parsed(line.content).runs {
-                guard let url = run.link, isWeb(url), seen.insert(url).inserted else { continue }
+            for run in runs(line.content) {
+                guard let url = run.link.flatMap(URL.init(string:)), isWeb(url), seen.insert(url).inserted else { continue }
                 found.append(url)
             }
         }

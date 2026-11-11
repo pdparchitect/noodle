@@ -65,9 +65,11 @@ def release_notes(product):
     if product == 'server':
         base = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Server-linux'
         return f'Download for Linux on [arm64]({base}-arm64.tar.gz) · [x86_64]({base}-x86_64.tar.gz)\n\n' + body
-    # The terminal app is one command-line binary, shipped as a ZIP only.
+    # The terminal app is one command-line binary: a ZIP for the Mac, and an archive for each Linux processor.
     if product == 'terminal':
-        return f'[Download ZIP for Apple silicon]({download}.zip)\n\n' + body
+        linux = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Terminal-linux'
+        return (f'[Download ZIP for Apple silicon]({download}.zip) · '
+                f'Linux on [arm64]({linux}-arm64.tar.gz) · [x86_64]({linux}-x86_64.tar.gz)\n\n' + body)
     links = f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
     if product == 'noodle':
         links += ('[Download Suite (macOS 26+)](https://github.com/pdparchitect/noodle/releases/download/'

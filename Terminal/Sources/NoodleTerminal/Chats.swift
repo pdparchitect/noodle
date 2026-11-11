@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import HubLink
 import SwiftTUICLI
@@ -121,7 +120,7 @@ struct SplitView: View {
         let chats = row.chats, thread = row.thread, name = thread.name, app = app
         var entries: [PaletteEntry] = []
         if chats.composerUnavailableReason(for: thread) == nil {
-            entries.append(PaletteEntry("Attach File…", "Send a file from this Mac to \(name)") {
+            entries.append(PaletteEntry("Attach File…", "Send a file from \(Desktop.computer) to \(name)") {
                 app.conversation(row.id).attaching = true
                 afterPalette = .composer
             })
@@ -218,14 +217,14 @@ struct SplitView: View {
         for attachment in message.attachments {
             if let url = attachment.url {
                 if ["http", "https"].contains(url.scheme?.lowercased()) {
-                    entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)") { NSWorkspace.shared.open(url) })
+                    entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)") { Desktop.open(url) })
                 }
                 continue
             }
-            entries.append(PaletteEntry("Open \(attachment.filename)", "Download it and open it on this Mac") {
+            entries.append(PaletteEntry("Open \(attachment.filename)", "Download it and open it on \(Desktop.computer)") {
                 app.run {
                     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle Terminal/\(message.id)", isDirectory: true)
-                    NSWorkspace.shared.open(try await chats.download(attachment, of: message, into: folder))
+                    Desktop.open(try await chats.download(attachment, of: message, into: folder))
                 }
             })
             entries.append(PaletteEntry("Save \(attachment.filename) to Downloads") {
@@ -237,12 +236,11 @@ struct SplitView: View {
             })
         }
         for url in Markdown.links(in: message.body) {
-            entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)", url.absoluteString) { NSWorkspace.shared.open(url) })
+            entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)", url.absoluteString) { Desktop.open(url) })
         }
         if !message.body.isEmpty {
             entries.append(PaletteEntry("Copy Message") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(message.body, forType: .string)
+                Desktop.copy(message.body)
                 app.tell("Copied.")
             })
         }
