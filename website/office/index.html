@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131519" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="One Mac in the office runs Noodle for your whole team: everyone's AI agents, their computers and signed-in browsers, and the tools they build. Everyone works with them from their own Mac, iPhone and iPad." />
+  <title>Noodle AI office - Your team's AI office, on one Mac.</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Noodle" />
+  <meta property="og:url" content="https://usenoodle.app/office/" />
+  <meta property="og:title" content="Noodle AI office - Your team's AI office, on one Mac." />
+  <meta property="og:description" content="One Mac in the office runs Noodle for your whole team: everyone's AI agents, their computers and signed-in browsers, and the tools they build. Everyone works with them from their own Mac, iPhone and iPad." />
+  <meta property="og:image" content="https://usenoodle.app/assets/social-card.jpg" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1260" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .unlock { row-gap: 44px; }
+    .unlock + .shot { margin-top: 72px; }
+    /* A day at the office, as a column of times. */
+    .day, .steps { padding: 0; list-style: none; }
+    .day { max-width: 760px; margin: 56px auto 0; }
+    .day li { display: grid; grid-template-columns: 80px 1fr; gap: 20px; padding: 22px 0; border-top: 1px solid rgba(127,127,127,.22); }
+    .day li:last-child { border-bottom: 1px solid rgba(127,127,127,.22); }
+    .day time { font-family: var(--display); font-size: 21px; line-height: 1.19048; font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
+    .day h3 { font-size: 19px; line-height: 1.21053; font-weight: 600; letter-spacing: .012em; }
+    .day p { margin-top: 6px; color: var(--gray); }
+    .note { margin-top: 28px; text-align: center; font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--gray); }
+    .note a { color: var(--blue); }
+    .note a:hover { text-decoration: underline; }
+    /* The apps, in two rows of cards. */
+    .row-title { margin-top: 56px; text-align: center; font-family: var(--display); font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; }
+    .row-title + .dl-grid { margin-top: 24px; }
+    .apps { grid-template-columns: repeat(4, 1fr); }
+    .apps.three { grid-template-columns: repeat(3, 1fr); max-width: 810px; margin-inline: auto; }
+    .feature.alt .dl { background: var(--bg); }
+    .feature.alt .dl:hover { background: var(--raised); }
+    /* Setup, in numbered steps. */
+    .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 28px; margin: 56px 0 0; counter-reset: step; }
+    .steps li { counter-increment: step; }
+    .steps li::before { content: counter(step); display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 16px; border-radius: 50%; background: var(--blue); color: #fff; font-family: var(--display); font-weight: 600; }
+    .steps h3 { font-size: 19px; line-height: 1.21053; font-weight: 600; letter-spacing: .012em; }
+    .steps p { margin-top: 8px; color: var(--gray); }
+    .office-privacy .priv-grid p { max-width: 32ch; }
+    @media (max-width: 1068px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px) {
+      .apps, .apps.three { grid-template-columns: 1fr 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 734px) {
+      .apps, .apps.three, .steps { grid-template-columns: 1fr; }
+      .unlock { row-gap: 28px; }
+      .day li { grid-template-columns: 1fr; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="logo" href="../" aria-label="Noodle home"><img src="../assets/symbol-noodle.svg" alt="Noodle" width="22" height="22" /></a>
+      <nav aria-label="Primary">
+        <a href="../#groups">Groups</a>
+        <a href="../#mobile">Mobile</a>
+        <a href="../computer/">Computer</a>
+        <a href="../browser/">Browser</a>
+        <a href="../applet/">Applet</a>
+        <a href="../#hub">Hub</a>
+        <a href="../#privacy">Privacy</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Docs</a>
+      </nav>
+      <a class="nav-dl" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro" id="top">
+      <div class="wrap narrow">
+        <img class="feat-icon" src="../assets/symbol-hub.svg" alt="" width="48" height="48" />
+        <p class="app-name">The AI office</p>
+        <h1 class="headline">Your team's AI office, on one Mac.</h1>
+        <p class="what">One Mac in the office runs Noodle for the whole team: everyone's agents, their computers and signed-in browsers, and the tools they build. Everyone works with them from their own Mac, iPhone and iPad.</p>
+        <div class="ctas">
+          <a class="btn" href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg">Download the Suite</a>
+          <a class="link" href="#unlock">See what you unlock <span aria-hidden="true">›</span></a>
+        </div>
+        <p class="req">Free and open source. Needs a Mac with Apple silicon and macOS 26 or later.</p>
+      </div>
+      <div class="wrap">
+        <figure class="hero-shot stage stage-diagram tone-mist">
+          <img src="../assets/office-diagram.svg" width="1280" height="800" fetchpriority="high" alt="One office Mac in the middle, linked to four team Macs and two iPhones around it." />
+        </figure>
+        <p class="fig-cap">The office Mac runs the agents and keeps the sign-ins. Everyone works with them from their own Mac or iPhone.</p>
+      </div>
+    </section>
+    <section class="facts">
+      <div class="wrap facts-grid">
+        <div><h3>Off your laptops</h3><p>The agents run on the office Mac, not on anyone's laptop. Close yours and they keep working.</p></div>
+        <div><h3>One place for AI accounts</h3><p>Sign the office Mac in to your AI accounts once. Plans decide who can use which.</p></div>
+        <div><h3>On a Mac you own</h3><p>Agents, their files, computers and browsers stay on the office Mac, not on someone else's cloud computers.</p></div>
+      </div>
+    </section>
+    <section class="feature alt" id="unlock">
+      <div class="wrap narrow">
+        <h2>What your team unlocks.</h2>
+        <p class="lead">Agents that do real work for every person in the company, each with its own computer, browsers and tools, all on one office Mac.</p>
+      </div>
+      <div class="wrap priv-grid unlock">
+        <div><h3>An agent for every job</h3><p>Each person makes agents with a name, a role and a workspace of their own: a researcher, a bookkeeper, a support writer.</p></div>
+        <div><h3>Shared with colleagues</h3><p>Share an agent with the people who need it. Each talks with it in a conversation of their own, and it knows them by name.</p></div>
+        <div><h3>Agents that work together</h3><p>Put several agents in a group with a shared goal. They split the work and report back in one thread.</p></div>
+        <div><h3>A computer of their own</h3><p>Give an agent a Linux desktop or shell on the office Mac to keep files, run scripts and install what it needs. It's all still there tomorrow.</p></div>
+        <div><h3>Signed in to your tools</h3><p>Sign a browser in to the web apps you use and hand it to an agent. When it shares the page with you, watch it work or take over from your Mac or iPhone.</p></div>
+        <div><h3>Tools built for you</h3><p>Ask for a dashboard, a calculator or a small internal app. Agents build it in Noodle Applet and share it, and it opens on your Mac or iPhone.</p></div>
+        <div><h3>Work that keeps going</h3><p>Agents keep a task list, wake on a schedule, such as every weekday at nine, and check for work while nobody is writing to them.</p></div>
+        <div><h3>A call when it matters</h3><p>Agents on Codex can ring your iPhone when something needs you, even with Noodle closed, and you can call them to talk it through.</p></div>
+      </div>
+      <div class="wrap">
+        <figure class="shot stage stage-hero tone-graphite">
+          <img class="win" src="../assets/screenshot-computer-list.avif" srcset="../assets/screenshot-computer-list-small.avif 936w, ../assets/screenshot-computer-list.avif 1082w" sizes="(max-width: 1124px) calc(75vw - 33px), 810px" width="1082" height="722" loading="lazy" decoding="async" alt="Noodle Computer listing its computers: desktops, shells and a local Mac, some for people and some for their agents." />
+          <img class="phone" src="../assets/mobile-chats.avif" srcset="../assets/mobile-chats-small.avif 400w, ../assets/mobile-chats.avif 600w" sizes="(max-width: 1124px) calc(17vw - 8px), 184px" width="600" height="1202" loading="lazy" decoding="async" alt="Noodle Mobile on an iPhone, listing agents and groups with their latest messages." />
+        </figure>
+      </div>
+    </section>
+    <section class="feature" id="day">
+      <div class="wrap narrow">
+        <h2>A day in a small team's office.</h2>
+      </div>
+      <div class="wrap">
+        <ol class="day">
+          <li><time>08:00</time><div><h3>The brief is ready before anyone is in</h3><p>Ada's research agent wakes on its schedule, reads the sites it's signed in to and writes her a summary of what changed overnight.</p></div></li>
+          <li><time>09:30</time><div><h3>Receipts from the train</h3><p>Sam sends photos of last week's receipts to the bookkeeping agent from his iPhone. It adds them to the spreadsheet on its own computer and replies with the totals.</p></div></li>
+          <li><time>11:00</time><div><h3>Answers for everyone</h3><p>Mia shared her product agent with each colleague. Anyone can ask it about the price list or the docs in its folder, in their own conversation.</p></div></li>
+          <li><time>14:00</time><div><h3>A person when it needs one</h3><p>Leo's agent works through orders in a browser signed in to the shop's admin. At the step that needs him, the agent shares the page, and Leo opens it from his Mac and takes over.</p></div></li>
+          <li><time>16:30</time><div><h3>A tool by the end of the day</h3><p>Ada asks for a dashboard of this week's orders. Her agent builds it in Noodle Applet, and it opens on her Mac and her iPhone.</p></div></li>
+          <li><time>19:00</time><div><h3>Everyone has gone home</h3><p>The agents work on through their task lists on the office Mac. If something can't wait, an agent on Codex rings its owner's iPhone.</p></div></li>
+        </ol>
+      </div>
+    </section>
+    <section class="feature alt" id="suite">
+      <div class="wrap narrow">
+        <h2>What runs on the office Mac.</h2>
+        <p class="lead">The Noodle Suite installs everything the office Mac needs in one go. Each person then uses the apps they like.</p>
+      </div>
+      <div class="wrap">
+        <h3 class="row-title">On the office Mac</h3>
+        <div class="dl-grid apps">
+          <a class="dl" href="https://github.com/pdparchitect/noodle/blob/main/Hub/README.md"><img src="../assets/symbol-hub.svg" alt="" /><b>Noodle Hub</b><span>Invites the team, runs everyone's agents and decides which AI accounts each person can use. Admins manage people and devices.</span><em>Read the guide</em></a>
+          <a class="dl" href="../computer/"><img src="../assets/symbol-computer.svg" alt="" /><b>Noodle Computer</b><span>Linux computers for the agents, plus macOS accounts and Windows, both experimental.</span><em>Learn more</em></a>
+          <a class="dl" href="../browser/"><img src="../assets/symbol-browser.svg" alt="" /><b>Noodle Browser</b><span>Signed-in browsers you hand to agents. The sign-ins stay on the office Mac.</span><em>Learn more</em></a>
+          <a class="dl" href="../applet/"><img src="../assets/symbol-applet.svg" alt="" /><b>Noodle Applet</b><span>Runs the tools and small apps the agents build, and keeps their data.</span><em>Learn more</em></a>
+        </div>
+        <h3 class="row-title">On everyone's devices</h3>
+        <div class="dl-grid apps three">
+          <a class="dl" href="../"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle</b><span>On each person's Mac. Make agents, chat, and open the computers and browsers they share.</span><em>Learn more</em></a>
+          <a class="dl" href="https://testflight.apple.com/join/wYKkNSP9"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Mobile</b><span>The office's agents on iPhone and iPad.</span><em>Join the beta</em></a>
+          <a class="dl" href="https://github.com/pdparchitect/noodle/blob/main/Terminal/README.md"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Terminal</b><span>Chat with the office's agents from Terminal on a Mac.</span><em>Read the guide</em></a>
+        </div>
+      </div>
+    </section>
+    <section class="feature" id="need">
+      <div class="wrap narrow">
+        <h2>What you need.</h2>
+        <p class="lead">A Mac that stays on in the office, the AI you want to use, and a network the team can reach.</p>
+      </div>
+      <div class="wrap">
+        <!-- Drawn to scale from Apple's published sizes: Mac mini 12.7 × 12.7 × 5.0 cm, Mac Studio 19.7 × 19.7 × 9.5 cm. -->
+        <figure class="shot stage stage-macs tone-stone">
+          <img src="../assets/office-macs.svg" width="1100" height="560" loading="lazy" decoding="async" alt="A Mac mini and a larger Mac Studio side by side, drawn to scale." />
+        </figure>
+        <div class="pair-caps"><p><b>Mac mini</b>Small and quiet</p><p><b>Mac Studio</b>More memory for local models</p></div>
+      </div>
+      <div class="wrap priv-grid">
+        <div><h3>The Mac</h3><p>Any Mac with Apple silicon and macOS 26 or later, such as a Mac mini or a Mac Studio. Keep it plugged in, online and awake.</p></div>
+        <div><h3>The AI</h3><p>Accounts for the harnesses you want, such as Codex and Claude Code, or local models on the Mac itself. More memory leaves room for larger models.</p></div>
+        <div><h3>The network</h3><p>At the office, devices reach the Hub on your network. Away from it, the Hub asks your router to open its port, or you add an address of your own.</p></div>
+        <div><h3>Everyone's devices</h3><p>Noodle on a Mac with macOS 26, Noodle Mobile on an iPhone or iPad with iOS 26, or Noodle Terminal.</p></div>
+      </div>
+    </section>
+    <section class="feature alt" id="setup">
+      <div class="wrap narrow">
+        <h2>Set it up in five steps.</h2>
+        <p class="lead">No servers to rent. Everything happens in the apps.</p>
+      </div>
+      <div class="wrap">
+        <ol class="steps">
+          <li><h3>Install the Suite</h3><p>On the office Mac, install Noodle, Noodle Hub, Noodle Computer, Noodle Browser and Noodle Applet in one go.</p></li>
+          <li><h3>Sign in the AI</h3><p>In Noodle Hub's Settings › Harness, sign in to your AI accounts, or download local models. Add profiles for more accounts.</p></li>
+          <li><h3>Make plans</h3><p>In Settings › Plans, choose which harnesses and models each plan lends, how many tokens it allows, and which computers people can make.</p></li>
+          <li><h3>Invite the team</h3><p>Add each person in Users and send them their invitation. They open it in Noodle on their Mac or scan it with Noodle Mobile.</p></li>
+          <li><h3>Make the agents</h3><p>Everyone makes their agents from Noodle or their phone, gives them computers, browsers and tools, and shares them with colleagues.</p></li>
+        </ol>
+        <p class="note"><a href="https://github.com/pdparchitect/noodle/blob/main/Hub/README.md">Read the Noodle Hub guide <span aria-hidden="true">›</span></a></p>
+      </div>
+      <div class="wrap">
+        <figure class="shot stage stage-one tone-mist"><img class="win" src="../assets/screenshot-hub.avif" width="682" height="672" loading="lazy" decoding="async" alt="Noodle Hub settings: the users invited to the Hub and the devices each one has paired." /></figure>
+        <p class="fig-cap">Your team in Noodle Hub: everyone you invited, and the devices each person has paired.</p>
+      </div>
+    </section>
+    <section class="feature office-privacy" id="privacy">
+      <div class="wrap narrow">
+        <h2>Private and in your control.</h2>
+        <p class="lead">Conversations, agents' files and memory, tool sign-ins, computers and browsers are all kept on the office Mac. Each harness's AI provider still sees what its agents send it.</p>
+      </div>
+      <div class="wrap priv-grid">
+        <div><h3>Restricted by default</h3><p>Every agent on the Hub starts restricted, in the same sandbox as in Noodle. Linux computers can't see the Mac's folders.</p></div>
+        <div><h3>You choose who's in</h3><p>Invitations work once and expire after 15 minutes. Suspend a person to stop their agents and block their devices, without deleting anything.</p></div>
+        <div><h3>Admins you trust</h3><p>Let trusted people manage the team from their own devices. Logs keep 90 days of who added people and devices, and what the Hub refused.</p></div>
+        <div><h3>Lend with care</h3><p>Lending a sign-in shares that account, so check your AI provider's terms first. A shared agent works for whoever talks with it, so share with people you trust or use separate accounts.</p></div>
+      </div>
+      <div class="wrap narrow">
+        <div class="ctas">
+          <a class="link" href="https://github.com/pdparchitect/noodle/blob/main/docs/security.md">Read about security <span aria-hidden="true">›</span></a>
+          <a class="link" href="https://github.com/pdparchitect/noodle/blob/main/docs/privacy.md">Read about privacy <span aria-hidden="true">›</span></a>
+        </div>
+      </div>
+    </section>
+    <section class="feature alt" id="cost">
+      <div class="wrap narrow">
+        <h2>Free apps. You pay only for the AI.</h2>
+        <p class="lead">Noodle sells no seats and no subscription. Your team pays its AI providers for the plans it uses.</p>
+      </div>
+      <div class="wrap facts-grid kinds">
+        <div><h3>Every app is free</h3><p>Noodle, the Hub and the companion apps are free and <a class="link" href="https://github.com/pdparchitect/noodle/blob/main/LICENSE">open source</a>.</p></div>
+        <div><h3>Spending in check</h3><p>Plans cap how many tokens each person's agents use per hour, day, week or month. Suspend an agent for a while to pause its spending.</p></div>
+        <div><h3>See where it goes</h3><p>Usage on the office Mac shows tokens and cost by agent, person, harness or model.</p></div>
+      </div>
+      <div class="wrap narrow">
+        <p class="note">Managing Noodle on many Macs with Jamf Pro, Kandji, Intune or another MDM? <a href="../enterprise/">See Noodle Enterprise <span aria-hidden="true">›</span></a></p>
+      </div>
+    </section>
+    <section class="download" id="download">
+      <div class="wrap narrow">
+        <h2>Open your AI office.</h2>
+        <p class="lead">Install the Suite on the office Mac, then bring in the team. Everything is free.</p>
+      </div>
+      <div class="wrap dl-grid">
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg"><img src="../assets/symbol-hub.svg" alt="" /><b>Noodle Suite</b><span>For the office Mac: all five Mac apps in one installer.</span><em>Download</em></a>
+        <a class="dl" href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle</b><span>For each person's Mac.</span><em>Download</em></a>
+        <a class="dl" href="https://testflight.apple.com/join/wYKkNSP9"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Mobile</b><span>For iPhone and iPad.</span><em>Join the beta</em></a>
+      </div>
+      <div class="wrap suite-row">
+        <p><a class="link" href="https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip">Download Noodle Terminal <span aria-hidden="true">›</span></a></p>
+        <p>Need a hand setting up? <a class="link" href="mailto:pdp@gnucitizen.org?subject=Noodle%20AI%20office">Write to us <span aria-hidden="true">›</span></a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <p>Noodle is free and open source under the Apache 2.0 licence, apart from <a href="../enterprise/">Noodle Enterprise</a>.</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/pdparchitect/noodle">GitHub</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/README.md">Documentation</a>
+        <a href="https://github.com/pdparchitect/noodle/blob/main/docs/security.md">Security</a>
+        <a href="./" aria-current="page">AI office</a>
+        <a href="../enterprise/">Enterprise</a>
+        <a href="../privacy/">Privacy policy</a>
+        <a href="../terms/">Terms of service</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="../app.js"></script>
+</body>
+</html>
