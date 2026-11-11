@@ -1,8 +1,9 @@
 import AppletBridge
-import CoreServices
 import BrowserBridge
 import ComputerBridge
+import CoreServices
 import Foundation
+import HubCore
 import HubLink
 import NoodleAppletTools
 import NoodleBrowserTools
@@ -11,6 +12,7 @@ import NoodleCore
 import NoodleImagesTools
 import NoodleMCP
 import NoodleRuntime
+import NoodleVoicePeer
 
 /// The Hub's bots, harnesses and conversations. They live in the Hub's own sandbox
 /// container, apart from Noodle's; the folder name is the one the Agent Host looks in.
@@ -27,6 +29,8 @@ import NoodleRuntime
     public let computers: HubComputers
     public let browsers: HubBrowsers
     public let bots: HubBots
+    /// Noodle Applet on this Mac, for the bots' applet tool and for people's devices.
+    public let applets: AppletController
     public let imageGeneration: ImageGenerationController
     public let link: HubLinkService
 
@@ -74,13 +78,17 @@ import NoodleRuntime
                                  call: computer ?? ComputerToolProvider.liveTransport(), surface: surfaces.computer)
         browsers = HubBrowsers(root: root, access: access, tools: tools, assignments: assignments,
                                call: browser ?? BrowserToolProvider.liveTransport(), surface: surfaces.browser)
+        let applets = AppletController(connection: applet, surface: surfaces.applet)
+        self.applets = applets
         bots = HubBots(repository: repository, runtime: self.runtime, access: access, connections: connections, computers: computers, browsers: browsers,
-                       applets: AppletController(connection: applet, surface: surfaces.applet),
+                       applets: applets,
                        uploads: root.appendingPathComponent("Uploads", isDirectory: true), readMarks: root.appendingPathComponent("read.json"),
                        pins: root.appendingPathComponent("pins.json"), notifications: root.appendingPathComponent("notifications.json"))
+        // On a Mac a Hub takes calls and makes small pictures of conversation files.
+        bots.makeCallPeer = { VoiceCallPeer() }
+        bots.makePreview = { await AttachmentPictures.make(of: $0, mediaType: $1, pixels: $2) }
         // The Hub's bots get the applet tool from its own controller. This Mac as a Hub shares
         // Noodle's, whose broker serves Noodle's bots, so the wiring is here and not in HubBots.
-        let applets = bots.applets
         applets.onGrantsChange = { [weak bots] granted in
             assignments.replace(AppletToolGrant.kind, with: granted)
             bots?.synchronizeToolSkills()
@@ -134,6 +142,8 @@ import NoodleRuntime
                            workingBots: agents.filter { runtime.snapshot(for: $0.id).phase == .working }.count)
     }
 }
+
+extension AppletController: HubNoodletRunning {}
 
 /// What quitting the Hub would interrupt.
 public struct HubActivity: Equatable, Sendable {

@@ -1,12 +1,14 @@
 import BrowserBridge
 import ComputerBridge
 import Foundation
+import HubCore
 import HubLink
-import NoodleComputerTools
 import NoodleBrowserTools
+import NoodleComputerTools
 import NoodleCore
 import NoodleMCP
 import NoodleRuntime
+import NoodleVoicePeer
 
 /// Noodle serving its own owner's devices, as a Noodle Hub serves the people it lends to: a phone
 /// or another Mac joined to it sees the bots already on this Mac and talks to them. Nobody else
@@ -73,6 +75,9 @@ import NoodleRuntime
         bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections, computers: computers,
                        browsers: browsers, applets: applets, uploads: directory.appendingPathComponent("Uploads", isDirectory: true),
                        readMarks: directory.appendingPathComponent("read.json"), pins: nil, notifications: nil)
+        // On a Mac a Hub takes calls and makes small pictures of conversation files.
+        bots.makeCallPeer = { VoiceCallPeer() }
+        bots.makePreview = { await AttachmentPictures.make(of: $0, mediaType: $1, pixels: $2) }
         link = HubLinkService(hubName: name, directory: directory.appendingPathComponent("Link", isDirectory: true),
                               access: access, profiles: profiles, bots: bots, connections: connections, computers: computers,
                               browsers: browsers, port: port, router: router, localEndpoints: localEndpoints,

@@ -1,6 +1,4 @@
 import AppletBridge
-import BrowserBridge
-import ComputerBridge
 import Foundation
 import HubLink
 import Network
@@ -73,8 +71,8 @@ import os
     @ObservationIgnored private let profiles: HarnessProfilesController
     @ObservationIgnored private let bots: HubBots?
     @ObservationIgnored private let connections: HubConnections?
-    @ObservationIgnored private let computers: HubComputers?
-    @ObservationIgnored private let browsers: HubBrowsers?
+    @ObservationIgnored private let computers: (any HubComputing)?
+    @ObservationIgnored private let browsers: (any HubBrowsing)?
     @ObservationIgnored private let noodlets: HubNoodlets?
     /// Open event streams, by the key of the device holding each.
     @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
@@ -115,8 +113,8 @@ import os
     }
 
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
-                bots: HubBots? = nil, connections: HubConnections? = nil, computers: HubComputers? = nil,
-                browsers: HubBrowsers? = nil,
+                bots: HubBots? = nil, connections: HubConnections? = nil, computers: (any HubComputing)? = nil,
+                browsers: (any HubBrowsing)? = nil,
                 port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
                 routerChecks: RouterChecks = .standard,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
@@ -130,8 +128,8 @@ import os
         self.connections = connections
         self.computers = computers
         self.browsers = browsers
-        noodlets = bots.map { bots in
-            HubNoodlets(applets: bots.applets, now: now, canOpen: { [weak bots] in bots?.canOpen($0, for: $1) ?? false })
+        noodlets = bots.flatMap { bots in
+            bots.applets.map { HubNoodlets(applets: $0, now: now, canOpen: { [weak bots] in bots?.canOpen($0, for: $1) ?? false }) }
         }
         self.port = port
         routerMapper = router
@@ -302,20 +300,21 @@ import os
                 switch link {
                 case .browser(let browser, let tab):
                     // Every browser on the owner's own Mac is theirs.
-                    guard let tab, try access.isPersonal || hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
+                    guard let tab, try access.isPersonal || hubBrowsers().keeps(browser, for: user) else {
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
                     let browsers = try hubBrowsers()
                     open = { (try await browsers.openSurface(browser: browser, tab: tab, for: user), nil) }
                 case .computer(let computer, let terminal, _):
-                    guard try access.isPersonal || hubComputers().computers(for: user).contains(where: { $0.id == computer }) else {
+                    guard try access.isPersonal || hubComputers().keeps(computer, for: user) else {
                         throw LinkError("That computer is not yours or no longer exists.")
                     }
                     let computers = try hubComputers()
                     open = { (try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
                 case .noodlet(let noodlet):
                     // Asked for the bot that shared it, Applet checks it is the bot's as it starts it.
-                    let applets = try hubBots().applets, owner = bot.uuidString.lowercased()
+                    guard let applets = try hubBots().applets else { throw LinkError("This Noodle Hub does not run noodlets.") }
+                    let owner = bot.uuidString.lowercased()
                     var info = AppletRequest(.info)
                     info.noodletID = noodlet
                     info.owner = owner
@@ -822,15 +821,13 @@ import os
             await computers.refresh()
             return .computers(computers.link(for: try user(key)))
         case .computerTemplates:
-            return .computerTemplates(try await hubComputers().templates(for: try user(key)).map {
-                LinkComputerTemplate(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol)
-            })
+            return .computerTemplates(try await hubComputers().linkTemplates(for: try user(key)))
         case .createComputer(let requestID, let draft):
             let computers = try hubComputers(), user = try user(key)
             Task { [weak self] in
                 do {
-                    let made = try await computers.create(ComputerDraft(draft), for: user)
-                    self?.push(.computerCreated(requestID: requestID, computer: computers.link(made, for: user), error: nil), to: user.id)
+                    let made = try await computers.create(draft, for: user)
+                    self?.push(.computerCreated(requestID: requestID, computer: made, error: nil), to: user.id)
                     self?.push(.computersChanged, to: user.id)
                 } catch {
                     self?.push(.computerCreated(requestID: requestID, computer: nil, error: error.localizedDescription), to: user.id)
@@ -839,9 +836,9 @@ import os
             return .done
         case .updateComputer(let id, let draft):
             let computers = try hubComputers(), user = try user(key)
-            let changed = try await computers.update(id, with: ComputerDraft(draft), for: user)
+            let changed = try await computers.update(id, with: draft, for: user)
             push(.computersChanged, to: user.id)
-            return .computer(computers.link(changed, for: user))
+            return .computer(changed)
         case .openSurface:
             throw LinkError("Surfaces open a stream.")
         case .signInForm(let conversationID, let attachmentID):
@@ -861,14 +858,14 @@ import os
             return .browsers(browsers.link(for: try user(key)))
         case .createBrowser(let draft):
             let browsers = try hubBrowsers(), user = try user(key)
-            let made = try await browsers.create(BrowserDraft(draft), for: user)
+            let made = try await browsers.create(draft, for: user)
             push(.browsersChanged, to: user.id)
-            return .browser(browsers.link(made, for: user))
+            return .browser(made)
         case .updateBrowser(let id, let draft):
             let browsers = try hubBrowsers(), user = try user(key)
-            let changed = try await browsers.update(id, with: BrowserDraft(draft), for: user)
+            let changed = try await browsers.update(id, with: draft, for: user)
             push(.browsersChanged, to: user.id)
-            return .browser(browsers.link(changed, for: user))
+            return .browser(changed)
         case .deleteBrowser(let id):
             let user = try user(key)
             try await hubBrowsers().delete(id, for: user)
@@ -959,7 +956,7 @@ import os
     }
 
     private func hubNoodlets() throws -> HubNoodlets {
-        guard let noodlets else { throw LinkError("This Noodle Hub does not keep bots.") }
+        guard let noodlets else { throw LinkError(bots == nil ? "This Noodle Hub does not keep bots." : "This Noodle Hub does not run noodlets.") }
         return noodlets
     }
 
@@ -978,7 +975,7 @@ import os
     private func watchedBrowser(_ attachmentID: UUID, in conversationID: UUID, by user: HubUser) async throws -> UUID {
         if access.isPersonal { try readNoodlesTools() }
         guard case .browser(let browser, _) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user).link,
-              try access.isPersonal || hubBrowsers().browsers(for: user).contains(where: { $0.id == browser }) else {
+              try access.isPersonal || hubBrowsers().keeps(browser, for: user) else {
             throw LinkError("That browser is not yours or no longer exists.")
         }
         guard (surfaces[conversationID] ?? []).contains(where: { $0.user == user.id && $0.attachment == attachmentID && !$0.stream.isClosed }) else {
@@ -987,12 +984,12 @@ import os
         return browser
     }
 
-    private func hubBrowsers() throws -> HubBrowsers {
+    private func hubBrowsers() throws -> any HubBrowsing {
         guard let browsers else { throw LinkError("This Noodle Hub does not keep browsers.") }
         return browsers
     }
 
-    private func hubComputers() throws -> HubComputers {
+    private func hubComputers() throws -> any HubComputing {
         guard let computers else { throw LinkError("This Noodle Hub does not keep computers.") }
         return computers
     }

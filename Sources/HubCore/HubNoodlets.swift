@@ -23,7 +23,7 @@ import NoodleRuntime
 
     /// How long a grant lasts unused.
     static let lifetime: TimeInterval = 12 * 3600
-    private let applets: AppletController
+    private let applets: any HubNoodletRunning
     private let now: () -> Date
     /// Whether a user can still open a conversation.
     private let canOpen: (_ conversation: UUID, _ user: UUID) -> Bool
@@ -31,7 +31,7 @@ import NoodleRuntime
     /// Calls arriving in pieces, by their id, until the last piece.
     private var pending: [UUID: (grant: UUID, data: Data, started: Date)] = [:]
 
-    init(applets: AppletController, now: @escaping () -> Date, canOpen: @escaping (_ conversation: UUID, _ user: UUID) -> Bool) {
+    init(applets: any HubNoodletRunning, now: @escaping () -> Date, canOpen: @escaping (_ conversation: UUID, _ user: UUID) -> Bool) {
         self.applets = applets
         self.now = now
         self.canOpen = canOpen

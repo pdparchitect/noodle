@@ -1,6 +1,7 @@
 import Foundation
 import HubCore
 import HubLink
+import HubMac
 import NoodleHubClient
 @testable import Noodle
 import NoodleCore

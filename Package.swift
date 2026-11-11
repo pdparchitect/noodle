@@ -50,6 +50,7 @@ let package = Package(
         .library(name: "NoodleHubClient", targets: ["NoodleHubClient"]),
         .library(name: "NoodleEnterprise", targets: ["NoodleEnterprise"]),
         .library(name: "HubCore", targets: ["HubCore"]),
+        .library(name: "HubMac", targets: ["HubMac"]),
         .library(name: "NoodleAgentBridge", targets: ["NoodleAgentBridge"]),
         .library(name: "NoodleToolScripting", targets: ["NoodleToolScripting"]),
         .library(name: "NoodleAppleRuntime", targets: ["NoodleAppleRuntime"]),
@@ -125,13 +126,17 @@ let package = Package(
         /// Calls' WebRTC connection to a harness's voice service, fed and played by whoever holds the call.
         .target(name: "NoodleVoicePeer", dependencies: ["NoodleCore", .product(name: "LiveKitWebRTC", package: "webrtc-xcframework")]),
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
-        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleMCP", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools", "NoodleImagesTools",
-                                                .product(name: "ComputerBridge", package: "Bridge"),
-                                                .product(name: "BrowserBridge", package: "BrowserProtocol"),
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP",
                                                 .product(name: "AppletBridge", package: "Protocol"),
                                                 .product(name: "HubLink", package: "HubLink")]),
+        /// HubCore on a Mac: with Noodle Computer, Browser and Applet, image generation, calls and CloudKit.
+        .target(name: "HubMac", dependencies: ["HubCore", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleMCP", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools", "NoodleImagesTools",
+                                               .product(name: "ComputerBridge", package: "Bridge"),
+                                               .product(name: "BrowserBridge", package: "BrowserProtocol"),
+                                               .product(name: "AppletBridge", package: "Protocol"),
+                                               .product(name: "HubLink", package: "HubLink")]),
         .target(name: "NoodleRuntimeSettings",
-                dependencies: ["NoodleCore", "NoodleRuntime", "HubCore", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
+                dependencies: ["NoodleCore", "NoodleRuntime", "HubCore", "HubMac", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                                .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleMCP",
                                .product(name: "ComputerBridge", package: "Bridge"), .product(name: "AppletBridge", package: "Protocol"),
                                .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle")],
@@ -144,7 +149,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -168,7 +173,7 @@ let package = Package(
         ),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: developmentHooks
         ),
         .testTarget(
@@ -183,7 +188,7 @@ let package = Package(
         .testTarget(name: "NoodleAgentBridgeTests", dependencies: ["NoodleAgentBridge"]),
         .testTarget(
             name: "HubCoreTests",
-            dependencies: ["HubCore", "NoodleCore", "NoodleHubClient", "NoodleMCP", "NoodleRuntime", "NoodleVoicePeer", .product(name: "HubLink", package: "HubLink"),
+            dependencies: ["HubCore", "HubMac", "NoodleCore", "NoodleHubClient", "NoodleMCP", "NoodleRuntime", "NoodleVoicePeer", .product(name: "HubLink", package: "HubLink"),
                            .product(name: "ComputerBridge", package: "Bridge"), .product(name: "BrowserBridge", package: "BrowserProtocol"),
                            .product(name: "AppletBridge", package: "Protocol")]
         ),

@@ -1,6 +1,7 @@
 import AppKit
 import HubCore
 import HubLink
+import HubMac
 import NoodleLaunchChecks
 import NoodleRuntimeSettings
 import NoodleSettingsUI

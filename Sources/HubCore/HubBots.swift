@@ -1,12 +1,8 @@
 import AppletBridge
-import AVFoundation
-import BrowserBridge
 import Foundation
-import ImageIO
 import HubLink
 import NoodleCore
 import NoodleRuntime
-import NoodleVoicePeer
 
 /// A bot that cannot answer because its owner's plan stopped lending its model, though it still lends the harness.
 public struct HubUnlentModel: Identifiable, Hashable, Sendable {
@@ -41,10 +37,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private let runtime: AgentRuntimeCoordinator
     private let access: HubAccess
     private let connections: HubConnections
-    private let computers: HubComputers
-    private let browsers: HubBrowsers
+    private let computers: (any HubComputing)?
+    private let browsers: (any HubBrowsing)?
     /// Noodle Applet on this Mac, for the Hub's bots' applet tool and for people's devices.
-    public let applets: AppletController
+    public let applets: (any HubNoodletRunning)?
     /// The image models and which bots may use them, kept where the bots run: the Hub, or Noodle for This Mac.
     public var imageGeneration: ImageGenerationController?
     /// Who used up their plan's tokens; their bots take no new turn. Nil where nobody is on a plan: on the owner's own Mac.
@@ -108,8 +104,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public var onNotificationsEdited: (() -> Void)?
 
     public init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, access: HubAccess,
-                connections: HubConnections, computers: HubComputers, browsers: HubBrowsers,
-                applets: AppletController, uploads: URL, readMarks: URL, pins: URL?, notifications: URL?) {
+                connections: HubConnections, computers: (any HubComputing)?, browsers: (any HubBrowsing)?,
+                applets: (any HubNoodletRunning)?, uploads: URL, readMarks: URL, pins: URL?, notifications: URL?) {
         self.uploads = uploads
         readMarksURL = readMarks
         pinsURL = pins
@@ -122,15 +118,15 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         self.browsers = browsers
         self.applets = applets
         messenger = MessengerBroker(repository: repository)
-        messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
+        messenger.noodletHasPreview = { [applets] url in await applets?.hasPreview(url) ?? false }
         messenger.onWakesChanged = { [weak self] id in
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.tasksChanged(of: id) } }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
-        computers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
-        browsers.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        computers?.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        browsers?.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         clearAbandonedUploads()
     }
 
@@ -168,7 +164,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         ringPendingCalls(now: now)
         // Devices are offered the models the Hub finds.
         runtime.refreshCapabilities()
-        applets.start(agents: agents)
+        applets?.start(agents: agents)
         try startTools()
         running = true
         loop = Task { [weak self] in
@@ -192,7 +188,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     /// Asks each bot to stop a computer it started and then left running unused.
     public func checkIdleComputers() async {
-        for notice in await computers.idle() {
+        for notice in await computers?.idleNotices() ?? [] {
             guard let agent = notice.agentID else { continue }
             runtime.wake(agent, note: notice.note, repository: repository)
         }
@@ -200,7 +196,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     /// Asks each bot to close tabs it opened and then left unused.
     public func checkIdleBrowsers() async {
-        for notice in await browsers.idle() { runtime.wake(notice.agentID, note: notice.note, repository: repository) }
+        for notice in await browsers?.idleNotices() ?? [] {
+            guard let agent = notice.agentID else { continue }
+            runtime.wake(agent, note: notice.note, repository: repository)
+        }
     }
 
     /// Tells devices what changes, for bots something else runs: Noodle, serving its own owner.
@@ -319,7 +318,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             // Tools post into the bot's conversations here and read its files, as in Noodle.
             let host = ToolHostServices.repository(repository, revoked: { [weak self] kind, id, agent in
                 guard kind == "computer", let computer = UUID(uuidString: id) else { return }
-                Task { @MainActor in self?.computers.revoke(computer: computer, agent: agent) }
+                Task { @MainActor in self?.computers?.revoke(computer: computer, agent: agent) }
             }) { assignments.assignments(for: $0) }
             let broker = ToolBridgeBroker(registry: connections.tools, host: host) { assignments.assignments(for: $0) }
             // A bot's AGENTS.md lists its tool skills once they are written.
@@ -340,7 +339,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public func synchronizeToolSkills() { toolBroker?.synchronizeSkills() }
 
     public func stop() {
-        applets.start(agents: [])
+        applets?.start(agents: [])
         toolBroker?.stop()
         toolBroker = nil
         loop?.cancel()
@@ -461,7 +460,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             runtime.start(agent: created.agent, repository: repository)
         }
         if toolBroker != nil { try? startTools() }
-        if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
+        if running { applets?.start(agents: (try? repository.loadAgents()) ?? []) }
         onChange?(user.id, .botsChanged)
         onBotsEdited?()
         // As saved, so it matches every later read of the same bot.
@@ -841,8 +840,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         let size = AttachmentPreview.size(for: pixels)
         let kept = repository.attachmentPreviewURL(attachment, pixels: size)
         if let data = try? Data(contentsOf: kept) { return data }
-        guard let data = await AttachmentPreview.make(of: repository.attachmentFileURL(attachment), mediaType: attachment.mediaType,
-                                                      pixels: size) else { return nil }
+        guard let data = await makePreview?(repository.attachmentFileURL(attachment), attachment.mediaType, size) else { return nil }
         try? FileManager.default.createDirectory(at: kept.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: kept, options: .atomic)
         return data
@@ -1129,8 +1127,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private var ringing: [UUID: AgentCallRequest] = [:]
     /// Picks a voice for a bot without one from its name; tests pass their own.
     public var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
-    /// Connects a call to the bot's voice service; tests pass their own.
-    public var makeCallPeer: @MainActor () -> any VoiceCallPeering = { VoiceCallPeer() }
+    /// Connects a call to the bot's voice service; nil on a Hub that takes no calls. Tests pass their own.
+    public var makeCallPeer: (@MainActor () -> any VoiceCallPeering)?
+    /// Makes a small picture of a conversation's file at most `pixels` on its long side; nil on a Hub that makes none.
+    public var makePreview: (@Sendable (_ file: URL, _ mediaType: String, _ pixels: Int) async -> Data?)?
 
     /// Starts a call with the bot of one of the user's conversations: their own bot, or one shared
     /// with them, who calls it as they talk with it, on its owner's plan. The bot need not be
@@ -1144,6 +1144,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
               agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false else {
             throw LinkError("This bot cannot take calls.")
         }
+        guard let makeCallPeer else { throw LinkError("This Noodle Hub does not take calls.") }
         guard running || watching else { throw LinkError("This Hub is not running bots right now.") }
         if conversation.guest != nil {
             guard let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }),
@@ -1705,9 +1706,9 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         }
         if toolBroker != nil { try? startTools() }
         connections.forget(bot: agent.id)
-        computers.forget(bot: agent.id)
-        browsers.forget(bot: agent.id)
-        if running { applets.start(agents: (try? repository.loadAgents()) ?? []) }
+        computers?.forget(bot: agent.id)
+        browsers?.forget(bot: agent.id)
+        if running { applets?.start(agents: (try? repository.loadAgents()) ?? []) }
         access.setOwner(nil, ofBot: agent.id)
         if access.host(ofBot: agent.id) != nil {
             access.setHost(nil, ofBot: agent.id)
@@ -1824,7 +1825,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             info.noodletID = noodlet
             info.owner = bot.id.uuidString.lowercased()
             let workspace = repository.directory(for: bot).resolvingSymlinksInPath().standardizedFileURL.pathComponents
-            let source = try await applets.companion(info).sourcePath.map {
+            let source = try await noodletRunner().companion(info).sourcePath.map {
                 URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.pathComponents
             }
             guard let source, source.count > workspace.count, Array(source.prefix(workspace.count)) == workspace else {
@@ -1842,7 +1843,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         var info = AppletRequest(.info)
         info.noodletID = noodlet
         info.includePreview = true
-        let response = try await applets.companion(info)
+        let response = try await noodletRunner().companion(info)
         return response.mediaType == "image/png" ? response.data : nil
     }
 
@@ -1854,7 +1855,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             var info = AppletRequest(.info)
             info.noodletID = noodlet
             info.includePreview = true
-            let response = try await applets.companion(info)
+            let response = try await noodletRunner().companion(info)
             guard let title = response.title else { return nil }
             return LinkCardInfo(title: title, image: response.mediaType == "image/png" ? response.data : nil,
                                 symbol: "square.grid.2x2", isGame: response.controls != nil || response.category == "games")
@@ -1862,6 +1863,11 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         guard let attachment = try attachments(in: conversationID)[attachmentID], let card = attachment.card else { return nil }
         return LinkCardInfo(title: card.title, detail: card.detail, image: repository.cardImage(of: attachment), symbol: card.symbol,
                             colour: card.colour, icon: card.icon, capturedAt: card.capturedAt)
+    }
+
+    private func noodletRunner() throws -> any HubNoodletRunning {
+        guard let applets else { throw LinkError("This Noodle Hub does not run noodlets.") }
+        return applets
     }
 
     /// A conversation the user has and its bots: one bot's own, a group of theirs, or theirs with a bot shared with them.
@@ -2060,69 +2066,12 @@ extension AttachmentAnnotation {
     }
 }
 
-/// Small pictures of conversation files for devices: a picture scaled down, a video's first frame or
-/// a PDF's first page, as JPEG, or PNG where the picture is see-through.
+/// The sizes of the small pictures of conversation files `HubBots.makePreview` makes for devices.
 enum AttachmentPreview {
     /// The sizes made, so a few copies serve every device: the smallest as big as asked, else the largest.
     static let sizes = [360, 720, 1440, 2048]
 
     static func size(for pixels: Int) -> Int { sizes.first { $0 >= pixels } ?? sizes[sizes.count - 1] }
-
-    static func make(of file: URL, mediaType: String, pixels: Int) async -> Data? {
-        let image: CGImage?
-        if mediaType.hasPrefix("image/") {
-            image = picture(file, pixels: pixels)
-        } else if mediaType.hasPrefix("video/") {
-            image = await frame(file, pixels: pixels)
-        } else if mediaType == "application/pdf" {
-            image = page(file, pixels: pixels)
-        } else {
-            return nil
-        }
-        return image.flatMap(encoded)
-    }
-
-    private static func picture(_ file: URL, pixels: Int) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: pixels,
-        ] as CFDictionary)
-    }
-
-    private static func frame(_ file: URL, pixels: Int) async -> CGImage? {
-        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: file))
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: pixels, height: pixels)
-        return try? await generator.image(at: .zero).image
-    }
-
-    private static func page(_ file: URL, pixels: Int) -> CGImage? {
-        guard let page = CGPDFDocument(file as CFURL)?.page(at: 1) else { return nil }
-        let box = page.getBoxRect(.cropBox)
-        guard box.width > 0, box.height > 0 else { return nil }
-        let scale = CGFloat(pixels) / max(box.width, box.height)
-        let width = Int((box.width * scale).rounded()), height = Int((box.height * scale).rounded())
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
-            return nil
-        }
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.scaleBy(x: scale, y: scale)
-        context.translateBy(x: -box.minX, y: -box.minY)
-        context.drawPDFPage(page)
-        return context.makeImage()
-    }
-
-    private static func encoded(_ image: CGImage) -> Data? {
-        let seeThrough = ![.none, .noneSkipFirst, .noneSkipLast].contains(image.alphaInfo)
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, (seeThrough ? "public.png" : "public.jpeg") as CFString, 1, nil)
-        else { return nil }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
-    }
 }
 
 /// A call the Hub holds for a device.

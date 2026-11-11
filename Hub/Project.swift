@@ -141,6 +141,7 @@ let project = Project(
             scripts: [embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "HubCore"),
+                .package(product: "HubMac"),
                 .package(product: "HubLink"),
                 .package(product: "NoodleBrand"),
                 .package(product: "NoodleLaunchChecks"),

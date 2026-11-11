@@ -1,5 +1,6 @@
 import Foundation
 import HubCore
+import HubMac
 import XCTest
 
 /// The Hub is server software, so it opens at login unless its owner turned that off.

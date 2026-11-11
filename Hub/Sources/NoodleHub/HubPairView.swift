@@ -1,6 +1,7 @@
 import AppKit
 import HubCore
 import HubLink
+import HubMac
 import NoodleBrand
 import NoodleRuntimeSettings
 import SwiftUI

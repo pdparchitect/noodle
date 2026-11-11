@@ -2,6 +2,7 @@ import CoreServices
 import Foundation
 import HubCore
 import HubLink
+import HubMac
 import XCTest
 
 /// Quitting the Hub cuts off whoever is connected and stops its bots, so it asks first.

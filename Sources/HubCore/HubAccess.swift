@@ -270,7 +270,7 @@ public struct HubCallPush: Codable, Hashable, Sendable {
     }
 
     /// Why a user at their plan's limit cannot make another computer or browser.
-    static func limitReached(_ limit: Int, _ one: String, _ many: String) -> LinkError {
+    package static func limitReached(_ limit: Int, _ one: String, _ many: String) -> LinkError {
         switch limit {
         case 0: LinkError("Your plan does not include \(many).")
         case 1: LinkError("Your plan allows up to 1 \(one). Delete it to make another.")

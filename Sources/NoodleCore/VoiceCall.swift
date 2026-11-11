@@ -161,3 +161,32 @@ extension HarnessProvider {
         }
     }
 }
+
+/// What a call needs of its connection to the voice service; tests stand in for WebRTC.
+public protocol VoiceCallPeering: AnyObject, Sendable {
+    /// The bot's voice, 48 kHz mono, a little at a time, on an audio thread.
+    var onVoice: (@Sendable ([Int16]) -> Void)? { get set }
+    /// The connection was lost, or never made.
+    var onFailure: (@MainActor @Sendable () -> Void)? { get set }
+    func makeOffer() async throws -> String
+    func accept(answer: String) async throws
+    /// The person's voice, 48 kHz mono, in pieces of any length, from any thread.
+    func hear(_ samples: [Int16])
+    func close()
+}
+
+extension VoiceCallPeering {
+    /// Places a call: `start` gets the offer and the events to report to, and the peer takes the
+    /// voice service's answer itself. Every other event goes on to `events`; an answer that does
+    /// not connect counts as a lost connection, for `onFailure`.
+    @MainActor public func place(_ start: (String, @escaping @MainActor (VoiceCallEvent) -> Void) throws -> Void,
+                                 events: @escaping @MainActor (VoiceCallEvent) -> Void) async throws {
+        let offer = try await makeOffer()
+        try start(offer) { [weak self] event in
+            guard case .answer(let sdp) = event else { return events(event) }
+            Task { @MainActor in
+                do { try await self?.accept(answer: sdp) } catch { self?.onFailure?() }
+            }
+        }
+    }
+}

@@ -4,6 +4,7 @@ import ComputerBridge
 import Foundation
 import HubCore
 import HubLink
+import HubMac
 import NoodleCore
 import XCTest
 

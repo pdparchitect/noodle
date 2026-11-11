@@ -22,6 +22,7 @@ let package = Package(
             name: "NoodleHub",
             dependencies: [
                 .product(name: "HubCore", package: "noodle"),
+                .product(name: "HubMac", package: "noodle"),
                 .product(name: "HubLink", package: "HubLink"),
                 .product(name: "NoodleBrand", package: "Brand"),
                 .product(name: "NoodleLaunchChecks", package: "LaunchChecks"),

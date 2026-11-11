@@ -1,5 +1,6 @@
 import BrowserBridge
 import Foundation
+import HubCore
 import HubLink
 import NoodleBrowserTools
 import NoodleCore
@@ -259,5 +260,23 @@ import NoodleCore
 extension BrowserDraft {
     public init(_ draft: LinkBrowserDraft) {
         self.init(name: draft.name, description: draft.description, symbol: draft.symbol, colour: draft.colour)
+    }
+}
+
+extension HubBrowsers: HubBrowsing {
+    public func create(_ draft: LinkBrowserDraft, for user: HubUser) async throws -> LinkBrowser {
+        link(try await create(BrowserDraft(draft), for: user), for: user)
+    }
+
+    public func update(_ id: UUID, with draft: LinkBrowserDraft, for user: HubUser) async throws -> LinkBrowser {
+        link(try await update(id, with: BrowserDraft(draft), for: user), for: user)
+    }
+
+    public func keeps(_ browser: UUID, for user: HubUser) -> Bool {
+        browsers(for: user).contains { $0.id == browser }
+    }
+
+    public func idleNotices() async -> [HubIdleNotice] {
+        await idle().map { HubIdleNotice(agentID: $0.agentID, note: $0.note) }
     }
 }

@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import HubCore
 import HubLink
 import Security
 

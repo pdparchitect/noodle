@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import HubCore
 import HubLink
+import HubMac
 import NoodleCore
 import NoodleMCP
 import NoodleRuntime

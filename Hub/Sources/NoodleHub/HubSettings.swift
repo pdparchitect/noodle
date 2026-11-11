@@ -1,5 +1,6 @@
 import AppKit
 import HubCore
+import HubMac
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -105,7 +106,7 @@ struct HubSettingsProblem: Equatable {
     }
 
     /// Gives the Hub's bots Noodle Applet's skill as soon as it is installed.
-    func refreshCompanionSkills() { hub.bots.applets.refreshSkills() }
+    func refreshCompanionSkills() { hub.applets.refreshSkills() }
 
     func openCompanionLibrary(_ app: CompanionApp) async throws {
         guard let installation = CompanionApp.installedApps()[app] else { return }

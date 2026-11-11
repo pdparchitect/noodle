@@ -1,6 +1,7 @@
 import Foundation
 @testable import HubCore
 import HubLink
+import HubMac
 import NoodleCore
 import XCTest
 

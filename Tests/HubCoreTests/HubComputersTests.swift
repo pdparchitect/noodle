@@ -2,6 +2,7 @@ import ComputerBridge
 import Foundation
 import HubCore
 import HubLink
+import HubMac
 import NoodleCore
 import XCTest
 
@@ -285,6 +286,17 @@ import XCTest
         let made = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
         try f.hub.computers.assign([made.id], to: alfred.id, for: f.ada)
         try f.hub.computers.assign([], to: alfred.id, for: f.ada)
+        for _ in 0..<50 where f.computer.revoked.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(f.computer.revoked.map(\.0), [made.id])
+        XCTAssertEqual(f.computer.revoked.map(\.1), [alfred.id])
+    }
+
+    /// A computer unassigned while a bot's tool call used it is taken back from that bot alone.
+    func testRevokingAComputerFromOneBotEndsOnlyThatBotsTerminals() async throws {
+        let f = try fixture()
+        let alfred = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let made = try await f.hub.computers.create(ComputerDraft(template: "ubuntu", name: "Workbench"), for: f.ada)
+        f.hub.computers.revoke(computer: made.id, agent: alfred.id)
         for _ in 0..<50 where f.computer.revoked.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
         XCTAssertEqual(f.computer.revoked.map(\.0), [made.id])
         XCTAssertEqual(f.computer.revoked.map(\.1), [alfred.id])

@@ -1,5 +1,6 @@
 import ComputerBridge
 import Foundation
+import HubCore
 import HubLink
 import NoodleComputerTools
 import NoodleCore
@@ -259,5 +260,27 @@ import NoodleCore
 extension ComputerDraft {
     public init(_ draft: LinkComputerDraft) {
         self.init(template: draft.template, name: draft.name, description: draft.description, symbol: draft.symbol, colour: draft.colour)
+    }
+}
+
+extension HubComputers: HubComputing {
+    public func linkTemplates(for user: HubUser) async throws -> [LinkComputerTemplate] {
+        try await templates(for: user).map { LinkComputerTemplate(id: $0.id, name: $0.name, description: $0.description, symbol: $0.symbol) }
+    }
+
+    public func create(_ draft: LinkComputerDraft, for user: HubUser) async throws -> LinkComputer {
+        link(try await create(ComputerDraft(draft), for: user), for: user)
+    }
+
+    public func update(_ id: UUID, with draft: LinkComputerDraft, for user: HubUser) async throws -> LinkComputer {
+        link(try await update(id, with: ComputerDraft(draft), for: user), for: user)
+    }
+
+    public func keeps(_ computer: UUID, for user: HubUser) -> Bool {
+        computers(for: user).contains { $0.id == computer }
+    }
+
+    public func idleNotices() async -> [HubIdleNotice] {
+        await idle().map { HubIdleNotice(agentID: $0.agentID, note: $0.note) }
     }
 }
