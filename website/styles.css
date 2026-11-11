@@ -283,6 +283,13 @@ figure { margin: 0; }
 .stage-phones.duo img { width: 23%; }
 .stage-phones.duo img:nth-child(2) { transform: translateY(-5%); }
 
+/* AI office page: Oscar's drawings of the Macs and of the office, with captions under them. */
+.stage-macs img { inset: 0; margin: auto; width: 88%; height: auto; }
+.stage-diagram img { inset: 0; width: 100%; height: 100%; filter: none; }
+.pair-caps { display: grid; grid-template-columns: 1fr 1.65fr; margin-top: 18px; text-align: center; font-size: 14px; color: var(--gray); }
+.pair-caps b { display: block; font-size: 17px; color: var(--ink); }
+.fig-cap { margin-top: 18px; text-align: center; font-size: 14px; color: var(--gray); }
+
 /* ---------- Responsive (breakpoints match apple.com) ---------- */
 @media (max-width: 1068px) {
   .feature h2, .privacy h2, .download h2, .headline { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
