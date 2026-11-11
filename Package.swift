@@ -219,7 +219,8 @@ package.targets += tool("Vision")
 
 // Only the Apple harness and its tests, for CI's macOS 27 job; the app is tested separately.
 if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
-    let targets: Set<String> = ["NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
+    // CSQLite stays declared, since NoodleCore names it, though only Linux builds it.
+    let targets: Set<String> = ["CSQLite", "NoodleCore", "NoodleAppleRuntime", "NoodleAppleAgent",
                                "NoodleMessenger", "NoodleToolScripting", "NoodleCoreTests", "NoodleAppleRuntimeTests"]
     package.targets.removeAll { !targets.contains($0.name) }
     package.products.removeAll { !["NoodleCore", "NoodleMessenger"].contains($0.name) }

@@ -44,16 +44,16 @@ private actor FakeHub {
     func listen(at endpoint: LinkEndpoint) { endpoints = [endpoint] }
 
     /// The live streams phones opened, each told at once that the Hub took it on, as the real Hub does.
-    var followers: [LinkStream] = []
+    var followers: [any LinkServerStream] = []
 
-    func follow(_ stream: LinkStream) {
+    func follow(_ stream: any LinkServerStream) {
         followers.append(stream)
         if holdsFollows { held.append(stream) } else { stream.send(Data()) }
     }
 
     /// Streams not yet taken on, as by a Hub slow to answer, until `releaseFollows`.
     var holdsFollows = false
-    var held: [LinkStream] = []
+    var held: [any LinkServerStream] = []
 
     func holdFollows() { holdsFollows = true }
 
