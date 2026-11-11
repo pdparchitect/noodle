@@ -77,6 +77,7 @@ import NoodleVoicePeer
                        readMarks: directory.appendingPathComponent("read.json"), pins: nil, notifications: nil)
         // On a Mac a Hub takes calls and makes small pictures of conversation files.
         bots.makeCallPeer = { VoiceCallPeer() }
+        bots.makeCallAudio = { peer, send in try HubCallAudio(peer: peer, send: send).receive }
         bots.makePreview = { await AttachmentPictures.make(of: $0, mediaType: $1, pixels: $2) }
         link = HubLinkService(hubName: name, directory: directory.appendingPathComponent("Link", isDirectory: true),
                               access: access, profiles: profiles, bots: bots, connections: connections, computers: computers,

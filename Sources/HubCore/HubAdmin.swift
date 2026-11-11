@@ -1,5 +1,5 @@
 import Foundation
-import HubLink
+import HubWire
 import NoodleCore
 
 /// What an admin may do from one of their devices. Only the Hub itself makes admins, and admins

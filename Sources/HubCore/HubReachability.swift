@@ -1,5 +1,5 @@
 import Foundation
-import HubLink
+import HubWire
 
 /// How devices away from home can reach a Hub, from what its Mac knows. Nothing here is tried
 /// from outside: an open port can still be blocked further along, and an address the owner

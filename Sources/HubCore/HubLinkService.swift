@@ -1,7 +1,6 @@
 import AppletBridge
 import Foundation
-import HubLink
-import Network
+import HubWire
 import NoodleCore
 import NoodleRuntime
 import Observation
@@ -75,12 +74,13 @@ import os
     @ObservationIgnored private let browsers: (any HubBrowsing)?
     @ObservationIgnored private let noodlets: HubNoodlets?
     /// Open event streams, by the key of the device holding each.
-    @ObservationIgnored private var streams: [ObjectIdentifier: LinkStream] = [:]
+    @ObservationIgnored private var streams: [ObjectIdentifier: any LinkServerStream] = [:]
     @ObservationIgnored private let port: UInt16
     @ObservationIgnored private let localEndpoints: (UInt16) -> [LinkEndpoint]
     @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private var server: LinkServer?
-    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private let listen: LinkListen
+    @ObservationIgnored private var server: (any LinkListening)?
+    @ObservationIgnored private let network: (any HubNetworkWatching)?
     /// The interfaces and routers the network last had, to tell a new network from the same one again.
     @ObservationIgnored private var networkPath: String?
     @ObservationIgnored private let routerMapper: (any RouterPortMapper)?
@@ -103,7 +103,7 @@ import os
     @ObservationIgnored private var pendingPushes: [UUID: Task<Void, Never>] = [:]
     /// Live views open on each conversation, whose they are and which card they show, to close when someone
     /// loses it and to sign in only to what is watched.
-    @ObservationIgnored private var surfaces: [UUID: [(user: UUID, attachment: UUID, stream: LinkStream)]] = [:]
+    @ObservationIgnored private var surfaces: [UUID: [(user: UUID, attachment: UUID, stream: any LinkServerStream)]] = [:]
 
     private struct Settings: Codable {
         var manualAddress: String
@@ -115,9 +115,9 @@ import os
     public init(hubName: String, directory: URL, access: HubAccess, profiles: HarnessProfilesController,
                 bots: HubBots? = nil, connections: HubConnections? = nil, computers: (any HubComputing)? = nil,
                 browsers: (any HubBrowsing)? = nil,
-                port: UInt16 = LinkEndpoint.defaultPort, router: (any RouterPortMapper)? = nil,
-                routerChecks: RouterChecks = .standard,
-                localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:),
+                port: UInt16 = LinkEndpoint.defaultPort, listen: @escaping LinkListen, network: (any HubNetworkWatching)?,
+                router: (any RouterPortMapper)? = nil, routerChecks: RouterChecks = .standard,
+                localEndpoints: @escaping (UInt16) -> [LinkEndpoint],
                 now: @escaping () -> Date = Date.init, pushes: (any HubPushPublisher)? = nil, pushDelay: Duration = .seconds(2),
                 callPushes: (any CallPushTransport)? = nil, callPushLog: ((String) -> Void)? = nil) {
         macName = hubName
@@ -132,6 +132,8 @@ import os
             bots.applets.map { HubNoodlets(applets: $0, now: now, canOpen: { [weak bots] in bots?.canOpen($0, for: $1) ?? false }) }
         }
         self.port = port
+        self.listen = listen
+        self.network = network
         routerMapper = router
         self.routerChecks = routerChecks
         self.localEndpoints = localEndpoints
@@ -174,7 +176,7 @@ import os
         guard server == nil else { return }
         state = .starting
         do {
-            let server = try LinkServer(identity: identity, port: port, admits: gate.admits) { [weak self] key, request in
+            let server = try listen(identity, port, gate.admits) { [weak self] key, request in
                 await self?.reply(to: request, from: key) ?? .response(Data())
             }
             try await server.start()
@@ -194,8 +196,7 @@ import os
         streams.removeAll()
         server?.stop()
         server = nil
-        pathMonitor?.cancel()
-        pathMonitor = nil
+        network?.stop()
         networkPath = nil
         state = .stopped
     }
@@ -296,7 +297,7 @@ import os
                 let (link, bot) = try await hubBots().companionLink(attachmentID, in: conversationID, for: user)
                 // Starting a computer or a noodlet can outlast a request, so the channel opens first
                 // and anything that then goes wrong comes down it.
-                let open: @MainActor () async throws -> (SurfaceSocket, Gamepad?)
+                let open: @MainActor () async throws -> (any HubLiveView, Gamepad?)
                 switch link {
                 case .browser(let browser, let tab):
                     // Every browser on the owner's own Mac is theirs.
@@ -304,13 +305,13 @@ import os
                         throw LinkError("That browser is not yours or no longer exists.")
                     }
                     let browsers = try hubBrowsers()
-                    open = { (try await browsers.openSurface(browser: browser, tab: tab, for: user), nil) }
+                    open = { (try await browsers.liveView(browser: browser, tab: tab, for: user), nil) }
                 case .computer(let computer, let terminal, _):
                     guard try access.isPersonal || hubComputers().keeps(computer, for: user) else {
                         throw LinkError("That computer is not yours or no longer exists.")
                     }
                     let computers = try hubComputers()
-                    open = { (try await computers.openSurface(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
+                    open = { (try await computers.liveView(computer: computer, terminal: terminal, bot: bot, for: user), nil) }
                 case .noodlet(let noodlet):
                     // Asked for the bot that shared it, Applet checks it is the bot's as it starts it.
                     guard let applets = try hubBots().applets else { throw LinkError("This Noodle Hub does not run noodlets.") }
@@ -330,7 +331,7 @@ import os
                         guard let session = started.sessionID else {
                             throw LinkError("Noodle Applet did not start the noodlet.")
                         }
-                        return (try await applets.companionSurface(AppletRequest(.surfaceStream, sessionID: session)), started.controls)
+                        return (try await applets.liveView(AppletRequest(.surfaceStream, sessionID: session)), started.controls)
                     }
                 }
                 return .stream { stream in
@@ -339,9 +340,9 @@ import os
                         self.surfaces[conversationID, default: []].append((user.id, attachmentID, stream))
                         stream.send(LinkProtocol.encode(LinkEvent.surfaceOpened(sessionID: UUID())))
                         do {
-                            let (socket, controls) = try await open()
+                            let (view, controls) = try await open()
                             if let controls { stream.send(LinkProtocol.encode(LinkEvent.surfaceControls(controls: controls))) }
-                            LinkSurface.relay(socket, to: stream)
+                            view.relay(to: stream)
                         }
                         catch {
                             stream.send(LinkProtocol.encode(LinkEvent.surfaceFailed(reason: error.localizedDescription)))
@@ -374,13 +375,7 @@ import os
 
     /// Redraws the endpoints whenever the network changes, and opens the router's port again on a new one.
     private func watchNetwork() {
-        let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] path in
-            let network = "\(path.status) \(path.availableInterfaces.first?.name ?? "") \(path.gateways)"
-            Task { @MainActor in self?.networkChanged(to: network) }
-        }
-        monitor.start(queue: .global(qos: .utility))
-        pathMonitor = monitor
+        network?.start { [weak self] network in self?.networkChanged(to: network) }
     }
 
     /// `network` names the interface and routers in use, when they are known.
@@ -444,7 +439,7 @@ import os
         server?.disconnectRefused()
     }
 
-    private func register(_ stream: LinkStream) {
+    private func register(_ stream: any LinkServerStream) {
         let id = ObjectIdentifier(stream)
         streams[id] = stream
         // The device waits for a first word, so it hears whatever is pushed from here on.

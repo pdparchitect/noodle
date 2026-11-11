@@ -1,6 +1,6 @@
 import AppletBridge
 import Foundation
-import HubLink
+import HubWire
 import NoodleCore
 import NoodleRuntime
 
@@ -1129,6 +1129,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
     /// Connects a call to the bot's voice service; nil on a Hub that takes no calls. Tests pass their own.
     public var makeCallPeer: (@MainActor () -> any VoiceCallPeering)?
+    /// Carries a call's audio between the device's channel, through `send`, and the peer; what it returns
+    /// takes the frames the device sends up. Nil on a Hub that takes no calls.
+    public var makeCallAudio: (@Sendable (_ peer: any VoiceCallPeering, _ send: @escaping @Sendable (Data) -> Void) throws
+                               -> @Sendable (Data) -> Void)?
     /// Makes a small picture of a conversation's file at most `pixels` on its long side; nil on a Hub that makes none.
     public var makePreview: (@Sendable (_ file: URL, _ mediaType: String, _ pixels: Int) async -> Data?)?
 
@@ -1144,7 +1148,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
               agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false else {
             throw LinkError("This bot cannot take calls.")
         }
-        guard let makeCallPeer else { throw LinkError("This Noodle Hub does not take calls.") }
+        guard let makeCallPeer, let makeCallAudio else { throw LinkError("This Noodle Hub does not take calls.") }
         guard running || watching else { throw LinkError("This Hub is not running bots right now.") }
         if conversation.guest != nil {
             guard let owner = access.owner(ofBot: agent.id).flatMap({ id in access.users.first { $0.id == id } }),
@@ -1171,8 +1175,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         if let previous = calls[conversation.id] { finish(previous, failure: nil, hangingUp: true) }
         runtime.start(agent: agent, repository: repository)
         let peer = makeCallPeer()
-        let audio: HubCallAudio
-        do { audio = try HubCallAudio(peer: peer, send: sendAudio) } catch {
+        let hear: @Sendable (Data) -> Void
+        do { hear = try makeCallAudio(peer, sendAudio) } catch {
             if let answered { leaveUnanswered(answered, .missed, at: Date()) }
             throw error
         }
@@ -1220,7 +1224,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             leaveMissedIfAnswered(call)
             throw error
         }
-        return HubCall(hear: audio.receive) { [weak self, weak call] in
+        return HubCall(hear: hear) { [weak self, weak call] in
             guard let self, let call, self.calls[call.conversationID] === call else { return }
             self.finish(call, failure: nil, hangingUp: true)
         }
@@ -2079,28 +2083,6 @@ public struct HubCall: Sendable {
     /// Takes the frames the device sends up the call's channel.
     public let hear: @Sendable (Data) -> Void
     public let hangUp: @MainActor () -> Void
-}
-
-/// Carries a call's audio between the device, as packets on the call's channel, and the bot's
-/// voice. Frames come in one at a time from the channel and the voice from the peer's own thread,
-/// so each direction has its own codec.
-final class HubCallAudio: @unchecked Sendable {
-    private let peer: any VoiceCallPeering
-    private let decoder: LinkCallDecoder
-
-    init(peer: any VoiceCallPeering, send: @escaping @Sendable (Data) -> Void) throws {
-        self.peer = peer
-        decoder = try LinkCallDecoder()
-        let encoder = try LinkCallEncoder()
-        peer.onVoice = { samples in
-            for packet in (try? encoder.encode(samples)) ?? [] { send(LinkCallAudio.frame(packet)) }
-        }
-    }
-
-    func receive(_ frame: Data) {
-        guard let packet = LinkCallAudio.packet(in: frame), let samples = try? decoder.decode(packet) else { return }
-        peer.hear(samples)
-    }
 }
 
 extension LinkIncomingCall {

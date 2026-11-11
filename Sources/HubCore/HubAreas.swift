@@ -1,10 +1,15 @@
 import AppletBridge
 import Foundation
-import HubLink
+import HubWire
 import NoodleCore
 
 // What the Hub's bots and its link need from the areas a Hub may or may not have. A Hub without one
 // leaves it nil: its requests are refused and its bots go without, as on a Hub that never kept it.
+
+/// What a device watches live: a computer's screen, a browser's tab or a noodlet, relayed down its stream.
+public protocol HubLiveView: Sendable {
+    func relay(to stream: any LinkServerStream)
+}
 
 /// Something a bot started and then left unused, which the bot is asked to close.
 public struct HubIdleNotice: Equatable, Sendable {
@@ -30,7 +35,7 @@ public struct HubIdleNotice: Equatable, Sendable {
     func assign(_ ids: Set<UUID>, to bot: UUID, for user: HubUser) throws
     /// Whether the computer is one of the user's.
     func keeps(_ computer: UUID, for user: HubUser) -> Bool
-    func openSurface(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> SurfaceSocket
+    func liveView(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> any HubLiveView
     func idleNotices() async -> [HubIdleNotice]
     func revoke(computer: UUID, agent: UUID)
     func forget(bot: UUID)
@@ -50,7 +55,7 @@ public struct HubIdleNotice: Equatable, Sendable {
     func assign(_ ids: Set<UUID>, to bot: UUID, for user: HubUser) throws
     /// Whether the browser is one of the user's.
     func keeps(_ browser: UUID, for user: HubUser) -> Bool
-    func openSurface(browser: UUID, tab: UUID, for user: HubUser) async throws -> SurfaceSocket
+    func liveView(browser: UUID, tab: UUID, for user: HubUser) async throws -> any HubLiveView
     func signInForm(browser: UUID, for user: HubUser) async throws -> LinkSignInForm
     func fillSignIn(_ fill: LinkSignInFill, browser: UUID, for user: HubUser) async throws
     func idleNotices() async -> [HubIdleNotice]
@@ -67,5 +72,12 @@ public struct HubIdleNotice: Equatable, Sendable {
     func start(agents: [AgentRecord])
     func hasPreview(_ url: URL) async -> Bool
     func companion(_ request: AppletRequest) async throws -> AppletResponse
-    func companionSurface(_ request: AppletRequest) async throws -> SurfaceSocket
+    func liveView(_ request: AppletRequest) async throws -> any HubLiveView
+}
+
+/// Tells the Hub when the network it is on changes, so it can redraw its addresses and reopen the router's port.
+@MainActor public protocol HubNetworkWatching: AnyObject {
+    /// `changed` gets a name for the interface and routers in use, the same for the same network.
+    func start(_ changed: @escaping @MainActor (String) -> Void)
+    func stop()
 }

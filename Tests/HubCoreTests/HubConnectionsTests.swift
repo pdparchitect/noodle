@@ -1,7 +1,8 @@
 import Foundation
-import HubCore
+@testable import HubCore
 import HubLink
 import HubMac
+import ImageIO
 import NoodleCore
 import XCTest
 
@@ -84,5 +85,30 @@ import XCTest
         f.hub.remove(f.ada)
         XCTAssertEqual(f.hub.connections.connections(for: f.bob).map(\.id), [kept.id])
         XCTAssertEqual(try MCPRegistry.load(root: f.hub.repository.rootURL).connections.map(\.id), [kept.id])
+    }
+}
+
+/// The catalogue's icons reach devices as the largest picture in each icon file, as PNG.
+@MainActor final class ToolIconTests: XCTestCase {
+    func testAnIconFileBecomesItsLargestPictureAsPNG() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tool-icon-\(UUID()).icns")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, "com.apple.icns" as CFString, 2, nil))
+        for side in [16, 32] { CGImageDestinationAddImage(destination, try Self.square(side), nil) }
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+        let png = try XCTUnwrap(HubConnections.largestPicture(in: url))
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(png as CFData, nil))
+        XCTAssertEqual(CGImageSourceGetType(source) as String?, "public.png")
+        XCTAssertEqual(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width, 32)
+        XCTAssertNil(HubConnections.largestPicture(in: url.deletingPathExtension().appendingPathExtension("missing")))
+    }
+
+    private static func square(_ side: Int) throws -> CGImage {
+        let context = try XCTUnwrap(CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        return try XCTUnwrap(context.makeImage())
     }
 }

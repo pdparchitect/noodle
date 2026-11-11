@@ -283,4 +283,8 @@ extension HubComputers: HubComputing {
     public func idleNotices() async -> [HubIdleNotice] {
         await idle().map { HubIdleNotice(agentID: $0.agentID, note: $0.note) }
     }
+
+    public func liveView(computer: UUID, terminal: UUID?, bot: UUID, for user: HubUser) async throws -> any HubLiveView {
+        SurfaceLiveView(socket: try await openSurface(computer: computer, terminal: terminal, bot: bot, for: user))
+    }
 }

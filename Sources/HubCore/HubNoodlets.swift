@@ -1,6 +1,6 @@
 import AppletBridge
 import Foundation
-import HubLink
+import HubWire
 import NoodleRuntime
 
 /// Noodlets its bots shared, run on a person's own device. The Hub hands out their files and

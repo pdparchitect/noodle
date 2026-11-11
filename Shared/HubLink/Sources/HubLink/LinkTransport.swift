@@ -114,14 +114,8 @@ enum LinkQUIC {
     }
 }
 
-/// What the Hub does with a request: answer it once, or keep the stream open to push frames.
-public enum LinkReply: Sendable {
-    case response(Data)
-    case stream(@Sendable (LinkStream) -> Void)
-}
-
-/// An open stream the Hub pushes frames down until either side closes it.
-public final class LinkStream: @unchecked Sendable {
+/// An open stream the Hub pushes frames down until either side closes it, over QUIC.
+public final class LinkStream: LinkServerStream, @unchecked Sendable {
     public static let keepAliveInterval: TimeInterval = 10
     /// How long a closed stream waits for the device to end its side.
     static let closeGrace: TimeInterval = 5
@@ -238,7 +232,10 @@ public final class LinkStream: @unchecked Sendable {
 /// Accepts QUIC connections only from keys `admits` lets in, refused during the handshake so
 /// nothing a stranger sends is read, and hands each request to `handler` with the sender's
 /// key, which is how the Hub knows which device is asking.
-public final class LinkServer: @unchecked Sendable {
+public final class LinkServer: LinkListening, @unchecked Sendable {
+    /// A QUIC listener, as the Hub opens one on a Mac.
+    public static let listen: LinkListen = { try LinkServer(identity: $0, port: $1, admits: $2, handler: $3) }
+
     public typealias Handler = @Sendable (LinkPublicKey, Data) async -> LinkReply
 
     private let listener: NWListener

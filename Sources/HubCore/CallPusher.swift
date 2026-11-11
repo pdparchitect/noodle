@@ -1,6 +1,6 @@
 import CryptoKit
 import Foundation
-import HubLink
+import HubWire
 import os
 
 /// Where the Hub posts its rings: Noodle Push, or a stand-in in tests.

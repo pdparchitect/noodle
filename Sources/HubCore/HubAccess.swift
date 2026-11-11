@@ -1,6 +1,8 @@
 import Foundation
-import HubLink
+import HubWire
+#if canImport(ImageIO)
 import ImageIO
+#endif
 import NoodleCore
 import Observation
 
@@ -349,6 +351,17 @@ public struct HubCallPush: Codable, Hashable, Sendable {
     public static let maxPictureBytes = 512 * 1024
 
     /// Sets the user's picture, or with nil their initials. An image sent as its digest alone keeps the one they have.
+    /// Whether devices can show `data` as a picture.
+    private static func isPicture(_ data: Data) -> Bool {
+        #if canImport(ImageIO)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else { return false }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
+        #else
+        // Without an image decoder, only PNG and JPEG, by their signatures.
+        return data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) || data.starts(with: [0xFF, 0xD8, 0xFF])
+        #endif
+    }
+
     public func setAvatar(_ avatar: LinkAvatar?, for user: HubUser) throws {
         guard let old = current(user) else { return }
         var kept = avatar
@@ -356,8 +369,7 @@ public struct HubCallPush: Codable, Hashable, Sendable {
             if let symbol = avatar.symbol, symbol.isEmpty || symbol.count > 64 { throw LinkError("That symbol cannot be used.") }
             if let image = avatar.image {
                 guard image.count <= Self.maxPictureBytes else { throw LinkError("Choose a smaller picture.") }
-                guard let source = CGImageSourceCreateWithData(image as CFData, nil), CGImageSourceGetCount(source) > 0,
-                      CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else { throw LinkError("That picture cannot be used.") }
+                guard Self.isPicture(image) else { throw LinkError("That picture cannot be used.") }
                 avatar.imageDigest = LinkPicture.digest(image)
                 try FileManager.default.createDirectory(at: picturesURL, withIntermediateDirectories: true)
                 try AtomicFile.write(image, to: pictureURL(of: user.id))

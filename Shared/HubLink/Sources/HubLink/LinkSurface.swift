@@ -37,7 +37,7 @@ public enum LinkSurface {
     /// ways and as it happens: video down as the companion encodes it, the person's controls up
     /// in the order they sent them. Video comes only as fast as the device's link takes it, so a
     /// slow link gets less of it rather than getting it late. While the view is open, bots wait.
-    public static func relay(_ companion: SurfaceSocket, to stream: LinkStream) {
+    public static func relay(_ companion: SurfaceSocket, to stream: any LinkServerStream) {
         let delivery = SurfaceDelivery()
         stream.onFrame { data in
             // How fast the device's link goes is the Hub's to measure, not the device's to say.

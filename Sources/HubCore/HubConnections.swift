@@ -1,6 +1,8 @@
 import Foundation
-import HubLink
+import HubWire
+#if canImport(ImageIO)
 import ImageIO
+#endif
 import NoodleCore
 import NoodleMCP
 
@@ -234,10 +236,14 @@ extension HubConnections {
                               endpoint: configuration.endpoint, badge: tool.maturity.badge, icon: icon(named: tool.iconName))
     }
 
-    /// The largest picture in an icon file, as PNG, which every device reads.
     private static func icon(named name: String) -> Data? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "icon", subdirectory: "ToolIcons"),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        Bundle.main.url(forResource: name, withExtension: "icon", subdirectory: "ToolIcons").flatMap(largestPicture)
+    }
+
+    /// The largest picture in an icon file, as PNG, which every device reads.
+    static func largestPicture(in url: URL) -> Data? {
+        #if canImport(ImageIO)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let largest = (0..<CGImageSourceGetCount(source)).compactMap { CGImageSourceCreateImageAtIndex(source, $0, nil) }
             .max { $0.width < $1.width }
         guard let largest else { return nil }
@@ -245,5 +251,8 @@ extension HubConnections {
         guard let destination = CGImageDestinationCreateWithData(png, "public.png" as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, largest, nil)
         return CGImageDestinationFinalize(destination) ? png as Data : nil
+        #else
+        return nil
+        #endif
     }
 }

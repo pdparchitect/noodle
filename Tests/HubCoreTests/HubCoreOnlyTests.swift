@@ -25,7 +25,7 @@ import XCTest
                            readMarks: root.appendingPathComponent("read.json"), pins: nil, notifications: nil)
         let link = HubLinkService(hubName: "Server", directory: root.appendingPathComponent("Link", isDirectory: true),
                                   access: access, profiles: HarnessProfilesController(store: repository.harnessProfiles),
-                                  bots: bots, connections: connections, port: 0,
+                                  bots: bots, connections: connections, port: 0, listen: LinkServer.listen, network: nil,
                                   localEndpoints: { [LinkEndpoint(host: "::1", port: $0)] })
         await link.start()
         addTeardownBlock { await MainActor.run { link.stop() } }

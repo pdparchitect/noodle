@@ -128,7 +128,7 @@ let package = Package(
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
         .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP",
                                                 .product(name: "AppletBridge", package: "Protocol"),
-                                                .product(name: "HubLink", package: "HubLink")]),
+                                                .product(name: "HubWire", package: "HubLink")]),
         /// HubCore on a Mac: with Noodle Computer, Browser and Applet, image generation, calls and CloudKit.
         .target(name: "HubMac", dependencies: ["HubCore", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleMCP", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools", "NoodleImagesTools",
                                                .product(name: "ComputerBridge", package: "Bridge"),

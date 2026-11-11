@@ -279,4 +279,8 @@ extension HubBrowsers: HubBrowsing {
     public func idleNotices() async -> [HubIdleNotice] {
         await idle().map { HubIdleNotice(agentID: $0.agentID, note: $0.note) }
     }
+
+    public func liveView(browser: UUID, tab: UUID, for user: HubUser) async throws -> any HubLiveView {
+        SurfaceLiveView(socket: try await openSurface(browser: browser, tab: tab, for: user))
+    }
 }

@@ -1,5 +1,8 @@
 import CryptoKit
 import Foundation
+#if canImport(ImageIO)
+import ImageIO
+#endif
 import SurfaceWire
 
 /// The version of the requests below. A Hub serves the versions it knows and names the app
@@ -2112,5 +2115,22 @@ extension KeyedDecodingContainer {
     /// A field that may be missing, as when it was added after the sender was built.
     func decode<T: Decodable>(_ key: Key, or fallback: @autoclosure () -> T) throws -> T {
         try decodeIfPresent(T.self, forKey: key) ?? fallback()
+    }
+}
+
+extension LinkPixelSize {
+    /// Reads only the file's header; nil for anything that is not a picture, and wherever ImageIO is missing.
+    public init?(pictureAt url: URL) {
+        #if canImport(ImageIO)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else { return nil }
+        // Orientations 5 to 8 turn the picture a quarter.
+        let turned = (5...8).contains((properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1)
+        self.init(width: turned ? height : width, height: turned ? width : height)
+        #else
+        return nil
+        #endif
     }
 }

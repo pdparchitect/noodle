@@ -86,6 +86,7 @@ import NoodleVoicePeer
                        pins: root.appendingPathComponent("pins.json"), notifications: root.appendingPathComponent("notifications.json"))
         // On a Mac a Hub takes calls and makes small pictures of conversation files.
         bots.makeCallPeer = { VoiceCallPeer() }
+        bots.makeCallAudio = { peer, send in try HubCallAudio(peer: peer, send: send).receive }
         bots.makePreview = { await AttachmentPictures.make(of: $0, mediaType: $1, pixels: $2) }
         // The Hub's bots get the applet tool from its own controller. This Mac as a Hub shares
         // Noodle's, whose broker serves Noodle's bots, so the wiring is here and not in HubBots.
@@ -142,8 +143,6 @@ import NoodleVoicePeer
                            workingBots: agents.filter { runtime.snapshot(for: $0.id).phase == .working }.count)
     }
 }
-
-extension AppletController: HubNoodletRunning {}
 
 /// What quitting the Hub would interrupt.
 public struct HubActivity: Equatable, Sendable {

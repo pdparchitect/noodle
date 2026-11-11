@@ -381,7 +381,7 @@ final class LinkStreamTests: XCTestCase {
 }
 
 extension LinkStreamTests {
-    private func quietServer(_ hub: LinkIdentity, _ open: @escaping @Sendable (LinkStream) -> Void) async throws -> LinkEndpoint {
+    private func quietServer(_ hub: LinkIdentity, _ open: @escaping @Sendable (any LinkServerStream) -> Void) async throws -> LinkEndpoint {
         let server = try LinkServer(identity: hub, port: 0, admits: { _ in true }, handler: { _, _ in .stream(open) })
         try await server.start()
         addTeardownBlock { server.stop() }
@@ -446,7 +446,7 @@ extension LinkStreamTests {
 }
 
 final class StreamBox: @unchecked Sendable {
-    var stream: LinkStream?
+    var stream: (any LinkServerStream)?
 }
 
 @MainActor final class HubPairingTests: XCTestCase {
