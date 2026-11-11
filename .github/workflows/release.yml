@@ -386,14 +386,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The toolchain image Noodle Push builds with.
-    container: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+    container:
+      image: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+      # The server's bot sandbox mounts its own /proc, which an unprivileged container forbids.
+      options: --privileged
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Install SQLite's headers, and msquic for the server's link
+      - name: Install SQLite's headers, msquic for the server's link and bubblewrap for its bots
         run: |
-          apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev curl ca-certificates
+          apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev curl ca-certificates bubblewrap
           curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/microsoft.deb
           dpkg -i /tmp/microsoft.deb && apt-get update && apt-get install -y --no-install-recommends libmsquic
       - name: Test live views' wire on Linux

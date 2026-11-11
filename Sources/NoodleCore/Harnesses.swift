@@ -157,6 +157,8 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneMuseURL: URL
     private let standaloneAntigravityURL: URL
     private let managedHarnesses: ManagedHarnessStore?
+    /// Where each harness is, when someone said so; then nothing else is looked for.
+    private var fixed: [HarnessProvider: String]?
     #if NOODLE_DEV_HOOKS
     private let simulateNoHarnesses: Bool
     private var externalInstallChecks: Set<HarnessProvider> = []
@@ -190,11 +192,18 @@ public struct HarnessDiscovery: Sendable {
         ]
     }
 
+    /// Only these harnesses, where they are: a server's are named in its configuration.
+    public init(fixed: [HarnessProvider: String]) {
+        self.init(homeDirectory: URL(fileURLWithPath: "/nonexistent"), executableSearchDirectories: [], environment: [:])
+        self.fixed = fixed
+    }
+
     public func discover() -> [HarnessInstallation] {
         HarnessProvider.allCases.map(discover)
     }
 
     public func allowsHostDiscovery(for provider: HarnessProvider) -> Bool {
+        guard fixed == nil else { return false }
         #if NOODLE_DEV_HOOKS
         return !simulateNoHarnesses || externalInstallChecks.contains(provider)
         #else
@@ -203,6 +212,7 @@ public struct HarnessDiscovery: Sendable {
     }
 
     public func discover(_ provider: HarnessProvider) -> HarnessInstallation {
+        if let fixed { return HarnessInstallation(provider: provider, executablePath: fixed[provider]) }
         #if NOODLE_DEV_HOOKS
         // Keep the override at discovery so startup, Settings, and refresh agree.
         // Apple's harness ships inside the app, so even a Mac without harnesses has it.
@@ -225,7 +235,8 @@ public struct HarnessDiscovery: Sendable {
     /// The person's own installation, where this process can see it. The sandboxed app sees
     /// only some vendors' locations; the Agent Host reports the others.
     public func ownExecutable(_ provider: HarnessProvider) -> URL? {
-        executableCandidates(for: provider).first(where: isExecutable)
+        if let fixed { return fixed[provider].map { URL(fileURLWithPath: $0) } }
+        return executableCandidates(for: provider).first(where: isExecutable)
     }
 
     /// Noodle's copy goes once the person installs their own, unless they chose to keep

@@ -17,32 +17,37 @@ import NoodleRuntime
     public let bots: HubBots
     public let link: HubLinkService
     private let repository: WorkspaceRepository
-    private let runtime: AgentRuntimeCoordinator
+    let runtime: AgentRuntimeCoordinator
     private let usage: UsageHistory
     private let tokenLimits: HubTokenLimits
 
-    /// `runtime` runs the bots; tests pass their own.
-    public init(configuration: ServerConfiguration, listen: @escaping LinkListen, runtime: AgentRuntimeCoordinator? = nil) throws {
+    public init(configuration: ServerConfiguration, listen: @escaping LinkListen) throws {
         let root = configuration.data
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
-        self.runtime = runtime ?? AgentRuntimeCoordinator()
-        self.runtime.remoteModels = RemoteModelAccountStore(repository: root)
-        self.runtime.harnessProfiles = repository.harnessProfiles
+        // Bots run the harnesses the file names, from where it says; on Linux under bubblewrap, by the server itself.
+        #if os(Linux)
+        runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection(),
+                                          makeProcess: { launch in launch.makeProcess { SandboxedHarnessConnection(workspace: launch.workspaceURL) } })
+        #else
+        runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection())
+        #endif
+        runtime.remoteModels = RemoteModelAccountStore(repository: root)
+        runtime.harnessProfiles = repository.harnessProfiles
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         access = HubAccess(url: root.appendingPathComponent("access.json"))
         access.log = HubActivityLog(url: root.appendingPathComponent("activity.jsonl"))
         try ServerAccess.apply(configuration, to: access)
         tokenLimits = HubTokenLimits(access: access, usage: usage)
         // Tokens count against the plan of whoever owns the bot when it uses them.
-        self.runtime.onUsage = { [usage, access, tokenLimits] sample in
+        runtime.onUsage = { [usage, access, tokenLimits] sample in
             var sample = sample
             sample.owner = access.owner(ofBot: sample.agentID)
             usage.record(sample)
             tokenLimits.check()
         }
-        self.runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
+        runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         access.onTokenLimitsChange = { [tokenLimits] in tokenLimits.check() }
         let connections = HubConnections(root: root, access: access, service: MCPService(namespace: "noodled"),
                                          tools: ToolProviderRegistry(), assignments: ToolAssignmentStore())

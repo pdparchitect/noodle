@@ -49,11 +49,21 @@ func loadConfiguration() -> ServerConfiguration {
 switch arguments.first {
 case "check":
     let configuration = loadConfiguration()
+    #if os(Linux)
+    if let problem = HarnessSandbox().problem() {
+        print(problem)
+        exit(1)
+    }
+    #endif
     let plans = configuration.plans.count, users = configuration.users.count
     print("\(configurationFile.path) is ready: \(plans) \(plans == 1 ? "plan" : "plans"), \(users) \(users == 1 ? "user" : "users").")
 case "run":
     let configuration = loadConfiguration()
     #if os(Linux)
+    if let problem = HarnessSandbox().problem() {
+        print("noodled could not start: \(problem)")
+        exit(1)
+    }
     let listen = QUICListener.listen(certificates: configuration.data.appendingPathComponent("Link/Certificates", isDirectory: true))
     #else
     let listen = LinkServer.listen

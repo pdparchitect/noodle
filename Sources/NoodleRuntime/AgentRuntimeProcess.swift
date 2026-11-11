@@ -42,9 +42,9 @@ extension AgentRuntimeProcess {
 @MainActor
 public struct AgentRuntimeLaunch {
     public let agent: AgentRecord
-    let provider: HarnessProvider
+    public let provider: HarnessProvider
     let executableURL: URL
-    let workspaceURL: URL
+    public let workspaceURL: URL
     let extendedAccess: Bool
     let appsEnabled: Bool
     let recoverInterruptedWork: Bool
@@ -57,18 +57,30 @@ public struct AgentRuntimeLaunch {
     public var profileOverride: UUID? = nil
 
     public func makeProcess() -> any AgentRuntimeProcess {
-        let connect: @MainActor () throws -> ExtendedAgentConnection = {
-            let connection = try ExtendedAgentConnection()
-            connection.profileOverride = profileOverride
-            return connection
-        }
+        makeProcess(connect: { try hostConnection() })
+    }
+
+    /// The bot's harness run through `connect`'s connection rather than the Agent Host's, as a server runs
+    /// them. Muse Code has its own connection, which only the Agent Host offers.
+    public func makeProcess(connect: @escaping @MainActor () throws -> any HarnessRuntimeConnection) -> any AgentRuntimeProcess {
+        makeProcess(connect: connect, connectMuse: { try hostConnection() })
+    }
+
+    private func hostConnection() throws -> ExtendedAgentConnection {
+        let connection = try ExtendedAgentConnection()
+        connection.profileOverride = profileOverride
+        return connection
+    }
+
+    private func makeProcess(connect: @escaping @MainActor () throws -> any HarnessRuntimeConnection,
+                             connectMuse: @escaping @MainActor () throws -> any MuseRuntimeConnection) -> any AgentRuntimeProcess {
         switch provider {
         case .muse:
             return MuseAgentProcess(agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
-                onActivity: onActivity, makeConnection: { try connect() })
+                onActivity: onActivity, makeConnection: connectMuse)
         case .apple, .fx, .grokBuild, .openCode:
             return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
