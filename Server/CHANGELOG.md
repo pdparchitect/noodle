@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
 ### Added
 
 - `sudo noodled setup` sets up a server step by step: it checks the machine and offers to install bubblewrap, msquic, Claude Code and Codex, asks a few questions, writes the configuration or keeps the one there, installs the service, signs in, starts the server and prints an invitation for your first device.

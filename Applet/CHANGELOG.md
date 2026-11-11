@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-11-11
+
 ### Fixed
 
 - After an update, Noodle Applet looks for the next one as soon as it opens instead of a day later. An old version updates in steps, through each version that moves your data on, so from now on those steps follow one another and end on the latest version.

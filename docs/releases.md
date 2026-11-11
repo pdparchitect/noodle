@@ -14,6 +14,8 @@ Each product has its own version and changelog:
 | Browser | `Browser/VERSION` | `Browser/CHANGELOG.md` | `browser-vX.Y.Z` |
 | Hub | `Hub/VERSION` | `Hub/CHANGELOG.md` | `hub-vX.Y.Z` |
 | Mobile | `Mobile/VERSION` | `Mobile/CHANGELOG.md` | `mobile-vX.Y.Z` |
+| Terminal | `Terminal/VERSION` | `Terminal/CHANGELOG.md` | `terminal-vX.Y.Z` |
+| Server | `Server/VERSION` | `Server/CHANGELOG.md` | `server-vX.Y.Z` |
 | Images | `Computer/Images/VERSION` | `Computer/Images/CHANGELOG.md` | `computer-images-vX.Y.Z` |
 
 1. Set the product's version to an unused, higher `X.Y.Z`.

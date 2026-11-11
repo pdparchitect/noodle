@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-11
+
 ### Added
 
 - Local Models, in Settings > Harness, offers larger models for Macs with lots of memory: gpt-oss 120B (96 GB), Qwen3 235B Instruct (192 GB), and Qwen3.5 397B and Qwen3 Coder 480B (512 GB). The list shows only the models the Hub's Mac has the memory to run, and suggests the most capable of them.

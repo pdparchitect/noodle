@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
 ### Security
 
 - Noodle Terminal no longer serves itself to web browsers. The terminal framework it is built with started a hidden companion page on a local port whenever it ran, and any program running as you could get the page's address and control Noodle Terminal through it; with `--web --bind` it listened on every network interface. Neither is built in any more, whatever the options or environment say.
