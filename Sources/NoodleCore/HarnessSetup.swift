@@ -234,7 +234,7 @@ enum CodexAccountResponse {
                     child.standardInput = stdinPipe
                     // Cancellation can race a queued write. Configure this valid
                     // pipe before use so a closed child reports EPIPE, not SIGPIPE.
-                    _ = fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+                    BrokenPipe.reportAsError(stdinPipe.fileHandleForWriting.fileDescriptor)
                     child.standardOutput = stdoutPipe
                     // Account failures are reported through JSON-RPC. Do not retain
                     // arbitrary stderr, which may include private configuration.

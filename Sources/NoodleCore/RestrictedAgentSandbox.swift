@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Applied by the signed Agent Host BEFORE executing a restricted harness. macOS
 /// cannot stack a second Seatbelt sandbox inside the app's inherited sandbox.

@@ -1,3 +1,4 @@
+#if canImport(CoreTransferable)
 import Foundation
 import CoreTransferable
 
@@ -21,3 +22,4 @@ public struct BackgroundPhoto: Transferable {
         }
     }
 }
+#endif

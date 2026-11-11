@@ -1,3 +1,5 @@
+// Tool extensions are ExtensionKit extensions, reached over NSXPC.
+#if os(macOS)
 import Foundation
 import ProductIdentity
 
@@ -223,3 +225,4 @@ public final class ToolExtensionConnection: ToolProvider, @unchecked Sendable {
         }
     }
 }
+#endif

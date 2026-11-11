@@ -1,5 +1,9 @@
 import ComputerBridge
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// The broker rechecks local access independently of the CLI. Walking directory
@@ -30,11 +34,11 @@ public enum ComputerWorkspaceFiles {
 
     static func parent(workspace: URL, path: String) throws -> (Int32, String) {
         let parts = try components(path)
-        var fd = Darwin.open(workspace.resolvingSymlinksInPath().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        var fd = systemOpen(workspace.resolvingSymlinksInPath().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw ComputerBridgeError("Cannot open the bot workspace.") }
         for part in parts.dropLast() {
             let next = openat(fd, part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            Darwin.close(fd)
+            systemClose(fd)
             guard next >= 0 else { throw ComputerBridgeError("The local parent folder must exist and cannot be a symlink.") }
             fd = next
         }
@@ -43,14 +47,14 @@ public enum ComputerWorkspaceFiles {
 
     public static func upload(workspace: URL, path: String, to staging: URL) throws -> Int64 {
         let (parent, name) = try parent(workspace: workspace, path: path)
-        defer { Darwin.close(parent) }
+        defer { systemClose(parent) }
         let source = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard source >= 0 else { throw ComputerBridgeError("Cannot read the local file; symlinks are not supported.") }
-        defer { Darwin.close(source) }
+        defer { systemClose(source) }
         _ = try ComputerTransferFiles.size(source)
-        let destination = Darwin.open(staging.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        let destination = systemOpen(staging.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard destination >= 0 else { throw ComputerBridgeError("Cannot stage the upload.") }
-        defer { Darwin.close(destination) }
+        defer { systemClose(destination) }
         return try ComputerTransferFiles.copy(source: source, destination: destination)
     }
 
@@ -59,10 +63,10 @@ public enum ComputerWorkspaceFiles {
     public static func read(workspace: URL, path: String, limit: Int) throws -> Data {
         guard limit >= 0, limit < Int.max else { throw ComputerBridgeError("Invalid workspace file size limit.") }
         let (parent, name) = try parent(workspace: workspace, path: path)
-        defer { Darwin.close(parent) }
+        defer { systemClose(parent) }
         let source = openat(parent, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard source >= 0 else { throw ComputerBridgeError("Cannot read the local file; symlinks are not supported.") }
-        defer { Darwin.close(source) }
+        defer { systemClose(source) }
         var info = stat()
         guard fstat(source, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
               info.st_size >= 0, info.st_size <= limit else {

@@ -87,6 +87,8 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
         .package(path: "Shared/Product"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1"),
+        // CryptoKit's API where there is no CryptoKit.
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
         // WebRTC for calls, built with a custom audio device, which Google's own Apple builds lack on macOS.
         .package(url: "https://github.com/livekit/webrtc-xcframework", exact: "150.7871.03")
     ],
@@ -103,7 +105,9 @@ let package = Package(
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
-        .target(name: "NoodleCore", dependencies: [.product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
+        /// The system's SQLite where the SDK has no module for it.
+        .systemLibrary(name: "CSQLite", providers: [.apt(["libsqlite3-dev"])]),
+        .target(name: "NoodleCore", dependencies: [.target(name: "CSQLite", condition: .when(platforms: [.linux])), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks),
         /// Noodle Enterprise: managed preferences from a configuration profile. Source-available under
         /// Enterprise/LICENSE, not Apache-2.0; the rest of Noodle reaches it only through NoodleCore's
@@ -114,7 +118,7 @@ let package = Package(
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
-        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
+        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
@@ -126,7 +130,7 @@ let package = Package(
         /// Calls' WebRTC connection to a harness's voice service, fed and played by whoever holds the call.
         .target(name: "NoodleVoicePeer", dependencies: ["NoodleCore", .product(name: "LiveKitWebRTC", package: "webrtc-xcframework")]),
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
-        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP",
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
                                                 .product(name: "AppletBridge", package: "Protocol"),
                                                 .product(name: "HubWire", package: "HubLink")]),
         /// HubCore on a Mac: with Noodle Computer, Browser and Applet, image generation, calls and CloudKit.

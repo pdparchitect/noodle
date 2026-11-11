@@ -1,6 +1,5 @@
 import Foundation
 import ProductIdentity
-import Security
 
 /// Agent launches accept only known installation locations and OpenAI-signed code.
 public enum CodexExecutableTrust {
@@ -32,12 +31,7 @@ public enum CodexExecutableTrust {
     public static func verifySignature(_ url: URL, identifier: String) throws {
         let rule = "anchor apple generic and identifier \"\(identifier)\" and certificate leaf[subject.OU] = \"2DC432GLL2\""
         try VerifiedExecutables.verify(url, requirement: rule) {
-            var code: SecStaticCode?
-            var requirement: SecRequirement?
-            guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
-                  SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
-                  let code, let requirement,
-                  SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess else {
+            guard HarnessSignatureVerification.unmet(url, requirement: rule) == nil else {
                 throw HarnessSetupError("Codex’s OpenAI signature could not be verified.")
             }
         }

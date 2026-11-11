@@ -1,6 +1,8 @@
 import Foundation
 import ProductIdentity
+#if canImport(Security)
 import Security
+#endif
 
 struct MCPCredentials: Codable, Sendable {
     let endpoint: URL
@@ -26,6 +28,7 @@ protocol MCPCredentialStorage: Sendable {
     func save(_ credentials: MCPCredentials, id: UUID) throws
     func remove(_ id: UUID) throws
 }
+#if canImport(Security)
 struct MCPCredentialStore: MCPCredentialStorage {
     let service: String
     private func query(_ id: UUID) -> [String: Any] {
@@ -64,6 +67,15 @@ struct MCPCredentialStore: MCPCredentialStorage {
         guard status == errSecSuccess || status == errSecItemNotFound else { throw MCPServiceError.keychain(status) }
     }
 }
+#else
+/// Without a keychain there is nowhere to keep a sign-in: none is found, and none is kept.
+struct MCPCredentialStore: MCPCredentialStorage {
+    let service: String
+    func load(_ id: UUID) throws -> MCPCredentials? { nil }
+    func save(_ credentials: MCPCredentials, id: UUID) throws { throw MCPServiceError.credentialStorage }
+    func remove(_ id: UUID) throws {}
+}
+#endif
 
 public enum MCPServiceError: LocalizedError, Sendable {
     case credentialStorage, signInRequired, registrationUnsupported, invalidMetadata, invalidCallback

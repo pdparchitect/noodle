@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// One fixed read-only command: the model listing, which also answers whether
 /// the account is signed in. Noodle receives only the sanitized result.

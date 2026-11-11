@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Keeps a slow or stalled child process from blocking the application's UI.
@@ -12,7 +16,7 @@ public final class ProcessInputWriter: @unchecked Sendable {
         self.handle = handle
         // An exited child must report a write error, not terminate the parent
         // with SIGPIPE. Configure only this descriptor, not the whole process.
-        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        BrokenPipe.reportAsError(handle.fileDescriptor)
     }
 
     public func write(_ data: Data, onFailure: @escaping @Sendable (Error) -> Void) {

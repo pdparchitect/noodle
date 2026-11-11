@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Large payloads stay out of JSON and PTYs. Both signed apps already have
@@ -19,7 +23,7 @@ public enum ComputerTransferFiles {
                 var info = stat()
                 if UUID(uuidString: url.lastPathComponent) != nil, lstat(url.path, &info) == 0,
                    info.st_mode & S_IFMT == S_IFDIR, info.st_uid == getuid(),
-                   Date().timeIntervalSince1970 - Double(info.st_mtimespec.tv_sec) > 3600 {
+                   Date().timeIntervalSince1970 - Double(info.modified.tv_sec) > 3600 {
                     try? FileManager.default.removeItem(at: url)
                 }
             }
@@ -41,9 +45,9 @@ public enum ComputerTransferFiles {
     }
 
     public static func openSource(_ url: URL) throws -> Int32 {
-        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let fd = openFile(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw ComputerBridgeError("Cannot open the transfer source.") }
-        do { _ = try size(fd); return fd } catch { Darwin.close(fd); throw error }
+        do { _ = try size(fd); return fd } catch { _ = close(fd); throw error }
     }
 
     public static func size(_ fd: Int32) throws -> Int64 {
@@ -52,7 +56,7 @@ public enum ComputerTransferFiles {
               info.st_size >= 0, info.st_size <= limit else {
             throw ComputerBridgeError("Transfers require a regular file up to 8 GiB.")
         }
-        return info.st_size
+        return Int64(info.st_size)
     }
 
     /// Call on a worker, with exclusive ownership of both file descriptors.
@@ -70,13 +74,25 @@ public enum ComputerTransferFiles {
         }
         var after = stat()
         guard count == expected, fstat(source, &after) == 0, after.st_size == before.st_size,
-              after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
-              after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec,
-              after.st_ctimespec.tv_sec == before.st_ctimespec.tv_sec,
-              after.st_ctimespec.tv_nsec == before.st_ctimespec.tv_nsec else {
+              after.modified.tv_sec == before.modified.tv_sec,
+              after.modified.tv_nsec == before.modified.tv_nsec,
+              after.changed.tv_sec == before.changed.tv_sec,
+              after.changed.tv_nsec == before.changed.tv_nsec else {
             throw ComputerBridgeError("The source changed or the transfer was incomplete.")
         }
         try output.synchronize()
         return count
     }
+}
+
+private func openFile(_ path: String, _ flags: Int32) -> Int32 { open(path, flags) }
+
+private extension stat {
+    #if canImport(Darwin)
+    var modified: timespec { st_mtimespec }
+    var changed: timespec { st_ctimespec }
+    #else
+    var modified: timespec { st_mtim }
+    var changed: timespec { st_ctim }
+    #endif
 }

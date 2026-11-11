@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 
 /// Exact production/development identities for the companion, the Noodle broker and its Browser tool extension.
 public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
@@ -29,6 +31,7 @@ public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
     }
     public static let processIdentity: Self? = {
         // Paths and request flags cannot select another environment.
+        #if canImport(Security)
         var code: SecCode?
         var info: CFDictionary?
         var staticCode: SecStaticCode?
@@ -37,6 +40,7 @@ public enum BrowserBuildIdentity: String, CaseIterable, Sendable {
            SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess,
            let identifier = (info as? [String: Any])?[kSecCodeInfoIdentifier as String] as? String,
            let value = identify(identifier) { return value }
+        #endif
         return identify(Bundle.main.bundleIdentifier)
     }()
     // Unsigned unit tests retain production defaults. Discovery, launch and

@@ -45,12 +45,15 @@ public struct SharedInbox: Sendable {
 
     public init(rootURL: URL) { self.rootURL = rootURL }
 
+    #if canImport(Darwin)
+    /// The share extension hands files over through an app group.
     public static func configured(bundle: Bundle = .main) throws -> SharedInbox {
         guard let identifier = bundle.object(forInfoDictionaryKey: "NoodleSharedGroup") as? String,
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
         else { throw SharedInboxError.unavailable }
         return SharedInbox(rootURL: container.appendingPathComponent("Sharing", isDirectory: true))
     }
+    #endif
 
     public func saveDestinations(_ destinations: [ShareDestination]) throws {
         try prepare()

@@ -1,7 +1,10 @@
 import Foundation
 import ProductIdentity
-import Security
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// The app consumes this catalogue from the bundled harness. Model identifiers
 /// belong to the harness and are deliberately not enumerated in UI code.
@@ -27,11 +30,7 @@ public enum AppleExecutableTrust {
               FileManager.default.isExecutableFile(atPath: candidate.path) else {
             throw HarnessSetupError("The Apple harness must be the executable bundled with this copy of Noodle.")
         }
-        var code: SecStaticCode?, rule: SecRequirement?
-        guard SecStaticCodeCreateWithPath(candidate as CFURL, [], &code) == errSecSuccess,
-              SecRequirementCreateWithString(requirement as CFString, [], &rule) == errSecSuccess,
-              let code, let rule,
-              SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate), rule) == errSecSuccess else {
+        guard HarnessSignatureVerification.unmet(candidate, requirement: requirement, strict: true) == nil else {
             throw HarnessSetupError("The bundled Apple harness signature is invalid. Reinstall Noodle.")
         }
         return candidate
@@ -115,6 +114,7 @@ public enum AppleAgentSandbox {
     /// macOS 27. Keep this identity aligned with AppleAgent-Info.plist; granting
     /// the whole Darwin user cache would expose other applications' data.
     private static var metalCacheDirectory: URL? {
+        #if canImport(Darwin)
         let count = confstr(_CS_DARWIN_USER_CACHE_DIR, nil, 0)
         guard count > 1 else { return nil }
         var buffer = [CChar](repeating: 0, count: count)
@@ -125,6 +125,9 @@ public enum AppleAgentSandbox {
         // evaluates the real /private/var path. Use realpath for the OS parent.
         return URL(fileURLWithPath: canonical(String(cString: buffer)), isDirectory: true)
             .appendingPathComponent(ProductIdentity.current.identifier("apple-agent"), isDirectory: true)
+        #else
+        return nil
+        #endif
     }
 
     private static func canonical(_ path: String) -> String {

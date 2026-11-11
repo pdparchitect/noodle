@@ -1,6 +1,8 @@
 import Foundation
 import NoodleCore
+#if canImport(OSLog)
 import OSLog
+#endif
 import ProductIdentity
 
 /// The sandboxed app downloads and unpacks. It cannot make the result runnable:

@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// Input excludes cached tokens; reasoning is part of output and not added to the total.
 public struct UsageTokens: Hashable, Sendable {

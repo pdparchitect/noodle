@@ -1,3 +1,4 @@
+#if canImport(UniformTypeIdentifiers)
 import Foundation
 import UniformTypeIdentifiers
 
@@ -172,3 +173,4 @@ private final class BackgroundDownloadLimit: NSObject, URLSessionDownloadDelegat
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
 }
+#endif

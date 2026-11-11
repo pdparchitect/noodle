@@ -1,6 +1,5 @@
 import Foundation
 import ProductIdentity
-import Security
 
 /// Both access modes accept only Anthropic's signed native Claude Code install.
 public enum ClaudeExecutableTrust {
@@ -30,16 +29,7 @@ public enum ClaudeExecutableTrust {
     public static func verifySignature(_ url: URL) throws {
         let rule = "anchor apple generic and identifier \"com.anthropic.claude-code\" and certificate leaf[subject.OU] = \"Q6L2SF6YDW\""
         try VerifiedExecutables.verify(url, requirement: rule) {
-            var code: SecStaticCode?
-            var requirement: SecRequirement?
-            guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
-                  SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
-                  let code, let requirement,
-                  SecStaticCodeCheckValidity(
-                    code,
-                    SecCSFlags(rawValue: kSecCSCheckAllArchitectures),
-                    requirement
-                  ) == errSecSuccess else {
+            guard HarnessSignatureVerification.unmet(url, requirement: rule) == nil else {
                 throw HarnessSetupError("Claude Code’s Anthropic signature could not be verified.")
             }
         }

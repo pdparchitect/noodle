@@ -1,3 +1,5 @@
+// Noodle Applet runs on a Mac.
+#if os(macOS)
 import AppKit
 import AppletBridge
 import Foundation
@@ -166,3 +168,4 @@ import ProductIdentity
     }
     deinit { monitor?.cancel() }
 }
+#endif

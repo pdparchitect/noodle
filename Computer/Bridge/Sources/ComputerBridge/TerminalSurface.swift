@@ -1,3 +1,4 @@
+#if canImport(CoreGraphics)
 import CoreGraphics
 import CoreText
 import Foundation
@@ -57,3 +58,4 @@ public enum TerminalSurface {
         }
     }
 }
+#endif

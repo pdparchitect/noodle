@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public enum MCPBridgeAction: String, Codable, Sendable {
     case tools, inspect, call, resources
@@ -57,9 +61,9 @@ public enum MCPBridgeFiles {
     }
     public static func read(_ file: URL, limit: Int, workspace: URL? = nil) throws -> Data {
         if let workspace { return try mailbox(for: file, workspace: workspace).read(file.lastPathComponent, limit: limit) }
-        let descriptor = Darwin.open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        let descriptor = systemOpen(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         guard descriptor >= 0 else { throw POSIXError(.ENOENT) }
-        defer { Darwin.close(descriptor) }
+        defer { systemClose(descriptor) }
         var info = stat()
         guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
               info.st_size <= limit else { throw MCPConnectionError.message("Invalid MCP bridge file.") }

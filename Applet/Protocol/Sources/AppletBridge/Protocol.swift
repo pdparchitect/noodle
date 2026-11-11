@@ -1,6 +1,11 @@
 import Foundation
 @_exported import NoodletFormat
+// Apple platforms get live views as well; elsewhere only what crosses the wire.
+#if canImport(Surface)
 @_exported import Surface
+#else
+@_exported import SurfaceWire
+#endif
 
 public enum AppletOperation: String, Codable, CaseIterable, Sendable {
     case list, info, validate, build, open, status, logs, inspect, eval, click, type, key, scroll, drag

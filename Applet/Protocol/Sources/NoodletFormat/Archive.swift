@@ -1,3 +1,4 @@
+#if canImport(Compression)
 import Compression
 import Foundation
 
@@ -108,3 +109,4 @@ public enum NoodletArchive {
         withUnsafeBytes(of: value.bigEndian) { Data($0) }
     }
 }
+#endif

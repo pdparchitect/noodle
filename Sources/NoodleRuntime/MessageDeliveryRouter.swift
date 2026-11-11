@@ -1,6 +1,8 @@
 import Foundation
 import NoodleCore
+#if canImport(os)
 import os
+#endif
 
 /// Queue immediately, then optionally promote that same pending wake: at once
 /// for an obvious stop request, otherwise when the model says so. Inference

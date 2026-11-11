@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Publish complete data using a temporary file in the destination directory.
@@ -9,8 +13,10 @@ public enum AtomicFile {
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(".noodle-write-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temporary) }
         try data.write(to: temporary)
-        guard Darwin.rename(temporary.path, destination.path) == 0 else {
+        guard renameFile(temporary.path, destination.path) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
     }
 }
+
+private func renameFile(_ source: String, _ destination: String) -> Int32 { rename(source, destination) }

@@ -1,6 +1,5 @@
 import Foundation
 import ProductIdentity
-import UniformTypeIdentifiers
 
 public struct MessengerCommandResult: Codable, Sendable {
     public let exitCode: Int32
@@ -133,7 +132,7 @@ public enum MessengerCLI {
                 var importedAttachments: [ConversationAttachment] = []
                 do {
                     for sourceURL in attachmentURLs {
-                        let mediaType = UTType(filenameExtension: sourceURL.pathExtension)?.preferredMIMEType
+                        let mediaType = Pictures.mediaType(forFilenameExtension: sourceURL.pathExtension)
                             ?? "application/octet-stream"
                         if brokered, sourceURL.isFileURL {
                             let workspace = repository.directory(forAgentID: agentID)

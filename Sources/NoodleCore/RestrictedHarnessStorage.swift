@@ -1,9 +1,19 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(LocalAuthentication)
 import LocalAuthentication
+#endif
+#if canImport(OSLog)
 import OSLog
+#endif
 import ProductIdentity
+#if canImport(Security)
 import Security
+#endif
 
 /// The trusted host copies login material only. Native histories, settings,
 /// hooks, MCP connections, and skills are never imported from a shared account.
@@ -631,7 +641,7 @@ public enum RestrictedHarnessStorage {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         // A tool that exits early reports EPIPE, not SIGPIPE.
-        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        BrokenPipe.reportAsError(input.fileHandleForWriting.fileDescriptor)
         try process.run()
         input.fileHandleForWriting.write(Data("add-generic-password -U -a \"\(account)\" -s \"\(service)\" -X \"\(hex)\"\n".utf8))
         try input.fileHandleForWriting.close()
@@ -674,6 +684,7 @@ public enum RestrictedHarnessStorage {
     private static func readKeychainItem(service: String, account: String) throws -> Data? {
         // Exact provider item only. Never enumerate Keychain or permit a prompt
         // during background startup. Access denial leaves the sandbox closed.
+        #if canImport(LocalAuthentication)
         let context = LAContext(); context.interactionNotAllowed = true
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service, kSecAttrAccount as String: account,
@@ -686,6 +697,9 @@ public enum RestrictedHarnessStorage {
             throw HarnessSetupError("macOS did not allow Noodle Agent Host to read the harness login (\(status)). Grant that helper access to the provider's login item in Keychain Access, then retry startup.")
         }
         return data
+        #else
+        throw HarnessSetupError("This system has no keychain for harness logins.")
+        #endif
     }
 }
 

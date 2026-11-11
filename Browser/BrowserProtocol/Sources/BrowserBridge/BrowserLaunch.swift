@@ -1,3 +1,5 @@
+// The companion apps run on a Mac.
+#if os(macOS)
 import AppKit
 
 public enum BrowserLaunch {
@@ -22,3 +24,4 @@ public enum BrowserLaunch {
             withApplicationAt: applicationURL, configuration: configuration)
     }
 }
+#endif

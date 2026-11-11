@@ -1,7 +1,15 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 import ProductIdentity
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// V2 keeps credentials and conversations in one database. The host reads only
 /// credential rows; every write to the bot's database runs inside its OS sandbox.

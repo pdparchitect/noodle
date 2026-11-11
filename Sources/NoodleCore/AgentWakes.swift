@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import ProductIdentity
 
@@ -259,9 +263,9 @@ extension WorkspaceRepository {
     private func updateWakes<Value>(agentID: UUID, _ change: (inout AgentWakeState) throws -> Value) throws -> Value {
         let package = storage(for: agentID).package
         guard FileManager.default.fileExists(atPath: package.path) else { throw WorkspaceError.missingAgent(agentID) }
-        let descriptor = Darwin.open(package.appendingPathComponent(".wakes.lock").path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        let descriptor = systemOpen(package.appendingPathComponent(".wakes.lock").path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw POSIXError(.EIO) }
-        defer { Darwin.close(descriptor) }
+        defer { systemClose(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
         defer { flock(descriptor, LOCK_UN) }
         var state = try readWakes(agentID: agentID)

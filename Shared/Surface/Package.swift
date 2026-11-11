@@ -12,6 +12,7 @@ let package = Package(
         .target(name: "SurfaceWire"),
         .target(name: "Surface", dependencies: ["SurfaceWire"]),
         .testTarget(name: "SurfaceTests", dependencies: ["Surface"]),
+        .testTarget(name: "SurfaceWireTests", dependencies: ["SurfaceWire"]),
     ],
     swiftLanguageModes: [.v5]
 )

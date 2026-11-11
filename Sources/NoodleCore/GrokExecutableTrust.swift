@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 public enum GrokExecutableTrust {
     public static func executable(at path: String, home: URL) throws -> URL {

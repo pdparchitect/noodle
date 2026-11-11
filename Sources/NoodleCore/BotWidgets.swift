@@ -86,12 +86,15 @@ public struct BotWidgetShelf: Sendable {
         picturesURL = rootURL.appendingPathComponent("Pictures", isDirectory: true)
     }
 
+    #if canImport(Darwin)
+    /// Widgets read the shelf through an app group.
     public static func configured(bundle: Bundle = .main) -> BotWidgetShelf? {
         guard let identifier = bundle.object(forInfoDictionaryKey: "NoodleSharedGroup") as? String,
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
         else { return nil }
         return BotWidgetShelf(rootURL: container.appendingPathComponent("Widgets", isDirectory: true))
     }
+    #endif
 
     /// Every bot, without its picture.
     public func load() -> [WidgetBot] {

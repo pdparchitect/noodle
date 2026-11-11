@@ -218,8 +218,8 @@ public struct ImageModelStore: Sendable {
     public func download(_ downloadable: ImageDownloadableModel,
                          progress: @escaping @Sendable (AppleModelDownloadProgress) -> Void = { _ in }) async throws -> ImageModel {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let capacity = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        if (try? model(id: downloadable.id)) == nil, let available = capacity.volumeAvailableCapacityForImportantUsage,
+        let available = try availableCapacity(at: directory)
+        if (try? model(id: downloadable.id)) == nil, let available,
            available < downloadable.byteCount + 1_073_741_824 {
             throw ToolProviderError("Not enough disk space: this model needs \(ByteCountFormatter.string(fromByteCount: downloadable.byteCount + 1_073_741_824, countStyle: .file)) free.")
         }

@@ -1,3 +1,4 @@
+#if canImport(AVFoundation)
 import Foundation
 @_exported import NoodleWallpaperCore
 
@@ -19,3 +20,4 @@ extension WorkspaceRepository {
         }
     }
 }
+#endif

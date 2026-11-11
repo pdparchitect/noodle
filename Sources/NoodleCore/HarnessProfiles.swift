@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// A separate harness login owned by Noodle. A bot without a profile uses its
@@ -146,7 +150,7 @@ public struct HarnessProfileStore: Sendable {
         defer { try? FileManager.default.removeItem(at: fresh) }
         try populateHome(fresh, provider: profile.provider)
         if AgentStorageLayout.exists(home) {
-            guard renamex_np(fresh.path, home.path, UInt32(RENAME_SWAP)) == 0 else {
+            guard swapItems(fresh.path, home.path) == 0 else {
                 throw HarnessSetupError("Could not sign out: \(String(cString: strerror(errno))).")
             }
         } else {

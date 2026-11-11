@@ -1,3 +1,5 @@
+// The companion apps run on a Mac.
+#if os(macOS)
 import Darwin
 import Foundation
 import Security
@@ -265,3 +267,4 @@ private final class PendingReply: @unchecked Sendable {
         watch.cancel()
     }
 }
+#endif

@@ -77,6 +77,22 @@ final class ProtocolTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root)
         XCTAssertThrowsError(try ComputerTransferFiles.staging(root: root, id: linkID, create: false))
     }
+    func testTransferCopiesTheWholeSource() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source"), copy = root.appendingPathComponent("copy")
+        let bytes = Data((0..<3_000_000).map { UInt8(truncatingIfNeeded: $0 * 7) })
+        try bytes.write(to: source)
+        FileManager.default.createFile(atPath: copy.path, contents: nil)
+        let input = try ComputerTransferFiles.openSource(source)
+        defer { close(input) }
+        let output = try FileHandle(forWritingTo: copy)
+        defer { try? output.close() }
+        XCTAssertEqual(try ComputerTransferFiles.copy(source: input, destination: output.fileDescriptor), Int64(bytes.count))
+        XCTAssertEqual(try Data(contentsOf: copy), bytes)
+        XCTAssertThrowsError(try ComputerTransferFiles.openSource(root), "a folder opened as a transfer source")
+    }
     func testCompatibilityNegotiationDoesNotRequireMatchingAppVersions() throws {
         XCTAssertNoThrow(try ComputerCapabilities.requireCompatible(ComputerCapabilities()))
         var newer = ComputerCapabilities()

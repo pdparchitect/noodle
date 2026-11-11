@@ -1,6 +1,15 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
+#if canImport(Security)
 import Security
+#endif
 import MCP
 import NoodleCore
 
@@ -68,12 +77,18 @@ struct MCPOAuth {
                 "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
             }.joined(separator: "&").data(using: .utf8)
         }
+        #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
         var data = Data()
         for try await byte in bytes {
             guard data.count < 1_048_576 else { throw MCPServiceError.responseTooLarge }
             data.append(byte)
         }
+        #else
+        // Linux's URLSession has no byte stream, so the limit holds only once the whole body is in.
+        let (data, response) = try await session.data(for: request)
+        guard data.count <= 1_048_576 else { throw MCPServiceError.responseTooLarge }
+        #endif
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let object = (try? JSONSerialization.jsonObject(with: data)) as? Object ?? [:]
         if object["error"] as? String == "invalid_grant" || object["error"] as? String == "invalid_client" {
@@ -272,9 +287,15 @@ struct MCPOAuth {
     }
     static func nonce() throws -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
+        #if canImport(Security)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw MCPServiceError.credentialStorage
         }
+        #else
+        // The system generator is cryptographically secure on every platform Swift runs on.
+        var generator = SystemRandomNumberGenerator()
+        for index in bytes.indices { bytes[index] = UInt8.random(in: .min ... .max, using: &generator) }
+        #endif
         return Data(bytes).base64EncodedString().replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }

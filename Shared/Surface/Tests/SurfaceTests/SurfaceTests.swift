@@ -18,17 +18,6 @@ final class SurfaceTests: XCTestCase {
         return context.makeImage()!
     }
 
-    func testInputRoundTripsThroughJSON() throws {
-        let inputs: [SurfaceInput] = [.pointer(.down, x: 10, y: 20, clickCount: 2), .scroll(x: 5, y: 6, dx: 0, dy: -40),
-                                      .key(.enter), .text("héllo")]
-        for input in inputs {
-            XCTAssertEqual(try JSONDecoder().decode(SurfaceInput.self, from: JSONEncoder().encode(input)), input)
-        }
-        for control in inputs.map(SurfaceControl.input) + [.view(width: 1200, height: 800), .keyFrame, .rate(bitsPerSecond: 1_000_000)] {
-            XCTAssertEqual(SurfaceControl(control.encoded), control)
-        }
-    }
-
     /// Packets travel as bytes, starting with a byte no JSON starts with.
     func testPacketsRoundTripAsBytes() throws {
         let packets = [SurfacePacket(sequence: 1, keyFrame: true, width: 1280, height: 800, parameterSets: [Data([1, 2]), Data([3])], sample: Data([9, 8, 7])),
@@ -138,22 +127,6 @@ final class SurfaceTests: XCTestCase {
         let timeout = Task { try await Task.sleep(for: .seconds(10)); task.cancel() }
         defer { timeout.cancel() }
         return await task.value
-    }
-
-    /// Frames cross in order both ways, and closing one end ends the other.
-    func testASocketCarriesFramesBothWays() async throws {
-        let (companion, hub) = try pair()
-        companion.send(Data([1, 2, 3]))
-        companion.send(Data(repeating: 7, count: 200_000))
-        hub.send(Data("{}".utf8))
-        var down: [Data] = []
-        for await frame in hub.frames { down.append(frame); if down.count == 2 { break } }
-        XCTAssertEqual(down, [Data([1, 2, 3]), Data(repeating: 7, count: 200_000)])
-        for await frame in companion.frames { XCTAssertEqual(frame, Data("{}".utf8)); break }
-        companion.close()
-        var more = 0
-        for await _ in hub.frames { more += 1 }
-        XCTAssertEqual(more, 0)
     }
 
     /// Video starts at a key frame as soon as someone watches, fits the viewer's window in

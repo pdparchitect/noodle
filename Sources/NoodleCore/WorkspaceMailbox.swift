@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import ComputerBridge
 
@@ -29,6 +33,7 @@ public final class WorkspaceMailbox: @unchecked Sendable {
 
     deinit { close(descriptor) }
 
+    #if canImport(Darwin)
     func observeChanges(on queue: DispatchQueue, handler: @escaping @Sendable () -> Void) throws -> DispatchSourceFileSystemObject {
         let copy = fcntl(descriptor, F_DUPFD_CLOEXEC, 0)
         guard copy >= 0 else { throw Self.invalid() }
@@ -39,6 +44,7 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         source.resume()
         return source
     }
+    #endif
 
     private static func validName(_ value: String) -> Bool {
         !value.isEmpty && value != "." && value != ".." && !value.contains("/") &&
@@ -57,9 +63,7 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         rewinddir(directory)
         var values: [String] = []
         while values.count < limit, let entry = readdir(directory) {
-            let name = withUnsafePointer(to: &entry.pointee.d_name) {
-                $0.withMemoryRebound(to: CChar.self, capacity: Int(entry.pointee.d_namlen) + 1) { String(cString: $0) }
-            }
+            let name = entryName(entry)
             if Self.validName(name) { values.append(name) }
         }
         return values
@@ -106,7 +110,7 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         try handle.write(contentsOf: data)
         if replaceExisting {
             guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.invalid() }
-        } else if renameatx_np(descriptor, temporary, descriptor, name, UInt32(RENAME_EXCL)) != 0 {
+        } else if renameExclusively(in: descriptor, temporary, name) != 0 {
             guard errno == EEXIST else { throw Self.invalid() }
             return false
         }
@@ -115,7 +119,7 @@ public final class WorkspaceMailbox: @unchecked Sendable {
 
     public func claim(_ name: String, as claimed: String) throws {
         guard Self.validName(name), Self.validName(claimed),
-              renameatx_np(descriptor, name, descriptor, claimed, UInt32(RENAME_EXCL)) == 0 else { throw Self.invalid() }
+              renameExclusively(in: descriptor, name, claimed) == 0 else { throw Self.invalid() }
     }
 
     public func copy(from source: URL, named name: String) throws {

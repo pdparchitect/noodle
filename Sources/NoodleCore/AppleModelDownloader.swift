@@ -1,5 +1,12 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public struct AppleModelDownloadProgress: Sendable {
     public enum Phase: Sendable { case downloading, verifying, importing }
@@ -31,8 +38,7 @@ public struct AppleModelDownloader: Sendable {
         try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
         // Partial weights from an interrupted run must not count against this download.
         store.removeAbandonedStaging()
-        let capacity = try store.directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        if let available = capacity.volumeAvailableCapacityForImportantUsage,
+        if let available = try availableCapacity(at: store.directory),
            available < downloadable.byteCount * 2 + 64 * 1_024 * 1_024 {
             throw HarnessSetupError("Not enough disk space to download and import this model.")
         }

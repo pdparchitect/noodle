@@ -1,4 +1,8 @@
+#if canImport(UniformTypeIdentifiers)
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -189,3 +193,4 @@ public enum AttachmentTransfer {
         return filename
     }
 }
+#endif

@@ -1,9 +1,14 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 #if canImport(ImageIO)
 import ImageIO
 #endif
-import SurfaceWire
+// Link events carry gamepads.
+@_exported import SurfaceWire
 
 /// The version of the requests below. A Hub serves the versions it knows and names the app
 /// to update for any other, rather than failing mid-conversation. Adding a request, an event

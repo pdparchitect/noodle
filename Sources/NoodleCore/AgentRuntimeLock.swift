@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// One harness per bot, held by the harness itself.
@@ -59,10 +63,7 @@ public enum AgentRuntimeLock {
 
     private static func leads(_ group: pid_t, inside workspace: URL) -> Bool {
         guard getpgid(group) == group else { return false }
-        var info = proc_vnodepathinfo()
-        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
-        guard proc_pidinfo(group, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return false }
-        let directory = withUnsafeBytes(of: info.pvi_cdir.vip_path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+        guard let directory = currentDirectory(of: group) else { return false }
         // Foundation's symlink resolution drops /private; the kernel reports it.
         guard let resolved = realpath(workspace.path, nil) else { return false }
         let root = String(cString: resolved)

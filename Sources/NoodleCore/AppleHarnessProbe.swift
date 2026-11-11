@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public enum AppleHarnessProbe {
     /// Called only after the host verifies the bundled executable. Availability

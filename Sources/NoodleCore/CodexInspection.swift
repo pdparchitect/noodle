@@ -52,7 +52,7 @@ public enum CodexInspection {
             process.standardInput = input
             process.standardOutput = output
             process.standardError = FileHandle.nullDevice
-            _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+            BrokenPipe.reportAsError(input.fileHandleForWriting.fileDescriptor)
             let reader = reader
             output.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData

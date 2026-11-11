@@ -1,6 +1,4 @@
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 @_exported import NoodleWallpaperCore
 
 extension WorkspaceRepository {
@@ -48,7 +46,7 @@ extension WorkspaceRepository {
 
     @discardableResult public func setBackground(conversationID: UUID, imageData: Data,
                                                  commit: () throws -> Void = {}) throws -> ConversationBackground {
-        let output = try BackgroundMedia.jpegData(from: imageData)
+        let output = try Self.backgroundJPEG(imageData)
         let directory = conversationDirectory(id: conversationID)
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("conversation.json").path) else {
             throw WorkspaceError.missingConversation(conversationID)
@@ -66,6 +64,15 @@ extension WorkspaceRepository {
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
         guard let size, size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
         return try setBackground(conversationID: attachment.conversationID, imageData: Data(contentsOf: url))
+    }
+
+    /// A picture background is kept as a JPEG; where pictures cannot be redrawn, only presets are.
+    private static func backgroundJPEG(_ imageData: Data) throws -> Data {
+        #if canImport(AVFoundation)
+        return try BackgroundMedia.jpegData(from: imageData)
+        #else
+        throw ConversationBackgroundError.invalidImage
+        #endif
     }
 
     /// Keep the previous media until the enclosing settings commit succeeds.

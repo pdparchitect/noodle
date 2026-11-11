@@ -1,5 +1,5 @@
 import Foundation
-import Surface
+import SurfaceWire
 
 public struct NoodletManifest: Codable, Sendable, Equatable {
   public var version: Int

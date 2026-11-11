@@ -1,12 +1,18 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import AppletBridge
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import ComputerBridge
 import BrowserBridge
 import Foundation
-import ImageIO
 import ProductIdentity
-import UniformTypeIdentifiers
 
 public struct CreatedAgentWorkspace: Sendable {
     public let agent: AgentRecord
@@ -287,22 +293,10 @@ public struct WorkspaceRepository: Sendable {
             throw WorkspaceError.invalidAttachment
         }
         let url = attachmentFileURL(attachment)
-        guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-              size <= 50 * 1024 * 1024, ConversationBackground.canUseImage(at: url),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 512
-              ] as CFDictionary) else { throw ConversationBackgroundError.invalidImage }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
-            throw ConversationBackgroundError.invalidImage
-        }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.86] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { throw ConversationBackgroundError.invalidImage }
+        guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 50 * 1024 * 1024,
+              let data = Pictures.jpegThumbnail(at: url, maxPixelSize: 512) else { throw ConversationBackgroundError.invalidImage }
         // Appearance only: preserve runtime configuration and do not restart the bot.
-        agent.avatarImageData = data as Data
+        agent.avatarImageData = data
         agent.updatedAt = Date()
         try saveAgentRecord(agent)
         return agent
@@ -1037,7 +1031,7 @@ public struct WorkspaceRepository: Sendable {
 
         let attachmentID = id
         let filename = originalFilename ?? sourceURL.lastPathComponent
-        let resolvedMediaType = detectedImageMediaType(at: sourceURL) ?? mediaType
+        let resolvedMediaType = Pictures.mediaType(at: sourceURL) ?? mediaType
         let annotation = annotation.flatMap { $0.isValid && voice == nil && $0.mediaType == resolvedMediaType ? $0 : nil }
         let attachment = ConversationAttachment(
             id: attachmentID,
@@ -1123,9 +1117,7 @@ public struct WorkspaceRepository: Sendable {
             if annotation.version == 1 {
                 guard data.starts(with: Data("%PDF-".utf8)) else { throw WorkspaceError.invalidAttachment }
             } else if annotation.region != nil {
-                guard detectedImageMediaType(in: data) == "image/png",
-                      let image = CGImageSourceCreateWithData(data as CFData, nil),
-                      CGImageSourceCreateImageAtIndex(image, 0, nil) != nil else { throw WorkspaceError.invalidAttachment }
+                guard Pictures.mediaType(of: data) == "image/png", Pictures.decodes(data) else { throw WorkspaceError.invalidAttachment }
             } else {
                 guard data == Data(annotation.textRepresentation.utf8) else { throw WorkspaceError.invalidAttachment }
             }
@@ -1148,7 +1140,7 @@ public struct WorkspaceRepository: Sendable {
         guard !filename.isEmpty else { throw WorkspaceError.invalidAttachment }
 
         let attachmentID = id
-        let resolvedMediaType = detectedImageMediaType(in: data) ?? mediaType
+        let resolvedMediaType = Pictures.mediaType(of: data) ?? mediaType
         let attachment = ConversationAttachment(
             id: attachmentID,
             conversationID: conversationID,
@@ -1264,7 +1256,7 @@ public struct WorkspaceRepository: Sendable {
             let remember = { if let metadataStamp, let fileStamp { attachmentRecords.store(attachment, at: metadata, stamp: metadataStamp + fileStamp) } }
             if attachment.url != nil { remember(); return attachment }
             let fileURL = attachmentFileURL(attachment)
-            guard let detectedMediaType = detectedImageMediaType(at: fileURL),
+            guard let detectedMediaType = Pictures.mediaType(at: fileURL),
                   detectedMediaType != attachment.mediaType else { remember(); return attachment }
 
             let repaired = ConversationAttachment(
@@ -1308,29 +1300,6 @@ public struct WorkspaceRepository: Sendable {
         decoder.dateDecodingStrategy = .iso8601
         let record = directory.appendingPathComponent("\(attachment.id.uuidString.lowercased()).json")
         return (try? Data(contentsOf: record)).flatMap { try? decoder.decode(ConversationAttachment.self, from: $0) }?.card?.image
-    }
-
-    private func detectedImageMediaType(at url: URL) -> String? {
-        guard let source = CGImageSourceCreateWithURL(
-            url as CFURL,
-            [kCGImageSourceShouldCache: false] as CFDictionary
-        ) else { return nil }
-        return detectedImageMediaType(from: source)
-    }
-
-    private func detectedImageMediaType(in data: Data) -> String? {
-        guard let source = CGImageSourceCreateWithData(
-            data as CFData,
-            [kCGImageSourceShouldCache: false] as CFDictionary
-        ) else { return nil }
-        return detectedImageMediaType(from: source)
-    }
-
-    private func detectedImageMediaType(from source: CGImageSource) -> String? {
-        guard let typeIdentifier = CGImageSourceGetType(source) as String?,
-              let contentType = UTType(typeIdentifier),
-              contentType.conforms(to: .image) else { return nil }
-        return contentType.preferredMIMEType
     }
 
     public func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {
@@ -1755,7 +1724,7 @@ public struct WorkspaceRepository: Sendable {
             do {
                 for file in files {
                     imported.append(try importAttachment(from: file, into: conversation.id,
-                        mediaType: UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"))
+                        mediaType: Pictures.mediaType(forFilenameExtension: file.pathExtension) ?? "application/octet-stream"))
                 }
                 let message = ChatMessage(id: request.id, conversationID: conversation.id, author: .user,
                     body: request.body.isEmpty ? "Sent \(files.count) attachment\(files.count == 1 ? "" : "s")" : request.body,
@@ -1804,9 +1773,9 @@ public struct WorkspaceRepository: Sendable {
 
     private func withConversationLock<Value>(_ id: UUID, operation: () throws -> Value) throws -> Value {
         let lockURL = conversationDirectory(id: id).appendingPathComponent(".messages.lock")
-        let descriptor = Darwin.open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        let descriptor = systemOpen(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw POSIXError(.EIO) }
-        defer { Darwin.close(descriptor) }
+        defer { systemClose(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
         defer { flock(descriptor, LOCK_UN) }
         return try operation()
@@ -1890,8 +1859,8 @@ final class FileRecordCache<Value: Sendable>: @unchecked Sendable {
         for (path, isFile) in directories.map({ ($0, false) }) + files.map({ ($0, true) }) {
             var info = stat()
             guard lstat(path, &info) == 0 else { return nil }
-            stamp += [Int64(info.st_dev), Int64(bitPattern: info.st_ino), Int64(info.st_mode)]
-            if isFile { stamp += [info.st_size, Int64(info.st_ctimespec.tv_sec), Int64(info.st_ctimespec.tv_nsec)] }
+            stamp += [Int64(info.st_dev), Int64(truncatingIfNeeded: info.st_ino), Int64(info.st_mode)]
+            if isFile { stamp += [Int64(info.st_size), Int64(info.changed.tv_sec), Int64(info.changed.tv_nsec)] }
         }
         return stamp
     }

@@ -24,6 +24,7 @@ public struct ConversationSearch: Equatable, Sendable {
         return found
     }
 
+    #if canImport(Darwin)
     /// `text` with the term in bold wherever it is, as a snippet shows it.
     public func highlighted(_ text: String) -> AttributedString {
         var styled = AttributedString(text)
@@ -33,6 +34,7 @@ public struct ConversationSearch: Equatable, Sendable {
         }
         return styled
     }
+    #endif
 
     private func range(in text: String, from start: String.Index? = nil) -> Range<String.Index>? {
         let start = start ?? text.startIndex

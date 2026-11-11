@@ -1,6 +1,11 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import ProductIdentity
+#if canImport(Security)
 import Security
+#endif
 
 /// A remote model as a bot selects it: `remote/<provider>/<account>/<model>`.
 /// The account names whose key the app hands over; the provider and model are
@@ -457,6 +462,7 @@ public protocol RemoteModelSecrets: Sendable {
     func delete(_ account: UUID) throws
 }
 
+#if canImport(Security)
 /// API keys live in the login Keychain, readable by the app that saved them.
 /// The app passes a key to the bot's Apple harness when a session starts.
 public struct RemoteModelKeychain: RemoteModelSecrets {
@@ -500,6 +506,15 @@ public struct RemoteModelKeychain: RemoteModelSecrets {
         HarnessSetupError("macOS did not allow \(ProductIdentity.current.name) to use the API key (\(status)). Unlock the login keychain, then try again.")
     }
 }
+#else
+/// Without a keychain there is nowhere to keep API keys: none is found, and none is kept.
+public struct RemoteModelKeychain: RemoteModelSecrets {
+    public init() {}
+    public func read(_ account: UUID) throws -> String? { nil }
+    public func write(_ key: String, account: UUID) throws { throw HarnessSetupError("This system has no keychain for API keys.") }
+    public func delete(_ account: UUID) throws {}
+}
+#endif
 
 /// Accounts are app data; their keys are in `secrets`.
 public struct RemoteModelAccountStore: Sendable {

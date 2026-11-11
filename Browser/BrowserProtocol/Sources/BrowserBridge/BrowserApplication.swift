@@ -1,3 +1,5 @@
+// The companion apps run on a Mac.
+#if os(macOS)
 import AppKit
 
 public enum BrowserApplication {
@@ -44,3 +46,4 @@ public enum BrowserApplication {
         return locate(build: build)?.standardizedFileURL == url.standardizedFileURL
     }
 }
+#endif

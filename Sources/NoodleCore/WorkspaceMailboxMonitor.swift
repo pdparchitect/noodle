@@ -1,5 +1,6 @@
 import Foundation
 
+#if canImport(Darwin)
 /// A scan hint, never an authorization boundary. Brokers still open and validate
 /// the current mailbox before every operation. Vnode events avoid idle directory
 /// walks; periodic reattachment also catches replaced parents and missed events.
@@ -58,3 +59,12 @@ public final class WorkspaceMailboxMonitor: @unchecked Sendable {
         return true
     }
 }
+#else
+/// Where there are no vnode events to hint at changes, every pass scans.
+public final class WorkspaceMailboxMonitor: Sendable {
+    public init(rescanInterval: TimeInterval = 5) {}
+    public func reset() {}
+    public func hasChanges(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool { true }
+    public func needsScan(workspace: URL, path: String, now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool { true }
+}
+#endif

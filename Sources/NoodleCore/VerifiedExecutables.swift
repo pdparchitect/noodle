@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// A full signature check reads and hashes the whole executable, hundreds of megabytes for some
@@ -22,9 +26,9 @@ enum VerifiedExecutables {
     private static func stamp(_ path: String) -> [Int64]? {
         var link = stat(), file = stat()
         guard lstat(path, &link) == 0, stat(path, &file) == 0 else { return nil }
-        return [Int64(link.st_dev), Int64(bitPattern: link.st_ino), Int64(link.st_mode),
-                Int64(file.st_dev), Int64(bitPattern: file.st_ino), Int64(file.st_mode), file.st_size,
-                Int64(file.st_mtimespec.tv_sec), Int64(file.st_mtimespec.tv_nsec),
-                Int64(file.st_ctimespec.tv_sec), Int64(file.st_ctimespec.tv_nsec)]
+        return [Int64(link.st_dev), Int64(truncatingIfNeeded: link.st_ino), Int64(link.st_mode),
+                Int64(file.st_dev), Int64(truncatingIfNeeded: file.st_ino), Int64(file.st_mode), Int64(file.st_size),
+                Int64(file.modified.tv_sec), Int64(file.modified.tv_nsec),
+                Int64(file.changed.tv_sec), Int64(file.changed.tv_nsec)]
     }
 }

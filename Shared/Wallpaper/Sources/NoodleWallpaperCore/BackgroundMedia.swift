@@ -1,11 +1,8 @@
+#if canImport(AVFoundation)
 import AVFoundation
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-
-public enum BackgroundMediaKind: String, Codable, Sendable {
-    case image, video, dynamicImage
-}
 
 /// Owns an immutable temporary copy, so previews and Apply never depend on an
 /// expired picker permission or a subsequently moved original file.
@@ -190,3 +187,4 @@ public enum BackgroundMedia {
         return try? await generator.image(at: .zero).image
     }
 }
+#endif

@@ -1,7 +1,13 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import Observation
+#if canImport(OSLog)
 import OSLog
+#endif
 import NoodleCore
 import ProductIdentity
 

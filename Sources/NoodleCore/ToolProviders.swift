@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import ProductIdentity
 
@@ -349,7 +353,7 @@ public enum ToolFileArguments {
                 guard let path = value as? String else { throw ToolProviderError("\(parameter.name) must be a workspace file path.") }
                 let relative = try ComputerWorkspaceFiles.relativePath(path, currentDirectory: currentDirectory, workspace: workspace)
                 let (parent, name) = try ComputerWorkspaceFiles.parent(workspace: workspace, path: relative)
-                defer { Darwin.close(parent) }
+                defer { systemClose(parent) }
                 let flags = switch parameter.access {
                 case .read: O_RDONLY | O_NONBLOCK
                 case .write: O_WRONLY | O_CREAT | O_EXCL
@@ -358,7 +362,7 @@ public enum ToolFileArguments {
                 let fd = openat(parent, name, flags | O_NOFOLLOW | O_CLOEXEC, 0o600)
                 var info = stat()
                 guard fd >= 0, fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == (parameter.access == .folder ? S_IFDIR : S_IFREG) else {
-                    if fd >= 0 { Darwin.close(fd) }
+                    if fd >= 0 { systemClose(fd) }
                     let message = switch parameter.access {
                     case .read: "Cannot read \(relative); expected a regular workspace file."
                     case .write: "Cannot create \(relative); existing files are never replaced."
@@ -380,7 +384,7 @@ public enum ToolFileArguments {
     static func discard(_ file: ToolFile, workspace: URL) {
         guard file.access == .write, let (parent, name) = try? ComputerWorkspaceFiles.parent(workspace: workspace, path: file.path) else { return }
         unlinkat(parent, name, 0)
-        Darwin.close(parent)
+        systemClose(parent)
     }
 }
 

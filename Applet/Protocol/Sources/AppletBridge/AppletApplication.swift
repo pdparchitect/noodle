@@ -1,3 +1,5 @@
+// The companion apps run on a Mac.
+#if os(macOS)
 import AppKit
 
 public enum AppletApplication {
@@ -37,3 +39,4 @@ public enum AppletApplication {
         return locate(build: build)?.standardizedFileURL == url.standardizedFileURL
     }
 }
+#endif

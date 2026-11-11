@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Extend this catalogue and the UI renderer together. Effects never execute code.
@@ -123,9 +127,9 @@ extension WorkspaceRepository {
     private func withEffectsLock<Value>(_ id: UUID, operation: () throws -> Value) throws -> Value {
         _ = try loadConversation(id: id)
         let file = conversationDirectory(id: id).appendingPathComponent(".effects.lock")
-        let descriptor = Darwin.open(file.path, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        let descriptor = systemOpen(file.path, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw POSIXError(.EIO) }
-        defer { Darwin.close(descriptor) }
+        defer { systemClose(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.EIO) }
         defer { flock(descriptor, LOCK_UN) }
         return try operation()

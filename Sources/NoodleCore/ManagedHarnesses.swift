@@ -1,6 +1,17 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import ProductIdentity
 
 /// Harnesses Noodle installs for a user who has none of their own. Each version
@@ -156,14 +167,7 @@ public struct ManagedHarnessStore: Sendable {
     }
 
     /// Executable paths of this user's running processes, as the unsandboxed Agent Host sees them.
-    public static func runningExecutables() -> [String] {
-        var pids = [pid_t](repeating: 0, count: Int(proc_listallpids(nil, 0)) + 64)
-        let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
-        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
-        return pids.prefix(max(0, count)).compactMap { pid in
-            proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 ? String(cString: buffer) : nil
-        }
-    }
+    public static func runningExecutables() -> [String] { runningExecutablePaths() }
 
     private func verify(_ provider: HarnessProvider, package: URL, distribution: HarnessDistribution) throws {
         let executable = package.appendingPathComponent(distribution.executablePath)
@@ -192,9 +196,11 @@ public struct ManagedHarnessStore: Sendable {
             } else if values.isRegularFile != true, values.isDirectory != true {
                 throw HarnessSetupError("The downloaded harness contains an unsupported file.")
             }
+            #if canImport(Darwin)
             guard removexattr(entry.path, "com.apple.quarantine", XATTR_NOFOLLOW) == 0 || errno == ENOATTR else {
                 throw HarnessSetupError("Could not release \(entry.lastPathComponent) from quarantine.")
             }
+            #endif
         }
     }
 }
@@ -324,7 +330,7 @@ public struct HarnessDownloader: Sendable {
     public init() {
         fetchData = { try await Self.data($0, distribution: $1) }
         fetchFile = { try await Self.file($0, destination: $1, distribution: $2, byteCount: $3, progress: $4) }
-        availableCapacity = { try? $0.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage }
+        availableCapacity = { try? NoodleCore.availableCapacity(at: $0) }
     }
     init(fetchData: @escaping FetchData, fetchFile: @escaping FetchFile,
          availableCapacity: @escaping @Sendable (URL) -> Int64? = { _ in nil }) {

@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(OSLog)
 import OSLog
+#endif
 import ProductIdentity
 
 /// Diagnostics only: no messages, tool arguments, names, paths, or raw errors.

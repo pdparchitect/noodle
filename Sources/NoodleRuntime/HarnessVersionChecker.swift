@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import NoodleCore
 
 @MainActor public final class HarnessVersionChecker: HarnessVersionChecking {
@@ -55,15 +58,25 @@ import NoodleCore
         defer { session.invalidateAndCancel() }
         var request = URLRequest(url: url)
         request.setValue("Noodle-Harness-Version-Check", forHTTPHeaderField: "User-Agent")
+        #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
+        #else
+        // Linux's URLSession has no byte stream, so the limit holds only once the whole body is in.
+        let (body, response) = try await session.data(for: request)
+        #endif
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
               response.expectedContentLength <= maximumReleaseBytes else { throw HarnessSetupError("Release check unavailable.") }
+        #if canImport(Darwin)
         var data = Data()
         for try await byte in bytes {
             guard data.count < maximumReleaseBytes else { throw HarnessSetupError("Release response too large.") }
             data.append(byte)
         }
         return data
+        #else
+        guard body.count <= maximumReleaseBytes else { throw HarnessSetupError("Release response too large.") }
+        return body
+        #endif
     }
 }
 

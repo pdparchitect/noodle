@@ -30,4 +30,37 @@ final class HarnessSignatureVerificationTests: XCTestCase {
             XCTAssertTrue($0.localizedDescription.contains("macOS error "))
         }
     }
+
+    /// Each harness names its own vendor when a signature does not hold.
+    func testEachTrustRejectsAnotherVendorsSignatureInItsOwnWords() throws {
+        let other = URL(fileURLWithPath: "/usr/bin/true")
+        XCTAssertThrowsError(try ClaudeExecutableTrust.verifySignature(other)) {
+            XCTAssertEqual($0.localizedDescription, "Claude Code’s Anthropic signature could not be verified.")
+        }
+        XCTAssertThrowsError(try CodexExecutableTrust.verifySignature(other, identifier: "codex")) {
+            XCTAssertEqual($0.localizedDescription, "Codex’s OpenAI signature could not be verified.")
+        }
+    }
+
+    /// The bundled Apple harness passes a strict check of the requirement it is given, and nothing else does.
+    func testTheAppleHarnessMustMeetItsRequirement() throws {
+        let application = FileManager.default.temporaryDirectory.appendingPathComponent("apple-harness-\(UUID()).app")
+            .resolvingSymlinksInPath()
+        let helpers = application.appendingPathComponent("Contents/Helpers", isDirectory: true)
+        try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: application) }
+        let agent = helpers.appendingPathComponent("NoodleAppleAgent")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: agent)
+        XCTAssertEqual(try AppleExecutableTrust.executable(at: agent.path, application: application,
+                                                           requirement: "anchor apple and identifier \"com.apple.true\""), agent)
+        XCTAssertThrowsError(try AppleExecutableTrust.executable(at: agent.path, application: application,
+                                                                 requirement: "anchor apple and identifier \"com.pdparchitect.noodle\"")) {
+            XCTAssertEqual($0.localizedDescription, "The bundled Apple harness signature is invalid. Reinstall Noodle.")
+        }
+    }
+
+    func testAnAppleSignedExecutableMeetsAnAppleRequirement() throws {
+        XCTAssertNoThrow(try HarnessSignatureVerification.verify(URL(fileURLWithPath: "/usr/bin/true"),
+            requirement: "anchor apple and identifier \"com.apple.true\"", signatureName: "Apple’s signature"))
+    }
 }

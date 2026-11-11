@@ -40,6 +40,29 @@ final class WorkspaceMailboxTests: XCTestCase {
         XCTAssertEqual(try folder.names(), ["preferences.md"])
     }
 
+    /// A message is claimed by one taker only, and a claim never replaces what is already there.
+    func testOnlyOneClaimTakesAMessage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = try WorkspaceMailbox(workspace: root, path: "")
+        try folder.writeNewData(Data("message".utf8), named: "message.json")
+        let claims = (0..<16).map { "claimed-\($0).json" }
+        let taken = NSLock()
+        nonisolated(unsafe) var winners: [String] = []
+        DispatchQueue.concurrentPerform(iterations: claims.count) { index in
+            if (try? folder.claim("message.json", as: claims[index])) != nil { taken.withLock { winners.append(claims[index]) } }
+        }
+        XCTAssertEqual(winners.count, 1)
+        XCTAssertEqual(try folder.names(), winners)
+        XCTAssertEqual(try folder.read(winners[0], limit: 100), Data("message".utf8))
+
+        try folder.writeNewData(Data("next".utf8), named: "next.json")
+        XCTAssertThrowsError(try folder.claim("next.json", as: winners[0]))
+        XCTAssertEqual(try folder.read(winners[0], limit: 100), Data("message".utf8))
+        XCTAssertEqual(try folder.read("next.json", limit: 100), Data("next".utf8))
+    }
+
     func testPreferencesRefreshPreservesLinksAndLoadingRejectsRedirection() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

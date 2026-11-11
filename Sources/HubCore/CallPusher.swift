@@ -1,7 +1,16 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import HubWire
+#if canImport(os)
 import os
+#endif
 
 /// Where the Hub posts its rings: Noodle Push, or a stand-in in tests.
 public protocol CallPushTransport: Sendable {

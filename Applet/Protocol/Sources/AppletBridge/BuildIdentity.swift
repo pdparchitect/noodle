@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 
 /// Fixed production/development namespaces, shared by the app, Noodle, Noodle Hub and the preview extension.
 public enum AppletBuildIdentity: String, CaseIterable, Sendable {
@@ -30,6 +32,7 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
     }
     public static let processIdentity: Self? = {
         // The code-signing identifier retains the channel; paths and flags cannot select it.
+        #if canImport(Security)
         var code: SecCode?
         var info: CFDictionary?
         var staticCode: SecStaticCode?
@@ -38,6 +41,7 @@ public enum AppletBuildIdentity: String, CaseIterable, Sendable {
            SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess,
            let identifier = (info as? [String: Any])?[kSecCodeInfoIdentifier as String] as? String,
            let value = identify(identifier) { return value }
+        #endif
         return identify(Bundle.main.bundleIdentifier)
     }()
     // Pure format utilities and unsigned unit tests retain production defaults.

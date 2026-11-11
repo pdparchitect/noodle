@@ -1,6 +1,7 @@
 import Foundation
 
 public enum MessageLink {
+    #if canImport(Darwin)
     public static func firstPublicWebURL(in markdown: String) -> URL? {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
@@ -29,6 +30,7 @@ public enum MessageLink {
         }
         return result
     }
+    #endif
 
     public static func publicWebURL(from url: URL, preservingFragment: Bool = false) -> URL? {
         guard let canonical = webURL(from: url, preservingFragment: preservingFragment),

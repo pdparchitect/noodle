@@ -1,3 +1,5 @@
+// Restricted Codex runs in the macOS sandbox, which keeps it from the system's trust store.
+#if canImport(Security)
 import Foundation
 import Security
 
@@ -36,3 +38,4 @@ public enum RestrictedCodexCertificates {
         return certificates.map { SecCertificateCopyData($0) as Data }
     }
 }
+#endif

@@ -4,7 +4,9 @@ import HubWire
 import NoodleCore
 import NoodleRuntime
 import Observation
+#if canImport(os)
 import os
+#endif
 
 /// Where paired devices reach the Hub. Every request is answered for the user whose device
 /// key it arrived with, from that user's plan.

@@ -1,5 +1,12 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A temporary, authenticated loopback server. Probing never creates a session,
 /// talks to a shared background service, or exposes provider credentials to Noodle.

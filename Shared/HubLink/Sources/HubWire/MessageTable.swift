@@ -100,12 +100,7 @@ extension MessageSegment {
     }
 
     /// One line without its emphasis, code and link markup.
-    private static func inlineText(_ line: String) -> String {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                                                              failurePolicy: .returnPartiallyParsedIfPossible)
-        guard let parsed = try? AttributedString(markdown: line, options: options) else { return line }
-        return String(parsed.characters)
-    }
+    private static func inlineText(_ line: String) -> String { InlineMarkdown.plainText(line) }
 }
 
 /// How a message's prose is broken into bubbles; dense replies read easier in smaller pieces.
@@ -215,11 +210,7 @@ public struct MessageTable: Equatable, Sendable {
         }.joined(separator: "\n") + "\n"
     }
 
-    public static func plainText(_ cell: String) -> String {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace, failurePolicy: .returnPartiallyParsedIfPossible)
-        return (try? AttributedString(markdown: cell, options: options)).map { String($0.characters) } ?? cell
-    }
+    public static func plainText(_ cell: String) -> String { InlineMarkdown.plainText(cell) }
 
     static func number(_ text: String) -> Double? {
         let trimmed = text.trimmingCharacters(in: CharacterSet(charactersIn: " $€£%+×x"))

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import ProductIdentity
 
 // A provider-neutral request and event stream. The Apple harness converts its
@@ -513,7 +516,16 @@ public struct URLSessionRemoteTransport: RemoteTransport {
     public init(session: URLSession = URLSession(configuration: .ephemeral)) { self.session = session }
 
     public func send(_ request: URLRequest) async throws -> RemoteHTTPResponse {
+        #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
+        #else
+        // Linux's URLSession has no byte stream, so the whole body arrives before its lines.
+        let (body, response) = try await session.data(for: request)
+        let bytes = AsyncStream<UInt8> { continuation in
+            body.forEach { continuation.yield($0) }
+            continuation.finish()
+        }
+        #endif
         guard let http = response as? HTTPURLResponse else { throw RemoteModelError.invalidStream("not an HTTP response") }
         let headers = http.allHeaderFields.reduce(into: [String: String]()) { result, field in
             if let key = field.key as? String, let value = field.value as? String { result[key] = value }

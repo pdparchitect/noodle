@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import NoodleCore
 
 /// Retains the HTTP status across URLSession without exposing response contents.

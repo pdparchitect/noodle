@@ -1,7 +1,13 @@
 import Foundation
+#if canImport(ImageIO)
 import ImageIO
+#endif
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 /// The built-in gradients in picker order, a row of ten each for pastel, bright, deep and neutral.
 /// The raw value is what gets stored and sent to the Hub; a name a build no longer knows loads as the default.
@@ -14,7 +20,9 @@ public enum ConversationBackgroundPreset: String, Codable, CaseIterable, Sendabl
     public struct Stop: Hashable, Sendable {
         public let red, green, blue: Double
         init(_ red: Double, _ green: Double, _ blue: Double) { self.red = red; self.green = green; self.blue = blue }
+        #if canImport(SwiftUI)
         public var color: Color { Color(red: red, green: green, blue: blue) }
+        #endif
     }
 
     public var name: String { rawValue.capitalized }
@@ -66,6 +74,7 @@ public enum ConversationBackgroundPreset: String, Codable, CaseIterable, Sendabl
     }
 }
 
+#if canImport(SwiftUI)
 /// A preset as the Mac and iPhone draw it: a diagonal gradient with a soft glow of its middle colour.
 public struct PresetGradient: View {
     let preset: ConversationBackgroundPreset
@@ -83,6 +92,11 @@ public struct PresetGradient: View {
             }
         }
     }
+}
+#endif
+
+public enum BackgroundMediaKind: String, Codable, Sendable {
+    case image, video, dynamicImage
 }
 
 /// Local appearance only: kept out of message delivery and the agent workspace.
@@ -106,6 +120,7 @@ public struct ConversationBackground: Codable, Equatable, Sendable {
         mediaKind = try container.decodeIfPresent(BackgroundMediaKind.self, forKey: .mediaKind)
     }
 
+    #if canImport(ImageIO)
     public static func canUseImage(at url: URL) -> Bool {
         guard let source = CGImageSourceCreateWithURL(url as CFURL,
             [kCGImageSourceShouldCache: false] as CFDictionary) else { return false }
@@ -118,6 +133,7 @@ public struct ConversationBackground: Codable, Equatable, Sendable {
               let type = UTType(identifier), type.conforms(to: .image) else { return false }
         return CGImageSourceGetCount(source) > 0
     }
+    #endif
 }
 
 public enum ConversationBackgroundError: LocalizedError {

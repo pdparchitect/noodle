@@ -1,3 +1,4 @@
+#if canImport(ImageIO)
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -118,3 +119,4 @@ public struct SystemWallpaper: Equatable, Sendable {
         return CGImageSourceGetCount(source) > 0
     }
 }
+#endif

@@ -1,4 +1,6 @@
+#if canImport(Darwin)
 import Darwin
+#endif
 import Foundation
 
 public struct AppletError: Error, LocalizedError, Sendable {
@@ -37,6 +39,7 @@ public enum NoodletPath {
         return current
     }
 
+    #if canImport(Darwin)
     /// Opens `relative` inside `root` to read it. `root` is the folder as it was when someone
     /// checked whose it is, already resolved: one swapped for a link since, or moved under one,
     /// opens nothing, and no link below it is followed either. Only a regular file opens.
@@ -68,4 +71,5 @@ public enum NoodletPath {
         }
         return FileHandle(fileDescriptor: file, closeOnDealloc: true)
     }
+    #endif
 }

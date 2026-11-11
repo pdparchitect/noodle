@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// One live view's connection between a companion and whoever relays it, over a local socket:
@@ -29,8 +33,10 @@ public final class SurfaceSocket: @unchecked Sendable {
         var forever = timeval(), stuck = timeval(tv_sec: 5, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &forever, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &stuck, socklen_t(MemoryLayout<timeval>.size))
+        #if canImport(Darwin)
         var enabled: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size))
+        #endif
         _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
         if held { writer.suspend() }
         let (frames, continuation) = AsyncStream.makeStream(of: Data.self)
@@ -39,7 +45,7 @@ public final class SurfaceSocket: @unchecked Sendable {
             while let frame = readFrame() { continuation.yield(frame) }
             continuation.finish()
             close()
-            writer.async { [self] in Darwin.close(fd) }
+            writer.async { [self] in closeDescriptor(fd) }
         }
     }
 
@@ -81,7 +87,7 @@ public final class SurfaceSocket: @unchecked Sendable {
         let resume = lock.withLock { () -> Bool in
             guard !closed else { return false }
             closed = true
-            shutdown(fd, SHUT_RDWR)
+            shutdown(fd, Int32(SHUT_RDWR))
             defer { held = false }
             return held
         }
@@ -95,7 +101,7 @@ public final class SurfaceSocket: @unchecked Sendable {
         return packet.withUnsafeBytes { buffer in
             var offset = 0
             while offset < buffer.count {
-                let written = Darwin.write(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+                let written = sendBytes(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
                 if written < 0 && errno == EINTR { continue }
                 guard written > 0 else { return false }
                 offset += written
@@ -116,7 +122,7 @@ public final class SurfaceSocket: @unchecked Sendable {
         let complete = data.withUnsafeMutableBytes { buffer -> Bool in
             var offset = 0
             while offset < count {
-                let received = Darwin.read(fd, buffer.baseAddress!.advanced(by: offset), count - offset)
+                let received = receiveBytes(fd, buffer.baseAddress!.advanced(by: offset), count - offset)
                 if received < 0 && errno == EINTR { continue }
                 guard received > 0 else { return false }
                 offset += received
@@ -125,4 +131,18 @@ public final class SurfaceSocket: @unchecked Sendable {
         }
         return complete ? data : nil
     }
+}
+
+private func closeDescriptor(_ fd: Int32) { _ = close(fd) }
+
+private func receiveBytes(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int { read(fd, buffer, count) }
+
+/// Writing to a viewer that has gone fails instead of raising SIGPIPE: Darwin's socket says so
+/// once, Linux on every send.
+private func sendBytes(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) -> Int {
+    #if canImport(Darwin)
+    write(fd, buffer, count)
+    #else
+    send(fd, buffer, count, Int32(MSG_NOSIGNAL))
+    #endif
 }

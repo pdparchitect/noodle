@@ -1,5 +1,10 @@
 import Foundation
+// Apple platforms get live views as well; elsewhere only what crosses the wire.
+#if canImport(Surface)
 @_exported import Surface
+#else
+@_exported import SurfaceWire
+#endif
 
 public struct ComputerBridgeError: LocalizedError, Sendable {
     public let message: String
