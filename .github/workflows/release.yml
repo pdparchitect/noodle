@@ -53,6 +53,7 @@ jobs:
       hub: ${{ steps.versions.outputs.hub }}
       mobile: ${{ steps.versions.outputs.mobile }}
       terminal: ${{ steps.versions.outputs.terminal }}
+      server: ${{ steps.versions.outputs.server }}
       images: ${{ steps.versions.outputs.images }}
       any: ${{ steps.versions.outputs.any }}
       products: ${{ steps.versions.outputs.products }}
@@ -468,8 +469,13 @@ jobs:
     uses: ./.github/workflows/terminal-release.yml
     secrets: inherit
 
+  prepare-server:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.server == 'true'
+    uses: ./.github/workflows/server-release.yml
+
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -486,6 +492,7 @@ jobs:
       (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.test-mobile.result == 'success') &&
       (needs.versions.outputs.terminal != 'true' || needs.test-terminal.result == 'success') &&
+      (needs.versions.outputs.server != 'true' || needs.test-linux.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&
       (needs.versions.outputs.computer != 'true' || needs.prepare-computer.result == 'success') &&
@@ -494,6 +501,7 @@ jobs:
       (needs.versions.outputs.hub != 'true' || needs.prepare-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.prepare-mobile.result == 'success') &&
       (needs.versions.outputs.terminal != 'true' || needs.prepare-terminal.result == 'success') &&
+      (needs.versions.outputs.server != 'true' || needs.prepare-server.result == 'success') &&
       (needs.versions.outputs.images != 'true' || needs.prepare-images.result == 'success')
     runs-on: ubuntu-latest
     permissions:
@@ -679,6 +687,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: zsh scripts/publish-terminal-release.sh "$TERMINAL_VERSION" "dist/terminal-$TERMINAL_VERSION/release-notes.md"
 
+  publish-server:
+    needs: [versions, tag]
+    if: >-
+      always() && !cancelled() && needs.tag.result == 'success' &&
+      needs.versions.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Read Server version
+        run: echo "SERVER_VERSION=$(cat Server/VERSION)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: server-release-*
+          path: dist
+          merge-multiple: true
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+      - name: Publish the verified Server archives and download channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zsh scripts/publish-server-release.sh "$SERVER_VERSION" "dist/server-$SERVER_VERSION/release-notes.md"
+
   # TestFlight is the phone app's release channel; automatic distribution hands each build to testers.
   publish-mobile:
     needs: [versions, tag]
@@ -752,7 +786,7 @@ jobs:
           gh release edit "$tag" --draft=false --latest
 
   complete:
-    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-mobile, publish-terminal, publish-noodle]
+    needs: [versions, tag, publish-images, publish-computer, publish-applet, publish-browser, publish-hub, publish-mobile, publish-terminal, publish-server, publish-noodle]
     if: always() && github.event_name != 'pull_request' && needs.versions.outputs.any == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -766,6 +800,7 @@ jobs:
           HUB_RESULT: ${{ needs.publish-hub.result }}
           MOBILE_RESULT: ${{ needs.publish-mobile.result }}
           TERMINAL_RESULT: ${{ needs.publish-terminal.result }}
+          SERVER_RESULT: ${{ needs.publish-server.result }}
           NOODLE_RESULT: ${{ needs.publish-noodle.result }}
         run: |
           python3 - <<'PY'

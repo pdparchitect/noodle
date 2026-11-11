@@ -1,0 +1,45 @@
+# Noodle Server's configuration. After changing it, run `noodled check`, then restart the service.
+
+# What devices call this server.
+name: Home Server
+
+# Where the server keeps its data. Only the account noodled runs as may read it.
+# data: /var/lib/noodled
+
+# The port devices connect to.
+# port: 38415
+
+# How devices away from this network reach the server, such as a domain name, with a port if it is
+# not the one above. Devices on the same network find it without this.
+# address: noodle.example.com
+
+# The harnesses you installed, by where their program is. A harness can also have profiles: logins
+# of their own, such as for another account.
+harnesses:
+  claude-code: /usr/local/bin/claude
+  codex:
+    path: /usr/local/bin/codex
+    profiles: [Work]
+
+# What the people on each plan may use. A plan lends a harness's own login, such as codex, or one of
+# its profiles, such as codex/Work. Leave out models to allow any, and tokens for no limit.
+plans:
+  Family:
+    harnesses: [claude-code, codex]
+    tokens:
+      limit: 2000000
+      per: week
+  Guests:
+    harnesses: [codex/Work]
+    models:
+      codex: [gpt-5-codex]
+
+# The people the server runs bots for, by name. Someone left out keeps their data but can no longer
+# use the server. An admin manages the other users from Noodle.
+users:
+  Ada:
+    plan: Family
+    admin: true
+    pair-devices: true
+  Bob:
+    plan: Guests

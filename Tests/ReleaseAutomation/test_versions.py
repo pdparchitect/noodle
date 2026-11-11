@@ -167,6 +167,12 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(result.stdout,
             '[Download ZIP for Apple silicon](https://github.com/pdparchitect/noodle/releases/download/'
             'terminal-v1.2.3/Noodle-Terminal-arm64.zip)\n\n- A release change.\n')
+        # The server is for Linux, one archive for each processor.
+        self.write_version('server', '1.2.3', body='- A release change.')
+        result = run('python3', 'scripts/release-versions.py', 'notes', 'server', cwd=self.root)
+        base = 'https://github.com/pdparchitect/noodle/releases/download/server-v1.2.3/Noodle-Server-linux'
+        self.assertEqual(result.stdout,
+            f'Download for Linux on [arm64]({base}-arm64.tar.gz) · [x86_64]({base}-x86_64.tar.gz)\n\n- A release change.\n')
         # Container images and the phone app have no macOS app installer.
         for product in ['images', 'mobile']:
             with self.subTest(product=product):

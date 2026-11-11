@@ -158,4 +158,13 @@ final class ServerConfigurationTests: XCTestCase {
             XCTAssertEqual(error.localizedDescription, "harnesses.codex.pth: noodled has no such setting.")
         }
     }
+
+    /// The example that ships beside noodled reads, and has no problem but the harnesses it names.
+    func testTheShippedExampleIsSound() throws {
+        let example = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("noodled.yaml")
+        let configuration = try ServerConfiguration(contentsOf: example)
+        XCTAssertEqual(configuration.problems(isProgram: { _ in true }), [])
+        XCTAssertEqual(configuration.users.map(\.name), ["Ada", "Bob"])
+    }
 }

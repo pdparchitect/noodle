@@ -1,0 +1,22 @@
+[Unit]
+Description=Noodle Server
+Documentation=https://github.com/pdparchitect/noodle/blob/main/Server/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=noodled
+Group=noodled
+ExecStart=/usr/local/bin/noodled run --config /etc/noodled/noodled.yaml
+Restart=on-failure
+RestartSec=5
+# The data folder, kept for noodled alone.
+StateDirectory=noodled
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,60 @@
+name: Prepare Noodle Server release
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate public release and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < Server/VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Eq "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" Server/CHANGELOG.md
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" == false ]] || {
+            echo 'Public downloads require a public repository.' >&2; exit 1
+          }
+          mkdir -p "dist/server-$version"
+          python3 scripts/release-versions.py notes server > "dist/server-$version/release-notes.md"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: server-release-notes
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    # The toolchain image Noodle Push builds with.
+    container: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install SQLite's headers
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev
+
+      - name: Build and pack
+        run: bash scripts/package-server-release.sh
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: server-release-${{ matrix.runner }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
