@@ -6,6 +6,8 @@ public enum ClaudeLaunch {
     /// labels a `-p` session `sdk-cli`, which currently uses a Claude plan's limits about
     /// twice as fast for the same tokens (anthropics/claude-code#97074, tracked in
     /// pdparchitect/noodle#233). Keep it until Anthropic says how labels are metered.
+    // TODO(#233): Review anthropics/claude-code#97074. Drop this once Claude Code meters
+    // `-p` sessions like interactive ones, or revert it if Anthropic says relabelling is not allowed.
     public static let environment = ["CLAUDE_CODE_ENTRYPOINT": "noodle"]
 
     public static func arguments(sessionID: UUID?, resumeSession: Bool, model: String?,
