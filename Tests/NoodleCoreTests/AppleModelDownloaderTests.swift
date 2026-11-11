@@ -128,8 +128,17 @@ final class AppleModelDownloaderTests: XCTestCase {
         XCTAssertEqual(recommended(32), "Qwen3.8 27B")
         XCTAssertEqual(recommended(48), "Qwen3.8 27B")
         XCTAssertEqual(recommended(64), "Qwen3 Coder Next")
-        XCTAssertEqual(recommended(128), "Qwen3 Coder Next")
+        XCTAssertEqual(recommended(96), "gpt-oss 120B")
+        XCTAssertEqual(recommended(128), "gpt-oss 120B")
+        XCTAssertEqual(recommended(192), "Qwen3 235B Instruct")
+        XCTAssertEqual(recommended(256), "Qwen3 235B Instruct")
+        XCTAssertEqual(recommended(512), "Qwen3.5 397B")
         XCTAssertEqual(recommended(4), "Qwen3 1.7B")
+        let offered = { (gigabytes: UInt64) in AppleDownloadableModel.offered(forPhysicalMemory: gigabytes << 30).map(\.name) }
+        XCTAssertEqual(offered(4), ["Qwen3 1.7B"])
+        XCTAssertEqual(offered(16).last, "Qwen3.5 9B")
+        XCTAssertFalse(offered(64).contains("gpt-oss 120B"))
+        XCTAssertEqual(offered(512), AppleDownloadableModel.available.map(\.name))
         for model in AppleDownloadableModel.available {
             XCTAssertNotNil(model.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))
             XCTAssertTrue(model.repository.hasPrefix("mlx-community/"))

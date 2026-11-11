@@ -38,7 +38,7 @@ public struct AppleLocalModelsView: View {
     private static let systemName = "Apple On-Device"
     private static let systemSummary = "Built into Apple Intelligence. Fast, but weak at tools and longer tasks."
     private var available: [AppleDownloadableModel] {
-        AppleDownloadableModel.available.filter { downloadable in
+        AppleDownloadableModel.offered().filter { downloadable in
             !models.contains { $0.sourceRepository == downloadable.repository }
         }
     }

@@ -218,8 +218,10 @@ only.
 
 The Available list offers, smallest first: Qwen3 1.7B, Qwen3 4B Instruct (2507),
 Qwen3 8B, Gemma 4 E4B, Qwen3.5 9B, Qwen3 14B, gpt-oss 20B, Qwen3.8 27B,
-Qwen3.6 35B-A3B and Qwen3 Coder Next. Each says what it suits and how much memory
-it needs; the largest want a Mac with 32 GB or 64 GB. Gemma 4 is offered under
+Qwen3.6 35B-A3B, Qwen3 Coder Next, gpt-oss 120B, Qwen3 235B Instruct, Qwen3.5 397B
+and Qwen3 Coder 480B. Each says what it suits and how much memory it needs; the
+largest want a Mac Studio with 192 GB or 512 GB. The list shows only the models
+your Mac has the memory to run, and suggests the most capable of them. Gemma 4 is offered under
 Google's Gemma terms, linked from **Details**.
 Downloaded models move to **Installed**.
 

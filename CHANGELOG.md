@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Organisations can manage Noodle with a configuration profile from Jamf Pro, Kandji, Intune, Mosyle or another MDM: which harnesses people can use, whether bots can run without the sandbox, which tool connections are allowed, whether Noodle Browser, Noodle Computer and Noodle Hubs can be used, and how Noodle updates. Changes apply while Noodle runs, and removing the profile brings back your own settings. Settings the profile sets say Managed by your organisation, and Settings › General lists them. This is Noodle Enterprise, under the PolyForm Small Business License 1.0.0 (free for individuals and small businesses), with a Jamf Pro schema, a sample profile and a deployment guide in the `Enterprise/` folder; see ENTERPRISE.md. Without a profile nothing changes.
+- Larger local models for Macs with lots of memory: gpt-oss 120B (96 GB), Qwen3 235B Instruct (192 GB), and Qwen3.5 397B and Qwen3 Coder 480B (512 GB). Local Models lists only the models your Mac has the memory to run and suggests the most capable of them, so a Mac Studio with 512 GB now gets Qwen3.5 397B.
 
 ### Changed
 
