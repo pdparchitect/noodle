@@ -93,6 +93,44 @@ jobs:
       - name: Verify app icons match their symbols
         run: zsh scripts/verify-icons.sh
 
+  test-shared:
+    needs: [versions]
+    if: contains(fromJSON(needs.versions.outputs.suites), 'shared')
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - name: Test shared wallpaper imports and preview drops
+        run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
+      - name: Test settings window behavior
+        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
+      - name: Test launch check matching
+        run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
+      - name: Test the Hub link
+        run: swift test --disable-sandbox --package-path Shared/HubLink --scratch-path .build/hub-link
+      - name: Test live views
+        run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
+      - name: Test the wordmark
+        run: swift test --disable-sandbox --package-path Shared/Brand --scratch-path .build/brand
+      - name: Test external tools access
+        run: swift test --disable-sandbox --package-path Shared/ExternalTools --scratch-path .build/external-tools
+      - name: Test reading patches
+        run: swift test --disable-sandbox --package-path Shared/Patch --scratch-path .build/patch
+      - name: Test Noodle Push
+        run: swift test --disable-sandbox --package-path Push --scratch-path .build/push
+
+  test-bridge:
+    needs: [versions]
+    if: contains(fromJSON(needs.versions.outputs.suites), 'bridge')
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test the shared protocol
+        run: swift test --disable-sandbox --package-path Computer/Bridge
+
   # Each test job runs only when the versions job chose its suite (scripts/ci-scope.py): when the change can
   # affect it, except on a push that merges a pull request which already passed it. A release runs every
   # suite. A skipped suite passes "CI passed" but never the tag gate.
@@ -155,34 +193,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  test-shared:
-    needs: [versions]
-    if: contains(fromJSON(needs.versions.outputs.suites), 'shared')
-    runs-on: macos-26
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - name: Test shared wallpaper imports and preview drops
-        run: swift test --disable-sandbox --package-path Shared/Wallpaper --scratch-path .build/wallpaper
-      - name: Test settings window behavior
-        run: swift test --disable-sandbox --package-path Shared/SettingsUI --scratch-path .build/settings-ui
-      - name: Test launch check matching
-        run: swift test --disable-sandbox --package-path Shared/LaunchChecks --scratch-path .build/launch-checks
-      - name: Test the Hub link
-        run: swift test --disable-sandbox --package-path Shared/HubLink --scratch-path .build/hub-link
-      - name: Test live views
-        run: swift test --disable-sandbox --package-path Shared/Surface --scratch-path .build/surface
-      - name: Test the wordmark
-        run: swift test --disable-sandbox --package-path Shared/Brand --scratch-path .build/brand
-      - name: Test external tools access
-        run: swift test --disable-sandbox --package-path Shared/ExternalTools --scratch-path .build/external-tools
-      - name: Test reading patches
-        run: swift test --disable-sandbox --package-path Shared/Patch --scratch-path .build/patch
-      - name: Test Noodle Push
-        run: swift test --disable-sandbox --package-path Push --scratch-path .build/push
-
   test-noodle-macos27:
     needs: [versions]
     if: contains(fromJSON(needs.versions.outputs.suites), 'noodle-macos27')
@@ -212,23 +222,6 @@ jobs:
           export NOODLE_APPLE_TEST_HELPER="$bin_path/NoodleAppleAgent"
           swift test --disable-sandbox --filter 'AppleLocalModelsTests|AppleModelDownloaderTests|NoodleAppleRuntimeTests'
           print 'macOS 27 harness build, Metal shaders, and regression tests passed. Live inference remains an explicit local opt-in.' >> "$GITHUB_STEP_SUMMARY"
-
-  test-computer:
-    needs: [versions]
-    if: contains(fromJSON(needs.versions.outputs.suites), 'computer')
-    # Windows computers use macOS 27's custom Virtio devices, which only Xcode 27's SDK has.
-    runs-on: xcode-27
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - name: Prepare Metal tools
-        run: xcodebuild -downloadComponent MetalToolchain
-      - name: Test Computer
-        run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
-      - name: Test Local Mac account boundaries and update recovery
-        run: swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 
   test-applet:
     needs: [versions]
@@ -306,15 +299,22 @@ jobs:
         timeout-minutes: 5
         run: zsh Applet/scripts/test-rendering.sh ".build/Noodle Applet.app"
 
-  test-bridge:
+  test-computer:
     needs: [versions]
-    if: contains(fromJSON(needs.versions.outputs.suites), 'bridge')
-    runs-on: macos-26
-    timeout-minutes: 10
+    if: contains(fromJSON(needs.versions.outputs.suites), 'computer')
+    # Windows computers use macOS 27's custom Virtio devices, which only Xcode 27's SDK has.
+    runs-on: xcode-27
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - name: Test the shared protocol
-        run: swift test --disable-sandbox --package-path Computer/Bridge
+        with:
+          lfs: true
+      - name: Prepare Metal tools
+        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Test Computer
+        run: swift test --disable-sandbox --package-path Computer --scratch-path .build/computer
+      - name: Test Local Mac account boundaries and update recovery
+        run: swift test --disable-sandbox --package-path Computer/LocalMac --scratch-path .build/localmac
 
   test-browser:
     needs: [versions]
@@ -463,16 +463,16 @@ jobs:
     uses: ./.github/workflows/computer-release.yml
     secrets: inherit
 
+  prepare-images:
+    needs: [versions, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.images == 'true'
+    uses: ./.github/workflows/computer-images.yml
+
   prepare-applet:
     needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.applet == 'true'
     uses: ./.github/workflows/applet-release.yml
     secrets: inherit
-
-  prepare-images:
-    needs: [versions, checks]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.images == 'true'
-    uses: ./.github/workflows/computer-images.yml
 
   prepare-browser:
     needs: [versions, checks]
