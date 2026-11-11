@@ -36,7 +36,7 @@
     .row-title { margin-top: 56px; text-align: center; font-family: var(--display); font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; }
     .row-title + .dl-grid { margin-top: 24px; }
     .apps { grid-template-columns: repeat(4, 1fr); }
-    .apps.three { grid-template-columns: repeat(3, 1fr); max-width: 810px; margin-inline: auto; }
+    .apps.two { grid-template-columns: repeat(2, 1fr); max-width: 540px; margin-inline: auto; }
     .feature.alt .dl { background: var(--bg); }
     .feature.alt .dl:hover { background: var(--raised); }
     /* Setup, in numbered steps. */
@@ -48,11 +48,11 @@
     .office-privacy .priv-grid p { max-width: 32ch; }
     @media (max-width: 1068px) { .steps { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 900px) {
-      .apps, .apps.three { grid-template-columns: 1fr 1fr; }
+      .apps { grid-template-columns: 1fr 1fr; }
       .steps { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 734px) {
-      .apps, .apps.three, .steps { grid-template-columns: 1fr; }
+      .apps, .apps.two, .steps { grid-template-columns: 1fr; }
       .unlock { row-gap: 28px; }
       .day li { grid-template-columns: 1fr; gap: 6px; }
     }
@@ -156,10 +156,9 @@
           <a class="dl" href="../applet/"><img src="../assets/symbol-applet.svg" alt="" /><b>Noodle Applet</b><span>Runs the tools and small apps the agents build, and keeps their data.</span><em>Learn more</em></a>
         </div>
         <h3 class="row-title">On everyone's devices</h3>
-        <div class="dl-grid apps three">
+        <div class="dl-grid apps two">
           <a class="dl" href="../"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle</b><span>On each person's Mac. Make agents, chat, and open the computers and browsers they share.</span><em>Learn more</em></a>
           <a class="dl" href="https://testflight.apple.com/join/wYKkNSP9"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Mobile</b><span>The office's agents on iPhone and iPad.</span><em>Join the beta</em></a>
-          <a class="dl" href="https://github.com/pdparchitect/noodle/blob/main/Terminal/README.md"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Terminal</b><span>Chat with the office's agents from Terminal on a Mac.</span><em>Read the guide</em></a>
         </div>
       </div>
     </section>
@@ -179,7 +178,7 @@
         <div><h3>The Mac</h3><p>Any Mac with Apple silicon and macOS 26 or later, such as a Mac mini or a Mac Studio. Keep it plugged in, online and awake.</p></div>
         <div><h3>The AI</h3><p>Accounts for the harnesses you want, such as Codex and Claude Code, or local models on the Mac itself. More memory leaves room for larger models.</p></div>
         <div><h3>The network</h3><p>At the office, devices reach the Hub on your network. Away from it, the Hub asks your router to open its port, or you add an address of your own.</p></div>
-        <div><h3>Everyone's devices</h3><p>Noodle on a Mac with macOS 26, Noodle Mobile on an iPhone or iPad with iOS 26, or Noodle Terminal.</p></div>
+        <div><h3>Everyone's devices</h3><p>Noodle on a Mac with macOS 26, or Noodle Mobile on an iPhone or iPad with iOS 26.</p></div>
       </div>
     </section>
     <section class="feature alt" id="setup">
@@ -245,7 +244,6 @@
         <a class="dl" href="https://testflight.apple.com/join/wYKkNSP9"><img src="../assets/symbol-noodle-card.svg" alt="" /><b>Noodle Mobile</b><span>For iPhone and iPad.</span><em>Join the beta</em></a>
       </div>
       <div class="wrap suite-row">
-        <p><a class="link" href="https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip">Download Noodle Terminal <span aria-hidden="true">›</span></a></p>
         <p>Need a hand setting up? <a class="link" href="mailto:pdp@gnucitizen.org?subject=Noodle%20AI%20office">Write to us <span aria-hidden="true">›</span></a></p>
       </div>
     </section>
