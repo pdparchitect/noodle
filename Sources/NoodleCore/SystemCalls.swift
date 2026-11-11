@@ -4,6 +4,9 @@ import Darwin
 import Glibc
 #endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // The few system calls whose spelling differs between Darwin and Linux, for code that would
 // otherwise name `Darwin.` to reach past a method of the same name.
@@ -121,4 +124,28 @@ package func availableCapacity(at url: URL) throws -> Int64? {
     #else
     try url.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity.map(Int64.init)
     #endif
+}
+
+package extension URLSession {
+    /// The body of `request`, read only up to `limit` bytes; past it, `tooLarge` is thrown.
+    /// `accept` sees the response first and throws to refuse it before any of the body is read.
+    /// Linux's URLSession has no byte stream, so there the limit holds once the whole body is in.
+    func data(for request: URLRequest, limit: Int, tooLarge: @autoclosure () -> Error,
+              accept: (URLResponse) throws -> Void = { _ in }) async throws -> (Data, URLResponse) {
+        #if canImport(Darwin)
+        let (bytes, response) = try await self.bytes(for: request)
+        try accept(response)
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < limit else { throw tooLarge() }
+            data.append(byte)
+        }
+        return (data, response)
+        #else
+        let (data, response) = try await self.data(for: request)
+        try accept(response)
+        guard data.count <= limit else { throw tooLarge() }
+        return (data, response)
+        #endif
+    }
 }

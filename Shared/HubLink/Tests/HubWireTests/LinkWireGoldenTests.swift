@@ -1,5 +1,5 @@
 import Foundation
-@testable import HubLink
+@testable import HubWire
 import XCTest
 
 /// Every message the link carries, held to the JSON recorded in Fixtures/wire-golden.json, so moving or

@@ -22,8 +22,16 @@ let package = Package(
         .target(name: "HubLink", dependencies: ["HubWire", .product(name: "X509", package: "swift-certificates"),
                                                 .product(name: "Surface", package: "Surface"),
                                                 .product(name: "PushWire", package: "Wire")]),
-        .testTarget(name: "HubLinkTests", dependencies: ["HubLink", "HubWire", .product(name: "X509", package: "swift-certificates")],
+        .testTarget(name: "HubLinkTests", dependencies: ["HubLink", "HubWire", .product(name: "X509", package: "swift-certificates")]),
+        // The wire alone, which also runs where HubLink cannot.
+        .testTarget(name: "HubWireTests", dependencies: ["HubWire", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))],
                     exclude: ["Fixtures"]),
     ],
     swiftLanguageModes: [.v5]
 )
+
+#if os(Linux)
+// Only the wire builds on Linux: HubLink's transport is Apple's Network framework.
+package.targets.removeAll { !["HubWire", "HubWireTests"].contains($0.name) }
+package.products.removeAll { $0.name != "HubWire" }
+#endif

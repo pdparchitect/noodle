@@ -57,7 +57,7 @@ class WorkflowTests(unittest.TestCase):
             'needs.versions.outputs.any': 'true', 'needs.checks.result': 'success',
             'needs.workflow-lint.result': 'success',
             'needs.test-noodle-macos27.result': 'success',
-            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'applet-rendering', 'browser', 'hub', 'mobile', 'bridge', 'terminal']},
+            **{f'needs.test-{p}.result': 'success' for p in ['noodle', 'shared', 'computer', 'applet', 'applet-rendering', 'browser', 'hub', 'mobile', 'bridge', 'terminal', 'linux']},
             **{f'needs.versions.outputs.{p}': 'true' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images']},
             **{f'needs.prepare-{p}.result': 'success' for p in ['noodle', 'computer', 'applet', 'browser', 'hub', 'mobile', 'terminal', 'images']},
         }
@@ -381,7 +381,7 @@ class WorkflowTests(unittest.TestCase):
             child = workflow(name)
             self.assertNotIn('push', child.get('on', child.get('true')))
         self.assertEqual(self.jobs['tag']['needs'], [
-            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-applet-rendering', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge', 'test-terminal',
+            'versions', 'workflow-lint', 'checks', 'test-noodle', 'test-shared', 'test-noodle-macos27', 'test-computer', 'test-applet', 'test-applet-rendering', 'test-browser', 'test-hub', 'test-mobile', 'test-bridge', 'test-terminal', 'test-linux',
             'prepare-noodle', 'prepare-computer', 'prepare-applet', 'prepare-browser', 'prepare-hub', 'prepare-mobile', 'prepare-terminal', 'prepare-images'])
 
     def test_documentation_only_changes_skip_app_ci_but_release_inputs_do_not(self):
@@ -805,7 +805,7 @@ class PathScopeTests(unittest.TestCase):
             self.assertEqual(triggers[event]['paths'], ['**'] + ['!' + pattern for pattern in self.scope.IGNORED])
 
     def test_changes_run_every_suite_that_depends_on_them(self):
-        root = ['checks', 'noodle', 'noodle-macos27', 'hub']
+        root = ['checks', 'noodle', 'noodle-macos27', 'hub', 'linux']
         applet = ['applet', 'applet-rendering']
         cases = [
             (['Mobile/Sources/NoodleMobile/HubChats.swift'], ['checks', 'mobile']),
@@ -828,17 +828,17 @@ class PathScopeTests(unittest.TestCase):
             (['Enterprise/Sources/NoodleEnterprise/ManagedPolicy.swift', 'Enterprise/Profiles/Noodle.mobileconfig'], root),
             (['Package.swift', 'Package.resolved', 'VERSION'], root),
             # Mobile bundles the voice previews from the root's Support folder.
-            (['Support/VoicePreviews/ava.m4a'], root + ['mobile']),
+            (['Support/VoicePreviews/ava.m4a'], ['checks', 'noodle', 'noodle-macos27', 'hub', 'mobile', 'linux']),
             (['Shared/ExternalTools/Sources/NoodleExternalTools/Access.swift'], ['checks', 'shared', 'computer', 'browser']),
-            (['Shared/HubLink/Sources/HubLink/Pairing.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'terminal']),
+            (['Shared/HubLink/Sources/HubLink/Pairing.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'terminal', 'linux']),
             (['Terminal/Sources/NoodleTerminal/App.swift', 'Terminal/Package.swift'], ['checks', 'terminal']),
-            (['Shared/Patch/Sources/NoodlePatch/Patch.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile']),
+            (['Shared/Patch/Sources/NoodlePatch/Patch.swift'], ['checks', 'noodle', 'shared', 'noodle-macos27', 'hub', 'mobile', 'linux']),
             (['Computer/Bridge/Sources/ComputerBridge/Bridge.swift'],
-             ['checks', 'noodle', 'noodle-macos27', 'computer', 'bridge', 'hub']),
+             ['checks', 'noodle', 'noodle-macos27', 'computer', 'bridge', 'hub', 'linux']),
             (['Applet/Protocol/Sources/AppletBridge/Request.swift'],
-             ['checks', 'noodle', 'noodle-macos27', *applet, 'hub', 'mobile']),
+             ['checks', 'noodle', 'noodle-macos27', *applet, 'hub', 'mobile', 'linux']),
             (['Browser/BrowserProtocol/Sources/BrowserBridge/Bridge.swift'],
-             ['checks', 'noodle', 'noodle-macos27', 'browser', 'hub']),
+             ['checks', 'noodle', 'noodle-macos27', 'browser', 'hub', 'linux']),
             (['Shared/SettingsUI/Sources/NoodleSettingsUI/Window.swift'],
              [suite for suite in self.everything if suite not in ['bridge', 'mobile', 'terminal']]),
             # Every protocol is built on the live views.
@@ -886,7 +886,7 @@ class PathScopeHistoryTests(ScopeHistoryTests):
         self.assertEqual(self.pull_request_run('Mobile/Sources/Chat.swift', 'Browser/Sources/Tabs.swift', release='false'),
                          ['checks', 'browser', 'mobile'])
         self.assertEqual(self.pull_request_run('Sources/Core.swift', release='false'),
-                         ['checks', 'noodle', 'noodle-macos27', 'hub'])
+                         ['checks', 'noodle', 'noodle-macos27', 'hub', 'linux'])
         self.assertEqual(self.pull_request_run('Browser/Sources/Tabs.swift', release='true'), self.scope.EVERYTHING)
         # Release pull requests run nothing; a version change alongside code runs that code's suites.
         self.assertEqual(self.pull_request_run('VERSION', 'Mobile/VERSION', 'Mobile/CHANGELOG.md'), [])

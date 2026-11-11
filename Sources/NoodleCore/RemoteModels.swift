@@ -507,8 +507,8 @@ public struct RemoteModelKeychain: RemoteModelSecrets {
     }
 }
 #else
-/// Without a keychain there is nowhere to keep API keys: none is found, and none is kept.
-public struct RemoteModelKeychain: RemoteModelSecrets {
+/// Where there is no keychain there is nowhere yet to keep API keys: none is found, and none is kept.
+public struct NoRemoteModelSecrets: RemoteModelSecrets {
     public init() {}
     public func read(_ account: UUID) throws -> String? { nil }
     public func write(_ key: String, account: UUID) throws { throw HarnessSetupError("This system has no keychain for API keys.") }
@@ -516,12 +516,23 @@ public struct RemoteModelKeychain: RemoteModelSecrets {
 }
 #endif
 
+extension RemoteModelAccountStore {
+    /// Where API keys are kept unless the caller says: the login Keychain on Apple platforms.
+    public static var systemSecrets: any RemoteModelSecrets {
+        #if canImport(Security)
+        RemoteModelKeychain()
+        #else
+        NoRemoteModelSecrets()
+        #endif
+    }
+}
+
 /// Accounts are app data; their keys are in `secrets`.
 public struct RemoteModelAccountStore: Sendable {
     public let file: URL
     private let secrets: any RemoteModelSecrets
 
-    public init(repository: URL, secrets: any RemoteModelSecrets = RemoteModelKeychain()) {
+    public init(repository: URL, secrets: any RemoteModelSecrets = RemoteModelAccountStore.systemSecrets) {
         file = repository.appendingPathComponent("RemoteModels.json")
         self.secrets = secrets
     }

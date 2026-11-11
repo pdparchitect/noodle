@@ -29,21 +29,9 @@ enum MCPIcon {
                 let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
                 defer { session.invalidateAndCancel() }
                 do {
-                    #if canImport(Darwin)
-                    let (bytes, response) = try await session.bytes(from: url)
-                    guard (response as? HTTPURLResponse)?.statusCode == 200 else { continue }
-                    var buffer = Data()
-                    for try await byte in bytes {
-                        guard buffer.count < 131_072 else { throw MCPServiceError.responseTooLarge }
-                        buffer.append(byte)
-                    }
-                    data = buffer
-                    #else
-                    // Linux's URLSession has no byte stream, so the limit holds only once the whole body is in.
-                    let (body, response) = try await session.data(from: url)
-                    guard (response as? HTTPURLResponse)?.statusCode == 200, body.count <= 131_072 else { continue }
-                    data = body
-                    #endif
+                    data = try await session.data(for: URLRequest(url: url), limit: 131_072, tooLarge: MCPServiceError.responseTooLarge) {
+                        guard ($0 as? HTTPURLResponse)?.statusCode == 200 else { throw MCPServiceError.network(($0 as? HTTPURLResponse)?.statusCode ?? 0) }
+                    }.0
                 } catch { continue }
             } else { continue }
             if let data, let normalized = thumbnail(data) { return normalized }

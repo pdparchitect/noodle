@@ -68,9 +68,8 @@ struct MCPCredentialStore: MCPCredentialStorage {
     }
 }
 #else
-/// Without a keychain there is nowhere to keep a sign-in: none is found, and none is kept.
-struct MCPCredentialStore: MCPCredentialStorage {
-    let service: String
+/// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
+struct MCPNoCredentials: MCPCredentialStorage {
     func load(_ id: UUID) throws -> MCPCredentials? { nil }
     func save(_ credentials: MCPCredentials, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func remove(_ id: UUID) throws {}

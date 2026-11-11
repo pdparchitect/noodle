@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import NoodleCore
 import XCTest
 
@@ -64,4 +67,42 @@ final class SystemCallsTests: XCTestCase {
     func testFreeSpaceIsReported() throws {
         XCTAssertGreaterThan(try XCTUnwrap(availableCapacity(at: try folder())), 0)
     }
+
+    private struct TooLarge: Error {}
+    private struct Refused: Error {}
+
+    /// A body comes back whole up to its limit; past it, or from a response the caller refuses, it does not.
+    func testADownloadStopsAtItsLimit() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FixedBody.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let request = URLRequest(url: URL(string: "https://noodle.invalid/body")!)
+
+        let (data, response) = try await session.data(for: request, limit: FixedBody.body.count, tooLarge: TooLarge())
+        XCTAssertEqual(data, FixedBody.body)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        do {
+            _ = try await session.data(for: request, limit: FixedBody.body.count - 1, tooLarge: TooLarge())
+            XCTFail("a body past its limit came back")
+        } catch is TooLarge {}
+        do {
+            _ = try await session.data(for: request, limit: FixedBody.body.count, tooLarge: TooLarge()) { _ in throw Refused() }
+            XCTFail("a refused response came back")
+        } catch is Refused {}
+    }
+}
+
+private final class FixedBody: URLProtocol, @unchecked Sendable {
+    static let body = Data((0..<300_000).map { UInt8(truncatingIfNeeded: $0) })
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        // In one piece: Linux's URLSession keeps only the last piece a protocol of its own hands over.
+        client?.urlProtocol(self, didLoad: Self.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

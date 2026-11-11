@@ -1,6 +1,9 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
-@testable import HubLink
 @testable import HubWire
 
 /// One message as the link carries it: how this build encodes it, and whether decoding the golden

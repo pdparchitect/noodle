@@ -379,10 +379,31 @@ jobs:
       - name: Test the terminal app
         run: swift test --disable-sandbox --package-path Terminal --scratch-path .build/terminal
 
+  test-linux:
+    needs: [versions]
+    if: contains(fromJSON(needs.versions.outputs.suites), 'linux')
+    # What a Linux Hub builds on: the wire, NoodleCore and NoodleMCP, with the tests that run there.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The toolchain image Noodle Push builds with.
+    container: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install SQLite's headers
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev
+      - name: Test live views' wire on Linux
+        run: swift test --package-path Shared/Surface --scratch-path .build/linux-surface
+      - name: Test the Hub link's wire on Linux
+        run: swift test --package-path Shared/HubLink --scratch-path .build/linux-hub-link
+      - name: Test NoodleCore and NoodleMCP on Linux
+        run: swift test --scratch-path .build/linux
+
   # One check for main's ruleset to require: every test job passed or was skipped.
   ci-passed:
     name: CI passed
-    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal]
+    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal, test-linux]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -440,7 +461,7 @@ jobs:
     secrets: inherit
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -449,7 +470,7 @@ jobs:
       needs.checks.result == 'success' &&
       ((needs.versions.outputs.noodle != 'true' && needs.versions.outputs.computer != 'true' && needs.versions.outputs.applet != 'true' && needs.versions.outputs.browser != 'true' && needs.versions.outputs.hub != 'true') ||
        (needs.test-noodle.result == 'success' && needs.test-shared.result == 'success' && needs.test-bridge.result == 'success' &&
-        needs.test-terminal.result == 'success')) &&
+        needs.test-terminal.result == 'success' && needs.test-linux.result == 'success')) &&
       (needs.versions.outputs.computer != 'true' || needs.test-computer.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet.result == 'success') &&
       (needs.versions.outputs.applet != 'true' || needs.test-applet-rendering.result == 'success') &&

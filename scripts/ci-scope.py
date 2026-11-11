@@ -34,6 +34,8 @@ SUITES = {
     "hub": (["Hub"], []),
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
     "terminal": (["Terminal"], []),
+    # The Hub engine on Linux.
+    "linux": (["", "Shared/HubLink", "Shared/Surface"], []),
 }
 EVERYTHING = ["checks", *SUITES]
 # The same files the workflow's trigger leaves out: they never start a run, so they never widen one.

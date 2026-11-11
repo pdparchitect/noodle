@@ -77,18 +77,7 @@ struct MCPOAuth {
                 "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
             }.joined(separator: "&").data(using: .utf8)
         }
-        #if canImport(Darwin)
-        let (bytes, response) = try await session.bytes(for: request)
-        var data = Data()
-        for try await byte in bytes {
-            guard data.count < 1_048_576 else { throw MCPServiceError.responseTooLarge }
-            data.append(byte)
-        }
-        #else
-        // Linux's URLSession has no byte stream, so the limit holds only once the whole body is in.
-        let (data, response) = try await session.data(for: request)
-        guard data.count <= 1_048_576 else { throw MCPServiceError.responseTooLarge }
-        #endif
+        let (data, response) = try await session.data(for: request, limit: 1_048_576, tooLarge: MCPServiceError.responseTooLarge)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let object = (try? JSONSerialization.jsonObject(with: data)) as? Object ?? [:]
         if object["error"] as? String == "invalid_grant" || object["error"] as? String == "invalid_client" {

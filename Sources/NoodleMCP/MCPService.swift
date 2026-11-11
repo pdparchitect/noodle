@@ -17,7 +17,11 @@ public actor MCPService {
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
     public init(namespace: String) {
+        #if canImport(Security)
         credentials = MCPCredentialStore(service: namespace + ".mcp.oauth")
+        #else
+        credentials = MCPNoCredentials()
+        #endif
         oauth = MCPOAuth()
         httpConfiguration = {
             let configuration = URLSessionConfiguration.ephemeral
