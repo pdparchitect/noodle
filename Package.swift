@@ -177,6 +177,8 @@ let package = Package(
         ),
         /// NoodleCore's tests that also run on Linux.
         .testTarget(name: "NoodleCorePortableTests", dependencies: ["NoodleCore"]),
+        /// NoodleMCP's tests that also run on Linux.
+        .testTarget(name: "NoodleMCPPortableTests", dependencies: ["NoodleMCP", "NoodleCore"]),
         .testTarget(
             name: "NoodleAppTests",
             dependencies: ["Noodle", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
@@ -225,7 +227,7 @@ if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
 
 #if os(Linux)
 // Only the Hub engine builds on Linux, with the tests that run there.
-let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests"]
+let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests", "NoodleMCPPortableTests"]
 package.targets.removeAll { !linux.contains($0.name) }
 package.products.removeAll { !["NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }
 #endif

@@ -1,5 +1,8 @@
 import XCTest
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import NoodleMCP
 
 final class MCPGuardedHTTPTests: XCTestCase {
@@ -71,6 +74,11 @@ final class MCPGuardedHTTPTests: XCTestCase {
     }
 
     func testSessionDoesNotFollowRedirectsEvenWhenTheDestinationWouldSucceed() async throws {
+        #if canImport(FoundationNetworking)
+        // The fixture redirects from a protocol of its own, which stops the process on Linux's URLSession;
+        // the guard's refusal of every redirect is checked directly above.
+        throw XCTSkip("Linux's URLSession cannot redirect from a test's own protocol.")
+        #endif
         let destination = URL(string: "https://other.invalid/mcp")!
         let destinationBody = Data("must not reach the MCP client".utf8)
         for status in [301, 302, 303, 307, 308] {
@@ -154,6 +162,20 @@ final class MCPGuardedHTTPTests: XCTestCase {
         XCTAssertEqual(client.body, first + second, "The full allowed response must arrive intact and in order")
         XCTAssertEqual(client.finishes, 1)
         XCTAssertTrue(client.errors.isEmpty)
+    }
+
+    /// Linux's URLSession keeps only the last piece a protocol of its own hands over, so there a response
+    /// is handed over whole once all of it has come; on a Mac it streams as it comes.
+    func testAResponseInPiecesReachesTheSessionWhole() async {
+        GuardHTTPFixture.reset(chunks: [Data(#"{"jsonrpc":"2.0","#.utf8), Data(#""id":1}"#.utf8)])
+        let client = GuardClient()
+        let loader = makeLoader(URLRequest(url: endpoint), client: client)
+        loader.startLoading()
+        await fulfillment(of: [client.completed], timeout: 5)
+        XCTAssertEqual(client.body, Data(#"{"jsonrpc":"2.0","id":1}"#.utf8))
+        #if canImport(FoundationNetworking)
+        XCTAssertEqual(client.loads, 1)
+        #endif
     }
 
     func testUnadvertisedStreamCannotExceedCumulativeByteLimit() async {
@@ -243,6 +265,8 @@ private final class GuardClient: NSObject, URLProtocolClient {
     private let lock = NSLock()
     private var storedBody = Data(), storedResponses: [HTTPURLResponse] = []
     private var storedErrors: [Error] = [], storedFinishes = 0
+    private var storedLoads = 0
+    var loads: Int { lock.withLock { storedLoads } }
     private var storedCachePolicies: [URLCache.StoragePolicy] = []
     var body: Data { lock.withLock { storedBody } }
     var responses: [HTTPURLResponse] { lock.withLock { storedResponses } }
@@ -255,7 +279,7 @@ private final class GuardClient: NSObject, URLProtocolClient {
             storedCachePolicies.append(policy)
         }
     }
-    func urlProtocol(_ protocol: URLProtocol, didLoad data: Data) { lock.withLock { storedBody.append(data) } }
+    func urlProtocol(_ protocol: URLProtocol, didLoad data: Data) { lock.withLock { storedBody.append(data); storedLoads += 1 } }
     func urlProtocolDidFinishLoading(_ protocol: URLProtocol) {
         lock.withLock { storedFinishes += 1 }
         completed.fulfill()

@@ -17,7 +17,14 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
     private var session: URLSession?
     private var loadingTask: URLSessionDataTask?
     private var received = 0
-    private var responseError: MCPHTTPError?
+    #if canImport(FoundationNetworking)
+    /// Linux's URLSession keeps only the last piece a protocol of its own hands over, so there the response
+    /// is held here and handed over whole once it has all come. On a Mac it streams, as event streams need.
+    private var pending = Data()
+    #endif
+    /// Why the response is refused. Kept here rather than left to cancelling: Linux's URLSession can go on
+    /// delivering after a cancel, and nothing refused may reach the client.
+    private var refusal: Error?
     // Per-instance configuration lets transport tests run without shared session state.
     var sessionConfiguration: () -> URLSessionConfiguration = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -50,11 +57,12 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         guard let response = response as? HTTPURLResponse, !(300..<400).contains(response.statusCode),
               response.expectedContentLength <= 8 * 1_048_576 else {
+            refusal = URLError(.cancelled)
             completionHandler(.cancel)
             return
         }
         guard (200..<300).contains(response.statusCode) else {
-            responseError = MCPHTTPError(status: response.statusCode)
+            refusal = MCPHTTPError(status: response.statusCode)
             completionHandler(.cancel)
             return
         }
@@ -62,17 +70,29 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
         completionHandler(.allow)
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard refusal == nil else { return }
         received += data.count
         guard received <= 8 * 1_048_576 else {
+            refusal = URLError(.cancelled)
             loadingTask?.cancel()
             return
         }
+        #if canImport(FoundationNetworking)
+        pending.append(data)
+        #else
         client?.urlProtocol(self, didLoad: data)
+        #endif
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let responseError { client?.urlProtocol(self, didFailWithError: responseError) }
+        if let refusal { client?.urlProtocol(self, didFailWithError: refusal) }
         else if let error { client?.urlProtocol(self, didFailWithError: error) }
-        else { client?.urlProtocolDidFinishLoading(self) }
+        else {
+            #if canImport(FoundationNetworking)
+            if !pending.isEmpty { client?.urlProtocol(self, didLoad: pending) }
+            pending = Data()
+            #endif
+            client?.urlProtocolDidFinishLoading(self)
+        }
         session.finishTasksAndInvalidate()
         self.session = nil
         self.loadingTask = nil
