@@ -489,9 +489,7 @@ struct MessageBubble: View {
                 }
 
                 if isUser {
-                    Text(deliveryLabel)
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.tertiary)
+                    DeliveryCaption(delivery: message.delivery)
                         .padding(.trailing, 5)
                 }
             }
@@ -729,8 +727,17 @@ struct MessageBubble: View {
         }
     }
 
-    private var deliveryLabel: String {
-        switch message.delivery {
+}
+
+/// How far your message got: one check when sent, two when delivered, the other states in words.
+/// The words stay for VoiceOver and the hover help. The checks are text, so they keep the caption's height,
+/// and they always take the width of two, so going from one to two moves nothing.
+struct DeliveryCaption: View {
+    let delivery: MessageDelivery
+
+    /// What it says: on the caption itself in the states that stay in words, and out loud for the checks.
+    var label: String {
+        switch delivery {
         case .saved: return "Saved"
         case .queued: return "Sent"
         case .delivered: return "Delivered"
@@ -738,6 +745,37 @@ struct MessageBubble: View {
         }
     }
 
+    /// How many check marks stand for it; nil for the states that stay in words.
+    var checks: Int? {
+        switch delivery {
+        case .queued: return 1
+        case .delivered: return 2
+        case .saved, .failed: return nil
+        }
+    }
+
+    var body: some View {
+        Group {
+            if let checks {
+                ZStack(alignment: .trailing) {
+                    Self.marks(2).hidden()
+                    // A notch stronger than the words: thin marks at this size vanish in .tertiary.
+                    Self.marks(checks).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(label).foregroundStyle(.tertiary)
+            }
+        }
+        .font(.system(size: 9.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .help(label)
+    }
+
+    private static func marks(_ count: Int) -> Text {
+        let check = Image(systemName: "checkmark")
+        return count == 1 ? Text(check) : Text("\(check)\(check)").tracking(-3)
+    }
 }
 
 private extension NSColor {

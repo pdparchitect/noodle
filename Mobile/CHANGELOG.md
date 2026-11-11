@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A message you sent shows one check mark once it's sent and two once it's delivered, in place of the words, as on the Mac. VoiceOver still says Sent or Delivered.
+- A bot's profile shows how long ago it set its status, and dims it once it's old, as on the Mac.
+
 ## [0.56.0] - 2026-11-10
 
 ### Added

@@ -222,6 +222,20 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertEqual(LinkProtocol.decodeEvent(LinkProtocol.encode(event)), event)
     }
 
+    /// A status the Hub timed travels with the bot, and dims once a heartbeat has gone by, the same rule as on the Mac.
+    func testAStatusTravelsWithWhenItWasSetAndDimsWhenOld() throws {
+        let setAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let bot = LinkBot(id: UUID(), conversationID: UUID(), draft: LinkBotDraft(name: "Alfred", provider: "codex"),
+                          createdAt: setAt, status: "Reading", statusSetAt: setAt)
+        let read = try LinkProtocol.decoder.decode(LinkBot.self, from: LinkProtocol.encoder.encode(bot))
+        XCTAssertEqual(read.statusSetAt, setAt)
+        XCTAssertFalse(bot.isStatusStale(at: setAt.addingTimeInterval(1_799), after: 1_800))
+        XCTAssertTrue(bot.isStatusStale(at: setAt.addingTimeInterval(1_801), after: 1_800))
+        var unsaid = bot
+        unsaid.statusSetAt = nil
+        XCTAssertFalse(unsaid.isStatusStale(at: setAt.addingTimeInterval(1_000_000), after: 1_800))
+    }
+
     func testFieldsAddedLaterMayBeMissing() throws {
         let id = UUID(), conversation = UUID()
         let message = try decode(LinkMessage.self,
@@ -237,6 +251,8 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertNil(bot.pause)
         // From a Hub that does not keep backgrounds.
         XCTAssertNil(bot.background)
+        // From a Hub that does not say when a status was set.
+        XCTAssertNil(bot.statusSetAt)
         let group = try decode(LinkGroup.self, #"{"id":"\#(id)","draft":{"name":"Crew","publicDescription":"","botIDs":[]},"createdAt":0}"#)
         XCTAssertNil(group.background)
         // A phase added after this app was built reads as unknown rather than failing the whole bot.
@@ -256,6 +272,8 @@ final class LinkCompatibilityTests: XCTestCase {
         XCTAssertFalse(status.keepsAnnotations)
         // Nor does one from before pauses say it explains them.
         XCTAssertFalse(status.explainsPauses)
+        // Nor does one that does not keep it say how often its bots get a heartbeat.
+        XCTAssertNil(status.heartbeatMinutes)
 
         let harness = try decode(LinkHarness.self, #"{"provider":"codex","providerName":"Codex"}"#)
         XCTAssertEqual(harness.models, [])
