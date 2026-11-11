@@ -6,12 +6,14 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #include <time.h>
 
 static const QUIC_BUFFER alpn = {sizeof("noodle-hub/1") - 1, (uint8_t *)"noodle-hub/1"};
@@ -34,7 +36,7 @@ static void load(void) {
         snprintf(load_error, sizeof load_error, "msquic could not be started.");
         return;
     }
-    QUIC_REGISTRATION_CONFIG config = {"noodled", QUIC_EXECUTION_PROFILE_LOW_LATENCY};
+    QUIC_REGISTRATION_CONFIG config = {"noodle", QUIC_EXECUTION_PROFILE_LOW_LATENCY};
     if (QUIC_FAILED(((const QUIC_API_TABLE *)table)->RegistrationOpen(&config, &registration))) {
         snprintf(load_error, sizeof load_error, "msquic could not be started.");
         return;
@@ -352,48 +354,100 @@ void nq_listener_close(nq_listener *listener) {
     free(listener);
 }
 
-// MARK: The test client
+// MARK: The client
 
 struct nq_client {
     HQUIC handle, configuration;
     pthread_mutex_t lock;
     pthread_cond_t changed;
-    int connected, closed;
-    uint8_t *peer;
-    size_t peer_capacity, *peer_length;
+    int connected, ending, closed, answered;
+    nq_verify verify;
+    void *context;
 };
 
 static QUIC_STATUS QUIC_API client_callback(HQUIC handle, void *context, QUIC_CONNECTION_EVENT *event) {
     nq_client *client = context;
+    QUIC_STATUS status = QUIC_STATUS_SUCCESS;
     pthread_mutex_lock(&client->lock);
     switch (event->Type) {
     case QUIC_CONNECTION_EVENT_PEER_CERTIFICATE_RECEIVED: {
+        // Whatever the server is, it answered; a server that is not the one wanted is refused here,
+        // before anything is sent to it.
+        client->answered = 1;
         const QUIC_BUFFER *certificate = (const QUIC_BUFFER *)event->PEER_CERTIFICATE_RECEIVED.Certificate;
-        if (certificate && client->peer && certificate->Length <= client->peer_capacity) {
-            memcpy(client->peer, certificate->Buffer, certificate->Length);
-            *client->peer_length = certificate->Length;
+        if (!certificate || !client->verify(client->context, certificate->Buffer, certificate->Length)) {
+            status = QUIC_STATUS_BAD_CERTIFICATE;
         }
         break;
     }
     case QUIC_CONNECTION_EVENT_CONNECTED: client->connected = 1; break;
-    case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE: client->closed = 1; break;
+    case QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_TRANSPORT:
+        // A handshake the server failed still means the server is there.
+        if (event->SHUTDOWN_INITIATED_BY_TRANSPORT.Status != QUIC_STATUS_CONNECTION_IDLE &&
+            event->SHUTDOWN_INITIATED_BY_TRANSPORT.Status != QUIC_STATUS_UNREACHABLE &&
+            event->SHUTDOWN_INITIATED_BY_TRANSPORT.Status != QUIC_STATUS_CONNECTION_TIMEOUT) {
+            client->answered = 1;
+        }
+        client->ending = 1;
+        break;
+    case QUIC_CONNECTION_EVENT_SHUTDOWN_INITIATED_BY_PEER:
+        client->answered = 1;
+        client->ending = 1;
+        break;
+    case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE: client->ending = 1; client->closed = 1; break;
     default: break;
     }
     pthread_cond_broadcast(&client->changed);
     pthread_mutex_unlock(&client->lock);
-    return QUIC_STATUS_SUCCESS;
+    return status;
 }
 
-nq_client *nq_connect(const char *host, uint16_t port, const char *certificate, const char *key,
-                      uint8_t *peer, size_t peer_capacity, size_t *peer_length, char *error, size_t error_length) {
+/// Writes `text` to a new file in `folder` that only this user can read.
+static int write_private(const char *folder, const char *name, const char *text, char *path, size_t capacity) {
+    snprintf(path, capacity, "%s/%s", folder, name);
+    int file = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (file < 0) return -1;
+    size_t length = strlen(text), written = 0;
+    while (written < length) {
+        ssize_t count = write(file, text + written, length - written);
+        if (count <= 0) { close(file); return -1; }
+        written += (size_t)count;
+    }
+    close(file);
+    return 0;
+}
+
+/// msquic reads a certificate only from files. They are written to a folder only this user can open,
+/// loaded, and removed at once, so the device's key stays on disk for no longer than that.
+static HQUIC client_configuration(const char *certificate_pem, const char *key_pem) {
+    const char *temporary = getenv("TMPDIR");
+    char folder[512];
+    snprintf(folder, sizeof folder, "%s/noodle-link-XXXXXX", temporary && *temporary ? temporary : "/tmp");
+    if (!mkdtemp(folder)) return NULL;
+    char certificate[600], key[600];
+    HQUIC handle = NULL;
+    if (write_private(folder, "certificate.pem", certificate_pem, certificate, sizeof certificate) == 0 &&
+        write_private(folder, "key.pem", key_pem, key, sizeof key) == 0) {
+        handle = configuration(certificate, key, 30, 1);
+    }
+    snprintf(certificate, sizeof certificate, "%s/certificate.pem", folder);
+    snprintf(key, sizeof key, "%s/key.pem", folder);
+    unlink(key);
+    unlink(certificate);
+    rmdir(folder);
+    return handle;
+}
+
+nq_client *nq_connect(const char *host, uint16_t port, const char *certificate_pem, const char *key_pem,
+                      nq_verify verify, void *context, int timeout_ms, int *answered, char *error, size_t error_length) {
+    *answered = 0;
     if (!ready(error, error_length)) return NULL;
     nq_client *client = calloc(1, sizeof *client);
     pthread_mutex_init(&client->lock, NULL);
     pthread_cond_init(&client->changed, NULL);
-    client->peer = peer;
-    client->peer_capacity = peer_capacity;
-    client->peer_length = peer_length;
-    client->configuration = configuration(certificate, key, 30, 1);
+    client->verify = verify;
+    client->context = context;
+    client->configuration = client_configuration(certificate_pem, key_pem);
     if (!client->configuration || QUIC_FAILED(api->ConnectionOpen(registration, client_callback, client, &client->handle)) ||
         QUIC_FAILED(api->ConnectionStart(client->handle, client->configuration, QUIC_ADDRESS_FAMILY_UNSPEC, host, port))) {
         snprintf(error, error_length, "The connection could not be started.");
@@ -402,19 +456,27 @@ nq_client *nq_connect(const char *host, uint16_t port, const char *certificate, 
         free(client);
         return NULL;
     }
-    struct timespec deadline = after(5000);
+    struct timespec deadline = after(timeout_ms);
     pthread_mutex_lock(&client->lock);
-    while (!client->connected && !client->closed) {
+    while (!client->connected && !client->ending) {
         if (pthread_cond_timedwait(&client->changed, &client->lock, &deadline) == ETIMEDOUT) break;
     }
-    int connected = client->connected && !client->closed;
+    int connected = client->connected && !client->ending;
+    *answered = client->answered;
     pthread_mutex_unlock(&client->lock);
     if (!connected) {
-        snprintf(error, error_length, "The server did not let the connection in.");
+        snprintf(error, error_length, *answered ? "The Hub refused the connection." : "The Hub did not answer.");
         nq_client_close(client);
         return NULL;
     }
     return client;
+}
+
+int nq_client_is_closed(nq_client *client) {
+    pthread_mutex_lock(&client->lock);
+    int ending = client->ending;
+    pthread_mutex_unlock(&client->lock);
+    return ending;
 }
 
 nq_stream *nq_client_open(nq_client *client, const uint8_t *bytes, size_t length, int finish) {
@@ -433,8 +495,9 @@ nq_stream *nq_client_open(nq_client *client, const uint8_t *bytes, size_t length
 long nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms) {
     struct timespec deadline = after(timeout_ms);
     pthread_mutex_lock(&stream->lock);
+    int timed_out = 0;
     while (stream->buffered == 0 && !stream->finished && !stream->failed) {
-        if (pthread_cond_timedwait(&stream->changed, &stream->lock, &deadline) == ETIMEDOUT) break;
+        if (pthread_cond_timedwait(&stream->changed, &stream->lock, &deadline) == ETIMEDOUT) { timed_out = 1; break; }
     }
     long result;
     if (stream->buffered > 0) {
@@ -443,8 +506,10 @@ long nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int tim
         memmove(stream->buffer, stream->buffer + count, stream->buffered - count);
         stream->buffered -= count;
         result = (long)count;
+    } else if (stream->finished) {
+        result = 0;
     } else {
-        result = stream->finished ? 0 : -1;
+        result = timed_out && !stream->failed ? -2 : -1;
     }
     pthread_mutex_unlock(&stream->lock);
     return result;

@@ -3,9 +3,8 @@ import PackageDescription
 
 // Noodle Server: a Hub for Linux, `noodled`, configured by a YAML file and run as a service.
 // ServerCore is the server's logic, tested on macOS and Linux alike; `noodled` only puts it behind a command.
-// On Linux devices reach it over msquic, through CNoodleQUIC; on a Mac it uses Noodle Hub's own listener.
+// Devices reach it through the Hub's link: msquic on Linux, and on a Mac Noodle Hub's own listener.
 let linux = TargetDependencyCondition.when(platforms: [.linux])
-let mac = TargetDependencyCondition.when(platforms: [.macOS])
 
 let package = Package(
     name: "Server",
@@ -22,22 +21,17 @@ let package = Package(
         .package(url: "https://github.com/fwcd/swift-qrcode-generator", from: "2.0.2"),
     ],
     targets: [
-        /// msquic, loaded when first used, behind the little the link needs. Its headers are vendored
-        /// in `msquic/`, under their MIT licence, since Ubuntu's package carries only the library.
-        .target(name: "CNoodleQUIC", exclude: ["msquic/LICENSE"]),
         .target(name: "ServerCore", dependencies: [
             .product(name: "HubCore", package: "Noodle"),
             .product(name: "NoodleCore", package: "Noodle"),
             .product(name: "NoodleMCP", package: "Noodle"),
             .product(name: "NoodleRuntime", package: "Noodle"),
             .product(name: "HubWire", package: "HubLink"),
-            // On a Mac, for development, the server listens as Noodle Hub does.
-            .product(name: "HubLink", package: "HubLink", condition: mac),
+            .product(name: "HubLink", package: "HubLink"),
             .product(name: "Yams", package: "Yams"),
             .product(name: "X509", package: "swift-certificates"),
             .product(name: "QRCodeGenerator", package: "swift-qrcode-generator"),
             .product(name: "Crypto", package: "swift-crypto", condition: linux),
-            .target(name: "CNoodleQUIC", condition: linux),
         ]),
         .executableTarget(name: "noodled", dependencies: [
             "ServerCore", .product(name: "HubWire", package: "HubLink"), .product(name: "NoodleCore", package: "Noodle"),
@@ -48,8 +42,7 @@ let package = Package(
             .product(name: "NoodleCore", package: "Noodle"),
             .product(name: "HubWire", package: "HubLink"),
             .product(name: "X509", package: "swift-certificates"),
-            .product(name: "HubLink", package: "HubLink", condition: mac),
-            .target(name: "CNoodleQUIC", condition: linux),
+            .product(name: "HubLink", package: "HubLink"),
         ]),
     ],
     swiftLanguageModes: [.v5]

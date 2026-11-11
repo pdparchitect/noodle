@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// The site a sign-in form's fields go to, first in the sign-in sheet on the iPhone and the Mac, with a
@@ -23,3 +24,4 @@ public struct LinkSignInSite: View {
         }
     }
 }
+#endif

@@ -2,7 +2,7 @@ import Foundation
 import HubWire
 @testable import ServerCore
 import XCTest
-#if canImport(HubLink)
+#if canImport(Vision)
 import CoreGraphics
 import HubLink
 import ImageIO
@@ -40,7 +40,7 @@ final class InvitationCodeTests: XCTestCase {
         XCTAssertEqual(height, width)
     }
 
-    #if canImport(HubLink)
+    #if canImport(Vision)
     /// What a phone reads from the picture is the invitation itself.
     func testThePictureScansAsTheInvitation() throws {
         let png = try InvitationCode(link: link).png(scale: 4)

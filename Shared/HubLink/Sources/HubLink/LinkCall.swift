@@ -1,3 +1,4 @@
+#if canImport(AVFoundation)
 import AVFoundation
 import Foundation
 import HubWire
@@ -123,3 +124,4 @@ public final class LinkCallPlayout: @unchecked Sendable {
         }
     }
 }
+#endif

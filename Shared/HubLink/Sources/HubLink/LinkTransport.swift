@@ -1,3 +1,4 @@
+#if canImport(Network)
 import Foundation
 import HubWire
 import Network
@@ -1004,3 +1005,4 @@ private extension NWError {
         return false
     }
 }
+#endif

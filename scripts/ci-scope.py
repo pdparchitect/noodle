@@ -34,8 +34,9 @@ SUITES = {
     "hub": (["Hub"], []),
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
     "terminal": (["Terminal"], []),
-    # The Hub engine on Linux, and Noodle Server built on it.
-    "linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),
+    # Noodle Server, on macOS and on Linux with the Hub engine and the wire it builds on there.
+    "server": (["Server"], []),
+    "server-linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),
 }
 EVERYTHING = ["checks", *SUITES]
 # The same files the workflow's trigger leaves out: they never start a run, so they never widen one.
@@ -79,7 +80,8 @@ def graph(root=ROOT):
     for base, texts in manifests.items():
         packages, paths = nodes.setdefault(base, (set(), set()))
         for text in texts:
-            for path in re.findall(r'\.(?:package|local)\(path:\s*"([^"]+)"', text):
+            # A package may be named first, as Noodle Server names the root package.
+            for path in re.findall(r'\.(?:package|local)\((?:name:\s*"[^"]*",\s*)?path:\s*"([^"]+)"', text):
                 packages.add(normalize(base, path))
             # Files a project takes from outside its folder, such as the phone app's voice previews.
             for path in re.findall(r"\.\./[\w./-]+", text):

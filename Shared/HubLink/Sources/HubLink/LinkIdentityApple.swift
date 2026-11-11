@@ -1,3 +1,4 @@
+#if canImport(Security)
 import Foundation
 import HubWire
 import Security
@@ -39,3 +40,4 @@ extension LinkPublicKey {
         self = parsed
     }
 }
+#endif

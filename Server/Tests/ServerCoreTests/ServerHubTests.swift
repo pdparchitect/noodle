@@ -1,4 +1,3 @@
-#if canImport(HubLink)
 import Foundation
 import HubCore
 import HubLink
@@ -6,7 +5,8 @@ import HubLink
 import XCTest
 
 /// The server's Hub as a device sees it: someone named in the file pairs, keeps a bot and talks to it,
-/// and is refused what the server does not keep. On a Mac it listens as Noodle Hub does.
+/// and is refused what the server does not keep, over the link it really uses: msquic on Linux, and on
+/// a Mac the listener Noodle Hub uses.
 @MainActor final class ServerHubTests: XCTestCase {
     func testSomeoneInTheFilePairsKeepsABotAndIsRefusedTheRest() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-\(UUID())")
@@ -24,7 +24,12 @@ import XCTest
             plan: Family
         """)
         configuration.port = 0
-        let hub = try ServerHub(configuration: configuration, listen: LinkServer.listen)
+        #if os(Linux)
+        let listen = QUICListener.listen(certificates: root.appendingPathComponent("Certificates"))
+        #else
+        let listen = LinkServer.listen
+        #endif
+        let hub = try ServerHub(configuration: configuration, listen: listen)
         await hub.start()
         addTeardownBlock { await MainActor.run { hub.stop() } }
         guard case .listening = hub.link.state else { throw XCTSkip("Could not listen: \(hub.link.state)") }
@@ -51,4 +56,3 @@ import XCTest
         }
     }
 }
-#endif

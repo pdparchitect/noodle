@@ -1,3 +1,4 @@
+#if canImport(CloudKit)
 import CloudKit
 import Foundation
 #if os(macOS)
@@ -189,3 +190,4 @@ public enum SpaceRecords {
         }) { ready[$0] }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if canImport(Vision)
 import CoreGraphics
 import CoreImage
 import CoreImage.CIFilterBuiltins
@@ -35,3 +36,4 @@ extension LinkInvitation {
         return CIContext().createCGImage(output, from: output.extent)
     }
 }
+#endif

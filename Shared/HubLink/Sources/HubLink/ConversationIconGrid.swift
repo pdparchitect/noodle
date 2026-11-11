@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// How the conversation list shows bots and groups: as rows, or as a grid of their pictures.
@@ -66,3 +67,4 @@ public struct ConversationIconGrid: Layout {
         }
     }
 }
+#endif

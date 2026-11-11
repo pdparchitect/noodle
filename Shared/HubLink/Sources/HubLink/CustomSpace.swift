@@ -158,3 +158,15 @@ public struct CustomSpace: Identifiable, Codable, Hashable, Sendable {
         }
     }
 }
+
+#if !canImport(SwiftUI)
+extension Array {
+    /// SwiftUI's reordering, as a list's drag hands it over, where there is no SwiftUI.
+    mutating func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        let moving = source.map { self[$0] }
+        let before = source.filter { $0 < destination }.count
+        for index in source.reversed() { remove(at: index) }
+        insert(contentsOf: moving, at: destination - before)
+    }
+}
+#endif

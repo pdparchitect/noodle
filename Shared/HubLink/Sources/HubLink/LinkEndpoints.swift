@@ -1,3 +1,4 @@
+#if canImport(SystemConfiguration)
 import Darwin
 import Foundation
 import Synchronization
@@ -212,3 +213,4 @@ enum TailnetDNS {
         return nil
     }
 }
+#endif

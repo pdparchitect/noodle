@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// Caps a cell's ideal width before measuring its height. A flexible frame alone
@@ -20,3 +21,4 @@ public struct MessageTableCellLayout: Layout {
         subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: nil))
     }
 }
+#endif

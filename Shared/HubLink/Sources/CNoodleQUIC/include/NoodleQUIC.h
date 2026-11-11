@@ -1,6 +1,6 @@
-// QUIC for Noodle Server, over msquic, which is loaded when first used. Only what the Hub's link
+// QUIC for the Hub's link on Linux, over msquic, which is loaded when first used. Only what the link
 // needs: a listener that admits devices by their certificate and hands their streams over, and a
-// client for the tests. Every callback comes on one of msquic's threads.
+// client that connects to a Hub it pins by key. Every callback comes on one of msquic's threads.
 #ifndef NOODLE_QUIC_H
 #define NOODLE_QUIC_H
 
@@ -42,15 +42,21 @@ void nq_stream_reset(nq_stream *stream, uint64_t code);
 void nq_stream_retain(nq_stream *stream);
 void nq_stream_release(nq_stream *stream);
 
-// MARK: A client, for tests.
+// MARK: The client
 
 typedef struct nq_client nq_client;
-/// Connects with `certificate` and `key` as the device's; `peer` gets the server's certificate as DER.
-nq_client *nq_connect(const char *host, uint16_t port, const char *certificate, const char *key,
-                      uint8_t *peer, size_t peer_capacity, size_t *peer_length, char *error, size_t error_length);
+/// Says whether the server's certificate, as DER, is the one wanted; nonzero lets the handshake go on.
+typedef int (*nq_verify)(void *context, const uint8_t *certificate, size_t length);
+/// Connects with the device's certificate and key, as PEM, to a server `verify` accepts, waiting up
+/// to `timeout_ms`. Nil with why in `error`; `answered` says whether the server answered at all.
+nq_client *nq_connect(const char *host, uint16_t port, const char *certificate_pem, const char *key_pem,
+                      nq_verify verify, void *context, int timeout_ms, int *answered, char *error, size_t error_length);
+/// Whether the connection has ended or is ending, as when it was idle too long or the server closed it.
+int nq_client_is_closed(nq_client *client);
 /// Opens a stream and sends `bytes`, finishing the client's side when `finish` is set.
 nq_stream *nq_client_open(nq_client *client, const uint8_t *bytes, size_t length, int finish);
-/// Waits up to `timeout_ms` for bytes: how many came, 0 once the server finished, -1 on a reset or timeout.
+/// Waits up to `timeout_ms` for bytes: how many came, 0 once the server finished, -1 when the stream
+/// failed, and -2 when nothing came in time.
 long nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms);
 void nq_client_close(nq_client *client);
 

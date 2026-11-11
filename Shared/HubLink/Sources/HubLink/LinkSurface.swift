@@ -1,3 +1,4 @@
+#if canImport(Surface)
 import Foundation
 
 /// What travels on a surface's channel: `surfaceOpened` as JSON first, a game's controls if it
@@ -57,3 +58,4 @@ public enum LinkSurface {
         }
     }
 }
+#endif

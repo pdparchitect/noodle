@@ -1,6 +1,6 @@
 import Foundation
 import HubWire
-@testable import ServerCore
+@testable import HubLink
 import X509
 import XCTest
 

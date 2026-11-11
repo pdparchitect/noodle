@@ -1,8 +1,6 @@
+#if canImport(CloudKit)
 import CloudKit
 import Foundation
-// Everything that imports HubLink sees the wire types as before.
-@_exported import HubWire
-@_exported import Surface
 
 extension LinkPush {
     /// The same for every write about one device and conversation, so each replaces the last.
@@ -20,3 +18,4 @@ extension LinkPush {
         return record
     }
 }
+#endif

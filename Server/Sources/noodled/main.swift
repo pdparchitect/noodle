@@ -1,10 +1,8 @@
 import Foundation
 import HubWire
 import NoodleCore
-import ServerCore
-#if canImport(HubLink)
 import HubLink
-#endif
+import ServerCore
 
 let usage = """
 USAGE: noodled <command> [--config <path>]

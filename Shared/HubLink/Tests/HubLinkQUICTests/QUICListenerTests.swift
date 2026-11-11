@@ -2,7 +2,7 @@
 import CNoodleQUIC
 import Foundation
 import HubWire
-@testable import ServerCore
+@testable import HubLink
 import XCTest
 
 /// The Linux listener serves devices as Noodle Hub's does on a Mac: pinned keys at the handshake and on
@@ -37,20 +37,22 @@ final class QUICListenerTests: XCTestCase {
         return listener
     }
 
+    private final class Peer: @unchecked Sendable { var certificate: [UInt8] = [] }
+
     /// Connects as `identity`, returning the client and the key the server's certificate carries.
     private func connect(to listener: any LinkListening, as identity: LinkIdentity? = nil) throws -> (OpaquePointer, LinkPublicKey?) {
         let pem = try LinkCertificate.pem(for: identity ?? device)
-        let files = folder.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
-        try Data(pem.certificate.utf8).write(to: files.appendingPathComponent("certificate.pem"))
-        try Data(pem.key.utf8).write(to: files.appendingPathComponent("key.pem"))
-        var peer = [UInt8](repeating: 0, count: 4096), peerLength = 0, error = [CChar](repeating: 0, count: 256)
-        guard let client = nq_connect("127.0.0.1", listener.port!, files.appendingPathComponent("certificate.pem").path,
-                                      files.appendingPathComponent("key.pem").path, &peer, peer.count, &peerLength, &error, error.count) else {
+        let peer = Unmanaged.passRetained(Peer())
+        defer { peer.release() }
+        var answered: Int32 = 0, error = [CChar](repeating: 0, count: 256)
+        guard let client = nq_connect("127.0.0.1", listener.port!, pem.certificate, pem.key, { context, bytes, length in
+            Unmanaged<Peer>.fromOpaque(context!).takeUnretainedValue().certificate = Array(UnsafeBufferPointer(start: bytes, count: length))
+            return 1
+        }, peer.toOpaque(), 5_000, &answered, &error, error.count) else {
             throw LinkError(String(cString: error))
         }
         addTeardownBlock { nq_client_close(client) }
-        return (client, LinkCertificate.key(of: Array(peer.prefix(peerLength))))
+        return (client, LinkCertificate.key(of: peer.takeUnretainedValue().certificate))
     }
 
     private func open(_ client: OpaquePointer, _ bytes: Data, finish: Bool = true) -> OpaquePointer {

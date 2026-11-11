@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
 private struct MessageTableHeaderBounds: PreferenceKey {
@@ -24,3 +25,4 @@ public extension View {
         }
     }
 }
+#endif

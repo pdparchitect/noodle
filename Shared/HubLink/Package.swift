@@ -19,10 +19,19 @@ let package = Package(
         .target(name: "HubWire", dependencies: [.product(name: "PushWire", package: "Wire"),
                                                 .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
                                                 .product(name: "SurfaceWire", package: "Surface")]),
+        /// msquic, loaded when first used, behind the little the link needs: Linux's QUIC, where Apple
+        /// platforms use Network.framework. Its headers are vendored in `msquic/`, under their MIT
+        /// licence, since Ubuntu's package carries only the library.
+        .target(name: "CNoodleQUIC", exclude: ["msquic/LICENSE"]),
         .target(name: "HubLink", dependencies: ["HubWire", .product(name: "X509", package: "swift-certificates"),
                                                 .product(name: "Surface", package: "Surface"),
-                                                .product(name: "PushWire", package: "Wire")]),
+                                                .product(name: "PushWire", package: "Wire"),
+                                                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
+                                                .target(name: "CNoodleQUIC", condition: .when(platforms: [.linux]))]),
         .testTarget(name: "HubLinkTests", dependencies: ["HubLink", "HubWire", .product(name: "X509", package: "swift-certificates")]),
+        // The link on Linux, over msquic, and what both platforms share of it.
+        .testTarget(name: "HubLinkQUICTests", dependencies: ["HubLink", "HubWire", .product(name: "X509", package: "swift-certificates"),
+                                                             .target(name: "CNoodleQUIC", condition: .when(platforms: [.linux]))]),
         // The wire alone, which also runs where HubLink cannot.
         .testTarget(name: "HubWireTests", dependencies: ["HubWire", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))],
                     exclude: ["Fixtures"]),
@@ -31,8 +40,6 @@ let package = Package(
 )
 
 #if os(Linux)
-// Only the wire builds on Linux: HubLink's transport is Apple's Network framework.
-package.targets.removeAll { !["HubWire", "HubWireTests"].contains($0.name) }
-// Packages that name HubLink for Apple platforms only still need the product to exist.
-package.products = [.library(name: "HubLink", targets: ["HubWire"]), .library(name: "HubWire", targets: ["HubWire"])]
+// HubLinkTests exercise the Apple transport, which Linux does not have.
+package.targets.removeAll { $0.name == "HubLinkTests" }
 #endif
