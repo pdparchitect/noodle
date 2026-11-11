@@ -289,6 +289,51 @@ figure { margin: 0; }
 .pair-caps { display: grid; grid-template-columns: 1fr 1.65fr; margin-top: 18px; text-align: center; font-size: 14px; color: var(--gray); }
 .pair-caps b { display: block; font-size: 17px; color: var(--ink); }
 .fig-cap { margin-top: 18px; text-align: center; font-size: 14px; color: var(--gray); }
+/* The rest of the AI office page, scoped to its body so no other page changes. Its sections are
+   shorter than a product page's, and its cards share each row's height, written to the same lines. */
+.office .feature { padding-top: 96px; }
+.office .feature > .wrap:last-child { padding-bottom: 96px; }
+.office .sub { margin-top: 14px; font-family: var(--display); font-size: 21px; line-height: 1.381; font-weight: 600; color: var(--gray); }
+.office .cards { display: grid; gap: 16px; margin-top: 52px; grid-auto-rows: 1fr; }
+.office .cards.c3 { grid-template-columns: repeat(3, 1fr); }
+.office .cards.c4 { grid-template-columns: repeat(4, 1fr); }
+.office .card { display: flex; flex-direction: column; padding: 26px 26px 28px; border-radius: 20px; background: var(--bg-alt); }
+.office .feature.alt .card { background: var(--bg); }
+.office .card h3 { font-size: 19px; line-height: 1.21053; font-weight: 600; letter-spacing: .012em; }
+.office .card p { margin-top: 8px; color: var(--gray); }
+.office .card .num { display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 16px; border-radius: 50%; background: var(--blue); color: #fff; font: 600 15px/1 var(--display); }
+/* How it works: the office Mac's apps beside everyone's devices. */
+.office .how { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 52px; }
+.office .panel { padding: 28px; border-radius: 22px; background: var(--bg); }
+.office .panel h3 { font-size: 21px; line-height: 1.19048; font-weight: 600; letter-spacing: .011em; }
+.office .panel ul { display: grid; gap: 14px; margin-top: 20px; }
+.office .panel.mac ul { grid-template-columns: 1fr 1fr; }
+.office .panel li { display: flex; align-items: center; gap: 12px; }
+.office .panel li img { width: 32px; height: 32px; flex: none; }
+.office .panel li b { display: block; font-family: var(--display); font-size: 17px; font-weight: 600; }
+.office .panel li span { display: block; font-size: 14px; line-height: 1.28577; color: var(--gray); }
+.office .small { margin-top: 28px; text-align: center; font-size: 14px; line-height: 1.28577; letter-spacing: -0.016em; color: var(--gray); }
+.office .small a { color: var(--blue); }
+.office .small a + a { margin-left: 18px; }
+.office .small a:hover { text-decoration: underline; }
+.office .download.alt .dl { background: var(--bg); }
+.office .download.alt .dl:hover { background: var(--raised); }
+@media (prefers-color-scheme: dark) {
+  .office .feature.alt .card, .office .panel { background: var(--raised); }
+  .office .panel li img { filter: invert(1) brightness(.96); }
+}
+@media (max-width: 1068px) { .office .cards.c4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) {
+  .office .cards.c3 { grid-template-columns: repeat(2, 1fr); }
+  .office .how { grid-template-columns: 1fr; }
+}
+@media (max-width: 734px) {
+  .office .feature { padding-top: 64px; }
+  .office .feature > .wrap:last-child { padding-bottom: 64px; }
+  .office .sub { font-size: 19px; }
+  .office .cards.c3, .office .cards.c4 { grid-template-columns: 1fr; grid-auto-rows: auto; margin-top: 36px; }
+  .office .panel.mac ul { grid-template-columns: 1fr; }
+}
 
 /* ---------- Responsive (breakpoints match apple.com) ---------- */
 @media (max-width: 1068px) {
