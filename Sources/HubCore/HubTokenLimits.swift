@@ -16,7 +16,7 @@ import Observation
     @ObservationIgnored private let usage: UsageHistory
     @ObservationIgnored private var checked = false
 
-    package init(access: HubAccess, usage: UsageHistory) {
+    public init(access: HubAccess, usage: UsageHistory) {
         self.access = access
         self.usage = usage
     }

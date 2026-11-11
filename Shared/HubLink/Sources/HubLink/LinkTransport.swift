@@ -4,9 +4,8 @@ import Network
 import Security
 
 enum LinkQUIC {
-    static let alpn = "noodle-hub/1"
-    /// What the Hub reads from a device; files travel in pieces well under it.
-    static let requestLimit = 1 << 20
+    static let alpn = LinkLimits.alpn
+    static let requestLimit = LinkLimits.request
     /// What a device reads from the Hub it pinned: answers and pushed frames, such as a bot list
     /// carrying photo avatars or a video key frame, can be far larger than any request.
     static let answerLimit = 64 << 20
@@ -18,7 +17,7 @@ enum LinkQUIC {
     /// Both sides present their key. `verify` decides whether the peer's key is acceptable.
     static func parameters(identity: LinkIdentity, verify: @escaping @Sendable (LinkPublicKey) -> Bool) throws -> NWParameters {
         let options = NWProtocolQUIC.Options(alpn: [alpn])
-        options.idleTimeout = 30_000
+        options.idleTimeout = Int(LinkLimits.idleTimeout * 1000)
         options.initialMaxStreamsBidirectional = streamLimit
         let security = options.securityProtocolOptions
         sec_protocol_options_set_local_identity(security, try identity.secIdentity())
@@ -116,9 +115,8 @@ enum LinkQUIC {
 
 /// An open stream the Hub pushes frames down until either side closes it, over QUIC.
 public final class LinkStream: LinkServerStream, @unchecked Sendable {
-    public static let keepAliveInterval: TimeInterval = 10
-    /// How long a closed stream waits for the device to end its side.
-    static let closeGrace: TimeInterval = 5
+    public static let keepAliveInterval = LinkLimits.keepAlive
+    static let closeGrace = LinkLimits.closeGrace
     /// How much a channel's client may send before anyone listens.
     static let unreadLimit = LinkQUIC.requestLimit
 

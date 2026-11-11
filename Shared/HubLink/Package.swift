@@ -33,5 +33,6 @@ let package = Package(
 #if os(Linux)
 // Only the wire builds on Linux: HubLink's transport is Apple's Network framework.
 package.targets.removeAll { !["HubWire", "HubWireTests"].contains($0.name) }
-package.products.removeAll { $0.name != "HubWire" }
+// Packages that name HubLink for Apple platforms only still need the product to exist.
+package.products = [.library(name: "HubLink", targets: ["HubWire"]), .library(name: "HubWire", targets: ["HubWire"])]
 #endif

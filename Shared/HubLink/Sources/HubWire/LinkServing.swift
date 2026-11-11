@@ -1,5 +1,18 @@
 import Foundation
 
+/// What both ends of the link keep to, whichever QUIC carries it.
+public enum LinkLimits {
+    public static let alpn = "noodle-hub/1"
+    /// What the Hub reads from a device; files travel in pieces well under it.
+    public static let request = 1 << 20
+    /// How often an open stream the Hub pushes down says something, if only an empty frame.
+    public static let keepAlive: TimeInterval = 10
+    /// How long a stream the Hub ended waits for the device to end its side.
+    public static let closeGrace: TimeInterval = 5
+    /// How long a connection may carry nothing before it is gone.
+    public static let idleTimeout: TimeInterval = 30
+}
+
 /// An open stream the Hub pushes frames down until either side closes it.
 public protocol LinkServerStream: AnyObject, Sendable {
     /// The device that opened it.
