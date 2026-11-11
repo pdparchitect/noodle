@@ -70,6 +70,7 @@ import NoodleRuntime
                               access: access, profiles: HarnessProfilesController(store: repository.harnessProfiles),
                               bots: bots, connections: connections, port: configuration.port, listen: listen, network: nil,
                               localEndpoints: { ServerAddresses.local(port: $0) })
+        link.manualAddress = configuration.address ?? ""
     }
 
     public func start() async {

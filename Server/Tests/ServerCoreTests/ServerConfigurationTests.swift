@@ -8,6 +8,7 @@ final class ServerConfigurationTests: XCTestCase {
     name: Home Server
     data: /srv/noodled
     port: 39000
+    address: noodle.example.com:443
     harnesses:
       claude-code: /opt/claude/bin/claude
       codex: /usr/local/bin/codex
@@ -39,6 +40,7 @@ final class ServerConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.name, "Home Server")
         XCTAssertEqual(configuration.data, URL(fileURLWithPath: "/srv/noodled"))
         XCTAssertEqual(configuration.port, 39000)
+        XCTAssertEqual(configuration.address, "noodle.example.com:443")
         XCTAssertEqual(configuration.harnesses, [.claudeCode: "/opt/claude/bin/claude", .codex: "/usr/local/bin/codex"])
         XCTAssertEqual(configuration.plans, [
             .init(name: "Family", harnesses: [.claudeCode, .codex], models: [.claudeCode: ["sonnet", "opus"]],
@@ -56,6 +58,7 @@ final class ServerConfigurationTests: XCTestCase {
         let configuration = try ServerConfiguration(yaml: "users:\n  Ada: {}\n")
         XCTAssertEqual(configuration.data, URL(fileURLWithPath: "/var/lib/noodled"))
         XCTAssertEqual(configuration.port, 38_415)
+        XCTAssertNil(configuration.address)
         XCTAssertFalse(configuration.name.isEmpty)
         XCTAssertEqual(configuration.harnesses, [:])
         XCTAssertEqual(configuration.plans, [])
@@ -91,6 +94,7 @@ final class ServerConfigurationTests: XCTestCase {
         FileManager.default.createFile(atPath: claude.path, contents: Data(), attributes: [.posixPermissions: 0o755])
         FileManager.default.createFile(atPath: notes.path, contents: Data(), attributes: [.posixPermissions: 0o644])
         let configuration = try ServerConfiguration(yaml: """
+        address: noodle.example.com:lots
         harnesses:
           claude-code: \(claude.path)
           codex: \(notes.path)
@@ -105,6 +109,7 @@ final class ServerConfigurationTests: XCTestCase {
             plan: Family
         """)
         XCTAssertEqual(configuration.problems(), [
+            "address: noodle.example.com:lots is not a host name or address, with a port if it is not the server's.",
             "harnesses.codex: \(notes.path) is not a program noodled can run.",
             "harnesses.muse: noodled runs only claude-code and codex for now.",
             "plans.Family.harnesses: opencode is not one of the harnesses this server has.",

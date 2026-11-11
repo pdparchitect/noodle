@@ -1,4 +1,5 @@
 import Foundation
+import HubWire
 import ServerCore
 #if canImport(HubLink)
 import HubLink
@@ -8,8 +9,11 @@ let usage = """
 USAGE: noodled <command> [--config <path>]
 
 COMMANDS:
-  check    Reads the configuration and reports every problem in it.
-  run      Serves devices until stopped.
+  check            Reads the configuration and reports every problem in it.
+  run              Serves devices until stopped.
+  invite <user>    Prints a link that pairs one device for someone in the configuration.
+                   --qr          Also draws the link's QR code, for a phone to scan.
+                   --png <file>  Also saves the QR code as a PNG picture.
 
 OPTIONS:
   --config <path>    The configuration file (default: /etc/noodled/noodled.yaml).
@@ -26,8 +30,9 @@ if let index = arguments.firstIndex(of: "--config") {
     arguments.removeSubrange(index...index + 1)
 }
 
-/// What stops the server, kept for as long as it runs.
+/// What stops the server and what the admin asks it, kept for as long as it runs.
 nonisolated(unsafe) var stopping: [any DispatchSourceSignal] = []
+nonisolated(unsafe) var control: ServerControl?
 
 /// The configuration, or the reasons it cannot be used, printed before exiting.
 func loadConfiguration() -> ServerConfiguration {
@@ -76,11 +81,15 @@ case "run":
                 print("noodled could not start: \(hub.link.state)")
                 exit(1)
             }
-            print("noodled serves \(configuration.name) on port \(port), for \(configuration.users.count) users.")
+            let asked = ServerControl(hub: hub, data: configuration.data)
+            try asked.start()
+            control = asked
+            print("noodled serves \(configuration.name) on port \(port), for \(configuration.users.count) \(configuration.users.count == 1 ? "user" : "users").")
             for signal in [SIGINT, SIGTERM] {
                 Foundation.signal(signal, SIG_IGN)
                 let source = DispatchSource.makeSignalSource(signal: signal, queue: .main)
                 source.setEventHandler {
+                    asked.stop()
                     hub.stop()
                     exit(0)
                 }
@@ -93,6 +102,44 @@ case "run":
         }
     }
     dispatchMain()
+case "invite":
+    var options = Array(arguments.dropFirst())
+    let drawsCode = options.contains("--qr")
+    options.removeAll { $0 == "--qr" }
+    var picture: URL?
+    if let index = options.firstIndex(of: "--png") {
+        guard index + 1 < options.count else {
+            FileHandle.standardError.write(Data("--png needs the file to save the QR code in.\n".utf8))
+            exit(64)
+        }
+        picture = URL(fileURLWithPath: options[index + 1])
+        options.removeSubrange(index...index + 1)
+    }
+    guard options.count == 1, !options[0].hasPrefix("--") else {
+        FileHandle.standardError.write(Data("noodled invite needs the name of a user in the configuration.\n".utf8))
+        exit(64)
+    }
+    let user = options[0]
+    let configuration = loadConfiguration()
+    do {
+        let link = try ServerControl.invite(user, data: configuration.data)
+        print("Send \(user) this link. It pairs one device and works for \(Int(LinkInvitation.lifetime / 60)) minutes:\n\n\(link)")
+        if drawsCode || picture != nil {
+            let code = try InvitationCode(link: link)
+            if drawsCode { print("\nOr scan this with Noodle on \(user)'s phone:\n\n\(code.terminal)") }
+            if let picture {
+                // Whoever has the picture can pair a device, so only the admin may read it.
+                guard FileManager.default.createFile(atPath: picture.path, contents: code.png(), attributes: [.posixPermissions: 0o600]) else {
+                    print("Could not save the QR code to \(picture.path).")
+                    exit(1)
+                }
+                print("\nThe QR code is in \(picture.path).")
+            }
+        }
+    } catch {
+        print(error.localizedDescription)
+        exit(1)
+    }
 case "help", "--help", "-h", nil:
     print(usage)
 default:

@@ -1,4 +1,5 @@
 import Foundation
+import HubWire
 import NoodleCore
 import Yams
 
@@ -28,6 +29,8 @@ public struct ServerConfiguration: Equatable, Sendable {
     public var name: String
     public var data: URL
     public var port: UInt16
+    /// Where devices away from the server's networks reach it, such as a domain, with a port when it is not `port`.
+    public var address: String?
     /// Each harness the admin installed, by where its program is.
     public var harnesses: [HarnessProvider: String]
     public var plans: [Plan]
@@ -44,10 +47,11 @@ public struct ServerConfiguration: Equatable, Sendable {
         } catch {
             throw ServerConfigurationError("noodled.yaml is not valid YAML: \(error)")
         }
-        let settings = try Self.settings(root, at: "", known: ["name", "data", "port", "harnesses", "plans", "users"])
+        let settings = try Self.settings(root, at: "", known: ["name", "data", "port", "address", "harnesses", "plans", "users"])
         name = try settings["name"].map { try Self.text($0, at: "name") } ?? Self.hostName
         data = try settings["data"].map { URL(fileURLWithPath: try Self.text($0, at: "data")) } ?? Self.defaultData
         port = try settings["port"].map { try Self.port($0) } ?? 38_415
+        address = try settings["address"].map { try Self.text($0, at: "address", expected: "expected a host name or address, with a port if it is not the server's.") }
 
         var harnesses: [HarnessProvider: String] = [:]
         for (key, value) in try Self.named(settings["harnesses"], at: "harnesses", expected: "expected each harness by name, with the path to it.") {
@@ -83,6 +87,9 @@ public struct ServerConfiguration: Equatable, Sendable {
     /// What reads fine but cannot work on this machine, each with where it is in the file.
     public func problems(isProgram: (String) -> Bool = Self.isProgram) -> [String] {
         var problems: [String] = []
+        if let address, LinkEndpoint(text: address, defaultPort: port) == nil {
+            problems.append("address: \(address) is not a host name or address, with a port if it is not the server's.")
+        }
         for (provider, path) in harnesses.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
             if !Self.supported.contains(provider) {
                 problems.append("harnesses.\(provider.rawValue): noodled runs only \(Self.supported.map(\.rawValue).joined(separator: " and ")) for now.")

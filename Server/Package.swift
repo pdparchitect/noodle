@@ -18,6 +18,8 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0"),
         .package(url: "https://github.com/apple/swift-certificates", from: "1.10.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
+        // Invitations' QR codes, where Core Image is not.
+        .package(url: "https://github.com/fwcd/swift-qrcode-generator", from: "2.0.2"),
     ],
     targets: [
         /// msquic, loaded when first used, behind the little the link needs. Its headers are vendored
@@ -33,10 +35,11 @@ let package = Package(
             .product(name: "HubLink", package: "HubLink", condition: mac),
             .product(name: "Yams", package: "Yams"),
             .product(name: "X509", package: "swift-certificates"),
+            .product(name: "QRCodeGenerator", package: "swift-qrcode-generator"),
             .product(name: "Crypto", package: "swift-crypto", condition: linux),
             .target(name: "CNoodleQUIC", condition: linux),
         ]),
-        .executableTarget(name: "noodled", dependencies: ["ServerCore"]),
+        .executableTarget(name: "noodled", dependencies: ["ServerCore", .product(name: "HubWire", package: "HubLink")]),
         .testTarget(name: "ServerCoreTests", dependencies: [
             "ServerCore",
             .product(name: "HubCore", package: "Noodle"),
