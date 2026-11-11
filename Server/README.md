@@ -8,11 +8,33 @@ The people you invite chat with their bots from Noodle on a Mac, Noodle Mobile a
 Terminal, as they would with a Noodle Hub. Computers, browsers, noodlets and calls stay with
 Noodle Hub on a Mac. Devices away from home are not told about new replies yet.
 
-## Installing
+## Quick setup
 
 Noodle Server needs a Linux machine or virtual machine with systemd, on arm64 or x86_64. It
-cannot run its bots inside an ordinary container. These steps are for Ubuntu 24.04; elsewhere,
-install the same packages.
+cannot run its bots inside an ordinary container.
+
+Download Noodle Server for
+[arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz)
+or [x86_64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz),
+then let it set itself up:
+
+```
+tar xzf Noodle-Server-linux-*.tar.gz
+sudo noodled/noodled setup
+```
+
+Setup checks the machine and offers to install what is missing: bubblewrap, msquic, and Claude
+Code or Codex. It asks what to call the server, how devices away from home reach it, and your
+name; writes the configuration; installs the service; signs the server in to each harness; starts
+it; and prints a link and QR code that pair your first device. It asks before every change. Run
+it again on a server already set up and it keeps your configuration, or moves it aside with the
+date in its name if you choose to start over.
+
+The rest of this page is what setup does, for doing it by hand, and how to run the server after.
+
+## Installing by hand
+
+These steps are for Ubuntu 24.04; elsewhere, install the same packages.
 
 Install the packages it needs, and msquic from Microsoft's packages:
 

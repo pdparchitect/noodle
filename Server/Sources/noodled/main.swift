@@ -8,6 +8,7 @@ let usage = """
 USAGE: noodled <command> [--config <path>]
 
 COMMANDS:
+  setup            Sets up this machine as a Noodle Server, step by step, asking before each change.
   check            Reads the configuration and reports every problem in it.
   run              Serves devices until stopped.
   invite <user>    Prints a link that pairs one device for someone in the configuration.
@@ -142,6 +143,24 @@ case "invite":
                 print("\nThe QR code is in \(picture.path).")
             }
         }
+    } catch {
+        print(error.localizedDescription)
+        exit(1)
+    }
+case "setup":
+    guard getuid() == 0 else {
+        print("Run setup as root: sudo \(CommandLine.arguments[0]) setup")
+        exit(1)
+    }
+    let running = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
+    let paths = SetupPaths.standard(running: running)
+    // The service it installs reads this file and no other.
+    guard configurationFile.path == paths.configuration.path else {
+        print("setup writes \(paths.configuration.path), which the service reads; leave out --config.")
+        exit(64)
+    }
+    do {
+        try ServerSetup(conversation: ConsoleConversation(), system: LiveSetupSystem(), paths: paths).run()
     } catch {
         print(error.localizedDescription)
         exit(1)
