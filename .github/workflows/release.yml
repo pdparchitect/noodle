@@ -397,8 +397,10 @@ jobs:
         run: swift test --package-path Shared/Surface --scratch-path .build/linux-surface
       - name: Test the Hub link's wire on Linux
         run: swift test --package-path Shared/HubLink --scratch-path .build/linux-hub-link
-      - name: Test NoodleCore and NoodleMCP on Linux
+      - name: Test the Hub engine on Linux
         run: swift test --scratch-path .build/linux
+      - name: Test Noodle Server
+        run: swift test --package-path Server --scratch-path .build/linux-server
 
   # One check for main's ruleset to require: every test job passed or was skipped.
   ci-passed:

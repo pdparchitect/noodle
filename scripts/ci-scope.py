@@ -34,8 +34,8 @@ SUITES = {
     "hub": (["Hub"], []),
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
     "terminal": (["Terminal"], []),
-    # The Hub engine on Linux.
-    "linux": (["", "Shared/HubLink", "Shared/Surface"], []),
+    # The Hub engine on Linux, and Noodle Server built on it.
+    "linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),
 }
 EVERYTHING = ["checks", *SUITES]
 # The same files the workflow's trigger leaves out: they never start a run, so they never widen one.
