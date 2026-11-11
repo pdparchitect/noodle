@@ -205,6 +205,7 @@ if CommandLine.arguments.count == 12, CommandLine.arguments[1] == "--harness-chi
             if HostPaths.managedHarnesses.manages(HarnessInstallation(provider: provider, executablePath: CommandLine.arguments[3])) {
                 setenv("DISABLE_AUTOUPDATER", "1", 1)
             }
+            for (key, value) in ClaudeLaunch.environment { setenv(key, value, 1) }
             strings = [executable.path] + (try ClaudeLaunch.arguments(sessionID: sessionID,
                 resumeSession: resumeSession, model: model, effort: effort, restricted: restricted, appsEnabled: appsEnabled))
         }

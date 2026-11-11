@@ -59,6 +59,7 @@ final class HarnessSandboxTests: XCTestCase {
         XCTAssertEqual(claude.environment["HOME"], home)
         XCTAssertEqual(claude.environment["CLAUDE_CONFIG_DIR"], home + "/.claude")
         XCTAssertEqual(claude.environment["DISABLE_AUTOUPDATER"], "1")
+        XCTAssertEqual(claude.environment["CLAUDE_CODE_ENTRYPOINT"], "noodle")
         XCTAssertEqual(claude.environment["NOODLE_WORKSPACE"], workspace.path)
         XCTAssertTrue(claude.arguments.contains(session.uuidString.lowercased()))
         XCTAssertTrue(try XCTUnwrap(claude.arguments.last).contains("\"sandbox\":{\"enabled\":false}"))

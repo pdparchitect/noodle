@@ -96,6 +96,7 @@ public struct HarnessSandbox: Sendable {
             environment["CLAUDE_CODE_TMPDIR"] = temporary.path
             // The admin updates the harness; a copy updating itself would write where the bot cannot.
             environment["DISABLE_AUTOUPDATER"] = "1"
+            environment.merge(ClaudeLaunch.environment) { _, label in label }
             let arguments = try ClaudeLaunch.arguments(sessionID: sessionID, resumeSession: resumeSession, model: model,
                                                        effort: effort, restricted: true)
             return (arguments, environment)

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Claude Code bots now tell Claude that the Hub runs them. Claude Code otherwise reports them as SDK sessions, which currently use a Claude plan's usage limits about twice as fast for the same work ([anthropics/claude-code#97074](https://github.com/anthropics/claude-code/issues/97074)).
 - When an update changes what bots are told about using the Hub, each bot is asked once to reread it, so bots that were already running pick up new features such as tasks without being restarted.
 
 ## [0.49.0] - 2026-11-10

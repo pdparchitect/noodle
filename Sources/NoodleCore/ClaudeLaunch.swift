@@ -2,6 +2,12 @@ import Foundation
 
 /// Fixed native arguments shared by the signed host and executable smoke tests.
 public enum ClaudeLaunch {
+    /// Names Noodle as the client, overwriting any inherited label. Claude Code otherwise
+    /// labels a `-p` session `sdk-cli`, which currently uses a Claude plan's limits about
+    /// twice as fast for the same tokens (anthropics/claude-code#97074, tracked in
+    /// pdparchitect/noodle#233). Keep it until Anthropic says how labels are metered.
+    public static let environment = ["CLAUDE_CODE_ENTRYPOINT": "noodle"]
+
     public static func arguments(sessionID: UUID?, resumeSession: Bool, model: String?,
                                  effort: String?, restricted: Bool, appsEnabled: Bool = false) throws -> [String] {
         guard let sessionID else { throw HarnessSetupError("Claude Code requires a valid session identifier.") }

@@ -68,6 +68,7 @@ final class RestrictedClaudeSandboxTests: XCTestCase {
         XCTAssertEqual(try settings(restricted)["disableClaudeAiConnectors"] as? Bool, true)
         XCTAssertEqual(try (settings(restricted)["sandbox"] as? [String: Bool])?["enabled"], false)
         XCTAssertNil(try settings(normal)["sandbox"])
+        XCTAssertEqual(ClaudeLaunch.environment, ["CLAUDE_CODE_ENTRYPOINT": "noodle"])
         for restricted in [false, true] {
             let allowed = try ClaudeLaunch.arguments(sessionID: id, resumeSession: true, model: nil,
                 effort: nil, restricted: restricted, appsEnabled: true)
