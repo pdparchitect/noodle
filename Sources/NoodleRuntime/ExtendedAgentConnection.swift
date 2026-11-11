@@ -2,8 +2,12 @@ import Foundation
 import NoodleAgentBridge
 import NoodleCore
 
+/// The app's connection to what runs its bots' harnesses: on a Mac, the signed Agent Host over XPC.
+/// Elsewhere there is no such host yet, so connecting fails and no bot starts.
 public final class ExtendedAgentConnection: NSObject, AgentHostClient {
+    #if os(macOS)
     private let connection: NSXPCConnection
+    #endif
     public var onData: ((Data, Bool) -> Void)?
     public var onExit: ((Int32) -> Void)?
     public var onFailure: ((String) -> Void)?
@@ -14,6 +18,7 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     private var stopping = false
 
     public init(bundle: Bundle = .main) throws {
+        #if os(macOS)
         guard let requirement = AgentHostIdentity.requirement(for: AgentHostIdentity.service, bundle: bundle) else {
             throw NSError(domain: "Noodle", code: 1, userInfo: [NSLocalizedDescriptionKey: "Agent Host signing configuration is missing. Rebuild the signed app."])
         }
@@ -32,12 +37,25 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
             self.onFailure?("Agent runtime was interrupted.")
         }
         connection.resume()
+        #else
+        throw HarnessSetupError("Bots cannot run on this system yet: it has no Agent Host.")
+        #endif
     }
 
     private func proxy(failure: ((String) -> Void)? = nil) -> AgentHostService? {
+        #if os(macOS)
         connection.remoteObjectProxyWithErrorHandler { [weak self] error in
             (failure ?? self?.onFailure)?(error.localizedDescription)
         } as? AgentHostService
+        #else
+        nil
+        #endif
+    }
+
+    private func disconnect() {
+        #if os(macOS)
+        connection.invalidate()
+        #endif
     }
 
     func start(
@@ -115,13 +133,13 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
         service.stop { [self] stopped in
             // Keep the same helper session available after an unconfirmed stop.
             // A new connection cannot confirm ownership of the old process group.
-            if stopped { connection.invalidate() }
+            if stopped { disconnect() }
             reply(stopped)
         }
     }
     public func invalidate() {
         stopping = true
-        connection.invalidate()
+        disconnect()
     }
     func checkCompatibility(reply: @escaping (Bool, String) -> Void) {
         proxy(failure: { reply(false, $0) })?.checkCompatibility(withReply: reply)

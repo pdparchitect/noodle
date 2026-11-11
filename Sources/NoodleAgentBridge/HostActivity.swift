@@ -1,3 +1,5 @@
+// Only the macOS Agent Host uses this.
+#if canImport(XPC)
 import Foundation
 import XPC
 
@@ -49,3 +51,4 @@ public final class HostActivity: @unchecked Sendable {
         deinit { release() }
     }
 }
+#endif

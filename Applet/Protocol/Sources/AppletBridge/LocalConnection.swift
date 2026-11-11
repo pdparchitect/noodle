@@ -1,14 +1,17 @@
-// The companion apps run on a Mac.
-#if os(macOS)
-import Darwin
 import Foundation
-import Security
 
 public enum AppletConnection {
     public static var providerID: String { AppletBuildIdentity.current.providerID }
     public static var clientIDs: [String] { AppletBuildIdentity.current.clientIDs }
     public static let maxFrame = 32 * 1_048_576
+}
 
+// The companion apps run on a Mac.
+#if os(macOS)
+import Darwin
+import Security
+
+extension AppletConnection {
     public static func socketURL(bundle: Bundle = .main) throws -> URL {
         guard let identity = AppletBuildIdentity.identify(bundle.bundleIdentifier),
               let group = bundle.object(forInfoDictionaryKey: "NoodleAppletGroup") as? String else {

@@ -300,7 +300,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private func requireTokens(for agents: [AgentRecord], from user: HubUser) throws {
         if let suspended = agents.first(where: { $0.isSuspended() }), let until = suspended.suspendedUntil {
             throw LinkError("\(suspended.displayName) is suspended. " + (until == AgentRecord.indefinitely ? "Unsuspend it first."
-                : "It continues \(RelativeDateTimeFormatter().localizedString(for: until, relativeTo: Date())), or unsuspend it first."))
+                : "It continues \(HubTokenLimits.relative(until, to: Date())), or unsuspend it first."))
         }
         guard let tokenLimits else { return }
         for agent in agents where access.host(ofBot: agent.id) == nil {
@@ -793,6 +793,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     /// piece lands, checked and converted as Noodle does a file a person picks.
     public func receiveBackground(_ piece: LinkBackgroundPiece, for user: HubUser) async throws -> LinkBackground? {
         _ = try ownedConversation(piece.conversationID, by: user)
+        #if !canImport(AVFoundation)
+        // Pictures and videos are checked and converted with Apple's media frameworks.
+        throw LinkError("This Noodle Hub keeps only the built-in backgrounds.")
+        #else
         guard let part = try keep(piece.data, at: piece.offset, of: piece.byteCount, as: piece.upload) else { return nil }
         let kind = URL(fileURLWithPath: piece.filename).pathExtension.lowercased().filter { $0.isLetter || $0.isNumber }
         let file = uploads.appendingPathComponent("\(piece.upload.uuidString).\(kind)")
@@ -803,6 +807,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         try repository.setBackground(conversationID: piece.conversationID, file: prepared)
         checkForChanges()
         return background(of: piece.conversationID)
+        #endif
     }
 
     /// One piece of a conversation's background file, or of the small copy made for phones the first time one asks.
@@ -816,7 +821,11 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         }
         guard repository.isOwnBackgroundFile(original, conversationID: fetch.conversationID) else { throw LinkError("This background has changed.") }
         if !FileManager.default.fileExists(atPath: url.path) {
+            #if canImport(AVFoundation)
             try await BackgroundMedia.writeCompactCopy(of: original, kind: background.mediaKind ?? .image, to: url)
+            #else
+            throw LinkError("This Noodle Hub cannot make a small copy of this background.")
+            #endif
         }
         guard repository.isOwnBackgroundFile(url, conversationID: fetch.conversationID) else { throw LinkError("This background has changed.") }
         let handle = try FileHandle(forReadingFrom: url)

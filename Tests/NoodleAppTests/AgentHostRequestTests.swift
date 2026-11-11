@@ -21,6 +21,13 @@ private struct HostAnswer: Codable, Equatable { let name: String }
         timers.forEach { $0.resolve(.failure(CancellationError())) }
     }
 
+    /// A build that is not signed cannot reach the Agent Host, and says how to get one that can.
+    func testAnUnsignedBuildCannotReachTheAgentHost() {
+        XCTAssertThrowsError(try ExtendedAgentConnection(bundle: Bundle(for: Self.self))) {
+            XCTAssertEqual($0.localizedDescription, "Agent Host signing configuration is missing. Rebuild the signed app.")
+        }
+    }
+
     /// The timeout waits on a gate, so no test depends on how long anything takes.
     private func ask(disconnected: String? = nil) async throws -> Task<HostAnswer, Error> {
         let link = link, timer = RoutingGate<Void>()

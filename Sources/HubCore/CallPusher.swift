@@ -10,6 +10,9 @@ import FoundationNetworking
 import HubWire
 #if canImport(os)
 import os
+#else
+// NoodleCore stands in for the system log.
+import NoodleCore
 #endif
 
 /// Where the Hub posts its rings: Noodle Push, or a stand-in in tests.

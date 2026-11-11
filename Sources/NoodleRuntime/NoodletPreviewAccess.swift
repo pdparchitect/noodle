@@ -1,3 +1,5 @@
+// Noodle Applet runs on a Mac, and hands previews over as security-scoped bookmarks.
+#if os(macOS)
 import Foundation
 import AppletBridge
 
@@ -23,3 +25,4 @@ public final class NoodletPreviewAccess {
     }
     deinit { if accessing { url.stopAccessingSecurityScopedResource() } }
 }
+#endif

@@ -1,6 +1,5 @@
 import Foundation
 import ProductIdentity
-import Security
 
 public enum AgentHostIdentity {
     public static var service: String {
@@ -32,6 +31,9 @@ public enum AgentHostIdentity {
 
 // Deliberately no arbitrary arguments, environment, or shell endpoint. The host
 // maps this typed configuration to a fixed command for each trusted harness.
+// XPC needs Objective-C protocols; elsewhere the same calls are plain Swift, for a host the
+// app runs itself. The two lists must stay the same: Linux CI builds the plain one.
+#if canImport(ObjectiveC)
 @objc public protocol AgentHostService {
     func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void)
     func inspectApple(withReply reply: @escaping (Data?, String?) -> Void)
@@ -100,3 +102,73 @@ public enum AgentHostIdentity {
     /// An account check read the signed-in account's email address or name.
     func accountName(_ name: String)
 }
+#else
+public protocol AgentHostService: AnyObject {
+    func startRestrictedApple(agentID: String, modelIdentifier: String?, withReply reply: @escaping (Int32, String?) -> Void)
+    func inspectApple(withReply reply: @escaping (Data?, String?) -> Void)
+    func startRestrictedCodex(agentID: String, executablePath: String, appsEnabled: Bool,
+                              withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedClaude(agentID: String, executablePath: String, sessionID: String?, resumeSession: Bool,
+                               modelIdentifier: String?, effortIdentifier: String?, appsEnabled: Bool,
+                               withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
+                            modelIdentifier: String?, effortIdentifier: String?,
+                            withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedMuse(agentID: String, executablePath: String, modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void)
+    func startRestrictedAntigravity(agentID: String, executablePath: String, conversationID: String?, modelIdentifier: String?,
+                                    withReply reply: @escaping (Int32, String?) -> Void)
+    func start(
+        harnessIdentifier: String,
+        agentID: String,
+        executablePath: String,
+        sessionID: String?,
+        resumeSession: Bool,
+        modelIdentifier: String?,
+        effortIdentifier: String?,
+        appsEnabled: Bool,
+        withReply reply: @escaping (Int32, String?) -> Void
+    )
+    /// A temporary login selection, resolved and checked against the harness by the host.
+    func startProfileHarness(harnessIdentifier: String, agentID: String, executablePath: String, profileID: String,
+                             restricted: Bool, appsEnabled: Bool, sessionID: String?, resumeSession: Bool,
+                             modelIdentifier: String?, effortIdentifier: String?,
+                             withReply reply: @escaping (Int32, String?) -> Void)
+    func write(_ data: Data)
+    func stop(withReply reply: @escaping (Bool) -> Void)
+    func checkCompatibility(withReply reply: @escaping (Bool, String) -> Void)
+    /// The profile is named by identifier only; the host resolves its folder
+    /// in Noodle's storage and derives the harness and environment from it.
+    func checkProfileAuthentication(profileID: String, executablePath: String,
+                                    withReply reply: @escaping (Bool, String?) -> Void)
+    func signInProfile(profileID: String, executablePath: String,
+                       withReply reply: @escaping (Bool, String?) -> Void)
+    /// Removes the profile's login, files and Keychain item alike; replies with why it could not.
+    func signOutProfile(profileID: String, withReply reply: @escaping (String?) -> Void)
+    /// The models an FX login offers through its Vercel team, JSON-encoded: a profile's, or with none the Default login's.
+    func fxModels(profileID: String?, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    /// The Vercel teams an FX profile's login can use, JSON-encoded; with a slug, that team is selected first.
+    func fxTeams(profileID: String, executablePath: String, selecting slug: String?,
+                 withReply reply: @escaping (Data?, String?) -> Void)
+    func codexModels(executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectGrok(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectAntigravity(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
+    /// The app names a download it staged in Noodle's storage. The host derives
+    /// the folder, checks the vendor's signature, and replies with the executable.
+    func publishHarness(harnessIdentifier: String, version: String, stagingID: String,
+                        withReply reply: @escaping (String?, String?) -> Void)
+}
+
+public protocol AgentHostClient: AnyObject {
+    func receive(_ data: Data, isError: Bool)
+    func terminated(_ status: Int32)
+    func signInChallenge(_ url: String, code: String)
+    /// A Codex account check read the account's plan limits: a JSON-encoded SubscriptionUsage.
+    func accountUsage(_ data: Data)
+    /// An account check read the signed-in account's email address or name.
+    func accountName(_ name: String)
+}
+#endif

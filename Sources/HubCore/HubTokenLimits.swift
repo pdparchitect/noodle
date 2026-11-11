@@ -70,9 +70,16 @@ import Observation
         "Token limit reached. Continues \(until.formatted(date: .abbreviated, time: .shortened))."
     }
 
-    /// Relative, as the person's device may be in another time zone: "in 5 hours".
-    private func relative(_ date: Date) -> String {
-        RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now())
+    private func relative(_ date: Date) -> String { Self.relative(date, to: now()) }
+
+    /// Relative, as the person's device may be in another time zone: "in 5 hours". Linux's
+    /// Foundation has only the format style, which rounds the odd minute differently.
+    static func relative(_ date: Date, to now: Date) -> String {
+        #if canImport(Darwin)
+        RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+        #else
+        date.formatted(.relative(presentation: .numeric, unitsStyle: .wide))
+        #endif
     }
 
     private func spending(of user: UUID, _ limit: HubTokenLimit) -> [UsageSpend] {

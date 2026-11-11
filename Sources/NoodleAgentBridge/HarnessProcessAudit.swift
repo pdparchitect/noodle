@@ -1,3 +1,5 @@
+// Only the macOS Agent Host uses this.
+#if canImport(Darwin)
 import Darwin
 import Foundation
 import os
@@ -172,3 +174,4 @@ public final class HarnessProcessAudit: @unchecked Sendable {
         return result == 0 ? usage.ri_lifetime_max_phys_footprint : nil
     }
 }
+#endif

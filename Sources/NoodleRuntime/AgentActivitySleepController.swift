@@ -5,7 +5,9 @@ import ProductIdentity
 public final class AgentActivitySleepController {
     private var activity: NSObjectProtocol?
 
+    /// Only a Mac sleeps while bots work; a server stays up on its own.
     func update(shouldPreventIdleSleep: Bool) {
+        #if canImport(Darwin)
         if shouldPreventIdleSleep, activity == nil {
             activity = ProcessInfo.processInfo.beginActivity(
                 options: [.idleSystemSleepDisabled],
@@ -15,11 +17,14 @@ public final class AgentActivitySleepController {
             ProcessInfo.processInfo.endActivity(activity)
             self.activity = nil
         }
+        #endif
     }
 
     deinit {
+        #if canImport(Darwin)
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)
         }
+        #endif
     }
 }

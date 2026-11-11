@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 import HubWire
 
 /// A port the router forwards to this Mac, and the outside address devices reach it on.

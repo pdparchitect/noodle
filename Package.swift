@@ -224,8 +224,8 @@ if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
 }
 
 #if os(Linux)
-// Only what a Linux Hub would build on: NoodleCore and NoodleMCP, with the tests that run there.
-let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleMCP", "NoodleCorePortableTests"]
+// Only the Hub engine builds on Linux, with the tests that run there.
+let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests"]
 package.targets.removeAll { !linux.contains($0.name) }
-package.products.removeAll { !["NoodleCore", "NoodleMCP"].contains($0.name) }
+package.products.removeAll { !["NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }
 #endif
