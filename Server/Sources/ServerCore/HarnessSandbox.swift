@@ -116,6 +116,9 @@ public struct HarnessSandbox: Sendable {
     public var onExit: ((Int32) -> Void)?
     public var onFailure: ((String) -> Void)?
     private let workspace: URL
+    private let logins: ServerLogins
+    /// A login the bot runs on for now, in place of its own, as when its own ran out.
+    private let profileOverride: UUID?
     private let sandbox: HarnessSandbox
     private var process: Process?
     private var input: ProcessInputWriter?
@@ -126,8 +129,10 @@ public struct HarnessSandbox: Sendable {
     private var stopping = false
     private var stopReplies: [(Bool) -> Void] = []
 
-    public init(workspace: URL, sandbox: HarnessSandbox = HarnessSandbox()) {
+    public init(workspace: URL, logins: ServerLogins, profileOverride: UUID? = nil, sandbox: HarnessSandbox = HarnessSandbox()) {
         self.workspace = workspace
+        self.logins = logins
+        self.profileOverride = profileOverride
         self.sandbox = sandbox
     }
 
@@ -149,6 +154,19 @@ public struct HarnessSandbox: Sendable {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                         attributes: [.posixPermissions: 0o700])
             }
+            // The bot's own login, or the one it runs on for now; a copy of it goes into the bot's home.
+            guard let login = try logins.profiles.selected(workspace: workspace, provider: provider, override: profileOverride) else {
+                throw HarnessSetupError("\(provider.displayName) has no login on this server.")
+            }
+            let loginHome = logins.profiles.loginHome(login)
+            if provider == .codex {
+                SharedLogins.shared.refreshCodexIfDue(loginHome: loginHome, executable: program, environment: logins.environment(login))
+            }
+            // A login the harness refused is not tried again until someone signs in, or a while has passed.
+            if RestrictedHarnessStorage.refusedAgain(provider: provider, workspace: workspace, loginHome: loginHome, secret: { _, _ in nil }) {
+                throw RestrictedHarnessStorage.refused(provider)
+            }
+            try logins.prepare(provider, login: login, workspace: workspace)
             // Held until the harness is gone, so no second server runs this bot.
             let lock = try AgentRuntimeLock.acquire(layout: AgentStorageLayout(workspace: workspace))
             let child = Process()
@@ -183,6 +201,9 @@ public struct HarnessSandbox: Sendable {
             self.lock = lock
             open = 2
             process = child
+            // A login the bot renews goes back to be shared, and one renewed elsewhere comes to the bot.
+            SharedLogins.shared.add(self, provider: provider, workspace: workspace, loginHome: loginHome, secret: { _, _ in nil },
+                                    writeSecret: nil, restricted: true, executable: program, environment: logins.environment(login))
             self.input = ProcessInputWriter(handle: input.fileHandleForWriting)
             reply(child.processIdentifier, nil)
         } catch {
@@ -222,6 +243,7 @@ public struct HarnessSandbox: Sendable {
 
     private func terminated(_ status: Int32) {
         self.status = status
+        SharedLogins.shared.remove(self)
         if let lock { close(lock) }
         lock = nil
         input = nil

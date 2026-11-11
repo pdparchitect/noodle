@@ -8,10 +8,22 @@ import Yams
 public struct ServerConfiguration: Equatable, Sendable {
     public struct Plan: Equatable, Sendable {
         public var name: String
+        /// The harnesses whose own login the plan lends.
         public var harnesses: [HarnessProvider]
-        /// The models a bot may use on a harness; a harness missing here may use any.
+        /// The profiles of each harness the plan lends, by name, written `claude-code/Work` in the file.
+        public var profiles: [HarnessProvider: [String]]
+        /// The models a bot may use on a harness, whichever of its logins; a harness missing here may use any.
         public var models: [HarnessProvider: [String]]
         public var tokens: TokenLimit?
+
+        public init(name: String, harnesses: [HarnessProvider], profiles: [HarnessProvider: [String]] = [:],
+                    models: [HarnessProvider: [String]], tokens: TokenLimit?) {
+            self.name = name
+            self.harnesses = harnesses
+            self.profiles = profiles
+            self.models = models
+            self.tokens = tokens
+        }
     }
 
     public struct User: Equatable, Sendable {
@@ -33,6 +45,8 @@ public struct ServerConfiguration: Equatable, Sendable {
     public var address: String?
     /// Each harness the admin installed, by where its program is.
     public var harnesses: [HarnessProvider: String]
+    /// Each harness's profiles, by name: logins besides its own.
+    public var profiles: [HarnessProvider: [String]]
     public var plans: [Plan]
     public var users: [User]
 
@@ -53,12 +67,22 @@ public struct ServerConfiguration: Equatable, Sendable {
         port = try settings["port"].map { try Self.port($0) } ?? 38_415
         address = try settings["address"].map { try Self.text($0, at: "address", expected: "expected a host name or address, with a port if it is not the server's.") }
 
-        var harnesses: [HarnessProvider: String] = [:]
+        var harnesses: [HarnessProvider: String] = [:], profiles: [HarnessProvider: [String]] = [:]
         for (key, value) in try Self.named(settings["harnesses"], at: "harnesses", expected: "expected each harness by name, with the path to it.") {
             let path = "harnesses.\(key)"
-            harnesses[try Self.harness(key, at: path)] = try Self.text(value, at: path, expected: "expected the path to the harness.")
+            let provider = try Self.harness(key, at: path)
+            // Just the path, or the path with the harness's profiles.
+            if case .mapping = value {
+                let harness = try Self.settings(value, at: path, known: ["path", "profiles"])
+                guard let program = harness["path"] else { throw ServerConfigurationError("\(path).path: expected the path to the harness.") }
+                harnesses[provider] = try Self.text(program, at: "\(path).path", expected: "expected the path to the harness.")
+                if let names = harness["profiles"] { profiles[provider] = try Self.list(names, at: "\(path).profiles") }
+            } else {
+                harnesses[provider] = try Self.text(value, at: path, expected: "expected the path to the harness.")
+            }
         }
         self.harnesses = harnesses
+        self.profiles = profiles
 
         plans = try Self.named(settings["plans"], at: "plans", expected: "expected each plan by name, with its settings.").map { name, node in
             let path = "plans.\(name)"
@@ -67,10 +91,13 @@ public struct ServerConfiguration: Equatable, Sendable {
             for (key, value) in try Self.named(plan["models"], at: "\(path).models", expected: "expected the models of each harness by its name.") {
                 models[try Self.harness(key, at: "\(path).models.\(key)")] = try Self.list(value, at: "\(path).models.\(key)")
             }
-            return Plan(name: name,
-                        harnesses: try (plan["harnesses"].map { try Self.list($0, at: "\(path).harnesses") } ?? [])
-                            .map { try Self.harness($0, at: "\(path).harnesses") },
-                        models: models,
+            var own: [HarnessProvider] = [], lent: [HarnessProvider: [String]] = [:]
+            for entry in try plan["harnesses"].map({ try Self.list($0, at: "\(path).harnesses") }) ?? [] {
+                let parts = entry.split(separator: "/", maxSplits: 1).map(String.init)
+                let provider = try Self.harness(parts[0], at: "\(path).harnesses")
+                if parts.count == 2 { lent[provider, default: []].append(parts[1]) } else { own.append(provider) }
+            }
+            return Plan(name: name, harnesses: own, profiles: lent, models: models,
                         tokens: try plan["tokens"].map { try Self.tokens($0, at: "\(path).tokens") })
         }
 
@@ -98,8 +125,14 @@ public struct ServerConfiguration: Equatable, Sendable {
             }
         }
         for plan in plans {
-            for provider in plan.harnesses where harnesses[provider] == nil {
-                problems.append("plans.\(plan.name).harnesses: \(provider.rawValue) is not one of the harnesses this server has.")
+            for provider in Set(plan.harnesses + plan.profiles.keys).sorted(by: { $0.rawValue < $1.rawValue }) {
+                guard harnesses[provider] != nil else {
+                    problems.append("plans.\(plan.name).harnesses: \(provider.rawValue) is not one of the harnesses this server has.")
+                    continue
+                }
+                for name in plan.profiles[provider] ?? [] where !(profiles[provider] ?? []).contains(name) {
+                    problems.append("plans.\(plan.name).harnesses: \(provider.rawValue)/\(name) is not one of the profiles in harnesses.\(provider.rawValue).")
+                }
             }
         }
         let planNames = Set(plans.map(\.name) + [Self.defaultPlan])

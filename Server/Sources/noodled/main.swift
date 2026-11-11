@@ -1,5 +1,6 @@
 import Foundation
 import HubWire
+import NoodleCore
 import ServerCore
 #if canImport(HubLink)
 import HubLink
@@ -14,6 +15,8 @@ COMMANDS:
   invite <user>    Prints a link that pairs one device for someone in the configuration.
                    --qr          Also draws the link's QR code, for a phone to scan.
                    --png <file>  Also saves the QR code as a PNG picture.
+  login <harness>  Signs the server in to claude-code or codex, with the harness's own sign-in.
+                   --profile <name>  Signs in that profile of the harness instead.
 
 OPTIONS:
   --config <path>    The configuration file (default: /etc/noodled/noodled.yaml).
@@ -54,14 +57,19 @@ func loadConfiguration() -> ServerConfiguration {
 switch arguments.first {
 case "check":
     let configuration = loadConfiguration()
+    let plans = configuration.plans.count, users = configuration.users.count
+    print("\(configurationFile.path) is ready: \(plans) \(plans == 1 ? "plan" : "plans"), \(users) \(users == 1 ? "user" : "users").")
+    // Only the server's own account can see its logins.
+    if FileManager.default.isReadableFile(atPath: configuration.data.path) {
+        let unsigned = ServerLogins(configuration: configuration, profiles: HarnessProfileStore(root: configuration.data)).unsigned()
+        if !unsigned.isEmpty { print("\nBots cannot start on these logins yet:\n" + unsigned.map { "  \($0)" }.joined(separator: "\n")) }
+    }
     #if os(Linux)
     if let problem = HarnessSandbox().problem() {
-        print(problem)
+        print("\n\(problem)")
         exit(1)
     }
     #endif
-    let plans = configuration.plans.count, users = configuration.users.count
-    print("\(configurationFile.path) is ready: \(plans) \(plans == 1 ? "plan" : "plans"), \(users) \(users == 1 ? "user" : "users").")
 case "run":
     let configuration = loadConfiguration()
     #if os(Linux)
@@ -136,6 +144,53 @@ case "invite":
                 print("\nThe QR code is in \(picture.path).")
             }
         }
+    } catch {
+        print(error.localizedDescription)
+        exit(1)
+    }
+case "login":
+    var options = Array(arguments.dropFirst())
+    var profile: String?
+    if let index = options.firstIndex(of: "--profile") {
+        guard index + 1 < options.count else {
+            FileHandle.standardError.write(Data("--profile needs the name of one of the harness's profiles.\n".utf8))
+            exit(64)
+        }
+        profile = options[index + 1]
+        options.removeSubrange(index...index + 1)
+    }
+    guard options.count == 1, let provider = HarnessProvider(rawValue: options[0] == "claude" ? "claude-code" : options[0]),
+          ServerConfiguration.supported.contains(provider) else {
+        FileHandle.standardError.write(Data("noodled login needs claude-code or codex.\n".utf8))
+        exit(64)
+    }
+    let configuration = loadConfiguration()
+    guard let program = configuration.harnesses[provider] else {
+        print("\(provider.rawValue) is not one of the harnesses in \(configurationFile.path).")
+        exit(1)
+    }
+    // Logins signed in by another account, such as root, would be out of the server's reach.
+    if let owner = (try? FileManager.default.attributesOfItem(atPath: configuration.data.path))?[.ownerAccountID] as? NSNumber,
+       owner.uint32Value != getuid() {
+        print("Sign in as the account noodled runs as, which owns \(configuration.data.path), such as: sudo -u noodled noodled login \(provider.rawValue)")
+        exit(1)
+    }
+    do {
+        let logins = ServerLogins(configuration: configuration, profiles: HarnessProfileStore(root: configuration.data))
+        let login = try logins.login(provider, profile: profile)
+        let command = try logins.signIn(provider, login: login)
+        let harness = Process()
+        harness.executableURL = URL(fileURLWithPath: program)
+        harness.arguments = command.arguments
+        harness.environment = command.environment
+        try harness.run()
+        harness.waitUntilExit()
+        let name = profile.map { "\(provider.displayName)'s \($0) profile" } ?? provider.displayName
+        guard harness.terminationStatus == 0, logins.isSignedIn(login) else {
+            print("\(name) is not signed in.")
+            exit(1)
+        }
+        print("Signed in to \(name). Bots on it use this login from their next start.")
     } catch {
         print(error.localizedDescription)
         exit(1)

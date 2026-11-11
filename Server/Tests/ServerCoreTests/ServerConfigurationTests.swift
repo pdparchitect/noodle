@@ -117,4 +117,45 @@ final class ServerConfigurationTests: XCTestCase {
         ])
         XCTAssertEqual(try ServerConfiguration(yaml: "harnesses:\n  claude-code: \(claude.path)\n").problems(), [])
     }
+
+    /// A harness may have profiles, each its own login; a plan lends a harness's own login, or a profile of it.
+    func testHarnessesCanHaveProfilesThatPlansLend() throws {
+        let configuration = try ServerConfiguration(yaml: """
+        harnesses:
+          claude-code:
+            path: /opt/claude/bin/claude
+            profiles: [Work, Family]
+          codex: /usr/local/bin/codex
+        plans:
+          Family:
+            harnesses: [claude-code/Family, codex]
+            models:
+              claude-code: [sonnet]
+        """)
+        XCTAssertEqual(configuration.harnesses, [.claudeCode: "/opt/claude/bin/claude", .codex: "/usr/local/bin/codex"])
+        XCTAssertEqual(configuration.profiles, [.claudeCode: ["Work", "Family"]])
+        let plan = try XCTUnwrap(configuration.plans.first)
+        XCTAssertEqual(plan.harnesses, [.codex])
+        XCTAssertEqual(plan.profiles, [.claudeCode: ["Family"]])
+        XCTAssertEqual(plan.models, [.claudeCode: ["sonnet"]])
+    }
+
+    func testAProfileAPlanLendsMustBeInTheFile() throws {
+        let configuration = try ServerConfiguration(yaml: """
+        harnesses:
+          claude-code:
+            path: /opt/claude/bin/claude
+            profiles: [Work]
+        plans:
+          Family:
+            harnesses: [claude-code/Home, codex/Work]
+        """)
+        XCTAssertEqual(configuration.problems(isProgram: { _ in true }), [
+            "plans.Family.harnesses: claude-code/Home is not one of the profiles in harnesses.claude-code.",
+            "plans.Family.harnesses: codex is not one of the harnesses this server has.",
+        ])
+        XCTAssertThrowsError(try ServerConfiguration(yaml: "harnesses:\n  codex:\n    pth: /bin/codex\n")) { error in
+            XCTAssertEqual(error.localizedDescription, "harnesses.codex.pth: noodled has no such setting.")
+        }
+    }
 }

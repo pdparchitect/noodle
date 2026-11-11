@@ -39,7 +39,9 @@ let package = Package(
             .product(name: "Crypto", package: "swift-crypto", condition: linux),
             .target(name: "CNoodleQUIC", condition: linux),
         ]),
-        .executableTarget(name: "noodled", dependencies: ["ServerCore", .product(name: "HubWire", package: "HubLink")]),
+        .executableTarget(name: "noodled", dependencies: [
+            "ServerCore", .product(name: "HubWire", package: "HubLink"), .product(name: "NoodleCore", package: "Noodle"),
+        ]),
         .testTarget(name: "ServerCoreTests", dependencies: [
             "ServerCore",
             .product(name: "HubCore", package: "Noodle"),

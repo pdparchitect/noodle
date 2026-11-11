@@ -4,11 +4,13 @@ import NoodleCore
 @testable import ServerCore
 import XCTest
 
-/// A bot's harness run for real under bubblewrap: it talks over its pipes, sees only its own bot, and
-/// everything it started ends when it is stopped. Skipped where bubblewrap cannot make a sandbox.
+/// A bot's harness run for real under bubblewrap: it talks over its pipes, works on its own copy of its
+/// login, sees only its own bot, and everything it started ends when it is stopped. Skipped where
+/// bubblewrap cannot make a sandbox.
 @MainActor final class SandboxedHarnessTests: XCTestCase {
     private var root: URL!
     private var workspace: URL!
+    private var logins: ServerLogins!
     private var output = Data()
     private var errors = Data()
     private var exited: Int32?
@@ -17,10 +19,15 @@ import XCTest
         if let problem = HarnessSandbox().problem() { throw XCTSkip(problem) }
 
         root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-\(UUID())").resolvingSymlinksInPath()
-        let layout = AgentStorageLayout(package: root.appendingPathComponent("Agents/\(UUID().uuidString.lowercased())"))
-        try FileManager.default.createDirectory(at: layout.workspace, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: layout.runtime, withIntermediateDirectories: true)
-        workspace = layout.workspace
+        let repository = WorkspaceRepository(rootURL: root)
+        workspace = repository.directory(for: try repository.createAgent(named: "Alfred", harnessIdentifier: "claude-code").agent)
+        logins = ServerLogins(configuration: try ServerConfiguration(yaml: "harnesses:\n  claude-code: /bin/sh\n"),
+                              profiles: repository.harnessProfiles)
+        // The server's Claude Code login, as `noodled login claude-code` leaves it.
+        let account = logins.profiles.accountHome(try logins.login(.claudeCode, profile: nil))
+        try FileManager.default.createDirectory(at: account, withIntermediateDirectories: true)
+        try Data(#"{"claudeAiOauth":{"accessToken":"the-login","refreshToken":"r","expiresAt":4102444800000}}"#.utf8)
+            .write(to: account.appendingPathComponent(".credentials.json"))
         try Data("the server's secret".utf8).write(to: root.appendingPathComponent("access.json"))
         let other = root.appendingPathComponent("Agents/other/workspace")
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
@@ -42,7 +49,7 @@ import XCTest
     }
 
     private func start(_ program: URL, provider: HarnessProvider = .claudeCode) async throws -> SandboxedHarnessConnection {
-        let connection = SandboxedHarnessConnection(workspace: workspace)
+        let connection = SandboxedHarnessConnection(workspace: workspace, logins: logins)
         connection.onData = { [unowned self] data, isError in isError ? errors.append(data) : output.append(data) }
         connection.onExit = { [unowned self] in exited = $0 }
         addTeardownBlock { @MainActor in connection.invalidate() }
@@ -67,6 +74,7 @@ import XCTest
         let connection = try await start(try harness("""
         echo "cwd=$(pwd)"
         echo "home=$HOME"
+        echo "login=$(cat "$CLAUDE_CONFIG_DIR/.credentials.json")"
         echo "args=$*"
         read line
         echo "got=$line"
@@ -78,6 +86,7 @@ import XCTest
         XCTAssertEqual(status, 3)
         XCTAssertTrue(text.contains("cwd=\(workspace.path)\n"), text)
         XCTAssertTrue(text.contains("home=\(workspace.path)/.noodle/home\n"), text)
+        XCTAssertTrue(text.contains("the-login"), text)
         XCTAssertTrue(text.contains("--input-format stream-json"), text)
         XCTAssertTrue(text.contains("got=hello\n"), text)
         XCTAssertEqual(String(decoding: errors, as: UTF8.self), "oops\n")
@@ -120,6 +129,17 @@ import XCTest
             XCTFail("Grok Build started")
         } catch {
             XCTAssertEqual(error.localizedDescription, "noodled runs only Claude Code and Codex.")
+        }
+    }
+
+    func testABotOnALoginNobodySignedInToDoesNotStart() async throws {
+        try FileManager.default.removeItem(at: logins.profiles.accountHome(try logins.login(.claudeCode, profile: nil))
+            .appendingPathComponent(".credentials.json"))
+        do {
+            _ = try await start(try harness("exit 0"))
+            XCTFail("the harness started")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Nobody has signed in to Claude Code on this server. Run: noodled login claude-code")
         }
     }
 }

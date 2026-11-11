@@ -6,10 +6,17 @@ import XCTest
 
 /// The file is what the server's users and plans are: starting makes the Hub's records match it.
 @MainActor final class ServerAccessTests: XCTestCase {
+    private var root: URL!
+    private var profiles: HarnessProfileStore { HarnessProfileStore(root: root) }
+
     private func access() -> HubAccess {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { [root] in try? FileManager.default.removeItem(at: root!) }
         return HubAccess(url: root.appendingPathComponent("access.json"))
+    }
+
+    private func apply(_ configuration: ServerConfiguration, to access: HubAccess) throws {
+        try ServerAccess.apply(configuration, to: access, profiles: profiles)
     }
 
     private let first = """
@@ -34,7 +41,7 @@ import XCTest
 
     func testStartingGivesTheHubTheFilesPlansAndUsers() throws {
         let access = access()
-        try ServerAccess.apply(try ServerConfiguration(yaml: first), to: access)
+        try apply(try ServerConfiguration(yaml: first), to: access)
 
         let family = try XCTUnwrap(access.plans.first { $0.name == "Family" })
         let claude = HubHarness(provider: .claudeCode, profile: nil), codex = HubHarness(provider: .codex, profile: nil)
@@ -59,11 +66,11 @@ import XCTest
     /// devices, one left out is suspended with their data kept, and a plan left out is gone.
     func testStartingAgainFollowsTheEditedFile() throws {
         let access = access()
-        try ServerAccess.apply(try ServerConfiguration(yaml: first), to: access)
+        try apply(try ServerConfiguration(yaml: first), to: access)
         let ada = try XCTUnwrap(access.users.first { $0.name == "Ada" })
         let bob = try XCTUnwrap(access.users.first { $0.name == "Bob" })
 
-        try ServerAccess.apply(try ServerConfiguration(yaml: """
+        try apply(try ServerConfiguration(yaml: """
         plans:
           Family:
             harnesses: [codex]
@@ -88,14 +95,14 @@ import XCTest
         XCTAssertEqual(bobNow.plan, HubPlan.defaultID)
 
         // Back in the file, Bob is the same user again.
-        try ServerAccess.apply(try ServerConfiguration(yaml: "users:\n  Bob: {}\n"), to: access)
+        try apply(try ServerConfiguration(yaml: "users:\n  Bob: {}\n"), to: access)
         XCTAssertEqual(access.users.first { $0.name == "Bob" }?.id, bob.id)
         XCTAssertEqual(access.users.first { $0.id == bob.id }?.isSuspended, false)
     }
 
     func testTheDefaultPlanIsSetByItsName() throws {
         let access = access()
-        try ServerAccess.apply(try ServerConfiguration(yaml: "plans:\n  Default:\n    harnesses: [codex]\nusers:\n  Ada: {}\n"), to: access)
+        try apply(try ServerConfiguration(yaml: "plans:\n  Default:\n    harnesses: [codex]\nusers:\n  Ada: {}\n"), to: access)
         let plan = try XCTUnwrap(access.plans.first(where: \.isDefault))
         XCTAssertEqual(plan.harnesses, [HubHarness(provider: .codex, profile: nil)])
         XCTAssertEqual(access.users.first?.plan, HubPlan.defaultID)
@@ -105,10 +112,39 @@ import XCTest
     func testStartingTwiceChangesNothing() throws {
         let access = access()
         let configuration = try ServerConfiguration(yaml: first)
-        try ServerAccess.apply(configuration, to: access)
+        try apply(configuration, to: access)
         let (plans, users) = (access.plans, access.users)
-        try ServerAccess.apply(configuration, to: access)
+        try apply(configuration, to: access)
         XCTAssertEqual(access.plans, plans)
         XCTAssertEqual(access.users, users)
+    }
+
+    /// Each profile in the file is one of the Hub's harness profiles, with its own login, and plans lend
+    /// it by name; starting again keeps the same profile, so its login stays signed in.
+    func testPlansLendTheProfilesInTheFile() throws {
+        let access = access()
+        let configuration = try ServerConfiguration(yaml: """
+        harnesses:
+          claude-code:
+            path: /opt/claude
+            profiles: [Work, Family]
+        plans:
+          Family:
+            harnesses: [claude-code, claude-code/Family]
+            models:
+              claude-code: [sonnet]
+        """)
+        try apply(configuration, to: access)
+        let made = try profiles.load()
+        XCTAssertEqual(Set(made.map(\.displayName)), ["Work", "Family"])
+        XCTAssertEqual(Set(made.map(\.provider)), [.claudeCode])
+        let family = try XCTUnwrap(made.first { $0.displayName == "Family" })
+        let plan = try XCTUnwrap(access.plans.first { $0.name == "Family" })
+        let own = HubHarness(provider: .claudeCode, profile: nil), lent = HubHarness(provider: .claudeCode, profile: family.id)
+        XCTAssertEqual(plan.harnesses, [own, lent])
+        XCTAssertEqual(plan.models, [own: ["sonnet"], lent: ["sonnet"]])
+
+        try apply(configuration, to: access)
+        XCTAssertEqual(try profiles.load(), made)
     }
 }

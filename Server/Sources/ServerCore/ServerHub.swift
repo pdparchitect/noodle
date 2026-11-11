@@ -28,8 +28,11 @@ import NoodleRuntime
         try repository.prepare()
         // Bots run the harnesses the file names, from where it says; on Linux under bubblewrap, by the server itself.
         #if os(Linux)
+        let logins = ServerLogins(configuration: configuration, profiles: repository.harnessProfiles)
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection(),
-                                          makeProcess: { launch in launch.makeProcess { SandboxedHarnessConnection(workspace: launch.workspaceURL) } })
+                                          makeProcess: { [logins] launch in
+            launch.makeProcess { SandboxedHarnessConnection(workspace: launch.workspaceURL, logins: logins, profileOverride: launch.profileOverride) }
+        })
         #else
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection())
         #endif
@@ -38,7 +41,7 @@ import NoodleRuntime
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         access = HubAccess(url: root.appendingPathComponent("access.json"))
         access.log = HubActivityLog(url: root.appendingPathComponent("activity.jsonl"))
-        try ServerAccess.apply(configuration, to: access)
+        try ServerAccess.apply(configuration, to: access, profiles: repository.harnessProfiles)
         tokenLimits = HubTokenLimits(access: access, usage: usage)
         // Tokens count against the plan of whoever owns the bot when it uses them.
         runtime.onUsage = { [usage, access, tokenLimits] sample in
