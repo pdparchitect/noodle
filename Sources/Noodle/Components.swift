@@ -753,6 +753,21 @@ extension NoodleStore {
         guard let mirror = hubMirror(forAgent: id) else { return runsHere(id) }
         return mirror.suspendsBots
     }
+
+    /// Whether this Mac may stop the bot now: one of its own that is working, here or on a Hub that can stop
+    /// bots; never one shared with it.
+    func canStop(_ id: UUID) -> Bool {
+        guard !isShared(id) else { return false }
+        guard let mirror = hubMirror(forAgent: id) else { return runsHere(id) && runtime.canStopTurn(id) }
+        return mirror.stopsBots && mirror.isConnected && mirror.phase(ofAgent: id) == .working
+    }
+
+    /// The bot Stop in the Conversation menu ends: that of a direct conversation, while it can be stopped.
+    func stoppableAgent(in conversationID: UUID?) -> AgentRecord? {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }), conversation.kind == .direct,
+              let agent = participants(for: conversation).first, canStop(agent.id) else { return nil }
+        return agent
+    }
 }
 
 /// Suspend Bot's choices of how long, or Unsuspend Bot for one already suspended.

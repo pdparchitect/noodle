@@ -16,6 +16,7 @@ struct KeybindingsSettingsView: View {
                     row(.capture)
                     row(.recordVoice)
                     row(.call)
+                    row(.stopBot)
                 }
                 Section("Any App") {
                     row(.chooseConversation)

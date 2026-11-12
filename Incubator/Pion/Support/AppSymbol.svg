@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" data-icon-background="pion" role="img" aria-labelledby="title">
+  <title id="title">Pion symbol</title>
+  <g id="symbol" fill="#f2efe4" fill-rule="evenodd">
+    <path d="M627,236 A128,128 0 1 1 626.9,236 Z"/>
+    <path d="M497,506 H757 A28,28 0 0 1 785,534 V546 A28,28 0 0 1 757,574 H497 A28,28 0 0 1 469,546 V534 A28,28 0 0 1 497,506 Z"/>
+    <path d="M553,592 H701 C703,700 742,790 812,872 H442 C512,790 551,700 553,592 Z"/>
+    <path d="M412,896 H842 A46,46 0 0 1 888,942 V972 A46,46 0 0 1 842,1018 H412 A46,46 0 0 1 366,972 V942 A46,46 0 0 1 412,896 Z"/>
+  </g>
+</svg>

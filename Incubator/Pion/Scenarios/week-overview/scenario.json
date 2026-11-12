@@ -1,0 +1,530 @@
+{
+  "version": 1,
+  "title": "A week of Investigations",
+  "summary": "A full roster and a week's worth of work: open, contained and closed Investigations at every severity, for screenshots of the lists, the roster and the policy.",
+  "clock": "16:20",
+  "champion": "Avery Lin",
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Margot",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead investigator",
+      "avatar": {
+        "symbol": "star.fill",
+        "color": 0
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Summarising INV-0063"
+      }
+    },
+    {
+      "key": "juno",
+      "name": "Juno",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Triage",
+      "avatar": {
+        "symbol": "line.3.horizontal.decrease",
+        "color": 1
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Triaging 3 new alerts"
+      }
+    },
+    {
+      "key": "odile",
+      "name": "Odile",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Email analysis",
+      "avatar": {
+        "symbol": "envelope.fill",
+        "color": 2
+      }
+    },
+    {
+      "key": "ines",
+      "name": "Ines",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Identity and sign-ins",
+      "avatar": {
+        "symbol": "person.badge.key.fill",
+        "color": 3
+      }
+    },
+    {
+      "key": "rafe",
+      "name": "Rafe",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Endpoints and EDR",
+      "avatar": {
+        "symbol": "desktopcomputer",
+        "color": 4
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Memory capture on SRV-APP-02"
+      }
+    },
+    {
+      "key": "theo",
+      "name": "Theo",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Network and DNS",
+      "avatar": {
+        "symbol": "network",
+        "color": 5
+      }
+    },
+    {
+      "key": "sasha",
+      "name": "Sasha",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Threat intelligence",
+      "avatar": {
+        "symbol": "binoculars.fill",
+        "color": 6
+      },
+      "status": {
+        "phase": "failed",
+        "detail": "Paused: usage limit reached"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "webshell",
+      "group": {
+        "name": "Web shell on SRV-APP-02",
+        "members": [
+          "margot",
+          "rafe",
+          "theo"
+        ]
+      },
+      "messages": [
+        {
+          "at": "13:05",
+          "from": "user",
+          "text": "Defender flagged `help.aspx` written by w3wp.exe on SRV-APP-02. @Margot, take it."
+        },
+        {
+          "at": "13:22",
+          "from": "rafe",
+          "text": "`help.aspx` takes a `cmd` parameter and runs it. It was written at 12:58 through the file-upload form of the support portal, which accepts any extension."
+        },
+        {
+          "at": "13:40",
+          "from": "theo",
+          "text": "Only one address ever requested it: 203.0.113.200, 14 requests between 12:59 and 13:03. Commands were `whoami`, `ipconfig /all` and `net user`."
+        },
+        {
+          "at": "14:10",
+          "from": "margot",
+          "text": "Host isolated with your approval, file quarantined. Status is **contained**. Rafe is capturing memory before we rebuild."
+        }
+      ],
+      "investigation": {
+        "number": 63,
+        "title": "Web shell on SRV-APP-02",
+        "objective": "Confirm the web shell, find how it was planted and whether it was used.",
+        "scope": [
+          "SRV-APP-02",
+          "203.0.113.200",
+          "svc_iis"
+        ],
+        "severity": "critical",
+        "status": "contained",
+        "source": "Defender: suspicious ASPX file",
+        "opened": "13:05",
+        "lead": "margot",
+        "case": {
+          "entities": [
+            {
+              "kind": "host",
+              "name": "SRV-APP-02",
+              "detail": "Support portal server",
+              "at": "13:22",
+              "by": "rafe"
+            },
+            {
+              "kind": "indicator",
+              "name": "203.0.113.200",
+              "detail": "Only client of help.aspx",
+              "at": "13:40",
+              "by": "theo"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "Defender for Endpoint",
+              "method": "DeviceFileEvents where FileName == 'help.aspx'",
+              "result": "Written 12:58 by w3wp.exe via the upload handler.",
+              "at": "13:22",
+              "by": "rafe"
+            },
+            {
+              "source": "IIS logs",
+              "method": "cs-uri-stem = /uploads/help.aspx",
+              "result": "14 requests from 203.0.113.200, 12:59–13:03; whoami, ipconfig, net user.",
+              "at": "13:40",
+              "by": "theo"
+            }
+          ],
+          "findings": [
+            {
+              "claim": "An attacker planted a web shell through the unrestricted upload form and ran discovery commands, with no sign of lateral movement yet.",
+              "evidence": [
+                "V-1",
+                "V-2"
+              ],
+              "confidence": "high",
+              "entities": [
+                "SRV-APP-02"
+              ],
+              "at": "13:45",
+              "by": "margot"
+            }
+          ],
+          "actions": [
+            {
+              "operation": "isolate_host",
+              "targets": [
+                "SRV-APP-02"
+              ],
+              "rationale": "Active web shell (V-1)",
+              "effect": "Server reachable only by Defender",
+              "undo": "Release",
+              "evidence": [
+                "V-1"
+              ],
+              "state": "done",
+              "note": "Isolated 13:58",
+              "at": "13:46",
+              "by": "rafe"
+            },
+            {
+              "operation": "quarantine_file",
+              "targets": [
+                "SRV-APP-02"
+              ],
+              "rationale": "help.aspx (V-1)",
+              "effect": "File moved to quarantine",
+              "undo": "Restore from quarantine",
+              "state": "approved",
+              "at": "13:50",
+              "by": "rafe"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "mfa",
+      "group": {
+        "name": "MFA fatigue attempts against 3 warehouse leads",
+        "members": [
+          "ines",
+          "juno",
+          "margot"
+        ]
+      },
+      "messages": [
+        {
+          "at": "11:30",
+          "from": "juno",
+          "text": "41 MFA pushes denied across three accounts in 25 minutes, all from 192.0.2.14. No approvals so far."
+        },
+        {
+          "at": "11:52",
+          "from": "ines",
+          "text": "All three passwords appear in a combo list posted on Tuesday. Proposing forced resets; that is notify-only under our policy."
+        }
+      ],
+      "investigation": {
+        "number": 62,
+        "title": "MFA fatigue attempts against 3 warehouse leads",
+        "objective": "Find out whether any push was approved, and how the passwords leaked.",
+        "scope": [
+          "k.osei",
+          "l.marsh",
+          "p.novak"
+        ],
+        "severity": "high",
+        "status": "triaging",
+        "source": "Entra ID: repeated MFA denials",
+        "opened": "11:30",
+        "lead": "margot",
+        "case": {
+          "actions": [
+            {
+              "operation": "reset_password",
+              "targets": [
+                "k.osei",
+                "l.marsh",
+                "p.novak"
+              ],
+              "rationale": "Passwords in a public combo list",
+              "effect": "Forces new passwords at next sign-in",
+              "undo": "None needed",
+              "at": "11:53",
+              "by": "ines"
+            },
+            {
+              "operation": "block_indicator",
+              "targets": [
+                "192.0.2.14"
+              ],
+              "rationale": "Source of every push",
+              "effect": "Conditional Access blocks the address",
+              "undo": "Remove the named location",
+              "at": "11:55",
+              "by": "ines"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "lookalike",
+      "group": {
+        "name": "Look-alike domain registered: kestre1-logistics.example",
+        "members": [
+          "margot",
+          "odile",
+          "sasha"
+        ]
+      },
+      "messages": [
+        {
+          "at": "09:10",
+          "from": "odile",
+          "text": "Registered last night, MX records already set, no website yet."
+        }
+      ],
+      "investigation": {
+        "number": 61,
+        "title": "Look-alike domain registered: kestre1-logistics.example",
+        "objective": "Decide whether the domain is being prepared for phishing.",
+        "scope": [
+          "kestre1-logistics.example"
+        ],
+        "severity": "medium",
+        "status": "open",
+        "source": "Brand monitoring",
+        "opened": "09:10",
+        "lead": "margot"
+      }
+    },
+    {
+      "key": "usb",
+      "group": {
+        "name": "USB storage on a kiosk PC",
+        "members": [
+          "juno",
+          "margot"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 10:15",
+          "from": "juno",
+          "text": "A USB drive was mounted on KIOSK-04 for 3 minutes. Waiting on the facilities team."
+        }
+      ],
+      "investigation": {
+        "number": 60,
+        "title": "USB storage on a kiosk PC",
+        "objective": "Check what was copied.",
+        "scope": [
+          "KIOSK-04"
+        ],
+        "severity": "low",
+        "status": "open",
+        "opened": "-1d 10:15",
+        "lead": "margot"
+      }
+    },
+    {
+      "key": "vpn",
+      "group": {
+        "name": "VPN sign-ins from a new country",
+        "members": [
+          "ines",
+          "margot"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-2d 08:50",
+          "from": "ines",
+          "text": "Travel matches the calendar and the Lisbon office IP range. Recommend closing as a false positive."
+        }
+      ],
+      "investigation": {
+        "number": 59,
+        "title": "VPN sign-ins from a new country",
+        "objective": "Confirm the travel.",
+        "scope": [
+          "r.adeyemi"
+        ],
+        "severity": "medium",
+        "status": "closed",
+        "outcome": "false-positive",
+        "closingNote": "r.adeyemi is at the Lisbon office this week; HR confirmed.",
+        "opened": "-2d 08:40",
+        "lead": "margot"
+      }
+    },
+    {
+      "key": "exfil",
+      "group": {
+        "name": "Large upload to personal cloud storage",
+        "members": [
+          "margot",
+          "rafe",
+          "theo"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-3d 14:30",
+          "from": "theo",
+          "text": "6.2 GB to a personal Dropbox from LT-0611 over two evenings. f.lund's last day is Friday."
+        }
+      ],
+      "investigation": {
+        "number": 58,
+        "title": "Large upload to personal cloud storage",
+        "objective": "Establish what left and whether it was allowed.",
+        "scope": [
+          "f.lund",
+          "LT-0611"
+        ],
+        "severity": "high",
+        "status": "closed",
+        "outcome": "handed-off",
+        "closingNote": "Departing employee; handed to HR and Legal with the evidence.",
+        "opened": "-3d 14:00",
+        "lead": "margot"
+      }
+    },
+    {
+      "key": "detection",
+      "group": {
+        "name": "Detection",
+        "description": "Alert triage across identity, endpoint and network",
+        "members": [
+          "juno",
+          "ines",
+          "rafe",
+          "theo"
+        ]
+      },
+      "messages": [
+        {
+          "at": "08:30",
+          "from": "juno",
+          "text": "Overnight: 286 alerts, 7 needed a look, 3 became Investigations (INV-0061 to INV-0063). The rest were the new backup job tripping the SMB rule again."
+        },
+        {
+          "at": "08:41",
+          "from": "theo",
+          "text": "I have a tuned version of the SMB rule that ignores the backup service account. Want me to propose it?"
+        },
+        {
+          "at": "08:45",
+          "from": "user",
+          "text": "Yes, send it to me with the before and after counts for last week."
+        }
+      ]
+    },
+    {
+      "key": "research",
+      "group": {
+        "name": "Threat Research",
+        "description": "Who targets companies like ours, and how we catch them",
+        "members": [
+          "sasha",
+          "margot"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 11:20",
+          "from": "sasha",
+          "text": "Weekly brief: help-desk impersonation is still the most common way in against logistics firms. Two new combo lists posted this week include our domain."
+        }
+      ]
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1440,
+        880
+      ]
+    },
+    "select": "webshell"
+  },
+  "timeline": [
+    {
+      "capture": "01-investigation"
+    },
+    {
+      "present": {
+        "select": "detection"
+      }
+    },
+    {
+      "capture": "02-group"
+    },
+    {
+      "present": {
+        "select": "webshell",
+        "inspector": "audit"
+      }
+    },
+    {
+      "capture": "03-audit"
+    },
+    {
+      "present": {
+        "select": "detection"
+      },
+      "settings": {
+        "PionBackdropEffect": "grid"
+      }
+    },
+    {
+      "capture": "04-grid"
+    },
+    {
+      "settings": {
+        "PionBackdropEffect": "scanlines"
+      }
+    },
+    {
+      "capture": "05-scanlines"
+    },
+    {
+      "settings": {
+        "PionBackdropEffect": "network"
+      }
+    },
+    {
+      "capture": "06-network"
+    }
+  ],
+  "settings": {
+    "PionSidebarShowsClosed": true
+  }
+}

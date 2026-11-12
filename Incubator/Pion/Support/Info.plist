@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>PionIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<!-- Tool connection sign-ins return here. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(PION_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Take your picture for a Hub, or scan the QR code of a Hub invitation when you choose Scan with Camera.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Let the agents you assign a calendar read and change that calendar. No agent sees a calendar you have not assigned.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Petko D. Petkov. PolyForm Noncommercial License 1.0.0.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Reach the Hub you join when it is on your network.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dictate messages, transcribed on this Mac, and talk with agents on calls you start.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Let the agents you assign a reminder list read and change that list. No agent sees a list you have not assigned.</string>
+	<!-- Pion and its Agent Host accept only each other. -->
+	<key>NoodleAgentHostService</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent-host</string>
+	<key>NoodleApplicationIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>NoodleSigningTeam</key>
+	<string>$(DEVELOPMENT_TEAM)</string>
+	<key>NoodleUpdatesEnabled</key>
+	<false/>
+</dict>
+</plist>

@@ -90,6 +90,9 @@ struct ConversationCommands: Commands {
     var floatOnTop: () -> Void = {}
     var isOnCall: () -> Bool = { false }
     var toggleCall: () -> Void = {}
+    /// Whether the key window's bot is working, so Stop can end its turn.
+    var canStop: () -> Bool = { false }
+    var stop: () -> Void = {}
     private let annotations = AnnotationCommandsState.shared
 
     var body: some Commands {
@@ -118,6 +121,9 @@ struct ConversationCommands: Commands {
                 toggleCall()
             }
             .appShortcut(.call)
+            Button("Stop", action: stop)
+                .appShortcut(.stopBot)
+                .disabled(!canStop())
             if NoodleAppIdentity.isDevelopment {
                 Divider()
                 // Plays in the key chat directly, skipping the queue a bot's effect goes through.

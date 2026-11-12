@@ -190,6 +190,17 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         notifications.requestStop(id)
         sendPending()
     }
+    /// Stop ends the turn with session/cancel, as a stop request does, without a message waiting to follow it.
+    /// The runtime restarts the harness afterwards, which ends any background work the harness keeps after a cancel.
+    public func cancelTurn() -> Bool {
+        notifications.take()
+        guard running, turnIsActive, let sessionID else { return false }
+        guard !interruptRequested else { return true }
+        interruptRequested = true
+        send(["jsonrpc": "2.0", "method": "session/cancel", "params": ["sessionId": sessionID]])
+        trace.record(.turnInterruptRequested)
+        return true
+    }
     public func heartbeat() { if canReceiveHeartbeat { startTurn(.heartbeat) } }
     public func wake() { if canReceiveHeartbeat { startTurn(.wake) } }
     public func organize() { if canReceiveHeartbeat { startTurn(.organize) } }

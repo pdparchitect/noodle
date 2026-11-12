@@ -22,7 +22,11 @@ import XCTest
     var voiceCallTexts: [String] = []
     var voiceCallEnds = 0
     var voiceCallEvents: (@MainActor (VoiceCallEvent) -> Void)?
+    /// Stop asked the harness to cancel its turn this many times; one that cannot is restarted at once.
+    var cancels = 0
+    var cancelsTurns = true
     private var stopCompletions: [(Bool) -> Void] = []
+    func cancelTurn() -> Bool { cancels += 1; return cancelsTurns }
 
     init(_ launch: AgentRuntimeLaunch) {
         self.launch = launch

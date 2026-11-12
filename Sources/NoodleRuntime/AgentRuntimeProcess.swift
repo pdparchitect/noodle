@@ -16,6 +16,10 @@ public protocol AgentRuntimeProcess: AnyObject {
     /// The pending message asks the bot to stop. Harnesses that can add it to the running turn take it like any
     /// urgent message, and the bot decides what to stop.
     func requestStop(_ id: UUID)
+    /// The person chose Stop: ends the running turn as the harness's own cancel does, and drops the wake waiting
+    /// for the bot, so it takes no new turn by itself. Answers false when the harness cannot cancel a turn; the
+    /// runtime then restarts it at once, keeping its session.
+    @discardableResult func cancelTurn() -> Bool
     func heartbeat()
     /// Starts a turn for a wake the bot scheduled, when it can take one like a heartbeat.
     func wake()
@@ -30,6 +34,7 @@ public protocol AgentRuntimeProcess: AnyObject {
 extension AgentRuntimeProcess {
     func notify() { _ = notify(immediately: false) }
     public func requestStop(_ id: UUID) { promoteNotification(id) }
+    public func cancelTurn() -> Bool { false }
     public func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
         throw VoiceCallUnavailable()
     }
