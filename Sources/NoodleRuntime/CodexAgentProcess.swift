@@ -607,7 +607,9 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             // mode. Inside the app sandbox Codex cannot apply its own, so leave
             // the app sandbox as the only one, as externalSandbox turns do.
             "sandbox": extendedAccess ? "workspace-write" : "danger-full-access",
-            "serviceName": "noodle"
+            "serviceName": "noodle",
+            // Given once for the thread, so no message carries it.
+            "developerInstructions": MessengerDocumentation.sessionInstructions
         ]
         if let model = configuration.modelIdentifier { params["model"] = model }
 

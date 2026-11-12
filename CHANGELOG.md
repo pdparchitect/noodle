@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Bots no longer think you stopped them when Noodle interrupts a long step to hand them a new message. Claude Code reports such an interrupt as the user asking it to stop and wait; bots now know from the start of each session that it comes from Noodle, so they check the step and carry on. Bots also run long commands in the background, so new messages reach them between steps. Claude Code takes this in its system prompt and Codex in its instructions, so it costs nothing per message.
+
 ## [0.84.0] - 2026-11-11
 
 ### Added
@@ -18,7 +22,6 @@ All notable changes to Noodle are documented here, following
 - Bots keep task notes to a sentence or two in plain words. A note that is too long is refused with how to shorten it, so bots no longer squeeze the spaces out of it to make it fit.
 - Claude Code bots now tell Claude that Noodle runs them. Claude Code otherwise reports them as SDK sessions, which currently use a Claude plan's usage limits about twice as fast for the same work ([anthropics/claude-code#97074](https://github.com/anthropics/claude-code/issues/97074)).
 - When an update changes what bots are told about using Noodle, each bot is asked once to reread it, so bots that were already running pick up new features such as tasks without being restarted.
-
 
 ## [0.83.0] - 2026-11-10
 

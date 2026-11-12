@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Bots no longer think you stopped them when the Hub interrupts a long step to hand them a new message. Claude Code reports such an interrupt as the user asking it to stop and wait; bots now know from the start of each session that it comes from the Hub, so they check the step and carry on. Bots also run long commands in the background, so new messages reach them between steps. Claude Code takes this in its system prompt and Codex in its instructions, so it costs nothing per message.
+
 ## [0.50.0] - 2026-11-11
 
 ### Added

@@ -65,6 +65,19 @@ final class MessengerDocumentationTests: XCTestCase {
         }
     }
 
+    /// What a bot is told once, when its session starts: messages can arrive while it works, a stop Noodle makes
+    /// to deliver them is not the user stopping it, and long commands run in the background. Claude Code takes
+    /// it as part of its system prompt; harnesses without one read it in the skill.
+    func testSessionsStartKnowingHowMessagesArriveMidWork() throws {
+        let instructions = MessengerDocumentation.sessionInstructions
+        XCTAssertTrue(instructions.contains("Run commands that may take more than a minute in the background"))
+        XCTAssertTrue(instructions.contains("not your user"))
+        let arguments = try ClaudeLaunch.arguments(sessionID: UUID(), resumeSession: false, model: nil, effort: nil, restricted: true)
+        let flag = try XCTUnwrap(arguments.firstIndex(of: "--append-system-prompt"))
+        XCTAssertEqual(arguments[flag + 1], instructions)
+        XCTAssertTrue(MessengerDocumentation.skillInstructions.contains(instructions))
+    }
+
     func testMessagesSayWhichConversationToUse() {
         let guidance = MessengerDeliveryKind.message.reference.guidance
         XCTAssertTrue(guidance.contains("description"))

@@ -62,7 +62,8 @@ final class HarnessSandboxTests: XCTestCase {
         XCTAssertEqual(claude.environment["CLAUDE_CODE_ENTRYPOINT"], "noodle")
         XCTAssertEqual(claude.environment["NOODLE_WORKSPACE"], workspace.path)
         XCTAssertTrue(claude.arguments.contains(session.uuidString.lowercased()))
-        XCTAssertTrue(try XCTUnwrap(claude.arguments.last).contains("\"sandbox\":{\"enabled\":false}"))
+        let settings = try XCTUnwrap(claude.arguments.firstIndex(of: "--settings"))
+        XCTAssertTrue(claude.arguments[settings + 1].contains("\"sandbox\":{\"enabled\":false}"))
 
         let codex = try HarnessSandbox.command(provider: .codex, workspace: workspace, sessionID: nil,
                                                resumeSession: false, model: nil, effort: nil)

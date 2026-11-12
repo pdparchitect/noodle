@@ -24,6 +24,8 @@ public enum ClaudeLaunch {
             resumeSession ? "--resume" : "--session-id", sessionID.uuidString.lowercased()]
         if let model { arguments += ["--model", model] }
         if let effort { arguments += ["--effort", effort] }
+        // Part of the system prompt, so it is given once and no message carries it.
+        arguments += ["--append-system-prompt", MessengerDocumentation.sessionInstructions]
         // The host applies Seatbelt to the entire process tree. Claude's nested
         // Bash sandbox cannot be stacked inside it; keep the normal tool set.
         var settings: [String: Any] = ["disableClaudeAiConnectors": !appsEnabled]

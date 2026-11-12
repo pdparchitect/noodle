@@ -65,14 +65,21 @@ import XCTest
         }
     }
 
-    func testCodexGetsNoGuidanceOtherHarnessesLack() async throws {
-        for extended in [false, true] {
-            let f = try fixture(), wire = HarnessWire(), p = f.codex(wire, extended: extended)
-            p.start(); try await f.openCodex(wire)
-            let params = try XCTUnwrap(wire.last("thread/start")["params"] as? [String: Any])
-            XCTAssertNil(params["developerInstructions"])
-            p.stop()
-        }
+    /// Every harness that takes instructions for a session gets the same ones, once: a new thread and a resumed
+    /// one alike, so no message carries them.
+    func testEveryThreadStartsWithTheSessionInstructions() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.codex(wire, extended: false)
+        p.start(); try await f.openCodex(wire)
+        let params = try XCTUnwrap(wire.last("thread/start")["params"] as? [String: Any])
+        XCTAssertEqual(params["developerInstructions"] as? String, MessengerDocumentation.sessionInstructions)
+        p.heartbeat(); try wire.reply("turn/start", result: ["turn": ["id": "turn-one"]])
+        try await f.wait { f.heartbeats == 1 }
+        complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        p.stop()
+        let next = HarnessWire(), restarted = f.codex(next, extended: false)
+        restarted.start(); try await f.openCodex(next, resuming: true)
+        let resumed = try XCTUnwrap(next.last("thread/resume")["params"] as? [String: Any])
+        XCTAssertEqual(resumed["developerInstructions"] as? String, MessengerDocumentation.sessionInstructions)
     }
 
     func testAppsSelectionReachesNewAndResumedRuntimesInBothAccessModes() async throws {
