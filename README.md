@@ -66,18 +66,13 @@ Each agent keeps its own workspace, backstory and history, and runs on the
 | **[Noodle Applet](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)** | Run tools, websites, experiments, and games created by you and your agents. | macOS 15 |
 | **[Noodle Browser](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | macOS 26 |
 | **[Noodle Hub](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | macOS 26 |
-| **[Noodle Terminal](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)** | Chat with the bots and groups on your Noodle Hub from a terminal, on your Mac or on Linux. | macOS 26, Linux |
-| **[Noodle Server](Server/README.md)** | A Noodle Hub for Linux: run bots for the people you list on the Claude Code and Codex you install, each in a sandbox of its own. | Linux |
+| **[Noodle Terminal](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)** | Chat with the bots and groups on your Noodle Hub from a terminal, on your Mac or on Linux. | macOS 26 · Linux [arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz), [x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz) |
+| **[Noodle Server](Server/README.md)** | A Noodle Hub for Linux: run bots for the people you list on the Claude Code and Codex you install, each in a sandbox of its own. | Linux [arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz), [x86_64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz) |
 | **[Noodle Mobile](https://testflight.apple.com/join/wYKkNSP9)** | Chat with the agents on your Noodle Hub from iPhone and iPad. Beta on TestFlight: open the link on your phone. | iOS 26 |
 
 Each Mac app link downloads the DMG. Open it and drag the app to **Applications**. ZIP downloads are on the [releases page](https://github.com/pdparchitect/noodle/releases).
-Noodle Terminal downloads as a ZIP holding the `noodle` command, or for Linux on
-[arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz)
-or [x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz);
-[its README](Terminal/README.md) shows where to put it. Noodle Server downloads for Linux on
-[arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz)
-or [x86_64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz);
-[its README](Server/README.md) walks through setting it up.
+Noodle Terminal downloads as the `noodle` command, for the Mac or for Linux; [its README](Terminal/README.md) shows where to put it.
+Noodle Server downloads for Linux; [its README](Server/README.md) walks through setting it up.
 Noodle Computer, Noodle Applet, Noodle Browser, Noodle Hub, Noodle Terminal, Noodle Server, and Noodle Mobile are optional companions and also work on their own.
 
 ## Get started
