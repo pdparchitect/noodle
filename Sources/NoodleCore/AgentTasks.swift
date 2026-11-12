@@ -170,7 +170,9 @@ extension WorkspaceRepository {
     private static func taskNote(_ raw: String?) throws -> String? {
         guard let note = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else { return nil }
         guard note.count <= AgentTaskLimits.noteLength else {
-            throw AgentTaskError("A task note is at most \(AgentTaskLimits.noteLength) characters.")
+            // How to shorten it too: told only the limit, a bot squeezes the spaces out instead.
+            throw AgentTaskError("This note is \(note.count) characters; a task note is at most \(AgentTaskLimits.noteLength). "
+                + "Say where the task stands in a sentence or two of plain words, and keep details in a file or the conversation.")
         }
         return note
     }

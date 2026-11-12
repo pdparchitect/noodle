@@ -53,6 +53,17 @@ final class AgentTaskTests: XCTestCase {
         XCTAssertEqual(try repository.loadTasks(agentID: bot.id).map(\.state), [.done])
     }
 
+    /// A note too long is refused with how long it was and how to shorten it, so a bot writes less rather
+    /// than squeezing the spaces out of what it has.
+    func testATooLongNoteSaysHowToShortenIt() throws {
+        let bot = try repository.createAgent(named: "Alfred").agent
+        let task = try decode(AgentTask.self, from: messenger(bot, "--add-task", "Tidy the notes"))
+        let refused = messenger(bot, "--update-task", task.id.uuidString, "--note", String(repeating: "word ", count: 70))
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertEqual(refused.standardError.trimmingCharacters(in: .whitespacesAndNewlines),
+            "messenger: This note is 349 characters; a task note is at most 300. Say where the task stands in a sentence or two of plain words, and keep details in a file or the conversation.")
+    }
+
     func testTaskWithoutThreadIsAllowed() throws {
         let bot = try repository.createAgent(named: "Alfred").agent
         let task = try decode(AgentTask.self, from: messenger(bot, "--add-task", "Tidy the notes"))

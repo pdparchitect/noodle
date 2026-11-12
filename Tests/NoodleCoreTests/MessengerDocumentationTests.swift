@@ -56,6 +56,15 @@ final class MessengerDocumentationTests: XCTestCase {
     }
 
     /// Bots in several groups need a rule for where each message goes, or they post work where it does not belong.
+    /// A task's note is a short status in plain words, which is what people read in the task list.
+    func testATaskNoteIsAShortPlainStatus() {
+        for command in [MessengerCommandKind.addTask, .updateTask] {
+            let guidance = command.guidance
+            XCTAssertTrue(guidance.contains("--note is a sentence or two in plain words"), command.rawValue)
+            XCTAssertTrue(guidance.contains("at most \(AgentTaskLimits.noteLength) characters"), command.rawValue)
+        }
+    }
+
     func testMessagesSayWhichConversationToUse() {
         let guidance = MessengerDeliveryKind.message.reference.guidance
         XCTAssertTrue(guidance.contains("description"))
