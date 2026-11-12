@@ -407,4 +407,32 @@ import XCTest
             XCTAssertEqual(p.snapshot.phase, stop ? .offline : .failed)
         }
     }
+
+    /// Stop interrupts the turn as Esc does, once, and drops the wake waiting behind it, so the bot goes idle.
+    func testStopInterruptsTheTurnOnceAndStartsNoOtherForWaitingMessages() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
+        try await ready(f, wire, p)
+        XCTAssertFalse(p.cancelTurn(), "No turn to interrupt")
+        p.notify(); p.notify()
+        XCTAssertEqual(wire.count("user"), 1)
+        XCTAssertTrue(p.cancelTurn()); XCTAssertTrue(p.cancelTurn())
+        XCTAssertEqual(wire.count("control_request"), 1)
+        let requestID = try XCTUnwrap(wire.last("control_request")["request_id"] as? String)
+        wire.emit(["type": "control_response", "response": ["request_id": requestID, "subtype": "success"]])
+        try complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        await f.drain()
+        XCTAssertEqual(wire.count("user"), 1, "The waiting wake is dropped")
+        XCTAssertFalse(f.recovery(.claudeCode).hasUnfinishedTurn)
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
+    /// Only background tasks are left: there is no turn to interrupt, so Stop restarts Claude Code to end them.
+    func testStopLeavesBackgroundTasksToARestart() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
+        try await ready(f, wire, p); p.notify()
+        try backgroundTasks(wire, 1); try complete(wire)
+        try await f.wait { p.snapshot.phase == .working && p.snapshot.detail == "1 background task running" }
+        XCTAssertFalse(p.cancelTurn())
+        XCTAssertEqual(wire.count("control_request"), 0)
+    }
 }

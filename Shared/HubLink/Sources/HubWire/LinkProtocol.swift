@@ -135,6 +135,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// Suspends one of this user's bots for a while, or unsuspends it. Answers `done`. Only for a Hub
     /// whose status says `suspendsBots`.
     case suspend(LinkSuspension)
+    /// Ends the turn one of this user's bots is working on, keeping its session; it goes back to idle
+    /// and its unread messages wait for its next turn. Answers `done`. Only for a Hub whose status says `stopsBots`.
+    case stop(botID: UUID)
     /// Starts a failed bot again, as Kick does in Noodle. Answers `done`, or `kickConfirmation`
     /// when the failure needs the person to agree first.
     case kick(botID: UUID)
@@ -1126,13 +1129,16 @@ public struct LinkStatus: Codable, Equatable, Sendable {
     public var groupNotifications: LinkNotifications?
     /// Whether the Hub takes `suspend` and lists each bot's `suspendedUntil`, so a device may offer to suspend one.
     public var suspendsBots: Bool
+    /// Whether the Hub takes `stop`, so a device may offer to stop a working bot.
+    public var stopsBots: Bool
 
     public init(hubName: String, userName: String, planName: String, harnesses: [LinkHarness], endpoints: [LinkEndpoint],
                 protocolVersion: Int = LinkProtocol.version, canPairDevices: Bool = false, isAdmin: Bool = false,
                 canShareBots: Bool = false, userID: UUID? = nil, avatar: LinkAvatar? = nil, imageModel: String? = nil,
                 keepsAnnotations: Bool = false, signsInToBrowsers: Bool = false, ringsThroughPush: Bool = false,
                 callPushExpiresAt: Date? = nil, explainsPauses: Bool = false, mutesGroups: Bool = false,
-                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil, suspendsBots: Bool = false) {
+                notifiesMentions: Bool = false, groupNotifications: LinkNotifications? = nil, suspendsBots: Bool = false,
+                stopsBots: Bool = false) {
         self.hubName = hubName
         self.userName = userName
         self.planName = planName
@@ -1154,12 +1160,13 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         self.notifiesMentions = notifiesMentions
         self.groupNotifications = groupNotifications
         self.suspendsBots = suspendsBots
+        self.stopsBots = stopsBots
     }
 
     private enum CodingKeys: String, CodingKey {
         case hubName, userName, planName, harnesses, endpoints, protocolVersion, canPairDevices, isAdmin, canShareBots, userID, avatar, imageModel,
              keepsAnnotations, signsInToBrowsers, ringsThroughPush, callPushExpiresAt, explainsPauses, mutesGroups,
-             notifiesMentions, groupNotifications, suspendsBots
+             notifiesMentions, groupNotifications, suspendsBots, stopsBots
     }
 
     public init(from decoder: Decoder) throws {
@@ -1185,6 +1192,7 @@ public struct LinkStatus: Codable, Equatable, Sendable {
         notifiesMentions = try c.decode(.notifiesMentions, or: false)
         groupNotifications = try c.decodeIfPresent(LinkNotifications.self, forKey: .groupNotifications)
         suspendsBots = try c.decode(.suspendsBots, or: false)
+        stopsBots = try c.decode(.stopsBots, or: false)
     }
 }
 

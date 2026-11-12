@@ -524,6 +524,22 @@ final class ChatsCacheFile: @unchecked Sendable {
         saveCache()
     }
 
+    /// Whether the menu offers Stop for the bot: one of the person's own, working, on a Hub that can stop bots.
+    func canStop(_ bot: LinkBot) -> Bool {
+        Self.offersStop(bot, phase: phase(of: bot), stopsBots: pairing.status?.stopsBots == true)
+    }
+
+    static func offersStop(_ bot: LinkBot, phase: LinkBotPhase?, stopsBots: Bool) -> Bool {
+        stopsBots && bot.owner == nil && phase == .working
+    }
+
+    /// Ends the turn the bot is working on, on the Hub. It says so in the bot's conversation.
+    func stop(_ bot: LinkBot) async throws {
+        guard case .done = try await pairing.request(.stop(botID: bot.id)) else {
+            throw LinkError("The Hub sent an unexpected answer.")
+        }
+    }
+
     /// How the user's groups that keep the default notify them.
     var groupNotifications: LinkNotifications { pairing.status?.groupNotifications ?? .all }
 
@@ -2502,6 +2518,9 @@ struct AgentsView: View {
         // A bot someone shared is only talked with.
         if row.thread.bot?.owner == nil {
             Button { editing = row } label: { Label(row.thread.group == nil ? "Edit Bot…" : "Edit Group…", systemImage: "pencil") }
+            if let bot = row.thread.bot, row.chats.canStop(bot) {
+                Button { stop(bot, row) } label: { Label("Stop", systemImage: "stop.circle") }
+            }
             if let bot = row.thread.bot, row.chats.suspendsBots {
                 if row.chats.isSuspended(bot) {
                     Button { suspend(bot, until: nil, row) } label: { Label("Unsuspend Bot", systemImage: "play.circle") }
@@ -2531,6 +2550,13 @@ struct AgentsView: View {
     private func setNotifications(_ level: LinkNotifications, _ row: Row) {
         Task {
             do { try await row.chats.setNotifications(level, of: row.thread) }
+            catch { row.chats.error = error.localizedDescription }
+        }
+    }
+
+    private func stop(_ bot: LinkBot, _ row: Row) {
+        Task {
+            do { try await row.chats.stop(bot) }
             catch { row.chats.error = error.localizedDescription }
         }
     }

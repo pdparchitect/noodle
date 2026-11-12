@@ -183,4 +183,23 @@ import XCTest
         XCTAssertEqual(wire.launches.count, 1)
         p.stop { _ in }; XCTAssertFalse(p.isAlive)
     }
+
+    /// Stop cancels the running prompt once and drops the wake waiting behind it, so the bot goes idle.
+    func testStopCancelsTheTurnOnceAndStartsNoOtherForWaitingMessages() async throws {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode] {
+            let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider)
+            p.start(); try await f.openACP(wire, provider: provider)
+            XCTAssertFalse(p.cancelTurn(), "No turn to cancel")
+            p.notify(); p.notify()
+            XCTAssertEqual(wire.count("session/prompt"), 1)
+            XCTAssertTrue(p.cancelTurn()); XCTAssertTrue(p.cancelTurn())
+            XCTAssertEqual(wire.count("session/cancel"), 1, "\(provider)")
+            try wire.reply("session/prompt", result: ["stopReason": "cancelled"])
+            try await f.wait { p.canReceiveHeartbeat }
+            await f.drain()
+            XCTAssertEqual(wire.count("session/prompt"), 1, "\(provider): the waiting wake is dropped")
+            XCTAssertFalse(f.recovery(provider).hasUnfinishedTurn)
+            XCTAssertTrue(f.failures.isEmpty)
+        }
+    }
 }

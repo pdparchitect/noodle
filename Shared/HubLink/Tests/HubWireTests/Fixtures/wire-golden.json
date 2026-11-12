@@ -1650,6 +1650,16 @@
     "version" : 1,
     "waitsWhilePacking" : true
   },
+  "request.stop" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "stop" : {
+        "botID" : "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
   "request.subscribe" : {
     "fetchesPictures" : true,
     "request" : {
@@ -3023,6 +3033,7 @@
         "protocolVersion" : 1,
         "ringsThroughPush" : true,
         "signsInToBrowsers" : true,
+        "stopsBots" : true,
         "suspendsBots" : true,
         "userID" : "00000000-0000-0000-0000-0000000000C0",
         "userName" : "Ada"
@@ -3050,6 +3061,7 @@
         "protocolVersion" : 1,
         "ringsThroughPush" : false,
         "signsInToBrowsers" : false,
+        "stopsBots" : false,
         "suspendsBots" : false,
         "userName" : ""
       }

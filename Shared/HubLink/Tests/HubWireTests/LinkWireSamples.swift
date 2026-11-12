@@ -218,7 +218,8 @@ enum LinkWireSamples {
         endpoints: [LinkEndpoint(host: "hub.local", port: 38_415), LinkEndpoint(host: "fd7a:115c:a1e0::1", port: 38_416)],
         protocolVersion: 1, canPairDevices: true, isAdmin: true, canShareBots: true, userID: id(0xC0), avatar: avatar,
         imageModel: "flux", keepsAnnotations: true, signsInToBrowsers: true, ringsThroughPush: true, callPushExpiresAt: date(86_400),
-        explainsPauses: true, mutesGroups: true, notifiesMentions: true, groupNotifications: .mentions, suspendsBots: true)
+        explainsPauses: true, mutesGroups: true, notifiesMentions: true, groupNotifications: .mentions, suspendsBots: true,
+        stopsBots: true)
     static let minimalStatus = LinkStatus(hubName: "Hub", userName: "", planName: "", harnesses: [], endpoints: [])
 
     static let invitation = LinkInvitation(hubName: "Home Hub", hubKey: hubKey,
@@ -269,6 +270,7 @@ enum LinkWireSamples {
             S.request("archive", .archive(LinkArchiveChange(id: id(0x01), archived: true))),
             S.request("suspend", .suspend(LinkSuspension(id: id(0x01), until: date(3600)))),
             S.request("suspend.lift", .suspend(LinkSuspension(id: id(0x01), until: nil))),
+            S.request("stop", .stop(botID: id(0x01))),
             S.request("kick", .kick(botID: id(0x01))),
             S.request("confirmKick", .confirmKick(botID: id(0x01), confirmationID: id(0x09))),
             S.request("newSession", .newSession(botID: id(0x01))),

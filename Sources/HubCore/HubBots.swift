@@ -629,6 +629,28 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         runtime.organize(agent.id)
     }
 
+    /// Stop, as in Noodle: ends the turn the user's bot is working on, through whichever runtime runs it,
+    /// and says so in its conversation. It keeps its session and its unread messages wait for its next turn.
+    public func stop(_ id: UUID, for user: HubUser) throws {
+        let agent = try runHere(id, by: user)
+        guard runtime.stopTurn(agent: agent, repository: repository) else {
+            throw LinkError("\(agent.displayName) is not working on anything.")
+        }
+        try repository.appendStopNotice(agentID: agent.id)
+        checkForChanges()
+    }
+
+    /// The same, as whoever keeps the Hub does it in Settings, for the bot's owner.
+    public func stop(_ id: UUID) throws {
+        guard let owner = access.owner(ofBot: id), let user = access.users.first(where: { $0.id == owner }) else {
+            throw LinkError("There is no such bot.")
+        }
+        try stop(id, for: user)
+    }
+
+    /// Whether the bot is working on a turn that Stop can end here.
+    public func canStop(_ id: UUID) -> Bool { access.host(ofBot: id) == nil && runtime.canStopTurn(id) }
+
     /// Only the user's own bots that run here; bots shared with them are left alone.
     public func introduce(in conversationID: UUID, for user: HubUser) throws {
         let bots = try ownedConversation(conversationID, by: user).bots

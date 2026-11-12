@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Stop a bot that is working: right-click it in the sidebar and choose Stop, or choose Conversation › Stop (⌘.) in its conversation. Its turn ends at once, along with any sub-agents and background commands it started; it keeps its session and goes back to idle. Messages you send it wait for its next turn, and its conversation says you stopped it, so it does not simply carry on. This works for your bots on a Noodle Hub too.
+
 ### Fixed
 
 - Bots no longer think you stopped them when Noodle interrupts a long step to hand them a new message. Claude Code reports such an interrupt as the user asking it to stop and wait; bots now know from the start of each session that it comes from Noodle, so they check the step and carry on. Bots also run long commands in the background, so new messages reach them between steps. Claude Code takes this in its system prompt and Codex in its instructions, so it costs nothing per message.

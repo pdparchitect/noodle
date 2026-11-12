@@ -78,6 +78,15 @@ final class MessengerDocumentationTests: XCTestCase {
         XCTAssertTrue(MessengerDocumentation.skillInstructions.contains(instructions))
     }
 
+    /// Stop leaves a "You stopped" notice in the bot's conversation; the bot reads it, unread, in its next turn,
+    /// and takes it as its user stopping it rather than a stop Noodle made to deliver messages.
+    func testABotKnowsTheNoticeOfItsUserStoppingIt() {
+        XCTAssertTrue(MessengerDocumentation.sessionInstructions.contains("says \"You stopped\" and your name"))
+        let notice = MessengerDeliveryKind.systemNotice.reference.guidance
+        XCTAssertTrue(notice.contains("\"You stopped\""))
+        XCTAssertTrue(notice.contains("do not resume that work"))
+    }
+
     func testMessagesSayWhichConversationToUse() {
         let guidance = MessengerDeliveryKind.message.reference.guidance
         XCTAssertTrue(guidance.contains("description"))

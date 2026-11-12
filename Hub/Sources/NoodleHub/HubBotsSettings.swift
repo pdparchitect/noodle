@@ -65,6 +65,10 @@ struct HubBotProfileButton: View {
             }
             // Its owner's Mac keeps one it hosts, and suspends it there.
             if agent.archivedAt == nil, device == nil, owner != nil {
+                if host.hub.bots.canStop(agent.id) {
+                    Button("Stop") { host.stop(id: agent.id) }
+                        .help("End the turn \(agent.displayName) is working on")
+                }
                 if agent.isSuspended() {
                     Button("Unsuspend") { host.setSuspended(until: nil, id: agent.id) }
                 } else {

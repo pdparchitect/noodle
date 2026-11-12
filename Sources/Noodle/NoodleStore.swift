@@ -2012,6 +2012,26 @@ final class NoodleStore {
         }
     }
 
+    /// Stop: ends the turn the bot is working on and says so in its conversation. It keeps its session, goes
+    /// back to idle, and its unread messages wait for its next turn. A Hub's bot is stopped there.
+    func stop(agentID: UUID) {
+        if let mirror = hubMirror(forAgent: agentID) {
+            Task {
+                do { try await mirror.stop(localAgentID: agentID) } catch { errorMessage = error.localizedDescription }
+            }
+            return
+        }
+        guard let agent = agents.first(where: { $0.id == agentID }),
+              runtime.stopTurn(agent: agent, repository: repository) else { return }
+        do {
+            guard let message = try repository.appendStopNotice(agentID: agentID) else { return }
+            messagesByConversation[message.conversationID, default: []].append(message)
+            sendToHub(message.conversationID)
+        } catch {
+            errorMessage = "Could not add the stop to the conversation: \(error.localizedDescription)"
+        }
+    }
+
     /// Reads one bot's record again after its Hub changed the copy here.
     private func reloadAgentRecord(_ id: UUID) {
         guard let updated = try? repository.loadAgents().first(where: { $0.id == id }),
