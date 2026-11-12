@@ -25,7 +25,7 @@ Everything outside `Enterprise/` stays Apache-2.0.
   your organisation.
 - **Larger organisations need a commercial licence from us to manage Noodle with configuration
   profiles.** To ask for one, email
-  [pdp@gnucitizen.org](mailto:pdp@gnucitizen.org?subject=Noodle%20Enterprise%20licence) and tell
+  [contact@usenoodle.app](mailto:contact@usenoodle.app?subject=Noodle%20Enterprise%20licence) and tell
   us about your organisation.
 
 **For now we grant commercial licences free of charge or on favourable terms**, so you can deploy
