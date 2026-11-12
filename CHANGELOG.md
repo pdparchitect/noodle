@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Install Noodle with a standard Mac installer. The Noodle Installer installs Noodle and lets you choose Noodle Computer, Noodle Browser, Noodle Applet and Noodle Terminal as it installs, each with what it does and its size; Noodle Terminal puts the `noodle` command in `/usr/local/bin`. An app your Mac can't run is greyed out with the reason. The Noodle Hub Installer does the same around Noodle Hub, for an always-on Mac. Both are signed and notarised, so organisations can deploy them with Jamf Pro, Kandji, Intune or Mosyle; `Enterprise/Deployment.md` lists their package identifiers and how to choose the apps. The disk images are still available.
+
 ### Fixed
 
 - Bots no longer think you stopped them when Noodle interrupts a long step to hand them a new message. Claude Code reports such an interrupt as the user asking it to stop and wait; bots now know from the start of each session that it comes from Noodle, so they check the step and carry on. Bots also run long commands in the background, so new messages reach them between steps. Claude Code takes this in its system prompt and Codex in its instructions, so it costs nothing per message.

@@ -17,19 +17,27 @@ REPO = 'pdparchitect/noodle'
 CHANNEL = 'suite-latest'
 IMAGE = 'Noodle-Suite-arm64.dmg'
 MANIFEST = 'suite-manifest.json'
-ASSETS = [IMAGE, IMAGE + '.sha256', MANIFEST]
+# Built by scripts/build-installers.py from the same verified apps as the disk image.
+INSTALLERS = ['Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg']
+# The manifest stays last: it is uploaded after everything else as the channel's completion marker.
+ASSETS = [IMAGE, IMAGE + '.sha256', *[name + suffix for name in INSTALLERS for suffix in ['', '.sha256']], MANIFEST]
 PRODUCTS = {
     'noodle': ('v', 'Noodle', 'com.pdparchitect.noodle'),
     'computer': ('computer-v', 'Noodle Computer', 'com.pdparchitect.noodle.computer'),
     'applet': ('applet-v', 'Noodle Applet', 'com.pdparchitect.noodle.applet'),
     'browser': ('browser-v', 'Noodle Browser', 'com.pdparchitect.noodle.browser'),
     'hub': ('hub-v', 'Noodle Hub', 'com.pdparchitect.noodle.hub'),
+    'terminal': ('terminal-v', 'Noodle Terminal', 'com.pdparchitect.noodle.terminal'),
 }
 # Companions that join the Suite after their first stable release.
-OPTIONAL = {'browser', 'hub'}
+OPTIONAL = {'browser', 'hub', 'terminal'}
+# Command-line tools: offered by the installers, never put in the disk image, which holds apps.
+COMMANDS = {'terminal'}
 SEMVER = r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RECIPE_FILES = ['scripts/suite-release.py', 'scripts/build-dmg.py', 'scripts/package-dmg.sh',
-                'scripts/dmg-background.swift', 'scripts/dmg-requirements.txt']
+                'scripts/dmg-background.swift', 'scripts/dmg-requirements.txt', 'scripts/build-installers.py',
+                *[f'scripts/installer/{product}/{page}.html' for product in ['Noodle', 'Hub']
+                  for page in ['welcome', 'readme', 'conclusion']]]
 
 
 def command(*args):
@@ -180,20 +188,41 @@ def verify_app(app, component):
     return team[1]
 
 
+def verify_command(binary, component):
+    """The published command-line tool, signed like the apps. A bare binary cannot be stapled; Gatekeeper
+    checks its notarization online, and the installer package that carries it is notarized and stapled."""
+    _, _, identifier = PRODUCTS[component['product']]
+    command('codesign', '--verify', '--strict', str(binary))
+    signature = subprocess.check_output(['codesign', '-dv', '--verbose=4', str(binary)], stderr=subprocess.STDOUT, text=True)
+    team = re.search(r'^TeamIdentifier=(\w+)$', signature, re.M)
+    if 'Authority=Developer ID Application:' not in signature or not team:
+        raise ValueError(f'{binary.name} lacks a Developer ID signature')
+    if not re.search(r'^Identifier=' + re.escape(identifier) + '$', signature, re.M):
+        raise ValueError(f'Unexpected identity in {binary.name}')
+    if command('lipo', '-archs', str(binary)) != 'arm64':
+        raise ValueError(f'{binary.name} is not the Apple silicon release')
+    return team[1]
+
+
 def release_notes(manifest):
     rows = [f"| {PRODUCTS[item['product']][1]} | [{item['version']}](https://github.com/{REPO}/releases/tag/{item['tag']}) |"
             for item in manifest['components']]
     tag = snapshot_tag(manifest)
-    return (f'[Download Noodle Suite for Apple silicon](https://github.com/{REPO}/releases/download/{tag}/{IMAGE})\n\n'
-            'Requires macOS 26 or later. Open the DMG and drag the apps to Applications.\n\n'
+    download = f'https://github.com/{REPO}/releases/download/{tag}'
+    return (f'[Download the Noodle Installer]({download}/{INSTALLERS[0]}) · '
+            f'[Noodle Hub Installer]({download}/{INSTALLERS[1]}) · '
+            f'[Noodle Suite disk image]({download}/{IMAGE})\n\n'
+            'Requires macOS 26 or later on Apple silicon. The installers let you choose the apps; '
+            'or open the disk image and drag the apps to Applications.\n\n'
             '| App | Version |\n| --- | --- |\n' + '\n'.join(rows) + '\n\n'
-            'Each app keeps its own automatic updates. This installer reuses the published app bundles.\n')
+            'Each app keeps its own automatic updates. These installers reuse the published app bundles.\n')
 
 
 def verify_assets(directory, manifest):
     if json.loads((directory / MANIFEST).read_text()) != manifest:
         raise ValueError('Suite manifest differs from the planned app versions')
-    verify_checksum(directory / IMAGE, checksum_value(directory / (IMAGE + '.sha256'), IMAGE))
+    for name in [IMAGE, *INSTALLERS]:
+        verify_checksum(directory / name, checksum_value(directory / (name + '.sha256'), name))
 
 
 def app_archive(github, component, downloads, cache=None):
@@ -228,15 +257,22 @@ def fetch(github, planned, directory, cache=None):
         for component in manifest['components']:
             downloads = directory / 'downloads' / component['product']
             archive = app_archive(github, component, downloads, cache)
-            name = PRODUCTS[component['product']][1] + '.app'
+            tool = component['product'] in COMMANDS
+            name = 'noodle' if tool else PRODUCTS[component['product']][1] + '.app'
             with zipfile.ZipFile(archive) as zipped:
                 for member in zipped.namelist():
                     path = Path(member)
-                    if path.is_absolute() or '..' in path.parts or path.parts[0] not in [name, '__MACOSX']:
+                    if (path.is_absolute() or '..' in path.parts or path.parts[0] not in [name, '__MACOSX']
+                            or (tool and path.parts[0] == name and len(path.parts) > 1)):
                         raise ValueError(f'Unexpected archive path: {member}')
             extracted = downloads / 'extracted'
             extracted.mkdir(parents=True)
             command('ditto', '-x', '-k', str(archive), str(extracted))
+            if tool:
+                teams.add(verify_command(extracted / name, component))
+                (directory / 'command').mkdir(exist_ok=True)
+                command('ditto', str(extracted / name), str(directory / 'command' / name))
+                continue
             app = extracted / name
             teams.add(verify_app(app, component))
             command('ditto', str(app), str(apps / name))
@@ -276,12 +312,12 @@ def publish(github, planned, directory, source):
     command('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest=false')
     if CHANNEL in by_tag:
         # The immutable snapshot remains available throughout channel promotion.
-        command('gh', 'release', 'upload', CHANNEL, *files[:2], '--repo', REPO, '--clobber')
+        command('gh', 'release', 'upload', CHANNEL, *files[:-1], '--repo', REPO, '--clobber')
         command('gh', 'release', 'edit', CHANNEL, '--repo', REPO, '--draft=false', '--latest=false',
                 '--title', title, '--notes-file', str(directory / 'release-notes.md'))
         # The manifest is the completion marker. A partial upload must never
         # make the next planner mistake a damaged channel for a finished Suite.
-        command('gh', 'release', 'upload', CHANNEL, files[2], '--repo', REPO, '--clobber')
+        command('gh', 'release', 'upload', CHANNEL, files[-1], '--repo', REPO, '--clobber')
     else:
         command('gh', 'release', 'create', CHANNEL, *files, '--repo', REPO, '--target', source,
                 '--draft', '--latest=false', '--title', title, '--notes-file', str(directory / 'release-notes.md'))

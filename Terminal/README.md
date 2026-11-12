@@ -16,7 +16,10 @@ WezTerm and iTerm2. Other terminals, including Terminal, show them in coloured b
 ### On a Mac
 
 Noodle Terminal needs macOS 26 on a Mac with Apple silicon.
-[Download Noodle-Terminal-arm64.zip](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)
+The [Noodle Installer](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg)
+can install it for you: check Noodle Terminal in its list of apps, and the `noodle` command goes
+in `/usr/local/bin`, which is already on your `PATH`. Or
+[download Noodle-Terminal-arm64.zip](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)
 and open it to get the `noodle` command. Move it to a folder on your `PATH`, then run it:
 
 ```
