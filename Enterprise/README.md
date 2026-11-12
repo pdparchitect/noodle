@@ -15,7 +15,7 @@ Everything in this folder is licensed under the
 - **Running Noodle without a configuration profile never needs a licence.**
 - **Larger organisations need a commercial licence from us to manage Noodle with configuration
   profiles.** To ask for one, email
-  [pdp@gnucitizen.org](mailto:pdp@gnucitizen.org?subject=Noodle%20Enterprise%20licence).
+  [contact@usenoodle.app](mailto:contact@usenoodle.app?subject=Noodle%20Enterprise%20licence).
 
 For now we grant commercial licences free of charge or on favourable terms, so you can deploy
 Noodle today without worrying about licence costs. Noodle has no licence keys and doesn't check for
