@@ -41,6 +41,10 @@ public final class SurfaceSocket: @unchecked Sendable {
         if held { writer.suspend() }
         let (frames, continuation) = AsyncStream.makeStream(of: Data.self)
         self.frames = frames
+        // A viewer gone before now leaves nothing to write to, and on a Mac a socket whose viewer has
+        // gone cannot be kept from raising SIGPIPE: the view ends here, before anything is written.
+        var next: UInt8 = 0
+        if recv(fd, &next, 1, Int32(MSG_PEEK | MSG_DONTWAIT)) == 0 { close() }
         Thread.detachNewThread { [self] in
             while let frame = readFrame() { continuation.yield(frame) }
             continuation.finish()

@@ -71,4 +71,20 @@ final class SurfaceWireTests: XCTestCase {
         }
         XCTAssertTrue(companion.isClosed)
     }
+
+    /// A viewer gone before its socket is taken on ends the view there and then: nothing is ever written to
+    /// it, since on a Mac writing to such a socket would end the whole process with SIGPIPE.
+    func testAViewerGoneBeforeItsSocketIsTakenOnEndsTheViewAtOnce() {
+        var fds: [Int32] = [0, 0]
+        #if canImport(Darwin)
+        let stream = SOCK_STREAM
+        #else
+        let stream = Int32(SOCK_STREAM.rawValue)
+        #endif
+        XCTAssertEqual(socketpair(AF_UNIX, stream, 0, &fds), 0)
+        _ = close(fds[1])
+        let companion = SurfaceSocket(fd: fds[0])
+        defer { companion.close() }
+        XCTAssertTrue(companion.isClosed)
+    }
 }
