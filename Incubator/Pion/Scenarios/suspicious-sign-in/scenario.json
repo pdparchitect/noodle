@@ -1,0 +1,388 @@
+{
+  "version": 1,
+  "title": "Impossible travel, waiting on the champion",
+  "summary": "A finance director signs in from Leeds and Amsterdam 20 minutes apart. The team proves it is a stolen session token and two containment actions wait for approval.",
+  "clock": "02:48",
+  "appearance": "dark",
+  "champion": "Avery Lin",
+  "protectedAssets": [
+    "DC01.corp.kestrel-logistics.example",
+    "DC02.corp.kestrel-logistics.example"
+  ],
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Margot",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead investigator",
+      "avatar": {
+        "symbol": "star.fill",
+        "color": 0
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Waiting on approval for A-3, A-4"
+      }
+    },
+    {
+      "key": "ines",
+      "name": "Ines",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Identity and sign-ins",
+      "avatar": {
+        "symbol": "person.badge.key.fill",
+        "color": 1
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Reviewing token grants"
+      }
+    },
+    {
+      "key": "rafe",
+      "name": "Rafe",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Endpoints and EDR",
+      "avatar": {
+        "symbol": "desktopcomputer",
+        "color": 2
+      },
+      "status": {
+        "phase": "ready",
+        "detail": "LT-0423 timeline"
+      }
+    },
+    {
+      "key": "theo",
+      "name": "Theo",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Network and DNS",
+      "avatar": {
+        "symbol": "network",
+        "color": 3
+      }
+    },
+    {
+      "key": "sasha",
+      "name": "Sasha",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Threat intelligence",
+      "avatar": {
+        "symbol": "binoculars.fill",
+        "color": 4
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "travel",
+      "group": {
+        "name": "Impossible travel for d.price (Finance Director)",
+        "members": [
+          "ines",
+          "margot",
+          "rafe",
+          "sasha"
+        ]
+      },
+      "messages": [
+        {
+          "at": "02:07",
+          "from": "user",
+          "text": "**INV-0057 is open: Impossible travel for d.price**, severity critical. @Margot leads.\n\nEstablish whether the account owner made the sign-in, and what the session did afterwards."
+        },
+        {
+          "at": "02:11",
+          "from": "ines",
+          "text": "Two sign-ins 20 minutes apart: **Leeds 01:38** from LT-0423 (normal), then **Amsterdam 01:58** from 198.51.100.23. The second used no password and no MFA prompt: it replayed a refresh token issued to LT-0423 at 01:38."
+        },
+        {
+          "at": "02:19",
+          "from": "rafe",
+          "text": "LT-0423 ran an unsigned `ChromeUpdate.exe` from Downloads at 01:31, seven minutes before the token was issued. It read the Edge and Chrome cookie stores. Classic infostealer behaviour:\n\n```\nChromeUpdate.exe → reads %LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies\nChromeUpdate.exe → POST 198.51.100.23:443 /upload (2.1 MB)\n```"
+        },
+        {
+          "at": "02:26",
+          "from": "sasha",
+          "text": "198.51.100.23 is a known Lumma stealer panel in three public feeds this week. **Medium confidence** on the family, high that this is commodity token theft rather than a targeted actor."
+        },
+        {
+          "at": "02:31",
+          "from": "ines",
+          "text": "From Amsterdam the session read d.price's mailbox and opened **two SharePoint folders: Board Papers and Q4 Forecast**. No mail sent, no rules created, no downloads above 5 MB."
+        },
+        {
+          "at": "02:36",
+          "from": "margot",
+          "text": "Sessions are revoked (policy allowed it) and I have moved this to **contained**. Two actions need you, @Avery: disabling d.price until they reset their password in person, and isolating LT-0423 so the stealer cannot take a fresh token. A third, isolating DC01 as a precaution, was refused by policy as a protected asset; I will not pursue it."
+        }
+      ],
+      "investigation": {
+        "number": 57,
+        "title": "Impossible travel for d.price (Finance Director)",
+        "objective": "Establish whether d.price made both sign-ins, what the second session did, and contain it if it is not theirs.",
+        "scope": [
+          "d.price",
+          "LT-0423",
+          "198.51.100.23",
+          "*.corp.kestrel-logistics.example"
+        ],
+        "severity": "critical",
+        "status": "contained",
+        "source": "Entra ID Protection: atypical travel",
+        "opened": "02:07",
+        "lead": "margot",
+        "case": {
+          "entities": [
+            {
+              "kind": "identity",
+              "name": "d.price",
+              "detail": "Finance Director; token replayed from Amsterdam",
+              "at": "02:11",
+              "by": "ines"
+            },
+            {
+              "kind": "host",
+              "name": "LT-0423",
+              "detail": "d.price's laptop, runs ChromeUpdate.exe",
+              "at": "02:19",
+              "by": "rafe"
+            },
+            {
+              "kind": "indicator",
+              "name": "198.51.100.23",
+              "detail": "Lumma panel; sign-in and upload destination",
+              "at": "02:11",
+              "by": "ines"
+            },
+            {
+              "kind": "indicator",
+              "name": "ChromeUpdate.exe",
+              "detail": "SHA-256 9f2c…e41a, unsigned",
+              "at": "02:19",
+              "by": "rafe"
+            },
+            {
+              "kind": "service",
+              "name": "SharePoint: Board Papers",
+              "detail": "Opened by the attacker's session",
+              "at": "02:31",
+              "by": "ines"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "Entra ID",
+              "method": "SigninLogs | where UserPrincipalName == 'd.price' and TimeGenerated > ago(2h)",
+              "result": "01:38 Leeds from LT-0423 (MFA); 01:58 Amsterdam 198.51.100.23 by refresh token, no interactive auth.",
+              "at": "02:11",
+              "by": "ines"
+            },
+            {
+              "source": "Defender for Endpoint",
+              "method": "DeviceProcessEvents on LT-0423, 01:00–02:00",
+              "result": "ChromeUpdate.exe launched 01:31 from Downloads, read browser cookie stores, uploaded 2.1 MB to 198.51.100.23.",
+              "at": "02:19",
+              "by": "rafe"
+            },
+            {
+              "source": "Threat feeds",
+              "method": "Lookup of 198.51.100.23 in three commercial and open feeds",
+              "result": "Listed as a Lumma stealer panel since 4 days ago.",
+              "at": "02:26",
+              "by": "sasha"
+            },
+            {
+              "source": "Microsoft 365 audit",
+              "method": "Unified audit log for d.price since 01:58",
+              "result": "MailItemsAccessed ×412; FileAccessed in Board Papers and Q4 Forecast; no sends, rules or large downloads.",
+              "at": "02:31",
+              "by": "ines"
+            }
+          ],
+          "findings": [
+            {
+              "claim": "The Amsterdam session was not d.price: it replayed a token stolen from LT-0423 by an infostealer.",
+              "evidence": [
+                "V-1",
+                "V-2"
+              ],
+              "confidence": "high",
+              "entities": [
+                "d.price",
+                "LT-0423"
+              ],
+              "at": "02:22",
+              "by": "margot"
+            },
+            {
+              "claim": "The stealer is most likely Lumma, and this looks like commodity token theft rather than a targeted intrusion.",
+              "evidence": [
+                "V-3"
+              ],
+              "confidence": "medium",
+              "entities": [
+                "198.51.100.23"
+              ],
+              "at": "02:27",
+              "by": "sasha"
+            },
+            {
+              "claim": "The attacker read board papers and the Q4 forecast, which may need to be treated as disclosed.",
+              "evidence": [
+                "V-4"
+              ],
+              "confidence": "high",
+              "entities": [
+                "SharePoint: Board Papers"
+              ],
+              "at": "02:32",
+              "by": "ines"
+            }
+          ],
+          "actions": [
+            {
+              "operation": "revoke_sessions",
+              "targets": [
+                "d.price"
+              ],
+              "rationale": "Stolen refresh token in use (V-1)",
+              "effect": "Every session and refresh token for d.price ends",
+              "undo": "d.price signs in again",
+              "evidence": [
+                "V-1"
+              ],
+              "at": "02:33",
+              "by": "ines"
+            },
+            {
+              "operation": "enrich_indicator",
+              "targets": [
+                "198.51.100.23"
+              ],
+              "rationale": "Attribution (V-3)",
+              "effect": "Adds feed data",
+              "undo": "Nothing",
+              "at": "02:25",
+              "by": "sasha"
+            },
+            {
+              "operation": "disable_user",
+              "targets": [
+                "d.price"
+              ],
+              "rationale": "The stealer may hold other tokens or the password (V-2); hold the account until an in-person reset",
+              "effect": "d.price cannot sign in at all",
+              "undo": "Re-enable the account in Entra ID",
+              "evidence": [
+                "V-1",
+                "V-2"
+              ],
+              "at": "02:35",
+              "by": "margot"
+            },
+            {
+              "operation": "isolate_host",
+              "targets": [
+                "LT-0423"
+              ],
+              "rationale": "Infostealer present (V-2); it can steal a fresh token at the next sign-in",
+              "effect": "LT-0423 can reach only Defender",
+              "undo": "Release from isolation in Defender",
+              "evidence": [
+                "V-2"
+              ],
+              "at": "02:35",
+              "by": "rafe"
+            },
+            {
+              "operation": "isolate_host",
+              "targets": [
+                "DC01.corp.kestrel-logistics.example"
+              ],
+              "rationale": "Precaution in case credentials reached the domain",
+              "effect": "Takes DC01 off the network",
+              "undo": "Release from isolation",
+              "at": "02:35",
+              "by": "margot"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "beacon",
+      "group": {
+        "name": "DNS beaconing from WH-SCAN-11",
+        "members": [
+          "margot",
+          "rafe",
+          "theo"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 16:40",
+          "from": "theo",
+          "text": "WH-SCAN-11 resolves `a8f3.update-cdn-check.example` every 60 s since Monday. Nothing else on the network does."
+        },
+        {
+          "at": "-1d 17:05",
+          "from": "rafe",
+          "text": "It is a Windows 10 IoT scanner without Defender, so I have no process data. Asking the warehouse team for the vendor's update schedule."
+        }
+      ],
+      "investigation": {
+        "number": 56,
+        "title": "DNS beaconing from WH-SCAN-11",
+        "objective": "Find out why a warehouse scanner resolves a random-looking domain every 60 seconds.",
+        "scope": [
+          "WH-SCAN-11",
+          "*.update-cdn-check.example"
+        ],
+        "severity": "medium",
+        "status": "triaging",
+        "source": "DNS analytics",
+        "opened": "-1d 16:40",
+        "lead": "margot"
+      }
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1440,
+        880
+      ]
+    },
+    "select": "travel"
+  },
+  "timeline": [
+    {
+      "capture": "01-awaiting-approval"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "02-needs-approval"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "03-policy"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "04-agents"
+    }
+  ]
+}

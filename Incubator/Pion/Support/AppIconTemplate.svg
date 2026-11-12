@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
+  <!-- Backgrounds selected by AppSymbol.svg data-icon-background. -->
+  <defs>
+    <g id="pion">
+      <defs>
+        <linearGradient id="pion-tile-shade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2c3e4c"/>
+          <stop offset="1" stop-color="#121b23"/>
+        </linearGradient>
+      </defs>
+      <path id="icon-background-pion-tile" fill="#1b2832" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"/>
+      <path fill="url(#pion-tile-shade)" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"/>
+      <path fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="6" d="M286,39 H968 A247,247 0 0 1 1215,286 V968 A247,247 0 0 1 968,1215 H286 A247,247 0 0 1 39,968 V286 A247,247 0 0 1 286,39 Z"/>
+    </g>
+  </defs>
+</svg>

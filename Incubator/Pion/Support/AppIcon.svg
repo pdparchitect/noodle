@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title">
+    <!--Generated from AppSymbol.svg and AppIconTemplate.svg; edit those sources.-->
+    <g id="pion">
+        <defs>
+            <linearGradient id="pion-tile-shade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#2c3e4c"></stop>
+                <stop offset="1" stop-color="#121b23"></stop>
+            </linearGradient>
+        </defs>
+        <path id="icon-background-pion-tile" fill="#1b2832" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"></path>
+        <path fill="url(#pion-tile-shade)" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"></path>
+        <path fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="6" d="M286,39 H968 A247,247 0 0 1 1215,286 V968 A247,247 0 0 1 968,1215 H286 A247,247 0 0 1 39,968 V286 A247,247 0 0 1 286,39 Z"></path>
+    </g>
+    <title id="title">Pion app icon</title>
+    <g id="symbol" fill="#f2efe4" fill-rule="evenodd">
+        <path d="M627,236 A128,128 0 1 1 626.9,236 Z"></path>
+        <path d="M497,506 H757 A28,28 0 0 1 785,534 V546 A28,28 0 0 1 757,574 H497 A28,28 0 0 1 469,546 V534 A28,28 0 0 1 497,506 Z"></path>
+        <path d="M553,592 H701 C703,700 742,790 812,872 H442 C512,790 551,700 553,592 Z"></path>
+        <path d="M412,896 H842 A46,46 0 0 1 888,942 V972 A46,46 0 0 1 842,1018 H412 A46,46 0 0 1 366,972 V942 A46,46 0 0 1 412,896 Z"></path>
+    </g>
+</svg>

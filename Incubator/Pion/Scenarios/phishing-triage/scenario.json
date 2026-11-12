@@ -1,0 +1,408 @@
+{
+  "version": 1,
+  "title": "Payroll phishing, triaged in minutes",
+  "summary": "A reported email turns out to be a credential phish sent to 23 people. The team scopes it, finds the one person who entered a password, and asks for approval to contain.",
+  "clock": "09:41",
+  "champion": "Avery Lin",
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Margot",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead investigator",
+      "avatar": {
+        "symbol": "star.fill",
+        "color": 0
+      },
+      "status": {
+        "phase": "ready",
+        "detail": "Coordinating INV-0042"
+      }
+    },
+    {
+      "key": "juno",
+      "name": "Juno",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Triage",
+      "avatar": {
+        "symbol": "line.3.horizontal.decrease",
+        "color": 1
+      }
+    },
+    {
+      "key": "odile",
+      "name": "Odile",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Email analysis",
+      "avatar": {
+        "symbol": "envelope.fill",
+        "color": 2
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Tracing the sender"
+      }
+    },
+    {
+      "key": "ines",
+      "name": "Ines",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Identity and sign-ins",
+      "avatar": {
+        "symbol": "person.badge.key.fill",
+        "color": 3
+      }
+    },
+    {
+      "key": "rafe",
+      "name": "Rafe",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Endpoints and EDR",
+      "avatar": {
+        "symbol": "desktopcomputer",
+        "color": 4
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "phish",
+      "group": {
+        "name": "\"Q4 payroll correction\" credential phish",
+        "members": [
+          "ines",
+          "juno",
+          "margot",
+          "odile"
+        ]
+      },
+      "messages": [
+        {
+          "at": "09:12",
+          "from": "user",
+          "text": "**INV-0042 is open: \"Q4 payroll correction\" credential phish**, severity high. @Margot leads; I am the champion.\n\nObjective: find everyone who received it, who clicked, who entered credentials, and contain any exposed account.\n\nFind every recipient of the message, who clicked or replied, and whether any credentials were entered."
+        },
+        {
+          "at": "09:14",
+          "from": "margot",
+          "text": "On it. @Odile, trace the sender and pull every copy from the gateway. @Juno, give me a first read on the reported message itself."
+        },
+        {
+          "at": "09:17",
+          "from": "juno",
+          "text": "Real phish, not a simulation: the link goes to `payroll-kestrel.example/login`, registered **yesterday at 16:02**, with a cloned Microsoft sign-in page. Not one of our training domains."
+        },
+        {
+          "at": "09:24",
+          "from": "odile",
+          "text": "Sender is `payroll@kestrel-logistlcs.example` (an l for the i), sent through 203.0.113.77. The gateway delivered **23 copies** between 08:51 and 08:53; it caught none. All 23 are recorded as evidence V-2."
+        },
+        {
+          "at": "09:31",
+          "from": "ines",
+          "text": "Proxy logs show 4 people opened the link. Only **m.okafor** submitted the form, at 09:03, and Entra shows a sign-in for m.okafor from 203.0.113.77 at 09:06 that passed MFA by push approval."
+        },
+        {
+          "at": "09:33",
+          "from": "margot",
+          "text": "That is the exposure. I have proposed blocking the sender domain and the phishing domain, and revoking m.okafor's sessions with a password reset. The block needs your approval, @Avery."
+        }
+      ],
+      "investigation": {
+        "number": 42,
+        "title": "\"Q4 payroll correction\" credential phish",
+        "objective": "Find everyone who received the message, who clicked, who entered credentials, and contain any account that was exposed.",
+        "scope": [
+          "kestrel-logistics.example",
+          "*.kestrel-logistics.example",
+          "payroll-kestrel.example",
+          "m.okafor",
+          "j.ferris",
+          "s.bauer",
+          "203.0.113.77"
+        ],
+        "severity": "high",
+        "status": "triaging",
+        "source": "Reported by s.bauer",
+        "opened": "09:12",
+        "lead": "margot",
+        "case": {
+          "entities": [
+            {
+              "kind": "indicator",
+              "name": "payroll-kestrel.example",
+              "detail": "Phishing page, registered yesterday 16:02",
+              "at": "09:17",
+              "by": "juno"
+            },
+            {
+              "kind": "indicator",
+              "name": "kestrel-logistlcs.example",
+              "detail": "Look-alike sender domain",
+              "at": "09:24",
+              "by": "odile"
+            },
+            {
+              "kind": "indicator",
+              "name": "203.0.113.77",
+              "detail": "Sending relay, and the attacker's sign-in",
+              "at": "09:24",
+              "by": "odile"
+            },
+            {
+              "kind": "identity",
+              "name": "m.okafor",
+              "detail": "Entered credentials at 09:03",
+              "at": "09:31",
+              "by": "ines"
+            },
+            {
+              "kind": "identity",
+              "name": "s.bauer",
+              "detail": "Reported the message",
+              "at": "09:12",
+              "by": "juno"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "Reported message",
+              "method": "Headers and body of the message s.bauer reported",
+              "result": "Link to payroll-kestrel.example/login; WHOIS shows registration 16:02 yesterday.",
+              "at": "09:17",
+              "by": "juno"
+            },
+            {
+              "source": "Mail gateway",
+              "method": "Message trace: sender payroll@kestrel-logistlcs.example, last 24 h",
+              "result": "23 messages delivered 08:51–08:53, none quarantined.",
+              "at": "09:24",
+              "by": "odile"
+            },
+            {
+              "source": "Web proxy",
+              "method": "Requests to payroll-kestrel.example since 08:50",
+              "result": "4 users opened the page; only m.okafor sent a POST to /login (09:03).",
+              "at": "09:29",
+              "by": "ines"
+            },
+            {
+              "source": "Entra ID",
+              "method": "Sign-in logs for m.okafor since 08:00",
+              "result": "Successful sign-in 09:06 from 203.0.113.77, MFA satisfied by push approval.",
+              "at": "09:31",
+              "by": "ines"
+            }
+          ],
+          "findings": [
+            {
+              "claim": "This is a targeted credential phish against payroll staff, not a simulation.",
+              "evidence": [
+                "V-1",
+                "V-2"
+              ],
+              "confidence": "high",
+              "entities": [
+                "payroll-kestrel.example"
+              ],
+              "at": "09:25",
+              "by": "margot"
+            },
+            {
+              "claim": "m.okafor's password was captured and used, and the attacker passed MFA by push approval.",
+              "evidence": [
+                "V-3",
+                "V-4"
+              ],
+              "confidence": "high",
+              "entities": [
+                "m.okafor",
+                "203.0.113.77"
+              ],
+              "at": "09:32",
+              "by": "ines"
+            }
+          ],
+          "actions": [
+            {
+              "operation": "enrich_indicator",
+              "targets": [
+                "payroll-kestrel.example"
+              ],
+              "rationale": "Hosting and registration history (V-1)",
+              "effect": "Adds reputation data to the case",
+              "undo": "Nothing to undo",
+              "at": "09:18",
+              "by": "juno"
+            },
+            {
+              "operation": "revoke_sessions",
+              "targets": [
+                "m.okafor"
+              ],
+              "rationale": "Attacker session from 203.0.113.77 (V-4)",
+              "effect": "Signs m.okafor out everywhere",
+              "undo": "They sign in again",
+              "evidence": [
+                "V-4"
+              ],
+              "at": "09:33",
+              "by": "margot"
+            },
+            {
+              "operation": "block_indicator",
+              "targets": [
+                "payroll-kestrel.example",
+                "203.0.113.77"
+              ],
+              "rationale": "Phishing page and the attacker's address (V-1, V-4)",
+              "effect": "Proxy and firewall drop traffic to both",
+              "undo": "Remove the two entries from the block list",
+              "evidence": [
+                "V-1",
+                "V-4"
+              ],
+              "at": "09:33",
+              "by": "margot"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "macro",
+      "group": {
+        "name": "Macro document blocked on WS-PAY-03",
+        "members": [
+          "margot",
+          "rafe"
+        ]
+      },
+      "messages": [
+        {
+          "at": "-1d 15:20",
+          "from": "user",
+          "text": "Defender blocked a macro on WS-PAY-03. Please confirm nothing else happened."
+        },
+        {
+          "at": "-1d 15:44",
+          "from": "rafe",
+          "text": "The document is the vendor's own invoice template, signed by them since 2023. No child processes, no network. Recommend closing as a false positive."
+        }
+      ],
+      "investigation": {
+        "number": 41,
+        "title": "Macro document blocked on WS-PAY-03",
+        "objective": "Confirm the blocked macro did nothing else.",
+        "scope": [
+          "WS-PAY-03",
+          "t.hale"
+        ],
+        "severity": "low",
+        "status": "closed",
+        "outcome": "false-positive",
+        "closingNote": "Vendor invoice template with a signed macro; the rule now allows the publisher.",
+        "opened": "-1d 15:20",
+        "lead": "margot"
+      }
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1440,
+        880
+      ]
+    },
+    "select": "phish"
+  },
+  "timeline": [
+    {
+      "capture": "01-overview"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "agent": "odile",
+      "in": "phish",
+      "reply": {
+        "text": "Pulled all 23 copies from mailboxes. Two people had forwarded it internally; those copies are gone too."
+      }
+    },
+    {
+      "in": "phish",
+      "evidence": {
+        "source": "Mail gateway",
+        "method": "Search and purge: subject \"Q4 payroll correction\", 24 h",
+        "result": "25 copies removed (23 delivered, 2 internal forwards)."
+      }
+    },
+    {
+      "agent": "odile",
+      "status": {
+        "phase": "ready"
+      }
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "agent": "ines",
+      "in": "phish",
+      "reply": {
+        "text": "m.okafor's mailbox has a new inbox rule from 09:08 that moves anything from *payroll* to RSS Feeds. That is the attacker hiding replies."
+      }
+    },
+    {
+      "in": "phish",
+      "propose": {
+        "operation": "disable_user",
+        "targets": [
+          "m.okafor"
+        ],
+        "rationale": "Attacker holds valid credentials and created an inbox rule",
+        "effect": "Blocks every sign-in until the password is reset",
+        "undo": "Re-enable the account"
+      },
+      "agent": "ines"
+    },
+    {
+      "in": "phish",
+      "propose": {
+        "operation": "isolate_host",
+        "targets": [
+          "DC01"
+        ],
+        "rationale": "Precaution",
+        "effect": "Takes the domain controller offline",
+        "undo": "Release"
+      },
+      "agent": "ines"
+    },
+    {
+      "present": {
+        "inspector": "case"
+      }
+    },
+    {
+      "capture": "02-approvals"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "present": {
+        "inspector": "audit"
+      }
+    },
+    {
+      "capture": "03-audit"
+    }
+  ]
+}
