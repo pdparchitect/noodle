@@ -92,6 +92,13 @@ struct HubSettingsProblem: Equatable {
         }
     }
 
+    /// Ends the turn a bot is working on, for its owner, and says so in their conversation with it.
+    func stop(id: UUID) {
+        do { try hub.bots.stop(id) } catch {
+            problem = HubSettingsProblem(title: "Could Not Stop", message: error.localizedDescription)
+        }
+    }
+
     func modelName(_ model: String, on harness: HubHarness) -> String {
         runtime.models(for: harness.provider.rawValue, profile: harness.profile).first { $0.id == model }?.displayName ?? model
     }

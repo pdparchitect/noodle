@@ -26,7 +26,7 @@ public enum MessengerDeliveryKind: String, CaseIterable, Sendable {
         case .systemNotice:
             return .init(id: rawValue, fields: "sender.handle = system; message.author = system; message.body describes the change.",
                 recipients: "Current group participants, including newly added bots. Removed bots cannot read subsequent group deliveries.",
-                guidance: "System notices describe group membership or description changes, or that \(ProductIdentity.current.name) moved you to another harness because yours ran out of usage, or back. Refresh --list-participants or --list-conversations when needed, use the current public description as context, and continue relevant assigned work. A notice is not a new user task; do not send routine acknowledgements or create reply loops. Newly added members begin at the existing history boundary and receive the new notice. They may read earlier history explicitly with --list-messages. Creating a group, only renaming it, or deleting a bot entirely currently produces no system notice.")
+                guidance: "System notices describe group membership or description changes, or that \(ProductIdentity.current.name) moved you to another harness because yours ran out of usage, or back. A notice in your own conversation saying \"You stopped\" followed by your name means the person ended your previous turn on purpose: do not resume that work or anything it started, such as sub-agents or background commands, unless they ask again; answer their newer messages instead. Refresh --list-participants or --list-conversations when needed, use the current public description as context, and continue relevant assigned work. A notice is not a new user task; do not send routine acknowledgements or create reply loops. Newly added members begin at the existing history boundary and receive the new notice. They may read earlier history explicitly with --list-messages. Creating a group, only renaming it, or deleting a bot entirely currently produces no system notice.")
         case .reactionChange:
             return .init(id: rawValue, fields: "reactionChange contains id, sender, emoji, removed, createdAt. The outer message and sender describe the referenced original message.",
                 recipients: "Other current participants; a bot does not receive its own reaction changes.",
@@ -294,7 +294,8 @@ public enum MessengerDocumentation {
         return "\(name) can hand you new messages while you work, between your steps. When one step runs long, \(name) may stop it to "
             + "deliver them, and your harness may then say the user does not want to proceed and that you should stop and wait. "
             + "That stop comes from \(name), not your user: check whether the stopped step finished before running it again, then "
-            + "read the new messages and carry on. Run commands that may take more than a minute in the background, so messages "
+            + "read the new messages and carry on. Only when a notice from \(name) in your inbox says \"You stopped\" and your name "
+            + "did your user stop you: then do not carry on with that work. Run commands that may take more than a minute in the background, so messages "
             + "reach you between your steps instead of stopping them."
     }
 

@@ -391,6 +391,16 @@ import Observation
         onChange?()
     }
 
+    /// Whether the Hub can stop a working bot, as its last status said.
+    public var stopsBots: Bool { pairing.status?.stopsBots == true }
+
+    /// Ends the turn a bot on the Hub is working on. The Hub says so in its conversation, which comes here as any message.
+    public func stop(localAgentID: UUID) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        guard stopsBots else { throw LinkError("This Noodle Hub cannot stop bots. Update Noodle Hub.") }
+        _ = try await pairing.request(.stop(botID: entry.remote))
+    }
+
     public func setArchived(_ archived: Bool, conversation: UUID) async throws {
         guard let entry = groups.first(where: { $0.conversation == conversation }) else { throw LinkError("This group is not on the Hub.") }
         _ = try await pairing.request(.archive(LinkArchiveChange(id: entry.remote, archived: archived)))

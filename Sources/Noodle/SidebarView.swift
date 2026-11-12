@@ -303,6 +303,7 @@ private struct SidebarList: View {
         case .direct:
             if let agent = store.participants(for: conversation).first, !store.isShared(agent.id) {
                 Divider()
+                if store.canStop(agent.id) { Button("Stop") { store.stop(agentID: agent.id) } }
                 if store.canSuspend(agent.id) { SuspendBotMenu(agent: agent) }
                 Button("Archive Bot") { store.setArchived(true, agentID: agent.id) }
             }

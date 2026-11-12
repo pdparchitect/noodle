@@ -185,6 +185,12 @@ struct NoodleApp: App {
                 if let id = store.conversationWindows.conversationID(in: NSApp.keyWindow) { store.floatConversation(id) }
             }, isOnCall: { store.voiceCalls.call != nil }, toggleCall: {
                 store.toggleVoiceCall(in: store.conversationWindows.conversationID(in: NSApp.keyWindow))
+            }, canStop: {
+                store.stoppableAgent(in: store.conversationWindows.conversationID(in: NSApp.keyWindow)) != nil
+            }, stop: {
+                if let agent = store.stoppableAgent(in: store.conversationWindows.conversationID(in: NSApp.keyWindow)) {
+                    store.stop(agentID: agent.id)
+                }
             })
             SpaceCommands(store: store)
             CompanionAppCommands(store: store)

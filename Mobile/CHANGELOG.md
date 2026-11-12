@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Stop a bot that is working: touch and hold it and choose Stop. Its turn ends at once and it goes back to idle; its conversation says you stopped it, and messages you send it wait for its next turn. Needs a Noodle Hub that can stop bots.
+
+### What to Test
+
+- Ask a bot for something long, such as a long build. While its picture shows it working, touch and hold it and choose Stop: within a few seconds it stops working, and its conversation says "You stopped" and its name.
+- Send it a new message: it answers that message and doesn't carry on with what it was doing.
+- Touch and hold a bot that isn't working: Stop isn't in the menu.
+
 ## [0.56.0] - 2026-11-10
 
 ### Added

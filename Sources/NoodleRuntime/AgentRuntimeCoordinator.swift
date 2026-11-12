@@ -292,6 +292,14 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored private var stabilityTasks: [UUID: Task<Void, Never>] = [:]
     private var recoveryPending: Set<UUID> = []
     private var blockedRecoveries: Set<UUID> = []
+    /// A bot the person stopped, waiting for its harness to end the turn before it restarts.
+    private struct StoppingTurn {
+        let restart: @MainActor () -> Void
+        var timeout: Task<Void, Never>?
+    }
+    private var stoppingTurns: [UUID: StoppingTurn] = [:]
+    /// Bots that start again after Stop without picking up the unread messages waiting for them.
+    @ObservationIgnored private var quietStarts: Set<UUID> = []
     private var isStoppingAll = false
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
@@ -948,7 +956,8 @@ public final class AgentRuntimeCoordinator {
 
     public func start(agent configured: AgentRecord, repository: WorkspaceRepository) {
         let agent = runningAgent(configured)
-        if heldAgents[agent.id] != nil { hold(agent.id); return }
+        // Whoever lets a held bot go starts it with its unread messages.
+        if heldAgents[agent.id] != nil { quietStarts.remove(agent.id); hold(agent.id); return }
         guard !neverStarts(agent.id), processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
               !blockedRecoveries.contains(agent.id) else { return }
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
@@ -1002,7 +1011,10 @@ public final class AgentRuntimeCoordinator {
             }, profileOverride: harnessFallbacks[agent.id].map { $0.profile ?? HarnessProfileStore.defaultID($0.current) }))
         processes[agent.id] = process
         process.start()
-        recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
+        // After Stop, unread messages wait for the next time something wakes the bot.
+        if quietStarts.remove(agent.id) == nil {
+            recoverUnreadMessages(for: agent, process: processes[agent.id], repository: repository)
+        }
     }
 
     private func recordUsage(_ message: [String: Any], provider: HarnessProvider, agent: AgentRecord) {
@@ -1038,6 +1050,50 @@ public final class AgentRuntimeCoordinator {
     public func organize(_ agentID: UUID) {
         guard canOrganize(agentID) else { return }
         processes[agentID]?.organize()
+    }
+
+    /// How long Stop lets a harness end its turn before restarting it anyway.
+    static let stopGracePeriod: Duration = .seconds(5)
+
+    /// Whether the person can stop the bot now: it runs here, is working, and is not being stopped already.
+    public func canStopTurn(_ agentID: UUID) -> Bool {
+        // The snapshot it shows, so menus follow it.
+        guard !isStoppingAll, processes[agentID] != nil else { return false }
+        return snapshot(for: agentID).phase == .working && stoppingTurns[agentID] == nil && !changingAccess.contains(agentID)
+    }
+
+    /// Stop: ends the turn the bot is working on, as the person asked. The harness cancels the turn, then
+    /// restarts with the same session once the turn has ended, or after `stopGracePeriod`, so no sub-agent or
+    /// background command it started keeps running. The bot goes back to idle, does not resume the turn, and
+    /// leaves its unread messages for the next time it is woken. Answers whether there was a turn to stop.
+    @discardableResult
+    public func stopTurn(agent: AgentRecord, repository: WorkspaceRepository) -> Bool {
+        guard canStopTurn(agent.id), let process = processes[agent.id] else { return false }
+        messageDelivery.cancel(for: agent.id)
+        // Until a message arrives, which still wakes it.
+        quietStarts.insert(agent.id)
+        let runtimeID = runtimeIDs[agent.id]
+        stoppingTurns[agent.id] = StoppingTurn(restart: { [weak self] in
+            guard let self, self.runtimeIDs[agent.id] == runtimeID else { return }
+            self.restart(agent: agent, repository: repository, sessionRecovery: nil, discardTurn: true)
+        })
+        guard process.cancelTurn() else {
+            finishStop(agent.id)
+            return true
+        }
+        stoppingTurns[agent.id]?.timeout = Task { [weak self, sleep] in
+            do { try await sleep(Self.stopGracePeriod) } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.finishStop(agent.id)
+        }
+        return true
+    }
+
+    /// Restarts the harness of a bot the person stopped, once its turn ended or its time ran out.
+    private func finishStop(_ agentID: UUID) {
+        guard let stopping = stoppingTurns.removeValue(forKey: agentID) else { return }
+        stopping.timeout?.cancel()
+        stopping.restart()
     }
 
     /// Ordinary Kick remains immediate; replacing a missing session requires a
@@ -1158,13 +1214,22 @@ public final class AgentRuntimeCoordinator {
 
     private enum SessionRecovery { case replace(String), retry }
 
+    /// Where the harness the bot runs on now keeps its session, and beside it the mark of an unfinished turn.
+    private func sessionState(of agent: AgentRecord, repository: WorkspaceRepository) -> URL {
+        let running = runningAgent(agent)
+        let provider = HarnessProvider(rawValue: running.harnessIdentifier ?? "") ?? .codex
+        return repository.storage(for: agent.id).sessionState(provider: provider,
+            extendedAccess: accessConfiguration.isExtended(for: running))
+    }
+
     private func restart(
         agent: AgentRecord,
         repository: WorkspaceRepository,
         resetThread: Bool = false,
         sessionRecovery: SessionRecovery?,
         pauseAfterStop: Bool = false,
-        retryFailedStop: Bool = false
+        retryFailedStop: Bool = false,
+        discardTurn: Bool = false
     ) {
         guard !isStoppingAll, !changingAccess.contains(agent.id),
               !blockedRestarts.contains(agent.id) || retryFailedStop else { return }
@@ -1177,15 +1242,14 @@ public final class AgentRuntimeCoordinator {
         let lifecycle = lifecycleID
         runtimeIDs[agent.id] = nil
         let old = processes.removeValue(forKey: agent.id) ?? failedStops[agent.id]
-        if !resetThread, old?.hasInterruptedWork == true { recoveryPending.insert(agent.id) }
+        // A stopped turn is over: the bot does not resume it.
+        if discardTurn { recoveryPending.remove(agent.id) }
+        else if !resetThread, old?.hasInterruptedWork == true { recoveryPending.insert(agent.id) }
         if resetThread {
             recoveryPending.remove(agent.id)
             sessionStartDates[agent.id] = now()
             saveSessionDates()
-            let running = runningAgent(agent)
-            let provider = HarnessProvider(rawValue: running.harnessIdentifier ?? "") ?? .codex
-            let state = repository.storage(for: agent.id).sessionState(provider: provider,
-                extendedAccess: accessConfiguration.isExtended(for: running))
+            let state = sessionState(of: agent, repository: repository)
             try? FileManager.default.removeItem(at: state)
             try? FileManager.default.removeItem(at: state.appendingPathExtension("unfinished"))
         }
@@ -1197,6 +1261,11 @@ public final class AgentRuntimeCoordinator {
             if stopped {
                 self.failedStops[agent.id] = nil
                 self.blockedRestarts.remove(agent.id)
+                // Only once the harness is gone, so it cannot mark the turn unfinished again.
+                if discardTurn {
+                    try? FileManager.default.removeItem(at: self.sessionState(of: agent, repository: repository)
+                        .appendingPathExtension("unfinished"))
+                }
                 if pauseAfterStop {
                     self.snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,
                         detail: "Codex could not reconnect after two automatic restarts. Use Kick to retry. Unfinished work is preserved.")
@@ -1238,6 +1307,7 @@ public final class AgentRuntimeCoordinator {
 
     public func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
         for agent in agents {
+            quietStarts.remove(agent.id)
             recordActivity(for: agent.id)
             recordInteraction(for: agent.id)
             if processes[agent.id] == nil {
@@ -1269,6 +1339,7 @@ public final class AgentRuntimeCoordinator {
         runtimeIDs[agentID] = nil
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
+        quietStarts.remove(agentID)
         changingAccess.remove(agentID)
         transitionIDs[agentID] = nil
         if revokeAccess {
@@ -1608,6 +1679,12 @@ public final class AgentRuntimeCoordinator {
         processes.removeValue(forKey: agent.id)
         runtimeIDs[agent.id] = nil
         stabilityTasks.removeValue(forKey: agent.id)?.cancel()
+        // It ended while the person stopped it: it starts again without the turn, as Stop would have.
+        if let stopping = stoppingTurns.removeValue(forKey: agent.id) {
+            stopping.timeout?.cancel()
+            restart(agent: agent, repository: repository, sessionRecovery: nil, discardTurn: true)
+            return
+        }
         if needsRecovery { recoveryPending.insert(agent.id) }
         scheduleRestart(agent: agent, repository: repository, detail: detail)
     }
@@ -1652,6 +1729,7 @@ public final class AgentRuntimeCoordinator {
 
     private func cancelSupervision(for agentID: UUID) {
         messageDelivery.cancel(for: agentID)
+        stoppingTurns.removeValue(forKey: agentID)?.timeout?.cancel()
         restartTasks.removeValue(forKey: agentID)?.cancel()
         stabilityTasks.removeValue(forKey: agentID)?.cancel()
         restartAttempts.removeValue(forKey: agentID)
@@ -1663,6 +1741,10 @@ public final class AgentRuntimeCoordinator {
         return { [weak self] snapshot in
             guard let self, self.runtimeIDs[agentID] == runtimeID, snapshot.agentID == agentID else { return }
             defer { previousPhase = snapshot.phase }
+            // The stopped turn ended: restart now, once the harness has finished reporting it.
+            if snapshot.phase != .working, self.stoppingTurns[agentID] != nil {
+                Task { @MainActor [weak self] in self?.finishStop(agentID) }
+            }
             if previousPhase == .working, snapshot.phase == .ready {
                 self.recordActivity(for: agentID)
                 if self.heartbeatTurns.remove(agentID) == nil { self.recordInteraction(for: agentID) }

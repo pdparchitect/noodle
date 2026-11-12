@@ -1344,6 +1344,20 @@ public struct WorkspaceRepository: Sendable {
         }
     }
 
+    /// Says in the bot's own conversation with its owner that they stopped it. The bot finds it unread when it
+    /// next checks Messenger, at the start of its next turn. Nil for a bot without that conversation.
+    @discardableResult
+    public func appendStopNotice(agentID: UUID) throws -> ChatMessage? {
+        guard let agent = try loadAgents().first(where: { $0.id == agentID }),
+              let conversation = try loadConversations().first(where: {
+                  $0.kind == .direct && $0.participantIDs == [agentID] && $0.guest == nil
+              }) else { return nil }
+        let message = ChatMessage(conversationID: conversation.id, author: .system,
+                                  body: "You stopped \(agent.displayName).", delivery: .delivered)
+        try append(message)
+        return message
+    }
+
     private func inboxURL(for agentID: UUID) -> URL {
         // Mutable messaging state is not skill/configuration data. Codex keeps
         // .agents read-only even within a writable workspace.

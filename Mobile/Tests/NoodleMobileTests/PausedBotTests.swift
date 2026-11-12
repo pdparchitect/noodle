@@ -31,6 +31,18 @@ import Testing
         #expect(HubChats.pauseSummary(for: .group(group), members: [ada], pause: \.pause, now: now) == nil)
     }
 
+    /// Stop is offered for the person's own bot while it works, and only by a Hub that takes it.
+    @Test func stopIsOfferedForAnOwnWorkingBotOnAHubThatStopsBots() {
+        let own = bot("Kai")
+        #expect(HubChats.offersStop(own, phase: .working, stopsBots: true))
+        #expect(!HubChats.offersStop(own, phase: .ready, stopsBots: true))
+        #expect(!HubChats.offersStop(own, phase: nil, stopsBots: true))
+        #expect(!HubChats.offersStop(own, phase: .working, stopsBots: false), "An older Hub does not know Stop")
+        var shared = bot("Ada")
+        shared.owner = "Grace"
+        #expect(!HubChats.offersStop(shared, phase: .working, stopsBots: true), "Only its owner stops a bot")
+    }
+
     @Test func aGroupIsGrayOnlyWhenNoBotCanAnswer() {
         #expect(GroupAvatar.phase(of: [.ready, .offline]) == .ready)
         #expect(GroupAvatar.phase(of: [.working, .offline]) == .working)

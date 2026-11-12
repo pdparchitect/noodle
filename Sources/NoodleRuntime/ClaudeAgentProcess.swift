@@ -274,6 +274,17 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
     }
 
+    /// Stop interrupts the turn as Esc does, without a message waiting to follow it. Background tasks left
+    /// running without a turn have nothing to interrupt; the runtime restarts Claude Code to end them.
+    public func cancelTurn() -> Bool {
+        notifications.take()
+        endSteering()
+        guard running, turnIsActive else { return false }
+        if interruptRequested || interruptRequestID != nil { return true }
+        requestInterrupt()
+        return interruptRequested
+    }
+
     private func endSteering() {
         steeringTimeout?.cancel()
         steeringTimeout = nil
