@@ -7,7 +7,7 @@
 **Personal AI agents for your Mac, iPhone and iPad.**<br>
 Free and open source. Runs on the AI inference/subscriptions you already have.
 
-<a href="https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg"><img alt="Download Noodle for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
+<a href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg"><img alt="Download Noodle for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
 
 [Website](https://usenoodle.app) · [Apps](#apps) · [Documentation](docs/README.md) · [Security](docs/security.md) · [Privacy](docs/privacy.md) · [Changelog](CHANGELOG.md)
 
@@ -60,17 +60,20 @@ Each agent keeps its own workspace, backstory and history, and runs on the
 
 | App | What it does | Download |
 | --- | --- | --- |
-| **[Noodle](#get-started)** | Personal AI agents that get things done. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg) |
+| **[Noodle](#get-started)** | Personal AI agents that get things done. | [![macOS 26 Installer](https://img.shields.io/badge/macOS_26-Installer-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg) [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/latest/download/Noodle-arm64.dmg) |
 | **[Noodle&nbsp;Suite](#get-started)** | Noodle and its released companion apps in one installer. Each app updates independently. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-arm64.dmg) |
 | **[Noodle&nbsp;Computer](Computer/README.md)** | Linux, macOS and Windows computers for you and your agents. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg) |
 | **[Noodle&nbsp;Applet](Applet/README.md)** | Run tools, websites, experiments, and games created by you and your agents. | [![macOS 15 DMG](https://img.shields.io/badge/macOS_15-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg) |
 | **[Noodle&nbsp;Browser](Browser/README.md)** | Dedicated browsers you sign in to and assign to agents, with persistent profiles, tabs, history, bookmarks, and file transfers. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg) |
-| **[Noodle&nbsp;Hub](Hub/README.md)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg) |
+| **[Noodle&nbsp;Hub](Hub/README.md)** | Share your harnesses with family and friends from an always-on Mac. Their bots run there, with your sign-ins kept on the Hub. | [![macOS 26 Installer](https://img.shields.io/badge/macOS_26-Installer-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Hub-Installer.pkg) [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg) |
 | **[Noodle&nbsp;Server](Server/README.md)** | A Noodle Hub for Linux: run bots for the people you list on the Claude Code and Codex you install, each in a sandbox of its own. | [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz) |
 | **[Noodle&nbsp;Terminal](Terminal/README.md)** | Chat with the bots and groups on your Noodle Hub from a terminal, on your Mac or on Linux. | [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip)<br>[![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz) |
 | **[Noodle&nbsp;Mobile](Mobile/README.md)** | Chat with the agents on your Noodle Hub from iPhone and iPad. Beta on TestFlight: open the link on your phone. | [![iOS 26 TestFlight](https://img.shields.io/badge/iOS_26-TestFlight-5E5CE6?logo=apple&logoColor=white)](https://testflight.apple.com/join/wYKkNSP9) |
 
-Open a DMG and drag the app to **Applications**; ZIP downloads of every Mac app are on the [releases page](https://github.com/pdparchitect/noodle/releases).
+The Noodle Installer installs Noodle and lets you choose Noodle Computer, Noodle Browser, Noodle Applet and Noodle Terminal too.
+The Noodle Hub Installer sets up an always-on Mac: Noodle Hub, and the apps its bots use there.
+Or open a DMG and drag the app to **Applications**; ZIP downloads of every Mac app are on the [releases page](https://github.com/pdparchitect/noodle/releases).
+To remove an app, drag it from Applications to the Bin; to remove the `noodle` command, delete it from `/usr/local/bin`.
 Each app's README shows how to set it up and use it.
 Noodle Computer, Noodle Applet, Noodle Browser, Noodle Hub, Noodle Server, Noodle Terminal, and Noodle Mobile are optional companions and also work on their own.
 

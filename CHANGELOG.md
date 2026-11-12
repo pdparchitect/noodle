@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Install Noodle with a standard Mac installer. The Noodle Installer installs Noodle and lets you choose Noodle Computer, Noodle Browser, Noodle Applet and Noodle Terminal as it installs, each with what it does and its size; Noodle Terminal puts the `noodle` command in `/usr/local/bin`. An app your Mac can't run is greyed out with the reason. The Noodle Hub Installer does the same around Noodle Hub, for an always-on Mac. Both are signed and notarised, so organisations can deploy them with Jamf Pro, Kandji, Intune or Mosyle; `Enterprise/Deployment.md` lists their package identifiers and how to choose the apps. The disk images are still available.
 - Stop a bot that is working: right-click it in the sidebar and choose Stop, or choose Conversation › Stop (⌘.) in its conversation. Its turn ends at once, along with any sub-agents and background commands it started; it keeps its session and goes back to idle. Messages you send it wait for its next turn, and its conversation says you stopped it, so it does not simply carry on. This works for your bots on a Noodle Hub too.
 
 ### Fixed

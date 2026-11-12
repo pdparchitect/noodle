@@ -30,8 +30,63 @@ Kandji, Microsoft Intune or Mosyle. Anything not supported is said so.
   ZIP of each app with a `.sha256` checksum, convenient for packaging. A specific version is at
   `releases/download/vX.Y.Z/Noodle-arm64.zip`.
 - Noodle Computer, Browser, Applet and Hub are optional. Deploy only those your people need.
-- No installer package (`.pkg`) is published. Wrap the app in a package with your MDM's tools,
-  or deploy the app bundle where your MDM supports it. Install apps in `/Applications`.
+- Install apps in `/Applications`, or deploy the installer packages below.
+
+### Installer packages
+
+| Package | Installs | Choices |
+| --- | --- | --- |
+| [Noodle-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg) | Noodle | Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
+| [Noodle-Hub-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Hub-Installer.pkg) | Noodle Hub | Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
+
+- Both are signed with a Developer ID Installer certificate and notarised by Apple, so your MDM
+  can deploy them as they are. Each has a `.sha256` checksum beside it.
+- Apps install in `/Applications`, and Noodle Terminal's `noodle` command in `/usr/local/bin`.
+  Installing over existing apps keeps their data, and an app that has already updated itself to a
+  newer version is left as it is.
+- Installed without choices, as most MDMs do, a package installs its main app with Noodle
+  Computer, Noodle Browser and Noodle Applet, and leaves out Noodle Terminal. To choose, pass a
+  choices file to `installer`, for example from a script your MDM runs:
+  `sudo installer -pkg Noodle-Installer.pkg -target / -applyChoiceChangesXML choices.xml`.
+  The choices are `computer`, `browser`, `applet` and `terminal`. This file leaves out Noodle
+  Computer and adds Noodle Terminal:
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0">
+  <array>
+    <dict>
+      <key>choiceIdentifier</key><string>computer</string>
+      <key>choiceAttribute</key><string>selected</string>
+      <key>attributeSetting</key><integer>0</integer>
+    </dict>
+    <dict>
+      <key>choiceIdentifier</key><string>terminal</string>
+      <key>choiceAttribute</key><string>selected</string>
+      <key>attributeSetting</key><integer>1</integer>
+    </dict>
+  </array>
+  </plist>
+  ```
+
+- Each app leaves a receipt under a package identifier that stays the same from release to
+  release, for your MDM's inventory and smart groups:
+
+  | Installs | Package identifier |
+  | --- | --- |
+  | Noodle | `com.pdparchitect.noodle.pkg.noodle` |
+  | Noodle Computer | `com.pdparchitect.noodle.pkg.computer` |
+  | Noodle Browser | `com.pdparchitect.noodle.pkg.browser` |
+  | Noodle Applet | `com.pdparchitect.noodle.pkg.applet` |
+  | Noodle Hub | `com.pdparchitect.noodle.pkg.hub` |
+  | Noodle Terminal | `com.pdparchitect.noodle.pkg.terminal` |
+
+  The receipt's version is the app's version at the time it was installed; apps update
+  themselves afterwards.
+- To uninstall, quit the apps, delete them from `/Applications` and the `noodle` command from
+  `/usr/local/bin`, then remove their receipts, for example
+  `sudo pkgutil --forget com.pdparchitect.noodle.pkg.noodle`.
 
 ## Updates
 

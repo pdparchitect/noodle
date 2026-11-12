@@ -42,11 +42,12 @@ class GitHubFixture:
         self.files.update({(tag, name): value for name, value in files.items()})
 
     def snapshot(self, tag, manifest, draft=False):
-        self.release(tag, {
-            suite.IMAGE: b'verified image',
-            suite.IMAGE + '.sha256': f'{hashlib.sha256(b"verified image").hexdigest()}  {suite.IMAGE}\n'.encode(),
-            suite.MANIFEST: json.dumps(manifest).encode(),
-        }, draft=draft)
+        files = {}
+        for name in [suite.IMAGE, *suite.INSTALLERS]:
+            data = b'verified ' + name.encode()
+            files[name] = data
+            files[name + '.sha256'] = f'{hashlib.sha256(data).hexdigest()}  {name}\n'.encode()
+        self.release(tag, {**files, suite.MANIFEST: json.dumps(manifest).encode()}, draft=draft)
 
     def releases(self):
         return copy.deepcopy(self.items)
@@ -109,6 +110,61 @@ class SuiteTests(unittest.TestCase):
         updated = self.plan()
         self.assertEqual(updated['manifest']['components'][-1]['product'], 'hub')
         self.assertEqual(updated['manifest']['components'][-1]['archive'], 'Noodle-Hub-arm64.zip')
+
+    def test_terminal_joins_the_suite_for_the_installers_but_not_its_disk_image(self):
+        initial = self.plan()
+        self.github.app('terminal', '0.1.0')
+        updated = self.plan()
+        terminal = updated['manifest']['components'][-1]
+        self.assertEqual((terminal['product'], terminal['archive']), ('terminal', 'Noodle-Terminal-arm64.zip'))
+        self.assertEqual(updated['manifest']['components'][:3], initial['manifest']['components'])
+        self.assertEqual(suite.COMMANDS, {'terminal'})
+
+    def test_fetch_puts_the_terminal_command_beside_the_apps(self):
+        def publish(member):
+            content = io.BytesIO()
+            with zipfile.ZipFile(content, 'w') as zipped:
+                zipped.writestr(member, b'#!/bin/sh\n')
+            data = content.getvalue()
+            self.github.files[('terminal-v0.1.0', 'Noodle-Terminal-arm64.zip')] = data
+            self.github.files[('terminal-v0.1.0', 'Noodle-Terminal-arm64.zip.sha256')] = \
+                f'{hashlib.sha256(data).hexdigest()}  Noodle-Terminal-arm64.zip\n'.encode()
+
+        self.github.app('terminal', '0.1.0')
+        publish('noodle')
+        planned = self.plan()
+        planned['manifest']['components'] = planned['manifest']['components'][-1:]
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(suite, 'verify_command', return_value='TEAM') as verify:
+            root = Path(temporary)
+            suite.fetch(self.github, planned, root)
+            self.assertEqual((root / 'command/noodle').read_bytes(), b'#!/bin/sh\n')
+            self.assertEqual(list((root / 'apps').iterdir()), [])  # The Suite disk image holds apps only.
+            verify.assert_called_once()
+        publish('bin/other')
+        planned = self.plan()
+        planned['manifest']['components'] = planned['manifest']['components'][-1:]
+        with tempfile.TemporaryDirectory() as temporary, patch.object(suite, 'verify_command', return_value='TEAM'):
+            with self.assertRaisesRegex(ValueError, 'Unexpected archive path'):
+                suite.fetch(self.github, planned, Path(temporary))
+
+    def test_installers_are_snapshot_assets_and_the_manifest_is_uploaded_last(self):
+        self.assertEqual(suite.INSTALLERS, ['Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg'])
+        for name in suite.INSTALLERS:
+            self.assertIn(name, suite.ASSETS)
+            self.assertIn(name + '.sha256', suite.ASSETS)
+        self.assertEqual(suite.ASSETS[-1], suite.MANIFEST)
+        planned = self.plan()
+        notes = suite.release_notes(planned['manifest'])
+        for name in suite.INSTALLERS:
+            self.assertIn(f"releases/download/{planned['tag']}/{name}", notes)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.assets(directory, planned)
+            suite.verify_assets(directory, planned['manifest'])
+            (directory / 'Noodle-Hub-Installer.pkg').write_bytes(b'corrupted')
+            with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
+                suite.verify_assets(directory, planned['manifest'])
 
     def test_channel_failure_reuses_the_existing_snapshot_without_repackaging(self):
         planned = self.plan()
