@@ -472,6 +472,26 @@ class WorkflowTests(unittest.TestCase):
         published = next(i for i, step in enumerate(steps) if 'suite-release.py publish' in step.get('run', ''))
         self.assertLess(retained, published)
 
+    def test_suite_signs_and_notarizes_both_installers_from_the_same_apps(self):
+        steps = workflow('suite-release.yml')['jobs']['assemble']['steps']
+        index = {name: next(i for i, step in enumerate(steps) if name in step.get('run', ''))
+                 for name in ['MACOS_INSTALLER_CERTIFICATE_P12', 'package-dmg.sh', 'build-installers.py']}
+        signing, installers = steps[index['MACOS_INSTALLER_CERTIFICATE_P12']], steps[index['build-installers.py']]
+        self.assertEqual(signing['env']['MACOS_INSTALLER_CERTIFICATE_P12'], '${{ secrets.MACOS_INSTALLER_CERTIFICATE_P12 }}')
+        self.assertIn('Developer ID Installer:', signing['run'])
+        self.assertIn('NOODLE_INSTALLER_IDENTITY=', signing['run'])
+        self.assertEqual(installers['run'],
+                         'python3 scripts/build-installers.py dist/suite --sign "$NOODLE_INSTALLER_IDENTITY" --notarize')
+        for action in ['none', 'reuse', 'build']:
+            self.assertEqual(condition(installers['if'], {'needs.plan.outputs.action': action}), action == 'build')
+        retained = next(i for i, step in enumerate(steps) if step.get('with', {}).get('name') == 'suite-release-assets')
+        self.assertLess(index['MACOS_INSTALLER_CERTIFICATE_P12'], index['build-installers.py'])
+        self.assertLess(index['package-dmg.sh'], index['build-installers.py'])
+        self.assertLess(index['build-installers.py'], retained)
+        cleanup = steps[-1]
+        self.assertEqual(cleanup['if'], 'always()')
+        self.assertIn('suite-installer.p12', cleanup['run'])
+
     def test_push_deploys_from_main_only_after_its_tests(self):
         flow = workflow('push.yml')
         triggers = flow.get('on', flow.get('true'))
