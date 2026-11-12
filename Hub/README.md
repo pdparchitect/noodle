@@ -1,5 +1,7 @@
 # Noodle Hub
 
+[![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/hub-latest/Noodle-Hub-arm64.dmg)
+
 Noodle Hub runs bots on an always-on Mac so the people you pair with it can use them.
 It lives in the menu bar and keeps its bots and conversations apart from Noodle's
 own. Its menu bar item pairs a new device, opens Usage, Logs and Settings, and quits the Hub.

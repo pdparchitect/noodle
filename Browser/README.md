@@ -1,5 +1,7 @@
 # Noodle Browser
 
+[![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/browser-latest/Noodle-Browser-arm64.dmg)
+
 Noodle Browser gives your bots web browsers on your Mac that remember where they
 were and who they are signed in as. Create a browser, open a website and sign in,
 then assign that browser to a bot in Noodle. The bot works in the same tabs and

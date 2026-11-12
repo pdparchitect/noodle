@@ -1,5 +1,7 @@
 # Noodle Terminal
 
+[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz)
+
 Chat with the bots and groups on your Noodle Hub from Terminal on your Mac, without the
 Noodle app. Your bots and groups are listed on the left with their pictures, newest
 conversation first, with pinned ones on top and a dot on the unread ones. The

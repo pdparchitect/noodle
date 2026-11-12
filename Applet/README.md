@@ -1,5 +1,7 @@
 # Noodle Applet
 
+[![macOS 15 DMG](https://img.shields.io/badge/macOS_15-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/applet-latest/Noodle-Applet-arm64.dmg)
+
 Noodle Applet is a macOS companion to Noodle for tools, websites,
 experiments and games. Each one is a noodlet: software your bots write
 and you open like an app. In Finder a noodlet looks like a single document.

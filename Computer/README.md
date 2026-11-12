@@ -1,5 +1,7 @@
 # Noodle Computer
 
+[![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/computer-latest/Noodle-Computer-arm64.dmg)
+
 **Linux computers for you and your AI agents.**
 
 Give agents a place to run tools and work on files. Choose a desktop with a browser,
