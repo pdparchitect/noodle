@@ -2,7 +2,6 @@ import AppKit
 import AVFoundation
 import CoreGraphics
 import Observation
-import NoodletRuntime
 import SwiftUI
 import UserNotifications
 import NoodleRuntimeSettings
@@ -144,54 +143,44 @@ enum ScreenRecordingAccess {
     }
 }
 
-struct PermissionsSettingsView: View {
+/// The permissions an app asks for, each with its state and a way to grant it. An app adds sections of
+/// its own below them.
+struct PermissionsSettingsView<Extra: View>: View {
     @State private var requesting: AppPermission?
-    @State private var noodlets: [NoodletGrants.Grant] = []
+    private let permissions: [AppPermission]
     private let checker: AppPermissionChecker
     private let openSettings: @MainActor (URL) -> Void
+    private let extra: Extra
 
-    @MainActor init(checker: AppPermissionChecker? = nil,
-                    openSettings: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+    @MainActor init(permissions: [AppPermission] = AppPermission.allCases, checker: AppPermissionChecker? = nil,
+                    openSettings: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+                    @ViewBuilder extra: () -> Extra) {
+        self.permissions = permissions
         self.checker = checker ?? .shared
         self.openSettings = openSettings
+        self.extra = extra()
     }
 
     var body: some View {
         Form {
             Section {
-                ForEach(AppPermission.allCases) { permission in
+                ForEach(permissions) { permission in
                     permissionRow(permission)
                 }
             }
-            if !noodlets.isEmpty {
-                Section("Hub Noodlets") {
-                    ForEach(noodlets) { grant in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(grant.title)
-                                Text(grant.permissions.compactMap { NoodletManifest.permissionTitles[$0] }.joined(separator: ", "))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Remove") {
-                                NoodletGrants().revoke(grant.id)
-                                noodlets = NoodletGrants().all
-                            }
-                            .buttonStyle(.link)
-                        }
-                    }
-                }
-            }
+            extra
         }
         .formStyle(.grouped)
-        .onAppear {
-            checker.refresh()
-            noodlets = NoodletGrants().all
-        }
+        .onAppear { checker.refresh() }
         // Returning from System Settings is when a permission most likely changed.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             checker.refresh()
         }
+    }
+
+    private static var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Noodle"
     }
 
     private func permissionRow(_ permission: AppPermission) -> some View {
@@ -252,10 +241,17 @@ struct PermissionsSettingsView: View {
             }
             .accessibilityLabel("Open \(permission.name) in System Settings")
             .help(permission == .screenRecording
-                  ? "Turn on Noodle under Screen Recording. macOS may ask to reopen Noodle."
-                  : "Turn on Noodle under \(permission.name)")
+                  ? "Turn on \(Self.appName) under Screen Recording. macOS may ask to reopen \(Self.appName)."
+                  : "Turn on \(Self.appName) under \(permission.name)")
         case .allowed, nil:
             EmptyView()
         }
+    }
+}
+
+extension PermissionsSettingsView where Extra == EmptyView {
+    @MainActor init(permissions: [AppPermission] = AppPermission.allCases, checker: AppPermissionChecker? = nil,
+                    openSettings: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        self.init(permissions: permissions, checker: checker, openSettings: openSettings) { EmptyView() }
     }
 }

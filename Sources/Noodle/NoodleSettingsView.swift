@@ -1,4 +1,5 @@
 import AppKit
+import NoodletRuntime
 import SwiftUI
 import NoodleBrand
 import NoodleCore
@@ -74,7 +75,7 @@ struct NoodleSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(NoodleSettingsTab.keybindings)
-            PermissionsSettingsView()
+            PermissionsSettingsView { HubNoodletGrantsSection() }
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(NoodleSettingsTab.permissions)
@@ -245,5 +246,35 @@ extension NoodleStore: BotSettingsHost {
         case .computer: try await computers.openLibrary()
         case .applet: try await applets.openLibrary()
         }
+    }
+}
+
+/// The device permissions Hub noodlets were granted on this Mac, each removable.
+private struct HubNoodletGrantsSection: View {
+    @State private var noodlets: [NoodletGrants.Grant] = []
+
+    var body: some View {
+        Group {
+            if !noodlets.isEmpty {
+                Section("Hub Noodlets") {
+                    ForEach(noodlets) { grant in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(grant.title)
+                                Text(grant.permissions.compactMap { NoodletManifest.permissionTitles[$0] }.joined(separator: ", "))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Remove") {
+                                NoodletGrants().revoke(grant.id)
+                                noodlets = NoodletGrants().all
+                            }
+                            .buttonStyle(.link)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { noodlets = NoodletGrants().all }
     }
 }

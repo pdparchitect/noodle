@@ -18,27 +18,6 @@ enum LongTextPolicy {
     }
 }
 
-extension MessageTextLayout {
-    static let defaultsKey = "messageTextLayout"
-    static let defaultValue = Self.together
-
-    var displayName: String {
-        switch self {
-        case .together: "Together"
-        case .paragraphs: "Paragraphs"
-        case .chunks: "Chunks"
-        }
-    }
-
-    var explanation: String {
-        switch self {
-        case .together: "Show each message in one bubble."
-        case .paragraphs: "Start a new bubble at every blank line."
-        case .chunks: "Group paragraphs into short bubbles, keeping a line that ends in a colon with what follows."
-        }
-    }
-}
-
 /// A message's prose, or one stretch of it between tables.
 struct MessageText: View {
     let message: ChatMessage
