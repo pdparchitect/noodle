@@ -114,11 +114,9 @@ struct PionSettingsView: View {
     }
 }
 
-/// Names for new agents and what the main window shows.
+/// Names for new agents. What the main window shows lives in the View menu.
 private struct GeneralSettingsView: View {
     @AppStorage(PionModel.agentNameStyleKey) private var nameStyle = PionModel.defaultAgentNameStyle.rawValue
-    @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
-    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.glyphs.rawValue
 
     var body: some View {
         Form {
@@ -128,12 +126,6 @@ private struct GeneralSettingsView: View {
                     Text("Human").tag(BotNameStyle.real.rawValue)
                 }
                 .pickerStyle(.segmented)
-            }
-            Section {
-                Picker("Background effect", selection: $effect) {
-                    ForEach(BackdropEffect.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                Toggle("Show closed Investigations in the sidebar", isOn: $showsClosed)
             }
         }
         .formStyle(.grouped)
