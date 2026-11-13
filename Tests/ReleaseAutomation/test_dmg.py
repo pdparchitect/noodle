@@ -188,9 +188,9 @@ class SuiteLayoutTests(unittest.TestCase):
                 self.module.suite_apps(set(names))
 
     def test_every_suite_icon_has_room_left_of_the_arrow(self):
-        for count in range(3, len(self.module.SUITE_NAMES) + 1):
+        for count in range(3, len(self.module.SUITE_NAMES) + 2):
             with self.subTest(count=count):
-                apps = [Path(name) for name in self.module.SUITE_NAMES[:count]]
+                apps = [Path(name) for name in (self.module.SUITE_NAMES + ['noodle'])[:count]]
                 _, locations = self.module.layout(apps, suite=True)
                 icon = self.module.icon_size(apps, suite=True)
                 points = [locations[app.name] for app in apps]
@@ -199,3 +199,31 @@ class SuiteLayoutTests(unittest.TestCase):
                     self.assertLess(x + icon / 2, 560)
                     for other_x, other_y in points[index + 1:]:
                         self.assertTrue(abs(x - other_x) >= icon + 8 or abs(y - other_y) >= icon + 40)
+
+
+class ProductContentsTests(unittest.TestCase):
+    def test_suite_includes_hub_and_terminal_but_individual_images_contain_only_their_app(self):
+        from unittest.mock import Mock, patch
+        import sys
+        spec = importlib.util.spec_from_file_location('contents_dmg', ROOT / 'scripts/build-dmg.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            apps = root / 'apps'
+            for name in module.SUITE_NAMES:
+                (apps / name / 'Contents').mkdir(parents=True)
+                (apps / name / 'Contents/Info.plist').write_bytes(b'fixture')
+            command = root / 'command/noodle'
+            command.parent.mkdir()
+            command.write_bytes(b'command')
+            command.chmod(0o755)
+            for arguments, expected in [(['--suite', str(apps)], module.SUITE_NAMES + ['noodle']),
+                                        ([str(apps / 'Noodle.app')], ['Noodle.app']),
+                                        ([str(apps / 'Noodle Hub.app')], ['Noodle Hub.app'])]:
+                with self.subTest(arguments=arguments):
+                    builder = Mock()
+                    with patch.dict(sys.modules, {'dmgbuild': builder}), patch.object(sys, 'argv', ['build-dmg', *arguments, str(root / 'background'), str(root / 'output.dmg')]), patch.object(module.subprocess, 'run'), patch.object(module, 'verify_image'):
+                        module.main()
+                    files = builder.build_dmg.call_args.kwargs['settings']['files']
+                    self.assertEqual([Path(file).name for file in files], expected)

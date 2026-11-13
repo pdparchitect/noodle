@@ -53,9 +53,9 @@ UNCHECKED = {'terminal'}
 COMPANIONS = ['computer', 'browser', 'applet', 'terminal']
 INSTALLERS = {
     'Noodle-Suite-Installer.pkg': dict(title='Noodle Suite', identifier='com.pdparchitect.noodle.pkg.suite-installer',
-                                       required='noodle', optional=COMPANIONS, resources='Suite'),
+                                       required='noodle', optional=['hub', *COMPANIONS], resources='Suite'),
     'Noodle-Installer.pkg': dict(title='Noodle', identifier='com.pdparchitect.noodle.pkg.installer',
-                                 required='noodle', optional=[], resources='Noodle'),
+                                 required='noodle', optional=COMPANIONS, resources='Noodle'),
     'Noodle-Hub-Installer.pkg': dict(title='Noodle Hub', identifier='com.pdparchitect.noodle.pkg.hub-installer',
                                      required='hub', optional=COMPANIONS, resources='Hub'),
 }
