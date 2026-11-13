@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-13
+
 ### Added
 
 - A working bot can be stopped, from Noodle, Noodle Mobile or the bot's profile in Settings › Bots. Its turn ends at once, along with any sub-agents and background commands it started; it keeps its session and goes back to idle, and its conversation says it was stopped. Only the bot's owner can stop it.
