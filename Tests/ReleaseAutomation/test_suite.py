@@ -149,7 +149,7 @@ class SuiteTests(unittest.TestCase):
                 suite.fetch(self.github, planned, Path(temporary))
 
     def test_installers_are_snapshot_assets_and_the_manifest_is_uploaded_last(self):
-        self.assertEqual(suite.INSTALLERS, ['Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg'])
+        self.assertEqual(suite.INSTALLERS, ['Noodle-Suite-Installer.pkg', 'Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg'])
         for name in suite.INSTALLERS:
             self.assertIn(name, suite.ASSETS)
             self.assertIn(name + '.sha256', suite.ASSETS)

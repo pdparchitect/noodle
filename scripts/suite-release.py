@@ -18,7 +18,7 @@ CHANNEL = 'suite-latest'
 IMAGE = 'Noodle-Suite-arm64.dmg'
 MANIFEST = 'suite-manifest.json'
 # Built by scripts/build-installers.py from the same verified apps as the disk image.
-INSTALLERS = ['Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg']
+INSTALLERS = ['Noodle-Suite-Installer.pkg', 'Noodle-Installer.pkg', 'Noodle-Hub-Installer.pkg']
 # The manifest stays last: it is uploaded after everything else as the channel's completion marker.
 ASSETS = [IMAGE, IMAGE + '.sha256', *[name + suffix for name in INSTALLERS for suffix in ['', '.sha256']], MANIFEST]
 PRODUCTS = {
@@ -36,7 +36,7 @@ COMMANDS = {'terminal'}
 SEMVER = r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RECIPE_FILES = ['scripts/suite-release.py', 'scripts/build-dmg.py', 'scripts/package-dmg.sh',
                 'scripts/dmg-background.swift', 'scripts/dmg-requirements.txt', 'scripts/build-installers.py',
-                *[f'scripts/installer/{product}/{page}.html' for product in ['Noodle', 'Hub']
+                *[f'scripts/installer/{product}/{page}.html' for product in ['Suite', 'Noodle', 'Hub']
                   for page in ['welcome', 'readme', 'conclusion']]]
 
 
@@ -209,10 +209,11 @@ def release_notes(manifest):
             for item in manifest['components']]
     tag = snapshot_tag(manifest)
     download = f'https://github.com/{REPO}/releases/download/{tag}'
-    return (f'[Download the Noodle Installer]({download}/{INSTALLERS[0]}) · '
-            f'[Noodle Hub Installer]({download}/{INSTALLERS[1]}) · '
+    return (f'[Download the Noodle Suite Installer]({download}/Noodle-Suite-Installer.pkg) · '
+            f'[Noodle Hub Installer]({download}/Noodle-Hub-Installer.pkg) · '
+            f'[Noodle Installer]({download}/Noodle-Installer.pkg) · '
             f'[Noodle Suite disk image]({download}/{IMAGE})\n\n'
-            'Requires macOS 26 or later on Apple silicon. The installers let you choose the apps; '
+            'Requires macOS 26 or later on Apple silicon. The Suite and Hub installers let you choose companion apps; Noodle Installer installs Noodle only; '
             'or open the disk image and drag the apps to Applications.\n\n'
             '| App | Version |\n| --- | --- |\n' + '\n'.join(rows) + '\n\n'
             'Each app keeps its own automatic updates. These installers reuse the published app bundles.\n')
