@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- Conversation list and icon previews show readable text instead of Markdown markup, including bot statuses.
+
 ### Added
 
 - Choose companion apps with the Noodle Suite Installer or Noodle Hub Installer. The standalone Noodle Installer installs Noodle only.

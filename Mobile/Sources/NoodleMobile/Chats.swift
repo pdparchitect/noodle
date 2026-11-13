@@ -1018,10 +1018,13 @@ final class ChatsCacheFile: @unchecked Sendable {
     /// What the bubble over a pinned circle says: the start of an unread reply, or else the bot's status.
     func note(for thread: HubThread) -> PinnedNote? {
         if isUnread(thread), let reply = messages(of: thread).last(where: { if case .bot = $0.author { true } else { false } }) {
-            let text = MessageRendering.previewText(reply.body).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let text = MarkdownPlainText.convert(MessageRendering.previewText(reply.body))
             if !text.isEmpty { return .unread(text) }
         }
-        return thread.bot?.status.map(PinnedNote.status)
+        return thread.bot?.status.flatMap {
+            let text = MarkdownPlainText.convert($0)
+            return text.isEmpty ? nil : .status(text)
+        }
     }
 
     /// In a group, the bot's name heading each run of its messages, by message.

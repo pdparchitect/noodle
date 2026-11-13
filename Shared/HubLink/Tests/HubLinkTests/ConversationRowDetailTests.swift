@@ -25,4 +25,18 @@ final class ConversationRowDetailTests: XCTestCase {
         XCTAssertEqual(line(.status, isGroup: true, status: "Busy", reply: "Done"), "Thanks",
                        "A group has a status per bot, so it keeps its latest message")
     }
+    func testCompactLinesSimplifyMarkdownBeforeTruncation() {
+        let reply = "**Done:** the test script for [Noodle](https://usenoodle.app) is `ready`."
+        for detail in ConversationRowDetail.allCases {
+            XCTAssertEqual(detail.line(isGroup: false, description: reply, status: reply,
+                                       latestReply: { reply }, latestMessage: reply),
+                           "Done: the test script for Noodle is ready.", "\(detail)")
+        }
+        XCTAssertEqual(ConversationRowDetail.status.line(isGroup: false, description: nil, status: "```",
+                        latestReply: { "# Ready\n- **First** item\n- `Second` item" }, latestMessage: "Fallback"),
+                       "Ready First item Second item")
+        XCTAssertEqual(ConversationRowDetail.status.line(isGroup: true, description: nil, status: reply,
+                        latestReply: { reply }, latestMessage: "**Group** update"), "Group update")
+    }
+
 }

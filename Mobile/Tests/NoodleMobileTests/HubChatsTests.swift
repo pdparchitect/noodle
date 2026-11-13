@@ -1533,6 +1533,20 @@ private actor RecordedSubscriptions: PushSubscriptions {
         }
     }
 
+    @Test func compactConversationLinesSimplifyMarkdownWithoutChangingMessages() async throws {
+        let hub = FakeHub()
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        let body = "**Done:** the test script for [Noodle](https://usenoodle.app) is `ready`."
+        await hub.botSays(body)
+        try await chats.reload()
+        let thread = HubThread.bot(try #require(chats.agents.first))
+        for detail in ConversationRowDetail.allCases {
+            #expect(chats.line(for: thread, showing: detail) == "Done: the test script for Noodle is ready.")
+        }
+        #expect(chats.latestMessage(of: thread)?.body == body)
+    }
+
     /// A call needs the bot running now, unlike a message it can pick up later: not stopped, starting or failed,
     /// not paused, and its Hub in reach.
     @Test func onlyABotThatIsRunningCanBeCalled() async throws {
@@ -1558,11 +1572,11 @@ private actor RecordedSubscriptions: PushSubscriptions {
         try await chats.reload()
         #expect(try note() == nil)
 
-        await hub.setStatus("Reviewing PR 42")
+        await hub.setStatus("**Reviewing** `PR 42`")
         try await chats.reload()
         #expect(try note() == .status("Reviewing PR 42"))
 
-        await hub.botSays("Done,\n  all green")
+        await hub.botSays("**Done,**\n  [all green](https://example.com)")
         try await chats.reload()
         #expect(try note() == .unread("Done, all green"))
 
