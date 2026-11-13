@@ -20,6 +20,8 @@ case "$bundle_identifier" in
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/browser-latest/appcast.xml' ;;
     com.pdparchitect.noodle.hub|com.pdparchitect.noodle.hub.local)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/hub-latest/appcast.xml' ;;
+    com.pdparchitect.pion|com.pdparchitect.pion.local)
+        expected_feed='https://github.com/pdparchitect/noodle/releases/download/pion-latest/appcast.xml' ;;
 esac
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == "$expected_feed" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info")" == '1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=' ]]

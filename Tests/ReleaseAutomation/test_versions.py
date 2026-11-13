@@ -46,7 +46,7 @@ class VersionTests(unittest.TestCase):
         self.git('commit', '-m', 'Fixture')
 
     def write_version(self, product, value, body='- A release change.'):
-        path, changelog, _ = self.module.PRODUCTS[product]
+        path, changelog, _ = self.module.ALL[product]
         (self.root / path).parent.mkdir(parents=True, exist_ok=True)
         (self.root / path).write_text(value + '\n')
         (self.root / changelog).write_text(f'## Unreleased\n\n## [{value}] - 2026-09-10\n\n{body}\n')
@@ -55,6 +55,18 @@ class VersionTests(unittest.TestCase):
         (self.root / 'new-code.txt').write_text('new code')
         self.commit()
         self.assertEqual(self.module.plan(), [])
+
+    def test_incubating_apps_release_only_on_their_own(self):
+        self.write_version('pion', '0.1.0')
+        self.commit()
+        # Noodle's pipeline never plans an incubating app, however its version reads.
+        self.assertEqual(self.module.plan(), [])
+        pending = run('python3', 'scripts/release-versions.py', 'pending', 'pion', cwd=self.root).stdout
+        self.assertEqual(pending, 'release=true\nversion=0.1.0\n')
+        self.git('tag', 'pion-v0.1.0')
+        pending = run('python3', 'scripts/release-versions.py', 'pending', 'pion', cwd=self.root).stdout
+        self.assertEqual(pending, 'release=false\nversion=0.1.0\n')
+        self.assertIn('Pion-arm64.dmg', self.module.release_notes('pion'))
 
     def test_independent_versions_and_numeric_ordering(self):
         self.write_version('computer', '1.10.0')

@@ -20,6 +20,11 @@ PRODUCTS = {
     "server": ("Server/VERSION", "Server/CHANGELOG.md", "server-v"),
     "images": ("Computer/Images/VERSION", "Computer/Images/CHANGELOG.md", "computer-images-v"),
 }
+# Incubating apps release on their own, from their own workflows: never planned or tagged with the products above.
+INCUBATOR = {
+    "pion": ("Incubator/Pion/VERSION", "Incubator/Pion/CHANGELOG.md", "pion-v"),
+}
+ALL = PRODUCTS | INCUBATOR
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 
 
@@ -28,7 +33,7 @@ def git(*args):
 
 
 def version(product):
-    path, _, prefix = PRODUCTS[product]
+    path, _, prefix = ALL[product]
     value = (ROOT / path).read_text().strip()
     if not re.fullmatch(SEMVER, value):
         raise ValueError(f"Invalid version in {path}: {value!r}")
@@ -41,7 +46,7 @@ def number(value):
 
 def notes(product):
     value, _ = version(product)
-    path = PRODUCTS[product][1]
+    path = ALL[product][1]
     text = (ROOT / path).read_text()
     header = re.search(rf"^## \[{re.escape(value)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$", text, re.M)
     if not header:
@@ -59,7 +64,7 @@ def release_notes(product):
     if product in ('images', 'mobile'):
         return body
     _, tag = version(product)
-    basename = 'Noodle' if product == 'noodle' else f'Noodle-{product.title()}'
+    basename = 'Noodle' if product == 'noodle' else product.title() if product in INCUBATOR else f'Noodle-{product.title()}'
     download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
     # The server is for Linux: one archive for each processor.
     if product == 'server':
@@ -78,7 +83,7 @@ def release_notes(product):
 
 
 def released_versions(product):
-    prefix = PRODUCTS[product][2]
+    prefix = ALL[product][2]
     return [tag[len(prefix):] for tag in git("tag", "--list", prefix + "*").splitlines()
             if re.fullmatch(re.escape(prefix) + SEMVER, tag)]
 
@@ -101,7 +106,7 @@ def plan():
 
 
 def mint(selected):
-    if not selected or len(set(selected)) != len(selected) or any(p not in PRODUCTS for p in selected):
+    if not selected or len(set(selected)) != len(selected) or any(p not in ALL for p in selected):
         raise ValueError("Expected a nonempty list of distinct products")
     if git("status", "--porcelain", "--untracked-files=no"):
         raise ValueError("Refusing to tag modified tracked files")
@@ -129,14 +134,28 @@ def mint(selected):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["plan", "tag", "notes"])
-    parser.add_argument("product", nargs="?", choices=PRODUCTS)
+    parser.add_argument("command", choices=["plan", "pending", "tag", "notes"])
+    parser.add_argument("product", nargs="?", choices=ALL)
     args = parser.parse_args()
     if args.command == "plan":
         selected = plan()
         outputs = {p: str(p in selected).lower() for p in PRODUCTS}
         outputs.update(any=str(bool(selected)).lower(), products=json.dumps(selected))
         output = "".join(f"{key}={value}\n" for key, value in outputs.items())
+        print(output, end="")
+        if os.environ.get("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"], "a") as file:
+                file.write(output)
+    elif args.command == "pending":
+        # Whether an incubating app's VERSION is dated and not yet released, for its own workflow.
+        if args.product not in INCUBATOR:
+            parser.error("pending takes an incubating app")
+        value, _ = version(args.product)
+        pending = value not in released_versions(args.product) and bool(
+            re.search(rf"^## \[{re.escape(value)}\] - ", (ROOT / ALL[args.product][1]).read_text(), re.M))
+        if pending:
+            notes(args.product)
+        output = f"release={str(pending).lower()}\nversion={value}\n"
         print(output, end="")
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as file:

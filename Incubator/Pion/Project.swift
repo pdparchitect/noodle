@@ -20,7 +20,7 @@ let embedHelpers: TargetScript = .post(script: """
     helpers="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
     rm -rf "$helpers"
     mkdir -p "$helpers"
-    sign() { codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$@"; }
+    sign() { codesign --force --options runtime "$PION_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$@"; }
     install_name_tool -delete_rpath "$BUILT_PRODUCTS_DIR/PackageFrameworks" "$TARGET_BUILD_DIR/$EXECUTABLE_PATH" 2>/dev/null || true
     for tool in messenger NoodleAppleAgent; do
         ditto "$BUILT_PRODUCTS_DIR/$tool" "$helpers/$tool"
@@ -30,10 +30,30 @@ let embedHelpers: TargetScript = .post(script: """
     for bundle in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do
         if [ -d "$BUILT_PRODUCTS_DIR/$bundle.bundle" ]; then
             ditto "$BUILT_PRODUCTS_DIR/$bundle.bundle" "$helpers/$bundle.bundle"
-            codesign --force --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$helpers/$bundle.bundle"
+            codesign --force "$PION_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$helpers/$bundle.bundle"
         fi
     done
     """, name: "Embed Helpers", basedOnDependencyAnalysis: false)
+
+/// As in Noodle's other apps: Pion already has outbound network access, so Sparkle's separate downloader
+/// goes. Removing it changes the framework, so it is signed again, inside out.
+let trimSparkle: TargetScript = .post(script: """
+    set -euo pipefail
+    sparkle="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Sparkle.framework"
+    rm -rf "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+    for component in "$sparkle/Versions/B/XPCServices/Installer.xpc" "$sparkle/Versions/B/Autoupdate" \\
+                     "$sparkle/Versions/B/Updater.app" "$sparkle"; do
+        codesign --force --options runtime "$PION_CODESIGN_TIMESTAMP" --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$component"
+    done
+    # Package checkouts sit beside Build/ in derived data, which archives nest deeper.
+    packages="$BUILD_DIR"
+    while [ ! -d "$packages/SourcePackages" ]; do
+        [ "$packages" != / ] || { echo "error: no Swift package checkouts above $BUILD_DIR" >&2; exit 1; }
+        packages="$(dirname "$packages")"
+    done
+    cp -f "$packages/SourcePackages/checkouts/Sparkle/LICENSE" \\
+       "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
+    """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 
 /// A command-line helper the app runs from Contents/Helpers. The app signs it when it embeds it.
 func helper(_ name: String, sources: SourceFilesList, dependencies: [TargetDependency],
@@ -60,6 +80,7 @@ let project = Project(
         .local(path: "../../Shared/HubLink"),
         .local(path: "../../Shared/Wallpaper"),
         .local(path: "../../Shared/Brand"),
+        .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
     settings: .settings(
         base: [
@@ -110,6 +131,7 @@ let project = Project(
                 "../../Sources/Noodle/VoiceMessagePlayer.swift",
                 "../../Sources/Noodle/HarnessChoosers.swift",
                 "../../Sources/Noodle/PermissionsSettingsView.swift",
+                "../../Sources/Noodle/AppUpdater.swift",
                 "../../Sources/Noodle/AttachmentPreviewController.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
@@ -137,7 +159,7 @@ let project = Project(
                 "Support/AppSymbol.svg",
             ],
             entitlements: .file(path: "Support/Pion.entitlements"),
-            scripts: [embedHelpers],
+            scripts: [embedHelpers, trimSparkle],
             dependencies: [
                 .package(product: "PionCore"),
                 .package(product: "NoodleBrand"),
@@ -149,6 +171,7 @@ let project = Project(
                 .package(product: "HubLink"),
                 .package(product: "NoodleHubClient"),
                 .package(product: "NoodleWallpaper"),
+                .package(product: "Sparkle"),
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
@@ -162,6 +185,11 @@ let project = Project(
                     "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
                     "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
                     "INFOPLIST_PREPROCESS": "YES",
+                    // Updates stay off unless a public release passes
+                    // INFOPLIST_PREPROCESSOR_DEFINITIONS=PION_UPDATES_ENABLED=true.
+                    "INFOPLIST_PREPROCESSOR_DEFINITIONS": "PION_UPDATES_ENABLED=false",
+                    // The helper phases sign without a timestamp; public releases pass PION_CODESIGN_TIMESTAMP=--timestamp.
+                    "PION_CODESIGN_TIMESTAMP": "--timestamp=none",
                     "INFOPLIST_OTHER_PREPROCESSOR_FLAGS": "-traditional",
                 ]) { $1 },
                 configurations: [

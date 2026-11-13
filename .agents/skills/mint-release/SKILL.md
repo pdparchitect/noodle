@@ -1,6 +1,6 @@
 ---
 name: mint-release
-description: Procedure for minting or publishing a version of Noodle, Computer, Applet, Browser, Hub or the Computer images. Use when the user asks to mint, cut, prepare, release or publish a version, bump a VERSION file, or turn Unreleased changelog notes into a dated release section.
+description: Procedure for minting or publishing a version of Noodle, Computer, Applet, Browser, Hub, Pion or the Computer images. Use when the user asks to mint, cut, prepare, release or publish a version, bump a VERSION file, or turn Unreleased changelog notes into a dated release section.
 ---
 
 # Mint a release
@@ -10,7 +10,8 @@ to `main` requests publication, so commit and push only on that explicit request
 
 The complete process, including the per-product version and changelog files, CI
 behaviour and recovery, is in [`docs/releases.md`](../../../docs/releases.md).
-Read it first and follow it; this skill only summarises the preparation.
+Read it first and follow it; this skill only summarises the preparation. Pion, incubating, releases on
+its own: [`Incubator/Pion/RELEASING.md`](../../../Incubator/Pion/RELEASING.md).
 
 ## Prepare
 

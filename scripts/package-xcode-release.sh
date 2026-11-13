@@ -3,6 +3,7 @@
 # Everything else follows from the app's name: APP/VERSION and APP/CHANGELOG.md, the app-v tag,
 # com.pdparchitect.noodle.app, Noodle-APP-arm64.zip and scripts/verify-app-release.sh. Noodle is the
 # repository itself: VERSION, CHANGELOG.md, the v tag, com.pdparchitect.noodle and Noodle-arm64.zip.
+# Pion, incubating, lives in Incubator/Pion and is named on its own.
 # An app with Support/update-milestones.json has them applied to its update feed.
 set -euo pipefail
 project_root="${0:A:h:h}"
@@ -11,6 +12,9 @@ product="${(L)app_folder}"
 setting="${(U)app_folder}"
 if [[ "$app_folder" == Noodle ]]; then
     folder="$project_root"; app_name=Noodle; bundle=com.pdparchitect.noodle; tag_prefix=v
+elif [[ "$app_folder" == Pion ]]; then
+    # An incubating app of its own: Incubator/Pion, com.pdparchitect.pion, the pion-v tag and Pion-arm64.zip.
+    folder="$project_root/Incubator/Pion"; app_name=Pion; bundle=com.pdparchitect.pion; tag_prefix=pion-v
 else
     folder="$project_root/$app_folder"; app_name="Noodle $app_folder"; bundle="com.pdparchitect.noodle.$product"; tag_prefix="$product-v"
 fi

@@ -4,18 +4,12 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
-	<!-- Dictation and calls. -->
+	<!-- Dictation. -->
 	<key>com.apple.security.device.audio-input</key>
-	<true/>
-	<key>com.apple.security.device.camera</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
-	<true/>
-	<key>com.apple.security.personal-information.calendars</key>
-	<true/>
-	<key>com.apple.security.personal-information.reminders</key>
 	<true/>
 	<!-- The harnesses a person installed themselves, as Noodle reads them. -->
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
@@ -27,6 +21,12 @@
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
 	<array>
 		<string>/.codex/</string>
+	</array>
+	<!-- Sparkle's two installer endpoints for this app's identifier. -->
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
 	</array>
 </dict>
 </plist>

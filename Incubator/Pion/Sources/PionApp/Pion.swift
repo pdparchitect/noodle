@@ -76,6 +76,8 @@ struct PionApp: App {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
         model.start()
+        // Noodle's updater, on Pion's own channel; it stays off in development builds.
+        if !model.isScripted { AppUpdater.shared.start() }
         #if PION_DEV_HOOKS
         ScenarioSession.active?.begin()
         #endif
@@ -141,6 +143,9 @@ struct PionCommands: Commands {
     private var conversationID: UUID? { context?.selection.wrappedValue }
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            CheckForUpdatesButton()
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }
                 .keyboardShortcut("n")

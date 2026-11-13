@@ -5,21 +5,25 @@ import CryptoKit
 // No GitHub connection, credentials, tags or real release assets are involved.
 let source = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL
 let fm = FileManager.default
-for app in ["Computer", "Applet", "Browser", "Hub"] {
+for app in ["Computer", "Applet", "Browser", "Hub", "Pion"] {
 let product = app.lowercased()
+// Companions are Noodle APP in APP/; Pion, incubating, is named on its own in Incubator/Pion.
+let folder = app == "Pion" ? "Incubator/Pion" : app
+let base = app == "Pion" ? "Pion" : "Noodle-\(app)"
+let title = app == "Pion" ? "Pion" : "Noodle \(app)"
 let root = fm.temporaryDirectory.appendingPathComponent("\(app)Release-Test-\(UUID().uuidString)")
 defer { try? fm.removeItem(at: root) }
-for path in ["scripts", "\(app)/Support", "bin", "dist/\(product)-1.2.3"] {
+for path in ["scripts", "\(folder)/Support", "bin", "dist/\(product)-1.2.3"] {
     try fm.createDirectory(at: root.appendingPathComponent(path), withIntermediateDirectories: true)
 }
 func write(_ text: String, _ path: String) throws { try text.write(to: root.appendingPathComponent(path), atomically: true, encoding: .utf8) }
-for path in ["scripts/publish-xcode-release.sh", "\(app)/Support/download-page.md"] {
+for path in ["scripts/publish-xcode-release.sh", "\(folder)/Support/download-page.md"] {
     try fm.copyItem(at: source.appendingPathComponent(path), to: root.appendingPathComponent(path))
 }
-try write("1.2.3\n", "\(app)/VERSION")
+try write("1.2.3\n", "\(folder)/VERSION")
 try write("Fixture release notes\n", "notes.md")
 let fixtureDigest = SHA256.hash(data: Data("fixture".utf8)).map { String(format: "%02x", $0) }.joined()
-for file in ["Noodle-\(app)-arm64.zip", "Noodle-\(app)-arm64.dmg", "appcast.xml"] {
+for file in ["\(base)-arm64.zip", "\(base)-arm64.dmg", "appcast.xml"] {
     try write("fixture", "dist/\(product)-1.2.3/" + file)
     if file != "appcast.xml" {
         try write("\(fixtureDigest)  \(file)\n", "dist/\(product)-1.2.3/" + file + ".sha256")
@@ -34,13 +38,13 @@ case "$1 $2 $3" in
     'release view \(product)-v1.2.3') [[ "$PUBLISH_TEST_MODE" == existing ]] ;;
     'release view \(product)-latest')
         if [[ "$*" == *'--json assets'* ]]; then
-            print -l Noodle-\(app)-arm64.zip Noodle-\(app)-arm64.zip.sha256 appcast.xml other.txt
+            print -l \(base)-arm64.zip \(base)-arm64.zip.sha256 appcast.xml other.txt
             exit 0
         fi
         case "$PUBLISH_TEST_MODE" in
             first) exit 1 ;;
-            rollback) print 'Noodle \(app) 9.0.0' ;;
-            *) print 'Noodle \(app) 1.2.2' ;;
+            rollback) print '\(title) 9.0.0' ;;
+            *) print '\(title) 1.2.2' ;;
         esac ;;
     'release edit \(product)-v1.2.3') [[ "$PUBLISH_TEST_MODE" != version-failure ]] ;;
     'release upload \(product)-latest')
@@ -80,19 +84,19 @@ for mode in ["first", "upgrade"] {
     precondition(!writes.isEmpty && writes.allSatisfy { $0.contains("--latest=false") })
     precondition(writes.first!.contains("\(product)-v1.2.3") && writes.first!.contains("--draft"))
     precondition(!writes.first!.contains("--clobber"))
-    precondition(writes.first!.contains("/Noodle-\(app)-arm64.zip "))
-    precondition(writes.first!.contains("/Noodle-\(app)-arm64.dmg "))
-    precondition(writes.first!.contains("/Noodle-\(app)-arm64.dmg.sha256 "))
+    precondition(writes.first!.contains("/\(base)-arm64.zip "))
+    precondition(writes.first!.contains("/\(base)-arm64.dmg "))
+    precondition(writes.first!.contains("/\(base)-arm64.dmg.sha256 "))
     let publication = log.range(of: "release edit \(product)-v1.2.3")!
     let channel = log.range(of: mode == "first" ? "release create \(product)-latest" : "release upload \(product)-latest")!
     precondition(publication.lowerBound < channel.lowerBound, "Channel must follow version publication")
     let channelCommand = log.split(separator: "\n").first {
         $0.hasPrefix(mode == "first" ? "release create \(product)-latest" : "release upload \(product)-latest")
     }!
-    precondition(channelCommand.contains("/Noodle-\(app)-arm64.zip "))
-    precondition(channelCommand.contains("/Noodle-\(app)-arm64.zip.sha256 "))
-    precondition(channelCommand.contains("/Noodle-\(app)-arm64.dmg "))
-    precondition(channelCommand.contains("/Noodle-\(app)-arm64.dmg.sha256 "))
+    precondition(channelCommand.contains("/\(base)-arm64.zip "))
+    precondition(channelCommand.contains("/\(base)-arm64.zip.sha256 "))
+    precondition(channelCommand.contains("/\(base)-arm64.dmg "))
+    precondition(channelCommand.contains("/\(base)-arm64.dmg.sha256 "))
     if mode == "first" {
         precondition(channelCommand.contains("/appcast.xml "))
     } else {
@@ -107,8 +111,8 @@ for mode in ["first", "upgrade"] {
     }
     precondition(!log.contains("release delete-asset"), "Publication never deletes a channel's downloads")
     // The channel page is the app's own, filled in for this release.
-    precondition(log.contains("--notes Noodle \(app) 1.2.3") && log.contains("Requires macOS"))
-    precondition(log.contains("releases/download/\(product)-v1.2.3/Noodle-\(app)-arm64.zip"))
+    precondition(log.contains("--notes \(title) 1.2.3") && log.contains("Requires macOS"))
+    precondition(log.contains("releases/download/\(product)-v1.2.3/\(base)-arm64.zip"))
 }
 for mode in ["rollback", "existing", "private"] {
     let (status, log) = try run(mode)

@@ -7,7 +7,7 @@ import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Pion.
 @MainActor @Observable final class PionSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case general, harnesses, agents, tools, permissions }
+    enum Tab: Hashable { case general, harnesses, agents, tools, permissions, updates }
 
     let model: PionModel
     let setup: HarnessSetupController
@@ -101,7 +101,12 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(PionSettingsHost.Tab.permissions)
+            UpdatesSettingsView()
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
+                .tag(PionSettingsHost.Tab.updates)
         }
+        .onAppear { AppUpdater.shared.probeForUpdate() }
         .sheet(item: $host.agentBeingEdited) { agent in
             AgentEditorSheet(model: host.model, agent: host.model.agent(agent.id) ?? agent, initialTab: host.agentEditorTab)
         }

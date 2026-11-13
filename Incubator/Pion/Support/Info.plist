@@ -45,10 +45,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Take your picture for a Hub, or scan the QR code of a Hub invitation when you choose Scan with Camera.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Let the agents you assign a calendar read and change that calendar. No agent sees a calendar you have not assigned.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
@@ -56,11 +52,9 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Reach the Hub you join when it is on your network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Dictate messages, transcribed on this Mac, and talk with agents on calls you start.</string>
+	<string>Dictate messages, transcribed on this Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Let the agents you assign a reminder list read and change that list. No agent sees a list you have not assigned.</string>
 	<!-- Pion and its Agent Host accept only each other. -->
 	<key>NoodleAgentHostService</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent-host</string>
@@ -68,7 +62,28 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>NoodleSigningTeam</key>
 	<string>$(DEVELOPMENT_TEAM)</string>
-	<key>NoodleUpdatesEnabled</key>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pdparchitect/noodle/releases/download/pion-latest/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAutomaticallyUpdate</key>
 	<false/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUSendProfileInfo</key>
+	<false/>
+	<!-- Preprocessed: true only for public releases. -->
+	<key>NoodleUpdatesEnabled</key>
+	<PION_UPDATES_ENABLED/>
 </dict>
 </plist>
