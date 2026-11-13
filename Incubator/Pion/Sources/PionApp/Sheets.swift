@@ -21,7 +21,6 @@ struct ConversationSheets: ViewModifier {
             case .editInvestigation(let investigation): NewInvestigationSheet(model: model, investigation: model.investigation(investigation.id) ?? investigation)
             case .chooseConversation: ConversationPicker(model: model, selection: $selection)
             case .close(let investigation): CloseInvestigationSheet(model: model, investigation: investigation)
-            case .members(let conversation): MembersSheet(model: model, conversation: conversation)
             }
         }
     }
@@ -82,25 +81,129 @@ struct ConversationPicker: View {
     }
 }
 
-/// Agents to tick, with the one that cannot be unticked shown first.
-struct AgentChecklist: View {
+/// The team as Noodle shows a group's members: marks in a grid, each removable, with more added from
+/// a searchable list. The lead stays, marked as such, while it leads.
+struct AgentMemberPicker: View {
     let model: PionModel
     @Binding var selection: Set<UUID>
     var fixed: UUID?
+    @State private var adding = false
+    @State private var search = ""
+
+    private var members: [AgentRecord] { model.agents.filter { $0.id == fixed || selection.contains($0.id) } }
+    private var available: [AgentRecord] {
+        model.agents.filter { $0.id != fixed && !selection.contains($0.id)
+            && (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search)) }
+    }
 
     var body: some View {
-        ForEach(model.agents) { agent in
-            Toggle(isOn: Binding(get: { agent.id == fixed || selection.contains(agent.id) },
-                                 set: { if $0 { selection.insert(agent.id) } else { selection.remove(agent.id) } })) {
-                HStack(spacing: 8) {
-                    AgentMark(agent: agent, size: 18)
-                    Text(agent.displayName)
-                    if let description = agent.publicDescription { Text(description).foregroundStyle(.secondary).lineLimit(1) }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Members").font(.caption.weight(.semibold))
+                Spacer()
+                Button { search = ""; adding = true } label: { Label("Add Agents", systemImage: "plus") }
+                    .disabled(model.agents.allSatisfy { $0.id == fixed || selection.contains($0.id) })
+                    .popover(isPresented: $adding, arrowEdge: .bottom) { chooser }
+            }
+            ScrollView {
+                if members.isEmpty {
+                    Button { search = ""; adding = true } label: {
+                        VStack(spacing: 10) {
+                            Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle)
+                            Text("Add agents to the team")
+                        }
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12, alignment: .top)], spacing: 16) {
+                        ForEach(members) { agent in
+                            VStack(spacing: 6) {
+                                AgentProfileButton(model: model, agent: agent, size: 44, inSheet: true)
+                                    .overlay(alignment: .topTrailing) {
+                                        if agent.id != fixed {
+                                            Button { selection.remove(agent.id) } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .font(.system(size: 16))
+                                                    .symbolRenderingMode(.palette)
+                                                    .foregroundStyle(.white, Color(nsColor: .darkGray))
+                                                    .padding(4)
+                                                    .contentShape(Circle())
+                                            }
+                                            .buttonStyle(.plain)
+                                            .offset(x: 10, y: -8)
+                                            .help("Remove \(agent.displayName)")
+                                            .accessibilityLabel("Remove \(agent.displayName)")
+                                        }
+                                    }
+                                Text(agent.displayName).font(.caption).lineLimit(2).multilineTextAlignment(.center)
+                                if agent.id == fixed {
+                                    Text("Lead").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    }
+                    .padding(12)
                 }
             }
-            .toggleStyle(.checkbox)
-            .disabled(agent.id == fixed)
+            // A few rows, then it scrolls rather than pushing the sheet past the window.
+            .frame(minHeight: 120, maxHeight: 260)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private var chooser: some View {
+        VStack(spacing: 12) {
+            TextField("Search agents", text: $search).textFieldStyle(.roundedBorder)
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(available) { agent in
+                        Button { selection.insert(agent.id) } label: {
+                            HStack(spacing: 10) {
+                                AgentMark(agent: agent, size: 28)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(agent.displayName).foregroundStyle(.primary)
+                                    if let description = agent.publicDescription {
+                                        Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                            }
+                            .padding(8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(agent.displayName)")
+                    }
+                    if available.isEmpty {
+                        Text(search.isEmpty ? "Every agent is on the team" : "No matching agents").foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 320, height: 300)
+    }
+}
+
+/// The sections of an editor, centred at their own width, as in Noodle's bot editor.
+private struct SheetTabPicker<Tab: RawRepresentable & CaseIterable & Hashable>: View where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
+    @Binding var selection: Tab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Picker("Section", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
+            ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -176,15 +279,21 @@ struct NewInvestigationSheet: View {
                         enabled: canSave, action: save)
             Divider()
             VStack(alignment: .leading, spacing: 18) {
-                TextField("Title", text: $draft.title, axis: .horizontal)
-                    .lineLimit(1)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled(false)
-                    .focused($titleFocused)
-                    .onSubmit(save)
-                Picker("Section", selection: $selectedTab) {
-                    ForEach(TeamEditorTab.allCases, id: \.self) { Text($0.rawValue) }
-                }.pickerStyle(.segmented).labelsHidden()
+                HStack(spacing: 14) {
+                    SymbolMark(symbol: "shield.lefthalf.filled", size: 56)
+                    VStack(alignment: .leading, spacing: 5) {
+                        TextField("Title", text: $draft.title, axis: .horizontal)
+                            .lineLimit(1)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 14))
+                            .autocorrectionDisabled(false)
+                            .focused($titleFocused)
+                            .onSubmit(save)
+                        Text(investigation.map { "\($0.reference), opened \($0.openedAt.pionShort)" } ?? "Gets the next reference when created.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
                     Picker("Severity", selection: $draft.severity) {
@@ -199,7 +308,7 @@ struct NewInvestigationSheet: View {
                         Text("None").tag(UUID?.none)
                         ForEach(model.agents) { agent in Text(agent.displayName).tag(Optional(agent.id)) }
                     }
-                    AgentChecklist(model: model, selection: $draft.staff, fixed: draft.lead)
+                    AgentMemberPicker(model: model, selection: $draft.staff, fixed: draft.lead)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $draft.memberTools)
                 }
@@ -261,22 +370,27 @@ struct GroupEditorSheet: View {
                         enabled: canSave, action: save)
             Divider()
             VStack(alignment: .leading, spacing: 18) {
-                TextField("Group name", text: $name, axis: .horizontal)
-                    .lineLimit(1)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled(false)
-                    .focused($nameFocused)
-                    .onSubmit(save)
+                HStack(spacing: 14) {
+                    SymbolMark(symbol: "person.3.fill", size: 56)
+                    VStack(alignment: .leading, spacing: 5) {
+                        TextField("Group name", text: $name, axis: .horizontal)
+                            .lineLimit(1)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 14))
+                            .autocorrectionDisabled(false)
+                            .focused($nameFocused)
+                            .onSubmit(save)
+                        Text(members.count == 1 ? "1 agent" : "\(members.count) agents").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 SheetNameValidation(name: name)
-                Picker("Section", selection: $selectedTab) {
-                    ForEach(TeamEditorTab.allCases, id: \.self) { Text($0.rawValue) }
-                }.pickerStyle(.segmented).labelsHidden()
+                SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
                     SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description)
                     FoldersSettingsRow(folders: $folders, owner: .group)
                 case .team:
-                    AgentChecklist(model: model, selection: $members)
+                    AgentMemberPicker(model: model, selection: $members)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $memberTools)
                 }
@@ -315,7 +429,7 @@ struct GroupEditorSheet: View {
 }
 
 enum AgentEditorTab: String, CaseIterable {
-    case general = "General", runtime = "Runtime", tools = "Tools"
+    case general = "General", runtime = "Harness", tools = "Tools"
 }
 
 struct AgentEditorSheet: View {
@@ -331,6 +445,10 @@ struct AgentEditorSheet: View {
     @State private var effort = ""
     @State private var resources = PionModel.AgentResources()
     @State private var selectedTab = AgentEditorTab.general
+    @State private var newID = UUID()
+    @State private var choosingHarness = false
+    @State private var choosingProfile = false
+    @State private var choosingModel = false
     @State private var error: String?
     @FocusState private var nameFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -350,35 +468,53 @@ struct AgentEditorSheet: View {
                         enabled: canSave, action: save)
             Divider()
             VStack(alignment: .leading, spacing: 18) {
-                Picker("Name Style", selection: $nameStyle) {
-                    Text("Generated").tag(BotNameStyle.playful.rawValue)
-                    Text("Human").tag(BotNameStyle.real.rawValue)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: nameStyle) {
-                    if agent == nil { name = model.suggestedAgentName(style: selectedNameStyle, excluding: name) }
-                }
-                HStack {
-                    TextField("Agent name", text: $name, axis: .horizontal)
-                        .lineLimit(1)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 14))
-                        .autocorrectionDisabled(false)
-                        .focused($nameFocused)
-                        .onSubmit(save)
-                    Button {
-                        name = model.suggestedAgentName(style: selectedNameStyle, excluding: name)
-                        nameFocused = true
-                    } label: { Image(systemName: "arrow.triangle.2.circlepath") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("Generate Another Name")
-                        .accessibilityLabel("Generate Another Name")
+                HStack(spacing: 14) {
+                    // The mark is drawn from the agent's identity; a new agent's can be drawn again until it is created.
+                    if let agent {
+                        AgentMark(agent: agent, size: 56)
+                    } else {
+                        Button { newID = UUID() } label: { AgentSigil(seed: newID, size: 56) }
+                            .buttonStyle(.plain)
+                            .help("Try Another Mark")
+                            .accessibilityLabel("Try Another Mark")
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        ZStack(alignment: .trailing) {
+                            TextField("Agent name", text: $name, axis: .horizontal)
+                                .lineLimit(1)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 14))
+                                .autocorrectionDisabled(false)
+                                .focused($nameFocused)
+                                .onSubmit(save)
+                            Menu {
+                                Picker("Name Style", selection: $nameStyle) {
+                                    Text("Generated Names").tag(BotNameStyle.playful.rawValue)
+                                    Text("Human Names").tag(BotNameStyle.real.rawValue)
+                                }
+                                .pickerStyle(.inline)
+                            } label: {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            } primaryAction: {
+                                name = model.suggestedAgentName(style: selectedNameStyle, excluding: name)
+                                nameFocused = true
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .padding(.trailing, 6)
+                            .help("Try Another Name")
+                            .accessibilityLabel("Generate Another Name")
+                            .onChange(of: nameStyle) {
+                                if agent == nil { name = model.suggestedAgentName(style: selectedNameStyle, excluding: name) }
+                            }
+                        }
+                        Text("You can rename this agent later without changing its workspace.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 SheetNameValidation(name: name)
-                Picker("Section", selection: $selectedTab) {
-                    ForEach(AgentEditorTab.allCases, id: \.self) { Text($0.rawValue) }
-                }.pickerStyle(.segmented).labelsHidden()
+                SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
                     SheetDescriptionField(title: "Description", prompt: "Briefly describe what this agent does…", text: $description)
@@ -418,53 +554,77 @@ struct AgentEditorSheet: View {
         .noodleSheetSizing()
     }
 
+    /// Noodle's harness rows and choosers, as its bot editor shows them.
     private var harnessFields: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let profiles = provider.map { model.harnessProfiles.profiles(for: $0) } ?? []
+        let models = provider.map { model.models(for: $0, profile: resources.profile) } ?? []
+        let selectedModel = models.first { $0.id == modelID }
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Harness").font(.caption.weight(.semibold))
-            if model.installedProviders.isEmpty {
-                LabeledContent("Harness") { Text("None installed").foregroundStyle(.secondary) }
-                SettingsLink { Text("Open Harness Settings") }
-            } else {
-                Picker("Harness", selection: Binding(get: { provider }, set: {
-                    provider = $0
-                    resources.profile = nil
-                    modelID = defaultModel($0)
-                    effort = ""
-                })) {
-                    Text("Default").tag(HarnessProvider?.none)
-                    if let provider, !model.installedProviders.contains(provider) {
-                        Text(provider.displayName).tag(Optional(provider))
+            VStack(spacing: 0) {
+                Button { choosingHarness = true } label: {
+                    RuntimeSelectionRow(title: "Harness", value: provider?.displayName ?? "Choose a harness",
+                                        icon: AnyView(Group {
+                                            if let provider { HarnessProviderIcon(provider: provider) } else { Image(systemName: "terminal") }
+                                        }))
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $choosingHarness, arrowEdge: .leading) {
+                    HarnessChooser(installations: model.runtime.availableInstallations, selection: Binding(
+                        get: { provider?.rawValue ?? "" },
+                        set: { identifier in
+                            provider = HarnessProvider(rawValue: identifier)
+                            resources.profile = nil
+                            modelID = defaultModel(provider)
+                            effort = ""
+                        }))
+                }
+                if !profiles.isEmpty {
+                    Divider().padding(.leading, 44)
+                    Button { choosingProfile = true } label: {
+                        RuntimeSelectionRow(title: "Profile", value: model.harnessProfiles.profile(resources.profile)?.displayName ?? "Default",
+                                            icon: AnyView(Image(systemName: "person.crop.circle")))
                     }
-                    ForEach(model.installedProviders) { provider in Text(provider.displayName).tag(Optional(provider)) }
-                }
-                let profiles = provider.map { model.harnessProfiles.profiles(for: $0) } ?? []
-                if !profiles.isEmpty || resources.profile != nil {
-                    Picker("Profile", selection: Binding(get: { resources.profile }, set: {
-                        resources.profile = $0
-                        modelID = defaultModel(provider)
-                    })) {
-                        Text("Default").tag(UUID?.none)
-                        if let id = resources.profile, !profiles.contains(where: { $0.id == id }) {
-                            Text("Unavailable Profile").tag(Optional(id))
-                        }
-                        ForEach(profiles) { profile in Text(profile.displayName).tag(Optional(profile.id)) }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $choosingProfile, arrowEdge: .leading) {
+                        HarnessProfileChooser(profiles: profiles, selection: Binding(
+                            get: { resources.profile },
+                            set: { resources.profile = $0; modelID = defaultModel(provider) }))
                     }
                 }
-                let models = provider.map { model.models(for: $0, profile: resources.profile) } ?? []
-                Picker("Model", selection: $modelID) {
-                    Text("Default").tag(String?.none)
-                    if let modelID, !models.contains(where: { $0.id == modelID }) { Text(modelID).tag(Optional(modelID)) }
-                    ForEach(models) { model in Text(model.displayName).tag(Optional(model.id)) }
+                Divider().padding(.leading, 44)
+                Button { choosingModel = true } label: {
+                    RuntimeSelectionRow(title: "Model", value: selectedModel?.displayName ?? modelID ?? "Default",
+                                        icon: AnyView(Image(systemName: "cube.transparent")), tag: selectedModel?.tag,
+                                        isLoading: model.runtime.isLoadingCapabilities)
                 }
+                .buttonStyle(.plain)
                 .disabled(models.isEmpty)
-                let efforts = models.first(where: { $0.id == modelID })?.supportedEfforts ?? []
-                if !efforts.isEmpty || !effort.isEmpty {
-                    Picker("Reasoning", selection: $effort) {
-                        Text("Default").tag("")
-                        if !effort.isEmpty, !efforts.contains(where: { $0.id == effort }) { Text(effort.capitalized).tag(effort) }
-                        ForEach(efforts) { choice in Text(choice.displayName).tag(choice.id) }
-                    }
+                .popover(isPresented: $choosingModel, arrowEdge: .leading) {
+                    ModelChooser(providerName: provider?.displayName ?? "Harness", usesCatalogueDefault: provider == .apple, models: models,
+                                 selection: Binding(get: { modelID ?? "" }, set: { id in
+                                     modelID = id.isEmpty ? nil : id
+                                     if let chosen = models.first(where: { $0.id == id }),
+                                        !chosen.supportedEfforts.contains(where: { $0.id == effort }) { effort = chosen.defaultEffort }
+                                 }))
                 }
+                if provider != .apple || selectedModel?.supportedEfforts.isEmpty == false {
+                    Divider().padding(.leading, 44)
+                    EffortControl(model: selectedModel, selection: $effort)
+                }
+            }
+            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.secondary.opacity(0.11)) }
+            HarnessExperimentalWarning(provider: provider)
+            if model.installedProviders.isEmpty {
+                HStack {
+                    Text("No harness is installed yet.").font(.caption).foregroundStyle(.secondary)
+                    SettingsLink { Text("Open Harness Settings") }.buttonStyle(.link).font(.caption)
+                }
+            }
+            if agent != nil {
+                Text("Saving restarts the agent. Its workspace and history stay unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -477,7 +637,8 @@ struct AgentEditorSheet: View {
                                       provider: provider, model: modelID, effort: effort, resources: resources)
             } else {
                 let created = try model.createAgent(name: name, description: description, instructions: instructions,
-                                                    provider: provider, model: modelID, effort: effort.isEmpty ? nil : effort, resources: resources)
+                                                    provider: provider, model: modelID, effort: effort.isEmpty ? nil : effort, resources: resources,
+                                                    id: newID)
                 model.selection = model.directConversation(of: created)?.id
             }
             dismiss()
@@ -511,7 +672,7 @@ struct CloseInvestigationSheet: View {
                 Picker("Outcome", selection: $outcome) {
                     ForEach(Investigation.Outcome.allCases, id: \.self) { Text($0.title) }
                 }
-                .pickerStyle(.radioGroup)
+                .pickerStyle(.segmented)
                 SheetDescriptionField(title: "Note", prompt: "What was concluded", text: $note)
                 let pending = model.pendingCount(investigation.id)
                 if pending > 0 {
@@ -523,33 +684,6 @@ struct CloseInvestigationSheet: View {
             .padding(20)
         }
         .frame(width: 480)
-        .noodleSheetSizing()
-    }
-}
-
-struct MembersSheet: View {
-    let model: PionModel
-    let conversation: BotConversation
-    @State private var members: Set<UUID> = []
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let lead = model.investigation(conversation.id)?.leadAgentID
-        VStack(spacing: 0) {
-            SheetHeader(heading: "Members", title: "Save", enabled: !members.isEmpty || lead != nil) {
-                model.setMembers(members, of: conversation)
-                dismiss()
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 14) {
-                Text(model.investigation(conversation.id).map { "\($0.reference) \($0.title)" } ?? conversation.displayName).font(.headline)
-                AgentChecklist(model: model, selection: $members, fixed: lead)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-        }
-        .onAppear { members = Set(conversation.participantIDs) }
-        .frame(width: 460)
         .noodleSheetSizing()
     }
 }
@@ -580,6 +714,8 @@ private struct TeamToolsPicker: View {
                         Spacer()
                         Text(count == 1 ? "1 tool" : "\(count) tools").foregroundStyle(.secondary)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { expanded = expanded == agent.id ? nil : agent.id } }
                 }
                 .help("Tool assignments apply to this agent in every conversation.")
             }

@@ -12,6 +12,8 @@ struct MainWindow: View {
         NavigationSplitView {
             Sidebar(model: model, window: window)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+                // The backdrop carries on under the sidebar's glass, softened by it.
+                .background { Backdrop(frosted: true).ignoresSafeArea() }
         } detail: {
             if let conversation = model.conversation(model.selection) {
                 ConversationView(model: model, window: window, conversation: conversation)
@@ -78,7 +80,7 @@ struct Sidebar: View {
                             }
                     }
                 } header: {
-                    SidebarHeader(title: "Investigations") { window.sheet = .newInvestigation }
+                    Text("Investigations")
                 }
                 // Closed ones only when asked for, a few at a time, to look back at.
                 if showsClosed, !closed.isEmpty {
@@ -105,7 +107,7 @@ struct Sidebar: View {
                                 .contextMenu { ConversationRowMenu(model: model, window: window, conversation: group) }
                         }
                     } header: {
-                        SidebarHeader(title: "Groups") { window.sheet = .newGroup }
+                        Text("Groups")
                     }
                 }
                 Section {
@@ -116,7 +118,7 @@ struct Sidebar: View {
                         }
                     }
                 } header: {
-                    SidebarHeader(title: "Agents") { window.sheet = .newAgent }
+                    Text("Agents")
                 }
             }
         }
@@ -158,25 +160,6 @@ struct ConversationRowMenu: View {
                 Button("Show Workspace in Finder") { NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: model.repository.directory(for: agent).path) }
             }
         }
-    }
-}
-
-/// A section title with a plus that appears on hover, as in Finder's and Mail's sidebars.
-struct SidebarHeader: View {
-    let title: String
-    let add: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Button(action: add) { Image(systemName: "plus") }
-                .buttonStyle(.borderless)
-                .opacity(hovering ? 1 : 0)
-                .help("New \(title.dropLast())")
-        }
-        .onHover { hovering = $0 }
     }
 }
 
@@ -222,7 +205,7 @@ struct GroupRow: View {
         let members = model.members(of: group)
         let unread = model.isUnread(group.id)
         HStack(spacing: 8) {
-            Image(systemName: "person.3.fill").font(.callout).foregroundStyle(.secondary).frame(width: 20)
+            SymbolMark(symbol: "person.3.fill", size: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(group.displayName).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
                 Text(members.map(\.displayName).formatted(.list(type: .and)))

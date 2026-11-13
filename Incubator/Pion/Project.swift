@@ -96,7 +96,8 @@ let project = Project(
             infoPlist: .file(path: "Support/Info.plist"),
             sources: [
                 "Sources/PionApp/**",
-                // Noodle's composer, @mention completion and dictation, and the transcript's scrolling.
+                // Noodle's composer, @mention completion and dictation, the transcript's scrolling, the harness
+                // choosers, the Permissions pane, and attachments with their previews, capture and annotation.
                 // They depend on nothing else in Noodle's app; Pion's build fails if one ever does.
                 "../../Sources/Noodle/ScrollableChatComposer.swift",
                 "../../Sources/Noodle/ComposerFocusSurface.swift",
@@ -106,6 +107,24 @@ let project = Project(
                 "../../Sources/Noodle/VoiceRecorder.swift",
                 "../../Sources/Noodle/VoiceCaptureRecovery.swift",
                 "../../Sources/Noodle/VoiceInputDevice.swift",
+                "../../Sources/Noodle/VoiceMessagePlayer.swift",
+                "../../Sources/Noodle/HarnessChoosers.swift",
+                "../../Sources/Noodle/PermissionsSettingsView.swift",
+                "../../Sources/Noodle/AttachmentPreviewController.swift",
+                "../../Sources/Noodle/AnnotationPopover.swift",
+                "../../Sources/Noodle/AnnotationPreview.swift",
+                "../../Sources/Noodle/AnnotationContent.swift",
+                "../../Sources/Noodle/AnnotationCommands.swift",
+                "../../Sources/Noodle/ConversationAnnotation.swift",
+                "../../Sources/Noodle/ConversationAnnotationContent.swift",
+                "../../Sources/Noodle/ScreenCaptureModel.swift",
+                "../../Sources/Noodle/ScreenCapturePreview.swift",
+                "../../Sources/Noodle/ScreenCaptureService.swift",
+                "../../Sources/Noodle/CaptureAttachment.swift",
+                "../../Sources/Noodle/AttachmentLayout.swift",
+                "../../Sources/Noodle/AttachmentInlinePreview.swift",
+                "../../Sources/Noodle/MessageMarkdownCache.swift",
+                "../../Sources/Noodle/MessageLinkPreview.swift",
                 "../../Sources/Noodle/TranscriptScrollView.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
                 "../../Sources/Noodle/BotFolderPicker.swift",
@@ -128,6 +147,7 @@ let project = Project(
                 .package(product: "NoodleAudioCapture"),
                 .package(product: "NoodleSettingsUI"),
                 .package(product: "HubLink"),
+                .package(product: "NoodleHubClient"),
                 .package(product: "NoodleWallpaper"),
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
@@ -163,7 +183,7 @@ let project = Project(
             infoPlist: .default,
             // Test the model without launching the app or starting anyone's harnesses.
             sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift", "Sources/PionApp/MessageBodyRenderer.swift",
-                      "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift",
+                      "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift", "Sources/PionApp/BackdropGames.swift",
                       "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),
                            .package(product: "HubLink"), .package(product: "NoodleBrand"), .package(product: "NoodleRuntimeSettings")],

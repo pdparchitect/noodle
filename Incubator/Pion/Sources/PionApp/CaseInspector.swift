@@ -249,6 +249,7 @@ private struct EvidenceRow: View {
             }
             .padding(.top, 4)
         } label: {
+            // The whole label opens it, not only the chevron.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(evidence.id).font(.caption.monospaced()).foregroundStyle(.secondary)
@@ -256,6 +257,9 @@ private struct EvidenceRow: View {
                 }
                 Text(evidence.result).font(.callout).foregroundStyle(.secondary).lineLimit(expanded ? nil : 2)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
         }
     }
 }
@@ -278,27 +282,124 @@ private struct EntityRow: View {
     }
 }
 
+/// The append-only log as a timeline, newest first and grouped by day: the time, a marker for the kind
+/// of event, what happened, who did it, and the detail beneath.
 struct AuditLogView: View {
     let model: PionModel
     let investigation: Investigation
 
     var body: some View {
         // Newest first; entries made at the same moment keep the order they were logged in.
-        let entries = model.audit(investigation.id).enumerated().sorted { ($0.element.at, $0.offset) > ($1.element.at, $1.offset) }
-        List(entries, id: \.offset) { _, entry in
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(entry.at.pionShort).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Text(entry.event).font(.caption.monospaced().weight(.semibold))
-                    Spacer()
-                    Text(model.name(of: entry.actor)).font(.caption).foregroundStyle(.secondary)
+        let entries = model.audit(investigation.id).enumerated().sorted { ($0.element.at, $0.offset) > ($1.element.at, $1.offset) }.map(\.element)
+        let days = Dictionary(grouping: entries) { Calendar.current.startOfDay(for: $0.at) }.sorted { $0.key > $1.key }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                ForEach(days, id: \.key) { day, items in
+                    Section {
+                        ForEach(Array(items.enumerated()), id: \.offset) { index, entry in
+                            AuditRow(entry: entry, actor: model.name(of: entry.actor), last: index == items.count - 1)
+                        }
+                    } header: {
+                        Text(Calendar.current.isDateInToday(day) ? "Today" : day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            // Frosted and fading out at its foot, so entries pass under it without a hard band.
+                            .background {
+                                Rectangle().fill(.ultraThinMaterial)
+                                    .mask(LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                                                         startPoint: .top, endPoint: .bottom))
+                            }
+                    }
                 }
-                Text(entry.detail).font(.callout).textSelection(.enabled)
             }
-            .padding(.vertical, 2)
+            .padding(.bottom, 14)
         }
-        .listStyle(.plain)
+        .overlay { if entries.isEmpty { Text("Nothing logged yet.").font(.callout).foregroundStyle(.secondary) } }
         .help("Append-only: every change to this Investigation, with who made it.")
+    }
+}
+
+private struct AuditRow: View {
+    let entry: AuditEntry
+    let actor: String
+    let last: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(entry.at.pionTime)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .frame(width: 36, alignment: .trailing)
+                .padding(.top, 3)
+            // The rail: a marker per entry, joined to the one below.
+            ZStack(alignment: .top) {
+                if !last {
+                    Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 1).padding(.top, 20)
+                }
+                Image(systemName: Self.symbol(entry.event))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.primary.opacity(0.75))
+                    .frame(width: 20, height: 20)
+                    .background(Color.primary.opacity(0.07), in: Circle())
+            }
+            .frame(width: 20)
+            .frame(maxHeight: .infinity, alignment: .top)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(Self.title(entry.event)).font(.callout.weight(.semibold))
+                    Spacer(minLength: 6)
+                    Text(actor).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(entry.detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(1.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            .padding(.top, 1)
+            .padding(.bottom, 14)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+    }
+
+    static func title(_ event: String) -> String {
+        switch event {
+        case "status": "Status Changed"
+        case "done": "Action Done"
+        case "approved": "Action Approved"
+        case "denied": "Action Denied"
+        case "proposed": "Action Proposed"
+        case "finding": "Finding"
+        case "evidence": "Evidence"
+        case "entity": "Entity"
+        case "scope": "Scope Changed"
+        case "staff": "Team Changed"
+        case "opened": "Opened"
+        default: event.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    static func symbol(_ event: String) -> String {
+        switch event {
+        case "status": "arrow.triangle.swap"
+        case "done": "checkmark"
+        case "approved": "checkmark.seal.fill"
+        case "denied": "xmark"
+        case "proposed": "hand.raised.fill"
+        case "finding": "exclamationmark"
+        case "evidence": "doc.text.magnifyingglass"
+        case "entity": "cube"
+        case "scope": "scope"
+        case "staff": "person.2.fill"
+        case "opened": "flag.fill"
+        default: "circle.fill"
+        }
     }
 }
 

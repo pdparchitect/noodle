@@ -92,6 +92,8 @@ struct PionScenario: Decodable {
         var window: Window?
         var select: String?
         var inspector: String?
+        /// edit, new-investigation, new-group, new-agent, or none to dismiss.
+        var sheet: String?
         struct Window: Decodable { let size: [Double] }
     }
 
@@ -524,6 +526,15 @@ enum ScenarioTime {
 
     private func apply(_ present: PionScenario.Present) {
         if let key = present.select, let id = conversationIDs[key] { model.selection = id }
+        if let sheet = present.sheet, let window {
+            switch sheet {
+            case "edit": if let conversation = model.conversation(model.selection) { window.edit(conversation, in: model) }
+            case "new-investigation": window.sheet = .newInvestigation
+            case "new-group": window.sheet = .newGroup
+            case "new-agent": window.sheet = .newAgent
+            default: window.sheet = nil
+            }
+        }
         if let inspector = present.inspector {
             window?.showsInspector = inspector != "hidden"
             window?.inspectorTab = inspector == "audit" ? .audit : .caseRecord

@@ -1,3 +1,4 @@
+import PhotosUI
 import HubLink
 import NoodleCore
 import NoodleWallpaper
@@ -37,6 +38,14 @@ struct ConversationView: View {
     @Bindable var window: WindowState
     let conversation: BotConversation
     @State private var composerHeight: CGFloat = 0
+    // Noodle's previews, capture and annotation, one of each per conversation shown.
+    @State private var attachmentPreview = AttachmentPreviewController()
+    @State private var screenCapturePreview = ScreenCapturePreviewController()
+    @State private var conversationAnnotations = ConversationAnnotationController()
+    @State private var choosingFiles = false
+    @State private var choosingPhotos = false
+    @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var selectedAttachmentID: UUID?
     /// Where the reader was in each conversation, kept while Pion runs.
     @State private static var viewports: [UUID: TranscriptViewport] = [:]
 
@@ -54,11 +63,12 @@ struct ConversationView: View {
             containsMessage: { id in messages.contains { $0.id == id } },
             onBackgroundTap: { window.composerFocusRequest = UUID() }
         ) {
-            ConversationStart(model: model, conversation: conversation, investigation: investigation)
+            ConversationStart(model: model, window: window, conversation: conversation, investigation: investigation)
                 .id(TranscriptScrollTarget.start)
             ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                 let previous = index > 0 ? messages[index - 1] : nil
-                MessageRow(model: model, conversation: conversation, investigation: investigation, message: message,
+                MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
+                           selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
                            continues: previous.map { $0.author == message.author && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
                     .id(message.id)
             }
@@ -68,9 +78,48 @@ struct ConversationView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottom) {
-            Composer(model: model, window: window, conversation: conversation, investigation: investigation)
+            Composer(model: model, window: window, conversation: conversation, investigation: investigation,
+                     actions: ComposerActions(attachFile: { choosingFiles = true },
+                                              choosePhoto: { photoSelection = []; choosingPhotos = true },
+                                              capture: showCapture,
+                                              preview: { showPreview($0) }))
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
         }
+        .environment(\.conversationAnnotations, conversationAnnotations)
+        .background(AttachmentPreviewHost(controller: attachmentPreview))
+        .background(ConversationAnnotationHost(controller: conversationAnnotations, conversationID: conversation.id,
+            title: investigation?.reference ?? conversation.displayName,
+            save: { note, content, source, raw in
+                try model.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+            }, focusComposer: { window.composerFocusRequest = UUID() }).frame(width: 0, height: 0))
+        .background(CaptureShortcut(capture: showCapture).frame(width: 0, height: 0))
+        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls): model.attach(urls, to: conversation.id)
+            case .failure(let error): model.problem = error.localizedDescription
+            }
+        }
+        .photosPicker(isPresented: $choosingPhotos, selection: $photoSelection, matching: .images, preferredItemEncoding: .current)
+        .onChange(of: photoSelection) { _, items in
+            guard !items.isEmpty else { return }
+            photoSelection = []
+            Task {
+                for item in items {
+                    if let data = try? await item.loadTransferable(type: Data.self) { model.importPhoto(data: data, into: conversation.id) }
+                }
+            }
+        }
+        // Links open in Noodle's preview, where they can be annotated, unless the person turned that off.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let link = WebLinkPreview.previewed(url, enabled: WebLinkPreview.opensInPreview()) else { return .systemAction }
+            screenCapturePreview.close()
+            attachmentPreview.showLink(link, conversationID: conversation.id) { note, content, source, raw in
+                try model.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
+            }
+            return .handled
+        })
+        .onAppear { attachmentPreview.reportError = { model.problem = $0.localizedDescription } }
+        .onDisappear { attachmentPreview.close(); screenCapturePreview.close(); conversationAnnotations.cancel() }
         .navigationTitle(investigation?.reference ?? conversation.displayName)
         .navigationSubtitle(investigation?.title ?? subtitle)
         .toolbar { toolbar }
@@ -78,7 +127,41 @@ struct ConversationView: View {
             if let investigation {
                 CaseInspector(model: model, window: window, investigation: investigation)
                     .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
+                    .background { Backdrop(frosted: true).ignoresSafeArea() }
             }
+        }
+    }
+
+    private func showCapture() {
+        if screenCapturePreview.focusIfOpen() { return }
+        guard let host = attachmentPreview.resolveHostWindow() else { return }
+        let destination = conversation.id
+        attachmentPreview.close()
+        screenCapturePreview.show(kind: .window, relativeTo: host) { image, title, region, comment in
+            try model.importCapture(image: image, title: title, region: region, comment: comment, into: destination)
+        }
+    }
+
+    /// Opens a file in Noodle's Quick Look, paging through the message's other files, where it can be annotated.
+    private func showPreview(_ attachment: ConversationAttachment, among group: [ConversationAttachment] = []) {
+        selectedAttachmentID = attachment.id
+        if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil, !WebLinkPreview.opensInPreview() {
+            attachmentPreview.close()
+            NSWorkspace.shared.open(link)
+            return
+        }
+        if attachment.url == nil, attachment.annotation == nil, QuickLookBypass.isHeld() {
+            attachmentPreview.close()
+            NSWorkspace.shared.open(model.fileURL(attachment))
+            return
+        }
+        screenCapturePreview.close()
+        let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = model.canEditAnnotation(attachment)
+            ? { attachment, comment in try model.reviseAnnotationComment(attachment, comment: comment) } : nil
+        let gallery = ConversationAttachment.previewGallery(opening: attachment, among: group).items
+        attachmentPreview.show(attachment, url: model.fileURL(attachment), gallery: gallery.map { ($0, model.fileURL($0)) },
+                               edit: edit, canEdit: { model.canEditAnnotation($0) }) { note, content, source in
+            try model.saveAnnotation(note, content: content, source: source)
         }
     }
 
@@ -127,13 +210,6 @@ struct ConversationView: View {
                 .help("Severity")
             }
         }
-        if conversation.kind == .group {
-            ToolbarItem {
-                Button { window.sheet = .members(conversation) } label: { Label("Members", systemImage: "person.2") }
-                    .help("Add or remove agents")
-                    .disabled(investigation?.isClosed == true)
-            }
-        }
         if investigation != nil {
             ToolbarItem {
                 Button { window.showsInspector.toggle() } label: { Label("Case", systemImage: "sidebar.trailing") }
@@ -146,6 +222,7 @@ struct ConversationView: View {
 /// What a conversation is about, above its first message.
 struct ConversationStart: View {
     let model: PionModel
+    let window: WindowState
     let conversation: BotConversation
     let investigation: Investigation?
 
@@ -174,7 +251,7 @@ struct ConversationStart: View {
                 if let description = conversation.publicDescription { Text(description).foregroundStyle(.secondary) }
             } else if let agent = model.agent(conversation.participantIDs.first) {
                 HStack(spacing: 12) {
-                    AgentMark(agent: agent, size: 40)
+                    AgentProfileButton(model: model, agent: agent, size: 40) { window.sheet = .editAgent(agent) }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(agent.displayName).font(.title2.weight(.semibold))
                         if let description = agent.publicDescription { Text(description).foregroundStyle(.secondary) }
@@ -185,7 +262,7 @@ struct ConversationStart: View {
                 HStack(spacing: 6) {
                     ForEach(model.members(of: conversation)) { agent in
                         HStack(spacing: 4) {
-                            AgentMark(agent: agent, size: 16, phase: model.phase(of: agent))
+                            AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent)) { window.sheet = .editAgent(agent) }
                             Text(agent.displayName).font(.caption)
                         }
                         .padding(.trailing, 4)
@@ -198,7 +275,8 @@ struct ConversationStart: View {
         .frame(maxWidth: MessageRow.column, alignment: .leading)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
-        .padding(.top, 28)
+        // The transcript runs under the toolbar; at rest its heading starts clear of it.
+        .padding(.top, 76)
     }
 }
 
@@ -208,9 +286,12 @@ struct MessageRow: View {
     static let column: CGFloat = 780
 
     let model: PionModel
+    let window: WindowState
     let conversation: BotConversation
     let investigation: Investigation?
     let message: ChatMessage
+    @Binding var selectedAttachmentID: UUID?
+    let preview: (ConversationAttachment) -> Void
     let continues: Bool
     @State private var hovering = false
 
@@ -220,7 +301,7 @@ struct MessageRow: View {
                 HStack {
                     Spacer(minLength: 120)
                     VStack(alignment: .trailing, spacing: 4) {
-                        MessageBody(text: message.body, fills: false)
+                        MessageBody(text: message.body, message: message, fills: false)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
@@ -234,7 +315,7 @@ struct MessageRow: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     if !continues { header }
-                    MessageBody(text: message.body)
+                    MessageBody(text: message.body, message: message)
                         .padding(.leading, 30)
                     files.padding(.leading, 30)
                 }
@@ -254,21 +335,16 @@ struct MessageRow: View {
         }
     }
 
-    /// The files sent with the message, each opening in its own app.
+    /// The files sent with the message as Noodle shows them: pictures, cards and annotations, each opening
+    /// in Quick Look, where it can be annotated.
     @ViewBuilder private var files: some View {
-        let attached = message.attachments.compactMap { model.attachment($0, in: conversation.id) }
+        let attached = model.files(of: message)
         if !attached.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(attached) { file in
-                    Button { NSWorkspace.shared.open(model.repository.attachmentFileURL(file)) } label: {
-                        Label(file.originalFilename, systemImage: "doc").lineLimit(1).truncationMode(.middle)
-                    }
-                    .buttonStyle(.plain)
-                    .font(.callout)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Color.secondary.opacity(0.1), in: .rect(cornerRadius: 10, style: .continuous))
-                    .help("Open \(file.originalFilename)")
-                }
+            AttachmentGroup(attachments: attached, mode: .wrap, alignment: message.author == .user ? .trailing : .leading) { attachment in
+                AttachmentInlinePreview(attachment: attachment, fileURL: model.fileURL(attachment), shouldLoad: true,
+                                        isSelected: selectedAttachmentID == attachment.id,
+                                        select: { selectedAttachmentID = attachment.id },
+                                        preview: { preview(attachment) })
             }
         }
     }
@@ -277,7 +353,11 @@ struct MessageRow: View {
         let agent: AgentRecord? = if case .agent(let id) = message.author { model.agent(id) } else { nil }
         let role = agent?.publicDescription
         return HStack(spacing: 8) {
-            AgentMark(agent: agent, size: 22)
+            if let agent {
+                AgentProfileButton(model: model, agent: agent, size: 22) { window.sheet = .editAgent(agent) }
+            } else {
+                AgentMark(agent: nil, size: 22)
+            }
             Text(model.name(of: message.author)).font(.callout.weight(.semibold))
             if let agent, agent.id == investigation?.leadAgentID {
                 Text("Lead").font(.caption.weight(.medium)).foregroundStyle(.secondary)
@@ -294,6 +374,8 @@ struct MessageRow: View {
 /// Markdown as Noodle splits it: prose, code blocks and tables, each drawn for reading.
 struct MessageBody: View {
     let text: String
+    /// The message the text belongs to, so a selection in it can be annotated as in Noodle.
+    var message: ChatMessage?
     /// An agent's message fills the column; the champion's hugs its text.
     var fills = true
 
@@ -301,7 +383,7 @@ struct MessageBody: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(MessageBodyRenderer.shared.render(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
-                case .prose(let blocks): Prose(blocks: blocks)
+                case .prose(let blocks): Prose(blocks: blocks, message: message)
                 case .table(let table): MarkdownTable(table: table)
                 }
             }
@@ -314,6 +396,7 @@ struct MessageBody: View {
 /// Prose with its code blocks set apart.
 private struct Prose: View {
     let blocks: [MessageBodyRenderer.Block]
+    let message: ChatMessage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -331,6 +414,7 @@ private struct Prose: View {
                         .font(.system(size: 14))
                         .lineSpacing(3.5)
                         .fixedSize(horizontal: false, vertical: true)
+                        .background { if let message { ConversationAnnotationText(message: message) } }
                 }
             }
         }

@@ -11,12 +11,14 @@ struct Composer: View {
     @Bindable var window: WindowState
     let conversation: BotConversation
     let investigation: Investigation?
+    let actions: ComposerActions
     @StateObject private var completion = ComposerNameCompletion()
     @State private var focused = false
-    @State private var choosingFiles = false
+    @State private var showingAttachmentMenu = false
     @State private var recorder: VoiceRecorder?
 
     private var closed: Bool { investigation?.isClosed == true }
+    private var dictating: Bool { recorder.map { $0.phase != .idle } ?? false }
     private var text: String { model.drafts[conversation.id] ?? "" }
     private var canSend: Bool {
         !closed && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(model.pendingAttachments[conversation.id] ?? []).isEmpty)
@@ -30,56 +32,74 @@ struct Composer: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(pending) { file in
-                                AttachmentChip(name: file.originalFilename) { model.removePending(file, from: conversation.id) }
+                                AttachmentChip(attachment: file, preview: { actions.preview(file) }) { model.removePending(file, from: conversation.id) }
                             }
                         }
                     }
                     .padding(.horizontal, 6)
                     .padding(.top, 4)
                 }
-                if let recorder, recorder.phase != .idle {
-                    DictationBar(recorder: recorder, finish: finishDictation, cancel: cancelDictation)
-                        .padding(.horizontal, 6)
-                } else {
-                    ScrollableChatComposer(
-                        text: Binding(get: { text }, set: { model.drafts[conversation.id] = $0 }),
-                        isFocused: $focused,
-                        conversationID: conversation.id,
-                        placeholder: closed ? "\(investigation?.reference ?? "This Investigation") is closed" : placeholder,
-                        agents: model.agents,
-                        preferredIDs: Set(conversation.participantIDs),
-                        separatesPreferredAgents: conversation.kind == .group,
-                        completion: completion,
-                        submit: { model.sendDraft(to: conversation.id) },
-                        dropFiles: { model.attach($0, to: conversation.id) }
-                    )
-                    // It measures its own text; a flexible frame would stretch it to whatever height is offered.
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minHeight: 24)
-                    .disabled(closed)
-                    .padding(.horizontal, 4)
+                // The field keeps its place while listening, so the composer never changes height.
+                ScrollableChatComposer(
+                    text: Binding(get: { text }, set: { model.drafts[conversation.id] = $0 }),
+                    isFocused: $focused,
+                    conversationID: conversation.id,
+                    placeholder: closed ? "\(investigation?.reference ?? "This Investigation") is closed" : placeholder,
+                    agents: model.agents,
+                    preferredIDs: Set(conversation.participantIDs),
+                    separatesPreferredAgents: conversation.kind == .group,
+                    completion: completion,
+                    submit: { model.sendDraft(to: conversation.id) },
+                    dropFiles: { model.attach($0, to: conversation.id) }
+                )
+                // It measures its own text; a flexible frame would stretch it to whatever height is offered.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 24)
+                .disabled(closed || dictating)
+                .opacity(dictating ? 0 : 1)
+                .padding(.horizontal, 4)
+                .overlay {
+                    if let recorder, dictating {
+                        DictationBar(recorder: recorder, cancel: cancelDictation).padding(.horizontal, 6)
+                    }
                 }
                 HStack(spacing: 10) {
-                    Button { choosingFiles = true } label: {
+                    // Noodle's menu: a file, a photo, or a capture of a window or the screen.
+                    Button { showingAttachmentMenu = true } label: {
                         Image(systemName: "plus").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 30)
                     }
                     .buttonStyle(ComposerIconButtonStyle())
-                    .help("Attach Files")
+                    .help("Add Attachment")
                     .disabled(closed)
-                    Spacer()
-                    Button(action: startDictation) {
-                        Image(systemName: "mic").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 30)
+                    .background {
+                        ComposerAttachmentMenu(isPresented: $showingAttachmentMenu, attachFile: actions.attachFile,
+                                               choosePhoto: actions.choosePhoto, capture: actions.capture)
                     }
-                    .buttonStyle(ComposerIconButtonStyle())
-                    .help("Dictate (⌘⇧D)")
-                    .disabled(closed || (recorder.map { $0.phase != .idle } ?? false))
+                    Spacer()
+                    if dictating {
+                        // As Noodle's: Return stops listening, and what was said lands in the field.
+                        Button(action: finishDictation) {
+                            Image(systemName: "stop.fill").font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(ComposerIconButtonStyle())
+                        .keyboardShortcut(.defaultAction)
+                        .help("Stop Dictation (Return)")
+                        .disabled(recorder?.phase != .recording)
+                    } else {
+                        Button(action: startDictation) {
+                            Image(systemName: "mic").font(.system(size: 15, weight: .medium)).frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(ComposerIconButtonStyle())
+                        .help("Dictate (⌘⇧D)")
+                        .disabled(closed)
+                    }
                     Button { model.sendDraft(to: conversation.id) } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 30, height: 30)
                             .foregroundStyle(canSend ? Color(nsColor: .textBackgroundColor) : Color.secondary)
                             .background(canSend ? Color.primary : Color.secondary.opacity(0.2), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canSend)
+                    .disabled(!canSend || dictating)
                     .help("Send (Return)")
                 }
             }
@@ -94,9 +114,6 @@ struct Composer: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
         .padding(.top, 8)
-        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { model.attach(urls, to: conversation.id) }
-        }
         .onChange(of: window.composerFocusRequest, initial: true) { focused = true }
         .focusedSceneValue(\.pionDictation, DictationCommand(
             isRecording: recorder?.phase == .recording,
@@ -138,10 +155,9 @@ struct Composer: View {
     }
 }
 
-/// Listening: the live level, how long, and buttons to stop or cancel.
+/// Listening: Noodle's live waveform across the field, how long, and a button to cancel.
 private struct DictationBar: View {
     let recorder: VoiceRecorder
-    let finish: () -> Void
     let cancel: () -> Void
 
     var body: some View {
@@ -154,51 +170,74 @@ private struct DictationBar: View {
             case .preparing, .finishing:
                 ProgressView().controlSize(.small)
                 Text(recorder.phase == .preparing ? recorder.preparation : "Transcribing…").foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             case .failed:
                 Text(recorder.error ?? "Dictation failed.").foregroundStyle(.red).lineLimit(1)
+                Spacer(minLength: 0)
             default:
-                Circle().fill(.red).frame(width: 7, height: 7)
-                Levels(samples: recorder.liveLevels)
-                Text(Duration.seconds(recorder.duration).formatted(.time(pattern: .minuteSecond)))
-                    .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                Circle().fill(.red).frame(width: 6, height: 6)
+                if recorder.recoveringInput {
+                    Text("Reconnecting microphone…").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                } else if recorder.noInputSignal {
+                    Text("No sound from \(recorder.inputName)").foregroundStyle(.secondary).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    LiveVoiceWaveform(samples: recorder.liveLevels, duration: recorder.duration, started: recorder.recordingStarted)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 22)
+                }
+                Text(voiceTime(recorder.duration)).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
             }
-            Spacer()
-            Button("Done", action: finish)
-                .keyboardShortcut(.defaultAction)
-                .disabled(recorder.phase != .recording)
         }
         .font(.callout)
-        .frame(minHeight: 30)
+        .help("Microphone: \(recorder.inputName)")
     }
 }
 
-private struct Levels: View {
-    let samples: [Float]
-    var body: some View {
-        HStack(alignment: .center, spacing: 2) {
-            ForEach(Array(samples.suffix(48).enumerated()), id: \.offset) { _, level in
-                Capsule().fill(Color.primary.opacity(0.6)).frame(width: 2.5, height: max(3, CGFloat(level) * 22))
-            }
-        }
-        .frame(height: 22)
-    }
-}
-
+/// A file waiting to be sent, as Noodle's composer shows it: an annotation by its note, anything else by
+/// its name. It opens in Quick Look, where it can be annotated.
 private struct AttachmentChip: View {
-    let name: String
+    let attachment: ConversationAttachment
+    let preview: () -> Void
     let remove: () -> Void
+
+    private var title: String {
+        attachment.annotation.map { $0.comment.split(whereSeparator: \.isWhitespace).joined(separator: " ") } ?? attachment.originalFilename
+    }
+
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "doc").foregroundStyle(.secondary)
-            Text(name).lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
+            Button(action: preview) {
+                HStack(spacing: 6) {
+                    Image(systemName: attachment.previewSymbolName).foregroundStyle(.secondary).frame(width: 14)
+                    Text(title).lineLimit(1).truncationMode(.tail)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(attachment.annotation.map { "Annotation on \($0.sourceFilename)\n\n\($0.comment)" } ?? attachment.originalFilename)
             Button(action: remove) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.plain).help("Remove")
+                .buttonStyle(.plain).help("Remove Attachment")
         }
         .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.1), in: .rect(cornerRadius: 10, style: .continuous))
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: 30)
+        .frame(maxWidth: 260)
+        .background(Color.secondary.opacity(0.1), in: Capsule())
+        .contextMenu {
+            Button("Quick Look", systemImage: "eye", action: preview)
+            Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
+        }
     }
+}
+
+/// What the composer's attachment menu and chips ask the conversation to do.
+struct ComposerActions {
+    let attachFile: () -> Void
+    let choosePhoto: () -> Void
+    let capture: () -> Void
+    let preview: (ConversationAttachment) -> Void
 }
 
 /// A round, borderless control that darkens under the pointer.

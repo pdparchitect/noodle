@@ -1,3 +1,4 @@
+import AppKit
 import NoodleCore
 import PionCore
 import SwiftUI
@@ -91,7 +92,7 @@ struct Tag: View {
     }
 }
 
-/// An agent's mark: its symbol, or its initial, on a neutral disc shaded for the system's appearance.
+/// An agent's mark: its generated sigil.
 /// As Noodle's bot pictures: circled while the agent works, with a red dot once stopped, greyed while offline.
 struct AgentMark: View {
     let agent: AgentRecord?
@@ -116,34 +117,67 @@ struct AgentMark: View {
     }
 
     private var disc: some View {
-        Circle()
-            .fill(LinearGradient(colors: [Color.primary.opacity(0.16), Color.primary.opacity(0.06)], startPoint: .top, endPoint: .bottom))
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5))
-            .frame(width: size, height: size)
-            .overlay {
-                if let symbol = agent?.avatarSymbolName {
-                    Image(systemName: symbol).font(.system(size: size * 0.44, weight: .medium)).foregroundStyle(.primary.opacity(0.8))
-                } else {
-                    Text(agent?.displayName.first.map(String.init) ?? "?")
-                        .font(.system(size: size * 0.48, weight: .semibold)).foregroundStyle(.primary.opacity(0.8))
-                }
-            }
+        AgentSigil(seed: agent?.id, size: size)
     }
 }
 
-/// An arc that turns around a working agent's mark. The turn is read from the clock, as Noodle's is, so
-/// it never replays a move the mark makes as the ring appears.
-private struct WorkingRing: View {
+/// An arc that turns around a working agent's mark. Core Animation turns it in the render server, so
+/// any number of working agents cost the main thread nothing per frame.
+private struct WorkingRing: NSViewRepresentable {
     let lineWidth: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        TimelineView(.animation) { context in
-            Circle()
-                .trim(from: 0, to: 0.28)
-                .stroke(Color.primary.opacity(0.85), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1 * 360))
+    func makeNSView(context: Context) -> RingView { RingView() }
+
+    func updateNSView(_ view: RingView, context: Context) {
+        view.configure(lineWidth: lineWidth, color: (colorScheme == .dark ? NSColor.white : .black).withAlphaComponent(0.85),
+                       turning: !reduceMotion)
+    }
+
+    final class RingView: NSView {
+        private let arc = CAShapeLayer()
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            arc.fillColor = nil
+            arc.lineCap = .round
+            arc.strokeEnd = 0.28
+            layer?.addSublayer(arc)
         }
-        .accessibilityHidden(true)
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        func configure(lineWidth: CGFloat, color: NSColor, turning: Bool) {
+            arc.lineWidth = lineWidth
+            arc.strokeColor = color.cgColor
+            if turning, arc.animation(forKey: "turn") == nil {
+                let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+                // Clockwise, as the SwiftUI ring turned: negative in a layer's flipped-up coordinates.
+                turn.fromValue = 0
+                turn.toValue = -2 * Double.pi
+                turn.duration = 1.1
+                turn.repeatCount = .infinity
+                turn.isRemovedOnCompletion = false
+                arc.add(turn, forKey: "turn")
+            } else if !turning {
+                arc.removeAnimation(forKey: "turn")
+            }
+            needsLayout = true
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            arc.frame = bounds
+            let inset = arc.lineWidth / 2
+            arc.path = CGPath(ellipseIn: bounds.insetBy(dx: inset, dy: inset), transform: nil)
+            CATransaction.commit()
+        }
     }
 }
 
@@ -168,6 +202,9 @@ extension Date {
             : abs(timeIntervalSince(now)) < 6 * 86_400 ? Self.weekdayTime : Self.dayTime
         return formatter.string(from: self)
     }
+
+    /// 15:12, the time alone on the 24-hour clock.
+    var pionTime: String { Self.time.string(from: self) }
 
     private static func formatter(_ template: String) -> DateFormatter {
         let formatter = DateFormatter()

@@ -475,7 +475,7 @@ import UniformTypeIdentifiers
     @discardableResult
     func createAgent(name: String, description: String?, instructions: String, provider: HarnessProvider?, model: String?,
                      effort: String? = nil, symbol: String? = nil, color: Int? = nil,
-                     resources: AgentResources = AgentResources()) throws -> AgentRecord {
+                     resources: AgentResources = AgentResources(), id: UUID = UUID()) throws -> AgentRecord {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? suggestedAgentName() : name
         let resources = try validated(resources, provider: provider)
         try repository.prepare()
@@ -483,7 +483,7 @@ import UniformTypeIdentifiers
         let created = try repository.createAgent(named: name, harnessIdentifier: provider?.rawValue, modelIdentifier: model,
                                                  reasoningEffort: effort, publicDescription: description,
                                                  avatarSymbolName: symbol, avatarColorIndex: color,
-                                                 backstory: instructions + "\n\n" + AgentRole.principles, now: now)
+                                                 backstory: instructions + "\n\n" + AgentRole.principles, id: id, now: now)
         do {
             try repository.updateAgentFolders(created.agent, folders: resources.folders)
             try repository.updateAgentHarnessProfile(created.agent, profile: resources.profile)
@@ -547,6 +547,18 @@ import UniformTypeIdentifiers
     }
 
     func attachment(_ id: UUID, in conversation: UUID) -> ConversationAttachment? { attachments[conversation]?[id] }
+
+    /// Files saved into a conversation outside `attach`, such as captures, annotations and what they mark.
+    func remember(_ saved: [ConversationAttachment], pending: ConversationAttachment? = nil) {
+        for attachment in saved { attachments[attachment.conversationID, default: [:]][attachment.id] = attachment }
+        if let pending {
+            if let index = pendingAttachments[pending.conversationID]?.firstIndex(where: { $0.id == pending.id }) {
+                pendingAttachments[pending.conversationID]![index] = pending
+            } else {
+                pendingAttachments[pending.conversationID, default: []].append(pending)
+            }
+        }
+    }
 
     @discardableResult
     func createGroup(name: String, description: String?, members: Set<UUID>, folders: [AgentFolder] = [],

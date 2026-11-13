@@ -135,6 +135,7 @@ struct PionCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.pionConversation) private var context
     @FocusedValue(\.pionDictation) private var dictation
+    private let annotations = AnnotationCommandsState.shared
 
     private var activeWindow: WindowState { context?.window ?? window }
     private var conversationID: UUID? { context?.selection.wrappedValue }
@@ -175,6 +176,14 @@ struct PionCommands: Commands {
                 NSApp.keyWindow?.level = $0 ? .floating : .normal
             }))
             .disabled(conversationID == nil)
+            Divider()
+            // Noodle's annotation commands, on the key conversation or the preview in front.
+            Button("Add Annotation…") { annotations.conversationOwner?.annotate() }
+                .appShortcut(.annotateSelection)
+                .disabled(!annotations.conversationEnabled)
+            Button("Annotate Region…") { annotations.conversationOwner?.startRegion() }
+                .appShortcut(.annotateRegion)
+                .disabled(!annotations.conversationEnabled)
             Divider()
             Button(dictation?.isRecording == true ? "Stop Dictation" : "Dictate") { dictation?.perform() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])

@@ -1,3 +1,4 @@
+import NoodleBrand
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -6,12 +7,12 @@ import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Pion.
 @MainActor @Observable final class PionSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case harnesses, agents, tools }
+    enum Tab: Hashable { case general, harnesses, agents, tools, permissions }
 
     let model: PionModel
     let setup: HarnessSetupController
     let mcp: MCPController
-    var selectedTab: Tab = .harnesses
+    var selectedTab: Tab = .general
     var agentBeingEdited: AgentRecord?
     var agentEditorTab = AgentEditorTab.general
 
@@ -79,6 +80,10 @@ struct PionSettingsView: View {
 
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
+            GeneralSettingsView()
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(PionSettingsHost.Tab.general)
             HarnessesSettingsView(store: host, setup: host.setup)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Harness", systemImage: "terminal") }
@@ -91,10 +96,41 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(PionSettingsHost.Tab.tools)
+            // Noodle's own pane; Pion asks only for what dictation and capture need.
+            PermissionsSettingsView(permissions: [.microphone, .screenRecording])
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Permissions", systemImage: "hand.raised") }
+                .tag(PionSettingsHost.Tab.permissions)
         }
         .sheet(item: $host.agentBeingEdited) { agent in
             AgentEditorSheet(model: host.model, agent: host.model.agent(agent.id) ?? agent, initialTab: host.agentEditorTab)
         }
         .task { await host.setup.refreshAll(host.runtime) }
+    }
+}
+
+/// Names for new agents and what the main window shows.
+private struct GeneralSettingsView: View {
+    @AppStorage(PionModel.agentNameStyleKey) private var nameStyle = PionModel.defaultAgentNameStyle.rawValue
+    @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
+    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.glyphs.rawValue
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Generated agent names", selection: $nameStyle) {
+                    Text("Generated").tag(BotNameStyle.playful.rawValue)
+                    Text("Human").tag(BotNameStyle.real.rawValue)
+                }
+                .pickerStyle(.segmented)
+            }
+            Section {
+                Picker("Background effect", selection: $effect) {
+                    ForEach(BackdropEffect.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                Toggle("Show closed Investigations in the sidebar", isOn: $showsClosed)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
