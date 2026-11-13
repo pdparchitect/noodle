@@ -4,6 +4,32 @@ import NoodleWallpaper
 import PionCore
 import SwiftUI
 
+/// A second conversation keeps its selection, sheets and inspector independent of the main window.
+struct ConversationWindow: View {
+    let model: PionModel
+    @Binding var selection: UUID?
+    @State private var window = WindowState()
+
+    var body: some View {
+        Group {
+            if let conversation = model.conversation(selection) {
+                ConversationView(model: model, window: window, conversation: conversation)
+                    .id(conversation.id)
+            } else {
+                ContentUnavailableView("No Conversation Selected", systemImage: "bubble.left.and.bubble.right")
+            }
+        }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .modifier(ConversationSheets(model: model, window: window, selection: $selection))
+        .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $selection, window: window,
+            search: { window.sheet = .chooseConversation }))
+        .onChange(of: selection, initial: true) { _, id in
+            if let id { model.markRead(id) }
+            window.composerFocusRequest = UUID()
+        }
+    }
+}
+
 /// One conversation as a document: a header, the messages in a reading column, and the composer.
 /// An Investigation also has its case record in the inspector.
 struct ConversationView: View {
@@ -67,13 +93,14 @@ struct ConversationView: View {
                 Menu {
                     ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { status in
                         Button { model.setStatus(status, of: investigation) } label: { Label(status.title, systemImage: status.symbol) }
-                            .disabled(investigation.status == status)
+                            .disabled(investigation.isClosed || investigation.status == status)
                     }
                     Divider()
                     if investigation.isClosed {
                         Button("Reopen") { model.setStatus(.open, of: investigation) }
                     } else {
                         Button("Close Investigation…") { window.sheet = .close(investigation) }
+                            .keyboardShortcut("k", modifiers: [.command, .shift])
                     }
                 } label: {
                     Label(investigation.outcome?.title ?? investigation.status.title, systemImage: investigation.status.symbol)

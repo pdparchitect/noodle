@@ -3,6 +3,78 @@ import NoodleSettingsUI
 import PionCore
 import SwiftUI
 
+struct ConversationSheets: ViewModifier {
+    let model: PionModel
+    @Bindable var window: WindowState
+    @Binding var selection: UUID?
+
+    func body(content: Content) -> some View {
+        content.sheet(item: $window.sheet) { sheet in
+            switch sheet {
+            case .newInvestigation: NewInvestigationSheet(model: model)
+            case .newGroup: NewGroupSheet(model: model)
+            case .newAgent: NewAgentSheet(model: model)
+            case .chooseConversation: ConversationPicker(model: model, selection: $selection)
+            case .close(let investigation): CloseInvestigationSheet(model: model, investigation: investigation)
+            case .members(let conversation): MembersSheet(model: model, conversation: conversation)
+            }
+        }
+    }
+}
+
+struct ConversationChoiceRow: View {
+    let model: PionModel
+    let conversation: BotConversation
+
+    var body: some View {
+        if let investigation = model.investigation(conversation.id) {
+            InvestigationRow(model: model, investigation: investigation)
+        } else if conversation.kind == .group {
+            GroupRow(model: model, group: conversation)
+        } else if let agent = model.agent(conversation.participantIDs.first) {
+            AgentRow(model: model, agent: agent, unread: model.isUnread(conversation.id))
+        }
+    }
+}
+
+struct ConversationPicker: View {
+    let model: PionModel
+    @Binding var selection: UUID?
+    @State private var query = ""
+    @State private var choice: UUID?
+    @FocusState private var searchFocused: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    private var matches: [BotConversation] { model.searchConversations(query) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search Conversations", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($searchFocused)
+                .padding(16)
+            Divider()
+            List(selection: $choice) {
+                ForEach(matches) { conversation in
+                    ConversationChoiceRow(model: model, conversation: conversation)
+                        .tag(conversation.id)
+                }
+            }
+            .frame(height: 320)
+            .overlay { if matches.isEmpty { ContentUnavailableView.search(text: query) } }
+            Divider()
+            SheetButtons(title: "Open", enabled: choice != nil) {
+                selection = choice
+                dismiss()
+            }
+        }
+        .onAppear { choice = selection ?? matches.first?.id; searchFocused = true }
+        .onChange(of: query) { if !matches.contains(where: { $0.id == choice }) { choice = matches.first?.id } }
+        .frame(width: 480)
+        .noodleSheetSizing()
+    }
+}
+
 /// Cancel, then the default action.
 struct SheetButtons: View {
     let title: String

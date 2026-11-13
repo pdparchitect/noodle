@@ -150,6 +150,18 @@ let project = Project(
                 ]
             )
         ),
+        .target(
+            name: "PionAppTests",
+            destinations: .macOS,
+            product: .unitTests,
+            bundleId: "com.pdparchitect.pion.tests",
+            deploymentTargets: .macOS("26.0"),
+            infoPlist: .default,
+            // Test the model without launching the app or starting anyone's harnesses.
+            sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift"],
+            dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore")],
+            settings: .settings(base: ["CODE_SIGNING_ALLOWED": "NO"])
+        ),
         // Launches harnesses under their sandbox. It accepts Pion alone, and Pion accepts it alone.
         .target(
             name: "NoodleAgentHost",

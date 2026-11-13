@@ -191,6 +191,43 @@ import UniformTypeIdentifiers
 
     func messages(in id: UUID) -> [ChatMessage] { transcripts[id] ?? [] }
 
+    /// Search every conversation, including closed cases, without changing the sidebar's selection.
+    func searchConversations(_ query: String) -> [BotConversation] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return conversations.filter { conversation in
+            guard !query.isEmpty else { return true }
+            let investigation = investigation(conversation.id)
+            let agent = conversation.kind == .direct ? agent(conversation.participantIDs.first) : nil
+            let fields = [conversation.displayName, conversation.publicDescription, agent?.displayName,
+                          agent?.publicDescription, investigation?.reference, investigation?.title, investigation?.objective]
+            return fields.compactMap { $0 }.contains { $0.localizedStandardContains(query) }
+                || messages(in: conversation.id).contains { $0.body.localizedStandardContains(query) }
+        }.sorted {
+            let left = investigation($0.id)?.title ?? $0.displayName
+            let right = investigation($1.id)?.title ?? $1.displayName
+            return left.localizedStandardCompare(right) == .orderedAscending
+        }
+    }
+
+    /// As in Noodle, Stop acts on the agent in a direct conversation, never a whole group.
+    func stoppableAgent(in conversationID: UUID?) -> AgentRecord? {
+        guard let conversation = conversation(conversationID), conversation.kind == .direct,
+              let agent = agent(conversation.participantIDs.first),
+              isScripted ? phase(of: agent) == .working : runtime.canStopTurn(agent.id) else { return nil }
+        return agent
+    }
+
+    func stop(in conversationID: UUID?) {
+        guard let agent = stoppableAgent(in: conversationID) else { return }
+        if isScripted { scriptedPhases[agent.id] = .ready }
+        else if !runtime.stopTurn(agent: agent, repository: repository) { return }
+        do {
+            if let message = try repository.appendStopNotice(agentID: agent.id) {
+                readTranscript(message.conversationID, notifying: false)
+            }
+        } catch { problem = error.localizedDescription }
+    }
+
     func conversation(_ id: UUID?) -> BotConversation? { id.flatMap { id in conversations.first { $0.id == id } } }
     func investigation(_ id: UUID?) -> Investigation? { id.flatMap { id in investigations.first { $0.id == id } } }
     func agent(_ id: UUID?) -> AgentRecord? { id.flatMap { id in agents.first { $0.id == id } } }

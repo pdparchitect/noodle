@@ -30,15 +30,9 @@ struct MainWindow: View {
         }
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .sheet(item: $window.sheet) { sheet in
-            switch sheet {
-            case .newInvestigation: NewInvestigationSheet(model: model)
-            case .newGroup: NewGroupSheet(model: model)
-            case .newAgent: NewAgentSheet(model: model)
-            case .close(let investigation): CloseInvestigationSheet(model: model, investigation: investigation)
-            case .members(let conversation): MembersSheet(model: model, conversation: conversation)
-            }
-        }
+        .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
+        .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
+            search: { window.searchFocusRequest = UUID() }))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
             Button("OK") { model.problem = nil }
         } message: {
@@ -58,6 +52,7 @@ struct Sidebar: View {
     @Bindable var window: WindowState
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @State private var closedLimit = SidebarOptions.closedShown
+    @FocusState private var searchFocused: Bool
     @SceneStorage("PionClosedExpanded") private var closedExpanded = true
 
     var body: some View {
@@ -66,51 +61,60 @@ struct Sidebar: View {
             .sorted { ($0.severity, $0.updatedAt) > ($1.severity, $1.updatedAt) }
         let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
         List(selection: $model.selection) {
-            Section {
-                ForEach(active) { investigation in
-                    InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
+            if !window.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ForEach(model.searchConversations(window.searchText)) { conversation in
+                    ConversationChoiceRow(model: model, conversation: conversation).tag(conversation.id)
                 }
-            } header: {
-                SidebarHeader(title: "Investigations") { window.sheet = .newInvestigation }
-            }
-            // Closed ones only when asked for, a few at a time, to look back at.
-            if showsClosed, !closed.isEmpty {
-                Section(isExpanded: $closedExpanded) {
-                    ForEach(closed.prefix(closedLimit)) { investigation in
+            } else {
+                Section {
+                    ForEach(active) { investigation in
                         InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
                     }
-                    if closed.count > closedLimit {
-                        Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
-                            closedLimit += SidebarOptions.closedShown
+                } header: {
+                    SidebarHeader(title: "Investigations") { window.sheet = .newInvestigation }
+                }
+                // Closed ones only when asked for, a few at a time, to look back at.
+                if showsClosed, !closed.isEmpty {
+                    Section(isExpanded: $closedExpanded) {
+                        ForEach(closed.prefix(closedLimit)) { investigation in
+                            InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
                         }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                        .selectionDisabled()
+                        if closed.count > closedLimit {
+                            Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
+                                closedLimit += SidebarOptions.closedShown
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            .selectionDisabled()
+                        }
+                    } header: {
+                        Text("Closed")
                     }
-                } header: {
-                    Text("Closed")
                 }
-            }
-            if !model.groups.isEmpty {
+                if !model.groups.isEmpty {
+                    Section {
+                        ForEach(model.groups) { group in
+                            GroupRow(model: model, group: group).tag(group.id)
+                        }
+                    } header: {
+                        SidebarHeader(title: "Groups") { window.sheet = .newGroup }
+                    }
+                }
                 Section {
-                    ForEach(model.groups) { group in
-                        GroupRow(model: model, group: group).tag(group.id)
+                    ForEach(model.agents) { agent in
+                        if let direct = model.directConversation(of: agent) {
+                            AgentRow(model: model, agent: agent, unread: model.isUnread(direct.id)).tag(direct.id)
+                        }
                     }
                 } header: {
-                    SidebarHeader(title: "Groups") { window.sheet = .newGroup }
+                    SidebarHeader(title: "Agents") { window.sheet = .newAgent }
                 }
-            }
-            Section {
-                ForEach(model.agents) { agent in
-                    if let direct = model.directConversation(of: agent) {
-                        AgentRow(model: model, agent: agent, unread: model.isUnread(direct.id)).tag(direct.id)
-                    }
-                }
-            } header: {
-                SidebarHeader(title: "Agents") { window.sheet = .newAgent }
             }
         }
         .listStyle(.sidebar)
+        .searchable(text: $window.searchText, placement: .sidebar, prompt: "Search Conversations")
+        .searchFocused($searchFocused)
+        .onChange(of: window.searchFocusRequest) { searchFocused = true }
         .toolbar {
             ToolbarItem {
                 Menu {

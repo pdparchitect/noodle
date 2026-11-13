@@ -72,7 +72,6 @@ struct Composer: View {
                     }
                     .buttonStyle(ComposerIconButtonStyle())
                     .help("Dictate (⌘⇧D)")
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
                     .disabled(closed || (recorder.map { $0.phase != .idle } ?? false))
                     Button { model.sendDraft(to: conversation.id) } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 30, height: 30)
@@ -99,6 +98,10 @@ struct Composer: View {
             if case .success(let urls) = result { model.attach(urls, to: conversation.id) }
         }
         .onChange(of: window.composerFocusRequest, initial: true) { focused = true }
+        .focusedSceneValue(\.pionDictation, DictationCommand(
+            isRecording: recorder?.phase == .recording,
+            isEnabled: !closed && (recorder == nil || recorder?.phase == .idle || recorder?.phase == .recording),
+            toggle: { if recorder?.phase == .recording { finishDictation() } else { startDictation() } }))
         .onDisappear { completion.detach(); Task { await recorder?.discard() } }
     }
 

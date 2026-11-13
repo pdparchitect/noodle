@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The View menu separates the inspector from display options and keeps background effects together in a submenu.
+- A Conversation menu replaces Investigation, with search, a conversation picker, separate conversation windows, Float on Top, dictation and Stop. Investigation status and closing stay in the investigation's toolbar.
+
 ### Added
 
 - Pion's first version: Investigations, groups and agents in one sidebar, each Investigation with an objective, a scope, a status, a lead agent and a case record of entities, evidence, findings and proposed actions beside the conversation.

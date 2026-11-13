@@ -1,0 +1,63 @@
+import NoodleCore
+import PionCore
+import XCTest
+
+@MainActor final class ConversationCommandsTests: XCTestCase {
+    private var root: URL!
+    private var model: PionModel!
+    private var agent: AgentRecord!
+    private var direct: BotConversation!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("PionCommands-\(UUID())")
+        model = PionModel(root: root, messenger: nil, isScripted: true)
+        agent = try model.repository.createAgent(named: "Avery", publicDescription: "Network analyst").agent
+        model.refresh()
+        direct = try XCTUnwrap(model.directConversation(of: agent))
+    }
+
+    override func tearDownWithError() throws {
+        model = nil
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    func testSearchFindsAgentsGroupsAndMessageTextWithoutChangingSelection() throws {
+        let group = try model.createGroup(name: "Response Team", description: "Triage", members: [agent.id])
+        try model.send("Unusual beacon from the laptop", in: direct.id)
+        model.selection = group.id
+
+        XCTAssertEqual(model.searchConversations("avery").map(\.id), [direct.id])
+        XCTAssertEqual(model.searchConversations("network analyst").map(\.id), [direct.id])
+        XCTAssertEqual(model.searchConversations("RESPONSE").map(\.id), [group.id])
+        XCTAssertEqual(model.searchConversations("beacon").map(\.id), [direct.id])
+        XCTAssertEqual(Set(model.searchConversations("  ").map(\.id)), Set([direct.id, group.id]))
+        XCTAssertTrue(model.searchConversations("missing").isEmpty)
+        XCTAssertEqual(model.selection, group.id)
+    }
+
+    func testSearchIncludesClosedInvestigationsAndTheirReference() throws {
+        let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: agent.id))
+        model.setStatus(.closed, of: investigation, outcome: .resolved)
+
+        XCTAssertEqual(model.searchConversations(investigation.reference).map(\.id), [investigation.id])
+        XCTAssertEqual(model.searchConversations("beaconing").map(\.id), [investigation.id])
+    }
+
+    func testStopTargetsTheRequestedDirectConversationAndRecordsItOnce() throws {
+        let group = try model.createGroup(name: "Response Team", description: nil, members: [agent.id])
+        model.selection = group.id
+        model.scriptedPhases[agent.id] = .working
+
+        XCTAssertNil(model.stoppableAgent(in: group.id))
+        XCTAssertNil(model.stoppableAgent(in: nil))
+        XCTAssertEqual(model.stoppableAgent(in: direct.id)?.id, agent.id)
+        let before = model.messages(in: direct.id).count
+        model.stop(in: direct.id)
+        XCTAssertEqual(model.phase(of: agent), .ready)
+        XCTAssertNil(model.stoppableAgent(in: direct.id))
+        XCTAssertEqual(model.messages(in: direct.id).count, before + 1)
+        model.stop(in: direct.id)
+        XCTAssertEqual(model.messages(in: direct.id).count, before + 1)
+        XCTAssertEqual(model.selection, group.id)
+    }
+}

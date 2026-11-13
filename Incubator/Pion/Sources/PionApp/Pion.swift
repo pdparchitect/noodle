@@ -35,6 +35,16 @@ struct PionApp: App {
             ScenarioCommands()
             #endif
         }
+        WindowGroup("Conversation", id: "conversation", for: UUID.self) { $id in
+            ConversationWindow(model: delegate.model, selection: $id)
+                .frame(minWidth: 720, minHeight: 540)
+                .background { Backdrop().ignoresSafeArea() }
+                .containerBackground(.thickMaterial, for: .window)
+        }
+        .defaultSize(width: 1000, height: 760)
+        .defaultLaunchBehavior(.suppressed)
+        .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified(showsTitle: false))
         Settings {
             PionSettingsView(host: delegate.settings)
         }
@@ -88,12 +98,13 @@ struct PionApp: App {
 /// The main window's sheets and panels, which menu commands open too.
 @MainActor @Observable final class WindowState {
     enum Sheet: Identifiable {
-        case newInvestigation, newGroup, newAgent, close(Investigation), members(BotConversation)
+        case newInvestigation, newGroup, newAgent, chooseConversation, close(Investigation), members(BotConversation)
         var id: String {
             switch self {
             case .newInvestigation: "new-investigation"
             case .newGroup: "new-group"
             case .newAgent: "new-agent"
+            case .chooseConversation: "choose-conversation"
             case .close(let investigation): "close-\(investigation.id)"
             case .members(let conversation): "members-\(conversation.id)"
             }
@@ -107,43 +118,98 @@ struct PionApp: App {
     var inspectorTab: InspectorTab = .caseRecord
     /// Asks the composer of the selected conversation to take the keyboard.
     var composerFocusRequest = UUID()
+    var searchText = ""
+    var searchFocusRequest = UUID()
+    var floatsOnTop = false
+}
+
+/// Scene focus keeps menu actions on the key conversation, rather than the main sidebar's selection.
+struct ConversationCommandContext {
+    let selection: Binding<UUID?>
+    let window: WindowState
+    let search: () -> Void
+}
+
+struct DictationCommand {
+    let isRecording: Bool
+    let isEnabled: Bool
+    let toggle: () -> Void
+
+    @MainActor func perform() {
+        guard isEnabled, NSApp.modalWindow == nil, let window = NSApp.keyWindow,
+              window.attachedSheet == nil, window.sheetParent == nil,
+              NSApp.currentEvent?.isARepeat != true else { return }
+        toggle()
+    }
+}
+
+private struct ConversationCommandKey: FocusedValueKey { typealias Value = ConversationCommandContext }
+private struct DictationCommandKey: FocusedValueKey { typealias Value = DictationCommand }
+
+extension FocusedValues {
+    var pionConversation: ConversationCommandContext? {
+        get { self[ConversationCommandKey.self] }
+        set { self[ConversationCommandKey.self] = newValue }
+    }
+    var pionDictation: DictationCommand? {
+        get { self[DictationCommandKey.self] }
+        set { self[DictationCommandKey.self] = newValue }
+    }
 }
 
 struct PionCommands: Commands {
     let model: PionModel
     let window: WindowState
+    @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.pionConversation) private var context
+    @FocusedValue(\.pionDictation) private var dictation
+
+    private var activeWindow: WindowState { context?.window ?? window }
+    private var conversationID: UUID? { context?.selection.wrappedValue }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Investigation") { window.sheet = .newInvestigation }
+            Button("New Investigation") { activeWindow.sheet = .newInvestigation }
                 .keyboardShortcut("n")
                 .disabled(model.agents.isEmpty)
-            Button("New Group") { window.sheet = .newGroup }
+            Button("New Group") { activeWindow.sheet = .newGroup }
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(model.agents.isEmpty)
-            Button("New Agent") { window.sheet = .newAgent }
+            Button("New Agent") { activeWindow.sheet = .newAgent }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         CommandGroup(after: .sidebar) {
-            Button(window.showsInspector ? "Hide Inspector" : "Show Inspector") { window.showsInspector.toggle() }
+            Button(activeWindow.showsInspector ? "Hide Inspector" : "Show Inspector") { activeWindow.showsInspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model.investigation(conversationID) == nil)
+            Divider()
             ViewOptions()
             Divider()
         }
-        CommandMenu("Investigation") {
-            let investigation = model.investigation(model.selection)
-            Menu("Status") {
-                ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { status in
-                    Button(status.title) { if let investigation { model.setStatus(status, of: investigation) } }
-                        .disabled(investigation == nil || investigation?.status == status)
-                }
+        CommandMenu("Conversation") {
+            Button("Search Conversations") { context?.search() }
+                .keyboardShortcut("f")
+                .disabled(context == nil)
+            Button("Choose Conversation…") { activeWindow.sheet = .chooseConversation }
+                .keyboardShortcut(.space, modifiers: [.control, .option])
+                .disabled(context == nil)
+            Divider()
+            Button("Open in New Window") {
+                if let conversationID { openWindow(id: "conversation", value: conversationID) }
             }
-            .disabled(investigation?.isClosed != false)
-            Button("Close Investigation…") { if let investigation { window.sheet = .close(investigation) } }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
-                .disabled(investigation?.isClosed != false)
-            Button("Reopen") { if let investigation { model.setStatus(.open, of: investigation) } }
-                .disabled(investigation?.isClosed != true)
+            .disabled(conversationID == nil)
+            Toggle("Float on Top", isOn: Binding(get: { activeWindow.floatsOnTop }, set: {
+                activeWindow.floatsOnTop = $0
+                NSApp.keyWindow?.level = $0 ? .floating : .normal
+            }))
+            .disabled(conversationID == nil)
+            Divider()
+            Button(dictation?.isRecording == true ? "Stop Dictation" : "Dictate") { dictation?.perform() }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(dictation?.isEnabled != true)
+            Button("Stop") { model.stop(in: conversationID) }
+                .keyboardShortcut(".")
+                .disabled(model.stoppableAgent(in: conversationID) == nil)
         }
     }
 }
@@ -168,6 +234,7 @@ struct ViewOptions: View {
                 if effect == .none { Divider() }
             }
         }
+        .pickerStyle(.menu)
     }
 }
 
