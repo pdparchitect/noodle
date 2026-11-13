@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-11-13
+
 ### Fixed
 
+- Keep the conversation layout and focused message box stable when the keyboard reduces the space on a wide screen.
 - Conversation list and icon previews show readable text instead of Markdown markup, including bot statuses.
 
 ### Added

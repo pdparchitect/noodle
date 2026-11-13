@@ -6,20 +6,17 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
-### Fixed
-
-- Conversation list and icon previews show readable text instead of Markdown markup, including bot statuses.
+## [0.85.0] - 2026-11-13
 
 ### Added
 
-- Choose companion apps with the Noodle Suite Installer or Noodle Hub Installer. The standalone Noodle Installer installs Noodle only.
-
-- Install Noodle with a standard Mac installer. The Noodle Installer installs Noodle and lets you choose Noodle Computer, Noodle Browser, Noodle Applet and Noodle Terminal as it installs, each with what it does and its size; Noodle Terminal puts the `noodle` command in `/usr/local/bin`. An app your Mac can't run is greyed out with the reason. The Noodle Hub Installer does the same around Noodle Hub, for an always-on Mac. Both are signed and notarised, so organisations can deploy them with Jamf Pro, Kandji, Intune or Mosyle; `Enterprise/Deployment.md` lists their package identifiers and how to choose the apps. The disk images are still available.
-- Stop a bot that is working: right-click it in the sidebar and choose Stop, or choose Conversation › Stop (⌘.) in its conversation. Its turn ends at once, along with any sub-agents and background commands it started; it keeps its session and goes back to idle. Messages you send it wait for its next turn, and its conversation says you stopped it, so it does not simply carry on. This works for your bots on a Noodle Hub too.
+- Stop a bot that is working: right-click it in the sidebar and choose Stop, or choose Conversation › Stop (⌘.) in its conversation. Its turn ends, along with any sub-agents and background commands it started; it keeps its session and goes back to idle. Messages you send it wait for its next turn, and its conversation says you stopped it. This works for your bots on a Noodle Hub too.
+- Install with the signed and notarised Noodle Suite Installer, choosing Computer, Browser, Applet and Terminal, or use the Hub Installer for an always-on Mac. Each companion has a description and size; unsupported apps are greyed out with the reason. The standalone Noodle Installer installs Noodle only. Terminal adds the `noodle` command to `/usr/local/bin`. Organisations can deploy the packages through MDM; see `Enterprise/Deployment.md` for identifiers and choices. Disk images remain available.
 
 ### Fixed
 
-- Bots no longer think you stopped them when Noodle interrupts a long step to hand them a new message. Claude Code reports such an interrupt as the user asking it to stop and wait; bots now know from the start of each session that it comes from Noodle, so they check the step and carry on. Bots also run long commands in the background, so new messages reach them between steps. Claude Code takes this in its system prompt and Codex in its instructions, so it costs nothing per message.
+- Conversation list and icon previews show readable text instead of Markdown markup, including bot statuses.
+- Bots know when Noodle interrupts a long step to deliver a message, so they check the step and carry on instead of treating it as you asking them to stop. Bots also run long commands in the background so messages reach them between steps. Claude Code receives this guidance in its system prompt and Codex in its instructions, with no extra text per message.
 
 ## [0.84.0] - 2026-11-11
 
