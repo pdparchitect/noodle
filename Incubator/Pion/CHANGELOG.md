@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Smoother conversation scrolling: unchanged messages reuse their formatted text when rows redraw.
+
 ### Changed
 
 - The View menu separates the inspector from display options and keeps background effects together in a submenu.

@@ -292,9 +292,9 @@ struct MessageBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(MessageSegment.split(text).enumerated()), id: \.offset) { _, segment in
+            ForEach(Array(MessageBodyRenderer.shared.render(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
-                case .text(let prose): Prose(text: prose)
+                case .prose(let blocks): Prose(blocks: blocks)
                 case .table(let table): MarkdownTable(table: table)
                 }
             }
@@ -306,57 +306,27 @@ struct MessageBody: View {
 
 /// Prose with its code blocks set apart.
 private struct Prose: View {
-    let text: String
+    let blocks: [MessageBodyRenderer.Block]
 
     var body: some View {
-        let blocks = Self.blocks(text)
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                if block.isCode {
+                switch block {
+                case .code(let text):
                     ScrollView(.horizontal, showsIndicators: false) {
-                        Text(block.text)
+                        Text(text)
                             .font(.system(size: 12, design: .monospaced))
                             .padding(12)
                     }
                     .background(Color.secondary.opacity(0.09), in: .rect(cornerRadius: 10, style: .continuous))
-                } else {
-                    Text(Self.markdown(block.text))
+                case .text(let text):
+                    Text(text)
                         .font(.system(size: 14))
                         .lineSpacing(3.5)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-    }
-
-    private static func blocks(_ text: String) -> [(text: String, isCode: Bool)] {
-        var result: [(String, Bool)] = [], lines: [Substring] = [], inCode = false
-        func flush() {
-            let joined = lines.joined(separator: "\n")
-            if !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inCode {
-                result.append((inCode ? joined : joined.trimmingCharacters(in: .newlines), inCode))
-            }
-            lines = []
-        }
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { flush(); inCode.toggle() } else { lines.append(line) }
-        }
-        flush()
-        return result
-    }
-
-    private static func markdown(_ text: String) -> AttributedString {
-        var rendered = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                                                                             failurePolicy: .returnPartiallyParsedIfPossible)))
-            ?? AttributedString(text)
-        for run in rendered.runs {
-            if let link = run.link, !["http", "https", "mailto"].contains(link.scheme?.lowercased() ?? "") { rendered[run.range].link = nil }
-            if run.inlinePresentationIntent?.contains(.code) == true {
-                rendered[run.range].font = .system(size: 12.5, design: .monospaced)
-                rendered[run.range].backgroundColor = Color.secondary.opacity(0.12)
-            }
-        }
-        return rendered
     }
 }
 
