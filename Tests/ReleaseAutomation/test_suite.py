@@ -139,7 +139,7 @@ class SuiteTests(unittest.TestCase):
             root = Path(temporary)
             suite.fetch(self.github, planned, root)
             self.assertEqual((root / 'command/noodle').read_bytes(), b'#!/bin/sh\n')
-            self.assertEqual(list((root / 'apps').iterdir()), [])  # The Suite disk image holds apps only.
+            self.assertEqual(list((root / 'apps').iterdir()), [])  # Command-line tools are staged separately from app bundles.
             verify.assert_called_once()
         publish('bin/other')
         planned = self.plan()

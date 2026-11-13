@@ -36,8 +36,8 @@ Kandji, Microsoft Intune or Mosyle. Anything not supported is said so.
 
 | Package | Installs | Choices |
 | --- | --- | --- |
-| [Noodle-Suite-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-Installer.pkg) | Noodle | Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
-| [Noodle-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg) | Noodle only | None |
+| [Noodle-Suite-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Suite-Installer.pkg) | Noodle | Noodle Hub, Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
+| [Noodle-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg) | Noodle | Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
 | [Noodle-Hub-Installer.pkg](https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Hub-Installer.pkg) | Noodle Hub | Noodle Computer, Noodle Browser, Noodle Applet, Noodle Terminal |
 
 - All three are signed with a Developer ID Installer certificate and notarised by Apple, so your MDM
@@ -45,11 +45,11 @@ Kandji, Microsoft Intune or Mosyle. Anything not supported is said so.
 - Apps install in `/Applications`, and Noodle Terminal's `noodle` command in `/usr/local/bin`.
   Installing over existing apps keeps their data, and an app that has already updated itself to a
   newer version is left as it is.
-- Installed without choices, as most MDMs do, the Suite and Hub packages install their main app with Noodle
-  Computer, Noodle Browser and Noodle Applet, and leave out Noodle Terminal. To choose, pass a
+- Installed without choices, as most MDMs do, all three packages install their main app with Noodle
+  Computer, Noodle Browser and Noodle Applet, and leave out Noodle Terminal. The Suite also installs Noodle Hub by default. To choose, pass a
   choices file to `installer`, for example from a script your MDM runs:
   `sudo installer -pkg Noodle-Suite-Installer.pkg -target / -applyChoiceChangesXML choices.xml`.
-  The standalone Noodle Installer installs Noodle only. For the Suite and Hub installers, the choices are `computer`, `browser`, `applet` and `terminal`. This file leaves out Noodle
+  All three installers offer `computer`, `browser`, `applet` and `terminal`; the Suite also offers `hub`. This file leaves out Noodle
   Computer and adds Noodle Terminal:
 
   ```xml
