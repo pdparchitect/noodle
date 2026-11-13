@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Conversation list and icon previews show readable text instead of Markdown markup, including bot statuses.
+
 ### Added
 
 - Stop a bot that is working: touch and hold it and choose Stop. Its turn ends at once and it goes back to idle; its conversation says you stopped it, and messages you send it wait for its next turn. Needs a Noodle Hub that can stop bots.
@@ -9,7 +13,7 @@
 ### What to Test
 
 - On an unfolded iPhone Duo, open a conversation in landscape and tap the message box. Check the keyboard opens and stays up while typing; rotate and dismiss it, then check the layout still adapts normally.
-
+- Ask a bot for bold text, code or a link: the list, icon and pinned previews show the words without Markdown marks; the conversation keeps its formatting.
 - Ask a bot for something long, such as a long build. While its picture shows it working, touch and hold it and choose Stop: within a few seconds it stops working, and its conversation says "You stopped" and its name.
 - Send it a new message: it answers that message and doesn't carry on with what it was doing.
 - Touch and hold a bot that isn't working: Stop isn't in the menu.
@@ -23,7 +27,6 @@
 ### Fixed
 
 - Keep the conversation layout stable when the keyboard takes up space on a wide screen.
-
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
 - Notifications show bot messages as clean text: bold, code, link and heading markup no longer appear in banners, links show their words, and list items keep their numbers or bullets.
 
