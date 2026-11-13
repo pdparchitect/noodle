@@ -8,6 +8,8 @@
 
 ### What to Test
 
+- On an unfolded iPhone Duo, open a conversation in landscape and tap the message box. Check the keyboard opens and stays up while typing; rotate and dismiss it, then check the layout still adapts normally.
+
 - Ask a bot for something long, such as a long build. While its picture shows it working, touch and hold it and choose Stop: within a few seconds it stops working, and its conversation says "You stopped" and its name.
 - Send it a new message: it answers that message and doesn't carry on with what it was doing.
 - Touch and hold a bot that isn't working: Stop isn't in the menu.
@@ -19,6 +21,8 @@
 - See what your bots are working on. In Settings › Conversation List, set Tasks to Waiting on Me or All Open to list your bots' tasks at the top of the conversation list, with the ones waiting on you first. Tap a task to write to its bot about it; your message goes to that conversation, marked with the task, and the bot moves the task on. Tasks are hidden until you choose to show them.
 
 ### Fixed
+
+- Keep the conversation layout stable when the keyboard takes up space on a wide screen.
 
 - Suspending a bot no longer grays out its groups. Only that bot's face turns gray, a group keeps its color while any of its bots can answer, and the group's row no longer says the bot is paused.
 - Notifications show bot messages as clean text: bold, code, link and heading markup no longer appear in banners, links show their words, and list items keep their numbers or bullets.

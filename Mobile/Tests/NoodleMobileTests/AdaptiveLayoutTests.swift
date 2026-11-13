@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import UIKit
 import HubLink
 @testable import NoodleMobile
 import SwiftUI
@@ -57,6 +59,44 @@ import Testing
         #expect(HomeLayout.choose(size: CGSize(width: 440, height: 868), verticalBar: nil) == .stack)
         #expect(HomeLayout.choose(size: CGSize(width: 838, height: 419), verticalBar: nil) == .stack)
         #expect(HomeLayout.choose(size: CGSize(width: 320, height: 980), verticalBar: nil) == .stack)
+    }
+
+    /// The keyboard may shorten SwiftUI's proposal without resizing the app window. A change of
+    /// navigation hierarchy here would replace the native editor and dismiss its keyboard.
+    @Test func aShorterContentProposalKeepsTheFocusedEditorInTwoColumns() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 951, height: 621)
+        let state = HomeViewportFixtureState()
+        let host = UIHostingController(rootView: HomeViewportFixture(state: state))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(500))
+        let room = window.bounds.inset(by: window.safeAreaInsets).size
+        try #require(HomeLayout.isWide(room), "Fixture needs a wide app window")
+        #expect(state.layout == .split)
+        let editor = try #require(Self.editor(in: host.view))
+        #expect(editor.becomeFirstResponder())
+
+        state.proposedHeight = 300
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(state.layout == .split)
+        #expect(Self.editor(in: host.view) === editor)
+        #expect(editor.isFirstResponder)
+
+        state.proposedHeight = 621
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(state.layout == .split)
+        #expect(Self.editor(in: host.view) === editor)
+        editor.resignFirstResponder()
+    }
+
+    private static func editor(in view: UIView) -> PastingTextView? {
+        if let editor = view as? PastingTextView { return editor }
+        return view.subviews.lazy.compactMap { editor(in: $0) }.first
     }
 
     static let scout = ChatLink(hub: "Studio", thread: UUID()), house = ChatLink(hub: "Studio", thread: UUID())
@@ -271,5 +311,39 @@ import Testing
         try #require(maxX >= minX, "Nothing was drawn")
         let ink = CGRect(x: CGFloat(minX), y: CGFloat(minY), width: CGFloat(maxX - minX + 1), height: CGFloat(maxY - minY + 1))
         return (ink, CGRect(origin: .zero, size: CGSize(width: width, height: height)), host.view.safeAreaInsets)
+    }
+}
+
+/// Repeats the home screen's two navigation branches around the real native composer. The shortened
+/// proposal is controlled: it verifies hierarchy stability, not that a physical Duo sends that proposal.
+@MainActor @Observable private final class HomeViewportFixtureState {
+    var proposedHeight: CGFloat = 621
+    var size = CGSize.zero
+    var layout: HomeLayout { HomeLayout.choose(size: size, verticalBar: nil) }
+}
+
+private struct HomeViewportFixture: View {
+    @Bindable var state: HomeViewportFixtureState
+    @State private var text = ""
+    @State private var caret = 0
+
+    var body: some View {
+        Group {
+            if state.layout == .split {
+                HStack {
+                    Color.clear.frame(width: 320)
+                    field
+                }
+            } else {
+                VStack { field }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: state.proposedHeight)
+        .background { HomeViewportReader(size: $state.size) }
+    }
+
+    private var field: some View {
+        ComposerField(text: $text, caret: $caret, placeholder: "Message", pasted: { _ in })
     }
 }
