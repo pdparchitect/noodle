@@ -20,7 +20,7 @@ def suite_apps(names):
 
 
 def icon_size(apps, suite=False):
-    # Five apps need a third column, which only fits left of the arrow at a smaller size.
+    # Five or six items need a third column, which only fits left of the arrow at a smaller size.
     return 128 if suite and len(apps) > 4 else 160
 
 
@@ -32,6 +32,8 @@ def layout(apps, suite=False):
         positions[2] = (285, 380)
     if len(apps) == 5:
         positions = [(100, 160), (275, 160), (450, 160), (187, 380), (362, 380)]
+    if len(apps) == 6:
+        positions = [(100, 160), (275, 160), (450, 160), (100, 380), (275, 380), (450, 380)]
     return (900, 560), {**dict(zip((app.name for app in apps), positions)), 'Applications': (745, 270)}
 
 
@@ -84,7 +86,10 @@ def verify_image(image, apps, suite=False):
             for app in apps:
                 copied_app = mount / app.name
                 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(copied_app)], check=True)
-                if (copied_app / 'Contents/Info.plist').read_bytes() != (app / 'Contents/Info.plist').read_bytes():
+                if app.is_file():
+                    if copied_app.read_bytes() != app.read_bytes() or not copied_app.stat().st_mode & 0o111:
+                        raise ValueError('DMG command differs from the executable source')
+                elif (copied_app / 'Contents/Info.plist').read_bytes() != (app / 'Contents/Info.plist').read_bytes():
                     raise ValueError('DMG app metadata differs from the source app')
             if not (mount / 'Applications').is_symlink() or (mount / 'Applications').readlink() != Path('/Applications'):
                 raise ValueError('DMG must link to /Applications')
@@ -127,6 +132,11 @@ def main():
         parser.error('Expected application bundles')
     if args.output.exists():
         parser.error('Refusing to overwrite an existing disk image')
+    if args.suite:
+        # suite-release fetch keeps the signed command beside apps; individual DMGs never include it.
+        terminal = source.parent / 'command/noodle'
+        if terminal.is_file():
+            apps.append(terminal)
     for app in apps:
         subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
     title = 'Noodle Suite Installer' if args.suite else apps[0].stem + ' Installer'

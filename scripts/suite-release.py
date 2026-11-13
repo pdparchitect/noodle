@@ -31,7 +31,7 @@ PRODUCTS = {
 }
 # Companions that join the Suite after their first stable release.
 OPTIONAL = {'browser', 'hub', 'terminal'}
-# Command-line tools: offered by the installers, never put in the disk image, which holds apps.
+# Command-line tools are fetched separately from app bundles; both the Suite image and installers include them.
 COMMANDS = {'terminal'}
 SEMVER = r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RECIPE_FILES = ['scripts/suite-release.py', 'scripts/build-dmg.py', 'scripts/package-dmg.sh',
@@ -213,7 +213,7 @@ def release_notes(manifest):
             f'[Noodle Hub Installer]({download}/Noodle-Hub-Installer.pkg) · '
             f'[Noodle Installer]({download}/Noodle-Installer.pkg) · '
             f'[Noodle Suite disk image]({download}/{IMAGE})\n\n'
-            'Requires macOS 26 or later on Apple silicon. The Suite and Hub installers let you choose companion apps; Noodle Installer installs Noodle only; '
+            'Requires macOS 26 or later on Apple silicon. All three installers let you choose companion apps; the Suite also offers Noodle Hub; '
             'or open the disk image and drag the apps to Applications.\n\n'
             '| App | Version |\n| --- | --- |\n' + '\n'.join(rows) + '\n\n'
             'Each app keeps its own automatic updates. These installers reuse the published app bundles.\n')

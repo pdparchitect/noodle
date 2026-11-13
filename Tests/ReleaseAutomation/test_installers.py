@@ -78,7 +78,7 @@ class DistributionTests(unittest.TestCase):
                     self.assertEqual(root.find(page).get('file'), page + '.html')
 
     def test_each_installer_requires_its_own_app_and_offers_the_companions(self):
-        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name)
                 found = choices(root)
@@ -88,21 +88,19 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(main.get('start_selected'), 'true')
                 outline = [line.get('choice') for line in root.find('choices-outline')]
                 self.assertEqual([item for item in outline if not item.endswith('.unavailable')],
-                                 [required, *OPTIONAL])
+                                 [required, *(['hub'] if name == 'Noodle-Suite-Installer.pkg' else []), *OPTIONAL])
                 other = 'hub' if required == 'noodle' else 'noodle'
-                self.assertNotIn(other, found)
+                if name == 'Noodle-Suite-Installer.pkg':
+                    self.assertIn('hub', found)
+                    self.assertNotEqual(found['hub'].get('enabled'), 'false')
+                else:
+                    self.assertNotIn(other, found)
                 for product in OPTIONAL:
                     self.assertNotEqual(found[product].get('enabled'), 'false')
                     self.assertEqual([ref.get('id') for ref in found[product].iter('pkg-ref')],
                                      [installers.PACKAGES[product]])
                 self.assertEqual(root.find('product').get('id'), installers.INSTALLERS[name]['identifier'])
                 self.assertEqual(root.find('product').get('version'), '1.2.3')
-
-    def test_standalone_noodle_installs_only_noodle(self):
-        root = parse('Noodle-Installer.pkg')
-        self.assertEqual(set(choices(root)), {'noodle'})
-        self.assertEqual(root.find('title').text, 'Noodle')
-        self.assertEqual([ref.get('id') for ref in root.findall('pkg-ref')], [installers.PACKAGES['noodle']])
 
     def test_terminal_starts_unchecked_and_the_apps_checked(self):
         found = choices(parse('Noodle-Suite-Installer.pkg'))
@@ -111,7 +109,7 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(found[product].get('start_selected'), f"supports('{MINIMUMS[product]}')")
 
     def test_installer_checks_apple_silicon_and_the_required_apps_macos(self):
-        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name, components(**{required: dict(minimum='26.1')}))
                 self.assertEqual(root.find('allowed-os-versions/os-version').get('min'), '26.1')
@@ -150,9 +148,6 @@ class DistributionTests(unittest.TestCase):
                     description = choice.get('description', '')
                     self.assertTrue(description.endswith('.'), description)
                     self.assertNotIn('...', description)
-            if name == 'Noodle-Installer.pkg':
-                self.assertEqual(set(refs), {installers.PACKAGES['noodle']})
-                continue
             self.assertEqual(refs[installers.PACKAGES['applet']].get('installKBytes'), '4321')
             self.assertEqual(refs[installers.PACKAGES['applet']].get('version'), '1.2.3')
             self.assertEqual(refs[installers.PACKAGES['applet']].text, '#applet.pkg')
