@@ -30,6 +30,41 @@ enum HomeLayout: Equatable {
     var pinsInList: Bool { self != .stackBesideBar }
 }
 
+/// The room of the app window, excluding system bars but not the keyboard. A keyboard changes
+/// SwiftUI's proposed height; that must not swap the navigation hierarchy and replace its editor.
+struct HomeViewportReader: UIViewRepresentable {
+    @Binding var size: CGSize
+
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: Probe, context: Context) {
+        view.changed = { size = $0 }
+        view.setNeedsLayout()
+    }
+
+    final class Probe: UIView {
+        var changed: ((CGSize) -> Void)?
+        private var reported: CGSize?
+
+        override func didMoveToWindow() { super.didMoveToWindow(); setNeedsLayout() }
+        override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); setNeedsLayout() }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let window else { return }
+            let size = window.bounds.inset(by: window.safeAreaInsets).size
+            guard size.width > 0, size.height > 0, size != reported else { return }
+            reported = size
+            // Layout may be in a SwiftUI update. Deliver the measured window size afterwards.
+            DispatchQueue.main.async { [weak self] in self?.changed?(size) }
+        }
+    }
+}
+
 /// Which conversation is open: pushed over the list in one column, or selected beside it in two.
 struct HomeNavigation: Equatable {
     /// The conversations over the list in one column, the latest on top.

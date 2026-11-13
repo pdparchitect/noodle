@@ -1894,12 +1894,8 @@ struct AgentsView: View {
                 }
             }
         })
-        // The room the screen has, whatever the keyboard covers, so typing never changes the layout.
-        .background {
-            Color.clear
-                .ignoresSafeArea(.keyboard)
-                .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
-        }
+        // Choose navigation from the window, not the keyboard-compressed SwiftUI proposal.
+        .background { HomeViewportReader(size: $size) }
         // A hardware keyboard's commands, in the menus holding ⌘ lists.
         .focusedSceneValue(\.homeCommands, commands(rows))
         // Unfolding the iPhone Duo or resizing an iPad window keeps the conversation that was open.
