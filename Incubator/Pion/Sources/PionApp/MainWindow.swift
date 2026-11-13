@@ -64,6 +64,7 @@ struct Sidebar: View {
             if !window.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ForEach(model.searchConversations(window.searchText)) { conversation in
                     ConversationChoiceRow(model: model, conversation: conversation).tag(conversation.id)
+                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
                 }
             } else {
                 Section {
@@ -95,6 +96,7 @@ struct Sidebar: View {
                     Section {
                         ForEach(model.groups) { group in
                             GroupRow(model: model, group: group).tag(group.id)
+                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: group) }
                         }
                     } header: {
                         SidebarHeader(title: "Groups") { window.sheet = .newGroup }
@@ -104,6 +106,7 @@ struct Sidebar: View {
                     ForEach(model.agents) { agent in
                         if let direct = model.directConversation(of: agent) {
                             AgentRow(model: model, agent: agent, unread: model.isUnread(direct.id)).tag(direct.id)
+                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: direct) }
                         }
                     }
                 } header: {
@@ -123,6 +126,30 @@ struct Sidebar: View {
                     Button("New Agent") { window.sheet = .newAgent }
                 } label: { Label("New", systemImage: "plus") }
                     .help("New Investigation, Group or Agent")
+            }
+        }
+    }
+}
+
+/// Shared by sidebar rows and search results; actions target the row that was clicked.
+struct ConversationRowMenu: View {
+    let model: PionModel
+    let window: WindowState
+    let conversation: BotConversation
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+        if model.investigation(conversation.id) == nil {
+            Divider()
+            Button(conversation.kind == .group ? "Edit Group…" : "Edit Agent…") { window.edit(conversation, in: model) }
+        }
+        if conversation.kind == .direct {
+            Divider()
+            Button("Stop") { model.stop(in: conversation.id) }
+                .disabled(model.stoppableAgent(in: conversation.id) == nil)
+            if let agent = model.agent(conversation.participantIDs.first) {
+                Button("Show Workspace in Finder") { NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: model.repository.directory(for: agent).path) }
             }
         }
     }
@@ -197,6 +224,8 @@ struct GroupRow: View {
             }
         }
         .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 
@@ -217,5 +246,7 @@ struct AgentRow: View {
             }
         }
         .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

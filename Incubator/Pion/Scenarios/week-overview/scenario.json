@@ -7,7 +7,7 @@
   "agents": [
     {
       "key": "margot",
-      "name": "Margot",
+      "name": "Lunar Fox",
       "harness": "claude-code",
       "model": "opus",
       "description": "Lead investigator",
@@ -22,7 +22,7 @@
     },
     {
       "key": "juno",
-      "name": "Juno",
+      "name": "Brisk Otter",
       "harness": "claude-code",
       "model": "sonnet",
       "description": "Triage",
@@ -37,7 +37,7 @@
     },
     {
       "key": "odile",
-      "name": "Odile",
+      "name": "Copper Finch",
       "harness": "codex",
       "model": "gpt-5.2-codex",
       "description": "Email analysis",
@@ -48,7 +48,7 @@
     },
     {
       "key": "ines",
-      "name": "Ines",
+      "name": "Clever Heron",
       "harness": "claude-code",
       "model": "opus",
       "description": "Identity and sign-ins",
@@ -59,7 +59,7 @@
     },
     {
       "key": "rafe",
-      "name": "Rafe",
+      "name": "Quiet Lynx",
       "harness": "codex",
       "model": "gpt-5.2-codex",
       "description": "Endpoints and EDR",
@@ -74,7 +74,7 @@
     },
     {
       "key": "theo",
-      "name": "Theo",
+      "name": "Silver Kite",
       "harness": "codex",
       "model": "gpt-5.2-codex",
       "description": "Network and DNS",
@@ -85,7 +85,7 @@
     },
     {
       "key": "sasha",
-      "name": "Sasha",
+      "name": "Indigo Moth",
       "harness": "claude-code",
       "model": "sonnet",
       "description": "Threat intelligence",
@@ -114,7 +114,7 @@
         {
           "at": "13:05",
           "from": "user",
-          "text": "Defender flagged `help.aspx` written by w3wp.exe on SRV-APP-02. @Margot, take it."
+          "text": "Defender flagged `help.aspx` written by w3wp.exe on SRV-APP-02. @Lunar Fox, take it."
         },
         {
           "at": "13:22",
@@ -129,7 +129,7 @@
         {
           "at": "14:10",
           "from": "margot",
-          "text": "Host isolated with your approval, file quarantined. Status is **contained**. Rafe is capturing memory before we rebuild."
+          "text": "Host isolated with your approval, file quarantined. Status is **contained**. Quiet Lynx is capturing memory before we rebuild."
         }
       ],
       "investigation": {

@@ -12,7 +12,7 @@
   "agents": [
     {
       "key": "margot",
-      "name": "Margot",
+      "name": "Lunar Fox",
       "harness": "claude-code",
       "model": "opus",
       "description": "Lead investigator",
@@ -27,7 +27,7 @@
     },
     {
       "key": "ines",
-      "name": "Ines",
+      "name": "Clever Heron",
       "harness": "claude-code",
       "model": "opus",
       "description": "Identity and sign-ins",
@@ -42,7 +42,7 @@
     },
     {
       "key": "rafe",
-      "name": "Rafe",
+      "name": "Quiet Lynx",
       "harness": "codex",
       "model": "gpt-5.2-codex",
       "description": "Endpoints and EDR",
@@ -57,7 +57,7 @@
     },
     {
       "key": "theo",
-      "name": "Theo",
+      "name": "Silver Kite",
       "harness": "codex",
       "model": "gpt-5.2-codex",
       "description": "Network and DNS",
@@ -68,7 +68,7 @@
     },
     {
       "key": "sasha",
-      "name": "Sasha",
+      "name": "Indigo Moth",
       "harness": "claude-code",
       "model": "sonnet",
       "description": "Threat intelligence",
@@ -94,7 +94,7 @@
         {
           "at": "02:07",
           "from": "user",
-          "text": "**INV-0057 is open: Impossible travel for d.price**, severity critical. @Margot leads.\n\nEstablish whether the account owner made the sign-in, and what the session did afterwards."
+          "text": "**INV-0057 is open: Impossible travel for d.price**, severity critical. @Lunar Fox leads.\n\nEstablish whether the account owner made the sign-in, and what the session did afterwards."
         },
         {
           "at": "02:11",

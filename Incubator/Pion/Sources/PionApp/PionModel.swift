@@ -1,4 +1,5 @@
 import Foundation
+import NoodleBrand
 import NoodleCore
 import NoodleRuntime
 import Observation
@@ -313,12 +314,90 @@ import UniformTypeIdentifiers
 
     // MARK: Agents
 
+    static let agentNameStyleKey = "PionAgentNameStyle"
+    static let defaultAgentNameStyle = BotNameStyle.playful
+
+    func suggestedAgentName(style: BotNameStyle = PionModel.defaultAgentNameStyle, excluding: String? = nil) -> String {
+        let taken = Set((agents.map(\.displayName) + [excluding].compactMap { $0 }).map { $0.lowercased() })
+        for _ in 0..<64 {
+            let candidate = BotNameGenerator.random(style: style, excluding: excluding)
+            if !taken.contains(candidate.lowercased()) { return candidate }
+        }
+        let base = BotNameGenerator.random(style: style)
+        var suffix = 2
+        while taken.contains("\(base) \(suffix)".lowercased()) { suffix += 1 }
+        return "\(base) \(suffix)"
+    }
+
+    func agentInstructions(_ agent: AgentRecord) throws -> String {
+        let backstory = try repository.loadAgentBackstory(agent)
+        if backstory == AgentRole.principles { return "" }
+        let suffix = "\n\n" + AgentRole.principles
+        return backstory.hasSuffix(suffix) ? String(backstory.dropLast(suffix.count)) : backstory
+    }
+
+    @discardableResult
+    func updateAgent(_ agent: AgentRecord, name: String, description: String?, instructions: String,
+                     provider: HarnessProvider?, model: String?) throws -> AgentRecord {
+        let name = try ConversationName.validated(name)
+        guard let current = self.agent(agent.id) else { throw WorkspaceError.missingAgent(agent.id) }
+        let previous = try agentInstructions(current)
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: current, conversations: conversations)
+        let profile = try repository.loadAgentHarnessProfile(current)
+        let updated: AgentRecord
+        do {
+            updated = try repository.updateAgent(current, displayName: name, harnessIdentifier: provider?.rawValue,
+                modelIdentifier: model, reasoningEffort: current.reasoningEffort, publicDescription: description,
+                avatarSymbolName: current.avatarSymbolName, avatarColorIndex: current.avatarColorIndex,
+                avatarImageData: current.avatarImageData, now: now)
+            try repository.updateAgentBackstory(updated, backstory: instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                                                + "\n\n" + AgentRole.principles)
+            if current.harnessIdentifier != updated.harnessIdentifier, profile != nil {
+                // A profile belongs to its harness; a new harness uses its own default login.
+                try repository.updateAgentHarnessProfile(updated, profile: nil)
+            }
+            for var conversation in conversations where conversation.kind == .direct && conversation.participantIDs == [agent.id] {
+                conversation.displayName = updated.displayName
+                conversation.updatedAt = now
+                try repository.updateConversation(conversation)
+            }
+            try repository.synchronizeAgentWorkspace(updated)
+        } catch {
+            do { try checkpoint.restore(); try repository.synchronizeAgentWorkspace(current) }
+            catch { throw CaseError("The agent could not be saved or fully restored: \(error.localizedDescription)") }
+            throw error
+        }
+        reload()
+        if running && !isScripted {
+            runtime.authorizeSelectedHarness(updated)
+            runtime.restart(agent: updated, repository: repository,
+                            resetThread: previous != instructions.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return updated
+    }
+
+    @discardableResult
+    func updateGroup(_ group: BotConversation, name: String, description: String?, members: Set<UUID>) throws -> BotConversation {
+        guard investigation(group.id) == nil else { throw CaseError("Use the investigation's controls to edit its team.") }
+        let updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
+                                                 participantIDs: Array(members), existingAgents: agents, now: now)
+        reload()
+        readTranscript(group.id, notifying: true)
+        if running && !isScripted {
+            for id in try repository.synchronizeAgentWorkspaces(agents) {
+                runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository)
+            }
+        }
+        return updated
+    }
+
     var installedProviders: [HarnessProvider] { runtime.availableInstallations.map(\.provider) }
     func models(for provider: HarnessProvider) -> [HarnessModel] { runtime.models(for: provider.rawValue) }
 
     @discardableResult
     func createAgent(name: String, description: String?, instructions: String, provider: HarnessProvider?, model: String?,
                      effort: String? = nil, symbol: String? = nil, color: Int? = nil) throws -> AgentRecord {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? suggestedAgentName() : name
         let created = try repository.createAgent(named: name, harnessIdentifier: provider?.rawValue, modelIdentifier: model,
                                                  reasoningEffort: effort, publicDescription: description,
                                                  avatarSymbolName: symbol, avatarColorIndex: color,

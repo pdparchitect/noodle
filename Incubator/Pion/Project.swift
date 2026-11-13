@@ -59,6 +59,7 @@ let project = Project(
         .local(path: "../../Shared/SettingsUI"),
         .local(path: "../../Shared/HubLink"),
         .local(path: "../../Shared/Wallpaper"),
+        .local(path: "../../Shared/Brand"),
     ],
     settings: .settings(
         base: [
@@ -106,6 +107,7 @@ let project = Project(
                 "../../Sources/Noodle/VoiceCaptureRecovery.swift",
                 "../../Sources/Noodle/VoiceInputDevice.swift",
                 "../../Sources/Noodle/TranscriptScrollView.swift",
+                "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
             ],
             resources: [
                 "Support/Assets.xcassets",
@@ -118,6 +120,7 @@ let project = Project(
             scripts: [embedHelpers],
             dependencies: [
                 .package(product: "PionCore"),
+                .package(product: "NoodleBrand"),
                 .package(product: "NoodleCore"),
                 .package(product: "NoodleRuntime"),
                 .package(product: "NoodleRuntimeSettings"),
@@ -158,9 +161,11 @@ let project = Project(
             deploymentTargets: .macOS("26.0"),
             infoPlist: .default,
             // Test the model without launching the app or starting anyone's harnesses.
-            sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift", "Sources/PionApp/MessageBodyRenderer.swift"],
+            sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift", "Sources/PionApp/MessageBodyRenderer.swift",
+                      "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift",
+                      "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),
-                           .package(product: "HubLink")],
+                           .package(product: "HubLink"), .package(product: "NoodleBrand")],
             settings: .settings(base: ["CODE_SIGNING_ALLOWED": "NO"])
         ),
         // Launches harnesses under their sandbox. It accepts Pion alone, and Pion accepts it alone.
