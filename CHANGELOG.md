@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Suite Installer starts with every supported component selected, including Terminal, and lets you turn off any of them, including Noodle.
 - Noodle Installer offers its optional companions again; Suite Installer also offers Noodle Hub. Noodle and Hub disk images each contain only their respective app; the Suite disk image includes all released Mac apps and the Terminal command. Downloads list Noodle, Hub, then Suite.
 
 ## [0.85.0] - 2026-11-13

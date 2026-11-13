@@ -78,7 +78,7 @@ class DistributionTests(unittest.TestCase):
                     self.assertEqual(root.find(page).get('file'), page + '.html')
 
     def test_each_installer_requires_its_own_app_and_offers_the_companions(self):
-        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name)
                 found = choices(root)
@@ -102,14 +102,24 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(root.find('product').get('id'), installers.INSTALLERS[name]['identifier'])
                 self.assertEqual(root.find('product').get('version'), '1.2.3')
 
-    def test_terminal_starts_unchecked_and_the_apps_checked(self):
+    def test_suite_all_supported_choices_start_selected_and_can_be_deselected(self):
         found = choices(parse('Noodle-Suite-Installer.pkg'))
+        for product, item in components().items():
+            with self.subTest(product=product):
+                choice = found[product]
+                self.assertEqual(choice.get('start_selected'), f"supports('{item['minimum']}')")
+                self.assertEqual(choice.get('start_enabled'), f"supports('{item['minimum']}')")
+                self.assertIsNone(choice.get('selected'))  # No forced selection overrides a person's choice.
+                self.assertIsNone(choice.get('enabled'))
+
+    def test_terminal_starts_unchecked_and_the_apps_checked(self):
+        found = choices(parse('Noodle-Installer.pkg'))
         self.assertEqual(found['terminal'].get('start_selected'), 'false')
         for product in ['computer', 'browser', 'applet']:
             self.assertEqual(found[product].get('start_selected'), f"supports('{MINIMUMS[product]}')")
 
     def test_installer_checks_apple_silicon_and_the_required_apps_macos(self):
-        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name, components(**{required: dict(minimum='26.1')}))
                 self.assertEqual(root.find('allowed-os-versions/os-version').get('min'), '26.1')
@@ -264,6 +274,22 @@ class LocalBuildTests(unittest.TestCase):
                     subprocess.run(['pkgutil', '--expand', str(package), str(expanded)], check=True)
                     root = ElementTree.parse(expanded / 'Distribution').getroot()
                     self.assertEqual(root.find('options').get('customize'), 'always')
+                    packaged_choices = {key: value for key, value in choices(root).items()
+                                        if not key.endswith('.unavailable')}
+                    if name == 'Noodle-Suite-Installer.pkg':
+                        self.assertEqual(set(packaged_choices), set(components()))
+                        for product, choice in packaged_choices.items():
+                            self.assertEqual(choice.get('start_selected'),
+                                             f"supports('{components()[product]['minimum']}')")
+                            self.assertEqual(choice.get('start_enabled'),
+                                             f"supports('{components()[product]['minimum']}')")
+                            self.assertIsNone(choice.get('enabled'))
+                            self.assertIsNone(choice.get('selected'))
+                    else:
+                        required_choice = packaged_choices[installers.INSTALLERS[name]['required']]
+                        self.assertEqual(required_choice.get('enabled'), 'false')
+                        self.assertEqual(required_choice.get('selected'), 'true')
+                        self.assertEqual(packaged_choices['terminal'].get('start_selected'), 'false')
                     for page in ['welcome', 'readme', 'conclusion']:
                         self.assertTrue((expanded / 'Resources' / (page + '.html')).is_file())
                     required = installers.INSTALLERS[name]['required']
