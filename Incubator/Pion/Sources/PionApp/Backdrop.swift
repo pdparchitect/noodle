@@ -15,7 +15,7 @@ enum BackdropEffect: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .none: "None"
-        case .glyphs: "Falling Glyphs"
+        case .glyphs: "Glyphs"
         case .grid: "Grid"
         case .scanlines: "Scanlines"
         case .network: "Network"
