@@ -72,7 +72,7 @@ Each agent keeps its own workspace, backstory and history, and runs on the
 
 The Noodle Installer installs Noodle and lets you choose Noodle Computer, Noodle Browser, Noodle Applet and Noodle Terminal too.
 The Noodle Hub Installer sets up an always-on Mac: Noodle Hub, and the apps its bots use there.
-The Suite Installer also offers Noodle Hub. Noodle and Hub DMGs each contain just their respective app; the Suite DMG contains all the apps and the Terminal command. To use Terminal, copy `noodle` to a folder on your command search path.
+The Suite Installer offers every component, including Noodle Hub and Terminal, selected at the start; you can turn off any of them, including Noodle. Noodle and Hub DMGs each contain just their respective app; the Suite DMG contains all the apps and the Terminal command. To use Terminal, copy `noodle` to a folder on your command search path.
 Or open a DMG and drag the app to **Applications**; ZIP downloads of every Mac app are on the [releases page](https://github.com/pdparchitect/noodle/releases).
 To remove an app, drag it from Applications to the Bin; to remove the `noodle` command, delete it from `/usr/local/bin`.
 Each app's README shows how to set it up and use it.
