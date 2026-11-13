@@ -53,7 +53,7 @@ UNCHECKED = {'terminal'}
 COMPANIONS = ['computer', 'browser', 'applet', 'terminal']
 INSTALLERS = {
     'Noodle-Suite-Installer.pkg': dict(title='Noodle Suite', identifier='com.pdparchitect.noodle.pkg.suite-installer',
-                                       required='noodle', optional=['hub', *COMPANIONS], resources='Suite'),
+                                       required='noodle', optional=['hub', *COMPANIONS], resources='Suite', all_optional=True),
     'Noodle-Installer.pkg': dict(title='Noodle', identifier='com.pdparchitect.noodle.pkg.installer',
                                  required='noodle', optional=COMPANIONS, resources='Noodle'),
     'Noodle-Hub-Installer.pkg': dict(title='Noodle Hub', identifier='com.pdparchitect.noodle.pkg.hub-installer',
@@ -107,6 +107,8 @@ def distribution(installer, items):
     required app's macOS, and a greyed-out row saying why for any companion this Mac cannot run."""
     spec = INSTALLERS[installer]
     required = spec['required']
+    # Suite uses Noodle for product metadata, but never locks any component on.
+    all_optional = spec.get('all_optional', False)
     if required not in items:
         raise ValueError(f'{name(required)} has no published release to install')
     optional = [product for product in spec['optional'] if product in items]
@@ -121,11 +123,11 @@ def distribution(installer, items):
         check = f"supports('{item['minimum']}')"
         outline.append(product)
         reference = f'        <pkg-ref id="{PACKAGES[product]}"/>\n'
-        if product == required:
+        if product == required and not all_optional:
             choices.append(f'    <choice{attributes(id=product, title=name(product), description=DESCRIPTIONS[product], start_selected="true", selected="true", enabled="false")}>\n'
                            f'{reference}    </choice>\n')
         else:
-            selected = 'false' if product in UNCHECKED else check
+            selected = 'false' if product in UNCHECKED and not all_optional else check
             choices.append(f'    <choice{attributes(id=product, title=name(product), description=DESCRIPTIONS[product], start_visible=check, start_enabled=check, start_selected=selected)}>\n'
                            f'{reference}    </choice>\n')
             # Installer cannot explain a disabled choice, so a stand-in row with the reason replaces it.
