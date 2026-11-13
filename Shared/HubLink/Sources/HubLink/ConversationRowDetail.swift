@@ -1,3 +1,5 @@
+import HubWire
+
 /// What the line under a bot's or group's name in the conversation list says.
 public enum ConversationRowDetail: String, CaseIterable, Identifiable, Sendable {
     case latestMessage, description, status
@@ -20,9 +22,12 @@ public enum ConversationRowDetail: String, CaseIterable, Identifiable, Sendable 
     public func line(isGroup: Bool, description: String?, status: String?, latestReply: () -> String?,
                      latestMessage: String) -> String {
         func shown(_ text: String?) -> String? {
-            guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
-            return text
+            guard let text else { return nil }
+            let plain = MarkdownPlainText.convert(text)
+            guard !plain.isEmpty else { return nil }
+            return plain
         }
+        let latestMessage = MarkdownPlainText.convert(latestMessage)
         switch self {
         case .latestMessage: return latestMessage
         case .description: return shown(description) ?? latestMessage
