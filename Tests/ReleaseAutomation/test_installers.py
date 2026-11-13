@@ -78,7 +78,7 @@ class DistributionTests(unittest.TestCase):
                     self.assertEqual(root.find(page).get('file'), page + '.html')
 
     def test_each_installer_requires_its_own_app_and_offers_the_companions(self):
-        for name, required in [('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name)
                 found = choices(root)
@@ -98,14 +98,20 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(root.find('product').get('id'), installers.INSTALLERS[name]['identifier'])
                 self.assertEqual(root.find('product').get('version'), '1.2.3')
 
+    def test_standalone_noodle_installs_only_noodle(self):
+        root = parse('Noodle-Installer.pkg')
+        self.assertEqual(set(choices(root)), {'noodle'})
+        self.assertEqual(root.find('title').text, 'Noodle')
+        self.assertEqual([ref.get('id') for ref in root.findall('pkg-ref')], [installers.PACKAGES['noodle']])
+
     def test_terminal_starts_unchecked_and_the_apps_checked(self):
-        found = choices(parse('Noodle-Installer.pkg'))
+        found = choices(parse('Noodle-Suite-Installer.pkg'))
         self.assertEqual(found['terminal'].get('start_selected'), 'false')
         for product in ['computer', 'browser', 'applet']:
             self.assertEqual(found[product].get('start_selected'), f"supports('{MINIMUMS[product]}')")
 
     def test_installer_checks_apple_silicon_and_the_required_apps_macos(self):
-        for name, required in [('Noodle-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
+        for name, required in [('Noodle-Suite-Installer.pkg', 'noodle'), ('Noodle-Hub-Installer.pkg', 'hub')]:
             with self.subTest(name=name):
                 root = parse(name, components(**{required: dict(minimum='26.1')}))
                 self.assertEqual(root.find('allowed-os-versions/os-version').get('min'), '26.1')
@@ -117,7 +123,7 @@ class DistributionTests(unittest.TestCase):
                 self.assertIn('macOS 26.1 or later', script)
 
     def test_choices_that_cannot_run_on_this_mac_are_greyed_out_with_the_reason(self):
-        root = parse('Noodle-Installer.pkg', components(computer=dict(minimum='26.2')))
+        root = parse('Noodle-Suite-Installer.pkg', components(computer=dict(minimum='26.2')))
         found = choices(root)
         for product, minimum, label in [('computer', '26.2', 'macOS 26.2'), ('applet', '15.0', 'macOS 15'),
                                         ('browser', '26.0', 'macOS 26'), ('terminal', '26.0', 'macOS 26')]:
@@ -144,6 +150,9 @@ class DistributionTests(unittest.TestCase):
                     description = choice.get('description', '')
                     self.assertTrue(description.endswith('.'), description)
                     self.assertNotIn('...', description)
+            if name == 'Noodle-Installer.pkg':
+                self.assertEqual(set(refs), {installers.PACKAGES['noodle']})
+                continue
             self.assertEqual(refs[installers.PACKAGES['applet']].get('installKBytes'), '4321')
             self.assertEqual(refs[installers.PACKAGES['applet']].get('version'), '1.2.3')
             self.assertEqual(refs[installers.PACKAGES['applet']].text, '#applet.pkg')
@@ -159,6 +168,7 @@ class DistributionTests(unittest.TestCase):
             'terminal': 'com.pdparchitect.noodle.pkg.terminal',
         })
         self.assertEqual({name: item['identifier'] for name, item in installers.INSTALLERS.items()}, {
+            'Noodle-Suite-Installer.pkg': 'com.pdparchitect.noodle.pkg.suite-installer',
             'Noodle-Installer.pkg': 'com.pdparchitect.noodle.pkg.installer',
             'Noodle-Hub-Installer.pkg': 'com.pdparchitect.noodle.pkg.hub-installer',
         })
@@ -166,7 +176,7 @@ class DistributionTests(unittest.TestCase):
     def test_unpublished_companions_are_left_out_but_the_required_app_is_not(self):
         items = components()
         del items['terminal']
-        found = choices(parse('Noodle-Installer.pkg', items))
+        found = choices(parse('Noodle-Suite-Installer.pkg', items))
         self.assertNotIn('terminal', found)
         self.assertNotIn('terminal.unavailable', found)
         del items['hub']
@@ -181,9 +191,10 @@ class DistributionTests(unittest.TestCase):
                     self.assertIn('color-scheme', text)
                     self.assertNotIn('...', text)
             readme = (installers.RESOURCES / item['resources'] / 'readme.html').read_text()
-            for product in [item['required'], *OPTIONAL]:
+            for product in [item['required'], *item['optional']]:
                 self.assertIn(suite.PRODUCTS[product][1], readme)
-            self.assertIn('/usr/local/bin', readme)
+            if item['optional']:
+                self.assertIn('/usr/local/bin', readme)
             conclusion = (installers.RESOURCES / item['resources'] / 'conclusion.html').read_text()
             self.assertIn('first', conclusion)  # Permissions are asked for on first launch.
             self.assertIn('up to date', conclusion)

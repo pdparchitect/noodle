@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build the Noodle and Noodle Hub Installer packages from a fetched Suite; never compile an app.
+"""Build the Noodle Suite, Noodle and Noodle Hub Installer packages from a fetched Suite; never compile an app.
 
     python3 scripts/suite-release.py plan && python3 scripts/suite-release.py fetch
     python3 scripts/build-installers.py dist/suite                     # unsigned, for a local look
     python3 scripts/build-installers.py dist/suite --sign "Developer ID Installer: …" --notarize
 
 Reads the verified apps in SUITE/apps, the `noodle` command in SUITE/command and the versions in
-SUITE/assets/suite-manifest.json, and writes Noodle-Installer.pkg and Noodle-Hub-Installer.pkg with
+SUITE/assets/suite-manifest.json, and writes Noodle-Suite-Installer.pkg, Noodle-Installer.pkg and Noodle-Hub-Installer.pkg with
 their checksums to SUITE/assets. Each app becomes a component package for /Applications and the
 command one for /usr/local/bin; each installer is a product archive whose choices page lists them.
 Notarizing uses scripts/notarize.sh and its APPLE_API_KEY_* variables.
@@ -52,8 +52,10 @@ DEFAULT_MINIMUM = '26.0'
 UNCHECKED = {'terminal'}
 COMPANIONS = ['computer', 'browser', 'applet', 'terminal']
 INSTALLERS = {
+    'Noodle-Suite-Installer.pkg': dict(title='Noodle Suite', identifier='com.pdparchitect.noodle.pkg.suite-installer',
+                                       required='noodle', optional=COMPANIONS, resources='Suite'),
     'Noodle-Installer.pkg': dict(title='Noodle', identifier='com.pdparchitect.noodle.pkg.installer',
-                                 required='noodle', optional=COMPANIONS, resources='Noodle'),
+                                 required='noodle', optional=[], resources='Noodle'),
     'Noodle-Hub-Installer.pkg': dict(title='Noodle Hub', identifier='com.pdparchitect.noodle.pkg.hub-installer',
                                      required='hub', optional=COMPANIONS, resources='Hub'),
 }
