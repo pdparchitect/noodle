@@ -15,6 +15,7 @@
 
 ### Added
 
+- Assign shared folders with read-only or read-and-write access to agents, groups and investigations. Agent editors now have General, Runtime and Tools sections, including harness profiles and reasoning effort. Add, configure and assign tool connections to agents, including from team editors; assignments reach the running agents and can be revoked. Investigations can be edited from their toolbar or context menu.
 - Pion's first version: Investigations, groups and agents in one sidebar, each Investigation with an objective, a scope, a status, a lead agent and a case record of entities, evidence, findings and proposed actions beside the conversation.
 - Conversations read as documents: agents' messages fill a reading column with their name above, yours sit on the right, and nothing is folded away.
 - A message field with @mentions, attachments and dictation that turns speech into text before you send it.

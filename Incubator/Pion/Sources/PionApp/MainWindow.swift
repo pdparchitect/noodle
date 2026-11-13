@@ -31,6 +31,7 @@ struct MainWindow: View {
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
+        .onOpenURL { _ = model.mcp.receiveAuthorizationCallback($0) }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
@@ -70,6 +71,11 @@ struct Sidebar: View {
                 Section {
                     ForEach(active) { investigation in
                         InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
+                            .contextMenu {
+                                if let conversation = model.conversation(investigation.id) {
+                                    ConversationRowMenu(model: model, window: window, conversation: conversation)
+                                }
+                            }
                     }
                 } header: {
                     SidebarHeader(title: "Investigations") { window.sheet = .newInvestigation }
@@ -140,10 +146,10 @@ struct ConversationRowMenu: View {
 
     var body: some View {
         Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
-        if model.investigation(conversation.id) == nil {
-            Divider()
-            Button(conversation.kind == .group ? "Edit Group…" : "Edit Agent…") { window.edit(conversation, in: model) }
-        }
+        Divider()
+        Button(model.investigation(conversation.id) != nil ? "Edit Investigation…" : conversation.kind == .group ? "Edit Group…" : "Edit Agent…") {
+            window.edit(conversation, in: model)
+        }.disabled(model.investigation(conversation.id)?.isClosed == true)
         if conversation.kind == .direct {
             Divider()
             Button("Stop") { model.stop(in: conversation.id) }

@@ -108,6 +108,7 @@ let project = Project(
                 "../../Sources/Noodle/VoiceInputDevice.swift",
                 "../../Sources/Noodle/TranscriptScrollView.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
+                "../../Sources/Noodle/BotFolderPicker.swift",
             ],
             resources: [
                 "Support/Assets.xcassets",
@@ -165,7 +166,7 @@ let project = Project(
                       "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift",
                       "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),
-                           .package(product: "HubLink"), .package(product: "NoodleBrand")],
+                           .package(product: "HubLink"), .package(product: "NoodleBrand"), .package(product: "NoodleRuntimeSettings")],
             settings: .settings(base: ["CODE_SIGNING_ALLOWED": "NO"])
         ),
         // Launches harnesses under their sandbox. It accepts Pion alone, and Pion accepts it alone.

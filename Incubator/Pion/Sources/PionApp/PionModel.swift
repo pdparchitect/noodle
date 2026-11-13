@@ -2,6 +2,7 @@ import Foundation
 import NoodleBrand
 import NoodleCore
 import NoodleRuntime
+import NoodleRuntimeSettings
 import Observation
 import PionCore
 import UniformTypeIdentifiers
@@ -13,6 +14,20 @@ import UniformTypeIdentifiers
     let runtime: AgentRuntimeCoordinator
     let store: PionStore
     let harnessProfiles: HarnessProfilesController
+    let mcp: MCPController
+
+    struct AgentResources {
+        var folders: [AgentFolder] = []
+        var connections: Set<UUID> = []
+        var profile: UUID?
+    }
+
+    func resources(for agent: AgentRecord) throws -> AgentResources {
+        AgentResources(folders: try repository.loadAgentFolders(agent), connections: mcp.selectedIDs(for: agent),
+                       profile: try repository.loadAgentHarnessProfile(agent))
+    }
+
+    func toolManifests(for agent: UUID) -> [ToolProviderManifest] { tools.manifests(assignments: toolAssignments.assignments(for: agent)) }
     /// A scenario's agents never run; their phases and messages come from its script.
     let isScripted: Bool
 
@@ -38,12 +53,14 @@ import UniformTypeIdentifiers
     private let messenger: MessengerBroker
     private var toolBroker: ToolBridgeBroker?
     private let tools = ToolProviderRegistry()
+    private let toolAssignments = ToolAssignmentStore()
     private var loop: Task<Void, Never>?
     private var transcriptDates: [UUID: Date] = [:]
     private var running = false
 
     init(root: URL, messenger launcher: URL?, isScripted: Bool = false) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: launcher)
+        mcp = MCPController(repository: repository)
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
         if !isScripted { discovery.removeSupersededManagedHarnesses() }
@@ -66,6 +83,11 @@ import UniformTypeIdentifiers
         try? tools.register(CaseToolProvider(store: store) { id in
             (try? repository.loadAgents())?.first { $0.id == id }?.displayName
         })
+        mcp.toolRegistry = tools
+        mcp.onAssignmentsChange = { [weak self, toolAssignments] granted in
+            toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
+            self?.toolBroker?.synchronizeSkills()
+        }
     }
 
     // MARK: Running
@@ -109,13 +131,20 @@ import UniformTypeIdentifiers
     }
 
     private func startTools() throws {
+        mcp.start(agents: agents)
         if toolBroker == nil {
             // Every agent has the case tool; the broker refuses conversations it is not in.
-            let broker = ToolBridgeBroker(registry: tools, host: .repository(repository) { _ in .none }) { _ in .none }
+            let assignments = toolAssignments
+            let broker = ToolBridgeBroker(registry: tools, host: .repository(repository) { assignments.assignments(for: $0) }) {
+                assignments.assignments(for: $0)
+            }
             broker.onSkillsChanged = { [weak self] id in
                 Task { @MainActor in
                     guard let self, let agent = self.agents.first(where: { $0.id == id }) else { return }
                     _ = try? self.repository.synchronizeAgentWorkspace(agent)
+                    if self.running && !self.isScripted {
+                        self.runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: self.repository)
+                    }
                 }
             }
             toolBroker = broker
@@ -338,21 +367,28 @@ import UniformTypeIdentifiers
 
     @discardableResult
     func updateAgent(_ agent: AgentRecord, name: String, description: String?, instructions: String,
-                     provider: HarnessProvider?, model: String?) throws -> AgentRecord {
+                     provider: HarnessProvider?, model: String?, effort: String? = nil,
+                     resources: AgentResources? = nil) throws -> AgentRecord {
         let name = try ConversationName.validated(name)
+        let resources = try resources.map { try validated($0, provider: provider) }
         guard let current = self.agent(agent.id) else { throw WorkspaceError.missingAgent(agent.id) }
         let previous = try agentInstructions(current)
         let checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: current, conversations: conversations)
         let profile = try repository.loadAgentHarnessProfile(current)
         let updated: AgentRecord
         do {
+            let chosenEffort = effort.map { $0.isEmpty ? nil : $0 } ?? current.reasoningEffort
             updated = try repository.updateAgent(current, displayName: name, harnessIdentifier: provider?.rawValue,
-                modelIdentifier: model, reasoningEffort: current.reasoningEffort, publicDescription: description,
+                modelIdentifier: model, reasoningEffort: chosenEffort, publicDescription: description,
                 avatarSymbolName: current.avatarSymbolName, avatarColorIndex: current.avatarColorIndex,
                 avatarImageData: current.avatarImageData, now: now)
             try repository.updateAgentBackstory(updated, backstory: instructions.trimmingCharacters(in: .whitespacesAndNewlines)
                                                 + "\n\n" + AgentRole.principles)
-            if current.harnessIdentifier != updated.harnessIdentifier, profile != nil {
+            if let resources {
+                try repository.updateAgentFolders(updated, folders: resources.folders)
+                try repository.updateAgentHarnessProfile(updated, profile: resources.profile)
+                try mcp.assign(resources.connections, to: updated, synchronizeWorkspace: false)
+            } else if current.harnessIdentifier != updated.harnessIdentifier, profile != nil {
                 // A profile belongs to its harness; a new harness uses its own default login.
                 try repository.updateAgentHarnessProfile(updated, profile: nil)
             }
@@ -363,7 +399,7 @@ import UniformTypeIdentifiers
             }
             try repository.synchronizeAgentWorkspace(updated)
         } catch {
-            do { try checkpoint.restore(); try repository.synchronizeAgentWorkspace(current) }
+            do { try checkpoint.restore(); try mcp.reloadAssignments(); try repository.synchronizeAgentWorkspace(current) }
             catch { throw CaseError("The agent could not be saved or fully restored: \(error.localizedDescription)") }
             throw error
         }
@@ -377,31 +413,88 @@ import UniformTypeIdentifiers
     }
 
     @discardableResult
-    func updateGroup(_ group: BotConversation, name: String, description: String?, members: Set<UUID>) throws -> BotConversation {
+    func updateGroup(_ group: BotConversation, name: String, description: String?, members: Set<UUID>,
+                     folders: [AgentFolder]? = nil, memberTools: [UUID: Set<UUID>] = [:]) throws -> BotConversation {
         guard investigation(group.id) == nil else { throw CaseError("Use the investigation's controls to edit its team.") }
-        let updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
-                                                 participantIDs: Array(members), existingAgents: agents, now: now)
+        _ = try ConversationName.validated(name)
+        try validateMemberTools(memberTools, members: members)
+        let folders = try folders.map { try AgentFolder.validated($0, protecting: AgentFolder.protectedLocations(root: repository.rootURL)) }
+        let before = conversation(group.id) ?? group
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
+        let updated: BotConversation
+        do {
+            try assignMemberTools(memberTools)
+            updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
+                                                  participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+        } catch { try checkpoint.restore(); try mcp.reloadAssignments(); throw error }
         reload()
         readTranscript(group.id, notifying: true)
-        if running && !isScripted {
-            for id in try repository.synchronizeAgentWorkspaces(agents) {
-                runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository)
-            }
-        }
+        synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
         return updated
     }
 
+    private func validated(_ resources: AgentResources, provider: HarnessProvider?) throws -> AgentResources {
+        let folders = try AgentFolder.validated(resources.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        try mcp.validateAssignment(resources.connections)
+        if let profile = resources.profile {
+            guard let saved = harnessProfiles.profile(profile), saved.provider == provider else {
+                throw CaseError("Choose a profile belonging to this harness.")
+            }
+        }
+        return AgentResources(folders: folders, connections: resources.connections, profile: resources.profile)
+    }
+
+    private func validateMemberTools(_ assignments: [UUID: Set<UUID>], members: Set<UUID>) throws {
+        guard !members.isEmpty, members.isSubset(of: Set(agents.map(\.id))), Set(assignments.keys).isSubset(of: members) else {
+            throw CaseError("Choose current team members before assigning tools.")
+        }
+        for ids in assignments.values { try mcp.validateAssignment(ids) }
+    }
+
+    private func assignMemberTools(_ assignments: [UUID: Set<UUID>]) throws {
+        for (id, connections) in assignments {
+            guard let agent = agent(id) else { throw WorkspaceError.missingAgent(id) }
+            try mcp.assign(connections, to: agent, synchronizeWorkspace: false)
+        }
+    }
+
+    /// Folder grants are copied into agent configuration and fixed when its sandbox launches.
+    /// Tool grants remain per agent and are checked by the broker around every call.
+    private func synchronizeResourceWorkspaces(restarting ids: Set<UUID>) {
+        do {
+            let changed = try repository.synchronizeAgentWorkspaces(agents)
+            guard running && !isScripted else { return }
+            for agent in agents where ids.contains(agent.id) { runtime.restart(agent: agent, repository: repository) }
+            for id in changed where !ids.contains(id) { runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository) }
+        } catch { problem = "Settings were saved, but the agents could not be updated: \(error.localizedDescription)" }
+    }
+
     var installedProviders: [HarnessProvider] { runtime.availableInstallations.map(\.provider) }
-    func models(for provider: HarnessProvider) -> [HarnessModel] { runtime.models(for: provider.rawValue) }
+    func models(for provider: HarnessProvider, profile: UUID? = nil) -> [HarnessModel] { runtime.models(for: provider.rawValue, profile: profile) }
 
     @discardableResult
     func createAgent(name: String, description: String?, instructions: String, provider: HarnessProvider?, model: String?,
-                     effort: String? = nil, symbol: String? = nil, color: Int? = nil) throws -> AgentRecord {
+                     effort: String? = nil, symbol: String? = nil, color: Int? = nil,
+                     resources: AgentResources = AgentResources()) throws -> AgentRecord {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? suggestedAgentName() : name
+        let resources = try validated(resources, provider: provider)
+        try repository.prepare()
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
         let created = try repository.createAgent(named: name, harnessIdentifier: provider?.rawValue, modelIdentifier: model,
                                                  reasoningEffort: effort, publicDescription: description,
                                                  avatarSymbolName: symbol, avatarColorIndex: color,
                                                  backstory: instructions + "\n\n" + AgentRole.principles, now: now)
+        do {
+            try repository.updateAgentFolders(created.agent, folders: resources.folders)
+            try repository.updateAgentHarnessProfile(created.agent, profile: resources.profile)
+            try mcp.assign(resources.connections, to: created.agent, synchronizeWorkspace: false)
+            try repository.synchronizeAgentWorkspace(created.agent)
+        } catch {
+            let failure = error
+            try checkpoint.restore(); try mcp.reloadAssignments()
+            try repository.deleteAgent(created.agent)
+            throw failure
+        }
         reload()
         if running {
             restartBrokers()
@@ -456,28 +549,42 @@ import UniformTypeIdentifiers
     func attachment(_ id: UUID, in conversation: UUID) -> ConversationAttachment? { attachments[conversation]?[id] }
 
     @discardableResult
-    func createGroup(name: String, description: String?, members: Set<UUID>) throws -> BotConversation {
-        let group = try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
-                                               existingAgents: agents, now: now)
+    func createGroup(name: String, description: String?, members: Set<UUID>, folders: [AgentFolder] = [],
+                     memberTools: [UUID: Set<UUID>] = [:]) throws -> BotConversation {
+        _ = try ConversationName.validated(name)
+        let folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        try validateMemberTools(memberTools, members: members)
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
+        let group: BotConversation
+        do {
+            try assignMemberTools(memberTools)
+            group = try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
+                                                existingAgents: agents, folders: folders, now: now)
+        } catch { try checkpoint.restore(); try mcp.reloadAssignments(); throw error }
         reload()
         readTranscript(group.id, notifying: false)
+        synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: nil, to: group))
         return group
     }
 
     func setMembers(_ ids: Set<UUID>, of conversation: BotConversation) {
-        let lead = investigation(conversation.id)?.leadAgentID.map { Set([$0]) } ?? []
+        let investigation = store.investigation(conversation.id)
+        guard investigation?.isClosed != true else { problem = "Reopen this investigation before changing its team."; return }
+        let previous = self.conversation(conversation.id) ?? conversation
+        let lead = investigation?.leadAgentID.map { Set([$0]) } ?? []
         let members = ids.union(lead)
-        let before = Set(conversation.participantIDs)
+        let before = Set(previous.participantIDs)
         guard members != before, !members.isEmpty else { return }
         do {
-            _ = try repository.updateGroupParticipants(conversationID: conversation.id, participantIDs: Array(members), existingAgents: agents, now: now)
+            let updated = try repository.updateGroupParticipants(conversationID: conversation.id, participantIDs: Array(members), existingAgents: agents, now: now)
             reload()
+            synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: previous, to: updated))
             let added = agents.filter { members.subtracting(before).contains($0.id) }.map(\.displayName)
             let removed = agents.filter { before.subtracting(members).contains($0.id) }.map(\.displayName)
             var parts: [String] = []
             if !added.isEmpty { parts.append("added " + added.formatted(.list(type: .and))) }
             if !removed.isEmpty { parts.append("removed " + removed.formatted(.list(type: .and))) }
-            if investigation(conversation.id) != nil {
+            if investigation != nil {
                 try store.append(AuditEntry(at: now, actor: .champion(champion), event: "staff", detail: parts.joined(separator: "; ")), to: conversation.id)
             }
             try send("I have \(parts.joined(separator: " and ")).", in: conversation.id)
@@ -493,6 +600,46 @@ import UniformTypeIdentifiers
         var severity = Investigation.Severity.medium
         var lead: UUID?
         var staff: Set<UUID> = []
+        var folders: [AgentFolder] = []
+        var memberTools: [UUID: Set<UUID>] = [:]
+    }
+
+    @discardableResult
+    func updateInvestigation(_ investigation: Investigation, draft: Draft) throws -> Investigation {
+        guard let current = store.investigation(investigation.id), !current.isClosed else { throw CaseError("Reopen this investigation before editing it.") }
+        guard let lead = draft.lead else { throw CaseError("Choose a lead agent.") }
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { throw CaseError("Give the investigation a title.") }
+        let members = draft.staff.union([lead])
+        try validateMemberTools(draft.memberTools, members: members)
+        let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
+        let group: BotConversation
+        let updated: Investigation
+        let toolsChanged = draft.memberTools.contains { id, ids in agent(id).map { mcp.selectedIDs(for: $0) != ids } ?? false }
+        do {
+            try assignMemberTools(draft.memberTools)
+            group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
+                publicDescription: draft.objective, participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+            updated = try store.update(current.id, by: .champion(champion), now: now) { value in
+                var events: [(event: String, detail: String)] = []
+                if value.title != title { events.append(("title", title)); value.title = title }
+                if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
+                let scope = Investigation.scope(from: draft.scope)
+                if value.scope != scope { events.append(("scope", scope.joined(separator: ", "))); value.scope = scope }
+                if value.severity != draft.severity { events.append(("severity", draft.severity.title)); value.severity = draft.severity }
+                if value.leadAgentID != lead { events.append(("lead", agent(lead)?.displayName ?? lead.uuidString)); value.leadAgentID = lead }
+                if Set(before.participantIDs) != members { events.append(("staff", "Updated the investigation team.")) }
+                if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
+                if toolsChanged { events.append(("tools", "Updated the team's agent tool assignments.")) }
+                return events
+            }
+        } catch { try checkpoint.restore(); try mcp.reloadAssignments(); throw error }
+        reload()
+        readTranscript(group.id, notifying: true)
+        synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
+        return updated
     }
 
     @discardableResult
@@ -501,9 +648,12 @@ import UniformTypeIdentifiers
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw CaseError("Give the Investigation a title.") }
         let scope = Investigation.scope(from: draft.scope)
+        let members = draft.staff.union([lead])
+        let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        try validateMemberTools(draft.memberTools, members: members)
         let number = (investigations.map(\.number).max() ?? 0) + 1
-        let group = try repository.createGroup(named: Self.groupName(number: number, title: title), publicDescription: draft.objective,
-                                               participantIDs: Array(draft.staff.union([lead])), existingAgents: agents, now: now)
+        let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
+                                    members: members, folders: folders, memberTools: draft.memberTools)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective, scope: scope, severity: draft.severity,
                                            champion: champion, leadAgentID: lead, playbookID: nil, number: number, now: now)
         reload()

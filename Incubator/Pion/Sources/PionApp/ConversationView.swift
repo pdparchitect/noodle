@@ -88,11 +88,11 @@ struct ConversationView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        if investigation == nil {
+        if investigation?.isClosed != true {
             ToolbarItem {
                 Button { window.edit(conversation, in: model) } label: { Label("Edit…", systemImage: "pencil") }
-                    .help(conversation.kind == .group ? "Edit Group…" : "Edit Agent…")
-                    .accessibilityLabel(conversation.kind == .group ? "Edit Group…" : "Edit Agent…")
+                    .help(investigation != nil ? "Edit Investigation…" : conversation.kind == .group ? "Edit Group…" : "Edit Agent…")
+                    .accessibilityLabel(investigation != nil ? "Edit Investigation…" : conversation.kind == .group ? "Edit Group…" : "Edit Agent…")
             }
         }
         if let investigation {

@@ -12,10 +12,12 @@ import SwiftUI
     let setup: HarnessSetupController
     let mcp: MCPController
     var selectedTab: Tab = .harnesses
+    var agentBeingEdited: AgentRecord?
+    var agentEditorTab = AgentEditorTab.general
 
     init(model: PionModel) {
         self.model = model
-        mcp = MCPController(repository: model.repository)
+        mcp = model.mcp
         setup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
                                        installer: ManagedHarnessInstaller(store: model.repository.managedHarnesses),
                                        profiles: model.repository.harnessProfiles)
@@ -52,8 +54,13 @@ import SwiftUI
     }
 
     func showHarnessSettings() { selectedTab = .harnesses }
-    func botProfileButton(_ agent: AgentRecord) -> AnyView { AnyView(EmptyView()) }
-    func botRuntimeEditor(_ agent: AgentRecord) -> AnyView { AnyView(EmptyView()) }
+    func botProfileButton(_ agent: AgentRecord) -> AnyView {
+        AnyView(Button { self.agentEditorTab = .general; self.agentBeingEdited = agent } label: { Image(systemName: "pencil") }
+            .buttonStyle(.link).help("Edit Agent…").accessibilityLabel("Edit Agent…"))
+    }
+    func botRuntimeEditor(_ agent: AgentRecord) -> AnyView {
+        AnyView(Button("Edit Runtime…") { self.agentEditorTab = .runtime; self.agentBeingEdited = agent }.buttonStyle(.link))
+    }
     func canArchive(_ agent: AgentRecord) -> Bool { true }
     func setArchived(_ archived: Bool, agent: AgentRecord) {
         do {
@@ -84,6 +91,9 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(PionSettingsHost.Tab.tools)
+        }
+        .sheet(item: $host.agentBeingEdited) { agent in
+            AgentEditorSheet(model: host.model, agent: host.model.agent(agent.id) ?? agent, initialTab: host.agentEditorTab)
         }
         .task { await host.setup.refreshAll(host.runtime) }
     }
