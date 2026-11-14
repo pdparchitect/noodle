@@ -51,7 +51,8 @@ its address and an API key, and Sentinel its tenant and workspace IDs with an ap
 Log Analytics Reader role. Cloudflare Security takes an account ID and an API token, Wiz its data
 center and a service account's client ID and secret, and GitHub an organisation and a token with
 read:org and read:audit_log. AbuseIPDB, urlscan.io, GreyNoise, AlienVault OTX and Have I Been Pwned
-each take an API key. Each service you add is a separate account, so two accounts of the same service can sit side by
+each take an API key. AWS takes a default region and the access key of an IAM user given the SecurityAudit
+policy, plus logs:StartQuery and logs:GetQueryResults for Logs Insights. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios

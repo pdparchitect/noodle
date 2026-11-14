@@ -12,8 +12,12 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { requests.append(request) }
         let key = request.url!.path + (request.url!.query.map { "?" + $0 } ?? "")
-        // An exact answer first, then one for the path whatever the query.
-        let (status, body) = lock.withLock { answers[key] ?? answers[request.url!.path] } ?? (404, #"{"error":"NotFound"}"#)
+        let action = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "Action" }?.value
+        // An answer for the request's target or action first, as AWS names its calls, then an exact one, then one for
+        // the path whatever the query.
+        let candidates = [request.value(forHTTPHeaderField: "X-Amz-Target"), action.map { "action:" + $0 }, key, request.url!.path]
+        let (status, body) = lock.withLock { candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first }
+            ?? (404, #"{"error":"NotFound"}"#)
         return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }

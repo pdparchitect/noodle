@@ -9,5 +9,5 @@ enum PionTools {
                                                          Splunk.preset, Elastic.preset, Sentinel.preset,
                                                          Cloudflare.preset, Wiz.preset, GitHub.preset,
                                                          AbuseIPDB.preset, URLScan.preset, GreyNoise.preset, OTX.preset,
-                                                         HaveIBeenPwned.preset]
+                                                         HaveIBeenPwned.preset, AWS.preset]
 }

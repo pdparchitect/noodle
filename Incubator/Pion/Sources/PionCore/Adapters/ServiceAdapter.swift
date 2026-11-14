@@ -160,6 +160,50 @@ public struct ServiceTable: Sendable {
     }
 }
 
+/// An XML element, with its text and children, for the few services that still answer in XML.
+public final class XMLNode: @unchecked Sendable {
+    public let name: String
+    public fileprivate(set) var text = ""
+    public fileprivate(set) var children: [XMLNode] = []
+
+    init(name: String) { self.name = name }
+
+    /// The first child of that name.
+    public func child(_ name: String) -> XMLNode? { children.first { $0.name == name } }
+    /// The text of the element found by following `path` down through children.
+    public func value(_ path: String...) -> String? {
+        var node: XMLNode? = self
+        for name in path { node = node?.child(name) }
+        let text = node?.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.isEmpty == false ? text : nil
+    }
+    /// Every element of that name at any depth below, in document order.
+    public func all(_ name: String) -> [XMLNode] {
+        children.flatMap { ($0.name == name ? [$0] : []) + $0.all(name) }
+    }
+
+    static func parse(_ data: Data) -> XMLNode? {
+        final class Reader: NSObject, XMLParserDelegate {
+            let root = XMLNode(name: "")
+            var stack: [XMLNode] = []
+            override init() { super.init(); stack = [root] }
+            func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String]) {
+                let node = XMLNode(name: name)
+                stack.last?.children.append(node)
+                stack.append(node)
+            }
+            func parser(_ parser: XMLParser, foundCharacters string: String) { stack.last?.text += string }
+            func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) { stack.removeLast() }
+        }
+        let parser = XMLParser(data: data)
+        let reader = Reader()
+        parser.delegate = reader
+        // Documents never reach out for entities they name.
+        parser.shouldResolveExternalEntities = false
+        return parser.parse() ? reader.root.children.first : nil
+    }
+}
+
 /// Checks for the values operations take, each refusing with a reason the bot can act on.
 public enum ServiceInput {
     /// An IPv4 or IPv6 address, as given.
@@ -279,10 +323,20 @@ public struct ServiceClient: Sendable {
         try decode(Answer.self, try await data(path, query: query, trailingSlash: trailingSlash))
     }
 
-    /// Sends `body` as JSON, for services that take a query or search that way.
+    /// Sends `body` as JSON, for services that take a query or search that way. `headers` add to the request's
+    /// own, such as the operation AWS reads from X-Amz-Target; `contentType` replaces the usual JSON one.
     public func post<Answer: Decodable>(_ path: [String], body: some Encodable, query: [String: String?] = [:],
+                                        headers: [String: String] = [:], contentType: String = "application/json; charset=utf-8",
                                         as answer: Answer.Type = Answer.self) async throws -> Answer {
-        try decode(Answer.self, try await data(path, query: query, method: "POST", body: try JSONEncoder().encode(body)))
+        try decode(Answer.self, try await data(path, query: query, method: "POST", body: try JSONEncoder().encode(body),
+                                               contentType: contentType, headers: headers))
+    }
+
+    /// The same service at another host, for an account whose services each have their own, as AWS's do. The
+    /// connection's access still decides which hosts may be reached.
+    public func at(host: String) throws -> ServiceClient {
+        guard let base = URL(string: "https://\(host)") else { throw ServiceError.input("\(host) is not a valid host.") }
+        return ServiceClient(base: base, access: access, settings: settings)
     }
 
     /// Sends `form` URL-encoded, for services that take their parameters that way.
@@ -294,12 +348,19 @@ public struct ServiceClient: Sendable {
         return try decode(Answer.self, try await data(path, method: "POST", body: Data(body.utf8), contentType: "application/x-www-form-urlencoded"))
     }
 
+    /// The body of an answer in XML, as older AWS APIs give it.
+    public func xml(_ path: [String], query: [String: String?] = [:]) async throws -> XMLNode {
+        guard let node = XMLNode.parse(try await data(path, query: query)) else { throw ServiceError.unreadable }
+        return node
+    }
+
     private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
         do { return try JSONDecoder().decode(Answer.self, from: data) } catch { throw ServiceError.unreadable }
     }
 
     public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
-                     contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false) async throws -> Data {
+                     contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false,
+                     headers: [String: String] = [:]) async throws -> Data {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
@@ -319,6 +380,7 @@ public struct ServiceClient: Sendable {
             request.httpBody = body
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
         case 200..<300: return data
@@ -402,5 +464,5 @@ public enum PionAdapters {
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter,
-                                                                  "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter]
+                                                                  "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter]
 }
