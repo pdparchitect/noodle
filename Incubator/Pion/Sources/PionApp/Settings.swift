@@ -55,9 +55,12 @@ import SwiftUI
     }
 
     func showHarnessSettings() { selectedTab = .harnesses }
+    /// The agent's mark, opening its profile as Noodle's bot pictures do here.
     func botProfileButton(_ agent: AgentRecord) -> AnyView {
-        AnyView(Button { self.agentEditorTab = .general; self.agentBeingEdited = agent } label: { Image(systemName: "pencil") }
-            .buttonStyle(.link).help("Edit Agent…").accessibilityLabel("Edit Agent…"))
+        AnyView(AgentProfileButton(model: model, agent: agent, size: 32, phase: model.phase(of: agent), opensMessageInWindow: true) {
+            self.agentEditorTab = .general
+            self.agentBeingEdited = self.model.agent(agent.id) ?? agent
+        })
     }
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView {
         AnyView(Button("Edit Runtime…") { self.agentEditorTab = .runtime; self.agentBeingEdited = agent }.buttonStyle(.link))

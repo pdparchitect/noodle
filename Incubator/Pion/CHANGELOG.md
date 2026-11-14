@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Settings › Agents shows each agent's mark in place of a pencil. As in Noodle, clicking it opens the agent's profile, with buttons to message it in a window of its own or edit it.
 - Investigations have no scope. Creating and editing one asks for its title, objective, team and tools; agents are told to stay on the objective.
 - Investigations start unassessed, and only their lead agent sets the severity, through the case tool, with a note in the audit log. The toolbar shows it.
 - Switching conversations works as in Noodle: the transcript dissolves into the next one while the toolbar, message field and inspector stay in place, so nothing flashes. Clicking a conversation puts the keyboard in its message field; moving with the arrow keys keeps it in the sidebar.

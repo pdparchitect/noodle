@@ -143,6 +143,8 @@ struct AgentProfileButton: View {
     var phase: AgentRuntimePhase?
     /// Inside a sheet, a message opens in a window of its own and editing is left to the sheet.
     var inSheet = false
+    /// From Settings, as in Noodle: a message opens in a window of its own, beside Settings.
+    var opensMessageInWindow = false
     var edit: (() -> Void)?
     @Environment(\.openWindow) private var openWindow
     @State private var showsProfile = false
@@ -158,7 +160,7 @@ struct AgentProfileButton: View {
         .popover(isPresented: $showsProfile, arrowEdge: .leading) {
             AgentProfile(model: model, agent: model.agent(agent.id) ?? agent,
                          message: model.directConversation(of: agent).map { direct in { finish {
-                             if inSheet { openWindow(id: "conversation", value: direct.id) } else { model.selection = direct.id }
+                             if inSheet || opensMessageInWindow { openWindow(id: "conversation", value: direct.id) } else { model.selection = direct.id }
                          } } },
                          edit: inSheet ? nil : edit.map { edit in { finish(edit) } })
                 .onDisappear {
