@@ -8,6 +8,7 @@ import ProductIdentity
 
 public actor MCPService {
     private let credentials: any MCPCredentialStorage
+    private let tokens: any MCPTokenStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -18,9 +19,12 @@ public actor MCPService {
     private var serverIcons: [UUID: [Icon]] = [:]
     public init(namespace: String) {
         #if canImport(Security)
-        credentials = MCPCredentialStore(service: namespace + ".mcp.oauth")
+        credentials = MCPKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
+                                                       label: "\(ProductIdentity.current.name) MCP connection")
+        tokens = MCPKeychainStore<MCPToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
         #else
         credentials = MCPNoCredentials()
+        tokens = MCPNoCredentials()
         #endif
         oauth = MCPOAuth()
         httpConfiguration = {
@@ -30,11 +34,12 @@ public actor MCPService {
             return configuration
         }
     }
-    init(credentials: any MCPCredentialStorage, oauth: MCPOAuth,
+    init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(), oauth: MCPOAuth,
          httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
-        self.credentials = credentials; self.oauth = oauth; self.httpConfiguration = httpConfiguration
+        self.credentials = credentials; self.tokens = tokens; self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     public func hasCredentials(_ id: UUID) -> Bool {
+        if (try? tokens.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
     }
@@ -49,6 +54,21 @@ public actor MCPService {
         queueTickets[id] = nil
         serverIcons[id] = nil
         try credentials.remove(id)
+        try tokens.remove(id)
+    }
+
+    /// Keeps the token a token connection sends, in place of signing in. Surrounding spaces are
+    /// dropped; a token is one line, since it goes in a request header.
+    public func saveToken(_ token: String, for connection: MCPConnectionRecord) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard let header = connection.tokenHeader else {
+            throw MCPConnectionError.message("This connection signs in through the browser, not with a token.")
+        }
+        let value = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= 8_192, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw MCPConnectionError.message("Paste the token on one line.")
+        }
+        try tokens.save(MCPToken(endpoint: connection.endpoint, header: header, value: value), id: connection.id)
     }
     public func icon(for connection: MCPConnectionRecord) async -> Data? {
         await MCPIcon.load(serverIcons[connection.id] ?? [], endpoint: connection.endpoint)
@@ -72,6 +92,11 @@ public actor MCPService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard connection.tokenHeader == nil else {
+            throw MCPConnectionError.message("This connection uses a token. Enter it in the connection's settings.")
+        }
+        // One that used a token before signs in now; the token would otherwise still count as its sign-in.
+        try tokens.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -182,8 +207,17 @@ public actor MCPService {
         if let deadline, Date() >= deadline { throw MCPServiceError.timedOut }
     }
 
-    private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
-                         authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+    /// The header that proves who the connection is: its token as saved, or an OAuth access token,
+    /// renewed first when it is about to expire.
+    private func authorization(for connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> (header: String, value: String) {
+        if let header = connection.tokenHeader {
+            guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
+                  token.header == header else { throw MCPServiceError.signInRequired }
+            // A bare token in Authorization is a bearer token; one that names its own scheme goes as it is.
+            let value = header.caseInsensitiveCompare("Authorization") == .orderedSame && !token.value.contains(" ")
+                ? "Bearer " + token.value : token.value
+            return (header, value)
+        }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw MCPServiceError.signInRequired }
         let oauthConfiguration = Self.oauthConfiguration(for: connection.endpoint)
@@ -203,11 +237,17 @@ public actor MCPService {
         }
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         guard let token = stored.accessToken else { throw MCPServiceError.signInRequired }
+        return ("Authorization", "Bearer " + token)
+    }
+
+    private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
+                         authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+        let authorization = try await authorization(for: connection, epoch: epoch, deadline: deadline)
         let configuration = httpConfiguration()
         let transport = HTTPClientTransport(endpoint: connection.endpoint, configuration: configuration, streaming: false,
             requestModifier: { original in
                 var request = original
-                request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+                request.setValue(authorization.value, forHTTPHeaderField: authorization.header)
                 return request
             })
         // A fresh protocol session per operation avoids leaking server-side session

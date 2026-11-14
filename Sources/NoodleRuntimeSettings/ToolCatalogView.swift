@@ -102,7 +102,7 @@ public struct ToolCreationSheet: View {
 
     public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
-        self.controller = controller; self.onAdded = onAdded; self.onConnect = onConnect ?? controller.connect
+        self.controller = controller; self.onAdded = onAdded; self.onConnect = onConnect ?? { controller.connect($0) }
         addPreset = nil; save = nil
     }
 

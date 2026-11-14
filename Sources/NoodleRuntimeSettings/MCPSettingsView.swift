@@ -41,9 +41,16 @@ public struct MCPSettingsView: View {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
-                                    Button(store.mcp.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.mcp.connect(connection) }
-                                        .buttonStyle(.link)
-                                        .disabled(store.mcp.signingIn != nil || !allows(connection))
+                                    if connection.tokenHeader != nil {
+                                        // A token is entered in the editor; there is no sign-in to start.
+                                        Button(store.mcp.connected.contains(connection.id) ? "Change Token…" : "Enter Token…") { editing = connection }
+                                            .buttonStyle(.link)
+                                            .disabled(store.mcp.signingIn != nil || !allows(connection))
+                                    } else {
+                                        Button(store.mcp.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.mcp.connect(connection) }
+                                            .buttonStyle(.link)
+                                            .disabled(store.mcp.signingIn != nil || !allows(connection))
+                                    }
                                     Button("Edit…") { editing = connection }
                                         .buttonStyle(.link)
                                     Button("Remove") { removing = connection }
@@ -108,13 +115,15 @@ public struct MCPSettingsView: View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
         } else if store.mcp.signingIn == connection.id {
-            Text(store.mcp.signInStage.isEmpty ? "Signing in…" : store.mcp.signInStage)
+            Text(store.mcp.signInStage.isEmpty ? (connection.tokenHeader == nil ? "Signing in…" : "Checking token…") : store.mcp.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.mcp.signInStage)
         } else if store.mcp.errors[connection.id] != nil {
             SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
         } else if store.mcp.connected.contains(connection.id) {
             SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+        } else if connection.tokenHeader != nil {
+            SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
         } else {
             SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
         }
@@ -139,7 +148,12 @@ public struct MCPEditor: View {
     let onBack: (() -> Void)?
     let onSaved: (MCPConnectionRecord) -> Void
     private let onConnect: (MCPConnectionRecord) -> Void
+    /// Keeps a token connection's token and checks it; nil where tokens cannot be kept yet, as on a Noodle Hub.
+    private let onToken: ((MCPConnectionRecord, String) -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @State private var usesToken: Bool
+    @State private var tokenHeader: String
+    @State private var token = ""
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
@@ -157,7 +171,10 @@ public struct MCPEditor: View {
         saveLater = nil
         self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
-        self.onConnect = onConnect ?? controller.connect
+        self.onConnect = onConnect ?? { controller.connect($0) }
+        onToken = { controller.connect($0, token: $1) }
+        _usesToken = State(initialValue: existing?.tokenHeader != nil)
+        _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _name = State(initialValue: existing?.name ?? "")
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
@@ -174,6 +191,9 @@ public struct MCPEditor: View {
         self.existing = existing
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect
+        onToken = nil
+        _usesToken = State(initialValue: false)
+        _tokenHeader = State(initialValue: "Authorization")
         _name = State(initialValue: existing?.name ?? "")
         _endpoint = State(initialValue: existing?.endpoint.absoluteString ?? "")
         _description = State(initialValue: existing?.description ?? "")
@@ -206,6 +226,25 @@ public struct MCPEditor: View {
                     TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
+                if onToken != nil {
+                    Picker("Sign-in", selection: $usesToken) {
+                        Text("Browser").tag(false)
+                        Text("Token").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    if usesToken {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Header").font(.caption.weight(.semibold))
+                            TextField("Authorization", text: $tokenHeader, axis: .horizontal).lineLimit(1)
+                                .autocorrectionDisabled()
+                                .help("The request header the service expects the token in. A token sent in Authorization goes as a bearer token unless it names its own scheme.")
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Token").font(.caption.weight(.semibold))
+                            SecureField(existing?.tokenHeader != nil ? "Saved; enter a new one to replace it" : "API key or token", text: $token)
+                        }
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description").font(.caption.weight(.semibold))
                     TextField("Optional", text: $description, axis: .vertical).lineLimit(2...3)
@@ -218,7 +257,7 @@ public struct MCPEditor: View {
                         .frame(height: 130)
                         .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
                 }
-                Text("MCP connection · Sign-in opens in your browser.")
+                Text(usesToken ? "MCP connection · The token is kept in Keychain and sent with every request." : "MCP connection · Sign-in opens in your browser.")
                     .font(.caption).foregroundStyle(.secondary)
                 if existing != nil {
                     Text("Changes apply to every bot using this connection.").font(.caption).foregroundStyle(.secondary)
@@ -249,17 +288,29 @@ public struct MCPEditor: View {
         record.name = try ConversationName.validated(name)
         record.description = String(description.prefix(1_000))
         record.instructions = String(instructions.prefix(20_000))
+        if usesToken {
+            let header = try MCPConnectionRecord.validatedTokenHeader(tokenHeader)
+            let blank = token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if blank, existing?.tokenHeader != header {
+                throw MCPConnectionError.message(existing?.tokenHeader == nil ? "Enter the token." : "Enter the token again for the new header.")
+            }
+            record.tokenHeader = header
+        } else {
+            record.tokenHeader = nil
+        }
         return record
     }
     private func finish(_ record: MCPConnectionRecord) {
         onSaved(record)
-        let shouldConnect = existing == nil
+        let newToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let switchedToBrowser = existing?.tokenHeader != nil && record.tokenHeader == nil
+        let shouldConnect = existing == nil || switchedToBrowser || record.tokenHeader != nil && !newToken.isEmpty
         dismiss()
         if shouldConnect {
             Task { @MainActor in
                 // Present authorization after the editor sheet has dismissed.
                 try? await Task.sleep(for: .milliseconds(250))
-                onConnect(record)
+                if record.tokenHeader != nil, let onToken { onToken(record, newToken) } else { onConnect(record) }
             }
         }
     }

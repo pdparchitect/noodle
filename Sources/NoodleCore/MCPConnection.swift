@@ -9,10 +9,14 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public var instructions: String
     public fileprivate(set) var skillName: String
     public var iconData: Data?
+    /// The request header a token connection sends its token in, such as Authorization or x-apikey.
+    /// Nil for a connection that signs in through the browser. The token itself is kept in Keychain.
+    public var tokenHeader: String?
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
-                description: String = "", instructions: String = "") throws {
+                description: String = "", instructions: String = "", tokenHeader: String? = nil) throws {
         self.id = id
+        self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
         self.name = try ConversationName.validated(name)
         self.endpoint = try Self.validatedEndpoint(endpoint)
         self.description = String(description.prefix(1_000))
@@ -22,6 +26,20 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
         }.joined().split(separator: "-").joined(separator: "-")
         let prefix = String(slug.prefix(20)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         self.skillName = "mcp-" + (prefix.isEmpty ? "connection" : prefix)
+    }
+
+    /// A header name a token may go in: letters, digits and the other characters HTTP allows in a name,
+    /// never one that frames the request or carries the browser's own credentials.
+    public static func validatedTokenHeader(_ name: String) throws -> String {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-.^_`|~")
+        let reserved: Set = ["host", "content-length", "content-type", "transfer-encoding", "connection", "cookie",
+                             "accept", "mcp-session-id", "mcp-protocol-version"]
+        guard !name.isEmpty, name.count <= 100, name.unicodeScalars.allSatisfy(allowed.contains),
+              !reserved.contains(name.lowercased()) else {
+            throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
+        }
+        return name
     }
 
     public static func validatedEndpoint(_ url: URL) throws -> URL {
@@ -104,6 +122,9 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
         for connection in connections {
             _ = try ConversationName.validated(connection.name)
             _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
+            if let header = connection.tokenHeader, try MCPConnectionRecord.validatedTokenHeader(header) != header {
+                throw MCPConnectionError.message("Invalid saved MCP connection.")
+            }
             guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,
                   connection.skillName.utf8.count <= 64,
                   connection.skillName.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }),

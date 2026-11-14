@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Tool connections can use a token instead of signing in through the browser. In Settings › Tools, Custom MCP has a Sign-in choice of Browser or Token: paste the service's API key or token and name the header it goes in, such as Authorization or x-apikey. The token is kept in Keychain.
 - A bot's Activity window logs each move to another login when usage runs out, and each return to its own. While the bot is away from its own login, the window's title bar names the login it is running on, on the right.
 - The Activity window is easier to scan: times and output are dimmed, each step's name is in bold, and steps are spaced apart.
 

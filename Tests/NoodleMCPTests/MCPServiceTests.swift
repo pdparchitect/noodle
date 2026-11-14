@@ -12,8 +12,18 @@ private final class TestVault: MCPCredentialStorage, @unchecked Sendable {
     func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
 }
 
+private final class TestTokens: MCPTokenStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [UUID: MCPToken] = [:]
+    func load(_ id: UUID) -> MCPToken? { lock.withLock { values[id] } }
+    func save(_ token: MCPToken, id: UUID) { lock.withLock { values[id] = token } }
+    func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
+}
+
 private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
+    /// The headers of every request to the MCP endpoint.
+    var mcpHeaders: [[String: String]] = []
     var registrations = 0
     var refreshes = 0
     var calls = 0
@@ -60,6 +70,7 @@ private final class FixtureState: @unchecked Sendable {
                 if let tokenScope { response["scope"] = tokenScope }
                 return (200, response)
             case "/mcp":
+                mcpHeaders.append(request.allHTTPHeaderFields ?? [:])
                 let object = try JSONSerialization.jsonObject(with: Self.body(request)) as! [String: Any]
                 guard let id = object["id"] else { return (202, [:]) }
                 let result: [String: Any]
@@ -134,8 +145,8 @@ final class MCPServiceTests: XCTestCase {
         config.protocolClasses = [FixtureProtocol.self]
         return config
     }
-    private func service(vault: TestVault) -> MCPService {
-        MCPService(credentials: vault, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
+    private func service(vault: TestVault, tokens: TestTokens = TestTokens()) -> MCPService {
+        MCPService(credentials: vault, tokens: tokens, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [FixtureProtocol.self]
             return config
@@ -281,6 +292,43 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertEqual(forged, MCPServiceError.invalidCallback.localizedDescription)
         XCTAssertTrue(FixtureProtocol.state.tokenResources.isEmpty, "A refused sign-in must not exchange a code")
     }
+    func testATokenConnectionSendsItsTokenInItsHeaderWithoutSigningIn() async throws {
+        let list = { (record: MCPConnectionRecord) in
+            MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
+        }
+        for (header, sent) in [("x-apikey", "secret-key"), ("Authorization", "Bearer secret-key")] {
+            FixtureProtocol.state = FixtureState()
+            let record = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: header)
+            let client = service(vault: TestVault())
+            var refused = false
+            do { _ = try await client.perform(list(record), connection: record) } catch MCPServiceError.signInRequired { refused = true }
+            XCTAssertTrue(refused, "a token connection without its token was not refused")
+            let unsaved = await client.hasCredentials(record.id); XCTAssertFalse(unsaved)
+
+            try await client.saveToken("  secret-key \n", for: record)
+            let saved = await client.hasCredentials(record.id); XCTAssertTrue(saved)
+            let tools = try JSONDecoder().decode(ListTools.Result.self, from: try await client.perform(list(record), connection: record))
+            XCTAssertEqual(tools.tools.map(\.name), ["first", "second"])
+            let headers = try XCTUnwrap(FixtureProtocol.state.mcpHeaders.first)
+            XCTAssertEqual(headers.first { $0.key.caseInsensitiveCompare(header) == .orderedSame }?.value, sent)
+            if header != "Authorization" { XCTAssertNil(headers["Authorization"]) }
+            XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+
+            try await client.disconnect(record.id)
+            let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
+        }
+    }
+
+    func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {
+        let client = service(vault: TestVault())
+        let keyed = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: "x-apikey")
+        let signedIn = try MCPConnectionRecord(name: "Signed In", endpoint: endpoint)
+        for (token, record) in [("   ", keyed), ("two\nlines", keyed), ("secret", signedIn)] {
+            do { try await client.saveToken(token, for: record); XCTFail("accepted \(token)") } catch {}
+            let unsaved = await client.hasCredentials(record.id); XCTAssertFalse(unsaved)
+        }
+    }
+
     func testPaginatedDiscoveryStructuredResultsAndRevocation() async throws {
         let vault = TestVault()
         let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)

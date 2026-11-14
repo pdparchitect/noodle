@@ -18,6 +18,18 @@ final class MCPConnectionTests: XCTestCase {
         registry.remove(work.id)
         XCTAssertTrue(registry.assigned(to: agent).isEmpty)
     }
+    func testATokenConnectionKeepsAValidHeaderNameAndOAuthOnesKeepNone() throws {
+        XCTAssertNil(try MCPConnectionRecord(name: "Notion", endpoint: endpoint).tokenHeader)
+        XCTAssertEqual(try MCPConnectionRecord(name: "VirusTotal", endpoint: endpoint, tokenHeader: " x-apikey ").tokenHeader, "x-apikey")
+        for header in ["", "X Key", "X-Key:", "Host", "content-length", "Cookie", "X-Key\r\nInjected: 1"] {
+            XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenHeader: header), header)
+        }
+        let saved = try MCPConnectionRecord(name: "VirusTotal", endpoint: endpoint, tokenHeader: "Authorization")
+        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(saved)), saved)
+        let earlier = Data(#"{"id":"\#(UUID().uuidString)","name":"Old","endpoint":"https://mcp.notion.com/mcp","description":"","instructions":"","skillName":"mcp-old"}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(MCPConnectionRecord.self, from: earlier).tokenHeader)
+    }
+
     /// The skill Noodle generates for a connection: its provider's manifest and tools, rendered.
     private func generatedSkill(_ record: MCPConnectionRecord) -> String {
         let provider = ConnectionToolProvider(id: record.skillName, title: record.name, connection: record.id,

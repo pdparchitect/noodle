@@ -22,21 +22,46 @@ struct MCPCredentials: Codable, Sendable {
     var expiresAt: Date?
 }
 
+/// A token a connection sends as it is, for a service that hands out keys rather than signing in.
+struct MCPToken: Codable, Sendable {
+    /// The endpoint it was given for; a connection now pointing elsewhere never sends it.
+    let endpoint: URL
+    let header: String
+    let value: String
+}
+
 /// Only linked into the app-side MCP client, never the agent's CLI.
 protocol MCPCredentialStorage: Sendable {
     func load(_ id: UUID) throws -> MCPCredentials?
     func save(_ credentials: MCPCredentials, id: UUID) throws
     func remove(_ id: UUID) throws
 }
+
+/// Where tokens are kept, apart from sign-ins.
+protocol MCPTokenStorage: Sendable {
+    func load(_ id: UUID) throws -> MCPToken?
+    func save(_ token: MCPToken, id: UUID) throws
+    func remove(_ id: UUID) throws
+}
+/// Tokens kept only while the process runs, for a service made without Keychain, as in tests.
+final class MCPMemoryTokens: MCPTokenStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var tokens: [UUID: MCPToken] = [:]
+    func load(_ id: UUID) -> MCPToken? { lock.withLock { tokens[id] } }
+    func save(_ token: MCPToken, id: UUID) { lock.withLock { tokens[id] = token } }
+    func remove(_ id: UUID) { _ = lock.withLock { tokens.removeValue(forKey: id) } }
+}
 #if canImport(Security)
-struct MCPCredentialStore: MCPCredentialStorage {
+/// One Keychain item per connection under `service`, holding a sign-in or a token.
+struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
     let service: String
+    let label: String
     private func query(_ id: UUID) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: id.uuidString.lowercased()]
     }
-    func load(_ id: UUID) throws -> MCPCredentials? {
+    func load(_ id: UUID) throws -> Value? {
         var query = query(id)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -44,10 +69,10 @@ struct MCPCredentialStore: MCPCredentialStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = item as? Data else { throw MCPServiceError.keychain(status) }
-        return try JSONDecoder().decode(MCPCredentials.self, from: data)
+        return try JSONDecoder().decode(Value.self, from: data)
     }
-    func save(_ credentials: MCPCredentials, id: UUID) throws {
-        let data = try JSONEncoder().encode(credentials)
+    func save(_ value: Value, id: UUID) throws {
+        let data = try JSONEncoder().encode(value)
         let fields = [kSecValueData as String: data] as CFDictionary
         let status = SecItemUpdate(query(id) as CFDictionary, fields)
         if status == errSecItemNotFound {
@@ -57,7 +82,7 @@ struct MCPCredentialStore: MCPCredentialStorage {
             // kSecAttrAccess lets Keychain create its default calling-app ACL;
             // no deprecated SecAccess/SecTrustedApplication setup is needed.
             // Updates above change only the data, preserving existing item ACLs.
-            addition[kSecAttrLabel as String] = "\(ProductIdentity.current.name) MCP connection"
+            addition[kSecAttrLabel as String] = label
             let added = SecItemAdd(addition as CFDictionary, nil)
             guard added == errSecSuccess else { throw MCPServiceError.keychain(added) }
         } else if status != errSecSuccess { throw MCPServiceError.keychain(status) }
@@ -67,11 +92,15 @@ struct MCPCredentialStore: MCPCredentialStorage {
         guard status == errSecSuccess || status == errSecItemNotFound else { throw MCPServiceError.keychain(status) }
     }
 }
+extension MCPKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
+extension MCPKeychainStore: MCPTokenStorage where Value == MCPToken {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct MCPNoCredentials: MCPCredentialStorage {
+struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage {
     func load(_ id: UUID) throws -> MCPCredentials? { nil }
     func save(_ credentials: MCPCredentials, id: UUID) throws { throw MCPServiceError.credentialStorage }
+    func load(_ id: UUID) throws -> MCPToken? { nil }
+    func save(_ token: MCPToken, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func remove(_ id: UUID) throws {}
 }
 #endif

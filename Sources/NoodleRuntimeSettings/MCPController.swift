@@ -146,19 +146,25 @@ public final class MCPController {
             try await service.disconnect(id)
         }
     }
-    func connect(_ record: MCPConnectionRecord) {
+    /// Signs the connection in through the browser, or for a token connection keeps `token` when one is
+    /// given; either way it then lists the connection's tools to show it works.
+    func connect(_ record: MCPConnectionRecord, token: String? = nil) {
         guard signingIn == nil else { return }
-        browser.captureReturnWindow()
+        if record.tokenHeader == nil { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil
         loginTask = Task {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
-                let redirect = Self.redirectURI(for: record.endpoint)
-                try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
-                    await self?.setSignInStage(stage)
-                }) { [browser] url in
-                    try await browser.authorize(url: url, callbackURL: redirect)
+                if record.tokenHeader != nil {
+                    if let token { try await service.saveToken(token, for: record) }
+                } else {
+                    let redirect = Self.redirectURI(for: record.endpoint)
+                    try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
+                        await self?.setSignInStage(stage)
+                    }) { [browser] url in
+                        try await browser.authorize(url: url, callbackURL: redirect)
+                    }
                 }
                 try Task.checkCancellation()
                 signInStage = "Checking available tools…"
