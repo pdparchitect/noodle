@@ -6,10 +6,13 @@ public struct MCPClientCredentials: Codable, Equatable, Sendable {
     public let tokenEndpoint: URL
     /// What to ask for, space-separated, when the service wants it named.
     public let scope: String?
-    public init(tokenEndpoint: URL, scope: String?) {
+    /// Fields the service wants in the exchange besides the standard ones, such as an audience.
+    public let parameters: [String: String]?
+    public init(tokenEndpoint: URL, scope: String?, parameters: [String: String]? = nil) {
         self.tokenEndpoint = tokenEndpoint
         let scope = scope?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.scope = scope?.isEmpty == false ? scope : nil
+        self.parameters = parameters?.isEmpty == false ? parameters : nil
     }
 }
 
@@ -114,7 +117,15 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
 
     public static func validatedClientCredentials(_ credentials: MCPClientCredentials) throws -> MCPClientCredentials {
         guard (credentials.scope?.count ?? 0) <= 1_000 else { throw MCPConnectionError.message("The scope is too long.") }
-        return MCPClientCredentials(tokenEndpoint: try validatedEndpoint(credentials.tokenEndpoint), scope: credentials.scope)
+        let names = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
+        for (name, value) in credentials.parameters ?? [:] {
+            guard (1...64).contains(name.count), name.unicodeScalars.allSatisfy(names.contains),
+                  !["grant_type", "client_id", "client_secret", "scope"].contains(name), value.count <= 1_000 else {
+                throw MCPConnectionError.message("Invalid token exchange field \(name).")
+            }
+        }
+        return MCPClientCredentials(tokenEndpoint: try validatedEndpoint(credentials.tokenEndpoint), scope: credentials.scope,
+                                    parameters: credentials.parameters)
     }
 
     public static func validatedEndpoint(_ url: URL) throws -> URL {

@@ -81,6 +81,8 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     case status(Int)
     case unreadable
     case input(String)
+    /// The service answered, but refused or failed the request, saying why.
+    case refused(String)
 
     public var errorDescription: String? {
         switch self {
@@ -90,6 +92,7 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
         case .status(let status): "The service could not answer (HTTP \(status))."
         case .unreadable: "The service answered with something that could not be read."
         case .input(let reason): reason
+        case .refused(let reason): "The service refused the request: \(reason)"
         }
     }
 }
@@ -224,11 +227,39 @@ public enum ServiceInput {
     }
 }
 
+/// A GraphQL request as services take it, and their answer: data, or errors saying why not.
+private struct GraphQLRequest<Variables: Encodable>: Encodable { let query: String; let variables: Variables }
+private struct GraphQLResponse<Answer: Decodable>: Decodable {
+    struct Problem: Decodable { let message: String? }
+    let data: Answer?
+    let errors: [Problem]?
+}
+
 /// Requests to the connection's service, below its address: paths are built from separate parts, so no value
 /// can climb out of the operation's own path, and every answer is checked before it is read.
 public struct ServiceClient: Sendable {
     let base: URL
     let access: any ServiceAccess
+    /// What the account filled in, such as its account ID.
+    var settings: [String: String] = [:]
+
+    /// One of the account's details, by its field's key.
+    public func setting(_ key: String) throws -> String {
+        guard let value = settings[key], !value.isEmpty else { throw ServiceError.input("This connection has no \(key) set.") }
+        return value
+    }
+
+    /// Runs a GraphQL query with its variables and returns its data. Errors the service reports come back as a refusal
+    /// carrying their messages.
+    public func graphQL<Answer: Decodable>(_ path: [String] = [], query: String, variables: some Encodable,
+                                           as answer: Answer.Type = Answer.self) async throws -> Answer {
+        let response = try await post(path, body: GraphQLRequest(query: query, variables: variables), as: GraphQLResponse<Answer>.self)
+        if let errors = response.errors, !errors.isEmpty {
+            throw ServiceError.refused(errors.compactMap(\.message).prefix(3).joined(separator: "; "))
+        }
+        guard let data = response.data else { throw ServiceError.unreadable }
+        return data
+    }
 
     /// `path`'s parts each go in as one segment; a part that would leave it is refused.
     public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:],
@@ -328,7 +359,7 @@ public struct OperationAdapter: MCPConnectionAdapter {
             throw MCPConnectionError.message("This connection does not offer \(tool).")
         }
         do {
-            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access))
+            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
             var object: [String: Any] = ["content": [["type": "text", "text": result.text]], "isError": false]
             if let structured = result.structured { object["structuredContent"] = try JSONSerialization.jsonObject(with: structured) }
             return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -354,5 +385,6 @@ public enum PionAdapters {
     public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
                                                                   "entra": Entra.adapter, "defender": Defender.adapter,
                                                                   "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
-                                                                  "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter]
+                                                                  "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
+                                                                  "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter]
 }

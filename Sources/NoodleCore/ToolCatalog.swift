@@ -89,8 +89,10 @@ public struct ClientCredentialsPreset: Equatable, Sendable {
     /// The token address, with a {key} for each field it needs.
     public let tokenEndpointTemplate: String
     public let scope: String?
-    public init(tokenEndpointTemplate: String, scope: String? = nil) {
-        self.tokenEndpointTemplate = tokenEndpointTemplate; self.scope = scope
+    /// Fields the service wants in the exchange besides the standard ones, such as an audience.
+    public let parameters: [String: String]
+    public init(tokenEndpointTemplate: String, scope: String? = nil, parameters: [String: String] = [:]) {
+        self.tokenEndpointTemplate = tokenEndpointTemplate; self.scope = scope; self.parameters = parameters
     }
 }
 
@@ -169,7 +171,7 @@ public struct MCPToolConfiguration: Equatable, Sendable {
             return try MCPConnectionRecord.validatedEndpoint(url)
         }
         let client = try clientCredentials.map {
-            MCPClientCredentials(tokenEndpoint: try address($0.tokenEndpointTemplate), scope: $0.scope)
+            MCPClientCredentials(tokenEndpoint: try address($0.tokenEndpointTemplate), scope: $0.scope, parameters: $0.parameters)
         }
         return (try endpointTemplate.map(address) ?? endpoint, fields.isEmpty ? nil : settings, client)
     }

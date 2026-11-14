@@ -48,7 +48,9 @@ ThreatHunting.Read.All. CrowdStrike Falcon takes its cloud and an API client's I
 scopes for hosts and alerts; SentinelOne takes its console address and an API token. Splunk, Elastic and Microsoft Sentinel let
 agents search logs in SPL, ES|QL and KQL: Splunk takes its address and an authentication token, Elastic
 its address and an API key, and Sentinel its tenant and workspace IDs with an app registration given the
-Log Analytics Reader role. Each service you add is a separate account, so two accounts of the same service can sit side by
+Log Analytics Reader role. Cloudflare Security takes an account ID and an API token, Wiz its data
+center and a service account's client ID and secret, and GitHub an organisation and a token with
+read:org and read:audit_log. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios

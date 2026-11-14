@@ -32,6 +32,7 @@
 
 ### Added
 
+- Cloudflare Security, Wiz and GitHub in Settings › Tools › Add Tools. Cloudflare Security takes an account ID and an API token, for DNS records, the account audit log and a zone's firewall events. Wiz takes its data center and a service account's client ID and secret, for cloud security issues and read-only queries over its security graph. GitHub takes an organisation and a token, for its audit log, members and outside collaborators, and secret scanning alerts.
 - Splunk, Elastic and Microsoft Sentinel in Settings › Tools › Add Tools, so agents can search logs in SPL, ES|QL and KQL. Splunk takes its address and an authentication token, Elastic its address and an API key, and Sentinel its tenant, workspace and an app registration's client ID and secret. Searches only read; Splunk commands that write or send are refused.
 - CrowdStrike Falcon and SentinelOne in Settings › Tools › Add Tools. Falcon takes its cloud and an API client's ID and secret, SentinelOne its console address and an API token. Agents can find hosts and agents, with their status, containment and last activity, and list the alerts and threats raised on them.
 - Microsoft Entra ID and Microsoft Defender XDR in Settings › Tools › Add Tools, each tenant added with its directory (tenant) ID and an app registration's client ID and secret. Agents can find users and see their groups, roles and sign-in methods, read sign-in logs and risky users, list Defender alerts and incidents, and run read-only KQL hunting queries.

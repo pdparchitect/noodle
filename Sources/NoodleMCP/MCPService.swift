@@ -263,7 +263,7 @@ public actor MCPService {
             guard var secret = try clients.load(connection.id), secret.endpoint == connection.endpoint,
                   secret.tokenEndpoint == exchange.tokenEndpoint else { throw MCPServiceError.signInRequired }
             if secret.accessToken == nil || (secret.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
-                secret = try await oauth.clientToken(secret, scope: exchange.scope)
+                secret = try await oauth.clientToken(secret, scope: exchange.scope, parameters: exchange.parameters)
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 try clients.save(secret, id: connection.id)
             }

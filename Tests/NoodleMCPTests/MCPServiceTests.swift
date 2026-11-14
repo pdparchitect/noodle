@@ -471,6 +471,22 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenParameter: "a b"))
     }
 
+    func testAClientCredentialsExchangeSendsTheServicesOwnFields() async throws {
+        let credentials = MCPClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: nil,
+                                               parameters: ["audience": "wiz-api"])
+        let record = try MCPConnectionRecord(name: "Posture", endpoint: endpoint, clientCredentials: credentials)
+        let client = service(vault: TestVault())
+        try await client.saveClientCredentials(clientID: "id", secret: "secret", for: record)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
+                                     connection: record)
+        let form = Set(FixtureProtocol.state.clientExchanges[0].split(separator: "&").map(String.init))
+        XCTAssertEqual(form, ["audience=wiz-api", "client_id=id", "client_secret=secret", "grant_type=client_credentials"])
+        for reserved in ["grant_type", "client_secret", "client_id", "scope", "bad name"] {
+            XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, clientCredentials:
+                MCPClientCredentials(tokenEndpoint: credentials.tokenEndpoint, scope: nil, parameters: [reserved: "x"])), reserved)
+        }
+    }
+
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {
         let client = service(vault: TestVault())
         let keyed = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: "x-apikey")

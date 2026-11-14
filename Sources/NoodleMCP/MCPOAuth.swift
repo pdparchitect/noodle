@@ -251,9 +251,11 @@ struct MCPOAuth {
 
     /// Exchanges a client ID and secret for an access token: the client-credentials grant, the secret sent in
     /// the form. A response without a lifetime is taken to last 30 minutes.
-    func clientToken(_ secret: MCPClientSecret, scope: String?) async throws -> MCPClientSecret {
+    func clientToken(_ secret: MCPClientSecret, scope: String?, parameters: [String: String]? = nil) async throws -> MCPClientSecret {
         var form = ["grant_type": "client_credentials", "client_id": secret.clientID, "client_secret": secret.clientSecret]
         if let scope { form["scope"] = scope }
+        // The service's own fields never replace the standard ones.
+        form.merge(parameters ?? [:]) { standard, _ in standard }
         let response = try await request(secret.tokenEndpoint, form: form)
         guard let token = response["access_token"] as? String, !token.isEmpty,
               (response["token_type"] as? String)?.lowercased() ?? "bearer" == "bearer" else { throw MCPServiceError.invalidMetadata }
