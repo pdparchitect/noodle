@@ -26,7 +26,7 @@ public struct MCPAdapterAccess: Sendable {
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         // Only the connection's host; an AWS connection, any AWS service below it, since each request is signed for one.
         let host = url(request)?.host?.lowercased() ?? "", home = endpoint.host?.lowercased() ?? ""
-        let reachable = host == home || (authorization?.signsForAWS == true && host.hasSuffix("." + home))
+        let reachable = host == home || (authorization?.coversSubdomains == true && host.hasSuffix("." + home))
         guard let url = request.url, url.scheme?.lowercased() == "https", reachable, url.port == endpoint.port, url.user == nil else {
             throw MCPConnectionError.message("A tool adapter may only reach its own service.")
         }
@@ -47,13 +47,23 @@ enum MCPAuthorization: Sendable {
     case parameter(String, String)
     /// Signed with an AWS key, for the service and region each request's address names.
     case aws(MCPAWSKey, defaultRegion: String)
+    /// A Google access token, good for every googleapis.com service its scopes allow.
+    case google(String)
 
-    var signsForAWS: Bool { if case .aws = self { true } else { false } }
+    /// Whether it reaches every service below its connection's host, as an AWS key or a Google token does.
+    var coversSubdomains: Bool {
+        switch self {
+        case .aws, .google: true
+        case .header, .parameter: false
+        }
+    }
 
     func apply(to request: inout URLRequest) {
         switch self {
         case .header(let name, let value):
             request.setValue(value, forHTTPHeaderField: name)
+        case .google(let token):
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         case .parameter(let name, let value):
             guard let url = request.url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
             components.queryItems = (components.queryItems ?? []).filter { $0.name != name } + [URLQueryItem(name: name, value: value)]

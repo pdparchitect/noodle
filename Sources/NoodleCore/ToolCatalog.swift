@@ -121,6 +121,9 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let adapter: String?
     /// For AWS: accounts sign their requests with an access key, in the region their region field names.
     public let signsForAWS: Bool
+    /// For Google: accounts act as a service account with these scopes, on behalf of the user their subject field
+    /// names, when they have one.
+    public let googleScopes: [String]?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
                 tokenScheme: String? = nil, tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil,
@@ -129,6 +132,7 @@ public struct MCPToolConfiguration: Equatable, Sendable {
         self.tokenParameter = tokenParameter
         self.adapter = adapter
         signsForAWS = false
+        googleScopes = nil
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
@@ -142,8 +146,9 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil, signsForAWS: Bool = false,
-                adapter: String? = nil) {
+                googleScopes: [String]? = nil, adapter: String? = nil) {
         self.signsForAWS = signsForAWS
+        self.googleScopes = googleScopes
         self.tokenParameter = tokenParameter
         self.tokenScheme = tokenScheme
         self.adapter = adapter
@@ -215,6 +220,9 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
                                                  tokenScheme: configuration.tokenScheme, tokenParameter: configuration.tokenParameter,
                                                  clientCredentials: account.clientCredentials,
                                                  awsSigning: configuration.signsForAWS ? MCPAWSSigning(region: account.settings?["region"] ?? "us-east-1") : nil,
+                                                 googleServiceAccount: configuration.googleScopes.map {
+                                                     MCPGoogleServiceAccount(scopes: $0, subject: account.settings?["subject"])
+                                                 },
                                                  adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
@@ -238,7 +246,8 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public var needsSetUp: Bool {
         switch configuration {
         case .mcp(let configuration):
-            configuration.usesToken || configuration.clientCredentials != nil || configuration.signsForAWS || !configuration.fields.isEmpty
+            configuration.usesToken || configuration.clientCredentials != nil || configuration.signsForAWS
+                || configuration.googleScopes != nil || !configuration.fields.isEmpty
         }
     }
 

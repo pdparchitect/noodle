@@ -125,7 +125,7 @@ public struct MCPSettingsView: View {
             SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
-        } else if connection.clientCredentials != nil || connection.awsSigning != nil {
+        } else if connection.clientCredentials != nil || connection.awsSigning != nil || connection.googleServiceAccount != nil {
             SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
         } else {
             SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
@@ -153,7 +153,7 @@ public struct MCPEditor: View {
     private let onConnect: (MCPConnectionRecord) -> Void
     /// Keeps a token or client secret and checks it; nil where those cannot be kept yet, as on a Noodle Hub.
     private let onSecret: ((MCPConnectionRecord, MCPConnectionSecret) -> Void)?
-    private enum SignIn: Hashable { case browser, token, client, aws }
+    private enum SignIn: Hashable { case browser, token, client, aws, google }
     @Environment(\.dismiss) private var dismiss
     @State private var signIn: SignIn
     @State private var tokenHeader: String
@@ -163,6 +163,7 @@ public struct MCPEditor: View {
     @State private var clientID = ""
     @State private var clientSecret = ""
     @State private var sessionToken = ""
+    @State private var serviceAccountKey = ""
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
@@ -183,7 +184,7 @@ public struct MCPEditor: View {
         self.onConnect = onConnect ?? { controller.connect($0) }
         onSecret = { controller.connect($0, secret: $1) }
         _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client
-                        : existing?.awsSigning != nil ? .aws : .browser)
+                        : existing?.awsSigning != nil ? .aws : existing?.googleServiceAccount != nil ? .google : .browser)
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
         _scope = State(initialValue: existing?.clientCredentials?.scope ?? "")
@@ -249,6 +250,12 @@ public struct MCPEditor: View {
                             Text("Client ID & Secret").tag(SignIn.client)
                         }
                         .pickerStyle(.segmented)
+                    }
+                    if signIn == .google {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Service Account Key").font(.caption.weight(.semibold))
+                            ServiceAccountKeyField(key: $serviceAccountKey, replacing: true)
+                        }
                     }
                     if signIn == .aws {
                         VStack(alignment: .leading, spacing: 6) {
@@ -348,7 +355,7 @@ public struct MCPEditor: View {
         record.tokenParameter = nil
         record.clientCredentials = nil
         switch signIn {
-        case .browser: break
+        case .browser, .google: break
         case .aws:
             // Its signing stays as its preset made it; only the key can be replaced.
             let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -390,6 +397,7 @@ public struct MCPEditor: View {
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
         case .aws: id.isEmpty ? nil : .aws(accessKeyID: id, secretAccessKey: clientSecret, sessionToken: sessionToken)
+        case .google: serviceAccountKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .google(serviceAccountKey)
         }
         let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
         let shouldConnect = existing == nil || switchedToBrowser || secret != nil
@@ -400,6 +408,30 @@ public struct MCPEditor: View {
                 try? await Task.sleep(for: .milliseconds(250))
                 if let secret, let onSecret { onSecret(record, secret) } else { onConnect(record) }
             }
+        }
+    }
+}
+
+/// Where a Google service account's JSON key is pasted, or read from the file Google gave. What is pasted shows
+/// only that a key is there, never its contents.
+struct ServiceAccountKeyField: View {
+    @Binding var key: String
+    var replacing = false
+    @State private var choosing = false
+
+    var body: some View {
+        HStack {
+            Text(key.isEmpty ? (replacing ? "Saved; choose a new key file to replace it" : "No key chosen") : "Key file chosen")
+                .foregroundStyle(key.isEmpty ? .secondary : .primary)
+            Spacer()
+            Button("Paste") { key = NSPasteboard.general.string(forType: .string) ?? "" }
+            Button("Choose Key File…") { choosing = true }
+        }
+        .fileImporter(isPresented: $choosing, allowedContentTypes: [.json]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            key = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         }
     }
 }

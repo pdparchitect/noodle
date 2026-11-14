@@ -23,6 +23,18 @@ public struct MCPAWSSigning: Codable, Equatable, Sendable {
     public init(region: String) { self.region = region }
 }
 
+/// For a connection that acts as a Google service account: the scopes its tokens ask for, and for Workspace, the
+/// user it acts on behalf of through domain-wide delegation. The account's key is kept in Keychain.
+public struct MCPGoogleServiceAccount: Codable, Equatable, Sendable {
+    public let scopes: [String]
+    public let subject: String?
+    public init(scopes: [String], subject: String?) {
+        self.scopes = scopes
+        let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.subject = subject?.isEmpty == false ? subject : nil
+    }
+}
+
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
 public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
@@ -46,8 +58,11 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public var clientCredentials: MCPClientCredentials?
     /// Set for a connection that signs its requests to AWS with an access key instead of sending a token.
     public var awsSigning: MCPAWSSigning?
-    /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret, or an AWS key.
-    public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsSigning != nil }
+    /// Set for a connection that acts as a Google service account instead of signing in.
+    public var googleServiceAccount: MCPGoogleServiceAccount?
+    /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret, an AWS key or a
+    /// Google service account's key.
+    public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsSigning != nil || googleServiceAccount != nil }
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
     /// address of the service the adapter calls. Only the app that has that adapter serves it.
     public var adapter: String?
@@ -59,8 +74,12 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, clientCredentials: MCPClientCredentials? = nil, awsSigning: MCPAWSSigning? = nil,
-                adapter: String? = nil) throws {
+                googleServiceAccount: MCPGoogleServiceAccount? = nil, adapter: String? = nil) throws {
         self.id = id
+        self.googleServiceAccount = try googleServiceAccount.map(Self.validatedGoogleServiceAccount)
+        guard googleServiceAccount == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil && awsSigning == nil) else {
+            throw MCPConnectionError.message("A connection acts as a Google service account or uses another sign-in, not both.")
+        }
         self.awsSigning = try awsSigning.map(Self.validatedAWSSigning)
         guard awsSigning == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil) else {
             throw MCPConnectionError.message("A connection signs with an AWS key or uses another sign-in, not both.")
@@ -102,6 +121,21 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
         }
         return name
+    }
+
+    /// Scopes Google's own, and a subject that is an email address.
+    public static func validatedGoogleServiceAccount(_ account: MCPGoogleServiceAccount) throws -> MCPGoogleServiceAccount {
+        guard (1...20).contains(account.scopes.count), account.scopes.allSatisfy({ scope in
+            scope.hasPrefix("https://www.googleapis.com/auth/") && scope.count <= 200
+                && scope.unicodeScalars.allSatisfy { !CharacterSet.whitespacesAndNewlines.contains($0) }
+        }) else { throw MCPConnectionError.message("Invalid Google scopes.") }
+        if let subject = account.subject {
+            let parts = subject.split(separator: "@")
+            guard parts.count == 2, subject.count <= 200, !subject.contains(where: \.isWhitespace) else {
+                throw MCPConnectionError.message("Enter the user to act as by their email address.")
+            }
+        }
+        return account
     }
 
     /// An AWS region's name, such as eu-west-1.
@@ -242,6 +276,12 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
                 }
             }
             if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
+            if let account = connection.googleServiceAccount {
+                guard !connection.usesToken, connection.clientCredentials == nil, connection.awsSigning == nil,
+                      try MCPConnectionRecord.validatedGoogleServiceAccount(account) == account else {
+                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                }
+            }
             if let signing = connection.awsSigning {
                 guard !connection.usesToken, connection.clientCredentials == nil,
                       try MCPConnectionRecord.validatedAWSSigning(signing) == signing else {

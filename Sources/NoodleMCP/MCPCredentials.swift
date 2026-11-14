@@ -50,6 +50,34 @@ struct MCPAWSKey: Codable, Sendable {
     let sessionToken: String?
 }
 
+/// A Google service account's key, with the access token last got with it while it lasts.
+struct MCPGoogleKey: Codable, Sendable {
+    /// What it was given for; a connection now pointing elsewhere never uses it.
+    let endpoint: URL
+    let clientEmail: String
+    let privateKeyID: String?
+    /// The RSA private key, as the PEM the key file holds.
+    let privateKey: String
+    var accessToken: String?
+    var expiresAt: Date?
+}
+
+/// Where Google service account keys are kept, apart from other secrets.
+protocol MCPGoogleKeyStorage: Sendable {
+    func load(_ id: UUID) throws -> MCPGoogleKey?
+    func save(_ key: MCPGoogleKey, id: UUID) throws
+    func remove(_ id: UUID) throws
+}
+
+/// Google keys kept only while the process runs, for a service made without Keychain, as in tests.
+final class MCPMemoryGoogleKeys: MCPGoogleKeyStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var keys: [UUID: MCPGoogleKey] = [:]
+    func load(_ id: UUID) -> MCPGoogleKey? { lock.withLock { keys[id] } }
+    func save(_ key: MCPGoogleKey, id: UUID) { lock.withLock { keys[id] = key } }
+    func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
+}
+
 /// Where AWS keys are kept, apart from other secrets.
 protocol MCPAWSKeyStorage: Sendable {
     func load(_ id: UUID) throws -> MCPAWSKey?
@@ -148,9 +176,12 @@ extension MCPKeychainStore: MCPCredentialStorage where Value == MCPCredentials {
 extension MCPKeychainStore: MCPTokenStorage where Value == MCPToken {}
 extension MCPKeychainStore: MCPClientSecretStorage where Value == MCPClientSecret {}
 extension MCPKeychainStore: MCPAWSKeyStorage where Value == MCPAWSKey {}
+extension MCPKeychainStore: MCPGoogleKeyStorage where Value == MCPGoogleKey {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage, MCPAWSKeyStorage {
+struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage, MCPAWSKeyStorage, MCPGoogleKeyStorage {
+    func load(_ id: UUID) throws -> MCPGoogleKey? { nil }
+    func save(_ key: MCPGoogleKey, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPAWSKey? { nil }
     func save(_ key: MCPAWSKey, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPClientSecret? { nil }

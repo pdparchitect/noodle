@@ -192,6 +192,7 @@ private struct PresetSetUpForm: View {
     @State private var clientID = ""
     @State private var clientSecret = ""
     @State private var sessionToken = ""
+    @State private var serviceAccountKey = ""
     @State private var error: String?
 
     init(tool: ToolDefinition, configuration: MCPToolConfiguration, name: String, onBack: @escaping () -> Void,
@@ -208,6 +209,7 @@ private struct PresetSetUpForm: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && configuration.fields.allSatisfy { !(values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             && (!configuration.usesToken || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            && (configuration.googleScopes == nil || !serviceAccountKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             && (configuration.clientCredentials == nil && !configuration.signsForAWS
                 || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
@@ -216,6 +218,7 @@ private struct PresetSetUpForm: View {
         if configuration.usesToken { return .token(token) }
         if configuration.clientCredentials != nil { return .client(id: clientID, secret: clientSecret) }
         if configuration.signsForAWS { return .aws(accessKeyID: clientID, secretAccessKey: clientSecret, sessionToken: sessionToken) }
+        if configuration.googleScopes != nil { return .google(serviceAccountKey) }
         return nil
     }
 
@@ -257,6 +260,9 @@ private struct PresetSetUpForm: View {
                 }
                 if configuration.usesToken {
                     field("API Key") { SecureField("Paste the key", text: $token) }
+                }
+                if configuration.googleScopes != nil {
+                    field("Service Account Key") { ServiceAccountKeyField(key: $serviceAccountKey) }
                 }
                 if configuration.signsForAWS {
                     field("Access Key ID") { TextField("AKIA…", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled() }

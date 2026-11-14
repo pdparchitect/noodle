@@ -11,6 +11,7 @@ public actor MCPService {
     private let tokens: any MCPTokenStorage
     private let clients: any MCPClientSecretStorage
     private let awsKeys: any MCPAWSKeyStorage
+    private let googleKeys: any MCPGoogleKeyStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -28,7 +29,9 @@ public actor MCPService {
         clients = MCPKeychainStore<MCPClientSecret>(service: namespace + ".mcp.client",
                                                     label: "\(ProductIdentity.current.name) MCP client secret")
         awsKeys = MCPKeychainStore<MCPAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
+        googleKeys = MCPKeychainStore<MCPGoogleKey>(service: namespace + ".mcp.google", label: "\(ProductIdentity.current.name) Google service account")
         #else
+        googleKeys = MCPNoCredentials()
         credentials = MCPNoCredentials()
         tokens = MCPNoCredentials()
         clients = MCPNoCredentials()
@@ -44,8 +47,9 @@ public actor MCPService {
     }
     init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(),
          clients: any MCPClientSecretStorage = MCPMemoryClientSecrets(), awsKeys: any MCPAWSKeyStorage = MCPMemoryAWSKeys(),
+         googleKeys: any MCPGoogleKeyStorage = MCPMemoryGoogleKeys(),
          oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
-        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys
+        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys; self.googleKeys = googleKeys
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     /// The adapters this app serves connections with, by the name connections give.
@@ -54,7 +58,8 @@ public actor MCPService {
     }
 
     public func hasCredentials(_ id: UUID) -> Bool {
-        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil { return true }
+        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil
+            || (try? googleKeys.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
     }
@@ -72,6 +77,24 @@ public actor MCPService {
         try tokens.remove(id)
         try clients.remove(id)
         try awsKeys.remove(id)
+        try googleKeys.remove(id)
+    }
+
+    /// Keeps a Google service account's key, from the JSON file Google issues, in place of signing in. The key is
+    /// checked by signing with it before it is kept.
+    public func saveGoogleKey(_ json: String, for connection: MCPConnectionRecord) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard connection.googleServiceAccount != nil else {
+            throw MCPConnectionError.message("This connection does not act as a Google service account.")
+        }
+        struct File: Decodable { let type: String?; let client_email: String?; let private_key: String?; let private_key_id: String? }
+        guard json.utf8.count <= 16_384, let file = try? JSONDecoder().decode(File.self, from: Data(json.utf8)),
+              file.type == "service_account", let email = file.client_email, email.contains("@"), let pem = file.private_key else {
+            throw MCPConnectionError.message("Paste the JSON key of a Google service account.")
+        }
+        try GoogleAssertion.validate(pem)
+        try googleKeys.save(MCPGoogleKey(endpoint: connection.endpoint, clientEmail: email, privateKeyID: file.private_key_id,
+                                         privateKey: pem), id: connection.id)
     }
 
     /// Keeps the AWS access key a connection signs its requests with, in place of signing in.
@@ -152,6 +175,7 @@ public actor MCPService {
         try tokens.remove(connection.id)
         try clients.remove(connection.id)
         try awsKeys.remove(connection.id)
+        try googleKeys.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -268,6 +292,22 @@ public actor MCPService {
         if let signing = connection.awsSigning {
             guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw MCPServiceError.signInRequired }
             return .aws(key, defaultRegion: signing.region)
+        }
+        if let account = connection.googleServiceAccount {
+            guard var key = try googleKeys.load(connection.id), key.endpoint == connection.endpoint else { throw MCPServiceError.signInRequired }
+            if key.accessToken == nil || (key.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
+                let assertion = try GoogleAssertion.make(key, scopes: account.scopes, subject: account.subject)
+                let response = try await oauth.request(GoogleAssertion.tokenEndpoint, form: [
+                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion,
+                ])
+                guard let token = response["access_token"] as? String, !token.isEmpty else { throw MCPServiceError.invalidMetadata }
+                key.accessToken = token
+                key.expiresAt = Date().addingTimeInterval((response["expires_in"] as? Double) ?? 3_000)
+                try checkActive(connection.id, epoch: epoch, deadline: deadline)
+                try googleKeys.save(key, id: connection.id)
+            }
+            guard let token = key.accessToken else { throw MCPServiceError.signInRequired }
+            return .google(token)
         }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
