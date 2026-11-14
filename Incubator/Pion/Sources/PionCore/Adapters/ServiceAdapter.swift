@@ -173,6 +173,9 @@ public struct ServiceClient: Sendable {
         var components = URLComponents(url: path.reduce(base) { $0.appendingPathComponent($1) }, resolvingAgainstBaseURL: false)
         let items = query.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }.sorted { $0.name < $1.name }
         components?.queryItems = items.isEmpty ? nil : items
+        // A plus sign in a value stays one: some services read a bare + in a query as a space.
+        let encoded = components?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        components?.percentEncodedQuery = encoded
         guard let url = components?.url else { throw ServiceError.input("These values make no valid request.") }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -259,5 +262,6 @@ public struct OperationAdapter: MCPConnectionAdapter {
 /// The adapters Pion serves its own connections with, by the name its catalogue entries give them.
 public enum PionAdapters {
     public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
-                                                                  "entra": Entra.adapter, "defender": Defender.adapter]
+                                                                  "entra": Entra.adapter, "defender": Defender.adapter,
+                                                                  "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter]
 }
