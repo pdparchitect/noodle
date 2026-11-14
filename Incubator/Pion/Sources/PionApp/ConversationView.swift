@@ -213,19 +213,22 @@ struct ConversationView: View {
                             .keyboardShortcut("k", modifiers: [.command, .shift])
                     }
                 } label: {
-                    Label(investigation.outcome?.title ?? investigation.status.title, systemImage: investigation.status.symbol)
-                        .labelStyle(.titleAndIcon)
+                    WidestLabel(title: investigation.outcome?.title ?? investigation.status.title, symbol: investigation.status.symbol,
+                                choices: [Investigation.Status.open, .triaging, .contained].map { ($0.title, $0.symbol) }
+                                    + Investigation.Outcome.allCases.map { ($0.title, Investigation.Status.closed.symbol) })
                 }
                 .help("Status")
             }
             ToolbarItem {
                 // Shown, not chosen: only the lead agent sets it, through the case tool.
-                Label(investigation.severityTitle, systemImage: "exclamationmark.triangle")
-                    .labelStyle(.titleAndIcon)
+                WidestLabel(title: investigation.severityTitle, symbol: "exclamationmark.triangle",
+                            choices: (Investigation.Severity.allCases.map(\.title) + ["Unassessed"]).map { ($0, "exclamationmark.triangle") })
                     .foregroundStyle(investigation.severity == nil ? .secondary : .primary)
                     .padding(.horizontal, 8)
                     .help("Severity, set by the lead agent")
             }
+            // What the Investigation is, apart from what can be done with it.
+            ToolbarSpacer(.fixed)
         }
         if let investigation {
             ToolbarItem {
@@ -478,5 +481,20 @@ private struct MarkdownTable: View {
             .padding(12)
         }
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.secondary.opacity(0.2)))
+    }
+}
+
+/// A label as wide as the widest of its choices, so changing it never shifts what is beside it.
+private struct WidestLabel: View {
+    let title: String
+    let symbol: String
+    let choices: [(title: String, symbol: String)]
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            ForEach(choices, id: \.title) { Label($0.title, systemImage: $0.symbol).hidden() }
+            Label(title, systemImage: symbol)
+        }
+        .labelStyle(.titleAndIcon)
     }
 }
