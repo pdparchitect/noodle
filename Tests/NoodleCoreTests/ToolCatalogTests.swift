@@ -212,4 +212,18 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try MCPConnectionRecord(name: "Plain", endpoint: endpoint,
             clientCredentials: .init(tokenEndpoint: URL(string: "http://falcon.example/oauth2/token")!, scope: nil)))
     }
+
+    func testAnAdapterPresetMakesConnectionsTheAppServesThatStayOnThisMac() throws {
+        let tool = ToolDefinition(id: "lookup", name: "Lookup", summary: "Reputation lookups.", defaultInstructions: "Look up.",
+            iconName: "lookup", configuration: .mcp(.init(endpoint: URL(string: "https://api.lookup.example/v3")!, tokenHeader: "x-apikey",
+                                                          adapter: "lookup")))
+        let account = try tool.makeConnection(name: "Lookup")
+        XCTAssertEqual(account.adapter, "lookup")
+        XCTAssertTrue(tool.staysOnThisMac)
+        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(account)), account)
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        XCTAssertFalse(notion.staysOnThisMac)
+        XCTAssertNil(try notion.makeConnection(name: "Notion").adapter)
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
+    }
 }

@@ -64,10 +64,19 @@ public final class MCPController {
         }
     }
     /// Reads which connections are signed in, after something besides Settings signed one in or out.
+    /// One the app's adapter answers without credentials is always ready.
     public func readSignIns() async {
         for connection in registry.connections {
-            if await service.hasCredentials(connection.id) { connected.insert(connection.id) } else { connected.remove(connection.id) }
+            let open = connection.adapter != nil && connection.tokenHeader == nil && connection.clientCredentials == nil
+            let signedIn = await service.hasCredentials(connection.id)
+            if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
         }
+    }
+
+    /// The adapters this app serves its own connections with, by the name catalogue entries give them.
+    public func serve(_ adapters: [String: any MCPConnectionAdapter]) {
+        let service = service
+        Task { await service.useAdapters(adapters) }
     }
     func save(_ record: MCPConnectionRecord) throws {
         guard Organisation.allows(Organisation.action(for: record)) else { throw MCPServiceError.notAllowed }
@@ -156,7 +165,7 @@ public final class MCPController {
     /// `secret` when one is given; either way it then lists the connection's tools to show it works.
     func connect(_ record: MCPConnectionRecord, secret: MCPConnectionSecret? = nil) {
         guard signingIn == nil else { return }
-        let signsIn = record.tokenHeader == nil && record.clientCredentials == nil
+        let signsIn = record.tokenHeader == nil && record.clientCredentials == nil && record.adapter == nil
         if signsIn { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil

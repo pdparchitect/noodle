@@ -230,9 +230,10 @@ import NoodleMCP
 
 extension HubConnections {
     /// The catalogue's services as devices show them, icons as PNG from the app's `ToolIcons`.
-    /// Only services that sign in through the browser: a Hub cannot yet keep an API key or a form's details.
+    /// Only services that sign in through the browser to an MCP server: a Hub cannot yet keep an API key or a
+    /// form's details, and has no app adapters.
     public static let catalogue: [LinkToolPreset] = ToolCatalog.matching("").compactMap { tool in
-        guard case .mcp(let configuration) = tool.configuration, !tool.needsSetUp else { return nil }
+        guard case .mcp(let configuration) = tool.configuration, !tool.staysOnThisMac else { return nil }
         return LinkToolPreset(id: tool.id, name: tool.name, summary: tool.summary, instructions: tool.defaultInstructions,
                               endpoint: configuration.endpoint, badge: tool.maturity.badge, icon: icon(named: tool.iconName))
     }

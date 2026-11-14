@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import ProductIdentity
 
 /// Protocol-independent catalogue. Setup routing is kept in ToolCreationSheet.
 public struct ToolCatalogView: View {
@@ -15,7 +16,7 @@ public struct ToolCatalogView: View {
 
     private var tools: [ToolDefinition] {
         ToolCatalog.matching(search).filter { tool in
-            includesSetUpTools || !tool.needsSetUp
+            includesSetUpTools || !tool.staysOnThisMac
         }
     }
 
@@ -48,7 +49,8 @@ public struct ToolCatalogView: View {
                                     }
                                     Spacer(minLength: 8)
                                     ToolMaturityBadge(maturity: tool.maturity)
-                                    Text(tool.kind.rawValue).font(.caption2).foregroundStyle(.secondary)
+                                    Text(tool.adapter != nil ? ProductIdentity.current.name : tool.kind.rawValue)
+                                        .font(.caption2).foregroundStyle(.secondary)
                                     Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                                 }.padding(9).contentShape(Rectangle())
                             }.buttonStyle(.plain).help(tool.needsSetUp ? "Set up \(tool.name)" : "Add \(tool.name) and sign in")

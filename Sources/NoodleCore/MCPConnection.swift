@@ -27,6 +27,9 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public var tokenHeader: String?
     /// Set for a connection that proves itself with a client ID and secret instead of signing in.
     public var clientCredentials: MCPClientCredentials?
+    /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
+    /// address of the service the adapter calls. Only the app that has that adapter serves it.
+    public var adapter: String?
     /// The catalogue preset it was made from, if any.
     public var catalogueID: String?
     /// What was filled in for the preset's fields, such as its domain; nil when it has none.
@@ -34,8 +37,9 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil,
-                clientCredentials: MCPClientCredentials? = nil) throws {
+                clientCredentials: MCPClientCredentials? = nil, adapter: String? = nil) throws {
         self.id = id
+        self.adapter = try adapter.map(Self.validatedAdapter)
         self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
         self.clientCredentials = try clientCredentials.map(Self.validatedClientCredentials)
         guard tokenHeader == nil || clientCredentials == nil else {
@@ -62,6 +66,15 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
         guard !name.isEmpty, name.count <= 100, name.unicodeScalars.allSatisfy(allowed.contains),
               !reserved.contains(name.lowercased()) else {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
+        }
+        return name
+    }
+
+    /// An adapter's name: lowercase letters, digits and hyphens.
+    public static func validatedAdapter(_ name: String) throws -> String {
+        guard (1...64).contains(name.count),
+              name.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
+            throw MCPConnectionError.message("Invalid tool adapter.")
         }
         return name
     }
@@ -159,6 +172,7 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
                     throw MCPConnectionError.message("Invalid saved MCP connection.")
                 }
             }
+            if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
             guard (connection.catalogueID?.count ?? 0) <= 100, (connection.settings?.count ?? 0) <= 20,
                   connection.settings?.allSatisfy({ $0.key.count <= 100 && $0.value.count <= 400 }) ?? true else {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")

@@ -116,7 +116,7 @@ public struct MCPSettingsView: View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
         } else if store.mcp.signingIn == connection.id {
-            Text(store.mcp.signInStage.isEmpty ? (connection.tokenHeader == nil && connection.clientCredentials == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
+            Text(store.mcp.signInStage.isEmpty ? (connection.tokenHeader == nil && connection.clientCredentials == nil && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.mcp.signInStage)
         } else if store.mcp.errors[connection.id] != nil {
@@ -239,12 +239,15 @@ public struct MCPEditor: View {
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
                 if onSecret != nil {
-                    Picker("Sign-in", selection: $signIn) {
-                        Text("Browser").tag(SignIn.browser)
-                        Text("Token").tag(SignIn.token)
-                        Text("Client ID & Secret").tag(SignIn.client)
+                    // An adapter connection proves itself the way its adapter expects; only its values change here.
+                    if existing?.adapter == nil {
+                        Picker("Sign-in", selection: $signIn) {
+                            Text("Browser").tag(SignIn.browser)
+                            Text("Token").tag(SignIn.token)
+                            Text("Client ID & Secret").tag(SignIn.client)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                     if signIn == .client {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Token URL").font(.caption.weight(.semibold))

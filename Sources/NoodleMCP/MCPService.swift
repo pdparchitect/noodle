@@ -18,6 +18,7 @@ public actor MCPService {
     private var epochs: [UUID: Int] = [:]
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
+    private var adapters: [String: any MCPConnectionAdapter] = [:]
     public init(namespace: String) {
         #if canImport(Security)
         credentials = MCPKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
@@ -44,6 +45,11 @@ public actor MCPService {
         self.credentials = credentials; self.tokens = tokens; self.clients = clients
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
+    /// The adapters this app serves connections with, by the name connections give.
+    public func useAdapters(_ adapters: [String: any MCPConnectionAdapter]) {
+        self.adapters = adapters
+    }
+
     public func hasCredentials(_ id: UUID) -> Bool {
         if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
@@ -118,7 +124,7 @@ public actor MCPService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard connection.tokenHeader == nil, connection.clientCredentials == nil else {
+        guard connection.tokenHeader == nil, connection.clientCredentials == nil, connection.adapter == nil else {
             throw MCPConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
@@ -278,8 +284,45 @@ public actor MCPService {
         return ("Authorization", "Bearer " + token)
     }
 
+    /// A connection the app's adapter answers: its tools and calls come from the adapter, which reaches the
+    /// service with the connection's credentials, if it has any.
+    private func adapt(_ request: MCPBridgeRequest, adapter name: String, connection: MCPConnectionRecord, epoch: Int,
+                       deadline: Date, authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+        guard let adapter = adapters[name] else {
+            throw MCPConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
+        }
+        let credentials = connection.tokenHeader != nil || connection.clientCredentials != nil
+        let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
+        try checkActive(connection.id, epoch: epoch, deadline: deadline)
+        switch request.action {
+        case .tools:
+            let data = try await adapter.tools(for: connection)
+            _ = try JSONDecoder().decode(ListTools.Result.self, from: data)
+            return data
+        case .inspect:
+            let tools = try JSONDecoder().decode(ListTools.Result.self, from: try await adapter.tools(for: connection)).tools
+            guard let tool = tools.first(where: { $0.name == request.tool }) else {
+                throw MCPConnectionError.message("This connection does not offer that tool. List its tools again.")
+            }
+            return try JSONEncoder().encode(tool)
+        case .call:
+            guard await authorized() else { throw MCPServiceError.revoked }
+            try checkActive(connection.id, epoch: epoch, deadline: deadline)
+            guard let tool = request.tool, !tool.isEmpty else { throw MCPServiceError.invalidMetadata }
+            let access = MCPAdapterAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+            return try await adapter.call(tool, arguments: request.arguments ?? Data("{}".utf8), connection: connection, access: access)
+        case .resources:
+            return Data(#"{"resources":[]}"#.utf8)
+        case .readResource:
+            throw MCPConnectionError.message("This connection offers no resources.")
+        }
+    }
+
     private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
                          authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
+        if let name = connection.adapter {
+            return try await adapt(request, adapter: name, connection: connection, epoch: epoch, deadline: deadline, authorized: authorized)
+        }
         let authorization = try await authorization(for: connection, epoch: epoch, deadline: deadline)
         let configuration = httpConfiguration()
         let transport = HTTPClientTransport(endpoint: connection.endpoint, configuration: configuration, streaming: false,

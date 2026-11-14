@@ -100,9 +100,12 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let endpointTemplate: String?
     /// For a service whose accounts use a client ID and secret.
     public let clientCredentials: ClientCredentialsPreset?
+    /// The app adapter that answers for the service, which is then at `endpoint` without an MCP server.
+    public let adapter: String?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
-                clientCredentials: ClientCredentialsPreset? = nil) {
+                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+        self.adapter = adapter
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
@@ -114,7 +117,9 @@ public struct MCPToolConfiguration: Equatable, Sendable {
 
     /// A service whose address differs for each account, built from what the account fills in.
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
-                authorizationServer: URL? = nil, tokenHeader: String? = nil, clientCredentials: ClientCredentialsPreset? = nil) {
+                authorizationServer: URL? = nil, tokenHeader: String? = nil, clientCredentials: ClientCredentialsPreset? = nil,
+                adapter: String? = nil) {
+        self.adapter = adapter
         self.clientCredentials = clientCredentials
         self.endpointTemplate = endpointTemplate
         self.fields = fields
@@ -180,12 +185,25 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
             let account = try configuration.account(values)
             var record = try MCPConnectionRecord(id: id, name: name, endpoint: account.endpoint, description: summary,
                                                  instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
-                                                 clientCredentials: account.clientCredentials)
+                                                 clientCredentials: account.clientCredentials, adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
             return record
         }
     }
+    /// The app adapter that answers for it, if any.
+    public var adapter: String? {
+        switch configuration { case .mcp(let configuration): configuration.adapter }
+    }
+
+    /// Whether only this Mac can serve it: one set up with a form, whose key or details a Noodle Hub cannot
+    /// keep yet, or one an app adapter answers.
+    public var staysOnThisMac: Bool {
+        switch configuration {
+        case .mcp(let configuration): needsSetUp || configuration.adapter != nil
+        }
+    }
+
     /// Whether adding it opens a form first: for an API key, or for details such as its domain.
     public var needsSetUp: Bool {
         switch configuration {
