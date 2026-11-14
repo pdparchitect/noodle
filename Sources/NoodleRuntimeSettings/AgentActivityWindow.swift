@@ -255,6 +255,29 @@ final class AgentActivityTextView: NSScrollView {
         textView.scrollToEndOfDocument(nil)
     }
 
+    /// Dims each entry's time and output and sets its title in semibold; the text itself stays as copied.
+    static func style(_ storage: NSTextStorage, entries: [AgentActivityEntry]) {
+        let regular = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let spaced = NSMutableParagraphStyle()
+        spaced.paragraphSpacingBefore = 6
+        storage.beginEditing()
+        storage.setAttributes([.font: regular, .foregroundColor: NSColor.secondaryLabelColor],
+                              range: NSRange(location: 0, length: storage.length))
+        var location = 0
+        for (index, entry) in entries.enumerated() {
+            let text = entry.text as NSString
+            let time = text.range(of: "] ").location
+            let lineEnd = text.range(of: "\n").location
+            if time != NSNotFound, lineEnd != NSNotFound, time < lineEnd, location + text.length <= storage.length {
+                storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor],
+                                      range: NSRange(location: location + time + 2, length: lineEnd - time - 2))
+                if index > 0 { storage.addAttribute(.paragraphStyle, value: spaced, range: NSRange(location: location, length: lineEnd)) }
+            }
+            location += text.length
+        }
+        storage.endEditing()
+    }
+
     func update(_ entries: [AgentActivityEntry]) {
         guard entries != rendered, let storage = textView.textStorage else { return }
         let following = isFollowing
@@ -275,8 +298,7 @@ final class AgentActivityTextView: NSScrollView {
         let prefixLength = rendered.prefix(same).reduce(0) { $0 + $1.text.utf16.count }
         storage.replaceCharacters(in: NSRange(location: prefixLength, length: storage.length - prefixLength),
                                   with: entries.dropFirst(same).map(\.text).joined())
-        storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                               .foregroundColor: NSColor.labelColor], range: NSRange(location: 0, length: storage.length))
+        Self.style(storage, entries: entries)
         rendered = entries
         let start = min(max(0, selection.location - removed), storage.length)
         let end = min(max(start, NSMaxRange(selection) - removed), storage.length)

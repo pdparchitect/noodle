@@ -5,6 +5,7 @@
 ### Added
 
 - A bot's Activity window logs each move to another login when usage runs out, and each return to its own. While the bot is away from its own login, the window's title bar names the login it is running on, on the right.
+- The Activity window is easier to scan: times and output are dimmed, each step's name is in bold, and steps are spaced apart.
 
 ## [0.51.0] - 2026-11-13
 

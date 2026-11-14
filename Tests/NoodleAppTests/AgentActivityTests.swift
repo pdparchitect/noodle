@@ -233,6 +233,32 @@ import XCTest
         XCTAssertTrue(controller.output.isAtBottom)
     }
 
+    func testLogDimsTimesAndOutputAndSpacesEntries() throws {
+        _ = NSApplication.shared
+        let log = AgentActivityLog()
+        log.record(.init(title: "Bash: started", detail: "ls -la"))
+        log.record(.init(title: "Tool result", detail: "total 0"))
+        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Reader"), log: log)
+        defer { controller.close() }
+        let storage = try XCTUnwrap(controller.output.textView.textStorage)
+        let text = storage.string as NSString
+        XCTAssertEqual(storage.string, log.text, "Copying keeps the plain text")
+        func color(at location: Int) -> NSColor? { storage.attribute(.foregroundColor, at: location, effectiveRange: nil) as? NSColor }
+        func weight(at location: Int) -> CGFloat? {
+            (storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont)
+                .flatMap { ($0.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any])?[.weight] as? CGFloat }
+        }
+        let title = text.range(of: "Bash: started").location, output = text.range(of: "ls -la").location
+        XCTAssertEqual(color(at: 1), .secondaryLabelColor)
+        XCTAssertEqual(color(at: title), .labelColor)
+        XCTAssertGreaterThan(try XCTUnwrap(weight(at: title)), try XCTUnwrap(weight(at: output)))
+        XCTAssertEqual(color(at: output), .secondaryLabelColor)
+        let second = text.range(of: "Tool result").location
+        let style = storage.attribute(.paragraphStyle, at: second, effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(style?.paragraphSpacingBefore, 6)
+        XCTAssertEqual((storage.attribute(.paragraphStyle, at: title, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacingBefore ?? 0, 0)
+    }
+
     func testTitleShowsTheFallbackLoginOnTheRightOnlyWhileAway() throws {
         _ = NSApplication.shared
         let log = AgentActivityLog()
