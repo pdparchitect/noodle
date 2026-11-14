@@ -1,5 +1,18 @@
 import Foundation
 
+/// Where a connection that proves itself with a client ID and secret exchanges them for an access token.
+/// The ID and secret themselves are kept in Keychain.
+public struct MCPClientCredentials: Codable, Equatable, Sendable {
+    public let tokenEndpoint: URL
+    /// What to ask for, space-separated, when the service wants it named.
+    public let scope: String?
+    public init(tokenEndpoint: URL, scope: String?) {
+        self.tokenEndpoint = tokenEndpoint
+        let scope = scope?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.scope = scope?.isEmpty == false ? scope : nil
+    }
+}
+
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
 public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
@@ -12,15 +25,22 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     /// The request header a token connection sends its token in, such as Authorization or x-apikey.
     /// Nil for a connection that signs in through the browser. The token itself is kept in Keychain.
     public var tokenHeader: String?
+    /// Set for a connection that proves itself with a client ID and secret instead of signing in.
+    public var clientCredentials: MCPClientCredentials?
     /// The catalogue preset it was made from, if any.
     public var catalogueID: String?
     /// What was filled in for the preset's fields, such as its domain; nil when it has none.
     public var settings: [String: String]?
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
-                description: String = "", instructions: String = "", tokenHeader: String? = nil) throws {
+                description: String = "", instructions: String = "", tokenHeader: String? = nil,
+                clientCredentials: MCPClientCredentials? = nil) throws {
         self.id = id
         self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
+        self.clientCredentials = try clientCredentials.map(Self.validatedClientCredentials)
+        guard tokenHeader == nil || clientCredentials == nil else {
+            throw MCPConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
+        }
         self.name = try ConversationName.validated(name)
         self.endpoint = try Self.validatedEndpoint(endpoint)
         self.description = String(description.prefix(1_000))
@@ -44,6 +64,11 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
         }
         return name
+    }
+
+    public static func validatedClientCredentials(_ credentials: MCPClientCredentials) throws -> MCPClientCredentials {
+        guard (credentials.scope?.count ?? 0) <= 1_000 else { throw MCPConnectionError.message("The scope is too long.") }
+        return MCPClientCredentials(tokenEndpoint: try validatedEndpoint(credentials.tokenEndpoint), scope: credentials.scope)
     }
 
     public static func validatedEndpoint(_ url: URL) throws -> URL {
@@ -128,6 +153,11 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
             _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
             if let header = connection.tokenHeader, try MCPConnectionRecord.validatedTokenHeader(header) != header {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")
+            }
+            if let credentials = connection.clientCredentials {
+                guard connection.tokenHeader == nil, try MCPConnectionRecord.validatedClientCredentials(credentials) == credentials else {
+                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                }
             }
             guard (connection.catalogueID?.count ?? 0) <= 100, (connection.settings?.count ?? 0) <= 20,
                   connection.settings?.allSatisfy({ $0.key.count <= 100 && $0.value.count <= 400 }) ?? true else {

@@ -9,6 +9,7 @@ import ProductIdentity
 public actor MCPService {
     private let credentials: any MCPCredentialStorage
     private let tokens: any MCPTokenStorage
+    private let clients: any MCPClientSecretStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -22,9 +23,12 @@ public actor MCPService {
         credentials = MCPKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
                                                        label: "\(ProductIdentity.current.name) MCP connection")
         tokens = MCPKeychainStore<MCPToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
+        clients = MCPKeychainStore<MCPClientSecret>(service: namespace + ".mcp.client",
+                                                    label: "\(ProductIdentity.current.name) MCP client secret")
         #else
         credentials = MCPNoCredentials()
         tokens = MCPNoCredentials()
+        clients = MCPNoCredentials()
         #endif
         oauth = MCPOAuth()
         httpConfiguration = {
@@ -34,12 +38,14 @@ public actor MCPService {
             return configuration
         }
     }
-    init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(), oauth: MCPOAuth,
+    init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(),
+         clients: any MCPClientSecretStorage = MCPMemoryClientSecrets(), oauth: MCPOAuth,
          httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
-        self.credentials = credentials; self.tokens = tokens; self.oauth = oauth; self.httpConfiguration = httpConfiguration
+        self.credentials = credentials; self.tokens = tokens; self.clients = clients
+        self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     public func hasCredentials(_ id: UUID) -> Bool {
-        if (try? tokens.load(id)) != nil { return true }
+        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
     }
@@ -55,6 +61,26 @@ public actor MCPService {
         serverIcons[id] = nil
         try credentials.remove(id)
         try tokens.remove(id)
+        try clients.remove(id)
+    }
+
+    /// Keeps the client ID and secret a connection exchanges for access tokens, in place of signing in.
+    /// A new pair starts afresh: no token got with the old one is used again.
+    public func saveClientCredentials(clientID: String, secret: String, for connection: MCPConnectionRecord) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard let exchange = connection.clientCredentials else {
+            throw MCPConnectionError.message("This connection does not use a client ID and secret.")
+        }
+        func line(_ value: String, _ name: String) throws -> String {
+            let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, value.count <= 4_096, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+                throw MCPConnectionError.message("Paste the \(name) on one line.")
+            }
+            return value
+        }
+        try clients.save(MCPClientSecret(endpoint: connection.endpoint, tokenEndpoint: exchange.tokenEndpoint,
+                                         clientID: line(clientID, "client ID"), clientSecret: line(secret, "client secret")),
+                         id: connection.id)
     }
 
     /// Keeps the token a token connection sends, in place of signing in. Surrounding spaces are
@@ -92,11 +118,12 @@ public actor MCPService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard connection.tokenHeader == nil else {
-            throw MCPConnectionError.message("This connection uses a token. Enter it in the connection's settings.")
+        guard connection.tokenHeader == nil, connection.clientCredentials == nil else {
+            throw MCPConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
-        // One that used a token before signs in now; the token would otherwise still count as its sign-in.
+        // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
         try tokens.remove(connection.id)
+        try clients.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -217,6 +244,17 @@ public actor MCPService {
             let value = header.caseInsensitiveCompare("Authorization") == .orderedSame && !token.value.contains(" ")
                 ? "Bearer " + token.value : token.value
             return (header, value)
+        }
+        if let exchange = connection.clientCredentials {
+            guard var secret = try clients.load(connection.id), secret.endpoint == connection.endpoint,
+                  secret.tokenEndpoint == exchange.tokenEndpoint else { throw MCPServiceError.signInRequired }
+            if secret.accessToken == nil || (secret.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
+                secret = try await oauth.clientToken(secret, scope: exchange.scope)
+                try checkActive(connection.id, epoch: epoch, deadline: deadline)
+                try clients.save(secret, id: connection.id)
+            }
+            guard let token = secret.accessToken else { throw MCPServiceError.signInRequired }
+            return ("Authorization", "Bearer " + token)
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw MCPServiceError.signInRequired }

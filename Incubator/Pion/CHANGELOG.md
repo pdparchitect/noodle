@@ -33,6 +33,7 @@
 ### Added
 
 - Tool connections can use a token instead of signing in through the browser, as in Noodle: in Settings › Tools, Custom MCP's Sign-in choice of Token takes an API key and the header it goes in.
+- Tool connections can also use a client ID and secret, as in Noodle: Custom MCP's Client ID & Secret choice takes the service's token URL and both values.
 - Attachments work as in Noodle: add a file, a photo or a capture of a window from the + menu; files show as pictures and cards in messages and open in Quick Look; annotate a file, a link, a region or selected text, from the preview or with Conversation › Add Annotation and Annotate Region.
 - Clicking an agent's mark opens its profile, with buttons to message or edit it.
 - General, Permissions and Update settings. Released builds update themselves from Pion's own channel, and Pion › Check for Updates looks now.

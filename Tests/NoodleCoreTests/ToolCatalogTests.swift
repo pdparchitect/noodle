@@ -191,4 +191,25 @@ final class ToolCatalogTests: XCTestCase {
         let earlier = try MCPConnectionRecord(name: "Notion", endpoint: signedIn.endpoint)
         XCTAssertEqual(ToolCatalog.definition(for: earlier), notion, "connections made before entries were remembered match by address")
     }
+
+    func testAClientCredentialsPresetBuildsEachAccountsTokenAddress() throws {
+        let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
+        let tool = ToolDefinition(id: "service-app", name: "Service App", summary: "As a service.", defaultInstructions: "Work.",
+            iconName: "service-app", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain],
+                clientCredentials: .init(tokenEndpointTemplate: "https://{domain}/oauth2/v1/token", scope: "okta.users.read"))))
+        XCTAssertTrue(tool.needsSetUp)
+        let account = try tool.makeConnection(name: "Acme", values: ["domain": "acme.okta.com"])
+        XCTAssertEqual(account.clientCredentials, MCPClientCredentials(tokenEndpoint: URL(string: "https://acme.okta.com/oauth2/v1/token")!,
+                                                                      scope: "okta.users.read"))
+        XCTAssertNil(account.tokenHeader)
+        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(account)), account)
+
+        let endpoint = URL(string: "https://falcon.example/mcp")!
+        let fixed = MCPClientCredentials(tokenEndpoint: URL(string: "https://falcon.example/oauth2/token")!, scope: nil)
+        XCTAssertNoThrow(try MCPConnectionRecord(name: "Falcon", endpoint: endpoint, clientCredentials: fixed))
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: endpoint, tokenHeader: "x-apikey", clientCredentials: fixed),
+                             "a connection uses one way to prove who it is")
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Plain", endpoint: endpoint,
+            clientCredentials: .init(tokenEndpoint: URL(string: "http://falcon.example/oauth2/token")!, scope: nil)))
+    }
 }

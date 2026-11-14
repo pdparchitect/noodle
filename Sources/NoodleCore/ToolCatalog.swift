@@ -75,6 +75,16 @@ public struct ToolField: Equatable, Sendable {
     }
 }
 
+/// How a preset whose accounts use a client ID and secret gets its access tokens.
+public struct ClientCredentialsPreset: Equatable, Sendable {
+    /// The token address, with a {key} for each field it needs.
+    public let tokenEndpointTemplate: String
+    public let scope: String?
+    public init(tokenEndpointTemplate: String, scope: String? = nil) {
+        self.tokenEndpointTemplate = tokenEndpointTemplate; self.scope = scope
+    }
+}
+
 public struct MCPToolConfiguration: Equatable, Sendable {
     /// Where the service is; for a preset with fields, a sample built from their placeholders.
     public let endpoint: URL
@@ -88,19 +98,24 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let fields: [ToolField]
     /// The address with a {key} for each field it needs, such as https://{domain}/mcp; nil for a fixed address.
     public let endpointTemplate: String?
+    /// For a service whose accounts use a client ID and secret.
+    public let clientCredentials: ClientCredentialsPreset?
 
-    public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil) {
+    public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
+                clientCredentials: ClientCredentialsPreset? = nil) {
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
         self.tokenHeader = tokenHeader
+        self.clientCredentials = clientCredentials
         fields = []
         endpointTemplate = nil
     }
 
     /// A service whose address differs for each account, built from what the account fills in.
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
-                authorizationServer: URL? = nil, tokenHeader: String? = nil) {
+                authorizationServer: URL? = nil, tokenHeader: String? = nil, clientCredentials: ClientCredentialsPreset? = nil) {
+        self.clientCredentials = clientCredentials
         self.endpointTemplate = endpointTemplate
         self.fields = fields
         self.oauth = oauth
@@ -117,15 +132,21 @@ public struct MCPToolConfiguration: Equatable, Sendable {
         }
     }
 
-    /// One account's address and settings from what it filled in, each value checked.
-    public func account(_ values: [String: String]) throws -> (endpoint: URL, settings: [String: String]?) {
-        guard let endpointTemplate else { return (endpoint, nil) }
+    /// One account's address, settings and token address from what it filled in, each value checked.
+    public func account(_ values: [String: String]) throws
+        -> (endpoint: URL, settings: [String: String]?, clientCredentials: MCPClientCredentials?) {
         var settings: [String: String] = [:]
         for field in fields { settings[field.key] = try field.validated(values[field.key] ?? "") }
-        guard let url = URL(string: Self.fill(endpointTemplate, fields: fields, values: settings)) else {
-            throw MCPConnectionError.message("These details make no valid address.")
+        func address(_ template: String) throws -> URL {
+            guard let url = URL(string: Self.fill(template, fields: fields, values: settings)) else {
+                throw MCPConnectionError.message("These details make no valid address.")
+            }
+            return try MCPConnectionRecord.validatedEndpoint(url)
         }
-        return (try MCPConnectionRecord.validatedEndpoint(url), settings)
+        let client = try clientCredentials.map {
+            MCPClientCredentials(tokenEndpoint: try address($0.tokenEndpointTemplate), scope: $0.scope)
+        }
+        return (try endpointTemplate.map(address) ?? endpoint, fields.isEmpty ? nil : settings, client)
     }
 
     /// Every addition is a separate account, including repeated presets.
@@ -158,7 +179,8 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
         case .mcp(let configuration):
             let account = try configuration.account(values)
             var record = try MCPConnectionRecord(id: id, name: name, endpoint: account.endpoint, description: summary,
-                                                 instructions: defaultInstructions, tokenHeader: configuration.tokenHeader)
+                                                 instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
+                                                 clientCredentials: account.clientCredentials)
             record.catalogueID = self.id
             record.settings = account.settings
             return record
@@ -167,7 +189,8 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     /// Whether adding it opens a form first: for an API key, or for details such as its domain.
     public var needsSetUp: Bool {
         switch configuration {
-        case .mcp(let configuration): configuration.tokenHeader != nil || !configuration.fields.isEmpty
+        case .mcp(let configuration):
+            configuration.tokenHeader != nil || configuration.clientCredentials != nil || !configuration.fields.isEmpty
         }
     }
 

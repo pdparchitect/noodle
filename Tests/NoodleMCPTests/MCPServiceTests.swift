@@ -20,8 +20,20 @@ private final class TestTokens: MCPTokenStorage, @unchecked Sendable {
     func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
 }
 
+private final class TestClients: MCPClientSecretStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [UUID: MCPClientSecret] = [:]
+    func load(_ id: UUID) -> MCPClientSecret? { lock.withLock { values[id] } }
+    func save(_ secret: MCPClientSecret, id: UUID) { lock.withLock { values[id] = secret } }
+    func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
+}
+
 private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
+    /// The forms posted to the client-credentials token address.
+    var clientExchanges: [String] = []
+    var clientTokenLifetime = 3600
+    var refuseClient = false
     /// The headers of every request to the MCP endpoint.
     var mcpHeaders: [[String: String]] = []
     var registrations = 0
@@ -57,6 +69,12 @@ private final class FixtureState: @unchecked Sendable {
             case "/register":
                 registrations += 1
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
+            case "/client-token":
+                let body = String(data: Self.body(request), encoding: .utf8) ?? ""
+                clientExchanges.append(body)
+                if refuseClient { return (401, ["error": "invalid_client"]) }
+                return (200, ["access_token": "client-access-\(clientExchanges.count)", "token_type": "bearer",
+                              "expires_in": clientTokenLifetime])
             case "/token":
                 let body = String(data: Self.body(request), encoding: .utf8) ?? ""
                 let form = URLComponents(string: "https://service.example/?" + body)?.queryItems
@@ -145,8 +163,8 @@ final class MCPServiceTests: XCTestCase {
         config.protocolClasses = [FixtureProtocol.self]
         return config
     }
-    private func service(vault: TestVault, tokens: TestTokens = TestTokens()) -> MCPService {
-        MCPService(credentials: vault, tokens: tokens, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
+    private func service(vault: TestVault, tokens: TestTokens = TestTokens(), clients: TestClients = TestClients()) -> MCPService {
+        MCPService(credentials: vault, tokens: tokens, clients: clients, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [FixtureProtocol.self]
             return config
@@ -317,6 +335,44 @@ final class MCPServiceTests: XCTestCase {
             try await client.disconnect(record.id)
             let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
         }
+    }
+
+    func testAClientIDAndSecretAreExchangedForAnAccessTokenThatIsReusedUntilItExpires() async throws {
+        let credentials = MCPClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: "read")
+        let record = try MCPConnectionRecord(name: "Service App", endpoint: endpoint, clientCredentials: credentials)
+        let list = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
+        let client = service(vault: TestVault())
+        var refused = false
+        do { _ = try await client.perform(list, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        XCTAssertTrue(refused, "a connection without its client secret was not refused")
+
+        try await client.saveClientCredentials(clientID: " app-id ", secret: " app-secret ", for: record)
+        let saved = await client.hasCredentials(record.id); XCTAssertTrue(saved)
+        _ = try await client.perform(list, connection: record)
+        _ = try await client.perform(list, connection: record)
+        let state = FixtureProtocol.state
+        XCTAssertEqual(state.clientExchanges.count, 1, "a token still valid is reused")
+        let form = Set(state.clientExchanges[0].split(separator: "&").map(String.init))
+        XCTAssertEqual(form, ["client_id=app-id", "client_secret=app-secret", "grant_type=client_credentials", "scope=read"])
+        XCTAssertEqual(Set(state.mcpHeaders.compactMap { $0["Authorization"] }), ["Bearer client-access-1"])
+        XCTAssertEqual(state.registrations, 0)
+
+        state.clientTokenLifetime = 30
+        try await client.saveClientCredentials(clientID: "app-id", secret: "new-secret", for: record)
+        _ = try await client.perform(list, connection: record)
+        _ = try await client.perform(list, connection: record)
+        XCTAssertEqual(state.clientExchanges.count, 3, "a new secret starts again, and a token about to expire is renewed")
+
+        state.refuseClient = true
+        try await client.saveClientCredentials(clientID: "app-id", secret: "revoked", for: record)
+        refused = false
+        do { _ = try await client.perform(list, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        XCTAssertTrue(refused, "a refused client asks for its credentials again")
+
+        try await client.disconnect(record.id)
+        let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
+        do { try await client.saveClientCredentials(clientID: "id", secret: "secret", for: try MCPConnectionRecord(name: "Plain", endpoint: endpoint))
+             XCTFail("accepted a client secret for a browser connection") } catch {}
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {

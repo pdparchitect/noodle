@@ -30,6 +30,17 @@ struct MCPToken: Codable, Sendable {
     let value: String
 }
 
+/// A client ID and secret, with the access token last exchanged for them while it lasts.
+struct MCPClientSecret: Codable, Sendable {
+    /// What they were given for; a connection now pointing elsewhere never sends them.
+    let endpoint: URL
+    let tokenEndpoint: URL
+    let clientID: String
+    let clientSecret: String
+    var accessToken: String?
+    var expiresAt: Date?
+}
+
 /// Only linked into the app-side MCP client, never the agent's CLI.
 protocol MCPCredentialStorage: Sendable {
     func load(_ id: UUID) throws -> MCPCredentials?
@@ -43,6 +54,22 @@ protocol MCPTokenStorage: Sendable {
     func save(_ token: MCPToken, id: UUID) throws
     func remove(_ id: UUID) throws
 }
+/// Where client IDs and secrets are kept, apart from sign-ins and tokens.
+protocol MCPClientSecretStorage: Sendable {
+    func load(_ id: UUID) throws -> MCPClientSecret?
+    func save(_ secret: MCPClientSecret, id: UUID) throws
+    func remove(_ id: UUID) throws
+}
+
+/// Client secrets kept only while the process runs, for a service made without Keychain, as in tests.
+final class MCPMemoryClientSecrets: MCPClientSecretStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var secrets: [UUID: MCPClientSecret] = [:]
+    func load(_ id: UUID) -> MCPClientSecret? { lock.withLock { secrets[id] } }
+    func save(_ secret: MCPClientSecret, id: UUID) { lock.withLock { secrets[id] = secret } }
+    func remove(_ id: UUID) { _ = lock.withLock { secrets.removeValue(forKey: id) } }
+}
+
 /// Tokens kept only while the process runs, for a service made without Keychain, as in tests.
 final class MCPMemoryTokens: MCPTokenStorage, @unchecked Sendable {
     private let lock = NSLock()
@@ -94,9 +121,12 @@ struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
 }
 extension MCPKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
 extension MCPKeychainStore: MCPTokenStorage where Value == MCPToken {}
+extension MCPKeychainStore: MCPClientSecretStorage where Value == MCPClientSecret {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage {
+struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage {
+    func load(_ id: UUID) throws -> MCPClientSecret? { nil }
+    func save(_ secret: MCPClientSecret, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPCredentials? { nil }
     func save(_ credentials: MCPCredentials, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPToken? { nil }

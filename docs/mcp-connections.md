@@ -6,7 +6,9 @@
 3. Complete sign-in in your browser. For a service that gives you an API key or
    token instead, choose **Token** under **Sign-in** in Custom MCP, paste it, and
    enter the header the service expects it in, such as `Authorization` or
-   `x-apikey`. Change it later with **Change Token…**.
+   `x-apikey`. For a service that gives you a client ID and secret, choose
+   **Client ID & Secret** and enter its token URL, any scope it needs, and both
+   values. Change them later with **Change Token…** or **Change Credentials…**.
 4. Add the connection under **Tools** when creating or editing a bot, then save.
 
 **New** in the bot's tool picker opens the same flow. Connections are saved
@@ -26,10 +28,10 @@ before trying again.
 
 ## Supported services
 
-Custom connections sign you in through your browser or send an API key or token
-you paste, which Noodle keeps in Keychain. Services that need a client secret, or
-that run as a program on your Mac, are not supported. Token connections are not
-available for tools kept on a Noodle Hub. Providers may restrict accounts or
+Custom connections sign you in through your browser, send an API key or token
+you paste, or exchange a client ID and secret for access tokens. Noodle keeps keys
+and secrets in Keychain. Services that run as a program on your Mac are not
+supported. Keys and secrets are not available for tools kept on a Noodle Hub. Providers may restrict accounts or
 plans.
 
 Some connections, such as Pipedream, give access to several services at once.

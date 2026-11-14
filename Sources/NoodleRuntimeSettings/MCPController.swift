@@ -3,6 +3,12 @@ import Observation
 import NoodleCore
 import NoodleMCP
 
+/// What a connection that does not sign in through the browser is given to prove who it is.
+public enum MCPConnectionSecret: Sendable {
+    case token(String)
+    case client(id: String, secret: String)
+}
+
 @MainActor @Observable
 public final class MCPController {
     public private(set) var registry = MCPRegistry()
@@ -146,18 +152,23 @@ public final class MCPController {
             try await service.disconnect(id)
         }
     }
-    /// Signs the connection in through the browser, or for a token connection keeps `token` when one is
-    /// given; either way it then lists the connection's tools to show it works.
-    func connect(_ record: MCPConnectionRecord, token: String? = nil) {
+    /// Signs the connection in through the browser, or for one with a token or a client ID and secret keeps
+    /// `secret` when one is given; either way it then lists the connection's tools to show it works.
+    func connect(_ record: MCPConnectionRecord, secret: MCPConnectionSecret? = nil) {
         guard signingIn == nil else { return }
-        if record.tokenHeader == nil { browser.captureReturnWindow() }
+        let signsIn = record.tokenHeader == nil && record.clientCredentials == nil
+        if signsIn { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil
         loginTask = Task {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
-                if record.tokenHeader != nil {
-                    if let token { try await service.saveToken(token, for: record) }
+                if !signsIn {
+                    switch secret {
+                    case .token(let token): try await service.saveToken(token, for: record)
+                    case .client(let id, let value): try await service.saveClientCredentials(clientID: id, secret: value, for: record)
+                    case nil: break
+                    }
                 } else {
                     let redirect = Self.redirectURI(for: record.endpoint)
                     try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in

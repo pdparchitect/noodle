@@ -249,6 +249,21 @@ struct MCPOAuth {
         return line.isEmpty ? nil : String(line.prefix(300))
     }
 
+    /// Exchanges a client ID and secret for an access token: the client-credentials grant, the secret sent in
+    /// the form. A response without a lifetime is taken to last 30 minutes.
+    func clientToken(_ secret: MCPClientSecret, scope: String?) async throws -> MCPClientSecret {
+        var form = ["grant_type": "client_credentials", "client_id": secret.clientID, "client_secret": secret.clientSecret]
+        if let scope { form["scope"] = scope }
+        let response = try await request(secret.tokenEndpoint, form: form)
+        guard let token = response["access_token"] as? String, !token.isEmpty,
+              (response["token_type"] as? String)?.lowercased() ?? "bearer" == "bearer" else { throw MCPServiceError.invalidMetadata }
+        let lifetime = (response["expires_in"] as? Double).flatMap { $0 > 0 ? $0 : nil } ?? 1_800
+        var result = secret
+        result.accessToken = token
+        result.expiresAt = Date().addingTimeInterval(lifetime)
+        return result
+    }
+
     func refresh(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration? = nil) async throws -> MCPCredentials {
         try validateConfiguration(credentials, configuration: configuration)
         guard let refreshToken = credentials.refreshToken else { throw MCPServiceError.signInRequired }

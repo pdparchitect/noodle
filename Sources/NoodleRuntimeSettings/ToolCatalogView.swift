@@ -129,12 +129,12 @@ public struct ToolCreationSheet: View {
             if let tool = settingUp, let controller, case .mcp(let configuration) = tool.configuration {
                 PresetSetUpForm(tool: tool, configuration: configuration,
                                 name: ToolCatalog.availableName(for: tool, existingNames: controller.registry.connections.map(\.name)),
-                                onBack: { settingUp = nil; error = nil }) { name, values, token in
+                                onBack: { settingUp = nil; error = nil }) { name, values, secret in
                     // Each one is a new account, whatever others share with it.
                     let connection = try controller.addPreset(tool, configuration: configuration, name: name, values: values)
                     onAdded(connection.id)
                     dismiss()
-                    if connection.tokenHeader != nil { controller.connect(connection, token: token) } else { onConnect(connection) }
+                    if let secret { controller.connect(connection, secret: secret) } else { onConnect(connection) }
                 }
             } else if customMCP, let controller {
                 MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
@@ -183,14 +183,16 @@ private struct PresetSetUpForm: View {
     let tool: ToolDefinition
     let configuration: MCPToolConfiguration
     let onBack: () -> Void
-    let onAdd: (String, [String: String], String) throws -> Void
+    let onAdd: (String, [String: String], MCPConnectionSecret?) throws -> Void
     @State private var name: String
     @State private var values: [String: String] = [:]
     @State private var token = ""
+    @State private var clientID = ""
+    @State private var clientSecret = ""
     @State private var error: String?
 
     init(tool: ToolDefinition, configuration: MCPToolConfiguration, name: String, onBack: @escaping () -> Void,
-         onAdd: @escaping (String, [String: String], String) throws -> Void) {
+         onAdd: @escaping (String, [String: String], MCPConnectionSecret?) throws -> Void) {
         self.tool = tool; self.configuration = configuration; self.onBack = onBack; self.onAdd = onAdd
         _name = State(initialValue: name)
         _values = State(initialValue: Dictionary(uniqueKeysWithValues: configuration.fields.compactMap { field in
@@ -203,6 +205,13 @@ private struct PresetSetUpForm: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && configuration.fields.allSatisfy { !(values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             && (configuration.tokenHeader == nil || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            && (configuration.clientCredentials == nil || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    private var secret: MCPConnectionSecret? {
+        if configuration.tokenHeader != nil { return .token(token) }
+        if configuration.clientCredentials != nil { return .client(id: clientID, secret: clientSecret) }
+        return nil
     }
 
     var body: some View {
@@ -212,8 +221,8 @@ private struct PresetSetUpForm: View {
                 Spacer()
                 Text(tool.name).font(.headline)
                 Spacer()
-                Button(configuration.tokenHeader == nil ? "Add & Connect" : "Connect") {
-                    do { try onAdd(name, values, token) } catch { self.error = error.localizedDescription }
+                Button("Add & Connect") {
+                    do { try onAdd(name, values, secret) } catch { self.error = error.localizedDescription }
                 }
                 .disabled(!complete)
                 .keyboardShortcut(.defaultAction)
@@ -243,7 +252,13 @@ private struct PresetSetUpForm: View {
                 }
                 if configuration.tokenHeader != nil {
                     field("API Key") { SecureField("Paste the key", text: $token) }
-                    Text("The key is kept in Keychain and sent with every request.").font(.caption).foregroundStyle(.secondary)
+                }
+                if configuration.clientCredentials != nil {
+                    field("Client ID") { TextField("Client ID", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled() }
+                    field("Client Secret") { SecureField("Client secret", text: $clientSecret) }
+                }
+                if secret != nil {
+                    Text("Kept in Keychain and used for every request.").font(.caption).foregroundStyle(.secondary)
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
             }.textFieldStyle(.roundedBorder).padding(20)
