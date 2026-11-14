@@ -80,7 +80,7 @@ struct PionSettingsView: View {
 
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
-            GeneralSettingsView()
+            GeneralSettingsView(runtime: host.runtime)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(PionSettingsHost.Tab.general)
@@ -114,8 +114,9 @@ struct PionSettingsView: View {
     }
 }
 
-/// Names for new agents. What the main window shows lives in the View menu.
+/// Names for new agents and sleep while they work. What the main window shows lives in the View menu.
 private struct GeneralSettingsView: View {
+    let runtime: AgentRuntimeCoordinator
     @AppStorage(PionModel.agentNameStyleKey) private var nameStyle = PionModel.defaultAgentNameStyle.rawValue
 
     var body: some View {
@@ -126,6 +127,14 @@ private struct GeneralSettingsView: View {
                     Text("Human").tag(BotNameStyle.real.rawValue)
                 }
                 .pickerStyle(.segmented)
+            }
+            Section {
+                Toggle("Keep Mac awake while agents work", isOn: Binding(
+                    get: { runtime.preventIdleSleepWhileWorking },
+                    set: { runtime.configurePreventIdleSleepWhileWorking($0) }
+                ))
+            } footer: {
+                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
             }
         }
         .formStyle(.grouped)
