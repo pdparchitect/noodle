@@ -143,4 +143,16 @@ final class ToolCatalogTests: XCTestCase {
             }
         }
     }
+
+    func testAnAppMayOfferItsOwnListReusingNoodlesEntries() throws {
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        XCTAssertEqual(ToolCatalog.entries, ToolCatalog.noodle)
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let own = ToolDefinition(id: "keys", name: "Keys", summary: "Lookups with a key.", defaultInstructions: "Look things up.",
+                                 iconName: "keys", configuration: .mcp(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
+        ToolCatalog.use([notion, own])
+        XCTAssertEqual(ToolCatalog.matching("").map(\.id), ["keys", "notion"])
+        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://keys.example/mcp")!), own)
+        XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.airtable.com/mcp")!))
+    }
 }

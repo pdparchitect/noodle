@@ -58,6 +58,8 @@ struct PionApp: App {
     lazy var settings = PionSettingsHost(model: model)
 
     override init() {
+        // Before anything adds or uses a tool connection.
+        ToolCatalog.use(PionTools.catalogue)
         #if PION_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
