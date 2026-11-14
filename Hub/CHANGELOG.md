@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A bot's Activity window logs each move to another login when usage runs out, and each return to its own. While the bot is away from its own login, the window's title bar names the login it is running on, on the right.
+
 ## [0.51.0] - 2026-11-13
 
 ### Added

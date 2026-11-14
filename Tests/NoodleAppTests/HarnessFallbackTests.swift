@@ -281,6 +281,26 @@ import XCTest
         XCTAssertNil(f.runtime.runningHarness(for: agent.id))
     }
 
+    func testTheSwitchAndTheReturnAreLoggedWithTheLoginInUse() throws {
+        let f = try fixture(), agent = try codexBot(f)
+        let log = f.runtime.activity.log(for: agent.id)
+        try f.start(agent).transition(.failed, failure: .usageLimit, usageResetsAt: f.clock.date.addingTimeInterval(3 * 3600))
+        XCTAssertTrue(log.entries.contains { $0.title == "Codex is out of usage, continuing on Claude Code" })
+        XCTAssertEqual(log.fallbackLogin, "Claude Code")
+
+        _ = f.runtime.kick(agent: agent, repository: f.repository)
+        XCTAssertEqual(log.entries.last { $0.title.hasPrefix("Back on") }?.title, "Back on Codex")
+        XCTAssertNil(log.fallbackLogin)
+    }
+
+    func testTheLoginInUseNamesTheFallbackProfile() throws {
+        let f = try fixture(fallbacks: []), agent = try codexBot(f)
+        let spare = try f.repository.harnessProfiles.create(provider: .codex, named: "Spare")
+        f.runtime.harnesses.setUsageRetries(.init(provider: .codex, profile: spare.id), on: true)
+        try f.start(agent).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.runtime.activity.log(for: agent.id).fallbackLogin, "Codex · Spare")
+    }
+
     func testTheSwitchPostsASystemLineInTheBotsConversation() throws {
         let f = try StoreFixture()
         addTeardownBlock { @MainActor in f.cleanUp() }

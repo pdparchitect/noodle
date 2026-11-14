@@ -253,7 +253,11 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored public var onHarnessSwitch: (@MainActor (UUID, String) -> Void)?
     /// Bots running on another harness because their own ran out of usage. Runtime state only:
     /// agent.json and Edit Bot keep each bot's own harness.
-    public private(set) var harnessFallbacks: [UUID: HarnessFallback] = [:]
+    public private(set) var harnessFallbacks: [UUID: HarnessFallback] = [:] {
+        didSet {
+            for id in oldValue.keys where harnessFallbacks[id] == nil { activity.clearFallbackLogin(id) }
+        }
+    }
     /// Logins found out of usage, keyed like SubscriptionUsageStore, and until when.
     private(set) var usageExhaustedUntil: [String: Date] = [:]
     /// When each bot last came back to its own harness, and how many times in a row it ran out again soon after.
@@ -1106,7 +1110,7 @@ public final class AgentRuntimeCoordinator {
             usageExhaustedUntil[fallback.primaryKey] = nil
             connectionRecoveryAttempts[agent.id] = nil
             forgetSignInRetries(agent.id)
-            onHarnessSwitch?(agent.id, "Back on \(fallback.primary.displayName)")
+            announceHarnessSwitch(agent.id, "Back on \(fallback.primary.displayName)")
             restart(agent: agent, repository: repository, sessionRecovery: nil, retryFailedStop: true)
             return nil
         }
@@ -1519,9 +1523,15 @@ public final class AgentRuntimeCoordinator {
                 unavailable: unavailable, returnAfter: max(reset, date.addingTimeInterval(cooldown)), flaps: flaps, primaryKey: primaryKey)
         }
         let reason = failure == .usageLimit ? "is out of usage" : "needs you to sign in"
-        onHarnessSwitch?(agent.id, "\(fallbackName(current, repository: repository)) \(reason), continuing on \(fallbackName(next, repository: repository))")
+        activity.log(for: agent.id).fallbackLogin = fallbackName(next, repository: repository)
+        announceHarnessSwitch(agent.id, "\(fallbackName(current, repository: repository)) \(reason), continuing on \(fallbackName(next, repository: repository))")
         restart(agent: agent, repository: repository, sessionRecovery: nil)
         return true
+    }
+
+    private func announceHarnessSwitch(_ agentID: UUID, _ line: String) {
+        activity.log(for: agentID).record(AgentActivityEvent(title: line), at: now())
+        onHarnessSwitch?(agentID, line)
     }
 
     private func fallbackName(_ target: HarnessFallbackTarget, repository: WorkspaceRepository) -> String {
@@ -1590,7 +1600,7 @@ public final class AgentRuntimeCoordinator {
                   !isOutOfUsage(fallback.primaryKey, at: date) else { continue }
             harnessFallbacks[agent.id] = nil
             fallbackReturns[agent.id] = (date, fallback.flaps)
-            onHarnessSwitch?(agent.id, "Back on \(fallback.primary.displayName)")
+            announceHarnessSwitch(agent.id, "Back on \(fallback.primary.displayName)")
             restart(agent: agent, repository: repository, sessionRecovery: nil)
         }
     }

@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- A bot's Activity window logs each move to another login when usage runs out, and each return to its own. While the bot is away from its own login, the window's title bar names the login it is running on, on the right.
+
 ### Fixed
 
 - Suite Installer starts with every supported component selected, including Terminal, and lets you turn off any of them, including Noodle.

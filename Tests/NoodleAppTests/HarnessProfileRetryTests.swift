@@ -111,4 +111,44 @@ import XCTest
         XCTAssertEqual(f.factory.processes.count, 2)
         XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, HarnessProfileStore.defaultID(.codex))
     }
+
+    func testEveryOptedInProfileOnTheSameHarnessIsUsedBeforeTheFallbackList() throws {
+        let f = try fixture()
+        let first = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "First")
+        _ = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Unticked")
+        let second = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Second")
+        let runtime = runtime(f, eligible: [first, second])
+        runtime.harnesses.setFallbacks([.codex])
+        runtime.harnesses.setFallback(on: true)
+        let agent = try f.agent(harness: .claudeCode)
+        runtime.start(agent: agent, repository: f.repository)
+        var launches: [HarnessProvider?] = [], profiles: [UUID?] = []
+        for _ in 0..<3 {
+            try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+            launches.append(f.factory.processes.last?.launch.provider)
+            profiles.append(f.factory.processes.last?.launch.profileOverride)
+        }
+        XCTAssertEqual(launches, [.claudeCode, .claudeCode, .codex])
+        XCTAssertEqual(profiles, [first.id, second.id, HarnessProfileStore.defaultID(.codex)])
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.count, 4)
+        XCTAssertEqual(runtime.snapshot(for: agent.id).failure, .usageLimit)
+    }
+
+    func testAFallbackHarnessUsesItsOwnOptedInProfilesBeforeGivingUp() throws {
+        let f = try fixture()
+        let spare = try f.repository.harnessProfiles.create(provider: .codex, named: "Spare")
+        let runtime = runtime(f, eligible: [spare])
+        runtime.harnesses.setFallbacks([.codex])
+        runtime.harnesses.setFallback(on: true)
+        let agent = try f.agent(harness: .claudeCode)
+        runtime.start(agent: agent, repository: f.repository)
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.last?.launch.provider, .codex)
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, HarnessProfileStore.defaultID(.codex))
+        try XCTUnwrap(f.factory.processes.last).transition(.failed, failure: .usageLimit)
+        XCTAssertEqual(f.factory.processes.last?.launch.provider, .codex)
+        XCTAssertEqual(f.factory.processes.last?.launch.profileOverride, spare.id)
+        XCTAssertEqual(f.factory.processes.count, 3)
+    }
 }

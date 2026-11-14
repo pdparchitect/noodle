@@ -108,6 +108,10 @@ public final class AgentActivityWindowController: NSWindowController, NSWindowDe
     }
 
     func refresh() {
+        // The right side names the login only while the bot is away from its own.
+        if let frame = window?.contentView as? AnnotationPreviewFrame, frame.kindLabel != log.fallbackLogin ?? "" {
+            frame.kindLabel = log.fallbackLogin ?? ""
+        }
         if revision != log.revision {
             output.update(log.entries)
             revision = log.revision
@@ -302,9 +306,14 @@ private final class ActivityEmptyLabel: NSTextField {
 /// A dark floating frame with a close button and a title, around a preview or a log.
 @MainActor public final class AnnotationPreviewFrame: NSVisualEffectView {
     private let title = NSTextField(labelWithString: "")
+    private let kind = NSTextField(labelWithString: "")
     public var filename: String {
         get { title.stringValue }
         set { title.stringValue = newValue }
+    }
+    public var kindLabel: String {
+        get { kind.stringValue }
+        set { kind.stringValue = newValue }
     }
 
     /// `accessory` sits in the header, before `kindLabel`.
@@ -325,7 +334,7 @@ private final class ActivityEmptyLabel: NSTextField {
         title.stringValue = filename
         title.font = .systemFont(ofSize: 13, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let kind = NSTextField(labelWithString: kindLabel)
+        kind.stringValue = kindLabel
         kind.font = .systemFont(ofSize: 11, weight: .medium); kind.textColor = .secondaryLabelColor
         kind.setContentCompressionResistancePriority(.required, for: .horizontal)
         let inset = NSView(); inset.wantsLayer = true

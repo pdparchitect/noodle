@@ -233,6 +233,23 @@ import XCTest
         XCTAssertTrue(controller.output.isAtBottom)
     }
 
+    func testTitleShowsTheFallbackLoginOnTheRightOnlyWhileAway() throws {
+        _ = NSApplication.shared
+        let log = AgentActivityLog()
+        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Alfred"), log: log)
+        defer { controller.close() }
+        let frame = try XCTUnwrap(controller.window?.contentView as? AnnotationPreviewFrame)
+        XCTAssertEqual(frame.filename, "Alfred - Activity")
+        XCTAssertEqual(frame.kindLabel, "")
+        log.fallbackLogin = "Claude Code · Spare"
+        controller.refresh()
+        XCTAssertEqual(frame.kindLabel, "Claude Code · Spare")
+        XCTAssertEqual(frame.filename, "Alfred - Activity")
+        log.fallbackLogin = nil
+        controller.refresh()
+        XCTAssertEqual(frame.kindLabel, "")
+    }
+
     func testFollowLatestButtonShowsOnlyAwayFromBottom() throws {
         _ = NSApplication.shared
         let agent = AgentRecord(displayName: "Follower")

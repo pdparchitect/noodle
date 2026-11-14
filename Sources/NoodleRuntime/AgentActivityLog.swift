@@ -36,6 +36,8 @@ public struct AgentActivityEntry: Equatable {
 public final class AgentActivityLog {
     public private(set) var entries: [AgentActivityEntry] = []
     public private(set) var revision = 0
+    /// The login a bot is temporarily running on while its own is out of usage; nil on its own.
+    public var fallbackLogin: String?
     private(set) var byteCount = 0
     private(set) var status = "Not started"
     private var phase: AgentRuntimePhase?
@@ -120,6 +122,9 @@ public final class AgentActivityStore {
     func recordSnapshots(_ snapshots: [UUID: AgentRuntimeSnapshot]) {
         for (id, snapshot) in snapshots { log(for: id).record(snapshot) }
     }
+
+    /// Clears the fallback login without creating a log for a bot that has none.
+    func clearFallbackLogin(_ agentID: UUID) { logs[agentID]?.fallbackLogin = nil }
 
     func retainAgents(_ ids: Set<UUID>) {
         logs = logs.filter { ids.contains($0.key) }
