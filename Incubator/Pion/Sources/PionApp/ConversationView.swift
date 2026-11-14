@@ -38,6 +38,9 @@ struct ConversationView: View {
     let conversation: BotConversation
     @State private var composerHeight: CGFloat = 0
     @AppStorage("PionInspectorWidth") private var inspectorWidth: Double = 360
+    // The column's ideal, taken from the stored width only as the inspector opens: following the width
+    // while the divider is dragged makes SwiftUI reapply it and the column stops resizing.
+    @State private var openingInspectorWidth: Double?
     // Noodle's previews, capture and annotation, one of each per conversation shown.
     @State private var attachmentPreview = AttachmentPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
@@ -117,12 +120,15 @@ struct ConversationView: View {
                     .id(investigation.id)
                     // Back at the width it was left at, here and on the next launch; widths outside the
                     // column's range come only from it opening or closing.
-                    .inspectorColumnWidth(min: 300, ideal: inspectorWidth, max: 520)
+                    .inspectorColumnWidth(min: 300, ideal: openingInspectorWidth ?? inspectorWidth, max: 520)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                         if (300...520).contains(width) { inspectorWidth = width }
                     }
                     .background { Backdrop(frosted: true).ignoresSafeArea() }
             }
+        }
+        .onChange(of: window.showsInspector && investigation != nil, initial: true) { _, shown in
+            if shown { openingInspectorWidth = inspectorWidth }
         }
         .onChange(of: conversation.id) { _, _ in
             attachmentPreview.close()
