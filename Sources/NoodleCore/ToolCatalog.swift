@@ -557,10 +557,16 @@ public enum ToolCatalog {
     }
 
     /// The preset a connection was made from: the one it remembers, or for one made before connections
-    /// remembered theirs, the one at its address.
+    /// remembered theirs, the one at its address. A remembered preset counts only when the connection is at an
+    /// address that preset makes from its saved details: organisation policy trusts presets, and connections are
+    /// files on disk.
     public static func definition(for connection: MCPConnectionRecord) -> ToolDefinition? {
-        if let id = connection.catalogueID { return entries.first { $0.id == id } }
-        return definition(forMCPEndpoint: connection.endpoint)
+        guard let id = connection.catalogueID else { return definition(forMCPEndpoint: connection.endpoint) }
+        guard let entry = entries.first(where: { $0.id == id }) else { return nil }
+        switch entry.configuration {
+        case .mcp(let configuration):
+            return (try? configuration.account(connection.settings ?? [:]).endpoint) == connection.endpoint ? entry : nil
+        }
     }
 
     public static func definition(forMCPEndpoint endpoint: URL) -> ToolDefinition? {

@@ -226,4 +226,24 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertNil(try notion.makeConnection(name: "Notion").adapter)
         XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
     }
+
+    func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        var disguised = try MCPConnectionRecord(name: "Notion", endpoint: URL(string: "https://attacker.example/mcp")!)
+        disguised.catalogueID = "notion"
+        XCTAssertNil(ToolCatalog.definition(for: disguised), "a connection elsewhere passed as a preset the organisation allows")
+        guard case .toolConnection(let catalogueID, _) = Organisation.action(for: disguised) else { return XCTFail() }
+        XCTAssertNil(catalogueID, "the custom-server rules were skipped")
+        XCTAssertEqual(ToolCatalog.definition(for: try notion.makeConnection(name: "Notion")), notion)
+
+        let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
+        let directory = ToolDefinition(id: "directory", name: "Directory", summary: "People.", defaultInstructions: "Look up.",
+            iconName: "directory", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain], tokenHeader: "x-key")))
+        ToolCatalog.use(ToolCatalog.noodle + [directory])
+        var account = try directory.makeConnection(name: "Acme", values: ["domain": "acme.okta.com"])
+        XCTAssertEqual(ToolCatalog.definition(for: account), directory)
+        account.settings = ["domain": "contoso.okta.com"]
+        XCTAssertNil(ToolCatalog.definition(for: account), "saved details that do not make its address")
+    }
 }
