@@ -161,6 +161,23 @@ import UniformTypeIdentifiers
         for conversation in conversations { readTranscript(conversation.id, notifying: true) }
     }
 
+    /// Holds suspended agents in the runtime, as Noodle does, and starts those whose suspension ran out.
+    private func applySuspensions() {
+        guard !isScripted else { return }
+        let released = runtime.hold(AgentRecord.suspensions(of: agents), for: .suspension)
+        guard running else { return }
+        for agent in agents where released.contains(agent.id) { runtime.start(agent: agent, repository: repository) }
+    }
+
+    /// Suspends the agent until then, or unsuspends it when nil. It finishes a turn under way, then takes no
+    /// new one; messages wait for it.
+    func setSuspended(until: Date?, agent: AgentRecord) {
+        do {
+            _ = try repository.setAgentSuspended(until: until, agentID: agent.id)
+            reload()
+        } catch { problem = error.localizedDescription }
+    }
+
     private func restartBrokers() {
         guard running else { return }
         do {
@@ -180,6 +197,7 @@ import UniformTypeIdentifiers
         let loadedAgents = ((try? repository.loadAgents()) ?? []).filter { $0.archivedAt == nil }
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
         if loadedAgents != agents { agents = loadedAgents }
+        applySuspensions()
         let loadedConversations = ((try? repository.loadConversations()) ?? []).filter { $0.archivedAt == nil }
         if loadedConversations != conversations { conversations = loadedConversations }
     }
@@ -293,6 +311,7 @@ import UniformTypeIdentifiers
 
     func phaseDetail(of agent: AgentRecord) -> String? {
         if isScripted { return agent.status }
+        if agent.isSuspended(), let until = agent.suspendedUntil { return AgentRecord.suspension(until: until) }
         let snapshot = runtime.snapshot(for: agent.id)
         return snapshot.pauseSummary ?? agent.status
     }

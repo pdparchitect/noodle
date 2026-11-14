@@ -1,4 +1,5 @@
 import AppKit
+import HubWire
 import NoodleCore
 import NoodleRuntimeSettings
 import PionCore
@@ -188,6 +189,7 @@ struct ConversationRowMenu: View {
             Button("Stop") { model.stop(in: conversation.id) }
                 .disabled(model.stoppableAgent(in: conversation.id) == nil)
         }
+        if let agent { SuspendAgentMenu(model: model, agent: agent) }
         if let investigation {
             if closed {
                 Button("Reopen") { model.setStatus(.open, of: investigation) }
@@ -198,6 +200,24 @@ struct ConversationRowMenu: View {
             Button("Archive Agent") { model.archive(agent) }
         } else {
             Button("Archive Group") { model.archive(conversation) }
+        }
+    }
+}
+
+/// Suspend Agent's choices of how long, as Noodle offers them, or Unsuspend Agent for one already suspended.
+struct SuspendAgentMenu: View {
+    let model: PionModel
+    let agent: AgentRecord
+
+    var body: some View {
+        if agent.isSuspended() {
+            Button("Unsuspend Agent") { model.setSuspended(until: nil, agent: agent) }
+        } else {
+            Menu("Suspend Agent") {
+                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                    Button(choice.title) { model.setSuspended(until: choice.until(), agent: agent) }
+                }
+            }
         }
     }
 }
