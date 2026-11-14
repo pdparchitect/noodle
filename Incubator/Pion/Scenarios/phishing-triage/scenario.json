@@ -4,6 +4,9 @@
   "summary": "A reported email turns out to be a credential phish sent to 23 people. The team scopes it, finds the one person who entered a password, and recommends how to contain it.",
   "clock": "09:41",
   "champion": "Avery Lin",
+  "settings": {
+    "PionBackdropEffect": "grid"
+  },
   "agents": [
     {
       "key": "margot",

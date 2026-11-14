@@ -21,17 +21,15 @@
 - The agent editor's Runtime section is now Harness, with Noodle's harness, model and reasoning choosers.
 - The Grid background ripples with pings that lift and push the dots they pass.
 - Background effects carry on under the sidebar and inspector, softened by their frosted glass, and are fainter, so text stands out.
-- Scanlines now have a sweeping refresh beam and flickers of interference.
 - Sheets use Noodle-style top action bars and rounded text fields, with multiline descriptions and Return left to the focused field. Scenarios use generated agent names throughout their conversations and mentions.
 - New agents start with generated names, with a Human option and a button to try another name. Agents and groups can be edited from their sidebar context menus or the conversation toolbar.
-- The View menu separates the inspector from display options and keeps background effects together in a submenu.
+- The View menu separates the inspector from display options and keeps background effects together in a submenu: Grid, Network and Glyphs. Pion starts with none.
 - A Conversation menu replaces Investigation, with search, a conversation picker, separate conversation windows, Float on Top, dictation and Stop. Investigation status and closing stay in the investigation's toolbar.
 
 ### Added
 
 - Attachments work as in Noodle: add a file, a photo or a capture of a window from the + menu; files show as pictures and cards in messages and open in Quick Look; annotate a file, a link, a region or selected text, from the preview or with Conversation › Add Annotation and Annotate Region.
 - Clicking an agent's mark opens its profile, with buttons to message or edit it.
-- Chess and Chase background effects: a famous game replayed across the whole window, and a maze cleared by a hunter chased by ghosts.
 - General, Permissions and Update settings. Released builds update themselves from Pion's own channel, and Pion › Check for Updates looks now.
 - Keep Mac awake while agents work, in General settings, as in Noodle.
 - Suspend an agent for an hour, four hours, until tomorrow, a week or until unsuspended, from its sidebar menu, as in Noodle. A suspended agent finishes its turn, then waits, and says until when.

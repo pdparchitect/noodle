@@ -21,7 +21,7 @@ struct PionApp: App {
         Window(pionAppName, id: "main") {
             MainWindow(model: delegate.model, window: delegate.window)
                 .frame(minWidth: 980, minHeight: 640)
-                // The desktop shows through, frosted, with Pion's falling glyphs under the frost.
+                // The desktop shows through, frosted, with Pion's background effect under the frost.
                 .background { Backdrop().ignoresSafeArea() }
                 .containerBackground(.thickMaterial, for: .window)
         }
@@ -212,14 +212,14 @@ extension Notification.Name {
 /// View › Sidebar and View › Background Effect, kept per person as Noodle keeps its view options.
 struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
-    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.glyphs.rawValue
+    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
 
     var body: some View {
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
         }
         Picker("Background Effect", selection: $effect) {
-            ForEach(BackdropEffect.allCases) { effect in
+            ForEach(BackdropEffect.offered) { effect in
                 Text(effect.title).tag(effect.rawValue)
                 if effect == .none { Divider() }
             }

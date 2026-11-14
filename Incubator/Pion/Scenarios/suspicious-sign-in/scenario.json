@@ -5,6 +5,9 @@
   "clock": "02:48",
   "appearance": "dark",
   "champion": "Avery Lin",
+  "settings": {
+    "PionBackdropEffect": "grid"
+  },
   "agents": [
     {
       "key": "margot",

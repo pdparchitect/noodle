@@ -4,6 +4,10 @@
   "summary": "A full roster and a week's worth of work: open, contained and closed Investigations at every severity, for screenshots of the lists, the roster and the case record.",
   "clock": "16:20",
   "champion": "Avery Lin",
+  "settings": {
+    "PionSidebarShowsClosed": true,
+    "PionBackdropEffect": "grid"
+  },
   "agents": [
     {
       "key": "margot",
@@ -452,22 +456,11 @@
     },
     {
       "settings": {
-        "PionBackdropEffect": "scanlines"
-      }
-    },
-    {
-      "capture": "05-scanlines"
-    },
-    {
-      "settings": {
         "PionBackdropEffect": "network"
       }
     },
     {
-      "capture": "06-network"
+      "capture": "05-network"
     }
-  ],
-  "settings": {
-    "PionSidebarShowsClosed": true
-  }
+  ]
 }

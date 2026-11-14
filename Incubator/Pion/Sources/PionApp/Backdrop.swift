@@ -10,6 +10,10 @@ enum BackdropEffect: String, CaseIterable, Identifiable {
     case none, glyphs, grid, scanlines, network, chess, chase
 
     static let key = "PionBackdropEffect"
+    /// What View › Background Effect offers, in its order. Scanlines, Chess and Chase are kept but not offered.
+    static let offered: [BackdropEffect] = [.none, .grid, .network, .glyphs]
+    /// What a new Pion starts with: nothing moving until the person picks an effect. Scenarios set their own.
+    static let standard = BackdropEffect.none
     var id: String { rawValue }
 
     var title: String {
@@ -31,13 +35,13 @@ enum BackdropEffect: String, CaseIterable, Identifiable {
 /// step with the one beside it, blurred and fainter, as if seen through their glass.
 struct Backdrop: View {
     var frosted = false
-    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.glyphs.rawValue
+    @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let kind = BackdropEffect(rawValue: effect) ?? .glyphs
+        let kind = BackdropEffect(rawValue: effect) ?? .standard
         if kind != .none {
             BackdropLayerView(effect: kind, dark: colorScheme == .dark, moving: !reduceMotion && appearsActive, frosted: frosted)
                 .allowsHitTesting(false)
