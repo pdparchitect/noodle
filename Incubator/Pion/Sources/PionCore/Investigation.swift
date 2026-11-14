@@ -1,6 +1,6 @@
 import Foundation
 
-/// The primary object in Pion: a group conversation with a scope, a status and a case record.
+/// The primary object in Pion: a group conversation with an objective, a status and a case record.
 /// Its identifier is the group conversation's, so the transcript and the case always match.
 public struct Investigation: Codable, Identifiable, Hashable, Sendable {
     public enum Status: String, Codable, CaseIterable, Sendable {
@@ -42,14 +42,13 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
     public let number: Int
     public var title: String
     public var objective: String
-    /// The entities and systems the Investigation is about. Only the champion changes it.
-    public var scope: [String]
     public var status: Status
-    public var severity: Severity
+    /// Nil until the lead agent has assessed it; only the lead sets it.
+    public var severity: Severity?
     public var outcome: Outcome?
     /// What the champion wrote when closing.
     public var closingNote: String?
-    /// The person who owns it: sets the scope and closes it.
+    /// The person who owns it and closes it.
     public var champion: String
     public var leadAgentID: UUID?
     /// Where it came from, such as an alert's name; nil when opened by hand.
@@ -58,14 +57,13 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
     public var updatedAt: Date
     public var closedAt: Date?
 
-    public init(id: UUID, number: Int, title: String, objective: String, scope: [String], severity: Severity,
+    public init(id: UUID, number: Int, title: String, objective: String, severity: Severity? = nil,
                 champion: String, leadAgentID: UUID?, source: String? = nil,
                 status: Status = .open, openedAt: Date = Date()) {
         self.id = id
         self.number = number
         self.title = title
         self.objective = objective
-        self.scope = scope
         self.status = status
         self.severity = severity
         self.champion = champion
@@ -77,23 +75,7 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
 
     public var reference: String { String(format: "INV-%04d", number) }
     public var isClosed: Bool { status == .closed }
+    /// What its severity reads as, "Unassessed" until the lead sets it.
+    public var severityTitle: String { severity?.title ?? "Unassessed" }
 
-    /// Whether `target` is inside the scope. An entry starting with `*.` covers every name ending in what follows.
-    public func covers(_ target: String) -> Bool {
-        let name = target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !name.isEmpty else { return false }
-        return scope.contains { entry in
-            let entry = entry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if entry.hasPrefix("*."), entry.count > 2 { return name.hasSuffix(String(entry.dropFirst(1))) }
-            return entry == name
-        }
-    }
-
-    /// Scope typed as one entry per line or separated by commas.
-    public static func scope(from text: String) -> [String] {
-        var seen = Set<String>()
-        return text.split(whereSeparator: { $0 == "\n" || $0 == "," })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
-    }
 }

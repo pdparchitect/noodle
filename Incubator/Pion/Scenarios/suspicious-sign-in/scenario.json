@@ -125,12 +125,6 @@
         "number": 57,
         "title": "Impossible travel for d.price (Finance Director)",
         "objective": "Establish whether d.price made both sign-ins, what the second session did, and contain it if it is not theirs.",
-        "scope": [
-          "d.price",
-          "LT-0423",
-          "198.51.100.23",
-          "*.corp.kestrel-logistics.example"
-        ],
         "severity": "critical",
         "status": "contained",
         "source": "Entra ID Protection: atypical travel",
@@ -273,10 +267,6 @@
         "number": 56,
         "title": "DNS beaconing from WH-SCAN-11",
         "objective": "Find out why a warehouse scanner resolves a random-looking domain every 60 seconds.",
-        "scope": [
-          "WH-SCAN-11",
-          "*.update-cdn-check.example"
-        ],
         "severity": "medium",
         "status": "triaging",
         "source": "DNS analytics",

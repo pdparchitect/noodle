@@ -296,12 +296,7 @@ struct NewInvestigationSheet: View {
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
-                    Picker("Severity", selection: $draft.severity) {
-                        ForEach(Investigation.Severity.allCases.reversed(), id: \.self) { Text($0.title) }
-                    }
                     SheetDescriptionField(title: "Objective", prompt: "What this investigation must establish", text: $draft.objective)
-                    SheetInstructionsEditor(title: "Scope", text: $draft.scope, height: 100, monospaced: true)
-                        .help("One entry per line. *.example.com covers every name under it. Agents can act only on what is in scope.")
                     FoldersSettingsRow(folders: $draft.folders, owner: .group)
                 case .team:
                     Picker("Lead", selection: $draft.lead) {
@@ -320,7 +315,6 @@ struct NewInvestigationSheet: View {
             guard !loaded else { return }
             if let investigation, let group = model.conversation(investigation.id) {
                 draft = PionModel.Draft(title: investigation.title, objective: investigation.objective,
-                    scope: investigation.scope.joined(separator: "\n"), severity: investigation.severity,
                     lead: investigation.leadAgentID, staff: Set(group.participantIDs), folders: group.folders ?? [])
             } else { draft.lead = model.agents.first?.id }
             loaded = true

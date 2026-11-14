@@ -140,11 +140,6 @@
         "number": 63,
         "title": "Web shell on SRV-APP-02",
         "objective": "Confirm the web shell, find how it was planted and whether it was used.",
-        "scope": [
-          "SRV-APP-02",
-          "203.0.113.200",
-          "svc_iis"
-        ],
         "severity": "critical",
         "status": "contained",
         "source": "Defender: suspicious ASPX file",
@@ -227,11 +222,6 @@
         "number": 62,
         "title": "MFA fatigue attempts against 3 warehouse leads",
         "objective": "Find out whether any push was approved, and how the passwords leaked.",
-        "scope": [
-          "k.osei",
-          "l.marsh",
-          "p.novak"
-        ],
         "severity": "high",
         "status": "triaging",
         "source": "Entra ID: repeated MFA denials",
@@ -261,9 +251,6 @@
         "number": 61,
         "title": "Look-alike domain registered: kestre1-logistics.example",
         "objective": "Decide whether the domain is being prepared for phishing.",
-        "scope": [
-          "kestre1-logistics.example"
-        ],
         "severity": "medium",
         "status": "open",
         "source": "Brand monitoring",
@@ -291,9 +278,6 @@
         "number": 60,
         "title": "USB storage on a kiosk PC",
         "objective": "Check what was copied.",
-        "scope": [
-          "KIOSK-04"
-        ],
         "severity": "low",
         "status": "open",
         "opened": "-1d 10:15",
@@ -320,9 +304,6 @@
         "number": 59,
         "title": "VPN sign-ins from a new country",
         "objective": "Confirm the travel.",
-        "scope": [
-          "r.adeyemi"
-        ],
         "severity": "medium",
         "status": "closed",
         "outcome": "false-positive",
@@ -352,10 +333,6 @@
         "number": 58,
         "title": "Large upload to personal cloud storage",
         "objective": "Establish what left and whether it was allowed.",
-        "scope": [
-          "f.lund",
-          "LT-0611"
-        ],
         "severity": "high",
         "status": "closed",
         "outcome": "handed-off",

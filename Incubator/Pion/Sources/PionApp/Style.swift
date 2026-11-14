@@ -23,6 +23,13 @@ extension Investigation.Severity {
     var color: Color { self == .critical ? .red : .primary }
 }
 
+extension Investigation {
+    /// The secondary colour until the lead assesses it.
+    var severityColor: Color { severity?.color ?? .secondary }
+    /// Unassessed first, then low to critical, for sorting.
+    var severityRank: Int { severity.map { Severity.allCases.firstIndex(of: $0)! + 1 } ?? 0 }
+}
+
 extension AgentRuntimePhase {
     var color: Color {
         switch self {
@@ -43,24 +50,25 @@ extension AgentRuntimePhase {
     }
 }
 
-/// A severity as a small bar of up to four steps, readable at a glance in a list.
+/// A severity as a small bar of up to four steps, readable at a glance in a list; all empty while unassessed.
 struct SeverityGlyph: View {
-    let severity: Investigation.Severity
+    let severity: Investigation.Severity?
     var closed = false
 
     var body: some View {
-        let level = Investigation.Severity.allCases.firstIndex(of: severity)! + 1
+        let level = severity.map { Investigation.Severity.allCases.firstIndex(of: $0)! + 1 } ?? 0
+        let color = severity?.color ?? .secondary
         HStack(alignment: .bottom, spacing: 1.5) {
             ForEach(1...4, id: \.self) { step in
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(step <= level ? (closed ? Color.secondary.opacity(0.6) : severity.color.opacity(severity == .critical ? 1 : 0.75))
+                    .fill(step <= level ? (closed ? Color.secondary.opacity(0.6) : color.opacity(severity == .critical ? 1 : 0.75))
                           : Color.primary.opacity(0.12))
                     .frame(width: 3, height: CGFloat(4 + step * 2))
             }
         }
         .frame(width: 18, height: 12, alignment: .bottomLeading)
-        .help("\(severity.title) severity")
-        .accessibilityLabel("\(severity.title) severity")
+        .help(severity.map { "\($0.title) severity" } ?? "Severity unassessed")
+        .accessibilityLabel(severity.map { "\($0.title) severity" } ?? "Severity unassessed")
     }
 }
 

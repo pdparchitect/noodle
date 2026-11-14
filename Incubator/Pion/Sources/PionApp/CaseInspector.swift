@@ -3,7 +3,7 @@ import NoodleCore
 import PionCore
 import SwiftUI
 
-/// The case record beside an Investigation: its scope, findings, evidence and entities; or the
+/// The case record beside an Investigation: its findings, evidence and entities; or the
 /// append-only audit log.
 struct CaseInspector: View {
     let model: PionModel
@@ -47,7 +47,12 @@ struct CaseRecordView: View {
         let record = model.caseRecord(investigation.id)
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                ScopeSection(model: model, investigation: investigation)
+                if let note = investigation.closingNote {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Heading(title: "Closing Note")
+                        Text(note).font(.callout)
+                    }
+                }
                 if !record.findings.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Findings", count: record.findings.count)
@@ -64,7 +69,7 @@ struct CaseRecordView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Entities", count: record.entities.count)
                         ForEach(record.entities) { entity in
-                            EntityRow(entity: entity, inScope: investigation.covers(entity.name))
+                            EntityRow(entity: entity)
                         }
                     }
                 }
@@ -73,49 +78,6 @@ struct CaseRecordView: View {
                 }
             }
             .padding(14)
-        }
-    }
-}
-
-private struct ScopeSection: View {
-    let model: PionModel
-    let investigation: Investigation
-    @State private var editing = false
-    @State private var text = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Heading(title: "Scope", count: investigation.scope.count)
-                if !investigation.isClosed {
-                    Button(editing ? "Done" : "Edit") {
-                        if editing { model.setScope(text, of: investigation) } else { text = investigation.scope.joined(separator: "\n") }
-                        editing.toggle()
-                    }
-                    .buttonStyle(.link).font(.caption)
-                }
-            }
-            if editing {
-                TextEditor(text: $text)
-                    .font(.callout.monospaced())
-                    .frame(minHeight: 80)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
-                    .help("One entry per line. *.example.com covers every name under it.")
-            } else if investigation.scope.isEmpty {
-                Text("Nothing in scope yet.").font(.callout).foregroundStyle(.secondary)
-            } else {
-                FlowLayout(spacing: 4) {
-                    ForEach(investigation.scope, id: \.self) { entry in
-                        Text(entry).font(.caption.monospaced())
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 4))
-                    }
-                }
-            }
-            if let note = investigation.closingNote {
-                Heading(title: "Closing Note")
-                Text(note).font(.callout)
-            }
         }
     }
 }
@@ -197,7 +159,6 @@ private struct EvidenceRow: View {
 
 private struct EntityRow: View {
     let entity: CaseRecord.Entity
-    let inScope: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -207,7 +168,6 @@ private struct EntityRow: View {
                 if let detail = entity.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
             }
             Spacer()
-            if inScope { Tag(text: "In Scope", color: .secondary) }
         }
         .contentShape(Rectangle())
         .contextMenu {
@@ -324,7 +284,7 @@ private struct AuditRow: View {
         case "finding": "Finding"
         case "evidence": "Evidence"
         case "entity": "Entity"
-        case "scope": "Scope Changed"
+        case "severity": "Severity Set"
         case "staff": "Team Changed"
         case "opened": "Opened"
         default: event.replacingOccurrences(of: "_", with: " ").capitalized
@@ -337,7 +297,7 @@ private struct AuditRow: View {
         case "finding": "exclamationmark"
         case "evidence": "doc.text.magnifyingglass"
         case "entity": "cube"
-        case "scope": "scope"
+        case "severity": "exclamationmark.triangle"
         case "staff": "person.2.fill"
         case "opened": "flag.fill"
         default: "circle.fill"

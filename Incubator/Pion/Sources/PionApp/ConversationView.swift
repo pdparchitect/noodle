@@ -108,7 +108,7 @@ struct ConversationView: View {
         .toolbar { toolbar }
         .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { window.showsInspector = $0 })) {
             if let investigation {
-                // Its own for each Investigation, so a scope being edited or evidence opened never carries over.
+                // Its own for each Investigation, so evidence opened in one never shows open in another.
                 CaseInspector(model: model, window: window, investigation: investigation)
                     .id(investigation.id)
                     .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
@@ -216,15 +216,12 @@ struct ConversationView: View {
                 .help("Status")
             }
             ToolbarItem {
-                Menu {
-                    ForEach(Investigation.Severity.allCases.reversed(), id: \.self) { severity in
-                        Button(severity.title) { model.setSeverity(severity, of: investigation) }
-                    }
-                } label: {
-                    Label(investigation.severity.title, systemImage: "exclamationmark.triangle").labelStyle(.titleAndIcon)
-                }
-                .disabled(investigation.isClosed)
-                .help("Severity")
+                // Shown, not chosen: only the lead agent sets it, through the case tool.
+                Label(investigation.severityTitle, systemImage: "exclamationmark.triangle")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(investigation.severity == nil ? .secondary : .primary)
+                    .padding(.horizontal, 8)
+                    .help("Severity, set by the lead agent")
             }
         }
         if let investigation {
@@ -262,7 +259,7 @@ struct ConversationStart: View {
                     Text(investigation.reference).font(.callout.monospaced()).foregroundStyle(.secondary)
                     Tag(text: investigation.outcome?.title ?? investigation.status.title,
                         color: investigation.isClosed ? .secondary : investigation.status.color, symbol: investigation.status.symbol)
-                    Tag(text: investigation.severity.title, color: investigation.severity.color)
+                    Tag(text: investigation.severityTitle, color: investigation.severityColor)
                 }
                 Text(investigation.title).font(.title2.weight(.semibold))
                 if !investigation.objective.isEmpty {

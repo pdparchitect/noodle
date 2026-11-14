@@ -13,9 +13,10 @@ The sidebar lists your Investigations, most severe first, with closed ones folde
 your groups; then your agents. Choose File > New Investigation (⌘N), New Group (⌥⌘N) or New Agent
 (⇧⌘N), or the plus beside a section's title.
 
-An Investigation is a conversation with its team, with an objective, a scope, a status and a case
-record. One agent leads it; you own it. The toolbar sets its status and severity, adds or removes
-agents, and shows the case record. Investigation > Close Investigation… closes it as a false
+An Investigation is a conversation with its team, with an objective, a status, a severity and a
+case record. One agent leads it; you own it. It starts unassessed until the lead agent sets its
+severity from the evidence; only the lead changes it. The toolbar sets its status, edits its title,
+objective and team, and shows the case record. Investigation > Close Investigation… closes it as a false
 positive, resolved or handed off, with a note.
 
 A group is a standing team you talk to outside any Investigation. Each agent also has a conversation
@@ -28,7 +29,7 @@ and the microphone (⌘⇧D) turns what you say into text in the field, to read 
 
 ## The case record
 
-The inspector beside an Investigation (⌥⌘I) shows what its agents record as they work: the scope,
+The inspector beside an Investigation (⌥⌘I) shows what its agents record as they work:
 findings with the evidence they cite, evidence with the query that produced it, and the entities
 involved. Audit Log lists every change to the case and who made it, and is only ever added to.
 

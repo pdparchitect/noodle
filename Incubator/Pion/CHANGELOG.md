@@ -13,6 +13,8 @@
 
 ### Changed
 
+- Investigations have no scope. Creating and editing one asks for its title, objective, team and tools; agents are told to stay on the objective.
+- Investigations start unassessed, and only their lead agent sets the severity, through the case tool, with a note in the audit log. The toolbar shows it.
 - Switching conversations works as in Noodle: the transcript dissolves into the next one while the toolbar, message field and inspector stay in place, so nothing flashes. Clicking a conversation puts the keyboard in its message field; moving with the arrow keys keeps it in the sidebar.
 - Pion no longer asks for the camera, calendars or reminders, which it does not use.
 - Agents have generated marks of their own, kept through renames, in place of symbols.
@@ -35,9 +37,9 @@
 - Keep Mac awake while agents work, in General settings, as in Noodle.
 - Suspend an agent for an hour, four hours, until tomorrow, a week or until unsuspended, from its sidebar menu, as in Noodle. A suspended agent finishes its turn, then waits, and says until when.
 - Export an Investigation as one zip, from its sidebar menu, the Export menu in its toolbar or Conversation › Export Investigation…: its details, case record, audit log, messages and attachments, to archive or share.
-- Sidebar menus laid out as in Noodle, the same for Investigations, groups and agents: open, edit, status and severity, Show in Finder, Show Activity, then stop, close or archive. Closed Investigations have the menu too. Messages, files, findings, evidence, entities and audit entries have their own menus to copy, look at or find what they show.
+- Sidebar menus laid out as in Noodle, the same for Investigations, groups and agents: open, edit, status, Show in Finder, Show Activity, then stop, close or archive. Closed Investigations have the menu too. Messages, files, findings, evidence, entities and audit entries have their own menus to copy, look at or find what they show.
 - Assign shared folders with read-only or read-and-write access to agents, groups and investigations. Agent editors now have General, Runtime and Tools sections, including harness profiles and reasoning effort. Add, configure and assign tool connections to agents, including from team editors; assignments reach the running agents and can be revoked. Investigations can be edited from their toolbar or context menu.
-- Pion's first version: Investigations, groups and agents in one sidebar, each Investigation with an objective, a scope, a status, a lead agent and a case record of entities, evidence and findings beside the conversation.
+- Pion's first version: Investigations, groups and agents in one sidebar, each Investigation with an objective, a status, a severity set by its lead agent, a lead agent and a case record of entities, evidence and findings beside the conversation.
 - Conversations read as documents: agents' messages fill a reading column with their name above, yours sit on the right, and nothing is folded away.
 - A message field with @mentions, attachments and dictation that turns speech into text before you send it.
 - An append-only audit log for every Investigation.

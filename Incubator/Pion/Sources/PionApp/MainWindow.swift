@@ -65,7 +65,7 @@ struct Sidebar: View {
     var body: some View {
         @Bindable var model = model
         let active = model.investigations.filter { !$0.isClosed }
-            .sorted { ($0.severity, $0.updatedAt) > ($1.severity, $1.updatedAt) }
+            .sorted { ($0.severityRank, $0.updatedAt) > ($1.severityRank, $1.updatedAt) }
         let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
         List(selection: Binding(get: { model.selection }, set: { id in
             window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
@@ -174,10 +174,6 @@ struct ConversationRowMenu: View {
         if let investigation {
             Picker("Status", selection: Binding(get: { investigation.status }, set: { model.setStatus($0, of: investigation) })) {
                 ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { Text($0.title).tag($0) }
-            }
-            .disabled(closed)
-            Picker("Severity", selection: Binding(get: { investigation.severity }, set: { model.setSeverity($0, of: investigation) })) {
-                ForEach(Investigation.Severity.allCases.reversed(), id: \.self) { Text($0.title).tag($0) }
             }
             .disabled(closed)
         }

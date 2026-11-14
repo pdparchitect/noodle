@@ -120,15 +120,6 @@
         "number": 42,
         "title": "\"Q4 payroll correction\" credential phish",
         "objective": "Find everyone who received the message, who clicked, who entered credentials, and contain any account that was exposed.",
-        "scope": [
-          "kestrel-logistics.example",
-          "*.kestrel-logistics.example",
-          "payroll-kestrel.example",
-          "m.okafor",
-          "j.ferris",
-          "s.bauer",
-          "203.0.113.77"
-        ],
         "severity": "high",
         "status": "triaging",
         "source": "Reported by s.bauer",
@@ -259,10 +250,6 @@
         "number": 41,
         "title": "Macro document blocked on WS-PAY-03",
         "objective": "Confirm the blocked macro did nothing else.",
-        "scope": [
-          "WS-PAY-03",
-          "t.hale"
-        ],
         "severity": "low",
         "status": "closed",
         "outcome": "false-positive",

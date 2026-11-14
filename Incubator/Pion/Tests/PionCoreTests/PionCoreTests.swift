@@ -17,20 +17,9 @@ final class PionCoreTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
-    private func open(scope: [String] = ["LT-0423", "*.corp.example", "d.price"]) throws -> Investigation {
-        try store.open(id: UUID(), title: "Beaconing laptop", objective: "Find out why LT-0423 beacons", scope: scope,
-                       severity: .high, champion: "Avery", leadAgentID: agent)
-    }
-
-    // MARK: Scope
-
-    func testScopeCoversExactNamesAndWildcardSuffixesOnly() throws {
-        let investigation = try open()
-        XCTAssertTrue(investigation.covers("lt-0423"))
-        XCTAssertTrue(investigation.covers("fs01.corp.example"))
-        XCTAssertFalse(investigation.covers("corp.example.evil.test"))
-        XCTAssertFalse(investigation.covers("LT-0424"))
-        XCTAssertFalse(investigation.covers(""))
+    private func open() throws -> Investigation {
+        try store.open(id: UUID(), title: "Beaconing laptop", objective: "Find out why LT-0423 beacons",
+                       champion: "Avery", leadAgentID: agent)
     }
 
     // MARK: Status
@@ -122,10 +111,21 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual(store.investigation(investigation.id)?.status, .contained)
     }
 
+    func testAnInvestigationStartsUnassessedAndOnlyItsLeadSetsSeverity() async throws {
+        let investigation = try open()
+        XCTAssertNil(investigation.severity)
+        let id = investigation.id.uuidString
+        do { _ = try await call("severity", ["conversation": id, "severity": "high", "note": "n"], as: UUID()); XCTFail("expected a refusal") } catch {}
+        do { _ = try await call("severity", ["conversation": id, "severity": "severe", "note": "n"]); XCTFail("expected a refusal") } catch {}
+        _ = try await call("severity", ["conversation": id, "severity": "high", "note": "Credentials were used"])
+        XCTAssertEqual(store.investigation(investigation.id)?.severity, .high)
+        XCTAssertEqual(store.audit(investigation.id).last?.event, "severity")
+    }
+
     func testTheToolListDeclaresTheConversationForTheBroker() async throws {
         let provider = CaseToolProvider(store: store) { _ in nil }
         let tools = try ToolDescriptor.list(mcp: try await provider.tools(context: ToolCallContext(agentID: agent, workspace: root)))
-        XCTAssertEqual(Set(tools.map(\.name)), ["read", "entity", "evidence", "finding", "status"])
+        XCTAssertEqual(Set(tools.map(\.name)), ["read", "entity", "evidence", "finding", "status", "severity"])
         XCTAssertTrue(tools.allSatisfy { $0.conversationParameter == "conversation" })
     }
 }

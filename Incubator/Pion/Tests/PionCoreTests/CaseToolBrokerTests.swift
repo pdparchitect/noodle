@@ -33,7 +33,7 @@ final class CaseToolBrokerTests: XCTestCase {
         let outsider = try repository.createAgent(named: "Theo").agent
         let agents = try repository.loadAgents()
         let group = try repository.createGroup(named: "INV-0001 Beacon", participantIDs: [member.id], existingAgents: agents)
-        let investigation = try store.open(id: group.id, title: "Beacon", objective: "", scope: ["LT-0423"], severity: .high,
+        let investigation = try store.open(id: group.id, title: "Beacon", objective: "",
                                            champion: "Avery", leadAgentID: member.id)
         let registry = ToolProviderRegistry()
         try registry.register(CaseToolProvider(store: store) { id in agents.first { $0.id == id }?.displayName })

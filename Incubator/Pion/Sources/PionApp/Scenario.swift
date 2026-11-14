@@ -59,7 +59,6 @@ struct PionScenario: Decodable {
         var number: Int?
         let title: String
         var objective: String?
-        var scope: [String]?
         var severity: Investigation.Severity?
         var status: Investigation.Status?
         var outcome: Investigation.Outcome?
@@ -329,8 +328,8 @@ enum ScenarioTime {
                 let members = Set(group.members.compactMap { agentIDs[$0] }).union([lead])
                 id = try model.repository.createGroup(named: PionModel.groupName(number: number, title: record.title), publicDescription: record.objective,
                                                       participantIDs: Array(members), existingAgents: agents, now: opened).id
-                _ = try model.store.open(id: id, title: record.title, objective: record.objective ?? "", scope: record.scope ?? [],
-                                         severity: record.severity ?? .medium, champion: model.champion, leadAgentID: lead,
+                _ = try model.store.open(id: id, title: record.title, objective: record.objective ?? "",
+                                         severity: record.severity, champion: model.champion, leadAgentID: lead,
                                          source: record.source, number: number, now: opened)
             } else if let group = conversation.group {
                 id = try model.repository.createGroup(named: group.name, publicDescription: group.description,

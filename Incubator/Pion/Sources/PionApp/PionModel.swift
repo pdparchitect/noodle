@@ -621,8 +621,6 @@ import UniformTypeIdentifiers
     struct Draft {
         var title = ""
         var objective = ""
-        var scope = ""
-        var severity = Investigation.Severity.medium
         var lead: UUID?
         var staff: Set<UUID> = []
         var folders: [AgentFolder] = []
@@ -651,9 +649,6 @@ import UniformTypeIdentifiers
                 var events: [(event: String, detail: String)] = []
                 if value.title != title { events.append(("title", title)); value.title = title }
                 if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
-                let scope = Investigation.scope(from: draft.scope)
-                if value.scope != scope { events.append(("scope", scope.joined(separator: ", "))); value.scope = scope }
-                if value.severity != draft.severity { events.append(("severity", draft.severity.title)); value.severity = draft.severity }
                 if value.leadAgentID != lead { events.append(("lead", agent(lead)?.displayName ?? lead.uuidString)); value.leadAgentID = lead }
                 if Set(before.participantIDs) != members { events.append(("staff", "Updated the investigation team.")) }
                 if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
@@ -672,24 +667,21 @@ import UniformTypeIdentifiers
         guard let lead = draft.lead else { throw CaseError("Choose a lead agent.") }
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw CaseError("Give the Investigation a title.") }
-        let scope = Investigation.scope(from: draft.scope)
         let members = draft.staff.union([lead])
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         try validateMemberTools(draft.memberTools, members: members)
         let number = (investigations.map(\.number).max() ?? 0) + 1
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
                                     members: members, folders: folders, memberTools: draft.memberTools)
-        let investigation = try store.open(id: group.id, title: title, objective: draft.objective, scope: scope, severity: draft.severity,
+        let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, leadAgentID: lead, number: number, now: now)
         reload()
         readTranscript(group.id, notifying: false)
         let leadName = agent(lead)?.displayName ?? "the lead"
         try send("""
-            **\(investigation.reference): \(title)**, severity \(draft.severity.title.lowercased()). @\(leadName) leads.
+            **\(investigation.reference): \(title)**. @\(leadName) leads, and sets the severity once the evidence allows.
 
             Objective: \(draft.objective.isEmpty ? title : draft.objective)
-
-            Scope: \(scope.isEmpty ? "nothing yet. Ask me before touching anything." : scope.joined(separator: ", "))
 
             Record what you find with the case tool as you go, and recommend any change to me.
             """, in: group.id)
@@ -737,29 +729,6 @@ import UniformTypeIdentifiers
             if let outcome, status == .closed { line += " as \(outcome.title.lowercased())" }
             if let note, !note.isEmpty { line += ": \(note)" }
             try send(line + ".", in: investigation.id)
-        } catch { problem = error.localizedDescription }
-    }
-
-    func setSeverity(_ severity: Investigation.Severity, of investigation: Investigation) {
-        do {
-            try store.update(investigation.id, by: .champion(champion), now: now) { value in
-                guard value.severity != severity else { return [] }
-                let from = value.severity
-                value.severity = severity
-                return [("severity", "\(from.title) → \(severity.title)")]
-            }
-        } catch { problem = error.localizedDescription }
-    }
-
-    func setScope(_ text: String, of investigation: Investigation) {
-        let scope = Investigation.scope(from: text)
-        guard scope != investigation.scope else { return }
-        do {
-            try store.update(investigation.id, by: .champion(champion), now: now) { value in
-                value.scope = scope
-                return [("scope", scope.joined(separator: ", "))]
-            }
-            try send("Scope of \(investigation.reference) is now: \(scope.isEmpty ? "nothing" : scope.joined(separator: ", ")).", in: investigation.id)
         } catch { problem = error.localizedDescription }
     }
 }

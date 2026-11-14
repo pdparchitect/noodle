@@ -9,11 +9,11 @@ public struct CaseToolProvider: ToolProvider {
     public let manifest = ToolProviderManifest(
         id: "case", title: "Case", summary: "Read an Investigation and record entities, evidence and findings.",
         instructions: """
-        Every group you are in is an Investigation. Pass its conversation ID as --conversation. Start with read: it returns the objective, the scope, the status and the case record so far.
+        Every group you are in is an Investigation. Pass its conversation ID as --conversation. Start with read: it returns the objective, the status, the severity and the case record so far.
 
         Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
-        status moves the Investigation to triaging or contained, with a note. Only the champion closes it or changes its scope.
+        If you lead the Investigation, set its severity with severity once the evidence lets you judge it, and again when that changes, with a note. status moves it to triaging or contained, with a note. Only the champion closes it.
         """,
         activation: .always)
 
@@ -41,7 +41,7 @@ public struct CaseToolProvider: ToolProvider {
                              "properties": properties.merging(["conversation": conversation]) { $1 }]]
         }
         return try JSONSerialization.data(withJSONObject: ["tools": [
-            tool("read", "Read the Investigation: objective, scope, status and the whole case record.", [:], required: [], readOnly: true),
+            tool("read", "Read the Investigation: objective, status, severity and the whole case record.", [:], required: [], readOnly: true),
             tool("entity", "Record a host, identity, service or indicator, or mark one already recorded as seen again.", [
                 "kind": ["type": "string", "enum": CaseRecord.Entity.Kind.allCases.map(\.rawValue), "description": "What it is."],
                 "name": string("Its exact name, such as LT-0423, d.price@example.com or 203.0.113.48."),
@@ -63,6 +63,10 @@ public struct CaseToolProvider: ToolProvider {
                 "status": ["type": "string", "enum": ["triaging", "contained"], "description": "The new status."],
                 "note": string("Why, in one line."),
             ], required: ["status", "note"]),
+            tool("severity", "Set the Investigation's severity. Only its lead agent may.", [
+                "severity": ["type": "string", "enum": Investigation.Severity.allCases.map(\.rawValue), "description": "How severe it is."],
+                "note": string("What in the evidence sets it, in one line."),
+            ], required: ["severity", "note"]),
         ]])
     }
 
@@ -98,15 +102,14 @@ public struct CaseToolProvider: ToolProvider {
                 let entity = record.record(entity: kind, name: entityName, detail: detail, by: actor, at: Date())
                 return (entity, "entity", "\(entity.id) \(kind.rawValue) \(entityName)")
             }
-            let scope = investigation.covers(entity.name) ? "in scope" : "outside the scope"
-            return Self.result("Recorded \(entity.id): \(kind.rawValue) \(entity.name), \(scope).")
+            return Self.result("Recorded \(entity.id): \(kind.rawValue) \(entity.name).")
         case "evidence":
             let source = try required("source"), method = try required("method"), result = try required("result")
             let evidence = try store.updateCase(id, by: actor) { record, _ in
                 let item = record.record(evidenceFrom: source, method: method, result: result, by: actor, at: Date())
                 return (item, "evidence", "\(item.id) from \(source)")
             }
-            return Self.result("Recorded \(evidence.id). Cite it in findings and proposals.")
+            return Self.result("Recorded \(evidence.id). Cite it in findings.")
         case "finding":
             let claim = try required("claim")
             guard let confidence = CaseRecord.Finding.Confidence(rawValue: text("confidence")) else {
@@ -133,6 +136,22 @@ public struct CaseToolProvider: ToolProvider {
             do { try store.setStatus(status, of: id, by: actor, note: note) }
             catch let error as CaseError { throw ToolProviderError(error.message) }
             return Self.result("\(investigation.reference) is now \(status.title.lowercased()). \(name) set it.")
+        case "severity":
+            guard let severity = Investigation.Severity(rawValue: text("severity")) else {
+                throw ToolProviderError("--severity is low, medium, high or critical.")
+            }
+            guard investigation.leadAgentID == context.agentID else {
+                throw ToolProviderError("Only the lead agent of \(investigation.reference) sets its severity.")
+            }
+            guard !investigation.isClosed else { throw ToolProviderError("\(investigation.reference) is closed.") }
+            let note = try required("note")
+            try store.update(id, by: actor) { value in
+                guard value.severity != severity else { return [] }
+                let from = value.severityTitle
+                value.severity = severity
+                return [("severity", "\(from) → \(severity.title): \(note)")]
+            }
+            return Self.result("\(investigation.reference) is now \(severity.title.lowercased()) severity. \(name) set it.")
         default:
             throw ToolProviderError("The case tool has no command \(tool).")
         }
@@ -155,10 +174,9 @@ public struct CaseToolProvider: ToolProvider {
         }
         var lines = [
             "\(investigation.reference): \(investigation.title)",
-            "Status: \(investigation.status.title)\(investigation.outcome.map { " (\($0.title))" } ?? ""). Severity: \(investigation.severity.title).",
+            "Status: \(investigation.status.title)\(investigation.outcome.map { " (\($0.title))" } ?? ""). Severity: \(investigation.severityTitle).",
             "Champion: \(investigation.champion). Lead: \(investigation.leadAgentID.flatMap(agentName) ?? "none").",
             "Objective: \(investigation.objective)",
-            "Scope: \(investigation.scope.isEmpty ? "nothing yet" : investigation.scope.joined(separator: ", "))",
         ]
         lines.append("\nEntities (\(record.entities.count)):")
         lines += record.entities.map { "- \($0.id) \($0.kind.rawValue) \($0.name)\($0.detail.map { ": \($0)" } ?? "") [last seen \(date.string(from: $0.lastSeen))]" }
