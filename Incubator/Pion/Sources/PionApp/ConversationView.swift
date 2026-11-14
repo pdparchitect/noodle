@@ -37,10 +37,14 @@ struct ConversationView: View {
     @Bindable var window: WindowState
     let conversation: BotConversation
     @State private var composerHeight: CGFloat = 0
-    @AppStorage("PionInspectorWidth") private var inspectorWidth: Double = 360
-    // The column's ideal, taken from the stored width only as the inspector opens: following the width
-    // while the divider is dragged makes SwiftUI reapply it and the column stops resizing.
+    // The column's ideal, read from the width it was left at only as the inspector opens. The width is
+    // kept in defaults, not app storage: a stored value the view watches redraws it on every step of a
+    // divider drag, in the middle of AppKit's layout, and the app crashes.
     @State private var openingInspectorWidth: Double?
+    private static let inspectorWidthKey = "PionInspectorWidth"
+    private static var storedInspectorWidth: Double {
+        UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double ?? 360
+    }
     // Noodle's previews, capture and annotation, one of each per conversation shown.
     @State private var attachmentPreview = AttachmentPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
@@ -114,21 +118,24 @@ struct ConversationView: View {
         // SwiftUI writes false back while it hides it, sometimes through the binding of the Investigation just
         // left, so only the Case button and View › Hide Inspector change whether it shows.
         .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { _ in })) {
-            if let investigation {
-                // Its own for each Investigation, so evidence opened in one never shows open in another.
-                CaseInspector(model: model, window: window, investigation: investigation)
-                    .id(investigation.id)
-                    // Back at the width it was left at, here and on the next launch; widths outside the
-                    // column's range come only from it opening or closing.
-                    .inspectorColumnWidth(min: 300, ideal: openingInspectorWidth ?? inspectorWidth, max: 520)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                        if (300...520).contains(width) { inspectorWidth = width }
-                    }
-                    .background { Backdrop(frosted: true).ignoresSafeArea() }
+            Group {
+                if let investigation {
+                    // Its own for each Investigation, so evidence opened in one never shows open in another.
+                    CaseInspector(model: model, window: window, investigation: investigation)
+                        .id(investigation.id)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                            if (300...520).contains(width) { UserDefaults.standard.set(Double(width), forKey: Self.inspectorWidthKey) }
+                        }
+                        .background { Backdrop(frosted: true).ignoresSafeArea() }
+                }
             }
+            // Back at the width it was left at, here and on the next launch; widths outside the column's
+            // range come only from it opening or closing. On the root: inside the condition SwiftUI misses
+            // it and the column is fixed at its default width.
+            .inspectorColumnWidth(min: 300, ideal: openingInspectorWidth ?? Self.storedInspectorWidth, max: 520)
         }
         .onChange(of: window.showsInspector && investigation != nil, initial: true) { _, shown in
-            if shown { openingInspectorWidth = inspectorWidth }
+            if shown { openingInspectorWidth = Self.storedInspectorWidth }
         }
         .onChange(of: conversation.id) { _, _ in
             attachmentPreview.close()
