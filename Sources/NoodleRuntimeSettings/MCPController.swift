@@ -88,9 +88,9 @@ public final class MCPController {
             }
             record = saved
         } else {
-            record = try MCPConnectionRecord(id: connectionID,
+            record = try configuration.makeConnection(id: connectionID,
                 name: ToolCatalog.availableName(for: tool, existingNames: registry.connections.map(\.name)),
-                endpoint: configuration.endpoint, description: tool.summary, instructions: tool.defaultInstructions)
+                description: tool.summary, instructions: tool.defaultInstructions)
         }
         try save(record)
         return registry.connections.first { $0.id == record.id }!

@@ -8,7 +8,16 @@ public struct ToolCatalogView: View {
     let onCustomMCP: () -> Void
     let onCancel: () -> Void
     var error: String? = nil
+    /// Whether services that take an API key are listed; not where tokens cannot be kept yet, as on a Noodle Hub.
+    var includesTokenTools = true
     @State private var search = ""
+
+    private var tools: [ToolDefinition] {
+        ToolCatalog.matching(search).filter { tool in
+            guard !includesTokenTools, case .mcp(let configuration) = tool.configuration else { return true }
+            return configuration.tokenHeader == nil
+        }
+    }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +38,7 @@ public struct ToolCatalogView: View {
                 if let error { Text(error).font(.caption).foregroundStyle(.red) }
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(ToolCatalog.matching(search)) { tool in
+                        ForEach(tools) { tool in
                             Button { onSelect(tool) } label: {
                                 HStack(spacing: 12) {
                                     ToolCatalogIcon(tool: tool, size: 32)
@@ -42,9 +51,9 @@ public struct ToolCatalogView: View {
                                     Text(tool.kind.rawValue).font(.caption2).foregroundStyle(.secondary)
                                     Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                                 }.padding(9).contentShape(Rectangle())
-                            }.buttonStyle(.plain).help("Add \(tool.name) and sign in")
+                            }.buttonStyle(.plain).help(tool.usesToken ? "Add \(tool.name) with an API key" : "Add \(tool.name) and sign in")
                         }
-                        if ToolCatalog.matching(search).isEmpty {
+                        if tools.isEmpty {
                             Text("No matching tools. You can add a custom MCP below.")
                                 .font(.caption).foregroundStyle(.secondary).padding()
                         }
@@ -99,6 +108,8 @@ public struct ToolCreationSheet: View {
     @State private var error: String?
     @State private var adding = false
     @State private var presetAttempts: [String: UUID] = [:]
+    /// A preset that takes an API key, added and waiting for it.
+    @State private var awaitingToken: MCPConnectionRecord?
 
     public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
@@ -115,13 +126,18 @@ public struct ToolCreationSheet: View {
 
     public var body: some View {
         Group {
-            if customMCP, let controller {
+            if let connection = awaitingToken, let controller {
+                PresetTokenEntry(connection: connection, onCancel: { dismiss() }) { token in
+                    dismiss()
+                    controller.connect(connection, token: token)
+                }
+            } else if customMCP, let controller {
                 MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
             } else if customMCP, let save {
                 MCPEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
-                                onCancel: { dismiss() }, error: error).disabled(adding)
+                                onCancel: { dismiss() }, error: error, includesTokenTools: controller != nil).disabled(adding)
             }
         }
     }
@@ -147,11 +163,50 @@ public struct ToolCreationSheet: View {
 
     private func added(_ connection: MCPConnectionRecord) {
         onAdded(connection.id)
+        if connection.tokenHeader != nil {
+            // Nothing opens in the browser; the key is asked for here.
+            awaitingToken = connection
+            adding = false
+            return
+        }
         dismiss()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
             onConnect(connection)
         }
+    }
+}
+
+/// Asks for the API key of a service just added from the catalogue. Cancelling keeps the connection,
+/// which asks for its key again from its row in Settings › Tools.
+private struct PresetTokenEntry: View {
+    let connection: MCPConnectionRecord
+    let onCancel: () -> Void
+    let onConnect: (String) -> Void
+    @State private var token = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Spacer()
+                Text(connection.name).font(.headline)
+                Spacer()
+                Button("Connect") { onConnect(token) }
+                    .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }.padding(16)
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    MCPConnectionIcon(connection: connection, size: 32)
+                    Text("Paste your \(connection.name) API key.").font(.headline)
+                }
+                SecureField("API key", text: $token).textFieldStyle(.roundedBorder)
+                Text("It is kept in Keychain and sent with every request to \(connection.endpoint.host ?? "the service").")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.padding(20)
+        }.frame(width: 480)
     }
 }
 

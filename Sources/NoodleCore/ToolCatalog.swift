@@ -20,15 +20,19 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     /// The sign-in server of a service that publishes no protected-resource metadata.
     /// It still registers itself; only discovery of the server is replaced.
     public let authorizationServer: URL?
-    public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil) {
+    /// For a service that takes an API key or token instead of a sign-in: the header it goes in.
+    public let tokenHeader: String?
+    public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil) {
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
+        self.tokenHeader = tokenHeader
     }
 
     /// Every addition is a separate account, including repeated presets.
-    public func makeConnection(name: String, description: String = "", instructions: String = "") throws -> MCPConnectionRecord {
-        try MCPConnectionRecord(name: name, endpoint: endpoint, description: description, instructions: instructions)
+    public func makeConnection(id: UUID = UUID(), name: String, description: String = "", instructions: String = "") throws -> MCPConnectionRecord {
+        try MCPConnectionRecord(id: id, name: name, endpoint: endpoint, description: description, instructions: instructions,
+                                tokenHeader: tokenHeader)
     }
 }
 
@@ -48,6 +52,11 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public let configuration: ToolConfiguration
     public let maturity: ToolMaturity
     public var kind: ToolKind { configuration.kind }
+    /// Whether it takes an API key or token rather than a sign-in.
+    public var usesToken: Bool {
+        if case .mcp(let configuration) = configuration { return configuration.tokenHeader != nil }
+        return false
+    }
 
     public init(id: String, name: String, summary: String, defaultInstructions: String, iconName: String, configuration: ToolConfiguration, maturity: ToolMaturity = .stable) {
         self.id = id; self.name = name; self.summary = summary

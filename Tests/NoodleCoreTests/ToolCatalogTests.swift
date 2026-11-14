@@ -129,4 +129,18 @@ final class ToolCatalogTests: XCTestCase {
         }
         XCTAssertNil(MCPToolConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
     }
+
+    func testATokenPresetMakesTokenConnectionsAndOthersSignIn() throws {
+        let endpoint = URL(string: "https://keys.example/mcp")!
+        let keyed = try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "x-apikey").makeConnection(name: "Keys")
+        XCTAssertEqual(keyed.tokenHeader, "x-apikey")
+        XCTAssertNil(try MCPToolConfiguration(endpoint: endpoint).makeConnection(name: "Signs In").tokenHeader)
+        XCTAssertThrowsError(try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "Cookie").makeConnection(name: "Bad"))
+        for case .mcp(let configuration) in ToolCatalog.entries.map(\.configuration) {
+            if let header = configuration.tokenHeader {
+                XCTAssertEqual(try MCPConnectionRecord.validatedTokenHeader(header), header)
+                XCTAssertNil(configuration.oauth, "a token preset has no sign-in to configure")
+            }
+        }
+    }
 }
