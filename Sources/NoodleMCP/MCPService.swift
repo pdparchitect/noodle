@@ -93,9 +93,10 @@ public actor MCPService {
     /// dropped; a token is one line, since it goes in a request header.
     public func saveToken(_ token: String, for connection: MCPConnectionRecord) throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard let header = connection.tokenHeader else {
+        guard connection.usesToken else {
             throw MCPConnectionError.message("This connection signs in through the browser, not with a token.")
         }
+        let header = connection.tokenHeader ?? connection.tokenParameter ?? ""
         let value = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, value.count <= 8_192, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
             throw MCPConnectionError.message("Paste the token on one line.")
@@ -124,7 +125,7 @@ public actor MCPService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard connection.tokenHeader == nil, connection.clientCredentials == nil, connection.adapter == nil else {
+        guard !connection.usesToken, connection.clientCredentials == nil, connection.adapter == nil else {
             throw MCPConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
@@ -242,7 +243,12 @@ public actor MCPService {
 
     /// The header that proves who the connection is: its token as saved, or an OAuth access token,
     /// renewed first when it is about to expire.
-    private func authorization(for connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> (header: String, value: String) {
+    private func authorization(for connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> MCPAuthorization {
+        if let parameter = connection.tokenParameter {
+            guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
+                  token.header == parameter else { throw MCPServiceError.signInRequired }
+            return .parameter(parameter, token.value)
+        }
         if let header = connection.tokenHeader {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
                   token.header == header else { throw MCPServiceError.signInRequired }
@@ -251,7 +257,7 @@ public actor MCPService {
             let value = if let scheme = connection.tokenScheme { scheme + " " + token.value }
                 else if header.caseInsensitiveCompare("Authorization") == .orderedSame && !token.value.contains(" ") { "Bearer " + token.value }
                 else { token.value }
-            return (header, value)
+            return .header(header, value)
         }
         if let exchange = connection.clientCredentials {
             guard var secret = try clients.load(connection.id), secret.endpoint == connection.endpoint,
@@ -262,7 +268,7 @@ public actor MCPService {
                 try clients.save(secret, id: connection.id)
             }
             guard let token = secret.accessToken else { throw MCPServiceError.signInRequired }
-            return ("Authorization", "Bearer " + token)
+            return .header("Authorization", "Bearer " + token)
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw MCPServiceError.signInRequired }
@@ -283,7 +289,7 @@ public actor MCPService {
         }
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         guard let token = stored.accessToken else { throw MCPServiceError.signInRequired }
-        return ("Authorization", "Bearer " + token)
+        return .header("Authorization", "Bearer " + token)
     }
 
     /// A connection the app's adapter answers: its tools and calls come from the adapter, which reaches the
@@ -293,7 +299,7 @@ public actor MCPService {
         guard let adapter = adapters[name] else {
             throw MCPConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
-        let credentials = connection.tokenHeader != nil || connection.clientCredentials != nil
+        let credentials = connection.usesToken || connection.clientCredentials != nil
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         switch request.action {
@@ -330,7 +336,7 @@ public actor MCPService {
         let transport = HTTPClientTransport(endpoint: connection.endpoint, configuration: configuration, streaming: false,
             requestModifier: { original in
                 var request = original
-                request.setValue(authorization.value, forHTTPHeaderField: authorization.header)
+                authorization.apply(to: &request)
                 return request
             })
         // A fresh protocol session per operation avoids leaking server-side session

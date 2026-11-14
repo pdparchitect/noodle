@@ -25,6 +25,10 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     /// The request header a token connection sends its token in, such as Authorization or x-apikey.
     /// Nil for a connection that signs in through the browser. The token itself is kept in Keychain.
     public var tokenHeader: String?
+    /// The query parameter a token goes in instead of a header, for a service that takes it only in its address.
+    public var tokenParameter: String?
+    /// Whether it proves itself with a token, in a header or in its address.
+    public var usesToken: Bool { tokenHeader != nil || tokenParameter != nil }
     /// A word the token follows in its header, such as SSWS; nil sends the token alone, or as a bearer
     /// token in Authorization.
     public var tokenScheme: String?
@@ -40,8 +44,12 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
-                clientCredentials: MCPClientCredentials? = nil, adapter: String? = nil) throws {
+                tokenParameter: String? = nil, clientCredentials: MCPClientCredentials? = nil, adapter: String? = nil) throws {
         self.id = id
+        self.tokenParameter = try tokenParameter.map(Self.validatedTokenParameter)
+        guard tokenHeader == nil || tokenParameter == nil else {
+            throw MCPConnectionError.message("A token goes in a header or in the address, not both.")
+        }
         self.tokenScheme = try tokenScheme.map(Self.validatedTokenScheme)
         guard tokenScheme == nil || tokenHeader != nil else {
             throw MCPConnectionError.message("A token scheme needs a token header.")
@@ -49,7 +57,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
         self.adapter = try adapter.map(Self.validatedAdapter)
         self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
         self.clientCredentials = try clientCredentials.map(Self.validatedClientCredentials)
-        guard tokenHeader == nil || clientCredentials == nil else {
+        guard (tokenHeader == nil && tokenParameter == nil) || clientCredentials == nil else {
             throw MCPConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
         }
         self.name = try ConversationName.validated(name)
@@ -73,6 +81,15 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
         guard !name.isEmpty, name.count <= 100, name.unicodeScalars.allSatisfy(allowed.contains),
               !reserved.contains(name.lowercased()) else {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
+        }
+        return name
+    }
+
+    /// A query parameter's name: letters, digits, hyphens and underscores.
+    public static func validatedTokenParameter(_ name: String) throws -> String {
+        guard (1...64).contains(name.count), name.unicodeScalars.allSatisfy(
+            CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").contains) else {
+            throw MCPConnectionError.message("Invalid token parameter.")
         }
         return name
     }
@@ -184,11 +201,16 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")
             }
             if let credentials = connection.clientCredentials {
-                guard connection.tokenHeader == nil, try MCPConnectionRecord.validatedClientCredentials(credentials) == credentials else {
+                guard !connection.usesToken, try MCPConnectionRecord.validatedClientCredentials(credentials) == credentials else {
                     throw MCPConnectionError.message("Invalid saved MCP connection.")
                 }
             }
             if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
+            if let parameter = connection.tokenParameter {
+                guard connection.tokenHeader == nil, try MCPConnectionRecord.validatedTokenParameter(parameter) == parameter else {
+                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                }
+            }
             if let scheme = connection.tokenScheme {
                 guard connection.tokenHeader != nil, try MCPConnectionRecord.validatedTokenScheme(scheme) == scheme else {
                     throw MCPConnectionError.message("Invalid saved MCP connection.")

@@ -94,6 +94,56 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     }
 }
 
+/// Checks for the values operations take, each refusing with a reason the bot can act on.
+public enum ServiceInput {
+    /// An IPv4 or IPv6 address, as given.
+    public static func ip(_ value: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var v4 = in_addr(), v6 = in6_addr()
+        guard inet_pton(AF_INET, value, &v4) == 1 || inet_pton(AF_INET6, value, &v6) == 1 else {
+            throw ServiceError.input("\"\(value)\" is not an IPv4 or IPv6 address.")
+        }
+        return value
+    }
+
+    /// A domain name alone, lowercased.
+    public static func domain(_ value: String) throws -> String {
+        let field = ToolField(key: "domain", title: "the domain", placeholder: "example.com", kind: .host)
+        guard let domain = try? field.validated(value) else {
+            throw ServiceError.input("\"\(value)\" is not a domain name; give it alone, such as example.com.")
+        }
+        return domain
+    }
+
+    /// A time in ISO 8601, such as 2026-11-13T00:00:00Z, as given.
+    public static func time(_ value: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let plain = ISO8601DateFormatter(), precise = ISO8601DateFormatter()
+        precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard plain.date(from: value) != nil || precise.date(from: value) != nil else {
+            throw ServiceError.input("Give times in ISO 8601, such as 2026-11-13T00:00:00Z.")
+        }
+        return value
+    }
+
+    /// The moment `days` ago, in ISO 8601, for searches left open-ended.
+    public static func daysAgo(_ days: Double) -> String {
+        ISO8601DateFormatter().string(from: Date().addingTimeInterval(-days * 86_400))
+    }
+
+    /// One of `values`, or a reason naming them.
+    public static func oneOf(_ value: String, _ values: [String], _ name: String) throws -> String {
+        guard values.contains(value) else { throw ServiceError.input("\(name) is one of \(values.joined(separator: ", ")).") }
+        return value
+    }
+
+    /// A list of between one and `limit` values, each checked.
+    public static func list(_ values: [String], limit: Int, _ each: (String) throws -> String) throws -> [String] {
+        guard (1...limit).contains(values.count) else { throw ServiceError.input("Give between 1 and \(limit) values.") }
+        return try values.map(each)
+    }
+}
+
 /// Requests to the connection's service, below its address: paths are built from separate parts, so no value
 /// can climb out of the operation's own path, and every answer is checked before it is read.
 public struct ServiceClient: Sendable {
@@ -103,11 +153,20 @@ public struct ServiceClient: Sendable {
     /// `path`'s parts each go in as one segment; a part that would leave it is refused.
     public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:],
                                        as answer: Answer.Type = Answer.self) async throws -> Answer {
-        let data = try await data(path, query: query)
+        try decode(Answer.self, try await data(path, query: query))
+    }
+
+    /// Sends `body` as JSON, for services that take a query or search that way.
+    public func post<Answer: Decodable>(_ path: [String], body: some Encodable, query: [String: String?] = [:],
+                                        as answer: Answer.Type = Answer.self) async throws -> Answer {
+        try decode(Answer.self, try await data(path, query: query, method: "POST", body: try JSONEncoder().encode(body)))
+    }
+
+    private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
         do { return try JSONDecoder().decode(Answer.self, from: data) } catch { throw ServiceError.unreadable }
     }
 
-    public func data(_ path: [String], query: [String: String?] = [:]) async throws -> Data {
+    public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil) async throws -> Data {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
@@ -116,8 +175,12 @@ public struct ServiceClient: Sendable {
         components?.queryItems = items.isEmpty ? nil : items
         guard let url = components?.url else { throw ServiceError.input("These values make no valid request.") }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        }
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
         case 200..<300: return data
@@ -195,5 +258,6 @@ public struct OperationAdapter: MCPConnectionAdapter {
 
 /// The adapters Pion serves its own connections with, by the name its catalogue entries give them.
 public enum PionAdapters {
-    public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter]
+    public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
+                                                                  "entra": Entra.adapter, "defender": Defender.adapter]
 }

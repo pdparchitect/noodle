@@ -149,21 +149,10 @@ extension Okta {
                       !value.contains(where: { $0 == "\"" || $0 == "\\" || $0.isNewline }) else { throw ServiceError.input(problem) }
                 return "\"\(value)\""
             }
-            func time(_ value: String) throws -> String {
-                let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                let plain = ISO8601DateFormatter(), precise = ISO8601DateFormatter()
-                precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                guard plain.date(from: value) != nil || precise.date(from: value) != nil else {
-                    throw ServiceError.input("Give times in ISO 8601, such as 2026-11-13T00:00:00Z.")
-                }
-                return value
-            }
             var filter: [String] = []
             if let user = input.user { filter.append("actor.alternateId eq " + (try quoted(user, "Give the user's login."))) }
             if let ip = input.ip {
-                let ip = ip.trimmingCharacters(in: .whitespacesAndNewlines)
-                var v4 = in_addr(), v6 = in6_addr()
-                guard inet_pton(AF_INET, ip, &v4) == 1 || inet_pton(AF_INET6, ip, &v6) == 1 else { throw ServiceError.input("Give an IPv4 or IPv6 address.") }
+                let ip = try ServiceInput.ip(ip)
                 filter.append("client.ipAddress eq \"\(ip)\"")
             }
             if let type = input.eventType {
@@ -175,8 +164,8 @@ extension Okta {
             if input.failuresOnly == true { filter.append("outcome.result eq \"FAILURE\"") }
             let limit = input.limit ?? 50
             guard (1...100).contains(limit) else { throw ServiceError.input("Ask for between 1 and 100 events.") }
-            let since = try input.since.map(time) ?? ISO8601DateFormatter().string(from: Date().addingTimeInterval(-7 * 86_400))
-            let until = try input.until.map(time)
+            let since = try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7)
+            let until = try input.until.map(ServiceInput.time)
 
             struct Event: Decodable {
                 struct Outcome: Decodable { let result: String?; let reason: String? }

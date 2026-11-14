@@ -206,12 +206,12 @@ private struct PresetSetUpForm: View {
     private var complete: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && configuration.fields.allSatisfy { !(values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            && (configuration.tokenHeader == nil || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            && (!configuration.usesToken || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             && (configuration.clientCredentials == nil || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 
     private var secret: MCPConnectionSecret? {
-        if configuration.tokenHeader != nil { return .token(token) }
+        if configuration.usesToken { return .token(token) }
         if configuration.clientCredentials != nil { return .client(id: clientID, secret: clientSecret) }
         return nil
     }
@@ -247,12 +247,12 @@ private struct PresetSetUpForm: View {
                                 ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
                             }
                             .labelsHidden()
-                        case .host, .text:
+                        case .host, .text, .identifier:
                             TextField(item.placeholder, text: value, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
                         }
                     }
                 }
-                if configuration.tokenHeader != nil {
+                if configuration.usesToken {
                     field("API Key") { SecureField("Paste the key", text: $token) }
                 }
                 if configuration.clientCredentials != nil {

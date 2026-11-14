@@ -67,7 +67,7 @@ public final class MCPController {
     /// One the app's adapter answers without credentials is always ready.
     public func readSignIns() async {
         for connection in registry.connections {
-            let open = connection.adapter != nil && connection.tokenHeader == nil && connection.clientCredentials == nil
+            let open = connection.adapter != nil && !connection.usesToken && connection.clientCredentials == nil
             let signedIn = await service.hasCredentials(connection.id)
             if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
         }
@@ -165,7 +165,7 @@ public final class MCPController {
     /// `secret` when one is given; either way it then lists the connection's tools to show it works.
     func connect(_ record: MCPConnectionRecord, secret: MCPConnectionSecret? = nil) {
         guard signingIn == nil else { return }
-        let signsIn = record.tokenHeader == nil && record.clientCredentials == nil && record.adapter == nil
+        let signsIn = !record.usesToken && record.clientCredentials == nil && record.adapter == nil
         if signsIn { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil

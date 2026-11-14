@@ -41,7 +41,10 @@ Harness signs in to the harnesses agents run on, Agents changes their models and
 Tools connects them to services, over MCP or through Pion's own lookups. Add VirusTotal there with
 your API key, then assign it to the agents that should check file hashes, domains, IP addresses and
 URLs. Add Okta with an org's domain and an API token for agents to look up users, their groups, apps
-and sign-in factors, and the org's System Log. Each service you add is a separate account, so two accounts of the same service can sit side by
+and sign-in factors, and the org's System Log. Shodan shows what an address exposes. Microsoft Entra ID
+and Microsoft Defender XDR take a tenant ID and an app registration's client ID and secret; give the
+app read permissions such as User.Read.All, AuditLog.Read.All, SecurityAlert.Read.All and
+ThreatHunting.Read.All. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios

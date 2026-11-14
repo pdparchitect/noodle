@@ -123,8 +123,7 @@ extension VirusTotal {
         static let input = JSONSchema.object(["domain": .string("The domain name alone, such as example.com.")], required: ["domain"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let field = ToolField(key: "domain", title: "the domain", placeholder: "example.com", kind: .host)
-            let domain = try checked(input.domain, { try? field.validated($0) }, "Give the domain name alone, such as example.com.")
+            let domain = try ServiceInput.domain(input.domain)
             struct Own: Decodable { let registrar: String?; let creation_date: Int? }
             let (id, common, own) = try await lookup(["domains", domain], on: service, Own.self)
             var report = Report(id: id, page: "domain", common: common)
@@ -142,10 +141,7 @@ extension VirusTotal {
         static let input = JSONSchema.object(["ip": .string("An IPv4 or IPv6 address.")], required: ["ip"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let ip = try checked(input.ip, { value in
-                var v4 = in_addr(), v6 = in6_addr()
-                return inet_pton(AF_INET, value, &v4) == 1 || inet_pton(AF_INET6, value, &v6) == 1 ? value : nil
-            }, "Give an IPv4 or IPv6 address.")
+            let ip = try ServiceInput.ip(input.ip)
             struct Own: Decodable { let as_owner: String?; let asn: Int?; let country: String?; let network: String? }
             let (id, common, own) = try await lookup(["ip_addresses", ip], on: service, Own.self)
             var report = Report(id: id, page: "ip-address", common: common)

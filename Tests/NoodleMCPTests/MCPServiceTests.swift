@@ -53,6 +53,8 @@ private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
     /// The headers of every request an adapter made to its service.
     var adapterHeaders: [[String: String]] = []
+    /// The query of every request, adapter's or MCP, by path.
+    var queries: [String: [String]] = [:]
     /// The forms posted to the client-credentials token address.
     var clientExchanges: [String] = []
     var clientTokenLifetime = 3600
@@ -93,6 +95,7 @@ private final class FixtureState: @unchecked Sendable {
                 registrations += 1
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
             case "/v3/files/abc":
+                queries[request.url!.path, default: []].append(request.url!.query ?? "")
                 adapterHeaders.append(request.allHTTPHeaderFields ?? [:])
                 return (200, ["verdict": "harmless"])
             case "/client-token":
@@ -114,6 +117,7 @@ private final class FixtureState: @unchecked Sendable {
                 if let tokenScope { response["scope"] = tokenScope }
                 return (200, response)
             case "/mcp":
+                queries[request.url!.path, default: []].append(request.url!.query ?? "")
                 mcpHeaders.append(request.allHTTPHeaderFields ?? [:])
                 let object = try JSONSerialization.jsonObject(with: Self.body(request)) as! [String: Any]
                 guard let id = object["id"] else { return (202, [:]) }
@@ -445,6 +449,26 @@ final class MCPServiceTests: XCTestCase {
         _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
                                      connection: record)
         XCTAssertEqual(FixtureProtocol.state.mcpHeaders.first?["Authorization"], "SSWS org-token")
+    }
+
+    func testATokenCanGoInTheAddressForServicesThatOnlyTakeItThere() async throws {
+        let keyed = try MCPConnectionRecord(name: "Scanner", endpoint: URL(string: "https://service.example/v3")!, tokenParameter: "key",
+                                            adapter: "lookup")
+        let client = service(vault: TestVault())
+        await client.useAdapters(["lookup": LookupAdapter()])
+        try await client.saveToken("scan-key", for: keyed)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: keyed.id, action: .call, tool: "file", arguments: Data("{}".utf8)),
+                                     connection: keyed)
+        XCTAssertEqual(FixtureProtocol.state.queries["/v3/files/abc"], ["key=scan-key"])
+        XCTAssertNil(FixtureProtocol.state.adapterHeaders.first?["Authorization"])
+
+        let server = try MCPConnectionRecord(name: "Server", endpoint: endpoint, tokenParameter: "api_key")
+        try await client.saveToken("server-key", for: server)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: server.id, action: .tools, tool: nil, arguments: nil),
+                                     connection: server)
+        XCTAssertEqual(Set(FixtureProtocol.state.queries["/mcp"] ?? []), ["api_key=server-key"])
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: endpoint, tokenHeader: "x-key", tokenParameter: "key"))
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenParameter: "a b"))
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {

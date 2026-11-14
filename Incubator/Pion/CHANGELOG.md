@@ -32,6 +32,8 @@
 
 ### Added
 
+- Microsoft Entra ID and Microsoft Defender XDR in Settings › Tools › Add Tools, each tenant added with its directory (tenant) ID and an app registration's client ID and secret. Agents can find users and see their groups, roles and sign-in methods, read sign-in logs and risky users, list Defender alerts and incidents, and run read-only KQL hunting queries.
+- Shodan in Settings › Tools › Add Tools: agents can see what an IP address exposes, with its open ports, services and known vulnerabilities, and resolve hostnames and addresses both ways.
 - Okta in Settings › Tools › Add Tools: add each org with its domain and an API token, and assign it to agents, who can find users, see their groups, apps and sign-in factors, and search the System Log by user, IP address, event type, failures and time. Nothing changes the org.
 - VirusTotal in Settings › Tools › Add Tools: add it with your API key and assign it to agents, who can look up the reputation of file hashes, domains, IP addresses and URLs. Lookups never submit anything for scanning.
 - Tool connections can use a token instead of signing in through the browser, as in Noodle: in Settings › Tools, Custom MCP's Sign-in choice of Token takes an API key and the header it goes in.

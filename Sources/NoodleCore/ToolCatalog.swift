@@ -24,6 +24,8 @@ public struct ToolField: Equatable, Sendable {
         case choice([Option])
         /// A line of text; in an address it is percent-encoded.
         case text
+        /// An ID such as a tenant or account: letters, digits, dots, hyphens and underscores.
+        case identifier
     }
     public struct Option: Equatable, Sendable {
         public let value: String
@@ -57,6 +59,13 @@ public struct ToolField: Equatable, Sendable {
         case .choice(let options):
             guard options.contains(where: { $0.value == value }) else { throw MCPConnectionError.message("Choose \(title).") }
             return value
+        case .identifier:
+            guard (1...128).contains(value.count), value.unicodeScalars.allSatisfy(
+                CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_").contains),
+                  value != ".", value != ".." else {
+                throw MCPConnectionError.message("Enter \(title) as letters, digits, dots, hyphens and underscores, such as \(placeholder).")
+            }
+            return value
         case .text:
             guard !value.isEmpty, value.count <= 200, !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
                 throw MCPConnectionError.message("Enter \(title) on one line.")
@@ -68,7 +77,7 @@ public struct ToolField: Equatable, Sendable {
     /// How the value goes into an address.
     func inAddress(_ value: String) -> String {
         switch kind {
-        case .host, .choice: value
+        case .host, .choice, .identifier: value
         case .text: value.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn:
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? value
         }
@@ -96,6 +105,10 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let tokenHeader: String?
     /// The word the token follows in that header, such as SSWS.
     public let tokenScheme: String?
+    /// For a service that takes its key only in its address: the query parameter it goes in.
+    public let tokenParameter: String?
+    /// Whether its accounts prove themselves with a token, in a header or in their address.
+    public var usesToken: Bool { tokenHeader != nil || tokenParameter != nil }
     /// What each account fills in, used in `endpointTemplate` as {key}.
     public let fields: [ToolField]
     /// The address with a {key} for each field it needs, such as https://{domain}/mcp; nil for a fixed address.
@@ -106,8 +119,10 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let adapter: String?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
-                tokenScheme: String? = nil, clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+                tokenScheme: String? = nil, tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil,
+                adapter: String? = nil) {
         self.tokenScheme = tokenScheme
+        self.tokenParameter = tokenParameter
         self.adapter = adapter
         self.endpoint = endpoint
         self.oauth = oauth
@@ -121,7 +136,8 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     /// A service whose address differs for each account, built from what the account fills in.
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
-                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+                tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+        self.tokenParameter = tokenParameter
         self.tokenScheme = tokenScheme
         self.adapter = adapter
         self.clientCredentials = clientCredentials
@@ -161,7 +177,7 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     /// Every addition is a separate account, including repeated presets.
     public func makeConnection(id: UUID = UUID(), name: String, description: String = "", instructions: String = "") throws -> MCPConnectionRecord {
         try MCPConnectionRecord(id: id, name: name, endpoint: endpoint, description: description, instructions: instructions,
-                                tokenHeader: tokenHeader, tokenScheme: tokenScheme)
+                                tokenHeader: tokenHeader, tokenScheme: tokenScheme, tokenParameter: tokenParameter)
     }
 }
 
@@ -189,7 +205,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
             let account = try configuration.account(values)
             var record = try MCPConnectionRecord(id: id, name: name, endpoint: account.endpoint, description: summary,
                                                  instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
-                                                 tokenScheme: configuration.tokenScheme,
+                                                 tokenScheme: configuration.tokenScheme, tokenParameter: configuration.tokenParameter,
                                                  clientCredentials: account.clientCredentials, adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
@@ -213,7 +229,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public var needsSetUp: Bool {
         switch configuration {
         case .mcp(let configuration):
-            configuration.tokenHeader != nil || configuration.clientCredentials != nil || !configuration.fields.isEmpty
+            configuration.usesToken || configuration.clientCredentials != nil || !configuration.fields.isEmpty
         }
     }
 

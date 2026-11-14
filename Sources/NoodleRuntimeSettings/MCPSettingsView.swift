@@ -41,9 +41,9 @@ public struct MCPSettingsView: View {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
-                                    if connection.tokenHeader != nil || connection.clientCredentials != nil {
+                                    if connection.usesToken || connection.clientCredentials != nil {
                                         // A token or client secret is entered in the editor; there is no sign-in to start.
-                                        let what = connection.tokenHeader != nil ? "Token" : "Credentials"
+                                        let what = connection.usesToken ? "Token" : "Credentials"
                                         Button(store.mcp.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
                                             .buttonStyle(.link)
                                             .disabled(store.mcp.signingIn != nil || !allows(connection))
@@ -116,14 +116,14 @@ public struct MCPSettingsView: View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
         } else if store.mcp.signingIn == connection.id {
-            Text(store.mcp.signInStage.isEmpty ? (connection.tokenHeader == nil && connection.clientCredentials == nil && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
+            Text(store.mcp.signInStage.isEmpty ? (!connection.usesToken && connection.clientCredentials == nil && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.mcp.signInStage)
         } else if store.mcp.errors[connection.id] != nil {
             SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
         } else if store.mcp.connected.contains(connection.id) {
             SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
-        } else if connection.tokenHeader != nil {
+        } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
         } else if connection.clientCredentials != nil {
             SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
@@ -181,7 +181,7 @@ public struct MCPEditor: View {
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect ?? { controller.connect($0) }
         onSecret = { controller.connect($0, secret: $1) }
-        _signIn = State(initialValue: existing?.tokenHeader != nil ? .token : existing?.clientCredentials != nil ? .client : .browser)
+        _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client : .browser)
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
         _scope = State(initialValue: existing?.clientCredentials?.scope ?? "")
@@ -270,15 +270,17 @@ public struct MCPEditor: View {
                         }
                     }
                     if signIn == .token {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Header").font(.caption.weight(.semibold))
-                            TextField("Authorization", text: $tokenHeader, axis: .horizontal).lineLimit(1)
-                                .autocorrectionDisabled()
-                                .help("The request header the service expects the token in. A token sent in Authorization goes as a bearer token unless it names its own scheme.")
+                        if existing?.tokenParameter == nil {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Header").font(.caption.weight(.semibold))
+                                TextField("Authorization", text: $tokenHeader, axis: .horizontal).lineLimit(1)
+                                    .autocorrectionDisabled()
+                                    .help("The request header the service expects the token in. A token sent in Authorization goes as a bearer token unless it names its own scheme.")
+                            }
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Token").font(.caption.weight(.semibold))
-                            SecureField(existing?.tokenHeader != nil ? "Saved; enter a new one to replace it" : "API key or token", text: $token)
+                            SecureField(existing?.usesToken == true ? "Saved; enter a new one to replace it" : "API key or token", text: $token)
                         }
                     }
                 }
@@ -327,9 +329,13 @@ public struct MCPEditor: View {
         record.description = String(description.prefix(1_000))
         record.instructions = String(instructions.prefix(20_000))
         record.tokenHeader = nil
+        record.tokenParameter = nil
         record.clientCredentials = nil
         switch signIn {
         case .browser: break
+        case .token where existing?.tokenParameter != nil:
+            // A token its service takes only in the address keeps going there; only its value changes.
+            record.tokenParameter = existing?.tokenParameter
         case .token:
             let header = try MCPConnectionRecord.validatedTokenHeader(tokenHeader)
             let blank = token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -362,7 +368,7 @@ public struct MCPEditor: View {
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
         }
-        let switchedToBrowser = signIn == .browser && (existing?.tokenHeader != nil || existing?.clientCredentials != nil)
+        let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
         let shouldConnect = existing == nil || switchedToBrowser || secret != nil
         dismiss()
         if shouldConnect {
