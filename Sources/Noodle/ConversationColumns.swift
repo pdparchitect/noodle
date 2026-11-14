@@ -17,12 +17,6 @@ enum MainWindowLayout: String {
     static let key = "NoodleMainWindowLayout"
 }
 
-/// View › Frosted or Solid: whether the sidebar and the column headers let the wallpaper show through.
-enum WindowSurface: String {
-    case frosted, solid
-    static let key = "NoodleWindowSurface"
-}
-
 /// Which conversations are open as columns, per space, and which has focus.
 @MainActor @Observable final class ColumnsModel {
     /// Kept across launches, so each space comes back with the columns it was left with.
@@ -377,7 +371,6 @@ private struct ConversationColumn: View {
     @State private var isDropTargeted = false
     @State private var isReorderTargeted = false
     @State private var composerFocusRequest: UUID?
-    @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
     private var isFocused: Bool { model.focusedID == conversation.id }
 
@@ -403,12 +396,9 @@ private struct ConversationColumn: View {
             .padding(.top, model.topInset)
             .background {
                 // A thin frost keeps the wallpaper's colour; the focused column's band is lighter, the others' darker.
-                // Solid covers it; the others' band is darkened less there, as nothing shows through.
                 ZStack {
-                    if surface == .solid { Rectangle().fill(Color(nsColor: .windowBackgroundColor)) }
-                    else { Rectangle().fill(.ultraThinMaterial) }
-                    Rectangle().fill(isFocused ? Color.white.opacity(0.14)
-                        : Color.black.opacity(surface == .solid ? 0.1 : 0.28))
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(isFocused ? Color.white.opacity(0.14) : Color.black.opacity(0.28))
                 }
                 .animation(.smooth(duration: 0.2), value: isFocused)
                 .allowsHitTesting(false)
@@ -572,19 +562,11 @@ struct FullScreenCommand: View {
 /// View > As List and As Columns.
 struct MainWindowLayoutCommands: View {
     @AppStorage(MainWindowLayout.key) private var layout = MainWindowLayout.list
-    @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
     var body: some View {
         Picker("Layout", selection: $layout) {
             Text("As List").tag(MainWindowLayout.list)
             Text("As Columns").tag(MainWindowLayout.columns)
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
-        Divider()
-        Picker("Surface", selection: $surface) {
-            Text("Frosted").tag(WindowSurface.frosted)
-            Text("Solid").tag(WindowSurface.solid)
         }
         .pickerStyle(.inline)
         .labelsHidden()

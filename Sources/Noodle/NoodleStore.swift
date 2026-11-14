@@ -1769,6 +1769,27 @@ final class NoodleStore {
         }
     }
 
+    /// Groups on a Noodle Hub have no lead yet: their bots are woken on the Hub.
+    func canLead(_ conversation: BotConversation) -> Bool {
+        conversation.kind == .group && hubMirror(forConversation: conversation.id) == nil
+    }
+
+    /// Makes a bot the group's lead, or leaves the group without one.
+    func setLead(_ agentID: UUID?, of conversation: BotConversation) {
+        guard canLead(conversation) else { return }
+        do {
+            let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: agents)
+            if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+                conversations[index] = updated
+                conversations.sort { $0.updatedAt > $1.updatedAt }
+            }
+            messagesByConversation[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
+            runtime.notify(participants(for: updated), repository: repository)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func updateGroup(
         _ conversation: BotConversation,
         named name: String,
@@ -2159,7 +2180,7 @@ final class NoodleStore {
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
         // The text draft is independent and remains untouched.
-        runtime.notify(participants(for: conversation), repository: repository)
+        runtime.notify(participants(for: conversation), in: conversation, body: voice.transcript ?? "", repository: repository)
         voiceCalls.shared(in: conversationID, body: voice.transcript ?? VoiceMessage.messageBody,
                           attachmentNames: staged.map(\.originalFilename))
         sendToHub(conversationID)
@@ -2192,7 +2213,7 @@ final class NoodleStore {
             }
 
             drafts.clear(conversation.id)
-            runtime.notify(participants(for: conversation), repository: repository)
+            runtime.notify(participants(for: conversation), in: conversation, body: body, repository: repository)
             voiceCalls.shared(in: conversation.id, body: body, attachmentNames: pendingAttachments.map(\.originalFilename))
             sendToHub(conversation.id)
         } catch {
@@ -2221,7 +2242,7 @@ final class NoodleStore {
             conversations[index].updatedAt = message.createdAt
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
-        runtime.notify(participants(for: conversation), repository: repository)
+        runtime.notify(participants(for: conversation), in: conversation, body: body, repository: repository)
         voiceCalls.shared(in: conversationID, body: body, attachmentNames: [copy.originalFilename])
         sendToHub(conversationID)
         return message
@@ -2248,7 +2269,7 @@ final class NoodleStore {
             conversations[index].updatedAt = message.createdAt
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
-        runtime.notify(participants(for: conversation), repository: repository)
+        runtime.notify(participants(for: conversation), in: conversation, body: command, repository: repository)
         sendToHub(conversation.id)
         return message
     }
@@ -2954,7 +2975,7 @@ final class NoodleStore {
                     }.value
                     refreshTranscripts()
                     if let conversation = conversations.first(where: { $0.id == message.conversationID }) {
-                        runtime.notify(participants(for: conversation), repository: repository)
+                        runtime.notify(participants(for: conversation), in: conversation, body: message.body, repository: repository)
                     }
                     try await Task.detached { try inbox.acknowledge(request.id) }.value
                 } catch {

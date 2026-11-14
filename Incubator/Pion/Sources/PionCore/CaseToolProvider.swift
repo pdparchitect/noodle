@@ -13,15 +13,19 @@ public struct CaseToolProvider: ToolProvider {
 
         Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
-        If you lead the Investigation, set its severity with severity once the evidence lets you judge it, and again when that changes, with a note. status moves it to triaging or contained, with a note. Only the champion closes it.
+        The champion may make one agent the lead; read says who it is, or that there is none. The lead hears the champion's messages a few seconds before the others, so it answers or hands work on with an @mention before everyone replies. Only the lead sets the severity with severity, once the evidence lets you judge it and again when that changes, and moves the status to triaging or contained with status, each with a note. Without a lead, neither changes: ask the champion to choose one if it matters. Only the champion closes an Investigation.
         """,
         activation: .always)
 
     private let store: PionStore
     private let agentName: @Sendable (UUID) -> String?
+    /// The lead of an Investigation's group, which the champion chooses; nil when it has none.
+    private let leadOf: @Sendable (UUID) -> UUID?
 
-    public init(store: PionStore, agentName: @escaping @Sendable (UUID) -> String?) {
+    public init(store: PionStore, leadOf: @escaping @Sendable (UUID) -> UUID?,
+                agentName: @escaping @Sendable (UUID) -> String?) {
         self.store = store
+        self.leadOf = leadOf
         self.agentName = agentName
     }
 
@@ -93,7 +97,7 @@ public struct CaseToolProvider: ToolProvider {
 
         switch tool {
         case "read":
-            return Self.result(Self.describe(investigation, store.caseRecord(id), agentName: agentName))
+            return Self.result(Self.describe(investigation, store.caseRecord(id), lead: leadOf(id), agentName: agentName))
         case "entity":
             guard let kind = CaseRecord.Entity.Kind(rawValue: text("kind")) else { throw ToolProviderError("--kind is one of host, identity, service, indicator or other.") }
             let entityName = try required("name")
@@ -129,9 +133,7 @@ public struct CaseToolProvider: ToolProvider {
             guard let status = Investigation.Status(rawValue: text("status")), status == .triaging || status == .contained else {
                 throw ToolProviderError("--status is triaging or contained. Only the champion closes an Investigation.")
             }
-            guard investigation.leadAgentID == context.agentID else {
-                throw ToolProviderError("Only the lead agent of \(investigation.reference) changes its status.")
-            }
+            try requireLead(of: investigation, context)
             let note = try required("note")
             do { try store.setStatus(status, of: id, by: actor, note: note) }
             catch let error as CaseError { throw ToolProviderError(error.message) }
@@ -140,9 +142,7 @@ public struct CaseToolProvider: ToolProvider {
             guard let severity = Investigation.Severity(rawValue: text("severity")) else {
                 throw ToolProviderError("--severity is low, medium, high or critical.")
             }
-            guard investigation.leadAgentID == context.agentID else {
-                throw ToolProviderError("Only the lead agent of \(investigation.reference) sets its severity.")
-            }
+            try requireLead(of: investigation, context)
             guard !investigation.isClosed else { throw ToolProviderError("\(investigation.reference) is closed.") }
             let note = try required("note")
             try store.update(id, by: actor) { value in
@@ -157,6 +157,15 @@ public struct CaseToolProvider: ToolProvider {
         }
     }
 
+    private func requireLead(of investigation: Investigation, _ context: ToolCallContext) throws {
+        guard let lead = leadOf(investigation.id) else {
+            throw ToolProviderError("\(investigation.reference) has no lead, so its status and severity stay as they are. Ask the champion to choose a lead if they should change.")
+        }
+        guard lead == context.agentID else {
+            throw ToolProviderError("Only \(investigation.reference)'s lead, \(agentName(lead) ?? "another agent"), changes its status and severity.")
+        }
+    }
+
     // MARK: Results
 
     static func result(_ text: String, isError: Bool = false) -> Data {
@@ -164,7 +173,8 @@ public struct CaseToolProvider: ToolProvider {
     }
 
     /// The Investigation as plain text, for an agent to read.
-    public static func describe(_ investigation: Investigation, _ record: CaseRecord, agentName: (UUID) -> String?) -> String {
+    public static func describe(_ investigation: Investigation, _ record: CaseRecord, lead: UUID?,
+                                agentName: (UUID) -> String?) -> String {
         let date = ISO8601DateFormatter()
         func who(_ actor: CaseActor) -> String {
             switch actor {
@@ -175,7 +185,7 @@ public struct CaseToolProvider: ToolProvider {
         var lines = [
             "\(investigation.reference): \(investigation.title)",
             "Status: \(investigation.status.title)\(investigation.outcome.map { " (\($0.title))" } ?? ""). Severity: \(investigation.severityTitle).",
-            "Champion: \(investigation.champion). Lead: \(investigation.leadAgentID.flatMap(agentName) ?? "none").",
+            "Champion: \(investigation.champion). Lead: \(lead.flatMap(agentName) ?? "none, until the champion chooses one").",
             "Objective: \(investigation.objective)",
         ]
         lines.append("\nEntities (\(record.entities.count)):")

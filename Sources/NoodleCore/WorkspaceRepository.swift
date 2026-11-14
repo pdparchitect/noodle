@@ -762,10 +762,12 @@ public struct WorkspaceRepository: Sendable {
         participantIDs: [UUID],
         existingAgents: [AgentRecord],
         folders: [AgentFolder] = [],
+        leadID: UUID? = nil,
         now: Date = Date()
     ) throws -> BotConversation {
         let name = try ConversationName.validated(rawName)
         let uniqueIDs = Array(Set(participantIDs))
+        if let leadID, !uniqueIDs.contains(leadID) { throw WorkspaceError.missingAgent(leadID) }
         guard !uniqueIDs.isEmpty else { throw WorkspaceError.insufficientGroupParticipants }
 
         let knownIDs = Set(existingAgents.map(\.id))
@@ -780,7 +782,8 @@ public struct WorkspaceRepository: Sendable {
             participantIDs: uniqueIDs.sorted { $0.uuidString < $1.uuidString },
             createdAt: now,
             updatedAt: now,
-            folders: try validatedGroupFolders(folders)
+            folders: try validatedGroupFolders(folders),
+            leadID: leadID
         )
         try createConversationFiles(conversation)
         return conversation
@@ -866,6 +869,8 @@ public struct WorkspaceRepository: Sendable {
             conversation.displayName = name
             conversation.publicDescription = normalizedDescription
             conversation.participantIDs = uniqueIDs.sorted { $0.uuidString < $1.uuidString }
+            // A lead taken out of the group stops leading it; added back, it is no longer the lead.
+            if conversation.lead == nil { conversation.leadID = nil }
             if let folders { conversation.folders = folders }
             conversation.updatedAt = now
             if needsNotice {
@@ -920,6 +925,43 @@ public struct WorkspaceRepository: Sendable {
                         "\(saveError.localizedDescription) Previous group settings could not be fully restored: \(restoreError.localizedDescription)"])
                 }
                 throw saveError
+            }
+            return conversation
+        }
+    }
+
+    /// Makes one of the group's bots its lead, or leaves the group without one, and tells the members in a notice.
+    public func setGroupLead(conversationID: UUID, agentID: UUID?, existingAgents: [AgentRecord],
+                             now: Date = Date()) throws -> BotConversation {
+        guard FileManager.default.fileExists(atPath: conversationDirectory(id: conversationID).path) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        return try withConversationLock(conversationID) {
+            guard var conversation = try loadConversations().first(where: {
+                $0.id == conversationID && $0.kind == .group
+            }) else {
+                throw WorkspaceError.missingConversation(conversationID)
+            }
+            if let agentID, !conversation.participantIDs.contains(agentID) { throw WorkspaceError.missingAgent(agentID) }
+            guard conversation.lead != agentID else { return conversation }
+            conversation.leadID = agentID
+            conversation.updatedAt = now
+            let name = agentID.flatMap { id in existingAgents.first { $0.id == id }?.displayName }
+            var messages = try loadMessages(conversationID: conversation.id)
+            messages.append(ChatMessage(conversationID: conversation.id, author: .system,
+                                        body: GroupNotice.leadChanged(agentID == nil ? nil : name ?? "A bot").body,
+                                        createdAt: now, delivery: .delivered))
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            let directory = conversationDirectory(id: conversation.id)
+            let previous = try Data(contentsOf: directory.appendingPathComponent("conversation.json"))
+            try AtomicFile.write(try encoder.encode(conversation), to: directory.appendingPathComponent("conversation.json"))
+            do {
+                try AtomicFile.write(try encoder.encode(messages), to: directory.appendingPathComponent("messages.json"))
+            } catch {
+                try? AtomicFile.write(previous, to: directory.appendingPathComponent("conversation.json"))
+                throw error
             }
             return conversation
         }
@@ -1551,7 +1593,8 @@ public struct WorkspaceRepository: Sendable {
                 participant: identity,
                 publicDescription: agent.publicDescription,
                 lastActiveAt: lastActivity[participantID],
-                suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil
+                suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil,
+                isLead: conversation.lead == participantID
             )
         }.sorted {
             if $0.participant.handle == .me { return true }

@@ -119,12 +119,26 @@ import XCTest
     func testQuickTeamEditsRefreshFolderGrantsAndKeepTheInvestigationsLead() throws {
         let lead = try agent(), previous = try agent("Brisk Otter"), next = try agent("Quiet Lynx")
         let investigation = try model.open(.init(title: "Beacon", lead: lead.id, staff: [previous.id], folders: [folder]))
+        XCTAssertEqual(model.conversation(investigation.id)?.lead, lead.id)
         XCTAssertEqual(try granted(previous), [folder])
         let conversation = try XCTUnwrap(model.conversation(investigation.id))
-        model.setMembers([next.id], of: conversation)
+        model.setMembers([lead.id, next.id], of: conversation)
         XCTAssertEqual(Set(model.conversation(investigation.id)?.participantIDs ?? []), [lead.id, next.id])
+        XCTAssertEqual(model.conversation(investigation.id)?.lead, lead.id)
         XCTAssertTrue(try granted(previous).isEmpty)
         XCTAssertEqual(try granted(next), [folder])
         XCTAssertEqual(try granted(lead), [folder])
+    }
+
+    func testTheChampionChoosesTheLeadAndAnInvestigationNeedsNone() throws {
+        let first = try agent(), second = try agent("Brisk Otter")
+        let investigation = try model.open(.init(title: "Beacon", staff: [first.id, second.id]))
+        let conversation = try XCTUnwrap(model.conversation(investigation.id))
+        XCTAssertNil(conversation.lead, "no lead unless the champion chooses one")
+        model.setLead(second.id, of: conversation)
+        XCTAssertEqual(model.conversation(investigation.id)?.lead, second.id)
+        XCTAssertEqual(model.audit(investigation.id).last?.event, "lead")
+        model.setLead(nil, of: conversation)
+        XCTAssertNil(model.conversation(investigation.id)?.lead)
     }
 }

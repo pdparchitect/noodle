@@ -63,7 +63,8 @@ struct PionScenario: Decodable {
         var status: Investigation.Status?
         var outcome: Investigation.Outcome?
         var closingNote: String?
-        let lead: String
+        /// The agent the champion made the lead; none when left out.
+        var lead: String?
         var source: String?
         let opened: String
         var `case`: Case?
@@ -163,7 +164,7 @@ struct PionScenario: Decodable {
             for message in conversation.messages ?? [] { try author(message.from, conversation.key) }
             if let investigation = conversation.investigation {
                 try require(conversation.group != nil, "\(conversation.key): only a group is an Investigation.")
-                try author(investigation.lead, conversation.key)
+                if let lead = investigation.lead { try author(lead, conversation.key) }
             }
         }
         for (index, step) in (timeline ?? []).enumerated() {
@@ -324,12 +325,12 @@ enum ScenarioTime {
             } else if let group = conversation.group, let record = conversation.investigation {
                 let opened = try ScenarioTime.date(record.opened, clock: clock)
                 let number = record.number ?? 1
-                let lead = agentIDs[record.lead]!
-                let members = Set(group.members.compactMap { agentIDs[$0] }).union([lead])
+                let lead = record.lead.flatMap { agentIDs[$0] }
+                let members = Set(group.members.compactMap { agentIDs[$0] }).union(lead.map { [$0] } ?? [])
                 id = try model.repository.createGroup(named: PionModel.groupName(number: number, title: record.title), publicDescription: record.objective,
-                                                      participantIDs: Array(members), existingAgents: agents, now: opened).id
+                                                      participantIDs: Array(members), existingAgents: agents, leadID: lead, now: opened).id
                 _ = try model.store.open(id: id, title: record.title, objective: record.objective ?? "",
-                                         severity: record.severity, champion: model.champion, leadAgentID: lead,
+                                         severity: record.severity, champion: model.champion,
                                          source: record.source, number: number, now: opened)
             } else if let group = conversation.group {
                 id = try model.repository.createGroup(named: group.name, publicDescription: group.description,
@@ -352,7 +353,8 @@ enum ScenarioTime {
                         try model.store.setStatus(.closed, of: id, by: .champion(model.champion), outcome: record.outcome ?? .resolved,
                                                   note: record.closingNote, now: at)
                     } else {
-                        try model.store.setStatus(status, of: id, by: .agent(agentIDs[record.lead]!), now: at)
+                        let actor = record.lead.flatMap { agentIDs[$0] }.map(CaseActor.agent) ?? .champion(model.champion)
+                        try model.store.setStatus(status, of: id, by: actor, now: at)
                     }
                 }
             }
@@ -367,7 +369,7 @@ enum ScenarioTime {
     private func by(_ key: String?, _ id: UUID) -> CaseActor {
         if key == "user" { return .champion(model.champion) }
         return key.flatMap { agentIDs[$0] }.map(CaseActor.agent)
-            ?? model.store.investigation(id)?.leadAgentID.map(CaseActor.agent) ?? .champion(model.champion)
+            ?? model.conversation(id)?.lead.map(CaseActor.agent) ?? .champion(model.champion)
     }
 
     private func time(_ text: String?, clock: Date, fallback: Date) throws -> Date {

@@ -28,11 +28,13 @@
 - Background effects carry on under the sidebar and inspector, softened by their frosted glass, and are fainter, so text stands out.
 - Sheets use Noodle-style top action bars and rounded text fields, with multiline descriptions and Return left to the focused field. Scenarios use generated agent names throughout their conversations and mentions.
 - New agents start with generated names, with a Human option and a button to try another name. Agents and groups can be edited from their sidebar context menus or the conversation toolbar.
-- The View menu separates the inspector from display options and keeps background effects together in a submenu: Grid, Network and Glyphs. Pion starts with none.
+- The View menu separates the inspector from display options and keeps the window's background together in one submenu: Frosted or Solid, then the effects Grid, Network and Glyphs. Pion starts frosted, with no effect.
 - A Conversation menu replaces Investigation, with search, a conversation picker, separate conversation windows, Float on Top, dictation and Stop. Investigation status and closing stay in the investigation's toolbar.
 
 ### Added
 
+- An Investigation or group has a lead only when you choose one: in its editor, right-click an agent and choose Make Lead. The lead hears your messages a few seconds before the others, so the team stops answering all at once, and only the lead sets severity and status. Without a lead, severity stays Unassessed.
+- View › Background › Solid gives the window a plain background in place of the frosted glass the desktop shows through. Frosted, the default, brings the frost back.
 - Proofpoint TAP, Sumo Logic, Tenable and Censys in Settings › Tools › Add Tools. Proofpoint takes a service principal and secret, Sumo Logic its deployment with an access ID and key, Tenable an access key and secret key, and Censys a personal access token. Agents can see the last hour's email threats and clicks, search logs, see an asset's vulnerabilities by IP address, and see what an internet host exposes.
 - Google Cloud and Google Workspace in Settings › Tools › Add Tools, each with a service account's JSON key. Google Cloud takes an organization, folder or project, for audit logs, Security Command Center findings, who has access to what, and resource search. Google Workspace takes the admin to act as, for sign-in, admin, OAuth token, Drive and other audit reports. Both only read, and the key never leaves the Mac.
 - AWS in Settings › Tools › Add Tools, each account added with a default region and a read-only IAM user's access key. Agents can look up CloudTrail events, list GuardDuty, Security Hub and IAM Access Analyzer findings, trace an access key to its owner and last use, read the credential report, find EC2 instances by ID or IP address and security groups open to the internet, and query CloudWatch Logs Insights. Requests are signed with the key, which never leaves the Mac.

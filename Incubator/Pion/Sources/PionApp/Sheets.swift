@@ -82,17 +82,17 @@ struct ConversationPicker: View {
 }
 
 /// The team as Noodle shows a group's members: marks in a grid, each removable, with more added from
-/// a searchable list. The lead stays, marked as such, while it leads.
+/// a searchable list. A member's context menu makes it the lead, which is then marked as such.
 struct AgentMemberPicker: View {
     let model: PionModel
     @Binding var selection: Set<UUID>
-    var fixed: UUID?
+    @Binding var lead: UUID?
     @State private var adding = false
     @State private var search = ""
 
-    private var members: [AgentRecord] { model.agents.filter { $0.id == fixed || selection.contains($0.id) } }
+    private var members: [AgentRecord] { model.agents.filter { selection.contains($0.id) } }
     private var available: [AgentRecord] {
-        model.agents.filter { $0.id != fixed && !selection.contains($0.id)
+        model.agents.filter { !selection.contains($0.id)
             && (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search)) }
     }
 
@@ -102,7 +102,7 @@ struct AgentMemberPicker: View {
                 Text("Members").font(.caption.weight(.semibold))
                 Spacer()
                 Button { search = ""; adding = true } label: { Label("Add Agents", systemImage: "plus") }
-                    .disabled(model.agents.allSatisfy { $0.id == fixed || selection.contains($0.id) })
+                    .disabled(model.agents.allSatisfy { selection.contains($0.id) })
                     .popover(isPresented: $adding, arrowEdge: .bottom) { chooser }
             }
             ScrollView {
@@ -124,27 +124,35 @@ struct AgentMemberPicker: View {
                             VStack(spacing: 6) {
                                 AgentProfileButton(model: model, agent: agent, size: 44, inSheet: true)
                                     .overlay(alignment: .topTrailing) {
-                                        if agent.id != fixed {
-                                            Button { selection.remove(agent.id) } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .font(.system(size: 16))
-                                                    .symbolRenderingMode(.palette)
-                                                    .foregroundStyle(.white, Color(nsColor: .darkGray))
-                                                    .padding(4)
-                                                    .contentShape(Circle())
-                                            }
-                                            .buttonStyle(.plain)
-                                            .offset(x: 10, y: -8)
-                                            .help("Remove \(agent.displayName)")
-                                            .accessibilityLabel("Remove \(agent.displayName)")
+                                        Button {
+                                            selection.remove(agent.id)
+                                            if lead == agent.id { lead = nil }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 16))
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.white, Color(nsColor: .darkGray))
+                                                .padding(4)
+                                                .contentShape(Circle())
                                         }
+                                        .buttonStyle(.plain)
+                                        .offset(x: 10, y: -8)
+                                        .help("Remove \(agent.displayName)")
+                                        .accessibilityLabel("Remove \(agent.displayName)")
                                     }
                                 Text(agent.displayName).font(.caption).lineLimit(2).multilineTextAlignment(.center)
-                                if agent.id == fixed {
+                                if agent.id == lead {
                                     Text("Lead").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
+                            .contextMenu {
+                                if agent.id == lead {
+                                    Button("Remove as Lead") { lead = nil }
+                                } else {
+                                    Button("Make Lead") { lead = agent.id }
+                                }
+                            }
                         }
                     }
                     .padding(12)
@@ -268,9 +276,10 @@ struct NewInvestigationSheet: View {
 
     init(model: PionModel, investigation: Investigation? = nil) { self.model = model; self.investigation = investigation }
 
-    private var members: Set<UUID> { draft.staff.union(draft.lead.map { [$0] } ?? []) }
+    private var members: Set<UUID> { draft.members }
     private var canSave: Bool {
-        loaded && investigation?.isClosed != true && draft.lead != nil && !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        loaded && investigation?.isClosed != true && !draft.members.isEmpty
+            && !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -299,11 +308,8 @@ struct NewInvestigationSheet: View {
                     SheetDescriptionField(title: "Objective", prompt: "What this investigation must establish", text: $draft.objective)
                     FoldersSettingsRow(folders: $draft.folders, owner: .group)
                 case .team:
-                    Picker("Lead", selection: $draft.lead) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(model.agents) { agent in Text(agent.displayName).tag(Optional(agent.id)) }
-                    }
-                    AgentMemberPicker(model: model, selection: $draft.staff, fixed: draft.lead)
+                    AgentMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
+                    LeadHint()
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $draft.memberTools)
                 }
@@ -315,8 +321,8 @@ struct NewInvestigationSheet: View {
             guard !loaded else { return }
             if let investigation, let group = model.conversation(investigation.id) {
                 draft = PionModel.Draft(title: investigation.title, objective: investigation.objective,
-                    lead: investigation.leadAgentID, staff: Set(group.participantIDs), folders: group.folders ?? [])
-            } else { draft.lead = model.agents.first?.id }
+                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [])
+            }
             loaded = true
             titleFocused = true
         }
@@ -347,6 +353,7 @@ struct GroupEditorSheet: View {
     @State private var name = ""
     @State private var description = ""
     @State private var members: Set<UUID> = []
+    @State private var lead: UUID?
     @State private var folders: [AgentFolder] = []
     @State private var memberTools: [UUID: Set<UUID>] = [:]
     @State private var selectedTab = TeamEditorTab.general
@@ -384,7 +391,8 @@ struct GroupEditorSheet: View {
                     SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description)
                     FoldersSettingsRow(folders: $folders, owner: .group)
                 case .team:
-                    AgentMemberPicker(model: model, selection: $members)
+                    AgentMemberPicker(model: model, selection: $members, lead: $lead)
+                    LeadHint()
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $memberTools)
                 }
@@ -399,6 +407,7 @@ struct GroupEditorSheet: View {
                 name = group.displayName
                 description = group.publicDescription ?? ""
                 members = Set(group.participantIDs)
+                lead = group.lead
                 folders = group.folders ?? []
             }
             nameFocused = true
@@ -412,13 +421,23 @@ struct GroupEditorSheet: View {
         do {
             let assignments = memberTools.filter { members.contains($0.key) }
             if let group {
-                try model.updateGroup(group, name: name, description: description, members: members, folders: folders, memberTools: assignments)
+                let updated = try model.updateGroup(group, name: name, description: description, members: members, folders: folders, memberTools: assignments)
+                if updated.lead != lead { model.setLead(lead, of: updated) }
             } else {
-                let created = try model.createGroup(name: name, description: description, members: members, folders: folders, memberTools: assignments)
+                let created = try model.createGroup(name: name, description: description, members: members, folders: folders,
+                                                    memberTools: assignments, lead: lead)
                 model.selection = created.id
             }
             dismiss()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// How a lead is chosen, under the team grid.
+private struct LeadHint: View {
+    var body: some View {
+        Text("Right-click an agent to make it the lead: it hears your messages first and sets the severity.")
+            .font(.caption).foregroundStyle(.secondary)
     }
 }
 

@@ -304,6 +304,8 @@ public final class AgentRuntimeCoordinator {
     private var stoppingTurns: [UUID: StoppingTurn] = [:]
     /// Bots that start again after Stop without picking up the unread messages waiting for them.
     @ObservationIgnored private var quietStarts: Set<UUID> = []
+    /// Bots waiting out a group lead's head start, with the wake that holds them; stopping a bot lets it go.
+    @ObservationIgnored private var heldForLead: [UUID: UUID] = [:]
     private var isStoppingAll = false
 
     @ObservationIgnored private var heartbeatScheduler: AgentHeartbeatScheduler
@@ -1321,6 +1323,25 @@ public final class AgentRuntimeCoordinator {
         }
     }
 
+    /// Wakes a conversation's bots for a person's new message: in a group with a lead, the lead and any bot the
+    /// message names at once, the others after `GroupLead.headStart`.
+    public func notify(_ agents: [AgentRecord], in conversation: BotConversation, body: String,
+                       repository: WorkspaceRepository) {
+        let order = GroupLead.wakeOrder(agents, in: conversation, body: body)
+        notify(order.now, repository: repository)
+        guard !order.later.isEmpty else { return }
+        let hold = UUID()
+        for agent in order.later { heldForLead[agent.id] = hold }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: GroupLead.headStart)
+            guard let self else { return }
+            // A newer message holds them again, and wakes them itself.
+            let released = order.later.filter { self.heldForLead[$0.id] == hold }
+            for agent in released { self.heldForLead[agent.id] = nil }
+            self.notify(released, repository: repository)
+        }
+    }
+
     public func startVoiceCall(agentID: UUID, _ request: VoiceCallRequest,
                                events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
         guard let process = processes[agentID] else { throw VoiceCallUnavailable() }
@@ -1344,6 +1365,7 @@ public final class AgentRuntimeCoordinator {
         cancelSupervision(for: agentID)
         recoveryPending.remove(agentID)
         quietStarts.remove(agentID)
+        heldForLead[agentID] = nil
         changingAccess.remove(agentID)
         transitionIDs[agentID] = nil
         if revokeAccess {

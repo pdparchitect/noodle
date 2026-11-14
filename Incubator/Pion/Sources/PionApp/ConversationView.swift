@@ -285,7 +285,7 @@ struct ConversationStart: View {
                 }
                 HStack(spacing: 14) {
                     Label(investigation.champion, systemImage: "person.crop.circle").help("Champion")
-                    if let lead = model.agent(investigation.leadAgentID) { Label("\(lead.displayName) leads", systemImage: "star") }
+                    if let lead = model.agent(model.conversation(investigation.id)?.lead) { Label("\(lead.displayName) leads", systemImage: "star") }
                     if let source = investigation.source { Label(source, systemImage: "bell").lineLimit(1) }
                     Label("Opened \(investigation.openedAt.pionShort)", systemImage: "clock")
                 }
@@ -410,7 +410,7 @@ struct MessageRow: View {
                 AgentMark(agent: nil, size: 22)
             }
             Text(model.name(of: message.author)).font(.callout.weight(.semibold))
-            if let agent, agent.id == investigation?.leadAgentID {
+            if let agent, investigation != nil, agent.id == model.conversation(message.conversationID)?.lead {
                 Text("Lead").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .overlay(Capsule().stroke(Color.secondary.opacity(0.4)))

@@ -6,6 +6,8 @@ import NoodleRuntimeSettings
 struct GroupMemberPicker: View {
     let agents: [AgentRecord]
     @Binding var selectedIDs: Set<UUID>
+    /// The group's lead, made from a member's context menu; nil where a group can have no lead.
+    var lead: Binding<UUID?>? = nil
     @State private var showingAdd = false
     @State private var search = ""
     @State private var memberPendingRemoval: AgentRecord?
@@ -69,8 +71,22 @@ struct GroupMemberPicker: View {
                                     .font(.caption)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
+                                if lead?.wrappedValue == agent.id {
+                                    Text("Lead")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
+                            .contextMenu {
+                                if let lead {
+                                    if lead.wrappedValue == agent.id {
+                                        Button("Remove as Lead") { lead.wrappedValue = nil }
+                                    } else {
+                                        Button("Make Lead") { lead.wrappedValue = agent.id }
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(12)
@@ -90,7 +106,10 @@ struct GroupMemberPicker: View {
             titleVisibility: .visible,
             presenting: memberPendingRemoval
         ) { agent in
-            Button("Remove from Group", role: .destructive) { selectedIDs.remove(agent.id) }
+            Button("Remove from Group", role: .destructive) {
+                selectedIDs.remove(agent.id)
+                if lead?.wrappedValue == agent.id { lead?.wrappedValue = nil }
+            }
             Button("Cancel", role: .cancel) {}
         }
     }

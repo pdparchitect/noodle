@@ -107,6 +107,15 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
     public var folders: [AgentFolder]?
     /// On a Noodle Hub, someone the bot's owner shared it with, who talks with it here.
     public var guest: ConversationGuest?
+    /// The bot a person made this group's lead, if any. It hears each of the person's new messages a
+    /// moment before the others, so it can answer or hand the message on before they all reply.
+    public var leadID: UUID?
+
+    /// The lead while it is still a member of the group; nil otherwise.
+    public var lead: UUID? {
+        guard kind == .group, let leadID, participantIDs.contains(leadID) else { return nil }
+        return leadID
+    }
 
     public init(
         id: UUID = UUID(),
@@ -118,7 +127,8 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         updatedAt: Date = Date(),
         archivedAt: Date? = nil,
         folders: [AgentFolder]? = nil,
-        guest: ConversationGuest? = nil
+        guest: ConversationGuest? = nil,
+        leadID: UUID? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -130,6 +140,7 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
         self.archivedAt = archivedAt
         self.folders = folders
         self.guest = guest
+        self.leadID = leadID
     }
 }
 
@@ -368,17 +379,21 @@ public struct MessengerParticipantStatus: Codable, Hashable, Sendable {
     public let lastActiveAt: Date?
     /// Set while the bot is suspended: it takes no new turn until then, and messages wait for it.
     public let suspendedUntil: Date?
+    /// True for the group's lead; left out for everyone else.
+    public let isLead: Bool?
 
     public init(
         participant: MessengerIdentity,
         publicDescription: String?,
         lastActiveAt: Date?,
-        suspendedUntil: Date? = nil
+        suspendedUntil: Date? = nil,
+        isLead: Bool = false
     ) {
         self.participant = participant
         self.publicDescription = publicDescription
         self.lastActiveAt = lastActiveAt
         self.suspendedUntil = suspendedUntil
+        self.isLead = isLead ? true : nil
     }
 }
 

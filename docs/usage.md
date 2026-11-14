@@ -23,6 +23,12 @@ of them. Click an agent's avatar to see its profile or open a direct conversatio
 Right-click a group in the sidebar to change its members or description. Removing a
 member keeps the group's history.
 
+To give a group a lead, open its Group Info, right-click a bot and choose **Make Lead**.
+The lead hears each of your messages a few seconds before the other bots, so it can
+answer or hand the message to one of them before they all reply. A bot you @mention
+hears it straight away. A group has no lead until you choose one, and groups on a
+Noodle Hub can't have one yet.
+
 ## Keep conversations in separate windows
 
 Right-click a bot or group in the sidebar and choose **Open in New Window**.

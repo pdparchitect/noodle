@@ -3,14 +3,14 @@ import Metal
 import QuartzCore
 import SwiftUI
 
-/// What moves behind the frosted window, chosen in View › Background Effect. Every effect is
+/// What moves behind the frosted window, chosen in View › Background. Every effect is
 /// monochrome and quiet enough to read over, and holds still when the person asks for less motion.
 enum BackdropEffect: String, CaseIterable, Identifiable {
     // The order is the shader's: each case's index picks its drawing.
     case none, glyphs, grid, scanlines, network, chess, chase
 
     static let key = "PionBackdropEffect"
-    /// What View › Background Effect offers, in its order. Scanlines, Chess and Chase are kept but not offered.
+    /// What View › Background offers, in its order. Scanlines, Chess and Chase are kept but not offered.
     static let offered: [BackdropEffect] = [.none, .grid, .network, .glyphs]
     /// What a new Pion starts with: nothing moving until the person picks an effect. Scenarios set their own.
     static let standard = BackdropEffect.none

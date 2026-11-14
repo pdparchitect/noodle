@@ -43,14 +43,13 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
     public var title: String
     public var objective: String
     public var status: Status
-    /// Nil until the lead agent has assessed it; only the lead sets it.
+    /// Nil until the group's lead has assessed it; only the lead sets it.
     public var severity: Severity?
     public var outcome: Outcome?
     /// What the champion wrote when closing.
     public var closingNote: String?
     /// The person who owns it and closes it.
     public var champion: String
-    public var leadAgentID: UUID?
     /// Where it came from, such as an alert's name; nil when opened by hand.
     public var source: String?
     public let openedAt: Date
@@ -58,7 +57,7 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
     public var closedAt: Date?
 
     public init(id: UUID, number: Int, title: String, objective: String, severity: Severity? = nil,
-                champion: String, leadAgentID: UUID?, source: String? = nil,
+                champion: String, source: String? = nil,
                 status: Status = .open, openedAt: Date = Date()) {
         self.id = id
         self.number = number
@@ -67,7 +66,6 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
         self.status = status
         self.severity = severity
         self.champion = champion
-        self.leadAgentID = leadAgentID
         self.source = source
         self.openedAt = openedAt
         updatedAt = openedAt

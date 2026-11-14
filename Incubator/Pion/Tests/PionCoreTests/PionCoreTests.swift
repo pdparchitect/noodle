@@ -19,7 +19,7 @@ final class PionCoreTests: XCTestCase {
 
     private func open() throws -> Investigation {
         try store.open(id: UUID(), title: "Beaconing laptop", objective: "Find out why LT-0423 beacons",
-                       champion: "Avery", leadAgentID: agent)
+                       champion: "Avery")
     }
 
     // MARK: Status
@@ -75,8 +75,12 @@ final class PionCoreTests: XCTestCase {
 
     // MARK: Case tool
 
+    /// The lead of every Investigation in these tests; nil leaves them without one.
+    private var lead: UUID?
+
     private func call(_ tool: String, _ arguments: [String: Any], as caller: UUID? = nil) async throws -> String {
-        let provider = CaseToolProvider(store: store) { _ in "Rafe" }
+        let lead = self.lead
+        let provider = CaseToolProvider(store: store, leadOf: { _ in lead }) { _ in "Rafe" }
         let data = try await provider.call(tool, arguments: JSONSerialization.data(withJSONObject: arguments), files: [],
                                            context: ToolCallContext(agentID: caller ?? agent, workspace: root))
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -103,6 +107,7 @@ final class PionCoreTests: XCTestCase {
     }
 
     func testOnlyTheLeadChangesStatusAndNobodyClosesThroughTheTool() async throws {
+        lead = agent
         let investigation = try open()
         let id = investigation.id.uuidString
         do { _ = try await call("status", ["conversation": id, "status": "contained", "note": "n"], as: UUID()); XCTFail("expected a refusal") } catch {}
@@ -112,6 +117,7 @@ final class PionCoreTests: XCTestCase {
     }
 
     func testAnInvestigationStartsUnassessedAndOnlyItsLeadSetsSeverity() async throws {
+        lead = agent
         let investigation = try open()
         XCTAssertNil(investigation.severity)
         let id = investigation.id.uuidString
@@ -122,8 +128,19 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual(store.audit(investigation.id).last?.event, "severity")
     }
 
+    func testWithoutALeadNobodyChangesSeverityOrStatus() async throws {
+        let investigation = try open()
+        let id = investigation.id.uuidString
+        do { _ = try await call("severity", ["conversation": id, "severity": "high", "note": "n"]); XCTFail("expected a refusal") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("no lead"), error.localizedDescription) }
+        do { _ = try await call("status", ["conversation": id, "status": "contained", "note": "n"]); XCTFail("expected a refusal") } catch {}
+        XCTAssertNil(store.investigation(investigation.id)?.severity)
+        let read = try await call("read", ["conversation": id])
+        XCTAssertTrue(read.contains("Lead: none"), read)
+    }
+
     func testTheToolListDeclaresTheConversationForTheBroker() async throws {
-        let provider = CaseToolProvider(store: store) { _ in nil }
+        let provider = CaseToolProvider(store: store, leadOf: { _ in nil }) { _ in nil }
         let tools = try ToolDescriptor.list(mcp: try await provider.tools(context: ToolCallContext(agentID: agent, workspace: root)))
         XCTAssertEqual(Set(tools.map(\.name)), ["read", "entity", "evidence", "finding", "status", "severity"])
         XCTAssertTrue(tools.allSatisfy { $0.conversationParameter == "conversation" })

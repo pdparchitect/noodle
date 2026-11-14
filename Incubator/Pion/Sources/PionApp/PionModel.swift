@@ -79,7 +79,9 @@ import UniformTypeIdentifiers
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
         let store = self.store, repository = self.repository
-        try? tools.register(CaseToolProvider(store: store) { id in
+        try? tools.register(CaseToolProvider(store: store, leadOf: { id in
+            (try? repository.loadConversations())?.first { $0.id == id }?.lead
+        }) { id in
             (try? repository.loadAgents())?.first { $0.id == id }?.displayName
         })
         connectionsController.toolRegistry = tools
@@ -291,7 +293,7 @@ import UniformTypeIdentifiers
     }
 
     func members(of conversation: BotConversation) -> [AgentRecord] {
-        let lead = investigation(conversation.id)?.leadAgentID
+        let lead = conversation.lead
         return agents.filter { conversation.participantIDs.contains($0.id) }
             .sorted { ($0.id == lead ? 0 : 1, $0.displayName) < ($1.id == lead ? 0 : 1, $1.displayName) }
     }
@@ -525,7 +527,24 @@ import UniformTypeIdentifiers
         _ = try repository.sendUserMessage(conversationID: id, body: body, now: now)
         readTranscript(id, notifying: false)
         markRead(id)
-        if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+        if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: body, repository: repository) }
+    }
+
+    /// Makes an agent the group's lead, or leaves it without one; the members are told in a notice.
+    func setLead(_ agentID: UUID?, of conversation: BotConversation) {
+        let investigation = store.investigation(conversation.id)
+        guard investigation?.isClosed != true else { problem = "Reopen this investigation before changing its lead."; return }
+        guard (self.conversation(conversation.id) ?? conversation).lead != agentID else { return }
+        do {
+            let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: agents, now: now)
+            if investigation != nil {
+                try store.append(AuditEntry(at: now, actor: .champion(champion), event: "lead",
+                                            detail: agentID.flatMap { agent($0)?.displayName } ?? "No lead"), to: conversation.id)
+            }
+            reload()
+            readTranscript(conversation.id, notifying: false)
+            if !isScripted { runtime.notify(members(of: updated), repository: repository) }
+        } catch { problem = error.localizedDescription }
     }
 
     func sendDraft(to id: UUID) {
@@ -576,7 +595,7 @@ import UniformTypeIdentifiers
 
     @discardableResult
     func createGroup(name: String, description: String?, members: Set<UUID>, folders: [AgentFolder] = [],
-                     memberTools: [UUID: Set<UUID>] = [:]) throws -> BotConversation {
+                     memberTools: [UUID: Set<UUID>] = [:], lead: UUID? = nil) throws -> BotConversation {
         _ = try ConversationName.validated(name)
         let folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         try validateMemberTools(memberTools, members: members)
@@ -585,7 +604,7 @@ import UniformTypeIdentifiers
         do {
             try assignMemberTools(memberTools)
             group = try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
-                                                existingAgents: agents, folders: folders, now: now)
+                                                existingAgents: agents, folders: folders, leadID: lead, now: now)
         } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
         reload()
         readTranscript(group.id, notifying: false)
@@ -597,8 +616,7 @@ import UniformTypeIdentifiers
         let investigation = store.investigation(conversation.id)
         guard investigation?.isClosed != true else { problem = "Reopen this investigation before changing its team."; return }
         let previous = self.conversation(conversation.id) ?? conversation
-        let lead = investigation?.leadAgentID.map { Set([$0]) } ?? []
-        let members = ids.union(lead)
+        let members = ids
         let before = Set(previous.participantIDs)
         guard members != before, !members.isEmpty else { return }
         do {
@@ -622,19 +640,22 @@ import UniformTypeIdentifiers
     struct Draft {
         var title = ""
         var objective = ""
+        /// Chosen by the champion from a member's context menu; nil, the default, leaves the group without a lead.
         var lead: UUID?
         var staff: Set<UUID> = []
         var folders: [AgentFolder] = []
         var memberTools: [UUID: Set<UUID>] = [:]
+        /// The lead is always one of them.
+        var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
     }
 
     @discardableResult
     func updateInvestigation(_ investigation: Investigation, draft: Draft) throws -> Investigation {
         guard let current = store.investigation(investigation.id), !current.isClosed else { throw CaseError("Reopen this investigation before editing it.") }
-        guard let lead = draft.lead else { throw CaseError("Choose a lead agent.") }
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw CaseError("Give the investigation a title.") }
-        let members = draft.staff.union([lead])
+        let members = draft.members
+        guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         try validateMemberTools(draft.memberTools, members: members)
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
@@ -650,7 +671,6 @@ import UniformTypeIdentifiers
                 var events: [(event: String, detail: String)] = []
                 if value.title != title { events.append(("title", title)); value.title = title }
                 if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
-                if value.leadAgentID != lead { events.append(("lead", agent(lead)?.displayName ?? lead.uuidString)); value.leadAgentID = lead }
                 if Set(before.participantIDs) != members { events.append(("staff", "Updated the investigation team.")) }
                 if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
                 if toolsChanged { events.append(("tools", "Updated the team's agent tool assignments.")) }
@@ -660,27 +680,30 @@ import UniformTypeIdentifiers
         reload()
         readTranscript(group.id, notifying: true)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
+        if group.lead != draft.lead { setLead(draft.lead, of: group) }
         return updated
     }
 
     @discardableResult
     func open(_ draft: Draft) throws -> Investigation {
-        guard let lead = draft.lead else { throw CaseError("Choose a lead agent.") }
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw CaseError("Give the Investigation a title.") }
-        let members = draft.staff.union([lead])
+        let members = draft.members
+        guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         try validateMemberTools(draft.memberTools, members: members)
         let number = (investigations.map(\.number).max() ?? 0) + 1
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
-                                    members: members, folders: folders, memberTools: draft.memberTools)
+                                    members: members, folders: folders, memberTools: draft.memberTools, lead: draft.lead)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
-                                           champion: champion, leadAgentID: lead, number: number, now: now)
+                                           champion: champion, number: number, now: now)
         reload()
         readTranscript(group.id, notifying: false)
-        let leadName = agent(lead)?.displayName ?? "the lead"
+        let leading = draft.lead.flatMap { agent($0)?.displayName }
+            .map { "@\($0) leads, and sets the severity once the evidence allows." }
+            ?? "There is no lead yet, so the severity stays unassessed until I choose one."
         try send("""
-            **\(investigation.reference): \(title)**. @\(leadName) leads, and sets the severity once the evidence allows.
+            **\(investigation.reference): \(title)**. \(leading)
 
             Objective: \(draft.objective.isEmpty ? title : draft.objective)
 

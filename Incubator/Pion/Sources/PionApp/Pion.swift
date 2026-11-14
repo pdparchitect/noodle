@@ -21,9 +21,9 @@ struct PionApp: App {
         Window(pionAppName, id: "main") {
             MainWindow(model: delegate.model, window: delegate.window)
                 .frame(minWidth: 980, minHeight: 640)
-                // The desktop shows through, frosted, with Pion's background effect under the frost.
+                // Pion's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
-                .containerBackground(.thickMaterial, for: .window)
+                .modifier(WindowSurfaceBackground())
         }
         .defaultSize(width: 1320, height: 840)
         // With the toolbar drawing no background, the window is moved by any empty part of it.
@@ -39,7 +39,7 @@ struct PionApp: App {
             ConversationWindow(model: delegate.model, selection: $id)
                 .frame(minWidth: 720, minHeight: 540)
                 .background { Backdrop().ignoresSafeArea() }
-                .containerBackground(.thickMaterial, for: .window)
+                .modifier(WindowSurfaceBackground())
         }
         .defaultSize(width: 1000, height: 760)
         .defaultLaunchBehavior(.suppressed)
@@ -211,22 +211,50 @@ extension Notification.Name {
     static let revealTranscriptMessage = Notification.Name("Pion.revealTranscriptMessage")
 }
 
-/// View › Sidebar and View › Background Effect, kept per person as Noodle keeps its view options.
+/// View › Background › Frosted or Solid: whether the desktop shows through the window.
+enum WindowSurface: String {
+    case frosted, solid
+    static let key = "PionWindowSurface"
+}
+
+/// The window's background for the chosen surface: frosted glass over the desktop, or the plain window colour.
+struct WindowSurfaceBackground: ViewModifier {
+    @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
+
+    func body(content: Content) -> some View {
+        content.containerBackground(surface == .solid ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+                                                      : AnyShapeStyle(.thickMaterial), for: .window)
+    }
+}
+
+/// View › Background (Frosted or Solid, and the effect) and View › Sidebar, kept per person as Noodle keeps its view options.
 struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
+    @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
     var body: some View {
+        // Everything about the window's background in one submenu: the surface, then the effect over it.
+        Menu("Background") {
+            Picker("Surface", selection: $surface) {
+                Text("Frosted").tag(WindowSurface.frosted)
+                Text("Solid").tag(WindowSurface.solid)
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            // Checkmark items rather than an inline picker, which draws a separator of its own under the header.
+            Section("Animation") {
+                ForEach(BackdropEffect.offered) { offered in
+                    Toggle(offered.title, isOn: Binding(get: { effect == offered.rawValue },
+                                                        set: { if $0 { effect = offered.rawValue } }))
+                    if offered == .none { Divider() }
+                }
+            }
+        }
+        Divider()
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
         }
-        Picker("Background Effect", selection: $effect) {
-            ForEach(BackdropEffect.offered) { effect in
-                Text(effect.title).tag(effect.rawValue)
-                if effect == .none { Divider() }
-            }
-        }
-        .pickerStyle(.menu)
     }
 }
 

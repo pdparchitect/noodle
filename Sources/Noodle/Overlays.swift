@@ -820,6 +820,7 @@ struct GroupInfoSheet: View {
     @State private var publicDescription: String
     @State private var selectedIDs: Set<UUID>
     @State private var folders: [AgentFolder]
+    @State private var leadID: UUID?
     @State private var backgroundDraft: BackgroundSelection?
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
@@ -830,6 +831,7 @@ struct GroupInfoSheet: View {
         _publicDescription = State(initialValue: conversation.publicDescription ?? "")
         _selectedIDs = State(initialValue: Set(conversation.participantIDs))
         _folders = State(initialValue: conversation.folders ?? [])
+        _leadID = State(initialValue: conversation.lead)
     }
 
     var body: some View {
@@ -875,9 +877,11 @@ struct GroupInfoSheet: View {
                 GroupDescriptionEditor(publicDescription: $publicDescription)
 
                 GroupMemberPicker(agents: store.groupCandidates(on: store.hubMirror(forConversation: conversation.id)),
-                                  selectedIDs: $selectedIDs)
+                                  selectedIDs: $selectedIDs, lead: store.canLead(conversation) ? $leadID : nil)
 
-                Text("Add at least one bot. Membership changes apply to future messages.")
+                Text(store.canLead(conversation)
+                     ? "Add at least one bot. Membership changes apply to future messages. Right-click a bot to make it the lead: it hears your messages first."
+                     : "Add at least one bot. Membership changes apply to future messages.")
                     .font(.caption)
                     .foregroundStyle(!selectedIDs.isEmpty ? Color.secondary : Color.red)
 
@@ -918,8 +922,10 @@ struct GroupInfoSheet: View {
 
     private func save() {
         if store.saveSettings(background: backgroundDraft, for: conversation, saving: {
-            store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
-                              folders: folders)
+            guard store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
+                                    folders: folders) else { return false }
+            if store.canLead(conversation), leadID != conversation.lead { store.setLead(leadID, of: conversation) }
+            return true
         }) {
             dismiss()
         }
@@ -931,7 +937,8 @@ struct GroupInfoSheet: View {
         return ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (
             trimmedName != conversation.displayName ||
                 trimmedDescription != (conversation.publicDescription ?? "") ||
-                selectedIDs != Set(conversation.participantIDs) || folders != (conversation.folders ?? []) || backgroundDraft != nil
+                selectedIDs != Set(conversation.participantIDs) || folders != (conversation.folders ?? []) || backgroundDraft != nil ||
+                leadID != conversation.lead
         )
     }
 }

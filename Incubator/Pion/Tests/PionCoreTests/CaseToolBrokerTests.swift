@@ -32,11 +32,13 @@ final class CaseToolBrokerTests: XCTestCase {
         let member = try repository.createAgent(named: "Margot").agent
         let outsider = try repository.createAgent(named: "Theo").agent
         let agents = try repository.loadAgents()
-        let group = try repository.createGroup(named: "INV-0001 Beacon", participantIDs: [member.id], existingAgents: agents)
-        let investigation = try store.open(id: group.id, title: "Beacon", objective: "",
-                                           champion: "Avery", leadAgentID: member.id)
+        let group = try repository.createGroup(named: "INV-0001 Beacon", participantIDs: [member.id], existingAgents: agents,
+                                               leadID: member.id)
+        let investigation = try store.open(id: group.id, title: "Beacon", objective: "", champion: "Avery")
         let registry = ToolProviderRegistry()
-        try registry.register(CaseToolProvider(store: store) { id in agents.first { $0.id == id }?.displayName })
+        try registry.register(CaseToolProvider(store: store, leadOf: { id in
+            (try? repository.loadConversations())?.first { $0.id == id }?.lead
+        }) { id in agents.first { $0.id == id }?.displayName })
         let broker = ToolBridgeBroker(registry: registry, host: .repository(repository) { _ in .none }) { _ in .none }
         self.broker = broker
         try broker.start(agents: agents.map { ToolBridgeAgent(id: $0.id, workspace: repository.directory(for: $0)) })

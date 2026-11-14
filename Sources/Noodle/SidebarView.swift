@@ -10,7 +10,6 @@ struct SidebarView: View {
     var focusRequest: UUID? = nil
     @Environment(NoodleStore.self) private var store
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
     @FocusState private var searchIsFocused: Bool
     @State private var kickRequest: AgentKickRequest?
     @State private var newSessionAgent: AgentRecord?
@@ -25,8 +24,7 @@ struct SidebarView: View {
         .modifier(AgentKickConfirmation(store: store, request: $kickRequest))
         .modifier(NewSessionConfirmation(store: store, agent: $newSessionAgent))
         .scrollContentBackground(.hidden)
-        .background((surface == .solid ? Color(nsColor: .windowBackgroundColor)
-            : Color.black.opacity(colorScheme == .dark ? 0.24 : 0.04)).ignoresSafeArea())
+        .background(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.04).ignoresSafeArea())
         .searchable(text: $store.searchText, placement: .sidebar, prompt: "Search")
         .controlSize(.large)
         .searchFocused($searchIsFocused)

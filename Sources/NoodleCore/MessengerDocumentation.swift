@@ -82,6 +82,7 @@ extension AgentWakeReason {
 enum GroupNotice {
     enum Kind: String, CaseIterable {
         case membersAdded = "members-added", membersRemoved = "members-removed", descriptionChanged = "description-changed"
+        case leadChanged = "lead-changed"
 
         var reference: MessengerReference {
             let guidance: String
@@ -92,19 +93,22 @@ enum GroupNotice {
                 guidance = "One or more bots left the group. Remaining members receive the notice; the removed bots no longer participate."
             case .descriptionChanged:
                 guidance = "The group's public description was updated or cleared. All current members receive the notice and updated conversation context."
+            case .leadChanged:
+                guidance = "A person made a bot the group's lead, or left the group without one. The lead hears each new message from a person a few seconds before the others, so it can answer, hand the message to one bot with an @mention, or say that nobody else needs to; the others read what it did before they reply. --list-participants marks the lead with isLead."
             }
             return .init(id: rawValue, fields: "A system-notice message; changes are combined into message.body when edited together.",
                 recipients: "All current group members after the update.", guidance: guidance)
         }
     }
 
-    case membersAdded([String]), membersRemoved([String]), descriptionChanged(String?)
+    case membersAdded([String]), membersRemoved([String]), descriptionChanged(String?), leadChanged(String?)
 
     var kind: Kind {
         switch self {
         case .membersAdded: return .membersAdded
         case .membersRemoved: return .membersRemoved
         case .descriptionChanged: return .descriptionChanged
+        case .leadChanged: return .leadChanged
         }
     }
 
@@ -116,6 +120,8 @@ enum GroupNotice {
             return "\(Self.names(names)) \(names.count == 1 ? "was" : "were") removed from the group."
         case .descriptionChanged(let description):
             return description.map { "The group description was updated: \($0)" } ?? "The group description was cleared."
+        case .leadChanged(let name):
+            return name.map { "\($0) now leads the group." } ?? "The group no longer has a lead."
         }
     }
 
@@ -193,7 +199,7 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
         case .listEffects: return "Return supported effect names as a JSON array: \(ConversationEffectKind.allCases.map(\.rawValue).joined(separator: ", "))."
         case .getLatest: return "Return unread messages and reaction changes as a JSON array and advance message/reaction cursors. --peek leaves cursors unchanged."
         case .listConversations: return "Return the bot's current conversations, including each group's public description."
-        case .listParticipants: return "Return { me, conversation, participants }; each participant has participant (identity), publicDescription, lastActiveAt (most recent message in this conversation, not online status) and, while that bot is suspended, suspendedUntil: it takes no new turn until then (year 4001 means until someone unsuspends it), so do not wait on it. Archived bots are left out. It never exposes another bot's private backstory."
+        case .listParticipants: return "Return { me, conversation, participants }; each participant has participant (identity), publicDescription, lastActiveAt (most recent message in this conversation, not online status), isLead for the group's lead, which a person chose (it hears new messages from people a moment before the others), and, while that bot is suspended, suspendedUntil: it takes no new turn until then (year 4001 means until someone unsuspends it), so do not wait on it. Archived bots are left out. It never exposes another bot's private backstory."
         case .listMessages: return "Read history including your own messages and current reactions without consuming the inbox, the newest 100 messages at a time. To read further back, pass the oldest message's id as --before. This is not the historical reaction-change event log."
         case .react: return "Add your own single emoji reaction. Adding twice is idempotent; other participants receive reactionChange feedback."
         case .unreact: return "Remove only your own matching emoji reaction. Repeating a removal is safe."
