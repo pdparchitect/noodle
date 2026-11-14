@@ -3,21 +3,6 @@ import NoodleCore
 @testable import PionCore
 import XCTest
 
-/// A service that answers from a table and records what it was asked.
-final class FakeService: ServiceAccess, @unchecked Sendable {
-    let lock = NSLock()
-    var requests: [URLRequest] = []
-    var answers: [String: (Int, String)] = [:]
-
-    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        lock.withLock { requests.append(request) }
-        let key = request.url!.path + (request.url!.query.map { "?" + $0 } ?? "")
-        // An exact answer first, then one for the path whatever the query.
-        let (status, body) = lock.withLock { answers[key] ?? answers[request.url!.path] } ?? (404, #"{"error":"NotFound"}"#)
-        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
-    }
-}
-
 /// Looks a file up by its hash, keeping only what an analyst needs.
 private struct FileReport: ServiceOperation {
     struct Input: Decodable, Sendable { let hash: String; let relationships: Bool? }

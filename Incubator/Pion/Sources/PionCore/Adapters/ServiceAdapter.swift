@@ -200,7 +200,17 @@ public enum ServiceInput {
         return value
     }
 
-    /// A query in the service's own language: not empty, and short enough to send.
+    /// A value that goes inside quotes in a service's filter, refused when it holds a quote, backslash or line
+    /// break that could end it early.
+    public static func quoted(_ value: String, _ name: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= 200, !value.contains(where: { $0 == "'" || $0 == "\"" || $0 == "\\" || $0.isNewline }) else {
+            throw ServiceError.input("Give \(name) without quotes or backslashes.")
+        }
+        return value
+    }
+
+        /// A query in the service's own language: not empty, and short enough to send.
     public static func query(_ value: String, limit: Int = 10_000) throws -> String {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, value.count <= limit else { throw ServiceError.input("Give a query of up to \(limit) characters.") }
