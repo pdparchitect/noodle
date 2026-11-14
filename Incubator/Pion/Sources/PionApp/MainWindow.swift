@@ -184,6 +184,9 @@ struct ConversationRowMenu: View {
         } else {
             Button("Show in Finder") { model.reveal(conversation) }
         }
+        if let investigation {
+            Button("Export Investigation…") { model.exportInvestigation(investigation) }
+        }
         Divider()
         if agent != nil {
             Button("Stop") { model.stop(in: conversation.id) }

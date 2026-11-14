@@ -181,6 +181,10 @@ struct PionCommands: Commands {
                 NSApp.keyWindow?.level = $0 ? .floating : .normal
             }))
             .disabled(conversationID == nil)
+            Button("Export Investigation…") {
+                if let investigation = model.investigation(conversationID) { model.exportInvestigation(investigation) }
+            }
+            .disabled(model.investigation(conversationID) == nil)
             Divider()
             // Noodle's annotation commands, on the key conversation or the preview in front.
             Button("Add Annotation…") { annotations.conversationOwner?.annotate() }

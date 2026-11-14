@@ -210,7 +210,12 @@ struct ConversationView: View {
                 .help("Severity")
             }
         }
-        if investigation != nil {
+        if let investigation {
+            ToolbarItem {
+                Button { model.exportInvestigation(investigation) } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                    .help("Export Investigation…")
+                    .accessibilityLabel("Export Investigation…")
+            }
             ToolbarItem {
                 Button { window.showsInspector.toggle() } label: { Label("Case", systemImage: "sidebar.trailing") }
                     .help("Show or hide the case record (⌥⌘I)")

@@ -696,6 +696,35 @@ import UniformTypeIdentifiers
         return investigation
     }
 
+    /// Writes one zip holding everything an Investigation keeps, in a folder named after it: its details, case
+    /// record and audit log, and under Conversation its messages and attachments.
+    func exportArchive(of investigation: Investigation, to url: URL) throws {
+        let files = FileManager.default
+        let staging = files.temporaryDirectory.appendingPathComponent("PionExport-\(UUID().uuidString)", isDirectory: true)
+        defer { try? files.removeItem(at: staging) }
+        let folder = staging.appendingPathComponent(Self.archiveName(of: investigation), isDirectory: true)
+        try files.createDirectory(at: staging, withIntermediateDirectories: true)
+        try files.copyItem(at: store.folder(investigation.id), to: folder)
+        let conversation = repository.conversationDirectory(id: investigation.id)
+        if files.fileExists(atPath: conversation.path) {
+            try files.copyItem(at: conversation, to: folder.appendingPathComponent("Conversation", isDirectory: true))
+        }
+        // Reading a folder for upload hands back a zip of it, which works inside the sandbox.
+        var coordination: NSError?, copying: Error?
+        NSFileCoordinator().coordinate(readingItemAt: folder, options: .forUploading, error: &coordination) { zip in
+            do {
+                if files.fileExists(atPath: url.path) { try files.removeItem(at: url) }
+                try files.copyItem(at: zip, to: url)
+            } catch { copying = error }
+        }
+        if let error = coordination ?? copying { throw error }
+    }
+
+    /// "INV-0001 Beaconing laptop", without characters a file name cannot hold.
+    static func archiveName(of investigation: Investigation) -> String {
+        "\(investigation.reference) \(investigation.title)".components(separatedBy: CharacterSet(charactersIn: "/:")).joined(separator: "-")
+    }
+
     /// The group's own name, within the length Noodle's core allows; Pion shows the Investigation's title instead.
     static func groupName(number: Int, title: String) -> String {
         String((String(format: "INV-%04d ", number) + title).prefix(ConversationName.maximumLength))

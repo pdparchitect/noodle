@@ -1,6 +1,8 @@
 import AppKit
 import NoodleCore
+import PionCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Noodle's attachment tiles show a noodlet link as a card; Pion has no noodlets, so such a link,
 /// which only an agent could have written, shows as a plain card naming it.
@@ -115,6 +117,21 @@ extension PionModel {
                 if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
                 try FileManager.default.copyItem(at: source, to: destination)
             } catch { self?.problem = "The attachment could not be saved: \(error.localizedDescription)" }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) } else { panel.begin(completionHandler: save) }
+    }
+}
+
+extension PionModel {
+    /// Asks where to save the Investigation's zip, then writes it there.
+    func exportInvestigation(_ investigation: Investigation) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.zip]
+        panel.nameFieldStringValue = Self.archiveName(of: investigation) + ".zip"
+        let save = { [weak self] (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url, let self else { return }
+            do { try self.exportArchive(of: investigation, to: destination) }
+            catch { self.problem = "\(investigation.reference) could not be exported: \(error.localizedDescription)" }
         }
         if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) } else { panel.begin(completionHandler: save) }
     }

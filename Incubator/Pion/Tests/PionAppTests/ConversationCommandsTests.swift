@@ -35,6 +35,25 @@ import XCTest
         XCTAssertEqual(model.selection, group.id)
     }
 
+    func testExportingAnInvestigationZipsItsCaseAuditMessagesAndAttachments() throws {
+        let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: agent.id))
+        let file = root.appendingPathComponent("capture.txt")
+        try Data("netstat".utf8).write(to: file)
+        model.attach([file], to: investigation.id)
+        model.drafts[investigation.id] = "Capture attached"
+        model.sendDraft(to: investigation.id)
+        let zip = root.appendingPathComponent("Export.zip")
+
+        try model.exportArchive(of: investigation, to: zip)
+
+        let data = try Data(contentsOf: zip)
+        XCTAssertEqual(data.prefix(2), Data("PK".utf8))
+        let folder = "INV-0001 Beaconing laptop/"
+        for name in ["investigation.json", "case.json", "audit.jsonl", "Conversation/messages.json", "Conversation/Attachments/"] {
+            XCTAssertNotNil(data.range(of: Data((folder + name).utf8)), name)
+        }
+    }
+
     func testSearchIncludesClosedInvestigationsAndTheirReference() throws {
         let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: agent.id))
         model.setStatus(.closed, of: investigation, outcome: .resolved)
