@@ -7,5 +7,7 @@ enum PionTools {
     static let catalogue: [ToolDefinition] = ToolCatalog.noodle + [VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset,
                                                          CrowdStrike.preset, SentinelOne.preset,
                                                          Splunk.preset, Elastic.preset, Sentinel.preset,
-                                                         Cloudflare.preset, Wiz.preset, GitHub.preset]
+                                                         Cloudflare.preset, Wiz.preset, GitHub.preset,
+                                                         AbuseIPDB.preset, URLScan.preset, GreyNoise.preset, OTX.preset,
+                                                         HaveIBeenPwned.preset]
 }

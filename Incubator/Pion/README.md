@@ -50,7 +50,8 @@ agents search logs in SPL, ES|QL and KQL: Splunk takes its address and an authen
 its address and an API key, and Sentinel its tenant and workspace IDs with an app registration given the
 Log Analytics Reader role. Cloudflare Security takes an account ID and an API token, Wiz its data
 center and a service account's client ID and secret, and GitHub an organisation and a token with
-read:org and read:audit_log. Each service you add is a separate account, so two accounts of the same service can sit side by
+read:org and read:audit_log. AbuseIPDB, urlscan.io, GreyNoise, AlienVault OTX and Have I Been Pwned
+each take an API key. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios

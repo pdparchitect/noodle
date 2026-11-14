@@ -181,7 +181,18 @@ public enum ServiceInput {
         return domain
     }
 
-    /// A time in ISO 8601, such as 2026-11-13T00:00:00Z, as given.
+    /// An email address: something before one @, and a domain after it.
+    public static func email(_ value: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, parts[0].count <= 64, !parts[0].contains(where: { $0.isWhitespace || "/?#\\".contains($0) }),
+              (try? domain(String(parts[1]))) != nil else {
+            throw ServiceError.input("\"\(value)\" is not an email address.")
+        }
+        return value.lowercased()
+    }
+
+        /// A time in ISO 8601, such as 2026-11-13T00:00:00Z, as given.
     public static func time(_ value: String) throws -> String {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let plain = ISO8601DateFormatter(), precise = ISO8601DateFormatter()
@@ -262,9 +273,10 @@ public struct ServiceClient: Sendable {
     }
 
     /// `path`'s parts each go in as one segment; a part that would leave it is refused.
-    public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:],
+    /// `trailingSlash` ends the path with a slash, for services whose addresses do and redirect otherwise.
+    public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:], trailingSlash: Bool = false,
                                        as answer: Answer.Type = Answer.self) async throws -> Answer {
-        try decode(Answer.self, try await data(path, query: query))
+        try decode(Answer.self, try await data(path, query: query, trailingSlash: trailingSlash))
     }
 
     /// Sends `body` as JSON, for services that take a query or search that way.
@@ -287,11 +299,13 @@ public struct ServiceClient: Sendable {
     }
 
     public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
-                     contentType: String = "application/json; charset=utf-8") async throws -> Data {
+                     contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false) async throws -> Data {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
-        var components = URLComponents(url: path.reduce(base) { $0.appendingPathComponent($1) }, resolvingAgainstBaseURL: false)
+        let address = path.reduce(base) { $0.appendingPathComponent($1) }
+        var components = URLComponents(url: trailingSlash ? address.appendingPathComponent("", isDirectory: true) : address,
+                                       resolvingAgainstBaseURL: false)
         let items = query.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }.sorted { $0.name < $1.name }
         components?.queryItems = items.isEmpty ? nil : items
         // A plus sign in a value stays one: some services read a bare + in a query as a space.
@@ -386,5 +400,7 @@ public enum PionAdapters {
                                                                   "entra": Entra.adapter, "defender": Defender.adapter,
                                                                   "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
-                                                                  "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter]
+                                                                  "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
+                                                                  "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter,
+                                                                  "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter]
 }
