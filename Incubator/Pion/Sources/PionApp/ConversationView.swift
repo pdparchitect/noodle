@@ -106,7 +106,10 @@ struct ConversationView: View {
         .navigationTitle(investigation?.reference ?? conversation.displayName)
         .navigationSubtitle(investigation?.title ?? subtitle)
         .toolbar { toolbar }
-        .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { window.showsInspector = $0 })) {
+        // Hidden for an agent or group without forgetting it was open, so it is back on returning to an Investigation.
+        .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { shown in
+            if investigation != nil { window.showsInspector = shown }
+        })) {
             if let investigation {
                 // Its own for each Investigation, so evidence opened in one never shows open in another.
                 CaseInspector(model: model, window: window, investigation: investigation)
