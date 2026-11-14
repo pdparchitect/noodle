@@ -1,4 +1,6 @@
+import AppKit
 import NoodleCore
+import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
 
@@ -87,6 +89,11 @@ struct Sidebar: View {
                     Section(isExpanded: $closedExpanded) {
                         ForEach(closed.prefix(closedLimit)) { investigation in
                             InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
+                                .contextMenu {
+                                    if let conversation = model.conversation(investigation.id) {
+                                        ConversationRowMenu(model: model, window: window, conversation: conversation)
+                                    }
+                                }
                         }
                         if closed.count > closedLimit {
                             Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
@@ -140,6 +147,9 @@ struct Sidebar: View {
 }
 
 /// Shared by sidebar rows and search results; actions target the row that was clicked.
+/// The menu of a conversation in the sidebar, in Noodle's order: opening it, editing it, looking at it in
+/// other places, then stopping, closing or archiving it. Investigations, groups and agents share it, so the
+/// same action sits in the same place whatever the row.
 struct ConversationRowMenu: View {
     let model: PionModel
     let window: WindowState
@@ -147,19 +157,88 @@ struct ConversationRowMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        let investigation = model.investigation(conversation.id)
+        let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
+        let closed = investigation?.isClosed == true
         Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
         Divider()
-        Button(model.investigation(conversation.id) != nil ? "Edit Investigation…" : conversation.kind == .group ? "Edit Group…" : "Edit Agent…") {
+        Button(investigation != nil ? "Edit Investigation…" : agent != nil ? "Edit Agent…" : "Edit Group…") {
             window.edit(conversation, in: model)
-        }.disabled(model.investigation(conversation.id)?.isClosed == true)
-        if conversation.kind == .direct {
-            Divider()
+        }
+        .disabled(closed)
+        if let investigation {
+            Picker("Status", selection: Binding(get: { investigation.status }, set: { model.setStatus($0, of: investigation) })) {
+                ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { Text($0.title).tag($0) }
+            }
+            .disabled(closed)
+            Picker("Severity", selection: Binding(get: { investigation.severity }, set: { model.setSeverity($0, of: investigation) })) {
+                ForEach(Investigation.Severity.allCases.reversed(), id: \.self) { Text($0.title).tag($0) }
+            }
+            .disabled(closed)
+        }
+        Divider()
+        if let agent {
+            Button("Show Activity") { model.showActivity(for: agent) }
+            Button("Show Workspace in Finder") { model.reveal(conversation) }
+        } else {
+            Button("Show in Finder") { model.reveal(conversation) }
+        }
+        Divider()
+        if agent != nil {
             Button("Stop") { model.stop(in: conversation.id) }
                 .disabled(model.stoppableAgent(in: conversation.id) == nil)
-            if let agent = model.agent(conversation.participantIDs.first) {
-                Button("Show Workspace in Finder") { NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: model.repository.directory(for: agent).path) }
-            }
         }
+        if let investigation {
+            if closed {
+                Button("Reopen") { model.setStatus(.open, of: investigation) }
+            } else {
+                Button("Close Investigation…") { window.sheet = .close(investigation) }
+            }
+        } else if let agent {
+            Button("Archive Agent") { model.archive(agent) }
+        } else {
+            Button("Archive Group") { model.archive(conversation) }
+        }
+    }
+}
+
+/// One activity window per agent, Noodle's own, kept for the whole app.
+@MainActor private let activityWindows = AgentActivityWindows()
+
+extension PionModel {
+    func showActivity(for agent: AgentRecord) {
+        activityWindows.show(agent: agent, log: runtime.activity.log(for: agent.id))
+    }
+
+    /// An agent's workspace; an Investigation's own folder, with its case record and audit log; a group's
+    /// conversation folder, with its messages and attachments.
+    func reveal(_ conversation: BotConversation) {
+        let url: URL
+        if conversation.kind == .direct, let agent = agent(conversation.participantIDs.first) {
+            url = repository.directory(for: agent)
+        } else if investigation(conversation.id) != nil {
+            url = store.folder(conversation.id)
+        } else {
+            url = repository.conversationDirectory(id: conversation.id)
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func archive(_ agent: AgentRecord) {
+        do {
+            _ = try repository.setAgentArchived(true, agentID: agent.id)
+            runtime.stop(agentID: agent.id)
+            reload()
+            activityWindows.synchronize(agents: agents)
+        } catch { problem = error.localizedDescription }
+    }
+
+    func archive(_ group: BotConversation) {
+        do {
+            _ = try repository.setConversationArchived(true, conversationID: group.id)
+            if selection == group.id { selection = nil }
+            reload()
+        } catch { problem = error.localizedDescription }
     }
 }
 
@@ -168,7 +247,6 @@ struct InvestigationRow: View {
     let investigation: Investigation
 
     var body: some View {
-        let pending = model.pendingCount(investigation.id)
         let unread = model.isUnread(investigation.id)
         HStack(alignment: .top, spacing: 8) {
             SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
@@ -177,12 +255,6 @@ struct InvestigationRow: View {
                 HStack(spacing: 6) {
                     Text(investigation.reference).font(.caption.monospaced()).foregroundStyle(.secondary)
                     Spacer(minLength: 4)
-                    if pending > 0 {
-                        Label("\(pending)", systemImage: "hand.raised.fill")
-                            .font(.caption2.weight(.semibold)).labelStyle(.titleAndIcon)
-                            .foregroundStyle(.orange)
-                            .help("\(pending) \(pending == 1 ? "action needs" : "actions need") your approval")
-                    }
                     Text(investigation.updatedAt.pionShort).font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
                 }
                 Text(investigation.title)

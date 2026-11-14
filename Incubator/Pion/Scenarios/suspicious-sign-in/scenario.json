@@ -1,14 +1,10 @@
 {
   "version": 1,
   "title": "Impossible travel, waiting on the champion",
-  "summary": "A finance director signs in from Leeds and Amsterdam 20 minutes apart. The team proves it is a stolen session token and two containment actions wait for approval.",
+  "summary": "A finance director signs in from Leeds and Amsterdam 20 minutes apart. The team proves it is a stolen session token and recommends how to contain it.",
   "clock": "02:48",
   "appearance": "dark",
   "champion": "Avery Lin",
-  "protectedAssets": [
-    "DC01.corp.kestrel-logistics.example",
-    "DC02.corp.kestrel-logistics.example"
-  ],
   "agents": [
     {
       "key": "margot",
@@ -22,7 +18,7 @@
       },
       "status": {
         "phase": "working",
-        "detail": "Waiting on approval for A-3, A-4"
+        "detail": "Waiting on Avery"
       }
     },
     {
@@ -119,7 +115,7 @@
         {
           "at": "02:36",
           "from": "margot",
-          "text": "Sessions are revoked (policy allowed it) and I have moved this to **contained**. Two actions need you, @Avery: disabling d.price until they reset their password in person, and isolating LT-0423 so the stealer cannot take a fresh token. A third, isolating DC01 as a precaution, was refused by policy as a protected asset; I will not pursue it."
+          "text": "I have moved this to **contained**. Two recommendations for you, @Avery: revoke d.price's sessions and disable the account until they reset their password in person, and isolate LT-0423 so the stealer cannot take a fresh token."
         }
       ],
       "investigation": {
@@ -244,73 +240,6 @@
               "at": "02:32",
               "by": "ines"
             }
-          ],
-          "actions": [
-            {
-              "operation": "revoke_sessions",
-              "targets": [
-                "d.price"
-              ],
-              "rationale": "Stolen refresh token in use (V-1)",
-              "effect": "Every session and refresh token for d.price ends",
-              "undo": "d.price signs in again",
-              "evidence": [
-                "V-1"
-              ],
-              "at": "02:33",
-              "by": "ines"
-            },
-            {
-              "operation": "enrich_indicator",
-              "targets": [
-                "198.51.100.23"
-              ],
-              "rationale": "Attribution (V-3)",
-              "effect": "Adds feed data",
-              "undo": "Nothing",
-              "at": "02:25",
-              "by": "sasha"
-            },
-            {
-              "operation": "disable_user",
-              "targets": [
-                "d.price"
-              ],
-              "rationale": "The stealer may hold other tokens or the password (V-2); hold the account until an in-person reset",
-              "effect": "d.price cannot sign in at all",
-              "undo": "Re-enable the account in Entra ID",
-              "evidence": [
-                "V-1",
-                "V-2"
-              ],
-              "at": "02:35",
-              "by": "margot"
-            },
-            {
-              "operation": "isolate_host",
-              "targets": [
-                "LT-0423"
-              ],
-              "rationale": "Infostealer present (V-2); it can steal a fresh token at the next sign-in",
-              "effect": "LT-0423 can reach only Defender",
-              "undo": "Release from isolation in Defender",
-              "evidence": [
-                "V-2"
-              ],
-              "at": "02:35",
-              "by": "rafe"
-            },
-            {
-              "operation": "isolate_host",
-              "targets": [
-                "DC01.corp.kestrel-logistics.example"
-              ],
-              "rationale": "Precaution in case credentials reached the domain",
-              "effect": "Takes DC01 off the network",
-              "undo": "Release from isolation",
-              "at": "02:35",
-              "by": "margot"
-            }
           ]
         }
       }
@@ -364,19 +293,19 @@
   },
   "timeline": [
     {
-      "capture": "01-awaiting-approval"
+      "capture": "01-contained"
     },
     {
       "waitFor": "key"
     },
     {
-      "capture": "02-needs-approval"
+      "capture": "02-case"
     },
     {
       "waitFor": "key"
     },
     {
-      "capture": "03-policy"
+      "capture": "03-audit"
     },
     {
       "waitFor": "key"

@@ -1,9 +1,10 @@
+import AppKit
 import NoodleCore
 import PionCore
 import SwiftUI
 
-/// The case record beside an Investigation: what waits for the champion first, then the objective
-/// and scope, findings, actions, evidence and entities; or the append-only audit log.
+/// The case record beside an Investigation: its scope, findings, evidence and entities; or the
+/// append-only audit log.
 struct CaseInspector: View {
     let model: PionModel
     @Bindable var window: WindowState
@@ -46,26 +47,11 @@ struct CaseRecordView: View {
         let record = model.caseRecord(investigation.id)
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if !record.pendingActions.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Heading(title: "Needs Approval", count: record.pendingActions.count)
-                        ForEach(record.pendingActions) { action in
-                            ApprovalCard(model: model, investigation: investigation, action: action, record: record)
-                        }
-                    }
-                }
                 ScopeSection(model: model, investigation: investigation)
                 if !record.findings.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Findings", count: record.findings.count)
                         ForEach(record.findings) { finding in FindingRow(model: model, finding: finding) }
-                    }
-                }
-                let decided = record.actions.filter { $0.state != .pending }
-                if !decided.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Heading(title: "Actions", count: decided.count)
-                        ForEach(decided.reversed()) { action in ActionRow(model: model, investigation: investigation, action: action) }
                     }
                 }
                 if !record.evidence.isEmpty {
@@ -78,67 +64,15 @@ struct CaseRecordView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Entities", count: record.entities.count)
                         ForEach(record.entities) { entity in
-                            EntityRow(entity: entity, inScope: investigation.covers(entity.name), protected: model.policy.isProtected(entity.name))
+                            EntityRow(entity: entity, inScope: investigation.covers(entity.name))
                         }
                     }
                 }
-                if record.entities.isEmpty && record.evidence.isEmpty && record.findings.isEmpty && record.actions.isEmpty {
+                if record.entities.isEmpty && record.evidence.isEmpty && record.findings.isEmpty {
                     Text("No records yet.").font(.callout).foregroundStyle(.secondary)
                 }
             }
             .padding(14)
-        }
-    }
-}
-
-/// An action waiting for the champion, with what is needed to decide it.
-struct ApprovalCard: View {
-    let model: PionModel
-    let investigation: Investigation
-    let action: CaseRecord.ProposedAction
-    let record: CaseRecord
-    @State private var note = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                Text(action.operation).font(.callout.monospaced().weight(.semibold))
-                Spacer()
-                Text(action.id).font(.caption.monospaced()).foregroundStyle(.secondary)
-            }
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
-                field("Targets", action.targets.joined(separator: ", "), mono: true)
-                field("Why", action.rationale)
-                field("Effect", action.expectedEffect)
-                field("Undo", action.undo)
-                if !action.evidence.isEmpty {
-                    field("Evidence", action.evidence.map { id in record.evidence.first { $0.id == id }.map { "\(id) \($0.source)" } ?? id }
-                        .joined(separator: ", "))
-                }
-                field("From", model.name(of: action.proposedBy))
-            }
-            .font(.callout)
-            TextField("Note for the team", text: $note)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-            HStack {
-                Spacer()
-                Button("Deny") { model.decide(action, in: investigation, approve: false, note: note) }
-                Button("Approve") { model.decide(action, in: investigation, approve: true, note: note) }
-                    .buttonStyle(ProminentButtonStyle())
-            }
-            .controlSize(.small)
-        }
-        .padding(10)
-        .background(Color.orange.opacity(0.06), in: .rect(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.orange.opacity(0.35)))
-    }
-
-    @ViewBuilder private func field(_ label: String, _ value: String, mono: Bool = false) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-            Text(value).font(mono ? .callout.monospaced() : .callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -168,7 +102,7 @@ private struct ScopeSection: View {
                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
                     .help("One entry per line. *.example.com covers every name under it.")
             } else if investigation.scope.isEmpty {
-                Text("Nothing in scope: every action is refused.").font(.callout).foregroundStyle(.secondary)
+                Text("Nothing in scope yet.").font(.callout).foregroundStyle(.secondary)
             } else {
                 FlowLayout(spacing: 4) {
                     ForEach(investigation.scope, id: \.self) { entry in
@@ -203,33 +137,16 @@ private struct FindingRow: View {
         }
         .padding(8)
         .background(Color.secondary.opacity(0.06), in: .rect(cornerRadius: 8, style: .continuous))
-    }
-}
-
-private struct ActionRow: View {
-    let model: PionModel
-    let investigation: Investigation
-    let action: CaseRecord.ProposedAction
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(action.operation).font(.callout.monospaced())
-                Spacer()
-                Tag(text: action.state.title, color: action.state.color)
+        .contentShape(.rect(cornerRadius: 8))
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") {
+                copyText("\(finding.id) (\(finding.confidence.rawValue) confidence): \(finding.claim)\nEvidence: \(finding.evidence.joined(separator: ", "))")
             }
-            Text(action.targets.joined(separator: ", ")).font(.caption.monospaced())
-            if let note = action.note { Text(note).font(.caption).foregroundStyle(.secondary) }
-            HStack {
-                Text("\(action.id) · \(model.name(of: action.proposedBy)) · \(action.mode.title)").font(.caption).foregroundStyle(.tertiary)
-                Spacer()
-                if action.state == .approved, !investigation.isClosed {
-                    Button("Mark Done") { model.markDone(action, in: investigation) }.buttonStyle(.link).font(.caption)
-                }
+            if let agent = model.agent(of: finding.recordedBy) {
+                Divider()
+                Button("Show Activity", systemImage: "list.bullet.rectangle") { model.showActivity(for: agent) }
             }
         }
-        .padding(8)
-        .background(Color.secondary.opacity(0.06), in: .rect(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -261,13 +178,26 @@ private struct EvidenceRow: View {
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
         }
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") {
+                copyText("\(evidence.id) from \(evidence.source): \(evidence.result)\nMethod: \(evidence.method)")
+            }
+            Button("Copy Method", systemImage: "terminal") { copyText(evidence.method) }
+            Divider()
+            Button(expanded ? "Collapse" : "Expand", systemImage: expanded ? "chevron.up" : "chevron.down") {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            }
+            if let agent = model.agent(of: evidence.recordedBy) {
+                Divider()
+                Button("Show Activity", systemImage: "list.bullet.rectangle") { model.showActivity(for: agent) }
+            }
+        }
     }
 }
 
 private struct EntityRow: View {
     let entity: CaseRecord.Entity
     let inScope: Bool
-    let protected: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -277,7 +207,11 @@ private struct EntityRow: View {
                 if let detail = entity.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
             }
             Spacer()
-            if protected { Tag(text: "Protected", color: .secondary, symbol: "lock.fill") } else if inScope { Tag(text: "In Scope", color: .secondary) }
+            if inScope { Tag(text: "In Scope", color: .secondary) }
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") { copyText(entity.name) }
         }
     }
 }
@@ -297,7 +231,7 @@ struct AuditLogView: View {
                 ForEach(days, id: \.key) { day, items in
                     Section {
                         ForEach(Array(items.enumerated()), id: \.offset) { index, entry in
-                            AuditRow(entry: entry, actor: model.name(of: entry.actor), last: index == items.count - 1)
+                            AuditRow(model: model, investigationID: investigation.id, entry: entry, last: index == items.count - 1)
                         }
                     } header: {
                         Text(Calendar.current.isDateInToday(day) ? "Today" : day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
@@ -324,11 +258,13 @@ struct AuditLogView: View {
 }
 
 private struct AuditRow: View {
+    let model: PionModel
+    let investigationID: UUID
     let entry: AuditEntry
-    let actor: String
     let last: Bool
 
     var body: some View {
+        let actor = model.name(of: entry.actor)
         HStack(alignment: .top, spacing: 10) {
             Text(entry.at.pionTime)
                 .font(.caption.monospacedDigit())
@@ -366,15 +302,25 @@ private struct AuditRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc") {
+                copyText("\(entry.at.formatted(date: .abbreviated, time: .shortened)) \(Self.title(entry.event)) by \(actor): \(entry.detail)")
+            }
+            if let agent = model.agent(of: entry.actor) {
+                Divider()
+                Button("Show Activity", systemImage: "list.bullet.rectangle") { model.showActivity(for: agent) }
+            }
+            Divider()
+            Button("Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([model.store.auditURL(investigationID)])
+            }
+        }
     }
 
     static func title(_ event: String) -> String {
         switch event {
         case "status": "Status Changed"
-        case "done": "Action Done"
-        case "approved": "Action Approved"
-        case "denied": "Action Denied"
-        case "proposed": "Action Proposed"
         case "finding": "Finding"
         case "evidence": "Evidence"
         case "entity": "Entity"
@@ -388,10 +334,6 @@ private struct AuditRow: View {
     static func symbol(_ event: String) -> String {
         switch event {
         case "status": "arrow.triangle.swap"
-        case "done": "checkmark"
-        case "approved": "checkmark.seal.fill"
-        case "denied": "xmark"
-        case "proposed": "hand.raised.fill"
         case "finding": "exclamationmark"
         case "evidence": "doc.text.magnifyingglass"
         case "entity": "cube"
@@ -429,5 +371,12 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             line = max(line, size.height)
         }
+    }
+}
+
+extension PionModel {
+    /// The agent behind a case entry, while it is still on the roster.
+    func agent(of actor: CaseActor) -> AgentRecord? {
+        if case .agent(let id) = actor { agent(id) } else { nil }
     }
 }

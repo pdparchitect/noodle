@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "A week of Investigations",
-  "summary": "A full roster and a week's worth of work: open, contained and closed Investigations at every severity, for screenshots of the lists, the roster and the policy.",
+  "summary": "A full roster and a week's worth of work: open, contained and closed Investigations at every severity, for screenshots of the lists, the roster and the case record.",
   "clock": "16:20",
   "champion": "Avery Lin",
   "agents": [
@@ -129,7 +129,7 @@
         {
           "at": "14:10",
           "from": "margot",
-          "text": "Host isolated with your approval, file quarantined. Status is **contained**. Quiet Lynx is capturing memory before we rebuild."
+          "text": "You isolated the host and quarantined the file. Status is **contained**. Quiet Lynx is capturing memory before we rebuild."
         }
       ],
       "investigation": {
@@ -193,36 +193,6 @@
               "at": "13:45",
               "by": "margot"
             }
-          ],
-          "actions": [
-            {
-              "operation": "isolate_host",
-              "targets": [
-                "SRV-APP-02"
-              ],
-              "rationale": "Active web shell (V-1)",
-              "effect": "Server reachable only by Defender",
-              "undo": "Release",
-              "evidence": [
-                "V-1"
-              ],
-              "state": "done",
-              "note": "Isolated 13:58",
-              "at": "13:46",
-              "by": "rafe"
-            },
-            {
-              "operation": "quarantine_file",
-              "targets": [
-                "SRV-APP-02"
-              ],
-              "rationale": "help.aspx (V-1)",
-              "effect": "File moved to quarantine",
-              "undo": "Restore from quarantine",
-              "state": "approved",
-              "at": "13:50",
-              "by": "rafe"
-            }
           ]
         }
       }
@@ -246,7 +216,7 @@
         {
           "at": "11:52",
           "from": "ines",
-          "text": "All three passwords appear in a combo list posted on Tuesday. Proposing forced resets; that is notify-only under our policy."
+          "text": "All three passwords appear in a combo list posted on Tuesday. I recommend forced resets for all three."
         }
       ],
       "investigation": {
@@ -263,34 +233,7 @@
         "source": "Entra ID: repeated MFA denials",
         "opened": "11:30",
         "lead": "margot",
-        "case": {
-          "actions": [
-            {
-              "operation": "reset_password",
-              "targets": [
-                "k.osei",
-                "l.marsh",
-                "p.novak"
-              ],
-              "rationale": "Passwords in a public combo list",
-              "effect": "Forces new passwords at next sign-in",
-              "undo": "None needed",
-              "at": "11:53",
-              "by": "ines"
-            },
-            {
-              "operation": "block_indicator",
-              "targets": [
-                "192.0.2.14"
-              ],
-              "rationale": "Source of every push",
-              "effect": "Conditional Access blocks the address",
-              "undo": "Remove the named location",
-              "at": "11:55",
-              "by": "ines"
-            }
-          ]
-        }
+        "case": {}
       }
     },
     {
@@ -438,7 +381,7 @@
         {
           "at": "08:41",
           "from": "theo",
-          "text": "I have a tuned version of the SMB rule that ignores the backup service account. Want me to propose it?"
+          "text": "I have a tuned version of the SMB rule that ignores the backup service account. Want me to share it?"
         },
         {
           "at": "08:45",

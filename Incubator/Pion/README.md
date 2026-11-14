@@ -28,14 +28,11 @@ and the microphone (⌘⇧D) turns what you say into text in the field, to read 
 
 ## The case record
 
-The inspector beside an Investigation (⌥⌘I) shows what its agents record as they work: actions
-waiting for your approval first, then the scope, findings with the evidence they cite, actions and
-what became of them, evidence with the exact query that produced it, and the entities involved.
-Audit Log lists every change to the Investigation and who made it, and is only ever added to.
+The inspector beside an Investigation (⌥⌘I) shows what its agents record as they work: the scope,
+findings with the evidence they cite, evidence with the query that produced it, and the entities
+involved. Audit Log lists every change to the case and who made it, and is only ever added to.
 
-Agents never change a system themselves: they propose an action, and Pion's policy allows it, sends
-it to you, or refuses it. A target outside the scope, or a protected asset, is always refused.
-Pion does not carry actions out yet; mark an approved action done once it has been.
+Agents never change a system themselves: they recommend changes to you in the conversation.
 
 ## Settings
 

@@ -1,3 +1,4 @@
+import AppKit
 import NoodleCore
 import SwiftUI
 
@@ -67,5 +68,54 @@ extension PionModel {
     /// The files a message carries, in its order.
     func files(of message: ChatMessage) -> [ConversationAttachment] {
         message.attachments.compactMap { attachment($0, in: message.conversationID) }
+    }
+}
+
+/// A file's menu in a message, in the order Noodle's has: copy it, look at it, keep a copy, find it.
+struct AttachmentMenu: View {
+    let model: PionModel
+    let attachment: ConversationAttachment
+    let preview: () -> Void
+
+    var body: some View {
+        Button("Copy", systemImage: "doc.on.doc") { model.copyAttachment(attachment) }
+        Divider()
+        Button("Quick Look", systemImage: "eye", action: preview)
+        if attachment.url == nil, attachment.annotation == nil {
+            Button("Save…", systemImage: "square.and.arrow.down") { model.saveAttachment(attachment) }
+            Button("Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([model.fileURL(attachment)])
+            }
+        }
+    }
+}
+
+extension PionModel {
+    /// A link as its address; a picture as itself, so it pastes as one; anything else as its file.
+    func copyAttachment(_ attachment: ConversationAttachment) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        if let link = attachment.url {
+            pasteboard.setString(link.absoluteString, forType: .string)
+            pasteboard.setString(link.absoluteString, forType: .URL)
+            return
+        }
+        let url = fileURL(attachment)
+        if attachment.mediaType.hasPrefix("image/"), let image = NSImage(contentsOf: url), pasteboard.writeObjects([image]) { return }
+        pasteboard.writeObjects([url as NSURL])
+    }
+
+    func saveAttachment(_ attachment: ConversationAttachment) {
+        let source = fileURL(attachment)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = (attachment.originalFilename as NSString).lastPathComponent
+        let save = { [weak self] (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url else { return }
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+                try FileManager.default.copyItem(at: source, to: destination)
+            } catch { self?.problem = "The attachment could not be saved: \(error.localizedDescription)" }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) } else { panel.begin(completionHandler: save) }
     }
 }

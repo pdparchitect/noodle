@@ -328,11 +328,17 @@ struct MessageRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(message.body, forType: .string)
+            Button("Copy", systemImage: "doc.on.doc") { copyText(message.body) }
+            if let agent = authorAgent {
+                Divider()
+                Button("Show Activity", systemImage: "list.bullet.rectangle") { model.showActivity(for: agent) }
+                Button("Edit Agent…", systemImage: "pencil") { window.sheet = .editAgent(agent) }
             }
         }
+    }
+
+    private var authorAgent: AgentRecord? {
+        if case .agent(let id) = message.author { model.agent(id) } else { nil }
     }
 
     /// The files sent with the message as Noodle shows them: pictures, cards and annotations, each opening
@@ -345,6 +351,7 @@ struct MessageRow: View {
                                         isSelected: selectedAttachmentID == attachment.id,
                                         select: { selectedAttachmentID = attachment.id },
                                         preview: { preview(attachment) })
+                    .contextMenu { AttachmentMenu(model: model, attachment: attachment) { preview(attachment) } }
             }
         }
     }

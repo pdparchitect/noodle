@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "Payroll phishing, triaged in minutes",
-  "summary": "A reported email turns out to be a credential phish sent to 23 people. The team scopes it, finds the one person who entered a password, and asks for approval to contain.",
+  "summary": "A reported email turns out to be a credential phish sent to 23 people. The team scopes it, finds the one person who entered a password, and recommends how to contain it.",
   "clock": "09:41",
   "champion": "Avery Lin",
   "agents": [
@@ -110,7 +110,7 @@
         {
           "at": "09:33",
           "from": "margot",
-          "text": "That is the exposure. I have proposed blocking the sender domain and the phishing domain, and revoking m.okafor's sessions with a password reset. The block needs your approval, @Avery."
+          "text": "That is the exposure. I recommend blocking the sender domain and the phishing domain, and revoking m.okafor's sessions with a password reset, @Avery."
         }
       ],
       "investigation": {
@@ -227,49 +227,6 @@
               "at": "09:32",
               "by": "ines"
             }
-          ],
-          "actions": [
-            {
-              "operation": "enrich_indicator",
-              "targets": [
-                "payroll-kestrel.example"
-              ],
-              "rationale": "Hosting and registration history (V-1)",
-              "effect": "Adds reputation data to the case",
-              "undo": "Nothing to undo",
-              "at": "09:18",
-              "by": "juno"
-            },
-            {
-              "operation": "revoke_sessions",
-              "targets": [
-                "m.okafor"
-              ],
-              "rationale": "Attacker session from 203.0.113.77 (V-4)",
-              "effect": "Signs m.okafor out everywhere",
-              "undo": "They sign in again",
-              "evidence": [
-                "V-4"
-              ],
-              "at": "09:33",
-              "by": "margot"
-            },
-            {
-              "operation": "block_indicator",
-              "targets": [
-                "payroll-kestrel.example",
-                "203.0.113.77"
-              ],
-              "rationale": "Phishing page and the attacker's address (V-1, V-4)",
-              "effect": "Proxy and firewall drop traffic to both",
-              "undo": "Remove the two entries from the block list",
-              "evidence": [
-                "V-1",
-                "V-4"
-              ],
-              "at": "09:33",
-              "by": "margot"
-            }
           ]
         }
       }
@@ -360,38 +317,12 @@
       }
     },
     {
-      "in": "phish",
-      "propose": {
-        "operation": "disable_user",
-        "targets": [
-          "m.okafor"
-        ],
-        "rationale": "Attacker holds valid credentials and created an inbox rule",
-        "effect": "Blocks every sign-in until the password is reset",
-        "undo": "Re-enable the account"
-      },
-      "agent": "ines"
-    },
-    {
-      "in": "phish",
-      "propose": {
-        "operation": "isolate_host",
-        "targets": [
-          "DC01"
-        ],
-        "rationale": "Precaution",
-        "effect": "Takes the domain controller offline",
-        "undo": "Release"
-      },
-      "agent": "ines"
-    },
-    {
       "present": {
         "inspector": "case"
       }
     },
     {
-      "capture": "02-approvals"
+      "capture": "02-case"
     },
     {
       "waitFor": "key"

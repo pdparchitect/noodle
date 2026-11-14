@@ -4,7 +4,7 @@ import Foundation
 public struct AuditEntry: Codable, Hashable, Sendable {
     public let at: Date
     public let actor: CaseActor
-    /// A short verb, such as opened, evidence or approved.
+    /// A short verb, such as opened, evidence or scope.
     public let event: String
     public let detail: String
 
@@ -13,9 +13,8 @@ public struct AuditEntry: Codable, Hashable, Sendable {
     }
 }
 
-/// Pion's own data beside Noodle's workspace: Investigations, their case records and audit logs,
-/// the roles of the standing roster and the action policy. Every change goes through here, under
-/// one lock, so the case tool on the broker's queue and the app on the main thread never race.
+/// Pion's own data beside Noodle's workspace: Investigations, their case records and audit logs.
+/// Every change goes through here, under one lock, so the case tool on the broker's queue and the app on the main thread never race.
 public final class PionStore: @unchecked Sendable {
     public let root: URL
     private let lock = NSLock()
@@ -29,12 +28,11 @@ public final class PionStore: @unchecked Sendable {
     // MARK: Paths
 
     private var investigationsFolder: URL { root.appendingPathComponent("Investigations", isDirectory: true) }
-    private func folder(_ id: UUID) -> URL { investigationsFolder.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true) }
+    /// Where an Investigation keeps its own files: investigation.json, case.json and audit.jsonl.
+    public func folder(_ id: UUID) -> URL { investigationsFolder.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true) }
     private func investigationURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("investigation.json") }
     private func caseURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("case.json") }
     public func auditURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("audit.jsonl") }
-    private var rosterURL: URL { root.appendingPathComponent("roster.json") }
-    private var policyURL: URL { root.appendingPathComponent("policy.json") }
 
     // MARK: Investigations
 
@@ -55,13 +53,13 @@ public final class PionStore: @unchecked Sendable {
 
     /// Opens an Investigation for a group conversation that already exists, numbering it after the last one.
     public func open(id: UUID, title: String, objective: String, scope: [String], severity: Investigation.Severity,
-                     champion: String, leadAgentID: UUID?, playbookID: String?, source: String? = nil,
+                     champion: String, leadAgentID: UUID?, source: String? = nil,
                      number: Int? = nil, now: Date = Date()) throws -> Investigation {
         let investigation = try lock.withLock {
             let next = number ?? (unlockedInvestigations().map(\.number).max() ?? 0) + 1
             let investigation = Investigation(id: id, number: next, title: title, objective: objective, scope: scope,
                                               severity: severity, champion: champion, leadAgentID: leadAgentID,
-                                              playbookID: playbookID, source: source, openedAt: now)
+                                              source: source, openedAt: now)
             try FileManager.default.createDirectory(at: folder(id), withIntermediateDirectories: true)
             try write(investigation, to: investigationURL(id))
             try write(CaseRecord(), to: caseURL(id))
@@ -141,76 +139,6 @@ public final class PionStore: @unchecked Sendable {
         return result
     }
 
-    /// Proposes an action. The policy decides its mode; an identical action still open is
-    /// returned as it is, so an agent that retries never gets the same thing twice.
-    public func propose(operation: String, targets: [String], rationale: String, expectedEffect: String, undo: String,
-                        evidence: [String], in id: UUID, by actor: CaseActor, now: Date = Date()) throws -> (CaseRecord.ProposedAction, ActionPolicy.Verdict, repeated: Bool) {
-        let policy = self.policy()
-        let operation = operation.trimmingCharacters(in: .whitespaces).lowercased()
-        let targets = targets.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        guard !operation.isEmpty, operation.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else {
-            throw CaseError("An operation is one word such as isolate_host.")
-        }
-        var repeatedAction: (CaseRecord.ProposedAction, ActionPolicy.Verdict)?
-        let result: (CaseRecord.ProposedAction, ActionPolicy.Verdict) = try updateCase(id, by: actor, now: now) { record, investigation in
-            let verdict = policy.verdict(operation: operation, targets: targets, in: investigation)
-            let sameTargets = Set(targets.map { $0.lowercased() })
-            if let existing = record.actions.first(where: {
-                $0.operation == operation && Set($0.targets.map { $0.lowercased() }) == sameTargets && [.pending, .approved, .done].contains($0.state)
-            }) {
-                repeatedAction = (existing, verdict)
-                return ((existing, verdict), "repeated", "\(existing.id) \(operation) was proposed again; it is already \(existing.state.title.lowercased()).")
-            }
-            let state: CaseRecord.ProposedAction.State
-            switch verdict.mode {
-            case .automatic, .notify: state = .approved
-            case .approval: state = .pending
-            case .never: state = .refused
-            }
-            let action = CaseRecord.ProposedAction(
-                id: CaseRecord.nextID("A", after: record.actions.map(\.id)), operation: operation, targets: targets,
-                rationale: rationale, expectedEffect: expectedEffect, undo: undo, evidence: evidence, mode: verdict.mode,
-                state: state, note: verdict.mode == .never ? verdict.reason : nil, proposedAt: now, proposedBy: actor,
-                decidedAt: state == .pending ? nil : now, decidedBy: state == .pending ? nil : .policy)
-            record.actions.append(action)
-            let summary = "\(action.id) \(operation) on \(targets.joined(separator: ", ")): \(state.title.lowercased()). \(verdict.reason)"
-            return ((action, verdict), "proposed", summary)
-        }
-        if let repeatedAction { return (repeatedAction.0, repeatedAction.1, true) }
-        return (result.0, result.1, false)
-    }
-
-    /// The champion's decision on a pending action, or marking an approved one done.
-    @discardableResult
-    public func decide(_ actionID: String, in id: UUID, approve: Bool, note: String?, by champion: String,
-                       now: Date = Date()) throws -> CaseRecord.ProposedAction {
-        try updateCase(id, by: .champion(champion), now: now) { record, investigation in
-            guard let index = record.actions.firstIndex(where: { $0.id == actionID }) else { throw CaseError("There is no action \(actionID).") }
-            guard record.actions[index].state == .pending else {
-                throw CaseError("\(actionID) is already \(record.actions[index].state.title.lowercased()).")
-            }
-            guard !investigation.isClosed else { throw CaseError("\(investigation.reference) is closed.") }
-            record.actions[index].state = approve ? .approved : .denied
-            record.actions[index].note = note?.isEmpty == true ? nil : note
-            record.actions[index].decidedAt = now
-            record.actions[index].decidedBy = .champion(champion)
-            let action = record.actions[index]
-            return (action, approve ? "approved" : "denied", "\(action.id) \(action.operation) on \(action.targets.joined(separator: ", "))" + (note.map { ": \($0)" } ?? ""))
-        }
-    }
-
-    @discardableResult
-    public func markDone(_ actionID: String, in id: UUID, note: String?, by champion: String, now: Date = Date()) throws -> CaseRecord.ProposedAction {
-        try updateCase(id, by: .champion(champion), now: now) { record, _ in
-            guard let index = record.actions.firstIndex(where: { $0.id == actionID }) else { throw CaseError("There is no action \(actionID).") }
-            guard record.actions[index].state == .approved else { throw CaseError("Only an approved action can be marked done.") }
-            record.actions[index].state = .done
-            if let note, !note.isEmpty { record.actions[index].note = note }
-            let action = record.actions[index]
-            return (action, "done", "\(action.id) \(action.operation) carried out" + (note.map { ": \($0)" } ?? ""))
-        }
-    }
-
     // MARK: Audit log
 
     public func audit(_ id: UUID) -> [AuditEntry] {
@@ -238,35 +166,6 @@ public final class PionStore: @unchecked Sendable {
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: line)
-    }
-
-    // MARK: Roster and policy
-
-    /// The role of each agent on the roster, by agent identifier.
-    public func roles() -> [UUID: String] {
-        lock.withLock { (try? read([UUID: String].self, from: rosterURL)) ?? [:] }
-    }
-
-    public func setRole(_ role: String?, of agent: UUID) throws {
-        try lock.withLock {
-            var roles = (try? read([UUID: String].self, from: rosterURL)) ?? [:]
-            roles[agent] = role
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try write(roles, to: rosterURL)
-        }
-        onChange?()
-    }
-
-    public func policy() -> ActionPolicy {
-        lock.withLock { (try? read(ActionPolicy.self, from: policyURL)) ?? .standard }
-    }
-
-    public func setPolicy(_ policy: ActionPolicy) throws {
-        try lock.withLock {
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try write(policy, to: policyURL)
-        }
-        onChange?()
     }
 
     // MARK: Files

@@ -8,7 +8,7 @@ import PionCore
 import UniformTypeIdentifiers
 
 /// What Pion's windows show and do. Noodle's workspace and runtime run the agents; PionStore keeps
-/// what Pion adds: which groups are Investigations, their case records and the action policy.
+/// what Pion adds: which groups are Investigations and their case records.
 @MainActor @Observable final class PionModel {
     let repository: WorkspaceRepository
     let runtime: AgentRuntimeCoordinator
@@ -34,7 +34,6 @@ import UniformTypeIdentifiers
     private(set) var agents: [AgentRecord] = []
     private(set) var conversations: [BotConversation] = []
     private(set) var investigations: [Investigation] = []
-    private(set) var policy: ActionPolicy = .standard
     private(set) var transcripts: [UUID: [ChatMessage]] = [:]
     /// Bumped whenever a case record or audit log may have changed, so the views showing one read it again.
     private(set) var caseRevision = 0
@@ -188,8 +187,6 @@ import UniformTypeIdentifiers
     private func reloadPion() {
         let loaded = store.investigations()
         if loaded != investigations { investigations = loaded }
-        let loadedPolicy = store.policy()
-        if loadedPolicy != policy { policy = loadedPolicy }
         caseRevision += 1
     }
 
@@ -290,8 +287,6 @@ import UniformTypeIdentifiers
         return store.audit(id)
     }
 
-    func pendingCount(_ id: UUID) -> Int { caseRecord(id).pendingActions.count }
-
     func phase(of agent: AgentRecord) -> AgentRuntimePhase {
         isScripted ? scriptedPhases[agent.id] ?? .ready : runtime.snapshot(for: agent.id).phase
     }
@@ -328,7 +323,6 @@ import UniformTypeIdentifiers
         switch actor {
         case .agent(let id): agent(id)?.displayName ?? "Removed agent"
         case .champion(let name): name
-        case .policy: "Policy"
         }
     }
 
@@ -360,8 +354,8 @@ import UniformTypeIdentifiers
 
     func agentInstructions(_ agent: AgentRecord) throws -> String {
         let backstory = try repository.loadAgentBackstory(agent)
-        if backstory == AgentRole.principles { return "" }
-        let suffix = "\n\n" + AgentRole.principles
+        if backstory == AgentPrinciples.text { return "" }
+        let suffix = "\n\n" + AgentPrinciples.text
         return backstory.hasSuffix(suffix) ? String(backstory.dropLast(suffix.count)) : backstory
     }
 
@@ -383,7 +377,7 @@ import UniformTypeIdentifiers
                 avatarSymbolName: current.avatarSymbolName, avatarColorIndex: current.avatarColorIndex,
                 avatarImageData: current.avatarImageData, now: now)
             try repository.updateAgentBackstory(updated, backstory: instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-                                                + "\n\n" + AgentRole.principles)
+                                                + "\n\n" + AgentPrinciples.text)
             if let resources {
                 try repository.updateAgentFolders(updated, folders: resources.folders)
                 try repository.updateAgentHarnessProfile(updated, profile: resources.profile)
@@ -483,7 +477,7 @@ import UniformTypeIdentifiers
         let created = try repository.createAgent(named: name, harnessIdentifier: provider?.rawValue, modelIdentifier: model,
                                                  reasoningEffort: effort, publicDescription: description,
                                                  avatarSymbolName: symbol, avatarColorIndex: color,
-                                                 backstory: instructions + "\n\n" + AgentRole.principles, id: id, now: now)
+                                                 backstory: instructions + "\n\n" + AgentPrinciples.text, id: id, now: now)
         do {
             try repository.updateAgentFolders(created.agent, folders: resources.folders)
             try repository.updateAgentHarnessProfile(created.agent, profile: resources.profile)
@@ -667,7 +661,7 @@ import UniformTypeIdentifiers
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
                                     members: members, folders: folders, memberTools: draft.memberTools)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective, scope: scope, severity: draft.severity,
-                                           champion: champion, leadAgentID: lead, playbookID: nil, number: number, now: now)
+                                           champion: champion, leadAgentID: lead, number: number, now: now)
         reload()
         readTranscript(group.id, notifying: false)
         let leadName = agent(lead)?.displayName ?? "the lead"
@@ -678,7 +672,7 @@ import UniformTypeIdentifiers
 
             Scope: \(scope.isEmpty ? "nothing yet. Ask me before touching anything." : scope.joined(separator: ", "))
 
-            Record what you find with the case tool as you go, and propose any change through it.
+            Record what you find with the case tool as you go, and recommend any change to me.
             """, in: group.id)
         return investigation
     }
@@ -718,23 +712,6 @@ import UniformTypeIdentifiers
                 return [("scope", scope.joined(separator: ", "))]
             }
             try send("Scope of \(investigation.reference) is now: \(scope.isEmpty ? "nothing" : scope.joined(separator: ", ")).", in: investigation.id)
-        } catch { problem = error.localizedDescription }
-    }
-
-    /// The champion's decision, posted in the Investigation so every agent in it hears it.
-    func decide(_ action: CaseRecord.ProposedAction, in investigation: Investigation, approve: Bool, note: String?) {
-        do {
-            try store.decide(action.id, in: investigation.id, approve: approve, note: note, by: champion, now: now)
-            var line = "**\(approve ? "Approved" : "Denied") \(action.id)**: \(action.operation) on \(action.targets.joined(separator: ", "))"
-            if let note, !note.isEmpty { line += ". \(note)" }
-            try send(line + ".", in: investigation.id)
-        } catch { problem = error.localizedDescription }
-    }
-
-    func markDone(_ action: CaseRecord.ProposedAction, in investigation: Investigation) {
-        do {
-            try store.markDone(action.id, in: investigation.id, note: nil, by: champion, now: now)
-            try send("\(action.id) \(action.operation) on \(action.targets.joined(separator: ", ")) is done.", in: investigation.id)
         } catch { problem = error.localizedDescription }
     }
 }

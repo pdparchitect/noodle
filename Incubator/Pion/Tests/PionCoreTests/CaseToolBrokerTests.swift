@@ -26,7 +26,7 @@ final class CaseToolBrokerTests: XCTestCase {
         return ((object?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
     }
 
-    func testAnAgentRecordsAndProposesInItsInvestigationAndIsRefusedAnyOther() async throws {
+    func testAnAgentRecordsInItsInvestigationAndIsRefusedAnyOther() async throws {
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Pion", isDirectory: true))
         let store = PionStore(root: root.appendingPathComponent("Store", isDirectory: true))
         let member = try repository.createAgent(named: "Margot").agent
@@ -34,7 +34,7 @@ final class CaseToolBrokerTests: XCTestCase {
         let agents = try repository.loadAgents()
         let group = try repository.createGroup(named: "INV-0001 Beacon", participantIDs: [member.id], existingAgents: agents)
         let investigation = try store.open(id: group.id, title: "Beacon", objective: "", scope: ["LT-0423"], severity: .high,
-                                           champion: "Avery", leadAgentID: member.id, playbookID: nil)
+                                           champion: "Avery", leadAgentID: member.id)
         let registry = ToolProviderRegistry()
         try registry.register(CaseToolProvider(store: store) { id in agents.first { $0.id == id }?.displayName })
         let broker = ToolBridgeBroker(registry: registry, host: .repository(repository) { _ in .none }) { _ in .none }
@@ -45,10 +45,6 @@ final class CaseToolBrokerTests: XCTestCase {
         let evidence = try await call("evidence", ["conversation": id, "source": "Defender", "method": "q", "result": "beacon"],
                                       as: repository.directory(for: member))
         XCTAssertTrue(evidence.contains("V-1"), evidence)
-        let pending = try await call("propose", ["conversation": id, "operation": "isolate_host", "targets": ["LT-0423"],
-                                                 "rationale": "V-1", "effect": "offline", "undo": "release"], as: repository.directory(for: member))
-        XCTAssertTrue(pending.contains("Pending approval, action A-1"), pending)
-        XCTAssertEqual(store.caseRecord(investigation.id).pendingActions.map(\.id), ["A-1"])
         XCTAssertEqual(store.audit(investigation.id).last?.actor, .agent(member.id))
 
         do {

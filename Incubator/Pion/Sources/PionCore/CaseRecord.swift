@@ -1,18 +1,16 @@
 import Foundation
 
-/// Who wrote something into a case: an agent, the champion, or the policy itself.
+/// Who wrote something into a case: an agent or the champion.
 public enum CaseActor: Codable, Hashable, Sendable {
     case agent(UUID)
     case champion(String)
-    case policy
 
-    private enum CodingKeys: String, CodingKey { case agent, champion, policy }
+    private enum CodingKeys: String, CodingKey { case agent, champion }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let id = try container.decodeIfPresent(UUID.self, forKey: .agent) { self = .agent(id) }
-        else if let name = try container.decodeIfPresent(String.self, forKey: .champion) { self = .champion(name) }
-        else { self = .policy }
+        else { self = .champion(try container.decode(String.self, forKey: .champion)) }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -20,7 +18,6 @@ public enum CaseActor: Codable, Hashable, Sendable {
         switch self {
         case .agent(let id): try container.encode(id, forKey: .agent)
         case .champion(let name): try container.encode(name, forKey: .champion)
-        case .policy: try container.encode(true, forKey: .policy)
         }
     }
 }
@@ -75,55 +72,13 @@ public struct CaseRecord: Codable, Equatable, Sendable {
         public let recordedBy: CaseActor
     }
 
-    public struct ProposedAction: Codable, Identifiable, Hashable, Sendable {
-        public enum State: String, Codable, Sendable {
-            /// Waiting for the champion.
-            case pending
-            /// Approved by the champion or allowed by policy; carried out outside Pion for now.
-            case approved
-            case denied
-            /// The policy never allows it, so nobody was asked.
-            case refused
-            /// Carried out and verified.
-            case done
-
-            public var title: String {
-                switch self {
-                case .pending: "Needs Approval"
-                case .approved: "Approved"
-                case .denied: "Denied"
-                case .refused: "Refused"
-                case .done: "Done"
-                }
-            }
-        }
-        public let id: String
-        public let operation: String
-        public let targets: [String]
-        public let rationale: String
-        public let expectedEffect: String
-        public let undo: String
-        public let evidence: [String]
-        public let mode: ActionPolicy.Mode
-        public var state: State
-        /// Why the policy refused it, or what the champion said deciding it.
-        public var note: String?
-        public let proposedAt: Date
-        public let proposedBy: CaseActor
-        public var decidedAt: Date?
-        public var decidedBy: CaseActor?
-    }
-
     public var entities: [Entity] = []
     public var evidence: [Evidence] = []
     public var findings: [Finding] = []
-    public var actions: [ProposedAction] = []
 
     public init() {}
 
-    public var pendingActions: [ProposedAction] { actions.filter { $0.state == .pending } }
-
-    /// The next identifier with `prefix`, such as A-4 after A-3. Identifiers are never reused.
+    /// The next identifier with `prefix`, such as V-4 after V-3. Identifiers are never reused.
     static func nextID(_ prefix: String, after existing: [String]) -> String {
         let numbers = existing.compactMap { $0.hasPrefix(prefix + "-") ? Int($0.dropFirst(prefix.count + 1)) : nil }
         return "\(prefix)-\((numbers.max() ?? 0) + 1)"

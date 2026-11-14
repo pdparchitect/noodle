@@ -4,7 +4,7 @@ import PionCore
 import SwiftUI
 
 // Pion is monochrome: black and white with the system's shading. Colour is kept for what needs
-// attention: an action waiting for the champion, critical severity, an agent working or stopped.
+// attention: critical severity, an agent working or stopped.
 
 extension Investigation.Status {
     var color: Color { .secondary }
@@ -21,14 +21,6 @@ extension Investigation.Status {
 
 extension Investigation.Severity {
     var color: Color { self == .critical ? .red : .primary }
-}
-
-extension ActionPolicy.Mode {
-    var color: Color { self == .approval ? .orange : .secondary }
-}
-
-extension CaseRecord.ProposedAction.State {
-    var color: Color { self == .pending ? .orange : .secondary }
 }
 
 extension AgentRuntimePhase {
@@ -216,4 +208,10 @@ extension Date {
     private static let time = formatter("HHmm")
     private static let weekdayTime = formatter("EEEHHmm")
     private static let dayTime = formatter("dMMMHHmm")
+}
+
+/// Puts plain text on the pasteboard, as every Copy in Pion's menus does.
+@MainActor func copyText(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
 }

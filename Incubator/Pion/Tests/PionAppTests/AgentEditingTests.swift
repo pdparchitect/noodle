@@ -61,7 +61,7 @@ import XCTest
         XCTAssertTrue(model.messages(in: conversation.id).contains { $0.body == "Keep this conversation." })
         XCTAssertEqual(try model.agentInstructions(saved), "Follow leads.")
         let backstory = try model.repository.loadAgentBackstory(saved)
-        XCTAssertEqual(backstory.components(separatedBy: AgentRole.principles).count, 2)
+        XCTAssertEqual(backstory.components(separatedBy: AgentPrinciples.text).count, 2)
     }
 
     func testEditingAGroupKeepsItsHistoryAndSavesItsMembers() throws {
@@ -82,7 +82,7 @@ import XCTest
         XCTAssertEqual(try model.agentInstructions(original), "")
         let updated = try model.updateAgent(original, name: "Morgan", description: nil,
                                              instructions: try model.agentInstructions(original), provider: nil, model: nil)
-        XCTAssertEqual(try model.repository.loadAgentBackstory(updated), AgentRole.principles)
+        XCTAssertEqual(try model.repository.loadAgentBackstory(updated), AgentPrinciples.text)
     }
 
     func testEditRoutesToTheClickedRowWithoutChangingTheSelection() throws {

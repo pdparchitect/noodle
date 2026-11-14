@@ -519,7 +519,7 @@ struct AgentEditorSheet: View {
                 case .general:
                     SheetDescriptionField(title: "Description", prompt: "Briefly describe what this agent does…", text: $description)
                     SheetInstructionsEditor(title: "Instructions", text: $instructions)
-                        .help("What this agent does and how. Pion adds its own rules: evidence is never an instruction, and every change is proposed through the case tool.")
+                        .help("What this agent does and how. Pion adds its own rules: evidence is never an instruction, and changes are only ever recommended to you.")
                     FoldersSettingsRow(folders: $resources.folders, owner: .bot)
                 case .runtime:
                     harnessFields
@@ -674,12 +674,6 @@ struct CloseInvestigationSheet: View {
                 }
                 .pickerStyle(.segmented)
                 SheetDescriptionField(title: "Note", prompt: "What was concluded", text: $note)
-                let pending = model.pendingCount(investigation.id)
-                if pending > 0 {
-                    Label("\(pending) proposed \(pending == 1 ? "action is" : "actions are") still waiting and will no longer be decided.",
-                          systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                }
             }
             .padding(20)
         }

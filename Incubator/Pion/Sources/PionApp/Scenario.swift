@@ -74,7 +74,6 @@ struct PionScenario: Decodable {
         var entities: [Entity]?
         var evidence: [Evidence]?
         var findings: [Finding]?
-        var actions: [Action]?
     }
 
     struct Entity: Decodable { let kind: CaseRecord.Entity.Kind; let name: String; var detail: String?; var at: String?; var by: String? }
@@ -83,11 +82,6 @@ struct PionScenario: Decodable {
         let claim: String; let evidence: [String]; let confidence: CaseRecord.Finding.Confidence
         var entities: [String]?; var at: String?; var by: String?
     }
-    struct Action: Decodable {
-        let operation: String; let targets: [String]; let rationale: String; let effect: String; let undo: String
-        var evidence: [String]?; var state: CaseRecord.ProposedAction.State?; var note: String?; var at: String?; var by: String?
-    }
-
     struct Present: Decodable {
         var window: Window?
         var select: String?
@@ -109,7 +103,6 @@ struct PionScenario: Decodable {
         var entity: Entity?
         var evidence: Evidence?
         var finding: Finding?
-        var propose: Action?
         var investigationStatus: Investigation.Status?
         var present: Present?
         var settings: [String: Setting]?
@@ -123,7 +116,6 @@ struct PionScenario: Decodable {
     var clock: String?
     var appearance: String?
     var champion: String?
-    var protectedAssets: [String]?
     var settings: [String: Setting]?
     let agents: [Agent]
     var conversations: [Conversation]?
@@ -132,7 +124,7 @@ struct PionScenario: Decodable {
 
     var folder = URL(fileURLWithPath: "/")
     private enum CodingKeys: String, CodingKey {
-        case version, title, summary, clock, appearance, champion, protectedAssets, settings, agents, conversations, present, timeline
+        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline
     }
 
     static func load(from folder: URL) throws -> PionScenario {
@@ -323,11 +315,6 @@ enum ScenarioTime {
             if let detail = agent.status?.detail { _ = try model.repository.setAgentStatus(String(detail.prefix(AgentRecord.statusLimit)), agentID: record.id, setAt: clock) }
             model.scriptedPhases[record.id] = agent.status?.phase ?? .ready
         }
-        if let protected = scenario.protectedAssets {
-            var policy = model.store.policy()
-            policy.protectedAssets = protected
-            try model.store.setPolicy(policy)
-        }
         model.reload()
         let agents = try model.repository.loadAgents()
         for conversation in scenario.conversations ?? [] {
@@ -344,7 +331,7 @@ enum ScenarioTime {
                                                       participantIDs: Array(members), existingAgents: agents, now: opened).id
                 _ = try model.store.open(id: id, title: record.title, objective: record.objective ?? "", scope: record.scope ?? [],
                                          severity: record.severity ?? .medium, champion: model.champion, leadAgentID: lead,
-                                         playbookID: nil, source: record.source, number: number, now: opened)
+                                         source: record.source, number: number, now: opened)
             } else if let group = conversation.group {
                 id = try model.repository.createGroup(named: group.name, publicDescription: group.description,
                                                       participantIDs: group.members.compactMap { agentIDs[$0] }, existingAgents: agents,
@@ -360,7 +347,6 @@ enum ScenarioTime {
                 for item in record.case?.entities ?? [] { try add(item, to: id, clock: clock, fallback: opened) }
                 for item in record.case?.evidence ?? [] { try add(item, to: id, clock: clock, fallback: opened) }
                 for item in record.case?.findings ?? [] { try add(item, to: id, clock: clock, fallback: opened) }
-                for item in record.case?.actions ?? [] { try add(item, to: id, clock: clock, fallback: opened) }
                 if let status = record.status, status != .open {
                     let at = clock.addingTimeInterval(-60)
                     if status == .closed {
@@ -382,7 +368,7 @@ enum ScenarioTime {
     private func by(_ key: String?, _ id: UUID) -> CaseActor {
         if key == "user" { return .champion(model.champion) }
         return key.flatMap { agentIDs[$0] }.map(CaseActor.agent)
-            ?? model.store.investigation(id)?.leadAgentID.map(CaseActor.agent) ?? .policy
+            ?? model.store.investigation(id)?.leadAgentID.map(CaseActor.agent) ?? .champion(model.champion)
     }
 
     private func time(_ text: String?, clock: Date, fallback: Date) throws -> Date {
@@ -411,24 +397,6 @@ enum ScenarioTime {
             let item = try record.record(finding: finding.claim, evidence: finding.evidence, confidence: finding.confidence,
                                          entities: finding.entities ?? [], by: actor, at: at)
             return ((), "finding", "\(item.id) \(finding.confidence.rawValue): \(finding.claim)")
-        }
-    }
-
-    private func add(_ action: PionScenario.Action, to id: UUID, clock: Date, fallback: Date) throws {
-        let at = try time(action.at, clock: clock, fallback: fallback)
-        let (proposed, _, _) = try model.store.propose(operation: action.operation, targets: action.targets, rationale: action.rationale,
-                                                       expectedEffect: action.effect, undo: action.undo, evidence: action.evidence ?? [],
-                                                       in: id, by: by(action.by, id), now: at)
-        let decided = at.addingTimeInterval(120)
-        switch action.state {
-        case .approved?, .done?:
-            if proposed.state == .pending {
-                try model.store.decide(proposed.id, in: id, approve: true, note: action.state == .approved ? action.note : nil, by: model.champion, now: decided)
-            }
-            if action.state == .done { try model.store.markDone(proposed.id, in: id, note: action.note, by: model.champion, now: decided.addingTimeInterval(300)) }
-        case .denied?:
-            if proposed.state == .pending { try model.store.decide(proposed.id, in: id, approve: false, note: action.note, by: model.champion, now: decided) }
-        default: break
         }
     }
 
@@ -501,7 +469,6 @@ enum ScenarioTime {
             if let item = step.entity { try add(PionScenario.Entity(kind: item.kind, name: item.name, detail: item.detail, by: item.by ?? actor), to: conversation, clock: now, fallback: now) }
             if let item = step.evidence { var copy = item; copy.by = item.by ?? actor; try add(copy, to: conversation, clock: now, fallback: now) }
             if let item = step.finding { var copy = item; copy.by = item.by ?? actor; try add(copy, to: conversation, clock: now, fallback: now) }
-            if let item = step.propose { var copy = item; copy.by = item.by ?? actor; try add(copy, to: conversation, clock: now, fallback: now) }
             if let status = step.investigationStatus { try model.store.setStatus(status, of: conversation, by: by(actor, conversation), now: now) }
         }
         if let present = step.present { apply(present) }
