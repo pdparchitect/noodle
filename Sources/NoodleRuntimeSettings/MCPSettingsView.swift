@@ -323,7 +323,7 @@ public struct MCPConnectionIcon: View {
         Group {
             if let data = connection.iconData, let image = NSImage(data: data) {
                 Image(nsImage: image).resizable().scaledToFit()
-            } else if let tool = ToolCatalog.definition(forMCPEndpoint: connection.endpoint) {
+            } else if let tool = ToolCatalog.definition(for: connection) {
                 ToolCatalogIcon(tool: tool, size: size)
             } else {
                 Image(systemName: "puzzlepiece.extension.fill").resizable().scaledToFit()

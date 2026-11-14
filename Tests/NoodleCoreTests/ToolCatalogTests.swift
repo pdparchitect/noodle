@@ -155,4 +155,40 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://keys.example/mcp")!), own)
         XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.airtable.com/mcp")!))
     }
+
+    func testAPresetBuildsEachAccountsAddressFromItsFields() throws {
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        let domain = ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)
+        let region = ToolField(key: "region", title: "Region", placeholder: "us-1",
+                               kind: .choice([.init(value: "us-1", title: "US-1"), .init(value: "eu-1", title: "EU-1")]))
+        let directory = ToolDefinition(id: "directory", name: "Directory", summary: "People and sign-ins.", defaultInstructions: "Look people up.",
+            iconName: "directory", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp/{region}", fields: [domain, region],
+                                                            tokenHeader: "Authorization")))
+        ToolCatalog.use(ToolCatalog.noodle + [directory])
+        guard case .mcp(let configuration) = directory.configuration else { return XCTFail() }
+        XCTAssertEqual(configuration.endpoint.absoluteString, "https://acme.okta.com/mcp/us-1", "a sample address from the placeholders")
+
+        let acme = try directory.makeConnection(name: "Directory — Acme", values: ["domain": " Acme.Okta.com ", "region": "eu-1"])
+        XCTAssertEqual(acme.endpoint.absoluteString, "https://acme.okta.com/mcp/eu-1")
+        XCTAssertEqual(acme.settings, ["domain": "acme.okta.com", "region": "eu-1"])
+        XCTAssertEqual(acme.catalogueID, "directory")
+        XCTAssertEqual(acme.tokenHeader, "Authorization")
+        let contoso = try directory.makeConnection(name: "Directory — Contoso", values: ["domain": "contoso.okta.com", "region": "us-1"])
+        XCTAssertNotEqual(acme.id, contoso.id)
+        XCTAssertEqual(ToolCatalog.definition(for: contoso), directory)
+        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(acme)), acme)
+
+        for bad in ["acme.okta.com/evil", "user@acme.okta.com", "acme.okta.com:8443", "https://acme.okta.com", "", "localhost", "-acme.okta.com"] {
+            XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": bad, "region": "us-1"]), bad)
+        }
+        XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": "acme.okta.com", "region": "mars"]))
+        XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": "acme.okta.com"]))
+
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let signedIn = try notion.makeConnection(name: "Notion")
+        XCTAssertEqual(signedIn.catalogueID, "notion")
+        XCTAssertNil(signedIn.settings)
+        let earlier = try MCPConnectionRecord(name: "Notion", endpoint: signedIn.endpoint)
+        XCTAssertEqual(ToolCatalog.definition(for: earlier), notion, "connections made before entries were remembered match by address")
+    }
 }

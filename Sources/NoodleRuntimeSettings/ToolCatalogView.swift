@@ -8,14 +8,14 @@ public struct ToolCatalogView: View {
     let onCustomMCP: () -> Void
     let onCancel: () -> Void
     var error: String? = nil
-    /// Whether services that take an API key are listed; not where tokens cannot be kept yet, as on a Noodle Hub.
-    var includesTokenTools = true
+    /// Whether services set up with a form (an API key, or details such as a domain) are listed; not where
+    /// those cannot be kept yet, as on a Noodle Hub.
+    var includesSetUpTools = true
     @State private var search = ""
 
     private var tools: [ToolDefinition] {
         ToolCatalog.matching(search).filter { tool in
-            guard !includesTokenTools, case .mcp(let configuration) = tool.configuration else { return true }
-            return configuration.tokenHeader == nil
+            includesSetUpTools || !tool.needsSetUp
         }
     }
 
@@ -51,7 +51,7 @@ public struct ToolCatalogView: View {
                                     Text(tool.kind.rawValue).font(.caption2).foregroundStyle(.secondary)
                                     Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                                 }.padding(9).contentShape(Rectangle())
-                            }.buttonStyle(.plain).help(tool.usesToken ? "Add \(tool.name) with an API key" : "Add \(tool.name) and sign in")
+                            }.buttonStyle(.plain).help(tool.needsSetUp ? "Set up \(tool.name)" : "Add \(tool.name) and sign in")
                         }
                         if tools.isEmpty {
                             Text("No matching tools. You can add a custom MCP below.")
@@ -85,7 +85,7 @@ public struct ToolMaturityBadge: View {
 public struct MCPConnectionMaturityBadge: View {
     let connection: MCPConnectionRecord
     public var body: some View {
-        if let tool = ToolCatalog.definition(forMCPEndpoint: connection.endpoint) {
+        if let tool = ToolCatalog.definition(for: connection) {
             ToolMaturityBadge(maturity: tool.maturity)
         }
     }
@@ -108,8 +108,8 @@ public struct ToolCreationSheet: View {
     @State private var error: String?
     @State private var adding = false
     @State private var presetAttempts: [String: UUID] = [:]
-    /// A preset that takes an API key, added and waiting for it.
-    @State private var awaitingToken: MCPConnectionRecord?
+    /// A preset whose form is open: one that takes an API key or details such as a domain.
+    @State private var settingUp: ToolDefinition?
 
     public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
          onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
@@ -126,10 +126,15 @@ public struct ToolCreationSheet: View {
 
     public var body: some View {
         Group {
-            if let connection = awaitingToken, let controller {
-                PresetTokenEntry(connection: connection, onCancel: { dismiss() }) { token in
+            if let tool = settingUp, let controller, case .mcp(let configuration) = tool.configuration {
+                PresetSetUpForm(tool: tool, configuration: configuration,
+                                name: ToolCatalog.availableName(for: tool, existingNames: controller.registry.connections.map(\.name)),
+                                onBack: { settingUp = nil; error = nil }) { name, values, token in
+                    // Each one is a new account, whatever others share with it.
+                    let connection = try controller.addPreset(tool, configuration: configuration, name: name, values: values)
+                    onAdded(connection.id)
                     dismiss()
-                    controller.connect(connection, token: token)
+                    if connection.tokenHeader != nil { controller.connect(connection, token: token) } else { onConnect(connection) }
                 }
             } else if customMCP, let controller {
                 MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
@@ -137,13 +142,14 @@ public struct ToolCreationSheet: View {
                 MCPEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
-                                onCancel: { dismiss() }, error: error, includesTokenTools: controller != nil).disabled(adding)
+                                onCancel: { dismiss() }, error: error, includesSetUpTools: controller != nil).disabled(adding)
             }
         }
     }
 
     private func add(_ tool: ToolDefinition) {
         guard !adding, case .mcp(let configuration) = tool.configuration else { return }
+        if tool.needsSetUp, controller != nil { settingUp = tool; return }
         adding = true
         // Saving the account can precede a failed workspace refresh.
         // Retrying this preset must resume that account, even after
@@ -163,12 +169,6 @@ public struct ToolCreationSheet: View {
 
     private func added(_ connection: MCPConnectionRecord) {
         onAdded(connection.id)
-        if connection.tokenHeader != nil {
-            // Nothing opens in the browser; the key is asked for here.
-            awaitingToken = connection
-            adding = false
-            return
-        }
         dismiss()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
@@ -177,36 +177,84 @@ public struct ToolCreationSheet: View {
     }
 }
 
-/// Asks for the API key of a service just added from the catalogue. Cancelling keeps the connection,
-/// which asks for its key again from its row in Settings › Tools.
-private struct PresetTokenEntry: View {
-    let connection: MCPConnectionRecord
-    let onCancel: () -> Void
-    let onConnect: (String) -> Void
+/// What a preset needs before its account can be added: a name, its fields, such as a domain, and its API key
+/// when it takes one. Every account is set up from scratch.
+private struct PresetSetUpForm: View {
+    let tool: ToolDefinition
+    let configuration: MCPToolConfiguration
+    let onBack: () -> Void
+    let onAdd: (String, [String: String], String) throws -> Void
+    @State private var name: String
+    @State private var values: [String: String] = [:]
     @State private var token = ""
+    @State private var error: String?
+
+    init(tool: ToolDefinition, configuration: MCPToolConfiguration, name: String, onBack: @escaping () -> Void,
+         onAdd: @escaping (String, [String: String], String) throws -> Void) {
+        self.tool = tool; self.configuration = configuration; self.onBack = onBack; self.onAdd = onAdd
+        _name = State(initialValue: name)
+        _values = State(initialValue: Dictionary(uniqueKeysWithValues: configuration.fields.compactMap { field in
+            if case .choice(let options) = field.kind, let first = options.first { return (field.key, first.value) }
+            return nil
+        }))
+    }
+
+    private var complete: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && configuration.fields.allSatisfy { !(values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            && (configuration.tokenHeader == nil || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Back", action: onBack).keyboardShortcut(.cancelAction)
                 Spacer()
-                Text(connection.name).font(.headline)
+                Text(tool.name).font(.headline)
                 Spacer()
-                Button("Connect") { onConnect(token) }
-                    .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .keyboardShortcut(.defaultAction)
+                Button(configuration.tokenHeader == nil ? "Add & Connect" : "Connect") {
+                    do { try onAdd(name, values, token) } catch { self.error = error.localizedDescription }
+                }
+                .disabled(!complete)
+                .keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    MCPConnectionIcon(connection: connection, size: 32)
-                    Text("Paste your \(connection.name) API key.").font(.headline)
+                    ToolCatalogIcon(tool: tool, size: 32)
+                    Text(tool.summary).font(.callout).foregroundStyle(.secondary)
                 }
-                SecureField("API key", text: $token).textFieldStyle(.roundedBorder)
-                Text("It is kept in Keychain and sent with every request to \(connection.endpoint.host ?? "the service").")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.padding(20)
+                field("Name") {
+                    TextField("e.g. \(tool.name) — Work", text: $name, axis: .horizontal).lineLimit(1)
+                }
+                ForEach(configuration.fields, id: \.key) { item in
+                    field(item.title) {
+                        let value = Binding(get: { values[item.key] ?? "" }, set: { values[item.key] = $0 })
+                        switch item.kind {
+                        case .choice(let options):
+                            Picker(item.title, selection: value) {
+                                ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
+                            }
+                            .labelsHidden()
+                        case .host, .text:
+                            TextField(item.placeholder, text: value, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                        }
+                    }
+                }
+                if configuration.tokenHeader != nil {
+                    field("API Key") { SecureField("Paste the key", text: $token) }
+                    Text("The key is kept in Keychain and sent with every request.").font(.caption).foregroundStyle(.secondary)
+                }
+                if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
+    }
+
+    private func field(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold))
+            content()
+        }
     }
 }
 

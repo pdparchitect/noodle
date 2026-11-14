@@ -12,6 +12,10 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     /// The request header a token connection sends its token in, such as Authorization or x-apikey.
     /// Nil for a connection that signs in through the browser. The token itself is kept in Keychain.
     public var tokenHeader: String?
+    /// The catalogue preset it was made from, if any.
+    public var catalogueID: String?
+    /// What was filled in for the preset's fields, such as its domain; nil when it has none.
+    public var settings: [String: String]?
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil) throws {
@@ -123,6 +127,10 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
             _ = try ConversationName.validated(connection.name)
             _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
             if let header = connection.tokenHeader, try MCPConnectionRecord.validatedTokenHeader(header) != header {
+                throw MCPConnectionError.message("Invalid saved MCP connection.")
+            }
+            guard (connection.catalogueID?.count ?? 0) <= 100, (connection.settings?.count ?? 0) <= 20,
+                  connection.settings?.allSatisfy({ $0.key.count <= 100 && $0.value.count <= 400 }) ?? true else {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")
             }
             guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,

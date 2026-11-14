@@ -15,7 +15,68 @@ public enum ToolConfiguration: Equatable, Sendable {
     }
 }
 
+/// Something a person fills in for each account of a service, such as its Okta domain or region.
+public struct ToolField: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+        /// A domain name alone, such as acme.okta.com: no scheme, port, path or credentials.
+        case host
+        /// One of the listed values.
+        case choice([Option])
+        /// A line of text; in an address it is percent-encoded.
+        case text
+    }
+    public struct Option: Equatable, Sendable {
+        public let value: String
+        public let title: String
+        public init(value: String, title: String) { self.value = value; self.title = title }
+    }
+    /// How the address template and the account's settings name it.
+    public let key: String
+    public let title: String
+    /// An example, shown in the empty field and used for the preset's sample address.
+    public let placeholder: String
+    public let kind: Kind
+
+    public init(key: String, title: String, placeholder: String, kind: Kind) {
+        self.key = key; self.title = title; self.placeholder = placeholder; self.kind = kind
+    }
+
+    /// The value as kept, or why it cannot be.
+    public func validated(_ value: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch kind {
+        case .host:
+            let host = value.lowercased()
+            let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+            let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-")
+            guard host.count <= 253, labels.count >= 2, labels.allSatisfy({ label in
+                (1...63).contains(label.count) && !label.hasPrefix("-") && !label.hasSuffix("-")
+                    && label.unicodeScalars.allSatisfy(allowed.contains)
+            }) else { throw MCPConnectionError.message("Enter \(title) as a domain name alone, such as \(placeholder).") }
+            return host
+        case .choice(let options):
+            guard options.contains(where: { $0.value == value }) else { throw MCPConnectionError.message("Choose \(title).") }
+            return value
+        case .text:
+            guard !value.isEmpty, value.count <= 200, !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+                throw MCPConnectionError.message("Enter \(title) on one line.")
+            }
+            return value
+        }
+    }
+
+    /// How the value goes into an address.
+    func inAddress(_ value: String) -> String {
+        switch kind {
+        case .host, .choice: value
+        case .text: value.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn:
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? value
+        }
+    }
+}
+
 public struct MCPToolConfiguration: Equatable, Sendable {
+    /// Where the service is; for a preset with fields, a sample built from their placeholders.
     public let endpoint: URL
     public let oauth: MCPOAuthConfiguration?
     /// The sign-in server of a service that publishes no protected-resource metadata.
@@ -23,11 +84,48 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let authorizationServer: URL?
     /// For a service that takes an API key or token instead of a sign-in: the header it goes in.
     public let tokenHeader: String?
+    /// What each account fills in, used in `endpointTemplate` as {key}.
+    public let fields: [ToolField]
+    /// The address with a {key} for each field it needs, such as https://{domain}/mcp; nil for a fixed address.
+    public let endpointTemplate: String?
+
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil) {
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
         self.tokenHeader = tokenHeader
+        fields = []
+        endpointTemplate = nil
+    }
+
+    /// A service whose address differs for each account, built from what the account fills in.
+    public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
+                authorizationServer: URL? = nil, tokenHeader: String? = nil) {
+        self.endpointTemplate = endpointTemplate
+        self.fields = fields
+        self.oauth = oauth
+        self.authorizationServer = authorizationServer
+        self.tokenHeader = tokenHeader
+        let sample = Self.fill(endpointTemplate, fields: fields, values: Dictionary(uniqueKeysWithValues: fields.map { ($0.key, $0.placeholder) }))
+        guard let sample = URL(string: sample) else { preconditionFailure("The placeholders of \(endpointTemplate) make no address.") }
+        endpoint = sample
+    }
+
+    private static func fill(_ template: String, fields: [ToolField], values: [String: String]) -> String {
+        fields.reduce(template) { address, field in
+            address.replacingOccurrences(of: "{\(field.key)}", with: field.inAddress(values[field.key] ?? ""))
+        }
+    }
+
+    /// One account's address and settings from what it filled in, each value checked.
+    public func account(_ values: [String: String]) throws -> (endpoint: URL, settings: [String: String]?) {
+        guard let endpointTemplate else { return (endpoint, nil) }
+        var settings: [String: String] = [:]
+        for field in fields { settings[field.key] = try field.validated(values[field.key] ?? "") }
+        guard let url = URL(string: Self.fill(endpointTemplate, fields: fields, values: settings)) else {
+            throw MCPConnectionError.message("These details make no valid address.")
+        }
+        return (try MCPConnectionRecord.validatedEndpoint(url), settings)
     }
 
     /// Every addition is a separate account, including repeated presets.
@@ -53,10 +151,24 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public let configuration: ToolConfiguration
     public let maturity: ToolMaturity
     public var kind: ToolKind { configuration.kind }
-    /// Whether it takes an API key or token rather than a sign-in.
-    public var usesToken: Bool {
-        if case .mcp(let configuration) = configuration { return configuration.tokenHeader != nil }
-        return false
+
+    /// A new account of this service, named `name`, from what was filled in for its fields.
+    public func makeConnection(id: UUID = UUID(), name: String, values: [String: String] = [:]) throws -> MCPConnectionRecord {
+        switch configuration {
+        case .mcp(let configuration):
+            let account = try configuration.account(values)
+            var record = try MCPConnectionRecord(id: id, name: name, endpoint: account.endpoint, description: summary,
+                                                 instructions: defaultInstructions, tokenHeader: configuration.tokenHeader)
+            record.catalogueID = self.id
+            record.settings = account.settings
+            return record
+        }
+    }
+    /// Whether adding it opens a form first: for an API key, or for details such as its domain.
+    public var needsSetUp: Bool {
+        switch configuration {
+        case .mcp(let configuration): configuration.tokenHeader != nil || !configuration.fields.isEmpty
+        }
     }
 
     public init(id: String, name: String, summary: String, defaultInstructions: String, iconName: String, configuration: ToolConfiguration, maturity: ToolMaturity = .stable) {
@@ -401,6 +513,13 @@ public enum ToolCatalog {
             suffix += 1
         }
         return name
+    }
+
+    /// The preset a connection was made from: the one it remembers, or for one made before connections
+    /// remembered theirs, the one at its address.
+    public static func definition(for connection: MCPConnectionRecord) -> ToolDefinition? {
+        if let id = connection.catalogueID { return entries.first { $0.id == id } }
+        return definition(forMCPEndpoint: connection.endpoint)
     }
 
     public static func definition(forMCPEndpoint endpoint: URL) -> ToolDefinition? {
