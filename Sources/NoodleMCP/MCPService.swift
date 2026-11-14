@@ -10,6 +10,7 @@ public actor MCPService {
     private let credentials: any MCPCredentialStorage
     private let tokens: any MCPTokenStorage
     private let clients: any MCPClientSecretStorage
+    private let awsKeys: any MCPAWSKeyStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -26,10 +27,12 @@ public actor MCPService {
         tokens = MCPKeychainStore<MCPToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
         clients = MCPKeychainStore<MCPClientSecret>(service: namespace + ".mcp.client",
                                                     label: "\(ProductIdentity.current.name) MCP client secret")
+        awsKeys = MCPKeychainStore<MCPAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
         #else
         credentials = MCPNoCredentials()
         tokens = MCPNoCredentials()
         clients = MCPNoCredentials()
+        awsKeys = MCPNoCredentials()
         #endif
         oauth = MCPOAuth()
         httpConfiguration = {
@@ -40,9 +43,9 @@ public actor MCPService {
         }
     }
     init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(),
-         clients: any MCPClientSecretStorage = MCPMemoryClientSecrets(), oauth: MCPOAuth,
-         httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
-        self.credentials = credentials; self.tokens = tokens; self.clients = clients
+         clients: any MCPClientSecretStorage = MCPMemoryClientSecrets(), awsKeys: any MCPAWSKeyStorage = MCPMemoryAWSKeys(),
+         oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
+        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     /// The adapters this app serves connections with, by the name connections give.
@@ -51,7 +54,7 @@ public actor MCPService {
     }
 
     public func hasCredentials(_ id: UUID) -> Bool {
-        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil { return true }
+        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
     }
@@ -68,6 +71,23 @@ public actor MCPService {
         try credentials.remove(id)
         try tokens.remove(id)
         try clients.remove(id)
+        try awsKeys.remove(id)
+    }
+
+    /// Keeps the AWS access key a connection signs its requests with, in place of signing in.
+    public func saveAWSKey(accessKeyID: String, secretAccessKey: String, sessionToken: String?, for connection: MCPConnectionRecord) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard connection.awsSigning != nil else { throw MCPConnectionError.message("This connection does not sign with an AWS key.") }
+        func line(_ value: String, _ name: String) throws -> String {
+            let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, value.count <= 4_096, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+                throw MCPConnectionError.message("Paste the \(name) on one line.")
+            }
+            return value
+        }
+        let token = try sessionToken.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : try line($0, "session token") }
+        try awsKeys.save(MCPAWSKey(endpoint: connection.endpoint, accessKeyID: try line(accessKeyID, "access key ID"),
+                                   secretAccessKey: try line(secretAccessKey, "secret access key"), sessionToken: token), id: connection.id)
     }
 
     /// Keeps the client ID and secret a connection exchanges for access tokens, in place of signing in.
@@ -125,12 +145,13 @@ public actor MCPService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard !connection.usesToken, connection.clientCredentials == nil, connection.adapter == nil else {
+        guard !connection.keepsSecret, connection.adapter == nil else {
             throw MCPConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
         try tokens.remove(connection.id)
         try clients.remove(connection.id)
+        try awsKeys.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -244,6 +265,10 @@ public actor MCPService {
     /// The header that proves who the connection is: its token as saved, or an OAuth access token,
     /// renewed first when it is about to expire.
     private func authorization(for connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> MCPAuthorization {
+        if let signing = connection.awsSigning {
+            guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw MCPServiceError.signInRequired }
+            return .aws(key, defaultRegion: signing.region)
+        }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
                   token.header == parameter else { throw MCPServiceError.signInRequired }
@@ -299,7 +324,7 @@ public actor MCPService {
         guard let adapter = adapters[name] else {
             throw MCPConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
-        let credentials = connection.usesToken || connection.clientCredentials != nil
+        let credentials = connection.keepsSecret
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         switch request.action {

@@ -7,6 +7,7 @@ import NoodleMCP
 public enum MCPConnectionSecret: Sendable {
     case token(String)
     case client(id: String, secret: String)
+    case aws(accessKeyID: String, secretAccessKey: String, sessionToken: String?)
 }
 
 @MainActor @Observable
@@ -67,7 +68,7 @@ public final class MCPController {
     /// One the app's adapter answers without credentials is always ready.
     public func readSignIns() async {
         for connection in registry.connections {
-            let open = connection.adapter != nil && !connection.usesToken && connection.clientCredentials == nil
+            let open = connection.adapter != nil && !connection.keepsSecret
             let signedIn = await service.hasCredentials(connection.id)
             if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
         }
@@ -165,7 +166,7 @@ public final class MCPController {
     /// `secret` when one is given; either way it then lists the connection's tools to show it works.
     func connect(_ record: MCPConnectionRecord, secret: MCPConnectionSecret? = nil) {
         guard signingIn == nil else { return }
-        let signsIn = !record.usesToken && record.clientCredentials == nil && record.adapter == nil
+        let signsIn = !record.keepsSecret && record.adapter == nil
         if signsIn { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil
@@ -176,6 +177,8 @@ public final class MCPController {
                     switch secret {
                     case .token(let token): try await service.saveToken(token, for: record)
                     case .client(let id, let value): try await service.saveClientCredentials(clientID: id, secret: value, for: record)
+                    case .aws(let id, let secret, let token):
+                        try await service.saveAWSKey(accessKeyID: id, secretAccessKey: secret, sessionToken: token, for: record)
                     case nil: break
                     }
                 } else {

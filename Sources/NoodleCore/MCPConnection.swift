@@ -16,6 +16,13 @@ public struct MCPClientCredentials: Codable, Equatable, Sendable {
     }
 }
 
+/// For a connection that signs its requests to AWS with an access key: the region it works in unless a request
+/// names another. The key itself is kept in Keychain.
+public struct MCPAWSSigning: Codable, Equatable, Sendable {
+    public let region: String
+    public init(region: String) { self.region = region }
+}
+
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
 public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
@@ -37,6 +44,10 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public var tokenScheme: String?
     /// Set for a connection that proves itself with a client ID and secret instead of signing in.
     public var clientCredentials: MCPClientCredentials?
+    /// Set for a connection that signs its requests to AWS with an access key instead of sending a token.
+    public var awsSigning: MCPAWSSigning?
+    /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret, or an AWS key.
+    public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsSigning != nil }
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
     /// address of the service the adapter calls. Only the app that has that adapter serves it.
     public var adapter: String?
@@ -47,8 +58,13 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
-                tokenParameter: String? = nil, clientCredentials: MCPClientCredentials? = nil, adapter: String? = nil) throws {
+                tokenParameter: String? = nil, clientCredentials: MCPClientCredentials? = nil, awsSigning: MCPAWSSigning? = nil,
+                adapter: String? = nil) throws {
         self.id = id
+        self.awsSigning = try awsSigning.map(Self.validatedAWSSigning)
+        guard awsSigning == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil) else {
+            throw MCPConnectionError.message("A connection signs with an AWS key or uses another sign-in, not both.")
+        }
         self.tokenParameter = try tokenParameter.map(Self.validatedTokenParameter)
         guard tokenHeader == nil || tokenParameter == nil else {
             throw MCPConnectionError.message("A token goes in a header or in the address, not both.")
@@ -86,6 +102,15 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
         }
         return name
+    }
+
+    /// An AWS region's name, such as eu-west-1.
+    public static func validatedAWSSigning(_ signing: MCPAWSSigning) throws -> MCPAWSSigning {
+        guard (1...32).contains(signing.region.count),
+              signing.region.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
+            throw MCPConnectionError.message("Invalid AWS region.")
+        }
+        return signing
     }
 
     /// A query parameter's name: letters, digits, hyphens and underscores.
@@ -217,6 +242,12 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
                 }
             }
             if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
+            if let signing = connection.awsSigning {
+                guard !connection.usesToken, connection.clientCredentials == nil,
+                      try MCPConnectionRecord.validatedAWSSigning(signing) == signing else {
+                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                }
+            }
             if let parameter = connection.tokenParameter {
                 guard connection.tokenHeader == nil, try MCPConnectionRecord.validatedTokenParameter(parameter) == parameter else {
                     throw MCPConnectionError.message("Invalid saved MCP connection.")

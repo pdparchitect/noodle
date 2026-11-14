@@ -191,6 +191,7 @@ private struct PresetSetUpForm: View {
     @State private var token = ""
     @State private var clientID = ""
     @State private var clientSecret = ""
+    @State private var sessionToken = ""
     @State private var error: String?
 
     init(tool: ToolDefinition, configuration: MCPToolConfiguration, name: String, onBack: @escaping () -> Void,
@@ -207,12 +208,14 @@ private struct PresetSetUpForm: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && configuration.fields.allSatisfy { !(values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             && (!configuration.usesToken || !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            && (configuration.clientCredentials == nil || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            && (configuration.clientCredentials == nil && !configuration.signsForAWS
+                || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 
     private var secret: MCPConnectionSecret? {
         if configuration.usesToken { return .token(token) }
         if configuration.clientCredentials != nil { return .client(id: clientID, secret: clientSecret) }
+        if configuration.signsForAWS { return .aws(accessKeyID: clientID, secretAccessKey: clientSecret, sessionToken: sessionToken) }
         return nil
     }
 
@@ -254,6 +257,11 @@ private struct PresetSetUpForm: View {
                 }
                 if configuration.usesToken {
                     field("API Key") { SecureField("Paste the key", text: $token) }
+                }
+                if configuration.signsForAWS {
+                    field("Access Key ID") { TextField("AKIA…", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled() }
+                    field("Secret Access Key") { SecureField("Secret access key", text: $clientSecret) }
+                    field("Session Token") { SecureField("Only for temporary credentials", text: $sessionToken) }
                 }
                 if configuration.clientCredentials != nil {
                     field("Client ID") { TextField("Client ID", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled() }

@@ -41,7 +41,7 @@ public struct MCPSettingsView: View {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
-                                    if connection.usesToken || connection.clientCredentials != nil {
+                                    if connection.keepsSecret {
                                         // A token or client secret is entered in the editor; there is no sign-in to start.
                                         let what = connection.usesToken ? "Token" : "Credentials"
                                         Button(store.mcp.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
@@ -116,7 +116,7 @@ public struct MCPSettingsView: View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
         } else if store.mcp.signingIn == connection.id {
-            Text(store.mcp.signInStage.isEmpty ? (!connection.usesToken && connection.clientCredentials == nil && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
+            Text(store.mcp.signInStage.isEmpty ? (!connection.keepsSecret && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.mcp.signInStage)
         } else if store.mcp.errors[connection.id] != nil {
@@ -125,7 +125,7 @@ public struct MCPSettingsView: View {
             SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
-        } else if connection.clientCredentials != nil {
+        } else if connection.clientCredentials != nil || connection.awsSigning != nil {
             SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
         } else {
             SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
@@ -153,7 +153,7 @@ public struct MCPEditor: View {
     private let onConnect: (MCPConnectionRecord) -> Void
     /// Keeps a token or client secret and checks it; nil where those cannot be kept yet, as on a Noodle Hub.
     private let onSecret: ((MCPConnectionRecord, MCPConnectionSecret) -> Void)?
-    private enum SignIn: Hashable { case browser, token, client }
+    private enum SignIn: Hashable { case browser, token, client, aws }
     @Environment(\.dismiss) private var dismiss
     @State private var signIn: SignIn
     @State private var tokenHeader: String
@@ -162,6 +162,7 @@ public struct MCPEditor: View {
     @State private var scope: String
     @State private var clientID = ""
     @State private var clientSecret = ""
+    @State private var sessionToken = ""
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
@@ -181,7 +182,8 @@ public struct MCPEditor: View {
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect ?? { controller.connect($0) }
         onSecret = { controller.connect($0, secret: $1) }
-        _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client : .browser)
+        _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client
+                        : existing?.awsSigning != nil ? .aws : .browser)
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
         _scope = State(initialValue: existing?.clientCredentials?.scope ?? "")
@@ -247,6 +249,20 @@ public struct MCPEditor: View {
                             Text("Client ID & Secret").tag(SignIn.client)
                         }
                         .pickerStyle(.segmented)
+                    }
+                    if signIn == .aws {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Access Key ID").font(.caption.weight(.semibold))
+                            TextField("Saved; enter a new key to replace it", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Secret Access Key").font(.caption.weight(.semibold))
+                            SecureField("Secret access key", text: $clientSecret)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Session Token").font(.caption.weight(.semibold))
+                            SecureField("Only for temporary credentials", text: $sessionToken)
+                        }
                     }
                     if signIn == .client {
                         VStack(alignment: .leading, spacing: 6) {
@@ -333,6 +349,12 @@ public struct MCPEditor: View {
         record.clientCredentials = nil
         switch signIn {
         case .browser: break
+        case .aws:
+            // Its signing stays as its preset made it; only the key can be replaced.
+            let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if id.isEmpty != clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw MCPConnectionError.message("Enter both the access key ID and the secret access key.")
+            }
         case .token where existing?.tokenParameter != nil:
             // A token its service takes only in the address keeps going there; only its value changes.
             record.tokenParameter = existing?.tokenParameter
@@ -367,6 +389,7 @@ public struct MCPEditor: View {
         case .browser: nil
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
+        case .aws: id.isEmpty ? nil : .aws(accessKeyID: id, secretAccessKey: clientSecret, sessionToken: sessionToken)
         }
         let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
         let shouldConnect = existing == nil || switchedToBrowser || secret != nil

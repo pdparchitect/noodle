@@ -21,10 +21,13 @@ public struct MCPAdapterAccess: Sendable {
     let authorization: MCPAuthorization?
     let configuration: @Sendable () -> URLSessionConfiguration
     static let limit = 8 * 1_048_576
+    private func url(_ request: URLRequest) -> URL? { request.url }
 
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        guard let url = request.url, url.scheme?.lowercased() == "https",
-              url.host?.lowercased() == endpoint.host?.lowercased(), url.port == endpoint.port, url.user == nil else {
+        // Only the connection's host; an AWS connection, any AWS service below it, since each request is signed for one.
+        let host = url(request)?.host?.lowercased() ?? "", home = endpoint.host?.lowercased() ?? ""
+        let reachable = host == home || (authorization?.signsForAWS == true && host.hasSuffix("." + home))
+        guard let url = request.url, url.scheme?.lowercased() == "https", reachable, url.port == endpoint.port, url.user == nil else {
             throw MCPConnectionError.message("A tool adapter may only reach its own service.")
         }
         var request = request
@@ -42,6 +45,10 @@ public struct MCPAdapterAccess: Sendable {
 enum MCPAuthorization: Sendable {
     case header(String, String)
     case parameter(String, String)
+    /// Signed with an AWS key, for the service and region each request's address names.
+    case aws(MCPAWSKey, defaultRegion: String)
+
+    var signsForAWS: Bool { if case .aws = self { true } else { false } }
 
     func apply(to request: inout URLRequest) {
         switch self {
@@ -54,6 +61,9 @@ enum MCPAuthorization: Sendable {
             components.percentEncodedQuery = components.percentEncodedQuery?
                 .replacingOccurrences(of: "+", with: "%2B").replacingOccurrences(of: "/", with: "%2F")
             request.url = components.url ?? url
+        case .aws(let key, let defaultRegion):
+            guard let host = request.url?.host, let scope = AWSSignature.scope(of: host, defaultRegion: defaultRegion) else { return }
+            AWSSignature.sign(&request, key: key, region: scope.region, service: scope.service)
         }
     }
 }

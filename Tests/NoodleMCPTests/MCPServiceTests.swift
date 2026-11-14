@@ -49,8 +49,29 @@ private final class LookupAdapter: MCPConnectionAdapter, @unchecked Sendable {
     }
 }
 
+/// An app's AWS adapter: it reaches two AWS services, and tries a host outside AWS.
+private final class CloudAdapter: MCPConnectionAdapter, @unchecked Sendable {
+    let lock = NSLock()
+    var refusedElsewhere = false
+    func tools(for connection: MCPConnectionRecord) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+    func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data {
+        var trail = URLRequest(url: URL(string: "https://cloudtrail.eu-west-1.amazonaws.com/aws")!)
+        trail.httpMethod = "POST"
+        trail.httpBody = Data("{}".utf8)
+        trail.setValue("application/x-amz-json-1.1", forHTTPHeaderField: "Content-Type")
+        trail.setValue("CloudTrail_20131101.LookupEvents", forHTTPHeaderField: "X-Amz-Target")
+        _ = try await access.data(for: trail)
+        _ = try await access.data(for: URLRequest(url: URL(string: "https://iam.amazonaws.com/aws?Action=ListUsers&Version=2010-05-08")!))
+        do { _ = try await access.data(for: URLRequest(url: URL(string: "https://amazonaws.com.evil.example/aws")!)) }
+        catch { lock.withLock { refusedElsewhere = true } }
+        return Data(#"{"content":[],"isError":false}"#.utf8)
+    }
+}
+
 private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
+    /// Every request made to the AWS stand-in: its host and headers.
+    var awsRequests: [(host: String, headers: [String: String])] = []
     /// The headers of every request an adapter made to its service.
     var adapterHeaders: [[String: String]] = []
     /// The query of every request, adapter's or MCP, by path.
@@ -98,6 +119,9 @@ private final class FixtureState: @unchecked Sendable {
                 queries[request.url!.path, default: []].append(request.url!.query ?? "")
                 adapterHeaders.append(request.allHTTPHeaderFields ?? [:])
                 return (200, ["verdict": "harmless"])
+            case "/aws":
+                awsRequests.append((request.url!.host!, request.allHTTPHeaderFields ?? [:]))
+                return (200, [:])
             case "/client-token":
                 let body = String(data: Self.body(request), encoding: .utf8) ?? ""
                 clientExchanges.append(body)
@@ -485,6 +509,54 @@ final class MCPServiceTests: XCTestCase {
             XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, clientCredentials:
                 MCPClientCredentials(tokenEndpoint: credentials.tokenEndpoint, scope: nil, parameters: [reserved: "x"])), reserved)
         }
+    }
+
+    func testSigV4MatchesAWSsPublishedExample() throws {
+        // AWS's Signature Version 4 test suite, get-vanilla.
+        var request = URLRequest(url: URL(string: "https://example.amazonaws.com/")!)
+        request.httpMethod = "GET"
+        let key = MCPAWSKey(endpoint: URL(string: "https://amazonaws.com")!, accessKeyID: "AKIDEXAMPLE",
+                            secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", sessionToken: nil)
+        let date = ISO8601DateFormatter().date(from: "2015-08-30T12:36:00Z")!
+        AWSSignature.sign(&request, key: key, region: "us-east-1", service: "service", date: date)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Amz-Date"), "20150830T123600Z")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"),
+            "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31")
+        XCTAssertEqual(AWSSignature.scope(of: "cloudtrail.eu-west-1.amazonaws.com", defaultRegion: "us-east-1")?.service, "cloudtrail")
+        XCTAssertEqual(AWSSignature.scope(of: "cloudtrail.eu-west-1.amazonaws.com", defaultRegion: "us-east-1")?.region, "eu-west-1")
+        XCTAssertEqual(AWSSignature.scope(of: "iam.amazonaws.com", defaultRegion: "eu-west-1")?.region, "us-east-1")
+        XCTAssertNil(AWSSignature.scope(of: "amazonaws.com.evil.example", defaultRegion: "us-east-1"))
+    }
+
+    func testAnAWSConnectionSignsEachRequestForItsServiceAndReachesOnlyAWS() async throws {
+        let record = try MCPConnectionRecord(name: "AWS", endpoint: URL(string: "https://amazonaws.com")!,
+                                             awsSigning: MCPAWSSigning(region: "eu-west-1"), adapter: "cloud")
+        let adapter = CloudAdapter()
+        let client = service(vault: TestVault())
+        await client.useAdapters(["cloud": adapter])
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "lookup", arguments: Data("{}".utf8))
+        var refused = false
+        do { _ = try await client.perform(call, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        XCTAssertTrue(refused, "an AWS connection without its keys was answered")
+
+        try await client.saveAWSKey(accessKeyID: " AKIAEXAMPLE ", secretAccessKey: "secret/key+value", sessionToken: nil, for: record)
+        let saved = await client.hasCredentials(record.id); XCTAssertTrue(saved)
+        _ = try await client.perform(call, connection: record)
+        let requests = FixtureProtocol.state.awsRequests
+        XCTAssertEqual(requests.map(\.host), ["cloudtrail.eu-west-1.amazonaws.com", "iam.amazonaws.com"])
+        XCTAssertTrue(requests[0].headers["Authorization"]?.hasPrefix("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/") == true)
+        XCTAssertTrue(requests[0].headers["Authorization"]?.contains("/eu-west-1/cloudtrail/aws4_request") == true)
+        XCTAssertTrue(requests[0].headers["Authorization"]?.contains("x-amz-target") == true, "the target is signed")
+        XCTAssertTrue(requests[1].headers["Authorization"]?.contains("/us-east-1/iam/aws4_request") == true)
+        XCTAssertNotNil(requests[0].headers["X-Amz-Date"])
+        XCTAssertFalse(requests.contains { $0.headers.values.contains { $0.contains("secret/key+value") } }, "the secret was sent")
+        XCTAssertTrue(adapter.refusedElsewhere, "an AWS connection reached a host outside AWS")
+
+        try await client.disconnect(record.id)
+        let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key",
+                                                     awsSigning: MCPAWSSigning(region: "eu-west-1")))
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: record.endpoint, awsSigning: MCPAWSSigning(region: "eu west")))
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {

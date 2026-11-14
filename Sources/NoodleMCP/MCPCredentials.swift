@@ -41,6 +41,31 @@ struct MCPClientSecret: Codable, Sendable {
     var expiresAt: Date?
 }
 
+/// An AWS access key: its ID, its secret, and for temporary credentials their session token.
+struct MCPAWSKey: Codable, Sendable {
+    /// What it was given for; a connection now pointing elsewhere never signs with it.
+    let endpoint: URL
+    let accessKeyID: String
+    let secretAccessKey: String
+    let sessionToken: String?
+}
+
+/// Where AWS keys are kept, apart from other secrets.
+protocol MCPAWSKeyStorage: Sendable {
+    func load(_ id: UUID) throws -> MCPAWSKey?
+    func save(_ key: MCPAWSKey, id: UUID) throws
+    func remove(_ id: UUID) throws
+}
+
+/// AWS keys kept only while the process runs, for a service made without Keychain, as in tests.
+final class MCPMemoryAWSKeys: MCPAWSKeyStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var keys: [UUID: MCPAWSKey] = [:]
+    func load(_ id: UUID) -> MCPAWSKey? { lock.withLock { keys[id] } }
+    func save(_ key: MCPAWSKey, id: UUID) { lock.withLock { keys[id] = key } }
+    func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
+}
+
 /// Only linked into the app-side MCP client, never the agent's CLI.
 protocol MCPCredentialStorage: Sendable {
     func load(_ id: UUID) throws -> MCPCredentials?
@@ -122,9 +147,12 @@ struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
 extension MCPKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
 extension MCPKeychainStore: MCPTokenStorage where Value == MCPToken {}
 extension MCPKeychainStore: MCPClientSecretStorage where Value == MCPClientSecret {}
+extension MCPKeychainStore: MCPAWSKeyStorage where Value == MCPAWSKey {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage {
+struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage, MCPAWSKeyStorage {
+    func load(_ id: UUID) throws -> MCPAWSKey? { nil }
+    func save(_ key: MCPAWSKey, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPClientSecret? { nil }
     func save(_ secret: MCPClientSecret, id: UUID) throws { throw MCPServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPCredentials? { nil }
