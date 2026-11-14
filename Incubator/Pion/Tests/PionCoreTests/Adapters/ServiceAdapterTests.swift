@@ -21,7 +21,7 @@ private struct FileReport: ServiceOperation {
 }
 
 final class ServiceAdapterTests: XCTestCase {
-    private let connection = try! MCPConnectionRecord(name: "Lookup", endpoint: URL(string: "https://api.lookup.example/api/v3")!,
+    private let connection = try! ToolConnection(name: "Lookup", endpoint: URL(string: "https://api.lookup.example/api/v3")!,
                                                       tokenHeader: "x-apikey", adapter: "lookup")
     private let adapter = OperationAdapter(operations: [FileReport()])
 

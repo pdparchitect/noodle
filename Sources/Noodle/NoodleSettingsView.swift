@@ -31,7 +31,7 @@ struct NoodleSettingsView: View {
 
     /// Tools whose row shows Needs attention.
     private var toolsNeedingAttention: Int {
-        store.mcp.registry.connections.filter { store.mcp.errors[$0.id] != nil }.count
+        store.connectionsController.registry.connections.filter { store.connectionsController.errors[$0.id] != nil }.count
     }
 
     /// Wide enough for every tab in the toolbar, none left in its overflow menu.
@@ -67,7 +67,7 @@ struct NoodleSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Groups", systemImage: "person.3") }
                 .tag(NoodleSettingsTab.groups)
-            MCPSettingsView(store: store) { ImageGenerationSettingsRow(controller: store.imageGeneration) }
+            ToolConnectionsSettingsView(store: store) { ImageGenerationSettingsRow(controller: store.imageGeneration) }
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(NoodleSettingsTab.mcps)

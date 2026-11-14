@@ -6,12 +6,12 @@ import MCP
 import NoodleCore
 import ProductIdentity
 
-public actor MCPService {
+public actor ToolConnectionService {
     private let credentials: any MCPCredentialStorage
-    private let tokens: any MCPTokenStorage
-    private let clients: any MCPClientSecretStorage
-    private let awsKeys: any MCPAWSKeyStorage
-    private let googleKeys: any MCPGoogleKeyStorage
+    private let tokens: any ConnectionTokenStorage
+    private let clients: any ConnectionClientSecretStorage
+    private let awsKeys: any ConnectionAWSKeyStorage
+    private let googleKeys: any ConnectionGoogleKeyStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -20,22 +20,22 @@ public actor MCPService {
     private var epochs: [UUID: Int] = [:]
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
-    private var adapters: [String: any MCPConnectionAdapter] = [:]
+    private var adapters: [String: any ToolConnectionAdapter] = [:]
     public init(namespace: String) {
         #if canImport(Security)
-        credentials = MCPKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
+        credentials = ConnectionKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
                                                        label: "\(ProductIdentity.current.name) MCP connection")
-        tokens = MCPKeychainStore<MCPToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
-        clients = MCPKeychainStore<MCPClientSecret>(service: namespace + ".mcp.client",
+        tokens = ConnectionKeychainStore<ConnectionToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
+        clients = ConnectionKeychainStore<ConnectionClientSecret>(service: namespace + ".mcp.client",
                                                     label: "\(ProductIdentity.current.name) MCP client secret")
-        awsKeys = MCPKeychainStore<MCPAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
-        googleKeys = MCPKeychainStore<MCPGoogleKey>(service: namespace + ".mcp.google", label: "\(ProductIdentity.current.name) Google service account")
+        awsKeys = ConnectionKeychainStore<ConnectionAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
+        googleKeys = ConnectionKeychainStore<ConnectionGoogleKey>(service: namespace + ".mcp.google", label: "\(ProductIdentity.current.name) Google service account")
         #else
-        googleKeys = MCPNoCredentials()
-        credentials = MCPNoCredentials()
-        tokens = MCPNoCredentials()
-        clients = MCPNoCredentials()
-        awsKeys = MCPNoCredentials()
+        googleKeys = NoConnectionCredentials()
+        credentials = NoConnectionCredentials()
+        tokens = NoConnectionCredentials()
+        clients = NoConnectionCredentials()
+        awsKeys = NoConnectionCredentials()
         #endif
         oauth = MCPOAuth()
         httpConfiguration = {
@@ -45,15 +45,15 @@ public actor MCPService {
             return configuration
         }
     }
-    init(credentials: any MCPCredentialStorage, tokens: any MCPTokenStorage = MCPMemoryTokens(),
-         clients: any MCPClientSecretStorage = MCPMemoryClientSecrets(), awsKeys: any MCPAWSKeyStorage = MCPMemoryAWSKeys(),
-         googleKeys: any MCPGoogleKeyStorage = MCPMemoryGoogleKeys(),
+    init(credentials: any MCPCredentialStorage, tokens: any ConnectionTokenStorage = MemoryConnectionTokens(),
+         clients: any ConnectionClientSecretStorage = MemoryConnectionClientSecrets(), awsKeys: any ConnectionAWSKeyStorage = MemoryConnectionAWSKeys(),
+         googleKeys: any ConnectionGoogleKeyStorage = MemoryConnectionGoogleKeys(),
          oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
         self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys; self.googleKeys = googleKeys
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     /// The adapters this app serves connections with, by the name connections give.
-    public func useAdapters(_ adapters: [String: any MCPConnectionAdapter]) {
+    public func useAdapters(_ adapters: [String: any ToolConnectionAdapter]) {
         self.adapters = adapters
     }
 
@@ -67,7 +67,7 @@ public actor MCPService {
         epochs[id, default: 0] += 1
         let pending = requests.removeValue(forKey: id) ?? [:]
         for request in pending.values {
-            request.completion.finish(.failure(MCPServiceError.revoked))
+            request.completion.finish(.failure(ToolConnectionServiceError.revoked))
             request.task.cancel()
         }
         queues[id] = nil
@@ -82,71 +82,71 @@ public actor MCPService {
 
     /// Keeps a Google service account's key, from the JSON file Google issues, in place of signing in. The key is
     /// checked by signing with it before it is kept.
-    public func saveGoogleKey(_ json: String, for connection: MCPConnectionRecord) throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+    public func saveGoogleKey(_ json: String, for connection: ToolConnection) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         guard connection.googleServiceAccount != nil else {
-            throw MCPConnectionError.message("This connection does not act as a Google service account.")
+            throw ToolConnectionError.message("This connection does not act as a Google service account.")
         }
         struct File: Decodable { let type: String?; let client_email: String?; let private_key: String?; let private_key_id: String? }
         guard json.utf8.count <= 16_384, let file = try? JSONDecoder().decode(File.self, from: Data(json.utf8)),
               file.type == "service_account", let email = file.client_email, email.contains("@"), let pem = file.private_key else {
-            throw MCPConnectionError.message("Paste the JSON key of a Google service account.")
+            throw ToolConnectionError.message("Paste the JSON key of a Google service account.")
         }
         try GoogleAssertion.validate(pem)
-        try googleKeys.save(MCPGoogleKey(endpoint: connection.endpoint, clientEmail: email, privateKeyID: file.private_key_id,
+        try googleKeys.save(ConnectionGoogleKey(endpoint: connection.endpoint, clientEmail: email, privateKeyID: file.private_key_id,
                                          privateKey: pem), id: connection.id)
     }
 
     /// Keeps the AWS access key a connection signs its requests with, in place of signing in.
-    public func saveAWSKey(accessKeyID: String, secretAccessKey: String, sessionToken: String?, for connection: MCPConnectionRecord) throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
-        guard connection.awsSigning != nil else { throw MCPConnectionError.message("This connection does not sign with an AWS key.") }
+    public func saveAWSKey(accessKeyID: String, secretAccessKey: String, sessionToken: String?, for connection: ToolConnection) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
+        guard connection.awsSigning != nil else { throw ToolConnectionError.message("This connection does not sign with an AWS key.") }
         func line(_ value: String, _ name: String) throws -> String {
             let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty, value.count <= 4_096, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                throw MCPConnectionError.message("Paste the \(name) on one line.")
+                throw ToolConnectionError.message("Paste the \(name) on one line.")
             }
             return value
         }
         let token = try sessionToken.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : try line($0, "session token") }
-        try awsKeys.save(MCPAWSKey(endpoint: connection.endpoint, accessKeyID: try line(accessKeyID, "access key ID"),
+        try awsKeys.save(ConnectionAWSKey(endpoint: connection.endpoint, accessKeyID: try line(accessKeyID, "access key ID"),
                                    secretAccessKey: try line(secretAccessKey, "secret access key"), sessionToken: token), id: connection.id)
     }
 
     /// Keeps the client ID and secret a connection exchanges for access tokens, in place of signing in.
     /// A new pair starts afresh: no token got with the old one is used again.
-    public func saveClientCredentials(clientID: String, secret: String, for connection: MCPConnectionRecord) throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+    public func saveClientCredentials(clientID: String, secret: String, for connection: ToolConnection) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         guard let exchange = connection.clientCredentials else {
-            throw MCPConnectionError.message("This connection does not use a client ID and secret.")
+            throw ToolConnectionError.message("This connection does not use a client ID and secret.")
         }
         func line(_ value: String, _ name: String) throws -> String {
             let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty, value.count <= 4_096, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                throw MCPConnectionError.message("Paste the \(name) on one line.")
+                throw ToolConnectionError.message("Paste the \(name) on one line.")
             }
             return value
         }
-        try clients.save(MCPClientSecret(endpoint: connection.endpoint, tokenEndpoint: exchange.tokenEndpoint,
+        try clients.save(ConnectionClientSecret(endpoint: connection.endpoint, tokenEndpoint: exchange.tokenEndpoint,
                                          clientID: line(clientID, "client ID"), clientSecret: line(secret, "client secret")),
                          id: connection.id)
     }
 
     /// Keeps the token a token connection sends, in place of signing in. Surrounding spaces are
     /// dropped; a token is one line, since it goes in a request header.
-    public func saveToken(_ token: String, for connection: MCPConnectionRecord) throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+    public func saveToken(_ token: String, for connection: ToolConnection) throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         guard connection.usesToken else {
-            throw MCPConnectionError.message("This connection signs in through the browser, not with a token.")
+            throw ToolConnectionError.message("This connection signs in through the browser, not with a token.")
         }
         let header = connection.tokenHeader ?? connection.tokenParameter ?? ""
         let value = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, value.count <= 8_192, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-            throw MCPConnectionError.message("Paste the token on one line.")
+            throw ToolConnectionError.message("Paste the token on one line.")
         }
-        try tokens.save(MCPToken(endpoint: connection.endpoint, header: header, value: value), id: connection.id)
+        try tokens.save(ConnectionToken(endpoint: connection.endpoint, header: header, value: value), id: connection.id)
     }
-    public func icon(for connection: MCPConnectionRecord) async -> Data? {
+    public func icon(for connection: ToolConnection) async -> Data? {
         await MCPIcon.load(serverIcons[connection.id] ?? [], endpoint: connection.endpoint)
     }
     public nonisolated static func configuredRedirectURI(for endpoint: URL,
@@ -154,29 +154,29 @@ public actor MCPService {
         oauthConfiguration(for: endpoint)?.clients.first { $0.bundleIdentifier == bundleIdentifier }?.redirectURI
     }
     private nonisolated static func oauthConfiguration(for endpoint: URL) -> MCPOAuthConfiguration? {
-        guard case .mcp(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
+        guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
         return configuration.oauth
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
-        guard case .mcp(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
+        guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
         return configuration.authorizationServer
     }
     private func rememberIcons(_ icons: [Icon], id: UUID, epoch: Int) {
         if epochs[id, default: 0] == epoch { serverIcons[id] = icons }
     }
-    public func signIn(_ connection: MCPConnectionRecord, redirectURI: URL,
+    public func signIn(_ connection: ToolConnection, redirectURI: URL,
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         guard !connection.keepsSecret, connection.adapter == nil else {
-            throw MCPConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
+            throw ToolConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
         try tokens.remove(connection.id)
         try clients.remove(connection.id)
         try awsKeys.remove(connection.id)
         try googleKeys.remove(connection.id)
-        guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
+        guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
         defer { authenticating.remove(connection.id) }
@@ -230,13 +230,13 @@ public actor MCPService {
         }
     }
 
-    public func perform(_ request: MCPBridgeRequest, connection: MCPConnectionRecord,
+    public func perform(_ request: MCPBridgeRequest, connection: ToolConnection,
                         authorized: @escaping @Sendable () async -> Bool = { true }) async throws -> Data {
         // Every call asks, so a connection the organisation blocks stops at once, whoever calls.
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw MCPServiceError.notAllowed }
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         try Task.checkCancellation()
-        guard Date() < request.expiresAt else { throw MCPServiceError.timedOut }
-        guard !authenticating.contains(connection.id) else { throw MCPServiceError.signInRequired }
+        guard Date() < request.expiresAt else { throw ToolConnectionServiceError.timedOut }
+        guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
         let deadline = min(request.expiresAt, Date().addingTimeInterval(90))
         let previous = queues[connection.id]
         let epoch = epochs[connection.id, default: 0]
@@ -245,8 +245,8 @@ public actor MCPService {
         let task = Task {
             if let previous { _ = try? await previous.value }
             try self.checkActive(connection.id, epoch: epoch, deadline: deadline)
-            guard Date() < request.expiresAt else { throw MCPServiceError.timedOut }
-            guard await authorized() else { throw MCPServiceError.revoked }
+            guard Date() < request.expiresAt else { throw ToolConnectionServiceError.timedOut }
+            guard await authorized() else { throw ToolConnectionServiceError.revoked }
             try self.checkActive(connection.id, epoch: epoch, deadline: deadline)
             return try await self.execute(request, connection: connection, epoch: epoch, deadline: deadline, authorized: authorized)
         }
@@ -257,7 +257,7 @@ public actor MCPService {
         let timeout = Task {
             do { try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow))) }
             catch { return }
-            if completion.finish(.failure(MCPServiceError.timedOut)) { task.cancel() }
+            if completion.finish(.failure(ToolConnectionServiceError.timedOut)) { task.cancel() }
         }
         Task {
             let result = await task.result
@@ -281,42 +281,42 @@ public actor MCPService {
     }
 
     private func checkActive(_ id: UUID, epoch: Int, deadline: Date? = nil) throws {
-        guard epochs[id, default: 0] == epoch else { throw MCPServiceError.revoked }
+        guard epochs[id, default: 0] == epoch else { throw ToolConnectionServiceError.revoked }
         try Task.checkCancellation()
-        if let deadline, Date() >= deadline { throw MCPServiceError.timedOut }
+        if let deadline, Date() >= deadline { throw ToolConnectionServiceError.timedOut }
     }
 
     /// The header that proves who the connection is: its token as saved, or an OAuth access token,
     /// renewed first when it is about to expire.
-    private func authorization(for connection: MCPConnectionRecord, epoch: Int, deadline: Date) async throws -> MCPAuthorization {
+    private func authorization(for connection: ToolConnection, epoch: Int, deadline: Date) async throws -> ConnectionAuthorization {
         if let signing = connection.awsSigning {
-            guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw MCPServiceError.signInRequired }
+            guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw ToolConnectionServiceError.signInRequired }
             return .aws(key, defaultRegion: signing.region)
         }
         if let account = connection.googleServiceAccount {
-            guard var key = try googleKeys.load(connection.id), key.endpoint == connection.endpoint else { throw MCPServiceError.signInRequired }
+            guard var key = try googleKeys.load(connection.id), key.endpoint == connection.endpoint else { throw ToolConnectionServiceError.signInRequired }
             if key.accessToken == nil || (key.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
                 let assertion = try GoogleAssertion.make(key, scopes: account.scopes, subject: account.subject)
                 let response = try await oauth.request(GoogleAssertion.tokenEndpoint, form: [
                     "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion,
                 ])
-                guard let token = response["access_token"] as? String, !token.isEmpty else { throw MCPServiceError.invalidMetadata }
+                guard let token = response["access_token"] as? String, !token.isEmpty else { throw ToolConnectionServiceError.invalidMetadata }
                 key.accessToken = token
                 key.expiresAt = Date().addingTimeInterval((response["expires_in"] as? Double) ?? 3_000)
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 try googleKeys.save(key, id: connection.id)
             }
-            guard let token = key.accessToken else { throw MCPServiceError.signInRequired }
+            guard let token = key.accessToken else { throw ToolConnectionServiceError.signInRequired }
             return .google(token)
         }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
-                  token.header == parameter else { throw MCPServiceError.signInRequired }
+                  token.header == parameter else { throw ToolConnectionServiceError.signInRequired }
             return .parameter(parameter, token.value)
         }
         if let header = connection.tokenHeader {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
-                  token.header == header else { throw MCPServiceError.signInRequired }
+                  token.header == header else { throw ToolConnectionServiceError.signInRequired }
             // The connection's scheme goes first. Otherwise a bare token in Authorization is a bearer token, and
             // one that names its own scheme goes as it is.
             let value = if let scheme = connection.tokenScheme { scheme + " " + token.value }
@@ -326,17 +326,17 @@ public actor MCPService {
         }
         if let exchange = connection.clientCredentials {
             guard var secret = try clients.load(connection.id), secret.endpoint == connection.endpoint,
-                  secret.tokenEndpoint == exchange.tokenEndpoint else { throw MCPServiceError.signInRequired }
+                  secret.tokenEndpoint == exchange.tokenEndpoint else { throw ToolConnectionServiceError.signInRequired }
             if secret.accessToken == nil || (secret.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
                 secret = try await oauth.clientToken(secret, scope: exchange.scope, parameters: exchange.parameters)
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 try clients.save(secret, id: connection.id)
             }
-            guard let token = secret.accessToken else { throw MCPServiceError.signInRequired }
+            guard let token = secret.accessToken else { throw ToolConnectionServiceError.signInRequired }
             return .header("Authorization", "Bearer " + token)
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
-              stored.accessToken != nil else { throw MCPServiceError.signInRequired }
+              stored.accessToken != nil else { throw ToolConnectionServiceError.signInRequired }
         let oauthConfiguration = Self.oauthConfiguration(for: connection.endpoint)
         try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
@@ -345,24 +345,24 @@ public actor MCPService {
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 // Rotating refresh token and access token are committed together.
                 try credentials.save(stored, id: connection.id)
-            } catch MCPServiceError.signInRequired {
+            } catch ToolConnectionServiceError.signInRequired {
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
                 stored.accessToken = nil; stored.refreshToken = nil; stored.expiresAt = nil
                 try credentials.save(stored, id: connection.id)
-                throw MCPServiceError.signInRequired
+                throw ToolConnectionServiceError.signInRequired
             }
         }
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
-        guard let token = stored.accessToken else { throw MCPServiceError.signInRequired }
+        guard let token = stored.accessToken else { throw ToolConnectionServiceError.signInRequired }
         return .header("Authorization", "Bearer " + token)
     }
 
     /// A connection the app's adapter answers: its tools and calls come from the adapter, which reaches the
     /// service with the connection's credentials, if it has any.
-    private func adapt(_ request: MCPBridgeRequest, adapter name: String, connection: MCPConnectionRecord, epoch: Int,
+    private func adapt(_ request: MCPBridgeRequest, adapter name: String, connection: ToolConnection, epoch: Int,
                        deadline: Date, authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
         guard let adapter = adapters[name] else {
-            throw MCPConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
+            throw ToolConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
         let credentials = connection.keepsSecret
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
@@ -375,23 +375,23 @@ public actor MCPService {
         case .inspect:
             let tools = try JSONDecoder().decode(ListTools.Result.self, from: try await adapter.tools(for: connection)).tools
             guard let tool = tools.first(where: { $0.name == request.tool }) else {
-                throw MCPConnectionError.message("This connection does not offer that tool. List its tools again.")
+                throw ToolConnectionError.message("This connection does not offer that tool. List its tools again.")
             }
             return try JSONEncoder().encode(tool)
         case .call:
-            guard await authorized() else { throw MCPServiceError.revoked }
+            guard await authorized() else { throw ToolConnectionServiceError.revoked }
             try checkActive(connection.id, epoch: epoch, deadline: deadline)
-            guard let tool = request.tool, !tool.isEmpty else { throw MCPServiceError.invalidMetadata }
-            let access = MCPAdapterAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+            guard let tool = request.tool, !tool.isEmpty else { throw ToolConnectionServiceError.invalidMetadata }
+            let access = ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
             return try await adapter.call(tool, arguments: request.arguments ?? Data("{}".utf8), connection: connection, access: access)
         case .resources:
             return Data(#"{"resources":[]}"#.utf8)
         case .readResource:
-            throw MCPConnectionError.message("This connection offers no resources.")
+            throw ToolConnectionError.message("This connection offers no resources.")
         }
     }
 
-    private func execute(_ request: MCPBridgeRequest, connection: MCPConnectionRecord, epoch: Int, deadline: Date,
+    private func execute(_ request: MCPBridgeRequest, connection: ToolConnection, epoch: Int, deadline: Date,
                          authorized: @escaping @Sendable () async -> Bool) async throws -> Data {
         if let name = connection.adapter {
             return try await adapt(request, adapter: name, connection: connection, epoch: epoch, deadline: deadline, authorized: authorized)
@@ -426,21 +426,21 @@ public actor MCPService {
                         let page = try await client.listTools(cursor: cursor)
                         tools += page.tools
                         cursor = page.nextCursor
-                        guard tools.count <= 5_000 else { throw MCPServiceError.responseTooLarge }
-                        if let cursor, !seen.insert(cursor).inserted { throw MCPServiceError.invalidMetadata }
+                        guard tools.count <= 5_000 else { throw ToolConnectionServiceError.responseTooLarge }
+                        if let cursor, !seen.insert(cursor).inserted { throw ToolConnectionServiceError.invalidMetadata }
                     } while cursor != nil
                     if request.action == .inspect {
                         guard let tool = tools.first(where: { $0.name == request.tool }) else {
-                            throw MCPConnectionError.message("This connection does not offer that tool. List its tools again.")
+                            throw ToolConnectionError.message("This connection does not offer that tool. List its tools again.")
                         }
                         data = try JSONEncoder().encode(tool)
                     } else {
                         data = try JSONEncoder().encode(ListTools.Result(tools: tools))
                     }
                 case .call:
-                    guard await authorized() else { throw MCPServiceError.revoked }
+                    guard await authorized() else { throw ToolConnectionServiceError.revoked }
                     try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                    guard let name = request.tool, !name.isEmpty else { throw MCPServiceError.invalidMetadata }
+                    guard let name = request.tool, !name.isEmpty else { throw ToolConnectionServiceError.invalidMetadata }
                     let arguments = try JSONDecoder().decode([String: Value].self, from: request.arguments ?? Data("{}".utf8))
                     let context = try await client.send(CallTool.request(.init(name: name, arguments: arguments)))
                     data = try JSONEncoder().encode(try await context.value)
@@ -453,21 +453,21 @@ public actor MCPService {
                         let page = try await client.listResources(cursor: cursor)
                         resources += page.resources
                         cursor = page.nextCursor
-                        guard resources.count <= 5_000 else { throw MCPServiceError.responseTooLarge }
-                        if let cursor, !seen.insert(cursor).inserted { throw MCPServiceError.invalidMetadata }
+                        guard resources.count <= 5_000 else { throw ToolConnectionServiceError.responseTooLarge }
+                        if let cursor, !seen.insert(cursor).inserted { throw ToolConnectionServiceError.invalidMetadata }
                     } while cursor != nil
                     data = try JSONEncoder().encode(ListResources.Result(resources: resources))
                 case .readResource:
-                    guard await authorized() else { throw MCPServiceError.revoked }
+                    guard await authorized() else { throw ToolConnectionServiceError.revoked }
                     try checkActive(connection.id, epoch: epoch, deadline: deadline)
                     guard let uri = request.uri, !uri.isEmpty, uri.utf8.count <= 4096 else {
-                        throw MCPServiceError.invalidMetadata
+                        throw ToolConnectionServiceError.invalidMetadata
                     }
                     let context = try await client.send(ReadResource.request(.init(uri: uri)))
                     data = try JSONEncoder().encode(try await context.value)
                 }
                 try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                guard data.count <= MCPBridgeFiles.maxResultBytes else { throw MCPServiceError.responseTooLarge }
+                guard data.count <= MCPBridgeFiles.maxResultBytes else { throw ToolConnectionServiceError.responseTooLarge }
                 return data
             } onCancel: {
                 // The SDK owns unstructured request tasks; cancelling our task
@@ -481,13 +481,13 @@ public actor MCPService {
             await client.disconnect()
             try checkActive(connection.id, epoch: epoch, deadline: deadline)
             // Never echo transport errors containing a provider's private response.
-            if let error = error as? MCPServiceError { throw error }
-            if let error = error as? MCPConnectionError { throw error }
+            if let error = error as? ToolConnectionServiceError { throw error }
+            if let error = error as? ToolConnectionError { throw error }
             let underlying: Error
             if case MCPError.transportError(let cause) = error { underlying = cause }
             else { underlying = error }
             let http = underlying as NSError
-            if http.domain == MCPHTTPError.errorDomain { throw MCPServiceError.network(http.code) }
+            if http.domain == MCPHTTPError.errorDomain { throw ToolConnectionServiceError.network(http.code) }
             let message: String
             if !initialized { message = "The MCP server could not start a connection. Try connecting again." }
             else if request.action == .call {
@@ -495,7 +495,7 @@ public actor MCPService {
             } else {
                 message = "The MCP server could not return the requested tools or resources. Try again."
             }
-            throw MCPConnectionError.message(message)
+            throw ToolConnectionError.message(message)
         }
     }
 }

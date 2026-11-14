@@ -533,13 +533,13 @@ final class HubHarnessChoiceTests: XCTestCase {
         let store = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
         let harness = try XCTUnwrap(store.hubMirror(forAgent: f.a.id)?.harness(ofAgent: f.a.id))
 
-        let account = try MCPConnectionRecord(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
-        try store.mcp.save(account)
+        let account = try ToolConnection(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
+        try store.connectionsController.save(account)
         XCTAssertTrue(store.updateAgent(f.a, name: f.a.displayName, harnessIdentifier: harness.identifier,
                                         modelIdentifier: nil, reasoningEffort: nil, avatarSymbolName: nil, avatarColorIndex: 0,
                                         avatarImageData: nil, publicDescription: "", backstory: "",
                                         mcpConnectionIDs: [account.id]))
-        XCTAssertEqual(store.mcp.selectedIDs(for: f.a), [])
+        XCTAssertEqual(store.connectionsController.selectedIDs(for: f.a), [])
     }
 }
 

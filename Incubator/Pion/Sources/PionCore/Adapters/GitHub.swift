@@ -14,7 +14,7 @@ public enum GitHub {
         each finding as evidence. These tools only read: recommend removing access or rotating a secret to the champion.
         """,
         iconName: "github",
-        configuration: .mcp(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
+        configuration: .connection(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
             fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier)],
             tokenHeader: "Authorization", adapter: "github")))
 

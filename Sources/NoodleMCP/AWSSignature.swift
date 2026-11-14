@@ -21,7 +21,7 @@ enum AWSSignature {
 
     /// Adds X-Amz-Date, the session token when there is one, and the Authorization header, signing every header the
     /// request carries along with its host.
-    static func sign(_ request: inout URLRequest, key: MCPAWSKey, region: String, service: String, date: Date = Date()) {
+    static func sign(_ request: inout URLRequest, key: ConnectionAWSKey, region: String, service: String, date: Date = Date()) {
         guard let url = request.url, let host = url.host?.lowercased() else { return }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

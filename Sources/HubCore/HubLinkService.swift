@@ -791,7 +791,7 @@ import os
             }
         case .saveConnection(let draft):
             let user = try user(key)
-            let record = try MCPConnectionRecord(id: draft.id, name: draft.name, endpoint: draft.endpoint,
+            let record = try ToolConnection(id: draft.id, name: draft.name, endpoint: draft.endpoint,
                                                  description: draft.description, instructions: draft.instructions)
             try hubConnections().add(record, for: user)
             push(.connectionsChanged, to: user.id)

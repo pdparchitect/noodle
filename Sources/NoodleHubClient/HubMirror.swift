@@ -1376,8 +1376,8 @@ public struct HubHarnessChoice: Equatable, Sendable {
 
 extension LinkConnection {
     /// As this Mac shows a connection, with the Hub's icon.
-    public var record: MCPConnectionRecord? {
-        var record = try? MCPConnectionRecord(id: draft.id, name: draft.name, endpoint: draft.endpoint,
+    public var record: ToolConnection? {
+        var record = try? ToolConnection(id: draft.id, name: draft.name, endpoint: draft.endpoint,
                                               description: draft.description, instructions: draft.instructions)
         record?.iconData = iconData
         return record
@@ -1385,7 +1385,7 @@ extension LinkConnection {
 }
 
 extension LinkConnectionDraft {
-    public init(_ record: MCPConnectionRecord) {
+    public init(_ record: ToolConnection) {
         self.init(id: record.id, name: record.name, endpoint: record.endpoint,
                   description: record.description, instructions: record.instructions)
     }

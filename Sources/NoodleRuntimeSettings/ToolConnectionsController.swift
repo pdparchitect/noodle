@@ -4,7 +4,7 @@ import NoodleCore
 import NoodleMCP
 
 /// What a connection that does not sign in through the browser is given to prove who it is.
-public enum MCPConnectionSecret: Sendable {
+public enum ToolConnectionSecret: Sendable {
     case token(String)
     case client(id: String, secret: String)
     case aws(accessKeyID: String, secretAccessKey: String, sessionToken: String?)
@@ -13,8 +13,8 @@ public enum MCPConnectionSecret: Sendable {
 }
 
 @MainActor @Observable
-public final class MCPController {
-    public private(set) var registry = MCPRegistry()
+public final class ToolConnectionsController {
+    public private(set) var registry = ToolConnectionRegistry()
     private(set) var connected: Set<UUID> = []
     private(set) var signingIn: UUID?
     private(set) var signInStage = ""
@@ -22,15 +22,15 @@ public final class MCPController {
     var errorMessage: String?
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
-    @ObservationIgnored public let service: MCPService
+    @ObservationIgnored public let service: ToolConnectionService
     @ObservationIgnored private var loginTask: Task<Void, Never>?
     @ObservationIgnored private var agents: [AgentRecord] = []
     @ObservationIgnored private var started = false
-    @ObservationIgnored private var providers: MCPConnectionProviders?
+    @ObservationIgnored private var providers: ToolConnectionProviders?
     /// Where this controller registers one provider per connection.
     @ObservationIgnored public var toolRegistry: ToolProviderRegistry? {
         didSet {
-            providers = toolRegistry.map { MCPConnectionProviders(registry: $0, service: service) }
+            providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
             providers?.onError = { [weak self] id, message in self?.errors[id] = message }
             synchronizeProviders()
         }
@@ -41,11 +41,11 @@ public final class MCPController {
     @ObservationIgnored private var registryReadable = true
     @ObservationIgnored private let deletions: DeletionJournal<UUID>
 
-    public init(repository: WorkspaceRepository, service: MCPService? = nil) {
+    public init(repository: WorkspaceRepository, service: ToolConnectionService? = nil) {
         self.repository = repository
-        self.service = service ?? MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
+        self.service = service ?? ToolConnectionService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
         deletions = DeletionJournal(url: repository.rootURL.appendingPathComponent("MCP/removed-sign-ins.json"))
-        do { registry = try MCPRegistry.load(root: repository.rootURL) }
+        do { registry = try ToolConnectionRegistry.load(root: repository.rootURL) }
         catch {
             registryReadable = false
             errorMessage = "Could not read saved tool connections. They have not been replaced."
@@ -77,12 +77,12 @@ public final class MCPController {
     }
 
     /// The adapters this app serves its own connections with, by the name catalogue entries give them.
-    public func serve(_ adapters: [String: any MCPConnectionAdapter]) {
+    public func serve(_ adapters: [String: any ToolConnectionAdapter]) {
         let service = service
         Task { await service.useAdapters(adapters) }
     }
-    func save(_ record: MCPConnectionRecord) throws {
-        guard Organisation.allows(Organisation.action(for: record)) else { throw MCPServiceError.notAllowed }
+    func save(_ record: ToolConnection) throws {
+        guard Organisation.allows(Organisation.action(for: record)) else { throw ToolConnectionServiceError.notAllowed }
         try requireReadableRegistry()
         var next = registry
         if let index = next.connections.firstIndex(where: { $0.id == record.id }) { next.connections[index] = record }
@@ -95,15 +95,15 @@ public final class MCPController {
 
     /// Creates a separate saved MCP account without signing in or assigning it.
     /// Other tool types use their own storage/setup handler, not this registry.
-    func addPreset(_ tool: ToolDefinition, configuration: MCPToolConfiguration, connectionID: UUID = UUID(),
-                   name: String? = nil, values: [String: String] = [:]) throws -> MCPConnectionRecord {
-        guard tool.configuration == .mcp(configuration) else {
-            throw MCPConnectionError.message("This tool requires a different setup method.")
+    func addPreset(_ tool: ToolDefinition, configuration: ToolConnectionConfiguration, connectionID: UUID = UUID(),
+                   name: String? = nil, values: [String: String] = [:]) throws -> ToolConnection {
+        guard tool.configuration == .connection(configuration) else {
+            throw ToolConnectionError.message("This tool requires a different setup method.")
         }
-        let record: MCPConnectionRecord
+        let record: ToolConnection
         if let saved = registry.connections.first(where: { $0.id == connectionID }) {
             guard saved.catalogueID == tool.id || saved.endpoint == configuration.endpoint else {
-                throw MCPConnectionError.message("The saved account does not match this tool.")
+                throw ToolConnectionError.message("The saved account does not match this tool.")
             }
             record = saved
         } else {
@@ -124,22 +124,22 @@ public final class MCPController {
     }
     public func reloadAssignments() throws {
         defer { synchronizeProviders() }
-        do { registry = try MCPRegistry.load(root: repository.rootURL); registryReadable = true }
+        do { registry = try ToolConnectionRegistry.load(root: repository.rootURL); registryReadable = true }
         catch { registryReadable = false; throw error }
     }
     public func validateAssignment(_ ids: Set<UUID>) throws {
         try requireReadableRegistry()
         guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
-            throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
+            throw ToolConnectionError.message("One of the selected tool connections no longer exists.")
         }
     }
     private func requireReadableRegistry() throws {
         guard registryReadable else {
-            throw MCPConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
+            throw ToolConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
         }
     }
     public func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
-    func remove(_ record: MCPConnectionRecord) {
+    func remove(_ record: ToolConnection) {
         if signingIn == record.id { loginTask?.cancel() }
         var next = registry
         next.remove(record.id)
@@ -159,14 +159,14 @@ public final class MCPController {
     @discardableResult private func deleteRemovedSignIns() async -> Error? {
         await deletions.run { id in
             // A removal whose registry write failed keeps its connection, so it keeps its sign-in too.
-            guard registryReadable else { throw MCPConnectionError.message("Saved tool connections could not be read.") }
+            guard registryReadable else { throw ToolConnectionError.message("Saved tool connections could not be read.") }
             guard !registry.connections.contains(where: { $0.id == id }) else { return }
             try await service.disconnect(id)
         }
     }
     /// Signs the connection in through the browser, or for one with a token or a client ID and secret keeps
     /// `secret` when one is given; either way it then lists the connection's tools to show it works.
-    func connect(_ record: MCPConnectionRecord, secret: MCPConnectionSecret? = nil) {
+    func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
         let signsIn = !record.keepsSecret && record.adapter == nil
         if signsIn { browser.captureReturnWindow() }
@@ -216,7 +216,7 @@ public final class MCPController {
     public static func redirectURI(for endpoint: URL) -> URL {
         let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
         let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-dev"
-        return MCPService.configuredRedirectURI(for: endpoint) ?? URL(string: "\(scheme)://mcp/oauth/callback")!
+        return ToolConnectionService.configuredRedirectURI(for: endpoint) ?? URL(string: "\(scheme)://mcp/oauth/callback")!
     }
 
     /// Opens the sign-in page of a connection kept elsewhere, as on a Noodle Hub, and returns
@@ -243,7 +243,7 @@ public final class MCPController {
             UUID(uuidString: key).map { ($0, Set(ids.filter(allowed.contains).map(\.uuidString))) }
         }))
     }
-    private nonisolated static func safeError(_ error: Error) -> String { MCPConnectionProviders.safeError(error) }
+    private nonisolated static func safeError(_ error: Error) -> String { ToolConnectionProviders.safeError(error) }
     /// Puts a changed organisation policy in force: blocked connections leave the bots that had them.
     public func applyOrganisationPolicy() { synchronizeProviders() }
 }
@@ -269,9 +269,9 @@ public final class MCPController {
     func authorize(url: URL, callbackURL: URL) async throws -> URL {
         let states = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "state" } ?? []
         // Callers validate the page already; a server-supplied file, app or local address must never open even if one misses it.
-        guard (try? MCPConnectionRecord.validatedEndpoint(url)) != nil,
+        guard (try? ToolConnection.validatedEndpoint(url)) != nil,
               pendingID == nil, states.count == 1, let state = states.first?.value, !state.isEmpty else {
-            throw MCPServiceError.invalidCallback
+            throw ToolConnectionServiceError.invalidCallback
         }
         let id = UUID()
         return try await withTaskCancellationHandler {
@@ -283,10 +283,10 @@ public final class MCPController {
                 self.continuation = continuation
                 timeout = Task { [weak self] in
                     try? await Task.sleep(for: self?.timeoutDuration ?? .seconds(180))
-                    if !Task.isCancelled { self?.finish(id, .failure(MCPServiceError.timedOut)) }
+                    if !Task.isCancelled { self?.finish(id, .failure(ToolConnectionServiceError.timedOut)) }
                 }
                 if !openURL(url) {
-                    finish(id, .failure(MCPConnectionError.message("Could not open your browser. Check your default browser and try again.")))
+                    finish(id, .failure(ToolConnectionError.message("Could not open your browser. Check your default browser and try again.")))
                 }
             }
         } onCancel: {

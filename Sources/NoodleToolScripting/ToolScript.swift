@@ -134,7 +134,7 @@ public enum ToolScript {
         }
     }
 
-    private static func failure(_ message: String) -> MCPConnectionError { .message(message) }
+    private static func failure(_ message: String) -> ToolConnectionError { .message(message) }
     private static func envelope(_ value: [String: Any]) throws -> String {
         String(decoding: try JSONSerialization.data(withJSONObject: value, options: [.withoutEscapingSlashes]), as: UTF8.self)
     }

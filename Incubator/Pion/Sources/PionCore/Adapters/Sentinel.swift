@@ -14,7 +14,7 @@ public enum Sentinel {
         KQL only reads.
         """,
         iconName: "sentinel",
-        configuration: .mcp(.init(endpointTemplate: "https://api.loganalytics.azure.com/v1/workspaces/{workspace}",
+        configuration: .connection(.init(endpointTemplate: "https://api.loganalytics.azure.com/v1/workspaces/{workspace}",
             fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier),
                      ToolField(key: "workspace", title: "Workspace ID", placeholder: "8a7f3c2e-0000-4000-8000-000000000002", kind: .identifier)],
             clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",

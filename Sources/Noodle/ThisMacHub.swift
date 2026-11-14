@@ -41,7 +41,7 @@ import Observation
     @ObservationIgnored private let runtime: AgentRuntimeCoordinator
     @ObservationIgnored private let applets: AppletController
     @ObservationIgnored private let profiles: HarnessProfilesController
-    @ObservationIgnored private let service: MCPService
+    @ObservationIgnored private let service: ToolConnectionService
     @ObservationIgnored private var awake: NSObjectProtocol?
     @ObservationIgnored private let defaults: UserDefaults
     private static let enabledKey = "ThisMacHubEnabled"
@@ -59,7 +59,7 @@ import Observation
     @ObservationIgnored var placement = Placement()
 
     init(repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator, applets: AppletController,
-         profiles: HarnessProfilesController, service: MCPService, defaults: UserDefaults = .standard) {
+         profiles: HarnessProfilesController, service: ToolConnectionService, defaults: UserDefaults = .standard) {
         self.repository = repository
         self.runtime = runtime
         self.applets = applets

@@ -133,9 +133,9 @@ struct TestOrganisationPolicy: OrganisationPolicy {
 
     func testAToolConnectionTheOrganisationBlocksCannotBeAddedOrReachBots() throws {
         let repository = try repository()
-        let controller = MCPController(repository: repository)
-        let blocked = try MCPConnectionRecord(name: "Blocked", endpoint: URL(string: "https://blocked.example/mcp")!)
-        let allowed = try MCPConnectionRecord(name: "Allowed", endpoint: URL(string: "https://allowed.example/mcp")!)
+        let controller = ToolConnectionsController(repository: repository)
+        let blocked = try ToolConnection(name: "Blocked", endpoint: URL(string: "https://blocked.example/mcp")!)
+        let allowed = try ToolConnection(name: "Allowed", endpoint: URL(string: "https://allowed.example/mcp")!)
         try controller.save(blocked)
         try controller.save(allowed)
         let agent = try repository.createAgent(named: "Fixture").agent
@@ -150,7 +150,7 @@ struct TestOrganisationPolicy: OrganisationPolicy {
         }
         controller.applyOrganisationPolicy()
         XCTAssertEqual(granted[agent.id], [allowed.id.uuidString])
-        let another = try MCPConnectionRecord(name: "Another", endpoint: URL(string: "https://blocked.example/other")!)
+        let another = try ToolConnection(name: "Another", endpoint: URL(string: "https://blocked.example/other")!)
         XCTAssertThrowsError(try controller.save(another)) {
             XCTAssertEqual($0.localizedDescription, "Your organisation doesn't allow this tool connection.")
         }

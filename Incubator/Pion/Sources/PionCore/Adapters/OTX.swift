@@ -12,7 +12,7 @@ public enum OTX {
         quality: cite them as leads, not proof. Record each lookup as evidence.
         """,
         iconName: "otx",
-        configuration: .mcp(.init(endpoint: URL(string: "https://otx.alienvault.com/api/v1")!, tokenHeader: "X-OTX-API-KEY", adapter: "otx")))
+        configuration: .connection(.init(endpoint: URL(string: "https://otx.alienvault.com/api/v1")!, tokenHeader: "X-OTX-API-KEY", adapter: "otx")))
 
     public static let adapter = OperationAdapter(operations: [Indicator()])
 }

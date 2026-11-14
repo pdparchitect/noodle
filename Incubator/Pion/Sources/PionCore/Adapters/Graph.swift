@@ -7,7 +7,7 @@ import NoodleMCP
 enum Graph {
     static func preset(id: String, name: String, summary: String, instructions: String) -> ToolDefinition {
         ToolDefinition(id: id, name: name, summary: summary, defaultInstructions: instructions, iconName: id,
-            configuration: .mcp(.init(endpointTemplate: "https://graph.microsoft.com/v1.0",
+            configuration: .connection(.init(endpointTemplate: "https://graph.microsoft.com/v1.0",
                 fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier)],
                 clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
                                                            scope: "https://graph.microsoft.com/.default"),

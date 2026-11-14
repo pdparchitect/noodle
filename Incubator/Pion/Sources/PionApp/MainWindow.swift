@@ -36,7 +36,7 @@ struct MainWindow: View {
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
-        .onOpenURL { _ = model.mcp.receiveAuthorizationCallback($0) }
+        .onOpenURL { _ = model.connectionsController.receiveAuthorizationCallback($0) }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {

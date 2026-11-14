@@ -7,7 +7,7 @@ public enum MCPFileContent {
     public static func arguments(_ data: Data, workspace: URL, currentDirectory: URL) throws -> Data {
         guard data.count <= MCPBridgeFiles.maxRequestBytes,
               let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw MCPConnectionError.message("Tool arguments must be a JSON object no larger than 1 MiB.")
+            throw ToolConnectionError.message("Tool arguments must be a JSON object no larger than 1 MiB.")
         }
         var changed = false
         var encodedFileBytes = 0
@@ -24,12 +24,12 @@ public enum MCPFileContent {
                     let folder = try WorkspaceMailbox(workspace: workspace, path: parent)
                     file = try folder.read(String(parts.last!), limit: MCPBridgeFiles.maxRequestBytes / 4 * 3)
                 } catch {
-                    throw MCPConnectionError.message("Cannot read MCP file reference @\(path). Use a regular workspace file without links, within the 1 MiB encoded input limit.")
+                    throw ToolConnectionError.message("Cannot read MCP file reference @\(path). Use a regular workspace file without links, within the 1 MiB encoded input limit.")
                 }
                 let encoded = file.base64EncodedString()
                 encodedFileBytes += encoded.utf8.count
                 guard encodedFileBytes <= MCPBridgeFiles.maxRequestBytes else {
-                    throw MCPConnectionError.message("Tool arguments exceed 1 MiB after expanding file references.")
+                    throw ToolConnectionError.message("Tool arguments exceed 1 MiB after expanding file references.")
                 }
                 return encoded
             }
@@ -41,7 +41,7 @@ public enum MCPFileContent {
         guard changed else { return data }
         let result = try JSONSerialization.data(withJSONObject: expanded, options: [.sortedKeys, .withoutEscapingSlashes])
         guard result.count <= MCPBridgeFiles.maxRequestBytes else {
-            throw MCPConnectionError.message("Tool arguments exceed 1 MiB after expanding file references.")
+            throw ToolConnectionError.message("Tool arguments exceed 1 MiB after expanding file references.")
         }
         return result
     }
@@ -51,11 +51,11 @@ public enum MCPFileContent {
     public static func result(_ data: Data, workspace: URL, callID: UUID, raw: Bool = false,
                               resourceRead: Bool = false) throws -> Data {
         guard data.count <= MCPBridgeFiles.maxResultBytes else {
-            throw MCPConnectionError.message("MCP result exceeds 8 MiB.")
+            throw ToolConnectionError.message("MCP result exceeds 8 MiB.")
         }
         if raw { return data }
         guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw MCPConnectionError.message("Invalid MCP result.")
+            throw ToolConnectionError.message("Invalid MCP result.")
         }
         let key = resourceRead ? "contents" : "content"
         guard var content = object[key] as? [[String: Any]] else { return data }
@@ -73,7 +73,7 @@ public enum MCPFileContent {
             default: continue
             }
             guard let encoded = encoded as? String, let decoded = Data(base64Encoded: encoded) else {
-                throw MCPConnectionError.message("Invalid base64 in MCP content item \(index + 1).")
+                throw ToolConnectionError.message("Invalid base64 in MCP content item \(index + 1).")
             }
             files.append((index, decoded, mime as? String ?? "application/octet-stream", type!))
         }

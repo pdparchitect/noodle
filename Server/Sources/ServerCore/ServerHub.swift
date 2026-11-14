@@ -52,7 +52,7 @@ import NoodleRuntime
         }
         runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         access.onTokenLimitsChange = { [tokenLimits] in tokenLimits.check() }
-        let connections = HubConnections(root: root, access: access, service: MCPService(namespace: "noodled"),
+        let connections = HubConnections(root: root, access: access, service: ToolConnectionService(namespace: "noodled"),
                                          tools: ToolProviderRegistry(), assignments: ToolAssignmentStore())
         bots = HubBots(repository: repository, runtime: self.runtime, access: access, connections: connections,
                        computers: nil, browsers: nil, applets: nil,

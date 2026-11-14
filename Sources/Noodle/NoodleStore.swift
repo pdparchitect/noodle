@@ -222,7 +222,7 @@ final class NoodleStore {
     @ObservationIgnored private let toolAssignments: ToolAssignmentStore
     @ObservationIgnored private let toolHost: ToolHostServices
     @ObservationIgnored private lazy var toolExtensions = ToolExtensionDiscovery(registry: toolProviders)
-    let mcp: MCPController
+    let connectionsController: ToolConnectionsController
     let computers: ComputerController
     let browsers: BrowserController
     let calendars: EventKitController
@@ -325,9 +325,9 @@ final class NoodleStore {
         let toolHost = ToolHostServices.repository(self.repository, revoked: { revocations.handle($0, $1, $2) }) { toolAssignments.assignments(for: $0) }
         self.toolHost = toolHost
         tools = ToolBridgeBroker(registry: toolProviders, host: toolHost) { toolAssignments.assignments(for: $0) }
-        mcp = MCPController(repository: self.repository)
-        mcp.toolRegistry = toolProviders
-        mcp.onAssignmentsChange = { [toolAssignments, tools] granted in
+        connectionsController = ToolConnectionsController(repository: self.repository)
+        connectionsController.toolRegistry = toolProviders
+        connectionsController.onAssignmentsChange = { [toolAssignments, tools] granted in
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             tools.synchronizeSkills()
         }
@@ -386,7 +386,7 @@ final class NoodleStore {
         harnessProfiles = HarnessProfilesController(store: self.repository.harnessProfiles)
         harnessProfiles.subscriptionUsage = self.runtime.subscriptionUsage
         thisMac = ThisMacHub(repository: self.repository, runtime: self.runtime, applets: applets, profiles: harnessProfiles,
-                             service: mcp.service)
+                             service: connectionsController.service)
         thisMac.imageGeneration = imageGeneration
         // Before any bot starts, so bots on a Hub never run here.
         refreshHubMirrors()
@@ -466,7 +466,7 @@ final class NoodleStore {
     /// Puts a changed organisation policy in force at once, keeping everything for when it allows it again.
     private func applyOrganisationPolicy() {
         if agentsStarted { runtime.reconcile(agents: agents, repository: repository, immediately: true) }
-        mcp.applyOrganisationPolicy()
+        connectionsController.applyOrganisationPolicy()
         tools.synchronizeSkills()
         Task { await thisMac.applyOrganisationPolicy() }
         // Open streams to joined Hubs end, and follow again through the policy: a Hub it blocks stays disconnected.
@@ -997,7 +997,7 @@ final class NoodleStore {
                 }
                 try tools.start(agents: toolAgents)
                 toolExtensions.start()
-                mcp.start(agents: agents)
+                connectionsController.start(agents: agents)
                 computers.start(agents: agents)
                 browsers.start(agents: agents)
                 applets.start(agents: agents)
@@ -1214,7 +1214,7 @@ final class NoodleStore {
                 mirror.hosting.phase = { [weak self] in self?.runtime.snapshot(for: $0).phase }
                 mirror.onSignInPage = { [weak self] connection, url in
                     guard let self else { throw ToolProviderError("Noodle is closing.") }
-                    return try await self.mcp.authorizeInBrowser(url, callbackURL: MCPController.redirectURI(for: connection.draft.endpoint))
+                    return try await self.connectionsController.authorizeInBrowser(url, callbackURL: ToolConnectionsController.redirectURI(for: connection.draft.endpoint))
                 }
                 return mirror
             }()
@@ -1466,7 +1466,7 @@ final class NoodleStore {
         var created: CreatedAgentWorkspace?
         var checkpoint: AgentSettingsCheckpoint?
         do {
-            try mcp.validateAssignment(mcpConnectionIDs)
+            try connectionsController.validateAssignment(mcpConnectionIDs)
             try computers.validate(computerIDs)
             try browsers.validate(browserIDs)
             try calendars.validate(calendarIDs)
@@ -1486,7 +1486,7 @@ final class NoodleStore {
             if let voice = validVoice(voice, harnessIdentifier: harnessIdentifier) {
                 try repository.updateAgentVoice(result.agent, voice: voice)
             }
-            try mcp.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
+            try connectionsController.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
             try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
             try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
             try calendars.assign(calendarIDs, to: result.agent, synchronizeWorkspace: false)
@@ -1497,7 +1497,7 @@ final class NoodleStore {
             var detail = error.localizedDescription
             do {
                 try checkpoint?.restore()
-                try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+                try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
                 if let created {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
@@ -1590,7 +1590,7 @@ final class NoodleStore {
         let previousBackstory: String
         var updatedConversations = conversations
         do {
-            if let mcpConnectionIDs { try mcp.validateAssignment(mcpConnectionIDs) }
+            if let mcpConnectionIDs { try connectionsController.validateAssignment(mcpConnectionIDs) }
             if let computerIDs { try computers.validate(computerIDs, for: agent) }
             if let browserIDs { try browsers.validate(browserIDs, for: agent) }
             if let calendarIDs { try calendars.validate(calendarIDs) }
@@ -1616,7 +1616,7 @@ final class NoodleStore {
             let profile = validHarnessProfile(harnessProfile ?? savedProfile, harnessIdentifier: harnessIdentifier)
             if profile != savedProfile { try repository.updateAgentHarnessProfile(updated, profile: profile) }
             if let voice { try repository.updateAgentVoice(updated, voice: validVoice(voice, harnessIdentifier: harnessIdentifier)) }
-            if let mcpConnectionIDs { try mcp.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
+            if let mcpConnectionIDs { try connectionsController.assign(mcpConnectionIDs, to: updated, synchronizeWorkspace: false) }
             if let computerIDs { try computers.assign(computerIDs, to: updated, synchronizeWorkspace: false) }
             if let browserIDs { try browsers.assign(browserIDs, to: updated, synchronizeWorkspace: false) }
             if let calendarIDs { try calendars.assign(calendarIDs, to: updated, synchronizeWorkspace: false) }
@@ -1628,7 +1628,7 @@ final class NoodleStore {
             if let checkpoint {
                 do {
                     try checkpoint.restore()
-                    try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+                    try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
                     // Generated skills derive from the restored settings. A damaged
                     // workspace may still need repair before it can be synchronized.
                     try repository.synchronizeAgentWorkspace(agent)
@@ -1662,7 +1662,7 @@ final class NoodleStore {
         computers.start(agents: agents)
         browsers.start(agents: agents)
         applets.start(agents: agents)
-        mcp.start(agents: agents)
+        connectionsController.start(agents: agents)
         do { try messenger.start(agents: agents) }
         catch { errorMessage = "Bot settings were saved, but Messenger could not start: \(error.localizedDescription)" }
         do { try tools.start(agents: toolAgents) }
@@ -2354,10 +2354,10 @@ final class NoodleStore {
     }
 
     private func reloadToolsEditedElsewhere() {
-        do { try mcp.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments() }
+        do { try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments() }
         catch { errorMessage = error.localizedDescription }
         Task {
-            await mcp.readSignIns()
+            await connectionsController.readSignIns()
             await computers.refresh()
             await browsers.refresh()
         }

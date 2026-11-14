@@ -9,7 +9,7 @@ import SwiftUI
     var agents: [AgentRecord] { get }
     var repository: WorkspaceRepository { get }
     var harnessProfiles: HarnessProfilesController { get }
-    var mcp: MCPController { get }
+    var connectionsController: ToolConnectionsController { get }
     func deleteHarnessProfile(_ profile: HarnessProfile)
     /// Brings the Harness settings forward, for example after a Kick that needs sign-in.
     func showHarnessSettings()

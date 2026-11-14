@@ -23,7 +23,7 @@ struct MCPCredentials: Codable, Sendable {
 }
 
 /// A token a connection sends as it is, for a service that hands out keys rather than signing in.
-struct MCPToken: Codable, Sendable {
+struct ConnectionToken: Codable, Sendable {
     /// The endpoint it was given for; a connection now pointing elsewhere never sends it.
     let endpoint: URL
     let header: String
@@ -31,7 +31,7 @@ struct MCPToken: Codable, Sendable {
 }
 
 /// A client ID and secret, with the access token last exchanged for them while it lasts.
-struct MCPClientSecret: Codable, Sendable {
+struct ConnectionClientSecret: Codable, Sendable {
     /// What they were given for; a connection now pointing elsewhere never sends them.
     let endpoint: URL
     let tokenEndpoint: URL
@@ -42,7 +42,7 @@ struct MCPClientSecret: Codable, Sendable {
 }
 
 /// An AWS access key: its ID, its secret, and for temporary credentials their session token.
-struct MCPAWSKey: Codable, Sendable {
+struct ConnectionAWSKey: Codable, Sendable {
     /// What it was given for; a connection now pointing elsewhere never signs with it.
     let endpoint: URL
     let accessKeyID: String
@@ -51,7 +51,7 @@ struct MCPAWSKey: Codable, Sendable {
 }
 
 /// A Google service account's key, with the access token last got with it while it lasts.
-struct MCPGoogleKey: Codable, Sendable {
+struct ConnectionGoogleKey: Codable, Sendable {
     /// What it was given for; a connection now pointing elsewhere never uses it.
     let endpoint: URL
     let clientEmail: String
@@ -63,34 +63,34 @@ struct MCPGoogleKey: Codable, Sendable {
 }
 
 /// Where Google service account keys are kept, apart from other secrets.
-protocol MCPGoogleKeyStorage: Sendable {
-    func load(_ id: UUID) throws -> MCPGoogleKey?
-    func save(_ key: MCPGoogleKey, id: UUID) throws
+protocol ConnectionGoogleKeyStorage: Sendable {
+    func load(_ id: UUID) throws -> ConnectionGoogleKey?
+    func save(_ key: ConnectionGoogleKey, id: UUID) throws
     func remove(_ id: UUID) throws
 }
 
 /// Google keys kept only while the process runs, for a service made without Keychain, as in tests.
-final class MCPMemoryGoogleKeys: MCPGoogleKeyStorage, @unchecked Sendable {
+final class MemoryConnectionGoogleKeys: ConnectionGoogleKeyStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var keys: [UUID: MCPGoogleKey] = [:]
-    func load(_ id: UUID) -> MCPGoogleKey? { lock.withLock { keys[id] } }
-    func save(_ key: MCPGoogleKey, id: UUID) { lock.withLock { keys[id] = key } }
+    private var keys: [UUID: ConnectionGoogleKey] = [:]
+    func load(_ id: UUID) -> ConnectionGoogleKey? { lock.withLock { keys[id] } }
+    func save(_ key: ConnectionGoogleKey, id: UUID) { lock.withLock { keys[id] = key } }
     func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
 }
 
 /// Where AWS keys are kept, apart from other secrets.
-protocol MCPAWSKeyStorage: Sendable {
-    func load(_ id: UUID) throws -> MCPAWSKey?
-    func save(_ key: MCPAWSKey, id: UUID) throws
+protocol ConnectionAWSKeyStorage: Sendable {
+    func load(_ id: UUID) throws -> ConnectionAWSKey?
+    func save(_ key: ConnectionAWSKey, id: UUID) throws
     func remove(_ id: UUID) throws
 }
 
 /// AWS keys kept only while the process runs, for a service made without Keychain, as in tests.
-final class MCPMemoryAWSKeys: MCPAWSKeyStorage, @unchecked Sendable {
+final class MemoryConnectionAWSKeys: ConnectionAWSKeyStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var keys: [UUID: MCPAWSKey] = [:]
-    func load(_ id: UUID) -> MCPAWSKey? { lock.withLock { keys[id] } }
-    func save(_ key: MCPAWSKey, id: UUID) { lock.withLock { keys[id] = key } }
+    private var keys: [UUID: ConnectionAWSKey] = [:]
+    func load(_ id: UUID) -> ConnectionAWSKey? { lock.withLock { keys[id] } }
+    func save(_ key: ConnectionAWSKey, id: UUID) { lock.withLock { keys[id] = key } }
     func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
 }
 
@@ -102,38 +102,38 @@ protocol MCPCredentialStorage: Sendable {
 }
 
 /// Where tokens are kept, apart from sign-ins.
-protocol MCPTokenStorage: Sendable {
-    func load(_ id: UUID) throws -> MCPToken?
-    func save(_ token: MCPToken, id: UUID) throws
+protocol ConnectionTokenStorage: Sendable {
+    func load(_ id: UUID) throws -> ConnectionToken?
+    func save(_ token: ConnectionToken, id: UUID) throws
     func remove(_ id: UUID) throws
 }
 /// Where client IDs and secrets are kept, apart from sign-ins and tokens.
-protocol MCPClientSecretStorage: Sendable {
-    func load(_ id: UUID) throws -> MCPClientSecret?
-    func save(_ secret: MCPClientSecret, id: UUID) throws
+protocol ConnectionClientSecretStorage: Sendable {
+    func load(_ id: UUID) throws -> ConnectionClientSecret?
+    func save(_ secret: ConnectionClientSecret, id: UUID) throws
     func remove(_ id: UUID) throws
 }
 
 /// Client secrets kept only while the process runs, for a service made without Keychain, as in tests.
-final class MCPMemoryClientSecrets: MCPClientSecretStorage, @unchecked Sendable {
+final class MemoryConnectionClientSecrets: ConnectionClientSecretStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var secrets: [UUID: MCPClientSecret] = [:]
-    func load(_ id: UUID) -> MCPClientSecret? { lock.withLock { secrets[id] } }
-    func save(_ secret: MCPClientSecret, id: UUID) { lock.withLock { secrets[id] = secret } }
+    private var secrets: [UUID: ConnectionClientSecret] = [:]
+    func load(_ id: UUID) -> ConnectionClientSecret? { lock.withLock { secrets[id] } }
+    func save(_ secret: ConnectionClientSecret, id: UUID) { lock.withLock { secrets[id] = secret } }
     func remove(_ id: UUID) { _ = lock.withLock { secrets.removeValue(forKey: id) } }
 }
 
 /// Tokens kept only while the process runs, for a service made without Keychain, as in tests.
-final class MCPMemoryTokens: MCPTokenStorage, @unchecked Sendable {
+final class MemoryConnectionTokens: ConnectionTokenStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var tokens: [UUID: MCPToken] = [:]
-    func load(_ id: UUID) -> MCPToken? { lock.withLock { tokens[id] } }
-    func save(_ token: MCPToken, id: UUID) { lock.withLock { tokens[id] = token } }
+    private var tokens: [UUID: ConnectionToken] = [:]
+    func load(_ id: UUID) -> ConnectionToken? { lock.withLock { tokens[id] } }
+    func save(_ token: ConnectionToken, id: UUID) { lock.withLock { tokens[id] = token } }
     func remove(_ id: UUID) { _ = lock.withLock { tokens.removeValue(forKey: id) } }
 }
 #if canImport(Security)
 /// One Keychain item per connection under `service`, holding a sign-in or a token.
-struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
+struct ConnectionKeychainStore<Value: Codable & Sendable>: Sendable {
     let service: String
     let label: String
     private func query(_ id: UUID) -> [String: Any] {
@@ -148,7 +148,7 @@ struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data else { throw MCPServiceError.keychain(status) }
+        guard status == errSecSuccess, let data = item as? Data else { throw ToolConnectionServiceError.keychain(status) }
         return try JSONDecoder().decode(Value.self, from: data)
     }
     func save(_ value: Value, id: UUID) throws {
@@ -164,37 +164,37 @@ struct MCPKeychainStore<Value: Codable & Sendable>: Sendable {
             // Updates above change only the data, preserving existing item ACLs.
             addition[kSecAttrLabel as String] = label
             let added = SecItemAdd(addition as CFDictionary, nil)
-            guard added == errSecSuccess else { throw MCPServiceError.keychain(added) }
-        } else if status != errSecSuccess { throw MCPServiceError.keychain(status) }
+            guard added == errSecSuccess else { throw ToolConnectionServiceError.keychain(added) }
+        } else if status != errSecSuccess { throw ToolConnectionServiceError.keychain(status) }
     }
     func remove(_ id: UUID) throws {
         let status = SecItemDelete(query(id) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw MCPServiceError.keychain(status) }
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw ToolConnectionServiceError.keychain(status) }
     }
 }
-extension MCPKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
-extension MCPKeychainStore: MCPTokenStorage where Value == MCPToken {}
-extension MCPKeychainStore: MCPClientSecretStorage where Value == MCPClientSecret {}
-extension MCPKeychainStore: MCPAWSKeyStorage where Value == MCPAWSKey {}
-extension MCPKeychainStore: MCPGoogleKeyStorage where Value == MCPGoogleKey {}
+extension ConnectionKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
+extension ConnectionKeychainStore: ConnectionTokenStorage where Value == ConnectionToken {}
+extension ConnectionKeychainStore: ConnectionClientSecretStorage where Value == ConnectionClientSecret {}
+extension ConnectionKeychainStore: ConnectionAWSKeyStorage where Value == ConnectionAWSKey {}
+extension ConnectionKeychainStore: ConnectionGoogleKeyStorage where Value == ConnectionGoogleKey {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct MCPNoCredentials: MCPCredentialStorage, MCPTokenStorage, MCPClientSecretStorage, MCPAWSKeyStorage, MCPGoogleKeyStorage {
-    func load(_ id: UUID) throws -> MCPGoogleKey? { nil }
-    func save(_ key: MCPGoogleKey, id: UUID) throws { throw MCPServiceError.credentialStorage }
-    func load(_ id: UUID) throws -> MCPAWSKey? { nil }
-    func save(_ key: MCPAWSKey, id: UUID) throws { throw MCPServiceError.credentialStorage }
-    func load(_ id: UUID) throws -> MCPClientSecret? { nil }
-    func save(_ secret: MCPClientSecret, id: UUID) throws { throw MCPServiceError.credentialStorage }
+struct NoConnectionCredentials: MCPCredentialStorage, ConnectionTokenStorage, ConnectionClientSecretStorage, ConnectionAWSKeyStorage, ConnectionGoogleKeyStorage {
+    func load(_ id: UUID) throws -> ConnectionGoogleKey? { nil }
+    func save(_ key: ConnectionGoogleKey, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
+    func load(_ id: UUID) throws -> ConnectionAWSKey? { nil }
+    func save(_ key: ConnectionAWSKey, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
+    func load(_ id: UUID) throws -> ConnectionClientSecret? { nil }
+    func save(_ secret: ConnectionClientSecret, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPCredentials? { nil }
-    func save(_ credentials: MCPCredentials, id: UUID) throws { throw MCPServiceError.credentialStorage }
-    func load(_ id: UUID) throws -> MCPToken? { nil }
-    func save(_ token: MCPToken, id: UUID) throws { throw MCPServiceError.credentialStorage }
+    func save(_ credentials: MCPCredentials, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
+    func load(_ id: UUID) throws -> ConnectionToken? { nil }
+    func save(_ token: ConnectionToken, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
     func remove(_ id: UUID) throws {}
 }
 #endif
 
-public enum MCPServiceError: LocalizedError, Sendable {
+public enum ToolConnectionServiceError: LocalizedError, Sendable {
     case credentialStorage, signInRequired, registrationUnsupported, invalidMetadata, invalidCallback
     case network(Int), timedOut, revoked, responseTooLarge
     /// The organisation managing this Mac doesn't allow the connection.

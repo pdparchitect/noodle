@@ -6,19 +6,19 @@ import NoodleCore
 
 /// Answers for the connections an app serves itself rather than through an MCP server: the app's own code
 /// calling a service's API. Results are shaped as MCP's, so bots use them as they use any other connection.
-public protocol MCPConnectionAdapter: Sendable {
+public protocol ToolConnectionAdapter: Sendable {
     /// The tools, as an MCP tools/list result.
-    func tools(for connection: MCPConnectionRecord) async throws -> Data
+    func tools(for connection: ToolConnection) async throws -> Data
     /// One call with its JSON arguments, as an MCP tools/call result. `access` reaches the service with the
     /// connection's credentials.
-    func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data
 }
 
 /// How an adapter reaches its service: only the connection's own host, over HTTPS, with the connection's
 /// credentials added and never shown to it. Redirects are not followed, so they cannot carry the credentials away.
-public struct MCPAdapterAccess: Sendable {
+public struct ToolConnectionAccess: Sendable {
     let endpoint: URL
-    let authorization: MCPAuthorization?
+    let authorization: ConnectionAuthorization?
     let configuration: @Sendable () -> URLSessionConfiguration
     static let limit = 8 * 1_048_576
     private func url(_ request: URLRequest) -> URL? { request.url }
@@ -28,25 +28,25 @@ public struct MCPAdapterAccess: Sendable {
         let host = url(request)?.host?.lowercased() ?? "", home = endpoint.host?.lowercased() ?? ""
         let reachable = host == home || (authorization?.coversSubdomains == true && host.hasSuffix("." + home))
         guard let url = request.url, url.scheme?.lowercased() == "https", reachable, url.port == endpoint.port, url.user == nil else {
-            throw MCPConnectionError.message("A tool adapter may only reach its own service.")
+            throw ToolConnectionError.message("A tool adapter may only reach its own service.")
         }
         var request = request
         authorization?.apply(to: &request)
         let session = URLSession(configuration: configuration(), delegate: NoRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
-        let (data, response) = try await session.data(for: request, limit: Self.limit, tooLarge: MCPServiceError.responseTooLarge)
-        guard let http = response as? HTTPURLResponse else { throw MCPServiceError.network(0) }
+        let (data, response) = try await session.data(for: request, limit: Self.limit, tooLarge: ToolConnectionServiceError.responseTooLarge)
+        guard let http = response as? HTTPURLResponse else { throw ToolConnectionServiceError.network(0) }
         return (data, http)
     }
 }
 
 /// How a request proves who its connection is: a header, or for a service that takes its key only there, a
 /// parameter in its address.
-enum MCPAuthorization: Sendable {
+enum ConnectionAuthorization: Sendable {
     case header(String, String)
     case parameter(String, String)
     /// Signed with an AWS key, for the service and region each request's address names.
-    case aws(MCPAWSKey, defaultRegion: String)
+    case aws(ConnectionAWSKey, defaultRegion: String)
     /// A Google access token, good for every googleapis.com service its scopes allow.
     case google(String)
 

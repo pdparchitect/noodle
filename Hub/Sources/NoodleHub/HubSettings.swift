@@ -23,7 +23,7 @@ struct HubSettingsProblem: Equatable {
 @MainActor @Observable final class HubSettingsHost: BotSettingsHost {
     let hub: Hub
     let setup: HarnessSetupController
-    let mcp: MCPController
+    let connectionsController: ToolConnectionsController
     var selectedTab: HubSettingsTab = .network
     /// Why archiving a bot or group, or changing a bot's model, failed, shown until dismissed.
     var problem: HubSettingsProblem?
@@ -31,7 +31,7 @@ struct HubSettingsProblem: Equatable {
 
     init(hub: Hub) {
         self.hub = hub
-        mcp = MCPController(repository: hub.repository)
+        connectionsController = ToolConnectionsController(repository: hub.repository)
         setup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
                                        installer: ManagedHarnessInstaller(store: hub.repository.managedHarnesses),
                                        profiles: hub.repository.harnessProfiles)
@@ -154,7 +154,7 @@ struct HubSettingsView: View {
 
     /// Tools whose row shows Needs attention.
     private var toolsNeedingAttention: Int {
-        host.mcp.registry.connections.filter { host.mcp.errors[$0.id] != nil }.count
+        host.connectionsController.registry.connections.filter { host.connectionsController.errors[$0.id] != nil }.count
     }
 
     private var networkNeedsAttention: Bool {
@@ -194,7 +194,7 @@ struct HubSettingsView: View {
                 .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }
                 .tag(HubSettingsTab.conversation)
             if Self.showsAgentSettings {
-                MCPSettingsView(store: host)
+                ToolConnectionsSettingsView(store: host)
                     .hubSettingsSize()
                     .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                     .tag(HubSettingsTab.tools)

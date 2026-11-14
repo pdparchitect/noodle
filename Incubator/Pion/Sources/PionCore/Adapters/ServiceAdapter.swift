@@ -8,7 +8,7 @@ public protocol ServiceAccess: Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
 
-extension MCPAdapterAccess: ServiceAccess {}
+extension ToolConnectionAccess: ServiceAccess {}
 
 /// A tool's input, described in code; bots see it as JSON Schema.
 public indirect enum JSONSchema: Sendable {
@@ -403,7 +403,7 @@ public struct ServiceClient: Sendable {
 
 /// An adapter made of operations. Its tools are the operations' names and schemas; a call decodes the
 /// operation's input and runs it. A failure the bot can act on comes back as an error result, not a fault.
-public struct OperationAdapter: MCPConnectionAdapter {
+public struct OperationAdapter: ToolConnectionAdapter {
     private struct Entry: Sendable {
         /// The tool as listed, in JSON.
         let tool: Data
@@ -429,19 +429,19 @@ public struct OperationAdapter: MCPConnectionAdapter {
         })
     }
 
-    public func tools(for connection: MCPConnectionRecord) async throws -> Data {
+    public func tools(for connection: ToolConnection) async throws -> Data {
         let tools = try entries.map { try JSONSerialization.jsonObject(with: $0.entry.tool) }
         return try JSONSerialization.data(withJSONObject: ["tools": tools], options: [.sortedKeys])
     }
 
-    public func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data {
+    public func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         try await run(tool, arguments: arguments, connection: connection, access: access)
     }
 
     /// A call through any access, so operations can be tried against a stand-in service.
-    func run(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: any ServiceAccess) async throws -> Data {
+    func run(_ tool: String, arguments: Data, connection: ToolConnection, access: any ServiceAccess) async throws -> Data {
         guard let entry = entries.first(where: { $0.name == tool })?.entry else {
-            throw MCPConnectionError.message("This connection does not offer \(tool).")
+            throw ToolConnectionError.message("This connection does not offer \(tool).")
         }
         do {
             let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
@@ -467,7 +467,7 @@ public struct OperationAdapter: MCPConnectionAdapter {
 
 /// The adapters Pion serves its own connections with, by the name its catalogue entries give them.
 public enum PionAdapters {
-    public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
+    public static let all: [String: any ToolConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
                                                                   "entra": Entra.adapter, "defender": Defender.adapter,
                                                                   "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,

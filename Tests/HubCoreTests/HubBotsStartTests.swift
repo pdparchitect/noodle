@@ -19,7 +19,7 @@ import XCTest
         let kai = try repository.createAgent(named: "Kai").agent
         let access = HubAccess(url: root.appendingPathComponent("access.json"))
         let tools = ToolProviderRegistry(), assignments = ToolAssignmentStore()
-        let service = MCPService(credentials: NoCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+        let service = ToolConnectionService(credentials: NoCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
         let connections = HubConnections(root: root, access: access, service: service, tools: tools, assignments: assignments)
         // Noodle Computer, Browser and Applet are never reached here.
         let computers = HubComputers(root: root, access: access, tools: tools, assignments: assignments,

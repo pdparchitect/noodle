@@ -17,7 +17,7 @@ final class MCPServiceLifecycleTests: XCTestCase {
 
     func testDisconnectLeavesAnotherConnectionsActiveRequestAlone() async throws {
         let fixture = try MCPLifecycleFixture()
-        let other = try MCPConnectionRecord(name: "Second synthetic account", endpoint: fixture.endpoint)
+        let other = try ToolConnection(name: "Second synthetic account", endpoint: fixture.endpoint)
         fixture.vault.save(try XCTUnwrap(fixture.vault.load(fixture.record.id)), id: other.id)
         let firstHeld = fixture.hold("tools/call")
         let first = fixture.call()
@@ -374,9 +374,9 @@ final class MCPServiceLifecycleTests: XCTestCase {
         guard case .failure(let error)? = operation.result else { return XCTFail("Expected cancellation", file: file, line: line) }
         XCTAssertTrue(error is CancellationError, "Expected CancellationError, got \(error)", file: file, line: line)
     }
-    private func assertFailure<T>(_ operation: LifecycleOperation<T>, _ expected: MCPServiceError,
+    private func assertFailure<T>(_ operation: LifecycleOperation<T>, _ expected: ToolConnectionServiceError,
                                   file: StaticString = #filePath, line: UInt = #line) {
-        guard case .failure(let error as MCPServiceError)? = operation.result else { return XCTFail("Expected \(expected), got \(String(describing: operation.result))", file: file, line: line) }
+        guard case .failure(let error as ToolConnectionServiceError)? = operation.result else { return XCTFail("Expected \(expected), got \(String(describing: operation.result))", file: file, line: line) }
         switch (error, expected) {
         case (.revoked, .revoked), (.timedOut, .timedOut): break
         default: XCTFail("Expected \(expected), got \(error)", file: file, line: line)

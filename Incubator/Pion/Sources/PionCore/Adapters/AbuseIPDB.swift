@@ -13,7 +13,7 @@ public enum AbuseIPDB {
         report anything.
         """,
         iconName: "abuseipdb",
-        configuration: .mcp(.init(endpoint: URL(string: "https://api.abuseipdb.com/api/v2")!, tokenHeader: "Key", adapter: "abuseipdb")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.abuseipdb.com/api/v2")!, tokenHeader: "Key", adapter: "abuseipdb")))
 
     public static let adapter = OperationAdapter(operations: [Check()])
 }

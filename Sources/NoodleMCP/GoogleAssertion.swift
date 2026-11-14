@@ -10,7 +10,7 @@ enum GoogleAssertion {
     /// Where every assertion goes. A key file's own token_uri is never used, so a crafted file cannot send one elsewhere.
     static let tokenEndpoint = URL(string: "https://oauth2.googleapis.com/token")!
 
-    static func make(_ key: MCPGoogleKey, scopes: [String], subject: String?, now: Date = Date()) throws -> String {
+    static func make(_ key: ConnectionGoogleKey, scopes: [String], subject: String?, now: Date = Date()) throws -> String {
         let issued = Int(now.timeIntervalSince1970)
         var header: [String: Any] = ["alg": "RS256", "typ": "JWT"]
         if let id = key.privateKeyID { header["kid"] = id }
@@ -39,17 +39,17 @@ enum GoogleAssertion {
         #if canImport(Security)
         let body = pem.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("-----") }.joined()
         guard let der = Data(base64Encoded: body), let pkcs1 = rsaKey(inPKCS8: der) ?? (der.first == 0x30 ? der : nil) else {
-            throw MCPConnectionError.message("The key file's private key could not be read.")
+            throw ToolConnectionError.message("The key file's private key could not be read.")
         }
         let attributes: [String: Any] = [kSecAttrKeyType as String: kSecAttrKeyTypeRSA, kSecAttrKeyClass as String: kSecAttrKeyClassPrivate]
         var error: Unmanaged<CFError>?
         guard let key = SecKeyCreateWithData(pkcs1 as CFData, attributes as CFDictionary, &error),
               let signature = SecKeyCreateSignature(key, .rsaSignatureMessagePKCS1v15SHA256, data as CFData, &error) as Data? else {
-            throw MCPConnectionError.message("The key file's private key could not sign.")
+            throw ToolConnectionError.message("The key file's private key could not sign.")
         }
         return signature
         #else
-        throw MCPServiceError.credentialStorage
+        throw ToolConnectionServiceError.credentialStorage
         #endif
     }
 

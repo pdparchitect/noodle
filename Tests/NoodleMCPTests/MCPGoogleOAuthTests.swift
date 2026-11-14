@@ -5,8 +5,8 @@ import NoodleCore
 @testable import NoodleMCP
 
 private enum GmailPreset {
-    static let configuration: MCPToolConfiguration = {
-        guard case .mcp(let configuration) = ToolCatalog.entries.first(where: { $0.id == "gmail" })!.configuration else {
+    static let configuration: ToolConnectionConfiguration = {
+        guard case .connection(let configuration) = ToolCatalog.entries.first(where: { $0.id == "gmail" })!.configuration else {
             fatalError("Missing Gmail preset")
         }
         return configuration
@@ -120,12 +120,12 @@ final class MCPGoogleOAuthTests: XCTestCase {
         XCTAssertNotEqual(production.id, development.id)
         XCTAssertNotEqual(production.redirectURI, development.redirectURI)
         for client in GmailPreset.oauth.clients {
-            XCTAssertEqual(MCPService.configuredRedirectURI(for: GmailPreset.endpoint,
+            XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: GmailPreset.endpoint,
                 bundleIdentifier: client.bundleIdentifier), client.redirectURI)
             XCTAssertEqual(try MCPOAuth.preconfiguredCredentials(endpoint: GmailPreset.endpoint,
                 redirect: client.redirectURI, configuration: GmailPreset.oauth)?.clientID, client.id)
         }
-        XCTAssertNil(MCPService.configuredRedirectURI(for: GmailPreset.endpoint, bundleIdentifier: "unknown.app"))
+        XCTAssertNil(ToolConnectionService.configuredRedirectURI(for: GmailPreset.endpoint, bundleIdentifier: "unknown.app"))
         let old = MCPCredentials(endpoint: URL(string: "https://example.com/mcp")!, issuer: URL(string: "https://example.com")!,
             authorizationEndpoint: URL(string: "https://example.com/authorize")!, tokenEndpoint: URL(string: "https://example.com/token")!,
             clientID: "registered-client", redirectURI: URL(string: "noodle://mcp/oauth/callback")!,
@@ -137,10 +137,10 @@ final class MCPGoogleOAuthTests: XCTestCase {
     }
 
     override func setUp() { GoogleProtocol.fixture = GoogleFixture() }
-    private func service(_ vault: GoogleTestVault) -> MCPService {
+    private func service(_ vault: GoogleTestVault) -> ToolConnectionService {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [GoogleProtocol.self]
-        return MCPService(credentials: vault, oauth: MCPOAuth(session: URLSession(configuration: config)), httpConfiguration: {
+        return ToolConnectionService(credentials: vault, oauth: MCPOAuth(session: URLSession(configuration: config)), httpConfiguration: {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [GoogleProtocol.self]
             return config
@@ -165,8 +165,8 @@ final class MCPGoogleOAuthTests: XCTestCase {
     }
 
     func testTwoAccountsUseBundledClientWithoutDiscoveryAndSurviveRefreshRestartAndRemoval() async throws {
-        let vault = GoogleTestVault(), first = try MCPConnectionRecord(name: "Gmail Work", endpoint: GmailPreset.endpoint)
-        let second = try MCPConnectionRecord(name: "Gmail Personal", endpoint: GmailPreset.endpoint)
+        let vault = GoogleTestVault(), first = try ToolConnection(name: "Gmail Work", endpoint: GmailPreset.endpoint)
+        let second = try ToolConnection(name: "Gmail Personal", endpoint: GmailPreset.endpoint)
         let client = service(vault)
         try await client.signIn(first, redirectURI: GmailPreset.production.redirectURI, browser: Self.browser)
         try await client.signIn(second, redirectURI: GmailPreset.production.redirectURI, browser: Self.browser)
@@ -196,7 +196,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
 
     func testCancelledReconnectPreservesPreviousAccountAndBadStateExchangesNothing() async throws {
         let vault = GoogleTestVault(), client = service(vault)
-        let record = try MCPConnectionRecord(name: "Gmail", endpoint: GmailPreset.endpoint)
+        let record = try ToolConnection(name: "Gmail", endpoint: GmailPreset.endpoint)
         let redirect = GmailPreset.production.redirectURI
         try await client.signIn(record, redirectURI: redirect, browser: Self.browser)
         let previous = vault.load(record.id)?.accessToken
@@ -207,25 +207,25 @@ final class MCPGoogleOAuthTests: XCTestCase {
         do {
             try await client.signIn(record, redirectURI: redirect) { _ in URL(string: GmailPreset.production.redirectURI.absoluteString + "?state=wrong&code=wrong")! }
             XCTFail("Expected state rejection")
-        } catch MCPServiceError.invalidCallback {}
+        } catch ToolConnectionServiceError.invalidCallback {}
         XCTAssertEqual(vault.load(record.id)?.accessToken, previous)
         XCTAssertEqual(GoogleProtocol.fixture.requests.count, 1)
     }
 
     func testWorkspaceServicesKeepScopesAndAccountTokensSeparateAcrossRefresh() async throws {
         let vault = GoogleTestVault(), client = service(vault)
-        var accounts: [MCPConnectionRecord] = []
+        var accounts: [ToolConnection] = []
         var refreshTokens: [String] = []
         for id in ["google-docs", "google-drive", "google-calendar"] {
             let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.id == id })
-            guard case .mcp(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
+            guard case .connection(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
             let oauth = try XCTUnwrap(configuration.oauth)
             let scope = oauth.scopes.joined(separator: " ")
             GoogleProtocol.fixture.endpoint = configuration.endpoint
             GoogleProtocol.fixture.requestedScope = scope
             GoogleProtocol.fixture.grantedScope = scope + " " + GmailPreset.scope
             for client in oauth.clients {
-                XCTAssertEqual(MCPService.configuredRedirectURI(for: configuration.endpoint,
+                XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: configuration.endpoint,
                     bundleIdentifier: client.bundleIdentifier), client.redirectURI)
             }
             for suffix in ["Work", "Personal"] {
@@ -256,19 +256,19 @@ final class MCPGoogleOAuthTests: XCTestCase {
         for raw in ["noodle://mcp/oauth/callback", "com.googleusercontent.apps.unknown:/oauth2callback"] {
             XCTAssertThrowsError(try MCPOAuth.preconfiguredCredentials(endpoint: GmailPreset.endpoint, redirect: URL(string: raw)!, configuration: GmailPreset.oauth))
         }
-        XCTAssertNil(MCPService.configuredRedirectURI(for: URL(string: "https://gmailmcp.googleapis.com/other")!))
-        let vault = GoogleTestVault(), record = try MCPConnectionRecord(name: "Gmail", endpoint: GmailPreset.endpoint)
+        XCTAssertNil(ToolConnectionService.configuredRedirectURI(for: URL(string: "https://gmailmcp.googleapis.com/other")!))
+        let vault = GoogleTestVault(), record = try ToolConnection(name: "Gmail", endpoint: GmailPreset.endpoint)
         GoogleProtocol.fixture.grantedScope = "https://www.googleapis.com/auth/gmail.readonly"
         do {
             try await service(vault).signIn(record, redirectURI: GmailPreset.production.redirectURI, browser: Self.browser)
             XCTFail("Missing draft permission accepted")
-        } catch MCPServiceError.signInRequired {}
+        } catch ToolConnectionServiceError.signInRequired {}
         XCTAssertNil(vault.load(record.id))
     }
 
     func testReadOnlyGrantRequiresReconnectBeforeDraftingAndPreservesAccountOnCancel() async throws {
         let vault = GoogleTestVault(), client = service(vault)
-        let record = try MCPConnectionRecord(name: "Gmail", endpoint: GmailPreset.endpoint)
+        let record = try ToolConnection(name: "Gmail", endpoint: GmailPreset.endpoint)
         let redirect = GmailPreset.production.redirectURI
         var stored = try XCTUnwrap(MCPOAuth.preconfiguredCredentials(endpoint: record.endpoint, redirect: redirect, configuration: GmailPreset.oauth))
         stored.accessToken = "old-read-only-token"
@@ -284,7 +284,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
         do {
             _ = try await client.perform(draft, connection: record)
             XCTFail("Read-only grant used for drafting")
-        } catch MCPServiceError.signInRequired {}
+        } catch ToolConnectionServiceError.signInRequired {}
         XCTAssertTrue(GoogleProtocol.fixture.requests.isEmpty)
         do {
             try await client.signIn(record, redirectURI: redirect) { _ in throw CancellationError() }
@@ -304,7 +304,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
 
     func testExpiredTestingGrantRequiresReconnect() async throws {
         let vault = GoogleTestVault(), client = service(vault)
-        let record = try MCPConnectionRecord(name: "Gmail", endpoint: GmailPreset.endpoint)
+        let record = try ToolConnection(name: "Gmail", endpoint: GmailPreset.endpoint)
         try await client.signIn(record, redirectURI: GmailPreset.production.redirectURI, browser: Self.browser)
         var stored = vault.load(record.id)!
         stored.expiresAt = .distantPast
@@ -313,7 +313,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
         do {
             _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil), connection: record)
             XCTFail("Expired grant accepted")
-        } catch MCPServiceError.signInRequired {}
+        } catch ToolConnectionServiceError.signInRequired {}
         XCTAssertNil(vault.load(record.id)?.accessToken)
         XCTAssertNil(vault.load(record.id)?.refreshToken)
     }

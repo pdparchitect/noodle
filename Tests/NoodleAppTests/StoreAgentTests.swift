@@ -237,9 +237,9 @@ import XCTest
     }
     func testLateWorkspaceFailureRestoresAssignmentsAndKeepsRuntimeRunning() throws {
         let f = try fixture()
-        let account = try MCPConnectionRecord(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
-        try f.store.mcp.save(account)
-        try f.store.mcp.assign([account.id], to: f.a)
+        let account = try ToolConnection(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
+        try f.store.connectionsController.save(account)
+        try f.store.connectionsController.assign([account.id], to: f.a)
         let old = try f.runtime.start(f.a)
         let registryURL = f.repository.rootURL.appendingPathComponent("MCP/connections.json")
         let before = try Data(contentsOf: registryURL)
@@ -250,7 +250,7 @@ import XCTest
         XCTAssertFalse(update(f, mcp: [], computers: []))
         XCTAssertEqual(try Data(contentsOf: registryURL), before)
         XCTAssertEqual(try Data(contentsOf: f.repository.storage(for: f.a.id).configuration), config)
-        XCTAssertEqual(f.store.mcp.selectedIDs(for: f.a), [account.id])
+        XCTAssertEqual(f.store.connectionsController.selectedIDs(for: f.a), [account.id])
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.repository.rootURL.appendingPathComponent("computers.json").path))
         XCTAssertEqual(old.stops, 0)
         XCTAssertTrue(old.isAlive)
@@ -259,8 +259,8 @@ import XCTest
 
     func testFailedAssignmentDuringCreationRemovesNewBotAndAllowsRetry() throws {
         let f = try fixture()
-        let account = try MCPConnectionRecord(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
-        try f.store.mcp.save(account)
+        let account = try ToolConnection(name: "Fixture account", endpoint: URL(string: "https://example.com/mcp")!)
+        try f.store.connectionsController.save(account)
         let before = try f.repository.loadAgents().map(\.id)
         let conversations = try f.repository.loadConversations().map(\.id).sorted { $0.uuidString < $1.uuidString }
         let directory = f.repository.rootURL.appendingPathComponent("MCP")
@@ -268,7 +268,7 @@ import XCTest
         XCTAssertFalse(create(f, mcp: [account.id]))
         XCTAssertEqual(try f.repository.loadAgents().map(\.id), before)
         XCTAssertEqual(try f.repository.loadConversations().map(\.id).sorted { $0.uuidString < $1.uuidString }, conversations)
-        XCTAssertTrue(f.store.mcp.registry.assignments.isEmpty)
+        XCTAssertTrue(f.store.connectionsController.registry.assignments.isEmpty)
         XCTAssertTrue(f.runtime.factory.processes.isEmpty)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         XCTAssertTrue(create(f, mcp: [account.id]), f.store.errorMessage ?? "")

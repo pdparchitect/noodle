@@ -13,7 +13,7 @@ public enum VirusTotal {
         Public keys allow only a few lookups a minute; look up what matters, and wait when told the service is rate limiting.
         """,
         iconName: "virustotal",
-        configuration: .mcp(.init(endpoint: URL(string: "https://www.virustotal.com/api/v3")!, tokenHeader: "x-apikey",
+        configuration: .connection(.init(endpoint: URL(string: "https://www.virustotal.com/api/v3")!, tokenHeader: "x-apikey",
                                   adapter: "virustotal")))
 
     public static let adapter = OperationAdapter(operations: [FileReport(), DomainReport(), AddressReport(), URLReport()])

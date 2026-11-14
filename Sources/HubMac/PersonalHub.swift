@@ -42,7 +42,7 @@ import NoodleVoicePeer
     /// `service` is Noodle's own, which keeps its tools' sign-ins; `computer` and `browser` reach
     /// Noodle Computer and Browser on this Mac, and tests pass their own.
     public init(name: String, directory: URL, repository: WorkspaceRepository, runtime: AgentRuntimeCoordinator,
-                applets: AppletController, profiles: HarnessProfilesController, service: MCPService,
+                applets: AppletController, profiles: HarnessProfilesController, service: ToolConnectionService,
                 computer: ComputerToolProvider.Transport? = nil, browser: BrowserToolProvider.Transport? = nil,
                 port: UInt16 = PersonalHub.port, router: (any RouterPortMapper)? = nil,
                 localEndpoints: @escaping (UInt16) -> [LinkEndpoint] = LinkEndpoint.local(port:)) {

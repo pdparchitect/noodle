@@ -6,8 +6,8 @@ import NoodleCore
 @testable import NoodleRuntimeSettings
 
 @MainActor final class ToolCreationInteractionTests: HiddenViewTests {
-    private func mcpFixture() throws -> MCPControllerFixture {
-        let f = try MCPControllerFixture(credentialFailure: false, removed: nil)
+    private func mcpFixture() throws -> ToolConnectionsControllerFixture {
+        let f = try ToolConnectionsControllerFixture(credentialFailure: false, removed: nil)
         addTeardownBlock { @MainActor in f.controller.start(agents: []); try? FileManager.default.removeItem(at: f.root) }
         return f
     }
@@ -40,7 +40,7 @@ import NoodleCore
     }
 
     func testPresetAddsOneSavedAccountAndDefersConnectionDespiteRepeatedClicks() async throws {
-        let f = try mcpFixture(); var added: [UUID] = [], connected: [MCPConnectionRecord] = []
+        let f = try mcpFixture(); var added: [UUID] = [], connected: [ToolConnection] = []
         let view = host(ToolCreationSheet(controller: f.controller, onAdded: { added.append($0) }, onConnect: { connected.append($0) }))
         let button = try await preset("Notion", in: view)
         press(button); press(button)
@@ -51,7 +51,7 @@ import NoodleCore
         XCTAssertEqual(saved.name, definition.name); XCTAssertEqual(saved.description, definition.summary)
         XCTAssertEqual(saved.instructions, definition.defaultInstructions)
         XCTAssertEqual(added, [saved.id]); XCTAssertEqual(connected, [saved])
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections, [saved])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections, [saved])
         XCTAssertTrue(f.controller.registry.assignments.isEmpty)
     }
 
@@ -62,7 +62,7 @@ import NoodleCore
             press(try await preset("Notion", in: view))
         }
         try await wait { connected == 2 }
-        let accounts = try MCPRegistry.load(root: f.root).connections
+        let accounts = try ToolConnectionRegistry.load(root: f.root).connections
         XCTAssertEqual(accounts.map(\.name), ["Notion", "Notion 2"])
         XCTAssertEqual(Set(accounts.map(\.id)).count, 2)
         XCTAssertEqual(Set(accounts.map(\.skillName)).count, 2)
@@ -79,7 +79,7 @@ import NoodleCore
         try FileManager.default.removeItem(at: f.registryURL)
         press(button)
         try await wait { connected == 1 }
-        XCTAssertEqual(added.count, 1); XCTAssertEqual(try MCPRegistry.load(root: f.root).connections.count, 1)
+        XCTAssertEqual(added.count, 1); XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections.count, 1)
     }
 
     func testWorkspaceRefreshRetryKeepsTheOriginallySavedPresetAccount() async throws {
@@ -87,7 +87,7 @@ import NoodleCore
         let file = f.repository.directory(for: f.a).appendingPathComponent(".agents/skills/messenger/SKILL.md")
         let bytes = try Data(contentsOf: file)
         try FileManager.default.removeItem(at: file); try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
-        var added: [UUID] = [], connected: [MCPConnectionRecord] = []
+        var added: [UUID] = [], connected: [ToolConnection] = []
         let view = host(ToolCreationSheet(controller: f.controller, onAdded: { added.append($0) }, onConnect: { connected.append($0) }))
         press(try await preset("Notion", in: view))
         let original = try XCTUnwrap(f.controller.registry.connections.first)
@@ -95,7 +95,7 @@ import NoodleCore
         try FileManager.default.removeItem(at: file); try bytes.write(to: file)
         press(try await preset("Notion", in: view))
         try await wait { connected.count == 1 }
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections, [original])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections, [original])
         XCTAssertEqual(added, [original.id]); XCTAssertEqual(connected, [original])
     }
 
@@ -104,7 +104,7 @@ import NoodleCore
         let file = f.repository.directory(for: f.a).appendingPathComponent(".agents/skills/messenger/SKILL.md")
         let bytes = try Data(contentsOf: file)
         try FileManager.default.removeItem(at: file); try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
-        var connected: [MCPConnectionRecord] = []
+        var connected: [ToolConnection] = []
         let view = host(ToolCreationSheet(controller: f.controller, onConnect: { connected.append($0) }))
         press(try await preset("Notion", in: view)); press(try await preset("Buildkite", in: view))
         let original = f.controller.registry.connections
@@ -112,7 +112,7 @@ import NoodleCore
         try FileManager.default.removeItem(at: file); try bytes.write(to: file)
         press(try await preset("Notion", in: view))
         try await wait { connected.count == 1 }
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections, original)
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections, original)
         XCTAssertEqual(connected.first?.id, original.first?.id)
     }
 
@@ -129,7 +129,7 @@ import NoodleCore
     }
 
     func testCustomCreationRoutesSavedIdentityAndConnectionThroughTheSheet() async throws {
-        let f = try mcpFixture(); var added: [UUID] = [], connected: [MCPConnectionRecord] = []
+        let f = try mcpFixture(); var added: [UUID] = [], connected: [ToolConnection] = []
         let view = host(ToolCreationSheet(controller: f.controller, onAdded: { added.append($0) }, onConnect: { connected.append($0) }))
         press(try await control("Custom MCP…", in: view))
         edit(try await textField("e.g. Notion — Work", in: view), text: "Custom fixture")
@@ -137,6 +137,6 @@ import NoodleCore
         press(try await control("Add & Connect", in: view))
         try await wait { connected.count == 1 }
         XCTAssertEqual(added, connected.map(\.id))
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections, connected)
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections, connected)
     }
 }

@@ -11,7 +11,7 @@ public enum Censys {
         location and DNS names, as Censys last scanned it. Record each lookup as evidence. Lookups never scan anything.
         """,
         iconName: "censys",
-        configuration: .mcp(.init(endpoint: URL(string: "https://api.platform.censys.io/v3/global")!, tokenHeader: "Authorization",
+        configuration: .connection(.init(endpoint: URL(string: "https://api.platform.censys.io/v3/global")!, tokenHeader: "Authorization",
                                   adapter: "censys")))
 
     public static let adapter = OperationAdapter(operations: [Host()])

@@ -27,8 +27,8 @@ import XCTest
         return Fixture(hub: hub, ada: ada, bob: bob)
     }
 
-    private func connection(_ name: String) throws -> MCPConnectionRecord {
-        try MCPConnectionRecord(name: name, endpoint: URL(string: "https://example.com/mcp")!, description: "Notes.")
+    private func connection(_ name: String) throws -> ToolConnection {
+        try ToolConnection(name: name, endpoint: URL(string: "https://example.com/mcp")!, description: "Notes.")
     }
 
     private func skill(_ name: String, of bot: LinkBot, in hub: Hub) throws -> URL {
@@ -84,7 +84,7 @@ import XCTest
         let kept = try f.hub.connections.add(try connection("Mail"), for: f.bob)
         f.hub.remove(f.ada)
         XCTAssertEqual(f.hub.connections.connections(for: f.bob).map(\.id), [kept.id])
-        XCTAssertEqual(try MCPRegistry.load(root: f.hub.repository.rootURL).connections.map(\.id), [kept.id])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.hub.repository.rootURL).connections.map(\.id), [kept.id])
     }
 }
 

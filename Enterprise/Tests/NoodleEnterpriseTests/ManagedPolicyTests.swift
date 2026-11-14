@@ -15,7 +15,7 @@ final class ManagedPolicyTests: XCTestCase {
     private let custom = URL(string: "https://mcp.example.com/mcp")!
     private func catalogue(_ id: String) -> OrganisationAction {
         let tool = ToolCatalog.entries.first { $0.id == id }!
-        guard case .mcp(let configuration) = tool.configuration else { fatalError() }
+        guard case .connection(let configuration) = tool.configuration else { fatalError() }
         return .toolConnection(catalogueID: id, endpoint: configuration.endpoint)
     }
 

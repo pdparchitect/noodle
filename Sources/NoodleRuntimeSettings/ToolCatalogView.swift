@@ -84,15 +84,15 @@ public struct ToolMaturityBadge: View {
     }
 }
 
-public struct MCPConnectionMaturityBadge: View {
-    let connection: MCPConnectionRecord
+public struct ToolConnectionMaturityBadge: View {
+    let connection: ToolConnection
     public var body: some View {
         if let tool = ToolCatalog.definition(for: connection) {
             ToolMaturityBadge(maturity: tool.maturity)
         }
     }
 
-    public init(connection: MCPConnectionRecord) {
+    public init(connection: ToolConnection) {
         self.connection = connection
     }
 }
@@ -100,11 +100,11 @@ public struct MCPConnectionMaturityBadge: View {
 /// One dispatch boundary per supported tool type; MCP owns its form and storage.
 public struct ToolCreationSheet: View {
     var onAdded: (UUID) -> Void = { _ in }
-    private let onConnect: (MCPConnectionRecord) -> Void
+    private let onConnect: (ToolConnection) -> Void
     /// On this Mac, adding is immediate; elsewhere, as on a Noodle Hub, it waits for an answer.
-    private let controller: MCPController?
-    private let addPreset: ((ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord)?
-    private let save: ((MCPConnectionRecord) async throws -> MCPConnectionRecord)?
+    private let controller: ToolConnectionsController?
+    private let addPreset: ((ToolDefinition, ToolConnectionConfiguration, UUID) async throws -> ToolConnection)?
+    private let save: ((ToolConnection) async throws -> ToolConnection)?
     @Environment(\.dismiss) private var dismiss
     @State private var customMCP = false
     @State private var error: String?
@@ -113,22 +113,22 @@ public struct ToolCreationSheet: View {
     /// A preset whose form is open: one that takes an API key or details such as a domain.
     @State private var settingUp: ToolDefinition?
 
-    public init(controller: MCPController, onAdded: @escaping (UUID) -> Void = { _ in },
-         onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
+    public init(controller: ToolConnectionsController, onAdded: @escaping (UUID) -> Void = { _ in },
+         onConnect: ((ToolConnection) -> Void)? = nil) {
         self.controller = controller; self.onAdded = onAdded; self.onConnect = onConnect ?? { controller.connect($0) }
         addPreset = nil; save = nil
     }
 
     /// For connections kept somewhere other than this Mac, as on a Noodle Hub.
-    public init(onAdded: @escaping (UUID) -> Void = { _ in }, onConnect: @escaping (MCPConnectionRecord) -> Void,
-                addPreset: @escaping (ToolDefinition, MCPToolConfiguration, UUID) async throws -> MCPConnectionRecord,
-                save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
+    public init(onAdded: @escaping (UUID) -> Void = { _ in }, onConnect: @escaping (ToolConnection) -> Void,
+                addPreset: @escaping (ToolDefinition, ToolConnectionConfiguration, UUID) async throws -> ToolConnection,
+                save: @escaping (ToolConnection) async throws -> ToolConnection) {
         controller = nil; self.onAdded = onAdded; self.onConnect = onConnect; self.addPreset = addPreset; self.save = save
     }
 
     public var body: some View {
         Group {
-            if let tool = settingUp, let controller, case .mcp(let configuration) = tool.configuration {
+            if let tool = settingUp, let controller, case .connection(let configuration) = tool.configuration {
                 PresetSetUpForm(tool: tool, configuration: configuration,
                                 name: ToolCatalog.availableName(for: tool, existingNames: controller.registry.connections.map(\.name)),
                                 onBack: { settingUp = nil; error = nil }) { name, values, secret in
@@ -139,9 +139,9 @@ public struct ToolCreationSheet: View {
                     if let secret { controller.connect(connection, secret: secret) } else { onConnect(connection) }
                 }
             } else if customMCP, let controller {
-                MCPEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
+                ToolConnectionEditor(controller: controller, onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect)
             } else if customMCP, let save {
-                MCPEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
+                ToolConnectionEditor(onBack: { customMCP = false }, onSaved: { onAdded($0.id) }, onConnect: onConnect, save: save)
             } else {
                 ToolCatalogView(onSelect: add, onCustomMCP: { customMCP = true },
                                 onCancel: { dismiss() }, error: error, includesSetUpTools: controller != nil).disabled(adding)
@@ -150,7 +150,7 @@ public struct ToolCreationSheet: View {
     }
 
     private func add(_ tool: ToolDefinition) {
-        guard !adding, case .mcp(let configuration) = tool.configuration else { return }
+        guard !adding, case .connection(let configuration) = tool.configuration else { return }
         if tool.needsSetUp, controller != nil { settingUp = tool; return }
         adding = true
         // Saving the account can precede a failed workspace refresh.
@@ -169,7 +169,7 @@ public struct ToolCreationSheet: View {
         }
     }
 
-    private func added(_ connection: MCPConnectionRecord) {
+    private func added(_ connection: ToolConnection) {
         onAdded(connection.id)
         dismiss()
         Task { @MainActor in
@@ -183,9 +183,9 @@ public struct ToolCreationSheet: View {
 /// when it takes one. Every account is set up from scratch.
 private struct PresetSetUpForm: View {
     let tool: ToolDefinition
-    let configuration: MCPToolConfiguration
+    let configuration: ToolConnectionConfiguration
     let onBack: () -> Void
-    let onAdd: (String, [String: String], MCPConnectionSecret?) throws -> Void
+    let onAdd: (String, [String: String], ToolConnectionSecret?) throws -> Void
     @State private var name: String
     @State private var values: [String: String] = [:]
     @State private var token = ""
@@ -195,8 +195,8 @@ private struct PresetSetUpForm: View {
     @State private var serviceAccountKey = ""
     @State private var error: String?
 
-    init(tool: ToolDefinition, configuration: MCPToolConfiguration, name: String, onBack: @escaping () -> Void,
-         onAdd: @escaping (String, [String: String], MCPConnectionSecret?) throws -> Void) {
+    init(tool: ToolDefinition, configuration: ToolConnectionConfiguration, name: String, onBack: @escaping () -> Void,
+         onAdd: @escaping (String, [String: String], ToolConnectionSecret?) throws -> Void) {
         self.tool = tool; self.configuration = configuration; self.onBack = onBack; self.onAdd = onAdd
         _name = State(initialValue: name)
         _values = State(initialValue: Dictionary(uniqueKeysWithValues: configuration.fields.compactMap { field in
@@ -215,7 +215,7 @@ private struct PresetSetUpForm: View {
                 || ![clientID, clientSecret].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 
-    private var secret: MCPConnectionSecret? {
+    private var secret: ToolConnectionSecret? {
         if let composed = configuration.composedToken { return (try? composed.compose(clientID, clientSecret)).map { .token($0) } }
         if configuration.usesToken { return .token(token) }
         if configuration.clientCredentials != nil { return .client(id: clientID, secret: clientSecret) }

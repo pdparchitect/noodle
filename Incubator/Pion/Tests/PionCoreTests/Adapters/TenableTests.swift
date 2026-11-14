@@ -9,7 +9,7 @@ final class TenableTests: XCTestCase {
     func testAnAssetsVulnerabilitiesByIP() async throws {
         XCTAssertEqual(tenable.endpoint.absoluteString, "https://cloud.tenable.com")
         XCTAssertEqual(tenable.tokenHeader, "X-ApiKeys")
-        guard case .mcp(let configuration) = Tenable.preset.configuration else { return XCTFail() }
+        guard case .connection(let configuration) = Tenable.preset.configuration else { return XCTFail() }
         XCTAssertEqual(try configuration.composedToken?.compose("A1", "S1"), "accessKey=A1;secretKey=S1")
         let service = FakeService()
         service.answers["/workbenches/assets"] = (200, #"{"assets":[{"id":"a-1","ipv4":["10.0.4.23"],"fqdn":["lt-0423.kestrel.example"],"operating_system":["Windows 11"],"last_seen":"2026-11-14T06:00:00Z"}]}"#)

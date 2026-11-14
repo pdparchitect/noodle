@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 import NoodleCore
 
-public struct MCPSettingsView: View {
+public struct ToolConnectionsSettingsView: View {
     let store: any BotSettingsHost
     /// Tools the app has built in, listed above the connections and never removed.
     private let builtIn: AnyView?
     @State private var showingAdd = false
-    @State private var editing: MCPConnectionRecord?
-    @State private var removing: MCPConnectionRecord?
+    @State private var editing: ToolConnection?
+    @State private var removing: ToolConnection?
     @State private var connectionsHeight: CGFloat = 80
     public var body: some View {
         VStack(spacing: 0) {
@@ -16,20 +16,20 @@ public struct MCPSettingsView: View {
                 VStack(spacing: 0) {
                     if let builtIn {
                         builtIn
-                        if !store.mcp.registry.connections.isEmpty { Divider().padding(.leading, 58) }
+                        if !store.connectionsController.registry.connections.isEmpty { Divider().padding(.leading, 58) }
                     }
-                    if store.mcp.registry.connections.isEmpty && builtIn == nil {
+                    if store.connectionsController.registry.connections.isEmpty && builtIn == nil {
                         Label("No connections", systemImage: "puzzlepiece.extension")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, minHeight: 80)
                     }
-                    ForEach(store.mcp.registry.connections) { connection in
+                    ForEach(store.connectionsController.registry.connections) { connection in
                         HStack(alignment: .top, spacing: 12) {
-                            MCPConnectionIcon(connection: connection, size: 32)
+                            ToolConnectionIcon(connection: connection, size: 32)
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
                                     Text(connection.name).font(.headline).lineLimit(1)
-                                    MCPConnectionMaturityBadge(connection: connection)
+                                    ToolConnectionMaturityBadge(connection: connection)
                                     Spacer(minLength: 4)
                                     connectionStatus(connection)
                                 }
@@ -37,37 +37,37 @@ public struct MCPSettingsView: View {
                                 if !connection.description.isEmpty {
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                                 }
-                                if let error = store.mcp.errors[connection.id] {
+                                if let error = store.connectionsController.errors[connection.id] {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
                                     if connection.keepsSecret {
                                         // A token or client secret is entered in the editor; there is no sign-in to start.
                                         let what = connection.usesToken ? "Token" : "Credentials"
-                                        Button(store.mcp.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
+                                        Button(store.connectionsController.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
                                             .buttonStyle(.link)
-                                            .disabled(store.mcp.signingIn != nil || !allows(connection))
+                                            .disabled(store.connectionsController.signingIn != nil || !allows(connection))
                                     } else {
-                                        Button(store.mcp.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.mcp.connect(connection) }
+                                        Button(store.connectionsController.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.connectionsController.connect(connection) }
                                             .buttonStyle(.link)
-                                            .disabled(store.mcp.signingIn != nil || !allows(connection))
+                                            .disabled(store.connectionsController.signingIn != nil || !allows(connection))
                                     }
                                     Button("Edit…") { editing = connection }
                                         .buttonStyle(.link)
                                     Button("Remove") { removing = connection }
                                         .buttonStyle(.link)
-                                    if store.mcp.signingIn == connection.id {
+                                    if store.connectionsController.signingIn == connection.id {
                                         Spacer(minLength: 4)
                                         ProgressView().controlSize(.mini)
                                             .frame(width: 12, height: 12)
                                             .accessibilityLabel("Signing in")
-                                        Button("Cancel") { store.mcp.cancelSignIn() }
+                                        Button("Cancel") { store.connectionsController.cancelSignIn() }
                                             .controlSize(.small)
                                     }
                                 }.padding(.top, 3)
                             }
                         }.padding(14)
-                        if connection.id != store.mcp.registry.connections.last?.id { Divider().padding(.leading, 58) }
+                        if connection.id != store.connectionsController.registry.connections.last?.id { Divider().padding(.leading, 58) }
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { geometry in
@@ -91,37 +91,37 @@ public struct MCPSettingsView: View {
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.mcp).noodleSheetSizing() }
-        .sheet(item: $editing) { connection in MCPEditor(controller: store.mcp, existing: connection).noodleSheetSizing() }
+        .sheet(isPresented: $showingAdd) { ToolCreationSheet(controller: store.connectionsController).noodleSheetSizing() }
+        .sheet(item: $editing) { connection in ToolConnectionEditor(controller: store.connectionsController, existing: connection).noodleSheetSizing() }
         .confirmationDialog("Remove Tool Connection?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             titleVisibility: .visible) {
             Button("Remove Connection", role: .destructive) {
-                if let removing { store.mcp.remove(removing) }
+                if let removing { store.connectionsController.remove(removing) }
                 removing = nil
             }
             Button("Cancel", role: .cancel) { removing = nil }
         } message: {
             Text("This removes this connection from all bots and deletes its saved sign-in from Noodle. Other connections to the same service are unchanged. To revoke the provider's grant too, use its account settings.")
         }
-        .alert("Tools", isPresented: Binding(get: { store.mcp.errorMessage != nil }, set: { if !$0 { store.mcp.errorMessage = nil } })) {
-            Button("OK") { store.mcp.errorMessage = nil }
-        } message: { Text(store.mcp.errorMessage ?? "") }
+        .alert("Tools", isPresented: Binding(get: { store.connectionsController.errorMessage != nil }, set: { if !$0 { store.connectionsController.errorMessage = nil } })) {
+            Button("OK") { store.connectionsController.errorMessage = nil }
+        } message: { Text(store.connectionsController.errorMessage ?? "") }
     }
 
-    private func allows(_ connection: MCPConnectionRecord) -> Bool {
+    private func allows(_ connection: ToolConnection) -> Bool {
         OrganisationStatus.shared.allows(Organisation.action(for: connection))
     }
 
-    @ViewBuilder private func connectionStatus(_ connection: MCPConnectionRecord) -> some View {
+    @ViewBuilder private func connectionStatus(_ connection: ToolConnection) -> some View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
-        } else if store.mcp.signingIn == connection.id {
-            Text(store.mcp.signInStage.isEmpty ? (!connection.keepsSecret && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.mcp.signInStage)
+        } else if store.connectionsController.signingIn == connection.id {
+            Text(store.connectionsController.signInStage.isEmpty ? (!connection.keepsSecret && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.connectionsController.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                .help(store.mcp.signInStage)
-        } else if store.mcp.errors[connection.id] != nil {
+                .help(store.connectionsController.signInStage)
+        } else if store.connectionsController.errors[connection.id] != nil {
             SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
-        } else if store.mcp.connected.contains(connection.id) {
+        } else if store.connectionsController.connected.contains(connection.id) {
             SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
@@ -143,16 +143,16 @@ public struct MCPSettingsView: View {
     }
 }
 
-public struct MCPEditor: View {
+public struct ToolConnectionEditor: View {
     /// Saves the connection on this Mac at once, or elsewhere, as on a Noodle Hub, and returns it as saved.
-    private let saveNow: ((MCPConnectionRecord) throws -> MCPConnectionRecord)?
-    private let saveLater: ((MCPConnectionRecord) async throws -> MCPConnectionRecord)?
-    let existing: MCPConnectionRecord?
+    private let saveNow: ((ToolConnection) throws -> ToolConnection)?
+    private let saveLater: ((ToolConnection) async throws -> ToolConnection)?
+    let existing: ToolConnection?
     let onBack: (() -> Void)?
-    let onSaved: (MCPConnectionRecord) -> Void
-    private let onConnect: (MCPConnectionRecord) -> Void
+    let onSaved: (ToolConnection) -> Void
+    private let onConnect: (ToolConnection) -> Void
     /// Keeps a token or client secret and checks it; nil where those cannot be kept yet, as on a Noodle Hub.
-    private let onSecret: ((MCPConnectionRecord, MCPConnectionSecret) -> Void)?
+    private let onSecret: ((ToolConnection, ToolConnectionSecret) -> Void)?
     private enum SignIn: Hashable { case browser, token, client, aws, google }
     @Environment(\.dismiss) private var dismiss
     @State private var signIn: SignIn
@@ -171,9 +171,9 @@ public struct MCPEditor: View {
     @State private var error: String?
     @State private var newConnectionID = UUID()
     @State private var saving = false
-    public init(controller: MCPController, existing: MCPConnectionRecord? = nil,
-         onBack: (() -> Void)? = nil, onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
-         onConnect: ((MCPConnectionRecord) -> Void)? = nil) {
+    public init(controller: ToolConnectionsController, existing: ToolConnection? = nil,
+         onBack: (() -> Void)? = nil, onSaved: @escaping (ToolConnection) -> Void = { _ in },
+         onConnect: ((ToolConnection) -> Void)? = nil) {
         saveNow = { record in
             try controller.save(record)
             return controller.registry.connections.first { $0.id == record.id } ?? record
@@ -195,10 +195,10 @@ public struct MCPEditor: View {
     }
 
     /// For a connection kept somewhere other than this Mac, as on a Noodle Hub.
-    public init(existing: MCPConnectionRecord? = nil, onBack: (() -> Void)? = nil,
-                onSaved: @escaping (MCPConnectionRecord) -> Void = { _ in },
-                onConnect: @escaping (MCPConnectionRecord) -> Void,
-                save: @escaping (MCPConnectionRecord) async throws -> MCPConnectionRecord) {
+    public init(existing: ToolConnection? = nil, onBack: (() -> Void)? = nil,
+                onSaved: @escaping (ToolConnection) -> Void = { _ in },
+                onConnect: @escaping (ToolConnection) -> Void,
+                save: @escaping (ToolConnection) async throws -> ToolConnection) {
         saveNow = nil
         saveLater = save
         self.existing = existing
@@ -341,7 +341,7 @@ public struct MCPEditor: View {
     }
     /// The two values an existing connection's token is made from, when its preset composes it.
     private var composedToken: ComposedToken? {
-        guard let existing, case .mcp(let configuration)? = ToolCatalog.definition(for: existing)?.configuration else { return nil }
+        guard let existing, case .connection(let configuration)? = ToolCatalog.definition(for: existing)?.configuration else { return nil }
         return configuration.composedToken
     }
 
@@ -356,13 +356,13 @@ public struct MCPEditor: View {
             }
         } catch { self.error = error.localizedDescription }
     }
-    private func draft() throws -> MCPConnectionRecord {
+    private func draft() throws -> ToolConnection {
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw MCPConnectionError.message("Enter a valid HTTPS server URL.")
+            throw ToolConnectionError.message("Enter a valid HTTPS server URL.")
         }
         // A registry save can succeed before workspace refresh fails. Keep
         // the draft's identity so retry updates that account in place.
-        var record = try existing ?? MCPConnectionRecord(id: newConnectionID, name: name, endpoint: url)
+        var record = try existing ?? ToolConnection(id: newConnectionID, name: name, endpoint: url)
         record.name = try ConversationName.validated(name)
         record.description = String(description.prefix(1_000))
         record.instructions = String(instructions.prefix(20_000))
@@ -375,7 +375,7 @@ public struct MCPEditor: View {
             // Its signing stays as its preset made it; only the key can be replaced.
             let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             if id.isEmpty != clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw MCPConnectionError.message("Enter both the access key ID and the secret access key.")
+                throw ToolConnectionError.message("Enter both the access key ID and the secret access key.")
             }
         case .token where composedToken != nil:
             // Its token is made from the two values; the connection itself stays as its preset made it.
@@ -388,34 +388,34 @@ public struct MCPEditor: View {
             // A token its service takes only in the address keeps going there; only its value changes.
             record.tokenParameter = existing?.tokenParameter
         case .token:
-            let header = try MCPConnectionRecord.validatedTokenHeader(tokenHeader)
+            let header = try ToolConnection.validatedTokenHeader(tokenHeader)
             let blank = token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if blank, existing?.tokenHeader != header {
-                throw MCPConnectionError.message(existing?.tokenHeader == nil ? "Enter the token." : "Enter the token again for the new header.")
+                throw ToolConnectionError.message(existing?.tokenHeader == nil ? "Enter the token." : "Enter the token again for the new header.")
             }
             record.tokenHeader = header
         case .client:
             guard let url = URL(string: tokenEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw MCPConnectionError.message("Enter the token URL.")
+                throw ToolConnectionError.message("Enter the token URL.")
             }
-            let exchange = try MCPConnectionRecord.validatedClientCredentials(MCPClientCredentials(tokenEndpoint: url, scope: scope))
+            let exchange = try ToolConnection.validatedClientCredentials(ConnectionClientCredentials(tokenEndpoint: url, scope: scope))
             let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             let secret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-            if id.isEmpty != secret.isEmpty { throw MCPConnectionError.message("Enter both the client ID and the secret.") }
+            if id.isEmpty != secret.isEmpty { throw ToolConnectionError.message("Enter both the client ID and the secret.") }
             if id.isEmpty, existing?.clientCredentials?.tokenEndpoint != exchange.tokenEndpoint {
-                throw MCPConnectionError.message(existing?.clientCredentials == nil ? "Enter the client ID and secret."
+                throw ToolConnectionError.message(existing?.clientCredentials == nil ? "Enter the client ID and secret."
                                                  : "Enter the client ID and secret again for the new token URL.")
             }
             record.clientCredentials = exchange
         }
         return record
     }
-    private func finish(_ record: MCPConnectionRecord) {
+    private func finish(_ record: ToolConnection) {
         onSaved(record)
         let newToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let composed = composedToken.flatMap { try? $0.compose(clientID, clientSecret) }
-        let secret: MCPConnectionSecret? = switch signIn {
+        let secret: ToolConnectionSecret? = switch signIn {
         case .browser: nil
         case .token where composedToken != nil: composed.map { .token($0) }
         case .token: newToken.isEmpty ? nil : .token(newToken)
@@ -460,8 +460,8 @@ struct ServiceAccountKeyField: View {
     }
 }
 
-public struct MCPConnectionIcon: View {
-    let connection: MCPConnectionRecord
+public struct ToolConnectionIcon: View {
+    let connection: ToolConnection
     let size: CGFloat
     public var body: some View {
         Group {
@@ -476,7 +476,7 @@ public struct MCPConnectionIcon: View {
         }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: size * 0.22))
     }
 
-    public init(connection: MCPConnectionRecord, size: CGFloat) {
+    public init(connection: ToolConnection, size: CGFloat) {
         self.connection = connection
         self.size = size
     }

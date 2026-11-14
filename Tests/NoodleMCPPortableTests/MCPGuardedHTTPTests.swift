@@ -44,7 +44,7 @@ final class MCPGuardedHTTPTests: XCTestCase {
             loader.startLoading()
             await fulfillment(of: [client.completed], timeout: 5)
             XCTAssertEqual(client.errors.count, 1)
-            guard case MCPServiceError.invalidMetadata? = client.errors.first else {
+            guard case ToolConnectionServiceError.invalidMetadata? = client.errors.first else {
                 return XCTFail("Invalid endpoints must fail validation")
             }
             XCTAssertEqual(client.finishes, 0)

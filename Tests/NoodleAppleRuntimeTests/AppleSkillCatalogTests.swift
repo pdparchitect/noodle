@@ -35,7 +35,7 @@ final class AppleSkillCatalogTests: XCTestCase {
     }
 
     func testReadsGeneratedMCPMetadataWithEscapedQuotesAndNewlines() throws {
-        let connection = try MCPConnectionRecord(name: "Team \"Tools\"", endpoint: URL(string: "https://example.com/mcp")!,
+        let connection = try ToolConnection(name: "Team \"Tools\"", endpoint: URL(string: "https://example.com/mcp")!,
                                                   description: "Search files.\nRead C:\\notes too.")
         // The skill Noodle generates for a tool connection, from its provider's manifest.
         let manifest = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: connection.id,

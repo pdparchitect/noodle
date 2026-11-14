@@ -15,7 +15,7 @@ public enum Okta {
         this connection; recommend it to the champion with the user's login, why, and how to undo it.
         """,
         iconName: "okta",
-        configuration: .mcp(.init(endpointTemplate: "https://{domain}/api/v1",
+        configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1",
                                   fields: [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)],
                                   tokenHeader: "Authorization", tokenScheme: "SSWS", adapter: "okta")))
 

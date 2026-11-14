@@ -20,7 +20,7 @@ enum MCPIcon {
                 guard icon.src.utf8.count <= 180_000, let comma = icon.src.firstIndex(of: ",") else { continue }
                 data = Data(base64Encoded: String(icon.src[icon.src.index(after: comma)...]))
             } else if let url = URL(string: icon.src), url.host == endpoint.host, url.port == endpoint.port,
-                      (try? MCPConnectionRecord.validatedEndpoint(url)) != nil {
+                      (try? ToolConnection.validatedEndpoint(url)) != nil {
                 let configuration = sessionConfiguration()
                 configuration.httpCookieStorage = nil
                 configuration.urlCredentialStorage = nil
@@ -29,8 +29,8 @@ enum MCPIcon {
                 let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
                 defer { session.invalidateAndCancel() }
                 do {
-                    data = try await session.data(for: URLRequest(url: url), limit: 131_072, tooLarge: MCPServiceError.responseTooLarge) {
-                        guard ($0 as? HTTPURLResponse)?.statusCode == 200 else { throw MCPServiceError.network(($0 as? HTTPURLResponse)?.statusCode ?? 0) }
+                    data = try await session.data(for: URLRequest(url: url), limit: 131_072, tooLarge: ToolConnectionServiceError.responseTooLarge) {
+                        guard ($0 as? HTTPURLResponse)?.statusCode == 200 else { throw ToolConnectionServiceError.network(($0 as? HTTPURLResponse)?.statusCode ?? 0) }
                     }.0
                 } catch { continue }
             } else { continue }

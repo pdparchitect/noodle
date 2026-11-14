@@ -12,9 +12,9 @@ final class ToolCatalogTests: XCTestCase {
             XCTAssertEqual(tool.iconName, tool.id)
             XCTAssertFalse(tool.iconName.contains("/"))
             switch tool.configuration {
-            case .mcp(let configuration):
+            case .connection(let configuration):
                 let endpoint = configuration.endpoint
-                XCTAssertEqual(try MCPConnectionRecord.validatedEndpoint(endpoint), endpoint)
+                XCTAssertEqual(try ToolConnection.validatedEndpoint(endpoint), endpoint)
                 XCTAssertNil(endpoint.query)
                 XCTAssertFalse(endpoint.path.hasSuffix("/sse"))
                 XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: endpoint), tool)
@@ -43,7 +43,7 @@ final class ToolCatalogTests: XCTestCase {
 
     func testPipedreamUsesThePublicEndUserGateway() throws {
         let tool = try XCTUnwrap(ToolCatalog.matching("Pipedream").first)
-        XCTAssertEqual(tool.configuration, .mcp(.init(endpoint: URL(string: "https://mcp.pipedream.net/v2")!)))
+        XCTAssertEqual(tool.configuration, .connection(.init(endpoint: URL(string: "https://mcp.pipedream.net/v2")!)))
         XCTAssertEqual(tool.iconName, "pipedream")
         XCTAssertTrue(tool.defaultInstructions.contains("account is unclear"))
         XCTAssertTrue(tool.defaultInstructions.contains("never request or handle their credentials"))
@@ -66,7 +66,7 @@ final class ToolCatalogTests: XCTestCase {
 
     func testAtlassianNamesItsAuthorizationServer() throws {
         let tool = try XCTUnwrap(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.atlassian.com/v1/mcp")!))
-        guard case .mcp(let configuration) = tool.configuration else { return XCTFail() }
+        guard case .connection(let configuration) = tool.configuration else { return XCTFail() }
         XCTAssertEqual(configuration.authorizationServer, URL(string: "https://mcp.atlassian.com"))
         XCTAssertNil(configuration.oauth)
     }
@@ -82,12 +82,12 @@ final class ToolCatalogTests: XCTestCase {
     func testCreatingPresetDoesNotAssignOrAuthenticateIt() throws {
         let tool = try XCTUnwrap(ToolCatalog.matching("Notion").first)
         switch tool.configuration {
-        case .mcp(let configuration):
+        case .connection(let configuration):
             let connection = try configuration.makeConnection(name: "Notion Work")
-            var registry = MCPRegistry()
+            var registry = ToolConnectionRegistry()
             registry.connections.append(connection)
             XCTAssertTrue(registry.assignments.isEmpty)
-            let roundTrip = try JSONDecoder().decode(MCPRegistry.self, from: JSONEncoder().encode(registry))
+            let roundTrip = try JSONDecoder().decode(ToolConnectionRegistry.self, from: JSONEncoder().encode(registry))
             XCTAssertEqual(roundTrip, registry)
             XCTAssertEqual(connection.name, "Notion Work")
         }
@@ -116,7 +116,7 @@ final class ToolCatalogTests: XCTestCase {
         var sharedClients: [MCPOAuthClientConfiguration]?
         for (id, service, scopes) in services {
             let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.id == id })
-            guard case .mcp(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
+            guard case .connection(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
             XCTAssertEqual(configuration.endpoint.absoluteString, "https://\(service)mcp.googleapis.com/mcp/v1")
             let oauth = try XCTUnwrap(configuration.oauth)
             XCTAssertEqual(oauth.scopes, scopes.map { "https://www.googleapis.com/auth/" + $0 })
@@ -127,18 +127,18 @@ final class ToolCatalogTests: XCTestCase {
                 XCTAssertEqual(client.redirectURI.scheme, client.id.split(separator: ".").reversed().joined(separator: "."))
             }
         }
-        XCTAssertNil(MCPToolConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
+        XCTAssertNil(ToolConnectionConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
     }
 
     func testATokenPresetMakesTokenConnectionsAndOthersSignIn() throws {
         let endpoint = URL(string: "https://keys.example/mcp")!
-        let keyed = try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "x-apikey").makeConnection(name: "Keys")
+        let keyed = try ToolConnectionConfiguration(endpoint: endpoint, tokenHeader: "x-apikey").makeConnection(name: "Keys")
         XCTAssertEqual(keyed.tokenHeader, "x-apikey")
-        XCTAssertNil(try MCPToolConfiguration(endpoint: endpoint).makeConnection(name: "Signs In").tokenHeader)
-        XCTAssertThrowsError(try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "Cookie").makeConnection(name: "Bad"))
-        for case .mcp(let configuration) in ToolCatalog.entries.map(\.configuration) {
+        XCTAssertNil(try ToolConnectionConfiguration(endpoint: endpoint).makeConnection(name: "Signs In").tokenHeader)
+        XCTAssertThrowsError(try ToolConnectionConfiguration(endpoint: endpoint, tokenHeader: "Cookie").makeConnection(name: "Bad"))
+        for case .connection(let configuration) in ToolCatalog.entries.map(\.configuration) {
             if let header = configuration.tokenHeader {
-                XCTAssertEqual(try MCPConnectionRecord.validatedTokenHeader(header), header)
+                XCTAssertEqual(try ToolConnection.validatedTokenHeader(header), header)
                 XCTAssertNil(configuration.oauth, "a token preset has no sign-in to configure")
             }
         }
@@ -149,7 +149,7 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.entries, ToolCatalog.noodle)
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
         let own = ToolDefinition(id: "keys", name: "Keys", summary: "Lookups with a key.", defaultInstructions: "Look things up.",
-                                 iconName: "keys", configuration: .mcp(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
+                                 iconName: "keys", configuration: .connection(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
         ToolCatalog.use([notion, own])
         XCTAssertEqual(ToolCatalog.matching("").map(\.id), ["keys", "notion"])
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://keys.example/mcp")!), own)
@@ -162,10 +162,10 @@ final class ToolCatalogTests: XCTestCase {
         let region = ToolField(key: "region", title: "Region", placeholder: "us-1",
                                kind: .choice([.init(value: "us-1", title: "US-1"), .init(value: "eu-1", title: "EU-1")]))
         let directory = ToolDefinition(id: "directory", name: "Directory", summary: "People and sign-ins.", defaultInstructions: "Look people up.",
-            iconName: "directory", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp/{region}", fields: [domain, region],
+            iconName: "directory", configuration: .connection(.init(endpointTemplate: "https://{domain}/mcp/{region}", fields: [domain, region],
                                                             tokenHeader: "Authorization")))
         ToolCatalog.use(ToolCatalog.noodle + [directory])
-        guard case .mcp(let configuration) = directory.configuration else { return XCTFail() }
+        guard case .connection(let configuration) = directory.configuration else { return XCTFail() }
         XCTAssertEqual(configuration.endpoint.absoluteString, "https://acme.okta.com/mcp/us-1", "a sample address from the placeholders")
 
         let acme = try directory.makeConnection(name: "Directory — Acme", values: ["domain": " Acme.Okta.com ", "region": "eu-1"])
@@ -176,7 +176,7 @@ final class ToolCatalogTests: XCTestCase {
         let contoso = try directory.makeConnection(name: "Directory — Contoso", values: ["domain": "contoso.okta.com", "region": "us-1"])
         XCTAssertNotEqual(acme.id, contoso.id)
         XCTAssertEqual(ToolCatalog.definition(for: contoso), directory)
-        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(acme)), acme)
+        XCTAssertEqual(try JSONDecoder().decode(ToolConnection.self, from: JSONEncoder().encode(acme)), acme)
 
         for bad in ["acme.okta.com/evil", "user@acme.okta.com", "acme.okta.com:8443", "https://acme.okta.com", "", "localhost", "-acme.okta.com"] {
             XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": bad, "region": "us-1"]), bad)
@@ -188,49 +188,49 @@ final class ToolCatalogTests: XCTestCase {
         let signedIn = try notion.makeConnection(name: "Notion")
         XCTAssertEqual(signedIn.catalogueID, "notion")
         XCTAssertNil(signedIn.settings)
-        let earlier = try MCPConnectionRecord(name: "Notion", endpoint: signedIn.endpoint)
+        let earlier = try ToolConnection(name: "Notion", endpoint: signedIn.endpoint)
         XCTAssertEqual(ToolCatalog.definition(for: earlier), notion, "connections made before entries were remembered match by address")
     }
 
     func testAClientCredentialsPresetBuildsEachAccountsTokenAddress() throws {
         let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
         let tool = ToolDefinition(id: "service-app", name: "Service App", summary: "As a service.", defaultInstructions: "Work.",
-            iconName: "service-app", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain],
+            iconName: "service-app", configuration: .connection(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain],
                 clientCredentials: .init(tokenEndpointTemplate: "https://{domain}/oauth2/v1/token", scope: "okta.users.read"))))
         XCTAssertTrue(tool.needsSetUp)
         let account = try tool.makeConnection(name: "Acme", values: ["domain": "acme.okta.com"])
-        XCTAssertEqual(account.clientCredentials, MCPClientCredentials(tokenEndpoint: URL(string: "https://acme.okta.com/oauth2/v1/token")!,
+        XCTAssertEqual(account.clientCredentials, ConnectionClientCredentials(tokenEndpoint: URL(string: "https://acme.okta.com/oauth2/v1/token")!,
                                                                       scope: "okta.users.read"))
         XCTAssertNil(account.tokenHeader)
-        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(account)), account)
+        XCTAssertEqual(try JSONDecoder().decode(ToolConnection.self, from: JSONEncoder().encode(account)), account)
 
         let endpoint = URL(string: "https://falcon.example/mcp")!
-        let fixed = MCPClientCredentials(tokenEndpoint: URL(string: "https://falcon.example/oauth2/token")!, scope: nil)
-        XCTAssertNoThrow(try MCPConnectionRecord(name: "Falcon", endpoint: endpoint, clientCredentials: fixed))
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: endpoint, tokenHeader: "x-apikey", clientCredentials: fixed),
+        let fixed = ConnectionClientCredentials(tokenEndpoint: URL(string: "https://falcon.example/oauth2/token")!, scope: nil)
+        XCTAssertNoThrow(try ToolConnection(name: "Falcon", endpoint: endpoint, clientCredentials: fixed))
+        XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: endpoint, tokenHeader: "x-apikey", clientCredentials: fixed),
                              "a connection uses one way to prove who it is")
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Plain", endpoint: endpoint,
+        XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: endpoint,
             clientCredentials: .init(tokenEndpoint: URL(string: "http://falcon.example/oauth2/token")!, scope: nil)))
     }
 
     func testAnAdapterPresetMakesConnectionsTheAppServesThatStayOnThisMac() throws {
         let tool = ToolDefinition(id: "lookup", name: "Lookup", summary: "Reputation lookups.", defaultInstructions: "Look up.",
-            iconName: "lookup", configuration: .mcp(.init(endpoint: URL(string: "https://api.lookup.example/v3")!, tokenHeader: "x-apikey",
+            iconName: "lookup", configuration: .connection(.init(endpoint: URL(string: "https://api.lookup.example/v3")!, tokenHeader: "x-apikey",
                                                           adapter: "lookup")))
         let account = try tool.makeConnection(name: "Lookup")
         XCTAssertEqual(account.adapter, "lookup")
         XCTAssertTrue(tool.staysOnThisMac)
-        XCTAssertEqual(try JSONDecoder().decode(MCPConnectionRecord.self, from: JSONEncoder().encode(account)), account)
+        XCTAssertEqual(try JSONDecoder().decode(ToolConnection.self, from: JSONEncoder().encode(account)), account)
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
         XCTAssertFalse(notion.staysOnThisMac)
         XCTAssertNil(try notion.makeConnection(name: "Notion").adapter)
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
     }
 
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
-        var disguised = try MCPConnectionRecord(name: "Notion", endpoint: URL(string: "https://attacker.example/mcp")!)
+        var disguised = try ToolConnection(name: "Notion", endpoint: URL(string: "https://attacker.example/mcp")!)
         disguised.catalogueID = "notion"
         XCTAssertNil(ToolCatalog.definition(for: disguised), "a connection elsewhere passed as a preset the organisation allows")
         guard case .toolConnection(let catalogueID, _) = Organisation.action(for: disguised) else { return XCTFail() }
@@ -239,7 +239,7 @@ final class ToolCatalogTests: XCTestCase {
 
         let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
         let directory = ToolDefinition(id: "directory", name: "Directory", summary: "People.", defaultInstructions: "Look up.",
-            iconName: "directory", configuration: .mcp(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain], tokenHeader: "x-key")))
+            iconName: "directory", configuration: .connection(.init(endpointTemplate: "https://{domain}/mcp", fields: [domain], tokenHeader: "x-key")))
         ToolCatalog.use(ToolCatalog.noodle + [directory])
         var account = try directory.makeConnection(name: "Acme", values: ["domain": "acme.okta.com"])
         XCTAssertEqual(ToolCatalog.definition(for: account), directory)
@@ -249,12 +249,12 @@ final class ToolCatalogTests: XCTestCase {
 
     func testATokenSchemeIsAWordAndNeedsATokenHeader() throws {
         let endpoint = URL(string: "https://acme.okta.com/api/v1")!
-        XCTAssertEqual(try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
+        XCTAssertEqual(try ToolConnectionConfiguration(endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
             .makeConnection(name: "Okta").tokenScheme, "SSWS")
         for scheme in ["", "SS WS", "Bearer:", String(repeating: "a", count: 40)] {
-            XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: scheme), scheme)
+            XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: scheme), scheme)
         }
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenScheme: "SSWS"), "a scheme without a token")
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: endpoint, tokenScheme: "SSWS"), "a scheme without a token")
     }
 
     func testATokenCanBeComposedFromTwoValues() throws {
@@ -268,13 +268,13 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try keys.compose("a", "two\nlines"))
 
         let tool = ToolDefinition(id: "logs", name: "Logs", summary: "Logs.", defaultInstructions: "Search.", iconName: "logs",
-            configuration: .mcp(.init(endpoint: URL(string: "https://api.logs.example/v1")!, tokenHeader: "Authorization", tokenScheme: "Basic",
+            configuration: .connection(.init(endpoint: URL(string: "https://api.logs.example/v1")!, tokenHeader: "Authorization", tokenScheme: "Basic",
                                       composedToken: basic, adapter: "logs")))
         XCTAssertTrue(tool.needsSetUp)
         let account = try tool.makeConnection(name: "Logs")
         XCTAssertEqual(account.tokenHeader, "Authorization")
         XCTAssertEqual(account.tokenScheme, "Basic")
-        guard case .mcp(let configuration) = tool.configuration else { return XCTFail() }
+        guard case .connection(let configuration) = tool.configuration else { return XCTFail() }
         XCTAssertEqual(configuration.composedToken, basic)
     }
 }

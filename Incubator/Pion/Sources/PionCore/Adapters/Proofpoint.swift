@@ -14,7 +14,7 @@ public enum Proofpoint {
         pulling a message or blocking a sender to the champion.
         """,
         iconName: "proofpoint",
-        configuration: .mcp(.init(endpoint: URL(string: "https://tap-api-v2.proofpoint.com/v2")!, tokenHeader: "Authorization", tokenScheme: "Basic",
+        configuration: .connection(.init(endpoint: URL(string: "https://tap-api-v2.proofpoint.com/v2")!, tokenHeader: "Authorization", tokenScheme: "Basic",
                                   composedToken: ComposedToken(first: "Service Principal", second: "Secret", format: .basic), adapter: "proofpoint")))
 
     public static let adapter = OperationAdapter(operations: [SIEMEvents()])

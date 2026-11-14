@@ -33,7 +33,7 @@ struct AdapterResult {
 
 /// Runs `tool` of `adapter` for `connection` against a stand-in service.
 func callTool(_ adapter: OperationAdapter, _ tool: String, _ arguments: String, on service: FakeService,
-         in connection: MCPConnectionRecord) async throws -> AdapterResult {
+         in connection: ToolConnection) async throws -> AdapterResult {
     let data = try await adapter.run(tool, arguments: Data(arguments.utf8), connection: connection, access: service)
     let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     return AdapterResult(text: ((result["content"] as? [[String: Any]])?.first?["text"]) as? String ?? "",

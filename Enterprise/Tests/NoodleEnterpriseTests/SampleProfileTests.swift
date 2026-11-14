@@ -179,7 +179,7 @@ enum RestrictiveProfile {
 
     private func catalogueConnection(_ id: String) -> OrganisationAction {
         let tool = ToolCatalog.entries.first { $0.id == id }!
-        guard case .mcp(let configuration) = tool.configuration else { fatalError("\(id) is not an MCP connection") }
+        guard case .connection(let configuration) = tool.configuration else { fatalError("\(id) is not an MCP connection") }
         return .toolConnection(catalogueID: id, endpoint: configuration.endpoint)
     }
 

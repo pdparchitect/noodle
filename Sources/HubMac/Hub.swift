@@ -72,7 +72,7 @@ import NoodleVoicePeer
         // One broker serves every tool a bot is given here, whichever kind it is.
         let tools = ToolProviderRegistry(), assignments = ToolAssignmentStore()
         connections = HubConnections(root: root, access: access,
-                                     service: MCPService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"),
+                                     service: ToolConnectionService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.hub"),
                                      tools: tools, assignments: assignments)
         computers = HubComputers(root: root, access: access, tools: tools, assignments: assignments,
                                  call: computer ?? ComputerToolProvider.liveTransport(), surface: surfaces.computer)

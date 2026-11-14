@@ -13,7 +13,7 @@ public enum Splunk {
         sendemail, are refused.
         """,
         iconName: "splunk",
-        configuration: .mcp(.init(endpointTemplate: "https://{host}:8089/services",
+        configuration: .connection(.init(endpointTemplate: "https://{host}:8089/services",
             fields: [ToolField(key: "host", title: "Splunk address", placeholder: "acme.splunkcloud.com", kind: .host)],
             tokenHeader: "Authorization", adapter: "splunk")))
 

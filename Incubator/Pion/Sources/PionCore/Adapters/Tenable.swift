@@ -13,7 +13,7 @@ public enum Tenable {
         tools only read.
         """,
         iconName: "tenable",
-        configuration: .mcp(.init(endpoint: URL(string: "https://cloud.tenable.com")!, tokenHeader: "X-ApiKeys",
+        configuration: .connection(.init(endpoint: URL(string: "https://cloud.tenable.com")!, tokenHeader: "X-ApiKeys",
             composedToken: ComposedToken(first: "Access Key", second: "Secret Key", format: .template("accessKey={first};secretKey={second}")),
             adapter: "tenable")))
 

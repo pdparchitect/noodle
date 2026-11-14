@@ -65,8 +65,8 @@ import XCTest
     }
 
     /// Noodle's own tool service, with a Keychain that holds no sign-ins.
-    private static func service() -> MCPService {
-        MCPService(credentials: NoPersonalCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+    private static func service() -> ToolConnectionService {
+        ToolConnectionService(credentials: NoPersonalCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
     }
 
     /// This Mac is its owner's alone, so nothing is hosted on it, and Noodle's runtime is left alone.
@@ -762,7 +762,7 @@ import XCTest
         let notes = LinkConnectionDraft(name: "Notes", endpoint: URL(string: "https://example.com/mcp")!)
         _ = try await f.device.request(.saveConnection(notes))
         _ = try await f.device.request(.assignConnections(botID: kai, connectionIDs: [notes.id]))
-        XCTAssertEqual(try MCPRegistry.load(root: root).assigned(to: kai).map(\.name), ["Notes"])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: root).assigned(to: kai).map(\.name), ["Notes"])
 
         guard case .browser(let work) = try await f.device.request(.createBrowser(LinkBrowserDraft(name: "Work"))) else {
             return XCTFail("no browser")
@@ -801,8 +801,8 @@ import XCTest
         let (f, made) = try await fixture(bots: ["Kai"])
         let kai = made[0].id, root = f.repository.rootURL
         // Saved in Noodle's Settings, as its tool controller does.
-        var registry = try MCPRegistry.load(root: root)
-        let notes = try MCPConnectionRecord(name: "Notes", endpoint: URL(string: "https://example.com/notes")!)
+        var registry = try ToolConnectionRegistry.load(root: root)
+        let notes = try ToolConnection(name: "Notes", endpoint: URL(string: "https://example.com/notes")!)
         registry.connections.append(notes)
         try registry.assign([notes.id], to: kai)
         try registry.save(root: root)
@@ -813,7 +813,7 @@ import XCTest
 
         let calendar = LinkConnectionDraft(name: "Calendar", endpoint: URL(string: "https://example.com/calendar")!)
         _ = try await f.device.request(.saveConnection(calendar))
-        let saved = try MCPRegistry.load(root: root)
+        let saved = try ToolConnectionRegistry.load(root: root)
         XCTAssertEqual(Set(saved.connections.map(\.name)), ["Notes", "Calendar"])
         XCTAssertEqual(saved.assigned(to: kai).map(\.id), [notes.id])
     }
@@ -865,8 +865,8 @@ import XCTest
     func testAConnectionNoodleAssignedSurvivesAnUnreadableFile() async throws {
         let (f, made) = try await fixture(bots: ["Kai"])
         let kai = made[0].id, root = f.repository.rootURL
-        var registry = MCPRegistry()
-        let notes = try MCPConnectionRecord(name: "Notes", endpoint: URL(string: "https://example.com/notes")!)
+        var registry = ToolConnectionRegistry()
+        let notes = try ToolConnection(name: "Notes", endpoint: URL(string: "https://example.com/notes")!)
         registry.connections.append(notes)
         try registry.assign([notes.id], to: kai)
         try registry.save(root: root)
@@ -876,7 +876,7 @@ import XCTest
             _ = try? await f.device.request(.saveConnection(calendar))
         }
 
-        XCTAssertEqual(try MCPRegistry.load(root: root).assigned(to: kai).map(\.id), [notes.id])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: root).assigned(to: kai).map(\.id), [notes.id])
     }
 
     /// It is the owner's own Mac: there is nobody else to add.

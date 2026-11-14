@@ -96,7 +96,7 @@ final class ToolScriptTests: XCTestCase {
         var printed = ""
         try ToolScript.run("try { mcp.tools(); } catch (error) { print(error.message); }", perform: { _, _, _, _, _ in
             calls += 1
-            throw MCPConnectionError.message("Connection revoked")
+            throw ToolConnectionError.message("Connection revoked")
         }, output: { data, _ in printed += String(decoding: data, as: UTF8.self) })
         XCTAssertEqual(calls, 1)
         XCTAssertEqual(printed, "\"Connection revoked\"\n")
@@ -206,7 +206,7 @@ final class ToolScriptTests: XCTestCase {
             }
         }
         XCTAssertThrowsError(try ToolScript.run("function inner() { mcp.call('missing'); }\nfunction outer() { inner(); }\nouter();",
-            sourceURL: url, perform: { _, _, _, _, _ in throw MCPConnectionError.message("Connection unavailable") }, output: { _, _ in })) {
+            sourceURL: url, perform: { _, _, _, _, _ in throw ToolConnectionError.message("Connection unavailable") }, output: { _, _ in })) {
             XCTAssertTrue($0.localizedDescription.contains("Connection unavailable"))
             XCTAssertTrue($0.localizedDescription.contains("inner@file:///workspace/workflow.js:1:"))
             XCTAssertTrue($0.localizedDescription.contains("outer@file:///workspace/workflow.js:2:"))

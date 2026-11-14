@@ -166,7 +166,7 @@ struct NewBotSheet: View {
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs, imageGeneration: $imageGeneration)
                     } else {
-                        MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                        MCPAssignmentPicker(controller: store.connectionsController, selectedIDs: $mcpConnectionIDs,
                                             calendars: store.calendars, reminders: store.reminders,
                                             calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
                                             builtIn: $builtInTools,
@@ -435,7 +435,7 @@ struct EditBotSheet: View {
                     if let mirror = store.hubMirror(forHarness: selectedHarnessIdentifier) {
                         HubConnectionPicker(mirror: mirror, selectedIDs: $mcpConnectionIDs, imageGeneration: $imageGeneration)
                     } else {
-                        MCPAssignmentPicker(controller: store.mcp, selectedIDs: $mcpConnectionIDs,
+                        MCPAssignmentPicker(controller: store.connectionsController, selectedIDs: $mcpConnectionIDs,
                                             calendars: store.calendars, reminders: store.reminders,
                                             calendarIDs: $calendarIDs, reminderIDs: $reminderListIDs,
                                             builtIn: $builtInTools,
@@ -467,7 +467,7 @@ struct EditBotSheet: View {
         .onAppear {
             nameFocused = selectedTab == .general
             backstory = store.backstory(for: agent)
-            mcpConnectionIDs = store.mcp.selectedIDs(for: agent)
+            mcpConnectionIDs = store.connectionsController.selectedIDs(for: agent)
             computerIDs = store.computers.selectedIDs(for: agent)
             browserIDs = store.browsers.selectedIDs(for: agent)
             calendarIDs = store.calendars.selectedIDs(for: agent)

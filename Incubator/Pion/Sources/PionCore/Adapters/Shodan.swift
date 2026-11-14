@@ -13,7 +13,7 @@ public enum Shodan {
         scanners last saw, which may be days old: say when. Record each lookup as evidence. These lookups never scan anything.
         """,
         iconName: "shodan",
-        configuration: .mcp(.init(endpoint: URL(string: "https://api.shodan.io")!, tokenParameter: "key", adapter: "shodan")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.shodan.io")!, tokenParameter: "key", adapter: "shodan")))
 
     public static let adapter = OperationAdapter(operations: [HostReport(), Resolve(), Reverse()])
 }

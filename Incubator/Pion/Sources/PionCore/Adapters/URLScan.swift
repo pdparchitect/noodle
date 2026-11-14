@@ -14,7 +14,7 @@ public enum URLScan {
         looking at.
         """,
         iconName: "urlscan",
-        configuration: .mcp(.init(endpoint: URL(string: "https://urlscan.io/api/v1")!, tokenHeader: "API-Key", adapter: "urlscan")))
+        configuration: .connection(.init(endpoint: URL(string: "https://urlscan.io/api/v1")!, tokenHeader: "API-Key", adapter: "urlscan")))
 
     public static let adapter = OperationAdapter(operations: [Search()])
 }

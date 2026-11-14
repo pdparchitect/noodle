@@ -16,7 +16,7 @@ import XCTest
         let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
         try repository.prepare()
         let access = HubAccess(url: root.appendingPathComponent("access.json"))
-        let service = MCPService(credentials: NoCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+        let service = ToolConnectionService(credentials: NoCredentials(), oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
         let connections = HubConnections(root: root, access: access, service: service,
                                          tools: ToolProviderRegistry(), assignments: ToolAssignmentStore())
         let bots = HubBots(repository: repository, runtime: runtime, access: access, connections: connections,

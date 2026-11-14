@@ -15,7 +15,7 @@ public enum GoogleCloud {
         and time window. These tools only read: recommend removing access or changing a resource to the champion.
         """,
         iconName: "google-cloud",
-        configuration: .mcp(.init(endpointTemplate: "https://googleapis.com",
+        configuration: .connection(.init(endpointTemplate: "https://googleapis.com",
             fields: [ToolField(key: "level", title: "Scope", placeholder: "organizations", kind: .choice([
                          .init(value: "organizations", title: "Organization"), .init(value: "folders", title: "Folder"),
                          .init(value: "projects", title: "Project")])),

@@ -22,7 +22,7 @@ public enum AWS {
         champion.
         """,
         iconName: "aws",
-        configuration: .mcp(.init(endpointTemplate: "https://amazonaws.com",
+        configuration: .connection(.init(endpointTemplate: "https://amazonaws.com",
             fields: [ToolField(key: "region", title: "Default region", placeholder: "us-east-1",
                                kind: .choice(regions.map { .init(value: $0, title: $0) }))],
             signsForAWS: true, adapter: "aws")))

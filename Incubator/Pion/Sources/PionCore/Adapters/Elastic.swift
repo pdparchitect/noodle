@@ -12,7 +12,7 @@ public enum Elastic {
         what it returned as evidence, with the query itself as the method. ES|QL only reads.
         """,
         iconName: "elastic",
-        configuration: .mcp(.init(endpointTemplate: "https://{host}",
+        configuration: .connection(.init(endpointTemplate: "https://{host}",
             fields: [ToolField(key: "host", title: "Elasticsearch address", placeholder: "acme.es.eu-west-1.aws.elastic.cloud", kind: .host)],
             tokenHeader: "Authorization", tokenScheme: "ApiKey", adapter: "elastic")))
 

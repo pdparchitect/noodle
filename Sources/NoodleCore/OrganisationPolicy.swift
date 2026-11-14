@@ -87,7 +87,7 @@ public enum Organisation {
     }
 
     /// What using this tool connection asks the organisation.
-    public static func action(for connection: MCPConnectionRecord) -> OrganisationAction {
+    public static func action(for connection: ToolConnection) -> OrganisationAction {
         .toolConnection(catalogueID: ToolCatalog.definition(for: connection)?.id, endpoint: connection.endpoint)
     }
 }

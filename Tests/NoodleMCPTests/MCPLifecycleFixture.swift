@@ -69,14 +69,14 @@ final class MCPLifecycleFixture: @unchecked Sendable {
     let vault = LifecycleVault()
     let endpoint: URL
     let redirect = URL(string: "noodle-fixture://oauth/callback")!
-    let record: MCPConnectionRecord
-    let service: MCPService
+    let record: ToolConnection
+    let service: ToolConnectionService
     let session: URLSession
     private let state: LifecycleHTTPState
 
     init(expired: Bool = false) throws {
         endpoint = URL(string: "https://\(UUID().uuidString.lowercased()).invalid/mcp")!
-        record = try MCPConnectionRecord(name: "Offline lifecycle fixture", endpoint: endpoint)
+        record = try ToolConnection(name: "Offline lifecycle fixture", endpoint: endpoint)
         state = LifecycleHTTPState(endpoint: endpoint)
         LifecycleHTTPProtocol.register(state)
         let config: @Sendable () -> URLSessionConfiguration = {
@@ -85,7 +85,7 @@ final class MCPLifecycleFixture: @unchecked Sendable {
             return configuration
         }
         session = URLSession(configuration: config())
-        service = MCPService(credentials: vault, oauth: MCPOAuth(session: session), httpConfiguration: config)
+        service = ToolConnectionService(credentials: vault, oauth: MCPOAuth(session: session), httpConfiguration: config)
         seed(expired: expired)
     }
     deinit { session.invalidateAndCancel(); LifecycleHTTPProtocol.unregister(state) }

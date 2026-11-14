@@ -13,9 +13,9 @@ import XCTest
         let access = HubAccess(url: root.appendingPathComponent("access.json"))
         let ada = try access.addUser(named: "Ada")
         let keychain = RefusingHubCredentials()
-        let service = MCPService(credentials: keychain, oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+        let service = ToolConnectionService(credentials: keychain, oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
         let first = HubConnections(root: root, access: access, service: service)
-        let notes = try first.add(try MCPConnectionRecord(name: "Notes", endpoint: URL(string: "https://example.com/mcp")!), for: ada)
+        let notes = try first.add(try ToolConnection(name: "Notes", endpoint: URL(string: "https://example.com/mcp")!), for: ada)
         keychain.refusing = true
         try first.remove(notes.id, for: ada)
         XCTAssertTrue(first.connections(for: ada).isEmpty, "Access must be revoked before the sign-in is deleted")
@@ -41,7 +41,7 @@ private final class RefusingHubCredentials: MCPCredentialStorage, @unchecked Sen
     func remove(_ id: UUID) throws {
         try lock.withLock {
             tries += 1
-            if refusal { throw MCPServiceError.keychain(-25308) }
+            if refusal { throw ToolConnectionServiceError.keychain(-25308) }
             deleted.append(id)
         }
     }

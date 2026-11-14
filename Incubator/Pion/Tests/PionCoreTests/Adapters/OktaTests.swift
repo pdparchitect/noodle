@@ -7,7 +7,7 @@ final class OktaTests: XCTestCase {
     private let acme = try! Okta.preset.makeConnection(name: "Okta — Acme", values: ["domain": "acme.okta.com"])
     private let contoso = try! Okta.preset.makeConnection(name: "Okta — Contoso", values: ["domain": "contoso.okta.com"])
 
-    private func call(_ tool: String, _ arguments: String, on service: FakeService, in connection: MCPConnectionRecord? = nil)
+    private func call(_ tool: String, _ arguments: String, on service: FakeService, in connection: ToolConnection? = nil)
         async throws -> (text: String, isError: Bool, structured: [String: Any]?) {
         let data = try await Okta.adapter.run(tool, arguments: Data(arguments.utf8), connection: connection ?? acme, access: service)
         let result = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

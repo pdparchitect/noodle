@@ -13,7 +13,7 @@ public enum SentinelOne {
         recommend isolating an endpoint or other responses to the champion.
         """,
         iconName: "sentinelone",
-        configuration: .mcp(.init(endpointTemplate: "https://{console}/web/api/v2.1",
+        configuration: .connection(.init(endpointTemplate: "https://{console}/web/api/v2.1",
             fields: [ToolField(key: "console", title: "Console address", placeholder: "acme.sentinelone.net", kind: .host)],
             tokenHeader: "Authorization", tokenScheme: "ApiToken", adapter: "sentinelone")))
 

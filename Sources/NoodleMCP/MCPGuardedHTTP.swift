@@ -34,8 +34,8 @@ final class MCPGuardedHTTP: URLProtocol, URLSessionDataDelegate, @unchecked Send
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        guard let url = request.url, (try? MCPConnectionRecord.validatedEndpoint(url)) != nil else {
-            client?.urlProtocol(self, didFailWithError: MCPServiceError.invalidMetadata)
+        guard let url = request.url, (try? ToolConnection.validatedEndpoint(url)) != nil else {
+            client?.urlProtocol(self, didFailWithError: ToolConnectionServiceError.invalidMetadata)
             return
         }
         let configuration = sessionConfiguration()

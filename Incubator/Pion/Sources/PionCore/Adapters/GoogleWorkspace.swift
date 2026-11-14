@@ -17,7 +17,7 @@ public enum GoogleWorkspace {
         champion.
         """,
         iconName: "google-workspace",
-        configuration: .mcp(.init(endpointTemplate: "https://googleapis.com",
+        configuration: .connection(.init(endpointTemplate: "https://googleapis.com",
             fields: [ToolField(key: "subject", title: "Admin to act as", placeholder: "admin@example.com", kind: .text)],
             googleScopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], adapter: "google-workspace")))
 

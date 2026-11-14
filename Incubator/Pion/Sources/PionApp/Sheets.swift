@@ -518,7 +518,7 @@ struct AgentEditorSheet: View {
                 case .runtime:
                     harnessFields
                 case .tools:
-                    PionToolAssignmentPicker(controller: model.mcp, selectedIDs: $resources.connections)
+                    PionToolAssignmentPicker(controller: model.connectionsController, selectedIDs: $resources.connections)
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
@@ -689,10 +689,10 @@ private struct TeamToolsPicker: View {
                 ContentUnavailableView("No Team Members", systemImage: "person.2")
             }
             ForEach(model.agents.filter { members.contains($0.id) }) { agent in
-                let count = (assignments[agent.id] ?? model.mcp.selectedIDs(for: agent)).count
+                let count = (assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent)).count
                 DisclosureGroup(isExpanded: Binding(get: { expanded == agent.id }, set: { expanded = $0 ? agent.id : nil })) {
-                    PionToolAssignmentPicker(controller: model.mcp, selectedIDs: Binding(
-                        get: { assignments[agent.id] ?? model.mcp.selectedIDs(for: agent) },
+                    PionToolAssignmentPicker(controller: model.connectionsController, selectedIDs: Binding(
+                        get: { assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent) },
                         set: { assignments[agent.id] = $0 }))
                         .padding(.top, 8)
                 } label: {
@@ -714,16 +714,16 @@ private struct TeamToolsPicker: View {
 
 /// Saved connections, their setup and sign-in are shared with Settings; this editor only drafts grants.
 private struct PionToolAssignmentPicker: View {
-    let controller: MCPController
+    let controller: ToolConnectionsController
     @Binding var selectedIDs: Set<UUID>
     @State private var showingAdd = false
     @State private var wantsNew = false
     @State private var creating = false
-    @State private var editing: MCPConnectionRecord?
+    @State private var editing: ToolConnection?
     @State private var search = ""
 
     private var known: Set<UUID> { Set(controller.registry.connections.map(\.id)) }
-    private var selected: [MCPConnectionRecord] { controller.registry.connections.filter { selectedIDs.contains($0.id) } }
+    private var selected: [ToolConnection] { controller.registry.connections.filter { selectedIDs.contains($0.id) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -749,9 +749,9 @@ private struct PionToolAssignmentPicker: View {
                     VStack(spacing: 6) {
                         ForEach(selected) { connection in
                             HStack(spacing: 10) {
-                                MCPConnectionIcon(connection: connection, size: 26)
+                                ToolConnectionIcon(connection: connection, size: 26)
                                 Text(connection.name).lineLimit(1)
-                                MCPConnectionMaturityBadge(connection: connection)
+                                ToolConnectionMaturityBadge(connection: connection)
                                 Spacer()
                                 Menu {
                                     Button("Edit Connection…") { editing = connection }
@@ -779,7 +779,7 @@ private struct PionToolAssignmentPicker: View {
             ToolCreationSheet(controller: controller, onAdded: { selectedIDs.insert($0) }).noodleSheetSizing()
         }
         .sheet(item: $editing) { connection in
-            MCPEditor(controller: controller, existing: connection).noodleSheetSizing()
+            ToolConnectionEditor(controller: controller, existing: connection).noodleSheetSizing()
         }
     }
 
@@ -793,7 +793,7 @@ private struct PionToolAssignmentPicker: View {
                     }) { connection in
                         Button { selectedIDs.insert(connection.id) } label: {
                             HStack(spacing: 10) {
-                                MCPConnectionIcon(connection: connection, size: 28)
+                                ToolConnectionIcon(connection: connection, size: 28)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(connection.name).foregroundStyle(.primary)
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)

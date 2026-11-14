@@ -14,7 +14,7 @@ public enum Cloudflare {
         address or changing a rule to the champion.
         """,
         iconName: "cloudflare",
-        configuration: .mcp(.init(endpointTemplate: "https://api.cloudflare.com/client/v4",
+        configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4",
             fields: [ToolField(key: "account", title: "Account ID", placeholder: "023e105f4ecef8ad9ca31a8372d0c353", kind: .identifier)],
             tokenHeader: "Authorization", adapter: "cloudflare")))
 

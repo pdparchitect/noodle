@@ -90,7 +90,7 @@ import XCTest
             do {
                 _ = try await browser.authorize(url: URL(string: "https://example.com/authorize\(query)")!, callbackURL: redirect)
                 XCTFail("Expected invalid callback error for \(query)")
-            } catch MCPServiceError.invalidCallback { }
+            } catch ToolConnectionServiceError.invalidCallback { }
             catch { XCTFail("Unexpected error: \(error)") }
         }
     }
@@ -111,7 +111,7 @@ import XCTest
             do {
                 _ = try await browser.authorize(url: URL(string: page)!, callbackURL: redirect)
                 XCTFail("Expected \(page) to be refused")
-            } catch MCPServiceError.invalidCallback { }
+            } catch ToolConnectionServiceError.invalidCallback { }
             catch { XCTFail("Unexpected error for \(page): \(error)") }
         }
     }
@@ -124,7 +124,7 @@ import XCTest
         do {
             _ = try await browser.authorize(url: authorization("second"), callbackURL: redirect)
             XCTFail("Concurrent login must fail")
-        } catch MCPServiceError.invalidCallback { }
+        } catch ToolConnectionServiceError.invalidCallback { }
         XCTAssertFalse(browser.receive(callback("second")))
         XCTAssertTrue(browser.receive(callback("first")))
         let outcome = try await result(first)
@@ -191,7 +191,7 @@ import XCTest
             return true
         }
         let expired = try await result(start(browser))
-        guard case .failure(MCPServiceError.timedOut) = expired else { return XCTFail("Expected timeout: \(expired)") }
+        guard case .failure(ToolConnectionServiceError.timedOut) = expired else { return XCTFail("Expected timeout: \(expired)") }
         XCTAssertFalse(browser.receive(callback("first")))
         let retry = start(browser, state: "second")
         await fulfillment(of: [reopened], timeout: 2)

@@ -16,7 +16,7 @@ public enum SumoLogic {
         with the query itself as the method. Searches only read.
         """,
         iconName: "sumologic",
-        configuration: .mcp(.init(endpointTemplate: "https://{deployment}/api/v1",
+        configuration: .connection(.init(endpointTemplate: "https://{deployment}/api/v1",
             fields: [ToolField(key: "deployment", title: "Deployment", placeholder: "api.sumologic.com",
                                kind: .choice(deployments.map { .init(value: $0.0, title: $0.1) }))],
             tokenHeader: "Authorization", tokenScheme: "Basic",

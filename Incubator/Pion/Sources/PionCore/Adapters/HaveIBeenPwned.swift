@@ -12,7 +12,7 @@ public enum HaveIBeenPwned {
         they were used. Record each lookup as evidence, and keep the address to what the investigation needs.
         """,
         iconName: "haveibeenpwned",
-        configuration: .mcp(.init(endpoint: URL(string: "https://haveibeenpwned.com/api/v3")!, tokenHeader: "hibp-api-key",
+        configuration: .connection(.init(endpoint: URL(string: "https://haveibeenpwned.com/api/v3")!, tokenHeader: "hibp-api-key",
                                   adapter: "haveibeenpwned")))
 
     public static let adapter = OperationAdapter(operations: [Breaches(), Pastes()])

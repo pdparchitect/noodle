@@ -11,14 +11,14 @@ import SwiftUI
 
     let model: PionModel
     let setup: HarnessSetupController
-    let mcp: MCPController
+    let connectionsController: ToolConnectionsController
     var selectedTab: Tab = .general
     var agentBeingEdited: AgentRecord?
     var agentEditorTab = AgentEditorTab.general
 
     init(model: PionModel) {
         self.model = model
-        mcp = model.mcp
+        connectionsController = model.connectionsController
         setup = HarnessSetupController(versionChecker: HarnessVersionChecker(),
                                        installer: ManagedHarnessInstaller(store: model.repository.managedHarnesses),
                                        profiles: model.repository.harnessProfiles)
@@ -95,7 +95,7 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Agents", systemImage: "person.2") }
                 .tag(PionSettingsHost.Tab.agents)
-            MCPSettingsView(store: host)
+            ToolConnectionsSettingsView(store: host)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(PionSettingsHost.Tab.tools)

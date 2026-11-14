@@ -121,7 +121,7 @@ struct NoodleApp: App {
                 .frame(minWidth: 980, minHeight: 670)
                 .background(WindowConfiguration())
         } onOpenURL: {
-            if !store.openWidgetLink($0), !store.receiveHubInvitation($0) { store.mcp.receiveAuthorizationCallback($0) }
+            if !store.openWidgetLink($0), !store.receiveHubInvitation($0) { store.connectionsController.receiveAuthorizationCallback($0) }
         }
         .defaultSize(width: 1160, height: 810)
         // Until the person moves it, which macOS then restores.

@@ -13,34 +13,34 @@ private final class TestVault: MCPCredentialStorage, @unchecked Sendable {
     func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
 }
 
-private final class TestTokens: MCPTokenStorage, @unchecked Sendable {
+private final class TestTokens: ConnectionTokenStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var values: [UUID: MCPToken] = [:]
-    func load(_ id: UUID) -> MCPToken? { lock.withLock { values[id] } }
-    func save(_ token: MCPToken, id: UUID) { lock.withLock { values[id] = token } }
+    private var values: [UUID: ConnectionToken] = [:]
+    func load(_ id: UUID) -> ConnectionToken? { lock.withLock { values[id] } }
+    func save(_ token: ConnectionToken, id: UUID) { lock.withLock { values[id] = token } }
     func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
 }
 
-private final class TestClients: MCPClientSecretStorage, @unchecked Sendable {
+private final class TestClients: ConnectionClientSecretStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var values: [UUID: MCPClientSecret] = [:]
-    func load(_ id: UUID) -> MCPClientSecret? { lock.withLock { values[id] } }
-    func save(_ secret: MCPClientSecret, id: UUID) { lock.withLock { values[id] = secret } }
+    private var values: [UUID: ConnectionClientSecret] = [:]
+    func load(_ id: UUID) -> ConnectionClientSecret? { lock.withLock { values[id] } }
+    func save(_ secret: ConnectionClientSecret, id: UUID) { lock.withLock { values[id] = secret } }
     func remove(_ id: UUID) { _ = lock.withLock { values.removeValue(forKey: id) } }
 }
 
 /// An app's adapter: two tools, and a call that reaches its service through the access it is given.
-private final class LookupAdapter: MCPConnectionAdapter, @unchecked Sendable {
+private final class LookupAdapter: ToolConnectionAdapter, @unchecked Sendable {
     let lock = NSLock()
     var calls: [(tool: String, arguments: String)] = []
     var reached: [String] = []
     var refusedElsewhere = false
 
-    func tools(for connection: MCPConnectionRecord) async throws -> Data {
+    func tools(for connection: ToolConnection) async throws -> Data {
         Data(#"{"tools":[{"name":"file","description":"A file's reputation.","inputSchema":{"type":"object"}},{"name":"domain","description":"A domain's reputation.","inputSchema":{"type":"object"}}]}"#.utf8)
     }
 
-    func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data {
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         lock.withLock { calls.append((tool, String(decoding: arguments, as: UTF8.self))) }
         let (data, _) = try await access.data(for: URLRequest(url: connection.endpoint.appendingPathComponent("files/abc")))
         lock.withLock { reached.append(String(decoding: data, as: UTF8.self)) }
@@ -51,11 +51,11 @@ private final class LookupAdapter: MCPConnectionAdapter, @unchecked Sendable {
 }
 
 /// An app's AWS adapter: it reaches two AWS services, and tries a host outside AWS.
-private final class CloudAdapter: MCPConnectionAdapter, @unchecked Sendable {
+private final class CloudAdapter: ToolConnectionAdapter, @unchecked Sendable {
     let lock = NSLock()
     var refusedElsewhere = false
-    func tools(for connection: MCPConnectionRecord) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
-    func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data {
+    func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         var trail = URLRequest(url: URL(string: "https://cloudtrail.eu-west-1.amazonaws.com/aws")!)
         trail.httpMethod = "POST"
         trail.httpBody = Data("{}".utf8)
@@ -260,7 +260,7 @@ private final class FixtureProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-final class MCPServiceTests: XCTestCase {
+final class ToolConnectionServiceTests: XCTestCase {
     private let endpoint = URL(string: "https://service.example/mcp")!
     private let redirect = URL(string: "noodle-dev://mcp/oauth/callback")!
     override func setUp() { FixtureProtocol.state = FixtureState() }
@@ -269,8 +269,8 @@ final class MCPServiceTests: XCTestCase {
         config.protocolClasses = [FixtureProtocol.self]
         return config
     }
-    private func service(vault: TestVault, tokens: TestTokens = TestTokens(), clients: TestClients = TestClients()) -> MCPService {
-        MCPService(credentials: vault, tokens: tokens, clients: clients, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
+    private func service(vault: TestVault, tokens: TestTokens = TestTokens(), clients: TestClients = TestClients()) -> ToolConnectionService {
+        ToolConnectionService(credentials: vault, tokens: tokens, clients: clients, oauth: MCPOAuth(session: URLSession(configuration: configuration())), httpConfiguration: {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [FixtureProtocol.self]
             return config
@@ -336,7 +336,7 @@ final class MCPServiceTests: XCTestCase {
                     return url
                 }
                 XCTFail("Reserved OAuth parameter accepted")
-            } catch MCPServiceError.invalidMetadata {}
+            } catch ToolConnectionServiceError.invalidMetadata {}
         }
         let settings = fixedOAuth()
         let stored = try XCTUnwrap(MCPOAuth.preconfiguredCredentials(endpoint: endpoint, redirect: redirect, configuration: settings))
@@ -344,12 +344,12 @@ final class MCPServiceTests: XCTestCase {
         do {
             _ = try await oauth.authorize(stored, configuration: settings, browser: Self.callback)
             XCTFail("Missing configured scope accepted")
-        } catch MCPServiceError.signInRequired {}
+        } catch ToolConnectionServiceError.signInRequired {}
     }
 
     func testHTTPStatusSurvivesSDKTransportAndProducesActionableConnectionError() async throws {
         let client = service(vault: TestVault())
-        let record = try MCPConnectionRecord(name: "Fixture", endpoint: endpoint)
+        let record = try ToolConnection(name: "Fixture", endpoint: endpoint)
         try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
         for status in [401, 403, 404, 429, 503] {
             FixtureProtocol.state.transportError = MCPHTTPError(status: status)
@@ -357,18 +357,18 @@ final class MCPServiceTests: XCTestCase {
                 _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id,
                     action: .tools, tool: nil, arguments: nil), connection: record)
                 XCTFail("Expected HTTP failure")
-            } catch MCPServiceError.network(let received) {
+            } catch ToolConnectionServiceError.network(let received) {
                 XCTAssertEqual(received, status)
-                XCTAssertTrue(MCPServiceError.network(received).localizedDescription.contains("HTTP \(status)"))
-                if status == 403 { XCTAssertTrue(MCPServiceError.network(received).localizedDescription.contains("MCP API is enabled")) }
+                XCTAssertTrue(ToolConnectionServiceError.network(received).localizedDescription.contains("HTTP \(status)"))
+                if status == 403 { XCTAssertTrue(ToolConnectionServiceError.network(received).localizedDescription.contains("MCP API is enabled")) }
             }
         }
     }
 
     func testTwoAccountsPersistIndependentRegistrationsAcrossRestart() async throws {
         let vault = TestVault()
-        let first = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)
-        let second = try MCPConnectionRecord(name: "Notion", endpoint: endpoint)
+        let first = try ToolConnection(name: "Notion", endpoint: endpoint)
+        let second = try ToolConnection(name: "Notion", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(first, redirectURI: redirect, browser: Self.callback)
         try await client.signIn(second, redirectURI: redirect, browser: Self.callback)
@@ -383,18 +383,18 @@ final class MCPServiceTests: XCTestCase {
     }
     func testBadStateOrCallbackDoesNotStoreTokens() async throws {
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         do {
             try await service(vault: vault).signIn(record, redirectURI: redirect) { _ in
                 URL(string: "noodle-dev://mcp/oauth/callback?code=stolen&state=wrong")!
             }
             XCTFail("Unverified callback accepted")
-        } catch { XCTAssertTrue(error is MCPServiceError) }
+        } catch { XCTAssertTrue(error is ToolConnectionServiceError) }
         XCTAssertNil(vault.load(record.id)?.accessToken)
         XCTAssertNotNil(vault.load(record.id)?.clientID, "Retry must preserve registration even if authorization was cancelled")
     }
     func testRefusedSignInShowsTheServiceReason() async throws {
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         func refuse(_ items: [URLQueryItem], sameState: Bool = true) async -> String {
             do {
                 try await service(vault: TestVault()).signIn(record, redirectURI: redirect) { url in
@@ -413,19 +413,19 @@ final class MCPServiceTests: XCTestCase {
         let bare = await refuse([.init(name: "error", value: "access_denied")])
         XCTAssertEqual(bare, "The service refused the sign-in (access_denied).")
         let forged = await refuse([.init(name: "error", value: "access_denied")], sameState: false)
-        XCTAssertEqual(forged, MCPServiceError.invalidCallback.localizedDescription)
+        XCTAssertEqual(forged, ToolConnectionServiceError.invalidCallback.localizedDescription)
         XCTAssertTrue(FixtureProtocol.state.tokenResources.isEmpty, "A refused sign-in must not exchange a code")
     }
     func testATokenConnectionSendsItsTokenInItsHeaderWithoutSigningIn() async throws {
-        let list = { (record: MCPConnectionRecord) in
+        let list = { (record: ToolConnection) in
             MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
         }
         for (header, sent) in [("x-apikey", "secret-key"), ("Authorization", "Bearer secret-key")] {
             FixtureProtocol.state = FixtureState()
-            let record = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: header)
+            let record = try ToolConnection(name: "Keyed", endpoint: endpoint, tokenHeader: header)
             let client = service(vault: TestVault())
             var refused = false
-            do { _ = try await client.perform(list(record), connection: record) } catch MCPServiceError.signInRequired { refused = true }
+            do { _ = try await client.perform(list(record), connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
             XCTAssertTrue(refused, "a token connection without its token was not refused")
             let unsaved = await client.hasCredentials(record.id); XCTAssertFalse(unsaved)
 
@@ -444,12 +444,12 @@ final class MCPServiceTests: XCTestCase {
     }
 
     func testAClientIDAndSecretAreExchangedForAnAccessTokenThatIsReusedUntilItExpires() async throws {
-        let credentials = MCPClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: "read")
-        let record = try MCPConnectionRecord(name: "Service App", endpoint: endpoint, clientCredentials: credentials)
+        let credentials = ConnectionClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: "read")
+        let record = try ToolConnection(name: "Service App", endpoint: endpoint, clientCredentials: credentials)
         let list = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
         let client = service(vault: TestVault())
         var refused = false
-        do { _ = try await client.perform(list, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        do { _ = try await client.perform(list, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
         XCTAssertTrue(refused, "a connection without its client secret was not refused")
 
         try await client.saveClientCredentials(clientID: " app-id ", secret: " app-secret ", for: record)
@@ -472,17 +472,17 @@ final class MCPServiceTests: XCTestCase {
         state.refuseClient = true
         try await client.saveClientCredentials(clientID: "app-id", secret: "revoked", for: record)
         refused = false
-        do { _ = try await client.perform(list, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        do { _ = try await client.perform(list, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
         XCTAssertTrue(refused, "a refused client asks for its credentials again")
 
         try await client.disconnect(record.id)
         let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
-        do { try await client.saveClientCredentials(clientID: "id", secret: "secret", for: try MCPConnectionRecord(name: "Plain", endpoint: endpoint))
+        do { try await client.saveClientCredentials(clientID: "id", secret: "secret", for: try ToolConnection(name: "Plain", endpoint: endpoint))
              XCTFail("accepted a client secret for a browser connection") } catch {}
     }
 
     func testAnAdapterConnectionIsAnsweredByTheAppWithItsCredentialsAndOnlyItsHost() async throws {
-        let record = try MCPConnectionRecord(name: "Lookup", endpoint: URL(string: "https://service.example/v3")!, tokenHeader: "x-apikey",
+        let record = try ToolConnection(name: "Lookup", endpoint: URL(string: "https://service.example/v3")!, tokenHeader: "x-apikey",
                                              adapter: "lookup")
         let adapter = LookupAdapter()
         let client = service(vault: TestVault())
@@ -512,14 +512,14 @@ final class MCPServiceTests: XCTestCase {
         let resources = try await client.perform(request(.resources, nil), connection: record)
         XCTAssertEqual((try JSONSerialization.jsonObject(with: resources) as? [String: Any])?["resources"] as? [String], [])
 
-        let open = try MCPConnectionRecord(name: "Open", endpoint: URL(string: "https://service.example/v3")!, adapter: "lookup")
+        let open = try ToolConnection(name: "Open", endpoint: URL(string: "https://service.example/v3")!, adapter: "lookup")
         _ = try await client.perform(request(.call, "file"), connection: open)
         XCTAssertNil(FixtureProtocol.state.adapterHeaders.last?["x-apikey"], "an adapter connection without credentials sends none")
         do { try await client.signIn(open, redirectURI: redirect, browser: Self.callback); XCTFail("an adapter connection signed in") } catch {}
     }
 
     func testATokenGoesAfterItsConnectionsSchemeWhenItHasOne() async throws {
-        let record = try MCPConnectionRecord(name: "Directory", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
+        let record = try ToolConnection(name: "Directory", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
         let client = service(vault: TestVault())
         try await client.saveToken("org-token", for: record)
         _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
@@ -528,7 +528,7 @@ final class MCPServiceTests: XCTestCase {
     }
 
     func testATokenCanGoInTheAddressForServicesThatOnlyTakeItThere() async throws {
-        let keyed = try MCPConnectionRecord(name: "Scanner", endpoint: URL(string: "https://service.example/v3")!, tokenParameter: "key",
+        let keyed = try ToolConnection(name: "Scanner", endpoint: URL(string: "https://service.example/v3")!, tokenParameter: "key",
                                             adapter: "lookup")
         let client = service(vault: TestVault())
         await client.useAdapters(["lookup": LookupAdapter()])
@@ -538,19 +538,19 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertEqual(FixtureProtocol.state.queries["/v3/files/abc"], ["key=scan-key"])
         XCTAssertNil(FixtureProtocol.state.adapterHeaders.first?["Authorization"])
 
-        let server = try MCPConnectionRecord(name: "Server", endpoint: endpoint, tokenParameter: "api_key")
+        let server = try ToolConnection(name: "Server", endpoint: endpoint, tokenParameter: "api_key")
         try await client.saveToken("server-key", for: server)
         _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: server.id, action: .tools, tool: nil, arguments: nil),
                                      connection: server)
         XCTAssertEqual(Set(FixtureProtocol.state.queries["/mcp"] ?? []), ["api_key=server-key"])
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: endpoint, tokenHeader: "x-key", tokenParameter: "key"))
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenParameter: "a b"))
+        XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: endpoint, tokenHeader: "x-key", tokenParameter: "key"))
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: endpoint, tokenParameter: "a b"))
     }
 
     func testAClientCredentialsExchangeSendsTheServicesOwnFields() async throws {
-        let credentials = MCPClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: nil,
+        let credentials = ConnectionClientCredentials(tokenEndpoint: URL(string: "https://service.example/client-token")!, scope: nil,
                                                parameters: ["audience": "wiz-api"])
-        let record = try MCPConnectionRecord(name: "Posture", endpoint: endpoint, clientCredentials: credentials)
+        let record = try ToolConnection(name: "Posture", endpoint: endpoint, clientCredentials: credentials)
         let client = service(vault: TestVault())
         try await client.saveClientCredentials(clientID: "id", secret: "secret", for: record)
         _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
@@ -558,21 +558,21 @@ final class MCPServiceTests: XCTestCase {
         let form = Set(FixtureProtocol.state.clientExchanges[0].split(separator: "&").map(String.init))
         XCTAssertEqual(form, ["audience=wiz-api", "client_id=id", "client_secret=secret", "grant_type=client_credentials"])
         for reserved in ["grant_type", "client_secret", "client_id", "scope", "bad name"] {
-            XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, clientCredentials:
-                MCPClientCredentials(tokenEndpoint: credentials.tokenEndpoint, scope: nil, parameters: [reserved: "x"])), reserved)
+            XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: endpoint, clientCredentials:
+                ConnectionClientCredentials(tokenEndpoint: credentials.tokenEndpoint, scope: nil, parameters: [reserved: "x"])), reserved)
         }
     }
 
     func testAGoogleServiceAccountSignsAnAssertionThatGoogleAloneReceives() async throws {
         let key = try TestGoogleKey()
-        let signing = MCPGoogleServiceAccount(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"],
+        let signing = ConnectionGoogleServiceAccount(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"],
                                               subject: "admin@kestrel.example")
-        let record = try MCPConnectionRecord(name: "Google", endpoint: URL(string: "https://googleapis.com")!,
+        let record = try ToolConnection(name: "Google", endpoint: URL(string: "https://googleapis.com")!,
                                              googleServiceAccount: signing, adapter: "cloud")
-        final class GoogleAdapter: MCPConnectionAdapter, @unchecked Sendable {
+        final class GoogleAdapter: ToolConnectionAdapter, @unchecked Sendable {
             var refusedElsewhere = false
-            func tools(for connection: MCPConnectionRecord) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
-            func call(_ tool: String, arguments: Data, connection: MCPConnectionRecord, access: MCPAdapterAccess) async throws -> Data {
+            func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+            func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
                 _ = try await access.data(for: URLRequest(url: URL(string: "https://logging.googleapis.com/google")!))
                 _ = try await access.data(for: URLRequest(url: URL(string: "https://admin.googleapis.com/google")!))
                 do { _ = try await access.data(for: URLRequest(url: URL(string: "https://googleapis.com.evil.example/google")!)) }
@@ -585,7 +585,7 @@ final class MCPServiceTests: XCTestCase {
         await client.useAdapters(["cloud": adapter])
         let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "x", arguments: Data("{}".utf8))
         var refused = false
-        do { _ = try await client.perform(call, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
         XCTAssertTrue(refused, "a Google connection without its key was answered")
 
         try await client.saveGoogleKey(key.json, for: record)
@@ -615,15 +615,15 @@ final class MCPServiceTests: XCTestCase {
         }
         try await client.disconnect(record.id)
         let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: record.endpoint,
-            googleServiceAccount: MCPGoogleServiceAccount(scopes: ["https://evil.example/scope"], subject: nil)))
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint,
+            googleServiceAccount: ConnectionGoogleServiceAccount(scopes: ["https://evil.example/scope"], subject: nil)))
     }
 
     func testSigV4MatchesAWSsPublishedExample() throws {
         // AWS's Signature Version 4 test suite, get-vanilla.
         var request = URLRequest(url: URL(string: "https://example.amazonaws.com/")!)
         request.httpMethod = "GET"
-        let key = MCPAWSKey(endpoint: URL(string: "https://amazonaws.com")!, accessKeyID: "AKIDEXAMPLE",
+        let key = ConnectionAWSKey(endpoint: URL(string: "https://amazonaws.com")!, accessKeyID: "AKIDEXAMPLE",
                             secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", sessionToken: nil)
         let date = ISO8601DateFormatter().date(from: "2015-08-30T12:36:00Z")!
         AWSSignature.sign(&request, key: key, region: "us-east-1", service: "service", date: date)
@@ -637,14 +637,14 @@ final class MCPServiceTests: XCTestCase {
     }
 
     func testAnAWSConnectionSignsEachRequestForItsServiceAndReachesOnlyAWS() async throws {
-        let record = try MCPConnectionRecord(name: "AWS", endpoint: URL(string: "https://amazonaws.com")!,
-                                             awsSigning: MCPAWSSigning(region: "eu-west-1"), adapter: "cloud")
+        let record = try ToolConnection(name: "AWS", endpoint: URL(string: "https://amazonaws.com")!,
+                                             awsSigning: ConnectionAWSSigning(region: "eu-west-1"), adapter: "cloud")
         let adapter = CloudAdapter()
         let client = service(vault: TestVault())
         await client.useAdapters(["cloud": adapter])
         let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "lookup", arguments: Data("{}".utf8))
         var refused = false
-        do { _ = try await client.perform(call, connection: record) } catch MCPServiceError.signInRequired { refused = true }
+        do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
         XCTAssertTrue(refused, "an AWS connection without its keys was answered")
 
         try await client.saveAWSKey(accessKeyID: " AKIAEXAMPLE ", secretAccessKey: "secret/key+value", sessionToken: nil, for: record)
@@ -662,15 +662,15 @@ final class MCPServiceTests: XCTestCase {
 
         try await client.disconnect(record.id)
         let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key",
-                                                     awsSigning: MCPAWSSigning(region: "eu-west-1")))
-        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: record.endpoint, awsSigning: MCPAWSSigning(region: "eu west")))
+        XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key",
+                                                     awsSigning: ConnectionAWSSigning(region: "eu-west-1")))
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint, awsSigning: ConnectionAWSSigning(region: "eu west")))
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {
         let client = service(vault: TestVault())
-        let keyed = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: "x-apikey")
-        let signedIn = try MCPConnectionRecord(name: "Signed In", endpoint: endpoint)
+        let keyed = try ToolConnection(name: "Keyed", endpoint: endpoint, tokenHeader: "x-apikey")
+        let signedIn = try ToolConnection(name: "Signed In", endpoint: endpoint)
         for (token, record) in [("   ", keyed), ("two\nlines", keyed), ("secret", signedIn)] {
             do { try await client.saveToken(token, for: record); XCTFail("accepted \(token)") } catch {}
             let unsaved = await client.hasCredentials(record.id); XCTAssertFalse(unsaved)
@@ -679,7 +679,7 @@ final class MCPServiceTests: XCTestCase {
 
     func testPaginatedDiscoveryStructuredResultsAndRevocation() async throws {
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
         let list = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
@@ -694,12 +694,12 @@ final class MCPServiceTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: result) as! [String: Any]
         XCTAssertEqual((object["structuredContent"] as? [String: Bool])?["accepted"], true)
         do { _ = try await client.perform(call, connection: record, authorized: { false }); XCTFail("Revoked assignment accepted") }
-        catch { XCTAssertTrue(error is MCPServiceError) }
+        catch { XCTAssertTrue(error is ToolConnectionServiceError) }
         XCTAssertEqual(FixtureProtocol.state.calls, 1)
     }
     func testConcurrentCallsRefreshOnceAndPersistRotation() async throws {
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
         var stored = vault.load(record.id)!
@@ -714,7 +714,7 @@ final class MCPServiceTests: XCTestCase {
     }
     func testResourceDiscoveryReadsAndRevocation() async throws {
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
         let list = MCPBridgeRequest(session: "", connectionID: record.id, action: .resources, tool: nil, arguments: nil)
@@ -727,15 +727,15 @@ final class MCPServiceTests: XCTestCase {
         XCTAssertEqual(decoded.contents.first?.blob, "AP8=")
         XCTAssertNotNil(decoded._meta)
         do { _ = try await client.perform(read, connection: record, authorized: { false }); XCTFail("Revoked resource access accepted") }
-        catch { XCTAssertTrue(error is MCPServiceError) }
+        catch { XCTAssertTrue(error is ToolConnectionServiceError) }
         XCTAssertEqual(FixtureProtocol.state.resourceURIs, ["reports://first"])
         FixtureProtocol.state.repeatResourceCursor = true
         do { _ = try await client.perform(list, connection: record); XCTFail("Repeated resource cursor accepted") }
-        catch { XCTAssertTrue(error is MCPServiceError) }
+        catch { XCTAssertTrue(error is ToolConnectionServiceError) }
     }
     func testInvalidGrantStopsRefreshAndRequiresReconnect() async throws {
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
         var stored = vault.load(record.id)!
@@ -753,11 +753,11 @@ final class MCPServiceTests: XCTestCase {
     func testIssuerMismatchPreventsRegistration() async throws {
         FixtureProtocol.state.mismatchedIssuer = true
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         do {
             try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
             XCTFail("Mismatched issuer accepted")
-        } catch { XCTAssertTrue(error is MCPServiceError) }
+        } catch { XCTAssertTrue(error is ToolConnectionServiceError) }
         XCTAssertEqual(FixtureProtocol.state.registrations, 0)
         XCTAssertNil(vault.load(record.id))
     }
@@ -767,7 +767,7 @@ final class MCPServiceTests: XCTestCase {
             FixtureProtocol.state.listedIssuer = listed
             FixtureProtocol.state.reportedIssuer = reported
             let vault = TestVault()
-            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            let record = try ToolConnection(name: "Test", endpoint: endpoint)
             try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
             XCTAssertEqual(vault.load(record.id)?.issuer.absoluteString, listed)
         }
@@ -786,7 +786,7 @@ final class MCPServiceTests: XCTestCase {
             _ = try await oauth.discoverAndRegister(endpoint: endpoint, redirect: redirect, clientName: "Test")
             XCTFail("Sign-in without resource metadata accepted")
         } catch {
-            guard case .invalidMetadata? = error as? MCPServiceError else { return XCTFail("\(error)") }
+            guard case .invalidMetadata? = error as? ToolConnectionServiceError else { return XCTFail("\(error)") }
         }
         XCTAssertEqual(FixtureProtocol.state.registrations, 0)
         let credentials = try await oauth.discoverAndRegister(endpoint: endpoint, redirect: redirect, clientName: "Test",
@@ -800,7 +800,7 @@ final class MCPServiceTests: XCTestCase {
         FixtureProtocol.state.registrationMissing = true
         FixtureProtocol.state.metadataDocumentClients = true
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
         try await service(vault: vault).signIn(record, redirectURI: redirect) { url in
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
             XCTAssertEqual(query.first { $0.name == "client_id" }?.value, "https://usenoodle.app/oauth/client.json")
@@ -827,12 +827,12 @@ final class MCPServiceTests: XCTestCase {
             FixtureProtocol.state.registrationMissing = true
             FixtureProtocol.state.metadataDocumentClients = supported
             let vault = TestVault()
-            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            let record = try ToolConnection(name: "Test", endpoint: endpoint)
             do {
                 try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
                 XCTFail("Sign-in without a usable client accepted")
             } catch {
-                guard case .registrationUnsupported? = error as? MCPServiceError else { return XCTFail("\(error)") }
+                guard case .registrationUnsupported? = error as? ToolConnectionServiceError else { return XCTFail("\(error)") }
             }
             XCTAssertNil(vault.load(record.id))
         }
@@ -841,7 +841,7 @@ final class MCPServiceTests: XCTestCase {
         FixtureProtocol.state.resourceIdentifier = "https://service.example"
         FixtureProtocol.state.pathMetadataMissing = true
         let vault = TestVault()
-        let record = try MCPConnectionRecord(name: "Gateway", endpoint: endpoint)
+        let record = try ToolConnection(name: "Gateway", endpoint: endpoint)
         let client = service(vault: vault)
         try await client.signIn(record, redirectURI: redirect) { url in
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
@@ -867,11 +867,11 @@ final class MCPServiceTests: XCTestCase {
                          "https://service.example/#fragment", "https://user:password@service.example", "https://127.0.0.1"] {
             FixtureProtocol.state.resourceIdentifier = resource
             let vault = TestVault()
-            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            let record = try ToolConnection(name: "Test", endpoint: endpoint)
             do {
                 try await service(vault: vault).signIn(record, redirectURI: redirect, browser: Self.callback)
                 XCTFail("Unexpected resource accepted: \(resource)")
-            } catch { XCTAssertTrue(error is MCPServiceError) }
+            } catch { XCTAssertTrue(error is ToolConnectionServiceError) }
             XCTAssertEqual(FixtureProtocol.state.registrations, 0)
             XCTAssertNil(vault.load(record.id))
         }
@@ -888,7 +888,7 @@ final class MCPServiceTests: XCTestCase {
     func testCallbackTargetAndDuplicateStateAreRejected() async throws {
         for variant in 0..<3 {
             let vault = TestVault()
-            let record = try MCPConnectionRecord(name: "Test", endpoint: endpoint)
+            let record = try ToolConnection(name: "Test", endpoint: endpoint)
             do {
                 try await service(vault: vault).signIn(record, redirectURI: redirect) { url in
                     var callback = URLComponents(url: try await Self.callback(url), resolvingAgainstBaseURL: false)!
@@ -898,7 +898,7 @@ final class MCPServiceTests: XCTestCase {
                     return callback.url!
                 }
                 XCTFail("Invalid callback accepted")
-            } catch { XCTAssertTrue(error is MCPServiceError) }
+            } catch { XCTAssertTrue(error is ToolConnectionServiceError) }
             XCTAssertNil(vault.load(record.id)?.accessToken)
         }
     }
@@ -907,14 +907,14 @@ final class MCPServiceTests: XCTestCase {
     /// the settings that show it keep their state.
     @MainActor func testConnectionFailuresAreReportedOnTheMainActor() async throws {
         let registry = ToolProviderRegistry()
-        let providers = MCPConnectionProviders(registry: registry, service: MCPService(credentials: TestVault(), oauth: MCPOAuth(),
+        let providers = ToolConnectionProviders(registry: registry, service: ToolConnectionService(credentials: TestVault(), oauth: MCPOAuth(),
                                                                                      httpConfiguration: { .ephemeral }))
         let reported = expectation(description: "error reported")
         providers.onError = { _, _ in
             XCTAssertTrue(Thread.isMainThread)
             reported.fulfill()
         }
-        let connection = try MCPConnectionRecord(name: "Fixture tools", endpoint: URL(string: "https://example.invalid/mcp")!)
+        let connection = try ToolConnection(name: "Fixture tools", endpoint: URL(string: "https://example.invalid/mcp")!)
         providers.synchronize([connection]) { _ in connection }
         let provider = try registry.provider(connection.skillName, assignments: [ConnectionToolProvider.grantKind: [connection.id.uuidString]])
         let context = ToolCallContext(agentID: UUID(), workspace: FileManager.default.temporaryDirectory)

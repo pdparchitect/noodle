@@ -14,7 +14,7 @@ public enum CrowdStrike {
         recommend containing a host or other responses to the champion.
         """,
         iconName: "crowdstrike",
-        configuration: .mcp(.init(endpointTemplate: "https://{region}",
+        configuration: .connection(.init(endpointTemplate: "https://{region}",
             fields: [ToolField(key: "region", title: "Falcon cloud", placeholder: "api.crowdstrike.com", kind: .choice([
                 .init(value: "api.crowdstrike.com", title: "US-1"), .init(value: "api.us-2.crowdstrike.com", title: "US-2"),
                 .init(value: "api.eu-1.crowdstrike.com", title: "EU-1"), .init(value: "api.laggar.gcw.crowdstrike.com", title: "US-GOV-1"),

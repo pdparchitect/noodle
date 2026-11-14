@@ -2,7 +2,7 @@ import Foundation
 
 /// Where a connection that proves itself with a client ID and secret exchanges them for an access token.
 /// The ID and secret themselves are kept in Keychain.
-public struct MCPClientCredentials: Codable, Equatable, Sendable {
+public struct ConnectionClientCredentials: Codable, Equatable, Sendable {
     public let tokenEndpoint: URL
     /// What to ask for, space-separated, when the service wants it named.
     public let scope: String?
@@ -18,14 +18,14 @@ public struct MCPClientCredentials: Codable, Equatable, Sendable {
 
 /// For a connection that signs its requests to AWS with an access key: the region it works in unless a request
 /// names another. The key itself is kept in Keychain.
-public struct MCPAWSSigning: Codable, Equatable, Sendable {
+public struct ConnectionAWSSigning: Codable, Equatable, Sendable {
     public let region: String
     public init(region: String) { self.region = region }
 }
 
 /// For a connection that acts as a Google service account: the scopes its tokens ask for, and for Workspace, the
 /// user it acts on behalf of through domain-wide delegation. The account's key is kept in Keychain.
-public struct MCPGoogleServiceAccount: Codable, Equatable, Sendable {
+public struct ConnectionGoogleServiceAccount: Codable, Equatable, Sendable {
     public let scopes: [String]
     public let subject: String?
     public init(scopes: [String], subject: String?) {
@@ -36,7 +36,7 @@ public struct MCPGoogleServiceAccount: Codable, Equatable, Sendable {
 }
 
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
-public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
+public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var name: String
     public let endpoint: URL
@@ -55,11 +55,11 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     /// token in Authorization.
     public var tokenScheme: String?
     /// Set for a connection that proves itself with a client ID and secret instead of signing in.
-    public var clientCredentials: MCPClientCredentials?
+    public var clientCredentials: ConnectionClientCredentials?
     /// Set for a connection that signs its requests to AWS with an access key instead of sending a token.
-    public var awsSigning: MCPAWSSigning?
+    public var awsSigning: ConnectionAWSSigning?
     /// Set for a connection that acts as a Google service account instead of signing in.
-    public var googleServiceAccount: MCPGoogleServiceAccount?
+    public var googleServiceAccount: ConnectionGoogleServiceAccount?
     /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret, an AWS key or a
     /// Google service account's key.
     public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsSigning != nil || googleServiceAccount != nil }
@@ -73,30 +73,30 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
-                tokenParameter: String? = nil, clientCredentials: MCPClientCredentials? = nil, awsSigning: MCPAWSSigning? = nil,
-                googleServiceAccount: MCPGoogleServiceAccount? = nil, adapter: String? = nil) throws {
+                tokenParameter: String? = nil, clientCredentials: ConnectionClientCredentials? = nil, awsSigning: ConnectionAWSSigning? = nil,
+                googleServiceAccount: ConnectionGoogleServiceAccount? = nil, adapter: String? = nil) throws {
         self.id = id
         self.googleServiceAccount = try googleServiceAccount.map(Self.validatedGoogleServiceAccount)
         guard googleServiceAccount == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil && awsSigning == nil) else {
-            throw MCPConnectionError.message("A connection acts as a Google service account or uses another sign-in, not both.")
+            throw ToolConnectionError.message("A connection acts as a Google service account or uses another sign-in, not both.")
         }
         self.awsSigning = try awsSigning.map(Self.validatedAWSSigning)
         guard awsSigning == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil) else {
-            throw MCPConnectionError.message("A connection signs with an AWS key or uses another sign-in, not both.")
+            throw ToolConnectionError.message("A connection signs with an AWS key or uses another sign-in, not both.")
         }
         self.tokenParameter = try tokenParameter.map(Self.validatedTokenParameter)
         guard tokenHeader == nil || tokenParameter == nil else {
-            throw MCPConnectionError.message("A token goes in a header or in the address, not both.")
+            throw ToolConnectionError.message("A token goes in a header or in the address, not both.")
         }
         self.tokenScheme = try tokenScheme.map(Self.validatedTokenScheme)
         guard tokenScheme == nil || tokenHeader != nil else {
-            throw MCPConnectionError.message("A token scheme needs a token header.")
+            throw ToolConnectionError.message("A token scheme needs a token header.")
         }
         self.adapter = try adapter.map(Self.validatedAdapter)
         self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
         self.clientCredentials = try clientCredentials.map(Self.validatedClientCredentials)
         guard (tokenHeader == nil && tokenParameter == nil) || clientCredentials == nil else {
-            throw MCPConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
+            throw ToolConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
         }
         self.name = try ConversationName.validated(name)
         self.endpoint = try Self.validatedEndpoint(endpoint)
@@ -118,31 +118,31 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
                              "accept", "mcp-session-id", "mcp-protocol-version"]
         guard !name.isEmpty, name.count <= 100, name.unicodeScalars.allSatisfy(allowed.contains),
               !reserved.contains(name.lowercased()) else {
-            throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
+            throw ToolConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
         }
         return name
     }
 
     /// Scopes Google's own, and a subject that is an email address.
-    public static func validatedGoogleServiceAccount(_ account: MCPGoogleServiceAccount) throws -> MCPGoogleServiceAccount {
+    public static func validatedGoogleServiceAccount(_ account: ConnectionGoogleServiceAccount) throws -> ConnectionGoogleServiceAccount {
         guard (1...20).contains(account.scopes.count), account.scopes.allSatisfy({ scope in
             scope.hasPrefix("https://www.googleapis.com/auth/") && scope.count <= 200
                 && scope.unicodeScalars.allSatisfy { !CharacterSet.whitespacesAndNewlines.contains($0) }
-        }) else { throw MCPConnectionError.message("Invalid Google scopes.") }
+        }) else { throw ToolConnectionError.message("Invalid Google scopes.") }
         if let subject = account.subject {
             let parts = subject.split(separator: "@")
             guard parts.count == 2, subject.count <= 200, !subject.contains(where: \.isWhitespace) else {
-                throw MCPConnectionError.message("Enter the user to act as by their email address.")
+                throw ToolConnectionError.message("Enter the user to act as by their email address.")
             }
         }
         return account
     }
 
     /// An AWS region's name, such as eu-west-1.
-    public static func validatedAWSSigning(_ signing: MCPAWSSigning) throws -> MCPAWSSigning {
+    public static func validatedAWSSigning(_ signing: ConnectionAWSSigning) throws -> ConnectionAWSSigning {
         guard (1...32).contains(signing.region.count),
               signing.region.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
-            throw MCPConnectionError.message("Invalid AWS region.")
+            throw ToolConnectionError.message("Invalid AWS region.")
         }
         return signing
     }
@@ -151,7 +151,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public static func validatedTokenParameter(_ name: String) throws -> String {
         guard (1...64).contains(name.count), name.unicodeScalars.allSatisfy(
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").contains) else {
-            throw MCPConnectionError.message("Invalid token parameter.")
+            throw ToolConnectionError.message("Invalid token parameter.")
         }
         return name
     }
@@ -160,7 +160,7 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public static func validatedTokenScheme(_ scheme: String) throws -> String {
         guard (1...32).contains(scheme.count), scheme.unicodeScalars.allSatisfy(
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-").contains) else {
-            throw MCPConnectionError.message("Invalid token scheme.")
+            throw ToolConnectionError.message("Invalid token scheme.")
         }
         return scheme
     }
@@ -169,51 +169,51 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public static func validatedAdapter(_ name: String) throws -> String {
         guard (1...64).contains(name.count),
               name.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
-            throw MCPConnectionError.message("Invalid tool adapter.")
+            throw ToolConnectionError.message("Invalid tool adapter.")
         }
         return name
     }
 
-    public static func validatedClientCredentials(_ credentials: MCPClientCredentials) throws -> MCPClientCredentials {
-        guard (credentials.scope?.count ?? 0) <= 1_000 else { throw MCPConnectionError.message("The scope is too long.") }
+    public static func validatedClientCredentials(_ credentials: ConnectionClientCredentials) throws -> ConnectionClientCredentials {
+        guard (credentials.scope?.count ?? 0) <= 1_000 else { throw ToolConnectionError.message("The scope is too long.") }
         let names = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
         for (name, value) in credentials.parameters ?? [:] {
             guard (1...64).contains(name.count), name.unicodeScalars.allSatisfy(names.contains),
                   !["grant_type", "client_id", "client_secret", "scope"].contains(name), value.count <= 1_000 else {
-                throw MCPConnectionError.message("Invalid token exchange field \(name).")
+                throw ToolConnectionError.message("Invalid token exchange field \(name).")
             }
         }
-        return MCPClientCredentials(tokenEndpoint: try validatedEndpoint(credentials.tokenEndpoint), scope: credentials.scope,
+        return ConnectionClientCredentials(tokenEndpoint: try validatedEndpoint(credentials.tokenEndpoint), scope: credentials.scope,
                                     parameters: credentials.parameters)
     }
 
     public static func validatedEndpoint(_ url: URL) throws -> URL {
         guard url.scheme?.lowercased() == "https", url.fragment == nil,
               let result = MessageLink.publicWebURL(from: url) else {
-            throw MCPConnectionError.message("Enter a public HTTPS server URL without credentials or a fragment.")
+            throw ToolConnectionError.message("Enter a public HTTPS server URL without credentials or a fragment.")
         }
         return result
     }
 }
 
-public enum MCPConnectionError: LocalizedError {
+public enum ToolConnectionError: LocalizedError {
     case message(String)
     public var errorDescription: String? {
         switch self { case .message(let text): return text }
     }
 }
 
-public struct MCPRegistry: Codable, Equatable, Sendable {
-    public var connections: [MCPConnectionRecord] = []
+public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
+    public var connections: [ToolConnection] = []
     public var assignments: [String: [UUID]] = [:]
     public init() {}
-    public func assigned(to agentID: UUID) -> [MCPConnectionRecord] {
+    public func assigned(to agentID: UUID) -> [ToolConnection] {
         let ids = Set(assignments[agentID.uuidString.lowercased()] ?? [])
         return connections.filter { ids.contains($0.id) }
     }
     public mutating func assign(_ ids: Set<UUID>, to agentID: UUID) throws {
         guard ids.isSubset(of: Set(connections.map(\.id))) else {
-            throw MCPConnectionError.message("One of the selected tool connections no longer exists.")
+            throw ToolConnectionError.message("One of the selected tool connections no longer exists.")
         }
         assignments[agentID.uuidString.lowercased()] = ids.sorted { $0.uuidString < $1.uuidString }
     }
@@ -235,7 +235,7 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
         next.normalizeSkillNames()
         let folder = root.appendingPathComponent("MCP", isDirectory: true)
         guard (try? FileManager.default.attributesOfItem(atPath: folder.path)[.type] as? FileAttributeType) != .typeSymbolicLink else {
-            throw MCPConnectionError.message("The MCP registry directory must not be a symbolic link.")
+            throw ToolConnectionError.message("The MCP registry directory must not be a symbolic link.")
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
@@ -262,52 +262,52 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
     }
     private func validate() throws {
         guard Set(connections.map(\.id)).count == connections.count else {
-            throw MCPConnectionError.message("Duplicate MCP connection identifiers.")
+            throw ToolConnectionError.message("Duplicate MCP connection identifiers.")
         }
         for connection in connections {
             _ = try ConversationName.validated(connection.name)
-            _ = try MCPConnectionRecord.validatedEndpoint(connection.endpoint)
-            if let header = connection.tokenHeader, try MCPConnectionRecord.validatedTokenHeader(header) != header {
-                throw MCPConnectionError.message("Invalid saved MCP connection.")
+            _ = try ToolConnection.validatedEndpoint(connection.endpoint)
+            if let header = connection.tokenHeader, try ToolConnection.validatedTokenHeader(header) != header {
+                throw ToolConnectionError.message("Invalid saved MCP connection.")
             }
             if let credentials = connection.clientCredentials {
-                guard !connection.usesToken, try MCPConnectionRecord.validatedClientCredentials(credentials) == credentials else {
-                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                guard !connection.usesToken, try ToolConnection.validatedClientCredentials(credentials) == credentials else {
+                    throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }
-            if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
+            if let adapter = connection.adapter { _ = try ToolConnection.validatedAdapter(adapter) }
             if let account = connection.googleServiceAccount {
                 guard !connection.usesToken, connection.clientCredentials == nil, connection.awsSigning == nil,
-                      try MCPConnectionRecord.validatedGoogleServiceAccount(account) == account else {
-                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                      try ToolConnection.validatedGoogleServiceAccount(account) == account else {
+                    throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }
             if let signing = connection.awsSigning {
                 guard !connection.usesToken, connection.clientCredentials == nil,
-                      try MCPConnectionRecord.validatedAWSSigning(signing) == signing else {
-                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                      try ToolConnection.validatedAWSSigning(signing) == signing else {
+                    throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }
             if let parameter = connection.tokenParameter {
-                guard connection.tokenHeader == nil, try MCPConnectionRecord.validatedTokenParameter(parameter) == parameter else {
-                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                guard connection.tokenHeader == nil, try ToolConnection.validatedTokenParameter(parameter) == parameter else {
+                    throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }
             if let scheme = connection.tokenScheme {
-                guard connection.tokenHeader != nil, try MCPConnectionRecord.validatedTokenScheme(scheme) == scheme else {
-                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                guard connection.tokenHeader != nil, try ToolConnection.validatedTokenScheme(scheme) == scheme else {
+                    throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }
             guard (connection.catalogueID?.count ?? 0) <= 100, (connection.settings?.count ?? 0) <= 20,
                   connection.settings?.allSatisfy({ $0.key.count <= 100 && $0.value.count <= 400 }) ?? true else {
-                throw MCPConnectionError.message("Invalid saved MCP connection.")
+                throw ToolConnectionError.message("Invalid saved MCP connection.")
             }
             guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,
                   connection.skillName.utf8.count <= 64,
                   connection.skillName.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }),
                   connection.description.count <= 1_000, connection.instructions.count <= 20_000,
                   (connection.iconData?.count ?? 0) <= 131_072 else {
-                throw MCPConnectionError.message("Invalid saved MCP connection.")
+                throw ToolConnectionError.message("Invalid saved MCP connection.")
             }
         }
     }

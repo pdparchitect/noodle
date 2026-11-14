@@ -18,13 +18,13 @@ import NoodleMCP
     /// Called with the owner when a sign-in ends, whether it worked or not.
     public var onSignInEnded: ((UUID) -> Void)?
     /// Signs a connection in through `browser` and checks it answers. Returns its icon.
-    public var signInFlow: (MCPConnectionRecord, URL, @escaping @Sendable (URL) async throws -> URL) async throws -> Data?
+    public var signInFlow: (ToolConnection, URL, @escaping @Sendable (URL) async throws -> URL) async throws -> Data?
 
     private let root: URL
     private let access: HubAccess
-    private let service: MCPService
-    private let providers: MCPConnectionProviders
-    private var registry: MCPRegistry
+    private let service: ToolConnectionService
+    private let providers: ToolConnectionProviders
+    private var registry: ToolConnectionRegistry
     private let deletions: DeletionJournal<UUID>
     private var signedIn: Set<UUID> = []
     private var problems: [UUID: String] = [:]
@@ -32,15 +32,15 @@ import NoodleMCP
     /// Sign-ins waiting for the device's browser to come back.
     private var pages: [UUID: (token: UUID, reply: CheckedContinuation<URL, Error>)] = [:]
 
-    public init(root: URL, access: HubAccess, service: MCPService,
+    public init(root: URL, access: HubAccess, service: ToolConnectionService,
                 tools: ToolProviderRegistry = ToolProviderRegistry(), assignments: ToolAssignmentStore = ToolAssignmentStore()) {
         self.tools = tools
         self.assignments = assignments
         self.root = root
         self.access = access
         self.service = service
-        providers = MCPConnectionProviders(registry: tools, service: service)
-        registry = (try? MCPRegistry.load(root: root)) ?? MCPRegistry()
+        providers = ToolConnectionProviders(registry: tools, service: service)
+        registry = (try? ToolConnectionRegistry.load(root: root)) ?? ToolConnectionRegistry()
         deletions = DeletionJournal(url: root.appendingPathComponent("MCP/removed-sign-ins.json"))
         signInFlow = { record, redirect, browser in
             try await service.signIn(record, redirectURI: redirect, browser: browser)
@@ -92,7 +92,7 @@ import NoodleMCP
                 }
             } catch {
                 signedIn.remove(id)
-                problems[id] = MCPConnectionProviders.safeError(error)
+                problems[id] = ToolConnectionProviders.safeError(error)
             }
             onSignInEnded?(user.id)
         }
@@ -116,17 +116,17 @@ import NoodleMCP
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(300))
                 guard let self, self.pages[id]?.token == token else { return }
-                self.pages.removeValue(forKey: id)?.reply.resume(throwing: MCPServiceError.timedOut)
+                self.pages.removeValue(forKey: id)?.reply.resume(throwing: ToolConnectionServiceError.timedOut)
             }
         }
     }
 
-    public func connections(for user: HubUser) -> [MCPConnectionRecord] {
+    public func connections(for user: HubUser) -> [ToolConnection] {
         registry.connections.filter { access.owner(ofConnection: $0.id) == user.id }
     }
 
     /// Saves a new connection, or changes one of the user's own. It is not assigned to any bot.
-    @discardableResult public func add(_ record: MCPConnectionRecord, for user: HubUser) throws -> MCPConnectionRecord {
+    @discardableResult public func add(_ record: ToolConnection, for user: HubUser) throws -> ToolConnection {
         var next = registry
         if let index = next.connections.firstIndex(where: { $0.id == record.id }) {
             _ = try owned(record.id, by: user)
@@ -144,7 +144,7 @@ import NoodleMCP
     /// Reads the connections and grants again, after Noodle changed them in the same files on its owner's Mac.
     /// Throws rather than keep an older copy, which a later save would write over Noodle's.
     public func reloadAssignments() throws {
-        let saved = try MCPRegistry.load(root: root)
+        let saved = try ToolConnectionRegistry.load(root: root)
         registry = saved
         Task { [weak self, service] in
             var signedIn: Set<UUID> = []
@@ -212,7 +212,7 @@ import NoodleMCP
         }
     }
 
-    private func owned(_ id: UUID, by user: HubUser) throws -> MCPConnectionRecord {
+    private func owned(_ id: UUID, by user: HubUser) throws -> ToolConnection {
         guard access.owner(ofConnection: id) == user.id, let record = registry.connections.first(where: { $0.id == id }) else {
             throw LinkError("That connection is not yours or no longer exists.")
         }
@@ -233,7 +233,7 @@ extension HubConnections {
     /// Only services that sign in through the browser to an MCP server: a Hub cannot yet keep an API key or a
     /// form's details, and has no app adapters.
     public static let catalogue: [LinkToolPreset] = ToolCatalog.matching("").compactMap { tool in
-        guard case .mcp(let configuration) = tool.configuration, !tool.staysOnThisMac else { return nil }
+        guard case .connection(let configuration) = tool.configuration, !tool.staysOnThisMac else { return nil }
         return LinkToolPreset(id: tool.id, name: tool.name, summary: tool.summary, instructions: tool.defaultInstructions,
                               endpoint: configuration.endpoint, badge: tool.maturity.badge, icon: icon(named: tool.iconName))
     }

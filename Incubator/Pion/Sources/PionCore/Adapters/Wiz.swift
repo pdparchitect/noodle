@@ -14,7 +14,7 @@ public enum Wiz {
         only read; mutations are refused.
         """,
         iconName: "wiz",
-        configuration: .mcp(.init(endpointTemplate: "https://api.{region}.app.wiz.io/graphql",
+        configuration: .connection(.init(endpointTemplate: "https://api.{region}.app.wiz.io/graphql",
             fields: [ToolField(key: "region", title: "Data center", placeholder: "us17", kind: .identifier)],
             clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://auth.app.wiz.io/oauth/token",
                                                        parameters: ["audience": "wiz-api"]),

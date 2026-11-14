@@ -6,7 +6,7 @@ import NoodleRuntime
 import NoodleRuntimeSettings
 
 struct MCPAssignmentPicker: View {
-    let controller: MCPController
+    let controller: ToolConnectionsController
     @Binding var selectedIDs: Set<UUID>
     /// Noodle's own tools sit in the same list; each carries its own scope.
     let calendars: EventKitController
@@ -22,8 +22,8 @@ struct MCPAssignmentPicker: View {
     @State private var search = ""
     @State private var wantsNewTool = false
     @State private var showingNewTool = false
-    @State private var editing: MCPConnectionRecord?
-    @State private var removing: MCPConnectionRecord?
+    @State private var editing: ToolConnection?
+    @State private var removing: ToolConnection?
     /// Room for five tools, so the sheet does not jump as they are added or removed.
     private static let listHeight: CGFloat = 5 * 44
 
@@ -69,9 +69,9 @@ struct MCPAssignmentPicker: View {
                     VStack(spacing: 6) {
                         ForEach(controller.registry.connections.filter { selectedIDs.contains($0.id) }) { connection in
                             HStack(spacing: 10) {
-                                MCPConnectionIcon(connection: connection, size: 26)
+                                ToolConnectionIcon(connection: connection, size: 26)
                                 Text(connection.name).lineLimit(1)
-                                MCPConnectionMaturityBadge(connection: connection)
+                                ToolConnectionMaturityBadge(connection: connection)
                                 Spacer()
                                 Button { editing = connection } label: {
                                     Image(systemName: "pencil").foregroundStyle(.secondary)
@@ -101,7 +101,7 @@ struct MCPAssignmentPicker: View {
             ToolCreationSheet(controller: controller, onAdded: { selectedIDs.insert($0) }).noodleSheetSizing()
         }
         .sheet(item: $editing) { connection in
-            MCPEditor(controller: controller, existing: connection).noodleSheetSizing()
+            ToolConnectionEditor(controller: controller, existing: connection).noodleSheetSizing()
         }
         .confirmationDialog("Remove “\(removing?.name ?? "")”?", isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }
@@ -115,7 +115,7 @@ struct MCPAssignmentPicker: View {
 }
 
 struct MCPConnectionChooser: View {
-    let controller: MCPController
+    let controller: ToolConnectionsController
     @Binding var selectedIDs: Set<UUID>
     @Binding var search: String
     var builtIn: Binding<Set<EventKitAssignments.Kind>>? = nil
@@ -164,11 +164,11 @@ struct MCPConnectionChooser: View {
                     }) { connection in
                         Button { selectedIDs.insert(connection.id) } label: {
                             HStack(spacing: 10) {
-                                MCPConnectionIcon(connection: connection, size: 28)
+                                ToolConnectionIcon(connection: connection, size: 28)
                                 VStack(alignment: .leading) {
                                     HStack {
                                         Text(connection.name).foregroundStyle(Color.primary)
-                                        MCPConnectionMaturityBadge(connection: connection)
+                                        ToolConnectionMaturityBadge(connection: connection)
                                     }
                                     Text(connection.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                                 }
@@ -201,11 +201,11 @@ struct HubConnectionPicker: View {
     @State private var search = ""
     @State private var wantsNewTool = false
     @State private var showingNewTool = false
-    @State private var editing: MCPConnectionRecord?
+    @State private var editing: ToolConnection?
     @State private var failure: String?
     private static let listHeight: CGFloat = 5 * 44
 
-    private var connections: [(link: LinkConnection, record: MCPConnectionRecord)] {
+    private var connections: [(link: LinkConnection, record: ToolConnection)] {
         mirror.connections.compactMap { link in link.record.map { (link, $0) } }
     }
 
@@ -249,15 +249,15 @@ struct HubConnectionPicker: View {
                               save: { try await save(LinkConnectionDraft($0)) }).noodleSheetSizing()
         }
         .sheet(item: $editing) { record in
-            MCPEditor(existing: record, onConnect: signIn, save: { try await save(LinkConnectionDraft($0)) }).noodleSheetSizing()
+            ToolConnectionEditor(existing: record, onConnect: signIn, save: { try await save(LinkConnectionDraft($0)) }).noodleSheetSizing()
         }
     }
 
-    private func row(_ link: LinkConnection, _ record: MCPConnectionRecord) -> some View {
+    private func row(_ link: LinkConnection, _ record: ToolConnection) -> some View {
         HStack(spacing: 10) {
-            MCPConnectionIcon(connection: record, size: 26)
+            ToolConnectionIcon(connection: record, size: 26)
             Text(record.name).lineLimit(1)
-            MCPConnectionMaturityBadge(connection: record)
+            ToolConnectionMaturityBadge(connection: record)
             if let problem = link.problem {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).help(problem)
             }
@@ -312,7 +312,7 @@ struct HubConnectionPicker: View {
                     }, id: \.link.id) { connection in
                         Button { selectedIDs.insert(connection.link.id) } label: {
                             HStack(spacing: 10) {
-                                MCPConnectionIcon(connection: connection.record, size: 28)
+                                ToolConnectionIcon(connection: connection.record, size: 28)
                                 VStack(alignment: .leading) {
                                     Text(connection.record.name).foregroundStyle(Color.primary)
                                     Text(connection.record.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
@@ -338,17 +338,17 @@ struct HubConnectionPicker: View {
             }
     }
 
-    private func save(_ draft: LinkConnectionDraft) async throws -> MCPConnectionRecord {
+    private func save(_ draft: LinkConnectionDraft) async throws -> ToolConnection {
         guard let record = try await mirror.saveConnection(draft).record else {
-            throw MCPConnectionError.message("The Hub saved a connection this Mac cannot read.")
+            throw ToolConnectionError.message("The Hub saved a connection this Mac cannot read.")
         }
         return record
     }
 
-    private func signIn(_ record: MCPConnectionRecord) {
+    private func signIn(_ record: ToolConnection) {
         failure = nil
         Task { @MainActor in
-            do { try await mirror.signIn(record.id, redirect: MCPController.redirectURI(for: record.endpoint)) }
+            do { try await mirror.signIn(record.id, redirect: ToolConnectionsController.redirectURI(for: record.endpoint)) }
             catch { failure = error.localizedDescription }
         }
     }

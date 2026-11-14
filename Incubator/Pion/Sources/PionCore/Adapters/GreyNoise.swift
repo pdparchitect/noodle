@@ -13,7 +13,7 @@ public enum GreyNoise {
         evidence.
         """,
         iconName: "greynoise",
-        configuration: .mcp(.init(endpoint: URL(string: "https://api.greynoise.io/v3")!, tokenHeader: "key", adapter: "greynoise")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.greynoise.io/v3")!, tokenHeader: "key", adapter: "greynoise")))
 
     public static let adapter = OperationAdapter(operations: [Context()])
 }

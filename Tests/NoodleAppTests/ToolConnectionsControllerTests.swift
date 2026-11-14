@@ -7,9 +7,9 @@ import XCTest
 
 /// Exercise the app controller and real workspace IPC. The service uses an empty
 /// credential store, so broker rejection and reconnect paths need no accounts.
-@MainActor final class MCPControllerTests: XCTestCase {
-    private func fixture(credentialFailure: Bool = false, removed: XCTestExpectation? = nil) throws -> MCPControllerFixture {
-        let f = try MCPControllerFixture(credentialFailure: credentialFailure, removed: removed)
+@MainActor final class ToolConnectionsControllerTests: XCTestCase {
+    private func fixture(credentialFailure: Bool = false, removed: XCTestExpectation? = nil) throws -> ToolConnectionsControllerFixture {
+        let f = try ToolConnectionsControllerFixture(credentialFailure: credentialFailure, removed: removed)
         addTeardownBlock { @MainActor in
             f.controller.start(agents: [])
             f.stop()
@@ -29,7 +29,7 @@ import XCTest
         XCTAssertEqual(f.controller.registry.connections, [account])
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [account.id])
         XCTAssertTrue(f.controller.selectedIDs(for: f.b).isEmpty)
-        let reloaded = MCPController(repository: f.repository, service: f.service)
+        let reloaded = ToolConnectionsController(repository: f.repository, service: f.service)
         XCTAssertNil(reloaded.errorMessage)
         XCTAssertEqual(reloaded.registry, f.controller.registry)
         XCTAssertEqual(reloaded.selectedIDs(for: f.a), [account.id])
@@ -37,9 +37,9 @@ import XCTest
 
     func testPresetsCreateIndependentAccountsAndRejectMismatchedSetup() throws {
         let f = try fixture()
-        let configuration = MCPToolConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
+        let configuration = ToolConnectionConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
         let tool = ToolDefinition(id: "fixture", name: "Fixture", summary: "Fixture tools",
-            defaultInstructions: "Keep accounts separate", iconName: "tools", configuration: .mcp(configuration))
+            defaultInstructions: "Keep accounts separate", iconName: "tools", configuration: .connection(configuration))
         let first = try f.controller.addPreset(tool, configuration: configuration)
         let second = try f.controller.addPreset(tool, configuration: configuration)
         XCTAssertNotEqual(first.id, second.id)
@@ -70,17 +70,17 @@ import XCTest
 
     func testPresetRetryPreservesEditedAccountAndCannotOverwriteAnotherServer() throws {
         let f = try fixture()
-        let configuration = MCPToolConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
+        let configuration = ToolConnectionConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
         let tool = ToolDefinition(id: "fixture", name: "Fixture", summary: "Fixture account", defaultInstructions: "",
-            iconName: "tools", configuration: .mcp(configuration))
+            iconName: "tools", configuration: .connection(configuration))
         var account = try f.controller.addPreset(tool, configuration: configuration)
         account.name = "Edited account"
         try f.controller.save(account)
         XCTAssertEqual(try f.controller.addPreset(tool, configuration: configuration, connectionID: account.id), account)
         let before = try Data(contentsOf: f.registryURL)
-        let other = MCPToolConfiguration(endpoint: URL(string: "https://other.example.com/mcp")!)
+        let other = ToolConnectionConfiguration(endpoint: URL(string: "https://other.example.com/mcp")!)
         let different = ToolDefinition(id: "different", name: "Different", summary: "", defaultInstructions: "",
-            iconName: "tools", configuration: .mcp(other))
+            iconName: "tools", configuration: .connection(other))
         XCTAssertThrowsError(try f.controller.addPreset(different, configuration: other, connectionID: account.id))
         XCTAssertEqual(try Data(contentsOf: f.registryURL), before)
         XCTAssertEqual(f.controller.registry.connections, [account])
@@ -108,7 +108,7 @@ import XCTest
         try f.controller.save(account)
         let damaged = Data("{ damaged registry with recoverable user data".utf8)
         try damaged.write(to: f.registryURL)
-        let controller = MCPController(repository: f.repository, service: f.service)
+        let controller = ToolConnectionsController(repository: f.repository, service: f.service)
         XCTAssertTrue(controller.errorMessage?.contains("have not been replaced") == true)
         XCTAssertThrowsError(try controller.save(account))
         XCTAssertThrowsError(try controller.validateAssignment([]))
@@ -151,7 +151,7 @@ import XCTest
         XCTAssertEqual(f.controller.registry.connections, [other])
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [other.id])
         XCTAssertTrue(f.controller.selectedIDs(for: f.b).isEmpty)
-        XCTAssertEqual(try MCPRegistry.load(root: f.root), f.controller.registry)
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root), f.controller.registry)
         try await f.waitUntil { (try? f.instructions(f.a).contains(other.name)) == true && (try? f.instructions(f.a).contains(account.name)) == false }
         await fulfillment(of: [removed], timeout: 2)
         XCTAssertNil(f.controller.errorMessage)
@@ -163,9 +163,9 @@ import XCTest
         let repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
         let keychain = RefusingControllerCredentials()
-        let service = MCPService(credentials: keychain, oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
-        let account = try MCPConnectionRecord(name: "Fixture tools", endpoint: URL(string: "https://example.com/mcp")!)
-        let first = MCPController(repository: repository, service: service)
+        let service = ToolConnectionService(credentials: keychain, oauth: MCPOAuth(), httpConfiguration: { .ephemeral })
+        let account = try ToolConnection(name: "Fixture tools", endpoint: URL(string: "https://example.com/mcp")!)
+        let first = ToolConnectionsController(repository: repository, service: service)
         try first.save(account)
         keychain.refusing = true
         first.remove(account)
@@ -175,7 +175,7 @@ import XCTest
         XCTAssertEqual(keychain.removed, [])
 
         keychain.refusing = false
-        let next = MCPController(repository: repository, service: service)
+        let next = ToolConnectionsController(repository: repository, service: service)
         next.start(agents: [])
         for _ in 0..<200 where keychain.removed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(keychain.removed, [account.id])
@@ -254,7 +254,7 @@ import XCTest
         XCTAssertEqual(f.reach.count, reached)
         // The bot it is assigned to reaches the service's sign-in gate.
         let granted = try await f.exchange(ToolBridgeRequest(session: try f.session(f.b).token, action: .tools, provider: account.skillName), agent: f.b)
-        XCTAssertEqual(granted.error, MCPServiceError.signInRequired.localizedDescription)
+        XCTAssertEqual(granted.error, ToolConnectionServiceError.signInRequired.localizedDescription)
         XCTAssertEqual(f.reach.count, reached + 1)
     }
 
@@ -265,7 +265,7 @@ import XCTest
         try f.start([f.a])
         let request = ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName)
         let response = try await f.exchange(request)
-        XCTAssertEqual(response.error, MCPServiceError.signInRequired.localizedDescription)
+        XCTAssertEqual(response.error, ToolConnectionServiceError.signInRequired.localizedDescription)
         try await f.waitUntil { f.controller.errors[account.id] == response.error }
         XCTAssertFalse(f.exists(request.id, extension: "running"))
         let replay = try await f.exchange(request)
@@ -329,16 +329,16 @@ import XCTest
     }
 }
 
-@MainActor final class MCPControllerFixture {
+@MainActor final class ToolConnectionsControllerFixture {
     let root: URL
     let repository: WorkspaceRepository
     let a: AgentRecord
     let b: AgentRecord
-    let service: MCPService
-    let controller: MCPController
+    let service: ToolConnectionService
+    let controller: ToolConnectionsController
     /// The same pieces the app wires together around this controller.
     let tools: ToolBridgeBroker
-    let reach = MCPServiceReach()
+    let reach = ToolConnectionServiceReach()
     var registryURL: URL { root.appendingPathComponent("MCP/connections.json") }
 
     init(credentialFailure: Bool, removed: XCTestExpectation?) throws {
@@ -347,9 +347,9 @@ import XCTest
         try repository.prepare()
         a = try repository.createAgent(named: "MCP A").agent
         b = try repository.createAgent(named: "MCP B").agent
-        service = MCPService(credentials: EmptyControllerCredentials(fails: credentialFailure, removed: removed, reach: reach), oauth: MCPOAuth(),
+        service = ToolConnectionService(credentials: EmptyControllerCredentials(fails: credentialFailure, removed: removed, reach: reach), oauth: MCPOAuth(),
             httpConfiguration: { XCTFail("An empty credential store must never start transport"); return .ephemeral })
-        controller = MCPController(repository: repository, service: service)
+        controller = ToolConnectionsController(repository: repository, service: service)
         let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
         let broker = ToolBridgeBroker(registry: registry) { assignments.assignments(for: $0) }
         tools = broker
@@ -368,13 +368,13 @@ import XCTest
     func stop() { tools.stop() }
     /// Noodle lists a connection's tools to write its skill, which reaches the service once. Waiting for
     /// the skill leaves only the requests under test to move `reach`.
-    func skill(_ account: MCPConnectionRecord, for agent: AgentRecord, exists: Bool = true) async throws {
+    func skill(_ account: ToolConnection, for agent: AgentRecord, exists: Bool = true) async throws {
         let file = repository.directory(for: agent).appendingPathComponent(".agents/skills/\(account.skillName)/SKILL.md")
         try await waitUntil { FileManager.default.fileExists(atPath: file.path) == exists }
     }
 
-    func account(name: String = "Fixture tools") throws -> MCPConnectionRecord {
-        try MCPConnectionRecord(name: name, endpoint: URL(string: "https://example.com/mcp")!)
+    func account(name: String = "Fixture tools") throws -> ToolConnection {
+        try ToolConnection(name: name, endpoint: URL(string: "https://example.com/mcp")!)
     }
     func folder(_ agent: AgentRecord) -> URL { repository.directory(for: agent).appendingPathComponent(ToolBroker.path) }
     func session(_ agent: AgentRecord) throws -> MCPBridgeSession {
@@ -417,7 +417,7 @@ import XCTest
 }
 
 /// Every request the service accepts starts by loading the connection's credentials.
-final class MCPServiceReach: @unchecked Sendable {
+final class ToolConnectionServiceReach: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
     var count: Int { lock.withLock { value } }
@@ -427,7 +427,7 @@ final class MCPServiceReach: @unchecked Sendable {
 private struct EmptyControllerCredentials: MCPCredentialStorage {
     let fails: Bool
     let removed: XCTestExpectation?
-    let reach: MCPServiceReach
+    let reach: ToolConnectionServiceReach
     func load(_ id: UUID) throws -> MCPCredentials? {
         reach.increment()
         if fails { throw NSError(domain: "fixture", code: 1, userInfo: [NSLocalizedDescriptionKey: "private-token=secret-fixture"]) }
@@ -447,7 +447,7 @@ private final class RefusingControllerCredentials: MCPCredentialStorage, @unchec
     func save(_ credentials: MCPCredentials, id: UUID) { XCTFail("These tests must never authorize an account") }
     func remove(_ id: UUID) throws {
         try lock.withLock {
-            if refusal { throw MCPServiceError.keychain(-25308) }
+            if refusal { throw ToolConnectionServiceError.keychain(-25308) }
             deleted.append(id)
         }
     }

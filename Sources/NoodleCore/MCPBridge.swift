@@ -27,7 +27,7 @@ public struct MCPBridgeRequest: Codable, Sendable {
     }
 
     /// Called by the broker with its own assignment list, never a CLI-supplied registry.
-    public func assignedConnection(in assignments: [MCPConnectionRecord]) -> MCPConnectionRecord? {
+    public func assignedConnection(in assignments: [ToolConnection]) -> ToolConnection? {
         guard (connectionID != nil) != (skillName != nil) else { return nil }
         if let connectionID { return assignments.first { $0.id == connectionID } }
         return assignments.first { $0.skillName == skillName }
@@ -66,10 +66,10 @@ public enum MCPBridgeFiles {
         defer { systemClose(descriptor) }
         var info = stat()
         guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
-              info.st_size <= limit else { throw MCPConnectionError.message("Invalid MCP bridge file.") }
+              info.st_size <= limit else { throw ToolConnectionError.message("Invalid MCP bridge file.") }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
         let data = try handle.read(upToCount: limit + 1) ?? Data()
-        guard data.count <= limit else { throw MCPConnectionError.message("MCP request or response is too large.") }
+        guard data.count <= limit else { throw ToolConnectionError.message("MCP request or response is too large.") }
         return data
     }
     public static func write<T: Encodable>(_ value: T, to file: URL, workspace: URL? = nil) throws {
@@ -93,7 +93,7 @@ public enum MCPBridgeFiles {
         }
         let prefix = path(workspace) + "/"
         let parent = path(file.deletingLastPathComponent())
-        guard parent.hasPrefix(prefix) else { throw MCPConnectionError.message("Bridge files must stay inside the bot workspace.") }
+        guard parent.hasPrefix(prefix) else { throw ToolConnectionError.message("Bridge files must stay inside the bot workspace.") }
         return try WorkspaceMailbox(workspace: workspace, path: String(parent.dropFirst(prefix.count)))
     }
 }

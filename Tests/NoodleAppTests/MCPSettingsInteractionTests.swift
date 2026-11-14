@@ -7,8 +7,8 @@ import NoodleRuntime
 @testable import NoodleRuntimeSettings
 
 @MainActor final class MCPSettingsInteractionTests: HiddenViewTests {
-    private func mcpFixture() throws -> MCPControllerFixture {
-        let f = try MCPControllerFixture(credentialFailure: false, removed: nil)
+    private func mcpFixture() throws -> ToolConnectionsControllerFixture {
+        let f = try ToolConnectionsControllerFixture(credentialFailure: false, removed: nil)
         addTeardownBlock { @MainActor in
             f.controller.start(agents: [])
             try? FileManager.default.removeItem(at: f.root)
@@ -18,13 +18,13 @@ import NoodleRuntime
 
     /// Noodle's built-in tools share the assignment list. These tests are about
     /// connections, so the controllers are real but list nothing.
-    private func eventKit(_ f: MCPControllerFixture, kind: EventKitAssignments.Kind) -> EventKitController {
+    private func eventKit(_ f: ToolConnectionsControllerFixture, kind: EventKitAssignments.Kind) -> EventKitController {
         EventKitController(repository: f.repository, kind: kind) { [] }
     }
 
     func testNewConnectionRequiresNameAndURLAndRejectsInvalidEndpoints() async throws {
         let f = try mcpFixture()
-        let editor = host(MCPEditor(controller: f.controller,
+        let editor = host(ToolConnectionEditor(controller: f.controller,
             onSaved: { _ in XCTFail("Invalid connections must not save") },
             onConnect: { _ in XCTFail("Invalid connections must not connect") }))
         let save = try await control("Add & Connect", in: editor)
@@ -47,8 +47,8 @@ import NoodleRuntime
     func testNewConnectionReturnsTheSavedIdentityAndConnectsAfterSaving() async throws {
         let f = try mcpFixture(), other = try f.account(name: "Work")
         try f.controller.save(other)
-        var saved: [MCPConnectionRecord] = [], connected: [MCPConnectionRecord] = []
-        let editor = host(MCPEditor(controller: f.controller, onSaved: { saved.append($0) },
+        var saved: [ToolConnection] = [], connected: [ToolConnection] = []
+        let editor = host(ToolConnectionEditor(controller: f.controller, onSaved: { saved.append($0) },
             onConnect: { connected.append($0) }))
         edit(try await textField("e.g. Notion — Work", in: editor), text: "  Work  ")
         edit(try await textField("https://…", in: editor), text: " https://example.com/mcp ")
@@ -60,7 +60,7 @@ import NoodleRuntime
         XCTAssertEqual(current.name, "Work")
         XCTAssertNotEqual(current.skillName, other.skillName)
         XCTAssertEqual(saved, [current]); XCTAssertEqual(connected, [current])
-        XCTAssertEqual(try MCPRegistry.load(root: f.root), f.controller.registry)
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root), f.controller.registry)
         XCTAssertTrue(f.controller.registry.assignments.isEmpty)
     }
 
@@ -69,8 +69,8 @@ import NoodleRuntime
         var account = try f.account()
         account.description = "Account description"; account.instructions = "Existing user text"
         try f.controller.save(account); try f.controller.assign([account.id], to: f.a)
-        var saved: MCPConnectionRecord?
-        let editor = host(MCPEditor(controller: f.controller, existing: account,
+        var saved: ToolConnection?
+        let editor = host(ToolConnectionEditor(controller: f.controller, existing: account,
             onSaved: { saved = $0 }, onConnect: { _ in XCTFail("Editing must not initiate sign-in") }))
         let endpoint = try await textField("https://…", in: editor)
         XCTAssertFalse(endpoint.isEnabled)
@@ -83,14 +83,14 @@ import NoodleRuntime
         XCTAssertEqual(result.skillName, account.skillName)
         XCTAssertEqual(f.controller.selectedIDs(for: f.a), [account.id])
         XCTAssertTrue(f.controller.selectedIDs(for: f.b).isEmpty)
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections, [result])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections, [result])
     }
 
     func testFailedRegistrySaveRetainsDraftAndRetryCreatesOnlyOneConnection() async throws {
         let f = try mcpFixture()
         try FileManager.default.createDirectory(at: f.registryURL, withIntermediateDirectories: true)
         var saved = 0, connected = 0
-        let editor = host(MCPEditor(controller: f.controller, onSaved: { _ in saved += 1 }, onConnect: { _ in connected += 1 }))
+        let editor = host(ToolConnectionEditor(controller: f.controller, onSaved: { _ in saved += 1 }, onConnect: { _ in connected += 1 }))
         let name = try await textField("e.g. Notion — Work", in: editor)
         edit(name, text: "Retried connection")
         edit(try await textField("https://…", in: editor), text: "https://example.com/mcp")
@@ -101,7 +101,7 @@ import NoodleRuntime
         try FileManager.default.removeItem(at: f.registryURL)
         press(try await control("Add & Connect", in: editor))
         try await wait { connected == 1 }
-        XCTAssertEqual(saved, 1); XCTAssertEqual(try MCPRegistry.load(root: f.root).connections.count, 1)
+        XCTAssertEqual(saved, 1); XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections.count, 1)
     }
 
     func testWorkspaceRefreshFailureRetriesTheSameConnectionWithoutDuplicatingIt() async throws {
@@ -112,7 +112,7 @@ import NoodleRuntime
         try FileManager.default.removeItem(at: file)
         try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
         var saved = 0, connected = 0
-        let editor = host(MCPEditor(controller: f.controller, onSaved: { _ in saved += 1 }, onConnect: { _ in connected += 1 }))
+        let editor = host(ToolConnectionEditor(controller: f.controller, onSaved: { _ in saved += 1 }, onConnect: { _ in connected += 1 }))
         let name = try await textField("e.g. Notion — Work", in: editor)
         edit(name, text: "Refresh retry")
         edit(try await textField("https://…", in: editor), text: "https://example.com/mcp")
@@ -124,18 +124,18 @@ import NoodleRuntime
         press(try await control("Add & Connect", in: editor))
         try await wait { connected == 1 }
         XCTAssertEqual(saved, 1)
-        XCTAssertEqual(try MCPRegistry.load(root: f.root).connections.map(\.id), [first.id])
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: f.root).connections.map(\.id), [first.id])
     }
 
     func testCancelAndBackLeaveTheRegistryUnchanged() async throws {
         let f = try mcpFixture(), account = try f.account()
         try f.controller.save(account)
         let before = try Data(contentsOf: f.registryURL)
-        let editor = host(MCPEditor(controller: f.controller, existing: account))
+        let editor = host(ToolConnectionEditor(controller: f.controller, existing: account))
         edit(try await textField("e.g. Notion — Work", in: editor), text: "Cancelled edit")
         press(try await control("Cancel", in: editor))
         var back = 0
-        let creation = host(MCPEditor(controller: f.controller, onBack: { back += 1 }))
+        let creation = host(ToolConnectionEditor(controller: f.controller, onBack: { back += 1 }))
         edit(try await textField("e.g. Notion — Work", in: creation), text: "Abandoned draft")
         press(try await control("Back", in: creation))
         XCTAssertEqual(back, 1); XCTAssertEqual(try Data(contentsOf: f.registryURL), before)
@@ -218,14 +218,14 @@ import NoodleRuntime
 
     func testSettingsReflectSavedConnectionsAndSignInStatusWithoutConnecting() async throws {
         let f = try fixture()
-        let settings = host(MCPSettingsView(store: f.store).environment(f.store))
+        let settings = host(ToolConnectionsSettingsView(store: f.store).environment(f.store))
         _ = try await control("No connections", in: settings)
-        let account = try MCPConnectionRecord(name: "Saved tools", endpoint: URL(string: "https://example.com/mcp")!, description: "Fixture account")
-        try f.store.mcp.save(account)
+        let account = try ToolConnection(name: "Saved tools", endpoint: URL(string: "https://example.com/mcp")!, description: "Fixture account")
+        try f.store.connectionsController.save(account)
         _ = try await control("Saved tools", in: settings)
         _ = try await control("Sign-in required", in: settings)
         _ = try await control("Fixture account", in: settings)
         try await wait { !self.hasControl("No connections", in: settings) }
-        XCTAssertNil(f.store.mcp.signingIn)
+        XCTAssertNil(f.store.connectionsController.signingIn)
     }
 }

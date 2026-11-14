@@ -38,7 +38,7 @@ struct MCPOAuth {
                                          configuration: MCPOAuthConfiguration?) throws -> MCPCredentials? {
         guard let configuration else { return nil }
         guard let client = configuration.clients.first(where: { $0.redirectURI == redirect }) else {
-            throw MCPServiceError.invalidCallback
+            throw ToolConnectionServiceError.invalidCallback
         }
         return MCPCredentials(endpoint: endpoint, issuer: configuration.issuer,
             authorizationEndpoint: configuration.authorizationEndpoint,
@@ -53,15 +53,15 @@ struct MCPOAuth {
               credentials.issuer == expected.issuer, credentials.authorizationEndpoint == expected.authorizationEndpoint,
               credentials.tokenEndpoint == expected.tokenEndpoint, credentials.clientID == expected.clientID,
               credentials.resource == expected.resource else {
-            throw MCPServiceError.invalidMetadata
+            throw ToolConnectionServiceError.invalidMetadata
         }
         guard Set(configuration.scopes).isSubset(of: Set((credentials.scope ?? "").split(separator: " ").map(String.init))) else {
-            throw MCPServiceError.signInRequired
+            throw ToolConnectionServiceError.signInRequired
         }
     }
 
     func request(_ url: URL, json: Object? = nil, form: [String: String]? = nil) async throws -> Object {
-        _ = try MCPConnectionRecord.validatedEndpoint(url)
+        _ = try ToolConnection.validatedEndpoint(url)
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let json {
@@ -77,13 +77,13 @@ struct MCPOAuth {
                 "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
             }.joined(separator: "&").data(using: .utf8)
         }
-        let (data, response) = try await session.data(for: request, limit: 1_048_576, tooLarge: MCPServiceError.responseTooLarge)
+        let (data, response) = try await session.data(for: request, limit: 1_048_576, tooLarge: ToolConnectionServiceError.responseTooLarge)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let object = (try? JSONSerialization.jsonObject(with: data)) as? Object ?? [:]
         if object["error"] as? String == "invalid_grant" || object["error"] as? String == "invalid_client" {
-            throw MCPServiceError.signInRequired
+            throw ToolConnectionServiceError.signInRequired
         }
-        guard (200..<300).contains(status) else { throw MCPServiceError.network(status) }
+        guard (200..<300).contains(status) else { throw ToolConnectionServiceError.network(status) }
         return object
     }
 
@@ -106,14 +106,14 @@ struct MCPOAuth {
                   let published = URL(string: resourceString),
                   Self.acceptsResource(published, for: endpoint),
                   let issuers = protectedResource["authorization_servers"] as? [String],
-                  let first = issuers.first, let listed = URL(string: first) else { throw MCPServiceError.invalidMetadata }
+                  let first = issuers.first, let listed = URL(string: first) else { throw ToolConnectionServiceError.invalidMetadata }
             resource = published; issuer = listed
         } else if let authorizationServer {
             resource = endpoint; issuer = authorizationServer
         } else {
-            throw MCPServiceError.invalidMetadata
+            throw ToolConnectionServiceError.invalidMetadata
         }
-        _ = try MCPConnectionRecord.validatedEndpoint(issuer)
+        _ = try ToolConnection.validatedEndpoint(issuer)
         var metadata: Object?
         await progress("Checking authorization server…")
         for candidate in discovery.authorizationServerMetadataURLs(for: issuer) {
@@ -125,10 +125,10 @@ struct MCPOAuth {
         guard let metadata,
               let authString = metadata["authorization_endpoint"] as? String, let authorization = URL(string: authString),
               let tokenString = metadata["token_endpoint"] as? String, let token = URL(string: tokenString) else {
-            throw MCPServiceError.invalidMetadata
+            throw ToolConnectionServiceError.invalidMetadata
         }
-        _ = try MCPConnectionRecord.validatedEndpoint(authorization)
-        _ = try MCPConnectionRecord.validatedEndpoint(token)
+        _ = try ToolConnection.validatedEndpoint(authorization)
+        _ = try ToolConnection.validatedEndpoint(token)
         let scope = (protectedResource?["scopes_supported"] as? [String])?.joined(separator: " ")
         guard let registrationString = metadata["registration_endpoint"] as? String,
               let registration = URL(string: registrationString) else {
@@ -136,7 +136,7 @@ struct MCPOAuth {
             // metadata, which only allows https addresses: hence the relay pages.
             guard metadata["client_id_metadata_document_supported"] as? Bool == true,
                   (metadata["token_endpoint_auth_methods_supported"] as? [String])?.contains("none") ?? true,
-                  let relay = Self.relays[redirect.absoluteString] else { throw MCPServiceError.registrationUnsupported }
+                  let relay = Self.relays[redirect.absoluteString] else { throw ToolConnectionServiceError.registrationUnsupported }
             return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                                   tokenEndpoint: token, clientID: Self.metadataDocument.absoluteString, redirectURI: redirect,
                                   relayURI: relay, resource: resource, scope: scope)
@@ -150,7 +150,7 @@ struct MCPOAuth {
         ])
         guard let clientID = registered["client_id"] as? String, !clientID.isEmpty,
               (registered["token_endpoint_auth_method"] as? String ?? "none") == "none" else {
-            throw MCPServiceError.registrationUnsupported
+            throw ToolConnectionServiceError.registrationUnsupported
         }
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
@@ -178,8 +178,8 @@ struct MCPOAuth {
     /// transport path (for example Pipedream's /v2). Never accept another origin
     /// or an unrelated resource path, and never change the transport destination.
     static func acceptsResource(_ resource: URL, for endpoint: URL) -> Bool {
-        guard (try? MCPConnectionRecord.validatedEndpoint(resource)) != nil,
-              (try? MCPConnectionRecord.validatedEndpoint(endpoint)) != nil else { return false }
+        guard (try? ToolConnection.validatedEndpoint(resource)) != nil,
+              (try? ToolConnection.validatedEndpoint(endpoint)) != nil else { return false }
         if resource == endpoint { return true }
         guard let canonical = URLComponents(url: resource, resolvingAgainstBaseURL: false),
               let transport = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else { return false }
@@ -210,28 +210,28 @@ struct MCPOAuth {
         if let scope = credentials.scope, !scope.isEmpty { components.queryItems?.append(.init(name: "scope", value: scope)) }
         let reserved = Set((components.queryItems ?? []).map(\.name)).union(["scope", "resource", "client_secret"])
         for (name, value) in (configuration?.authorizationParameters ?? [:]).sorted(by: { $0.key < $1.key }) {
-            guard !reserved.contains(name) else { throw MCPServiceError.invalidMetadata }
+            guard !reserved.contains(name) else { throw ToolConnectionServiceError.invalidMetadata }
             components.queryItems?.append(.init(name: name, value: value))
         }
-        guard let authorizationURL = components.url else { throw MCPServiceError.invalidMetadata }
+        guard let authorizationURL = components.url else { throw ToolConnectionServiceError.invalidMetadata }
         let callback = try await browser(authorizationURL)
         let expected = URLComponents(url: credentials.redirectURI, resolvingAgainstBaseURL: false)!
         guard let actual = URLComponents(url: callback, resolvingAgainstBaseURL: false),
               actual.scheme == expected.scheme, actual.host == expected.host,
               actual.user == nil, actual.password == nil,
               actual.port == expected.port, actual.path == expected.path, actual.fragment == nil else {
-            throw MCPServiceError.invalidCallback
+            throw ToolConnectionServiceError.invalidCallback
         }
         let values = Dictionary(grouping: actual.queryItems ?? [], by: \.name)
-        guard values["state"]?.count == 1, values["state"]?.first?.value == state else { throw MCPServiceError.invalidCallback }
+        guard values["state"]?.count == 1, values["state"]?.first?.value == state else { throw ToolConnectionServiceError.invalidCallback }
         if let refusal = values["error"] {
             // Only a callback carrying our state may put the service's words on screen.
-            guard refusal.count == 1, let code = Self.displayable(refusal.first?.value) else { throw MCPServiceError.invalidCallback }
-            throw MCPServiceError.authorizationRefused(code: code,
+            guard refusal.count == 1, let code = Self.displayable(refusal.first?.value) else { throw ToolConnectionServiceError.invalidCallback }
+            throw ToolConnectionServiceError.authorizationRefused(code: code,
                 reason: values["error_description"]?.count == 1 ? Self.displayable(values["error_description"]?.first?.value) : nil)
         }
         guard values["code"]?.count == 1,
-              let code = values["code"]?.first?.value, !code.isEmpty else { throw MCPServiceError.invalidCallback }
+              let code = values["code"]?.first?.value, !code.isEmpty else { throw ToolConnectionServiceError.invalidCallback }
         var form = [
             "grant_type": "authorization_code", "code": code, "code_verifier": verifier,
             "client_id": credentials.clientID, "redirect_uri": (credentials.relayURI ?? credentials.redirectURI).absoluteString
@@ -251,14 +251,14 @@ struct MCPOAuth {
 
     /// Exchanges a client ID and secret for an access token: the client-credentials grant, the secret sent in
     /// the form. A response without a lifetime is taken to last 30 minutes.
-    func clientToken(_ secret: MCPClientSecret, scope: String?, parameters: [String: String]? = nil) async throws -> MCPClientSecret {
+    func clientToken(_ secret: ConnectionClientSecret, scope: String?, parameters: [String: String]? = nil) async throws -> ConnectionClientSecret {
         var form = ["grant_type": "client_credentials", "client_id": secret.clientID, "client_secret": secret.clientSecret]
         if let scope { form["scope"] = scope }
         // The service's own fields never replace the standard ones.
         form.merge(parameters ?? [:]) { standard, _ in standard }
         let response = try await request(secret.tokenEndpoint, form: form)
         guard let token = response["access_token"] as? String, !token.isEmpty,
-              (response["token_type"] as? String)?.lowercased() ?? "bearer" == "bearer" else { throw MCPServiceError.invalidMetadata }
+              (response["token_type"] as? String)?.lowercased() ?? "bearer" == "bearer" else { throw ToolConnectionServiceError.invalidMetadata }
         let lifetime = (response["expires_in"] as? Double).flatMap { $0 > 0 ? $0 : nil } ?? 1_800
         var result = secret
         result.accessToken = token
@@ -268,7 +268,7 @@ struct MCPOAuth {
 
     func refresh(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration? = nil) async throws -> MCPCredentials {
         try validateConfiguration(credentials, configuration: configuration)
-        guard let refreshToken = credentials.refreshToken else { throw MCPServiceError.signInRequired }
+        guard let refreshToken = credentials.refreshToken else { throw ToolConnectionServiceError.signInRequired }
         var form = [
             "grant_type": "refresh_token", "refresh_token": refreshToken,
             "client_id": credentials.clientID
@@ -280,11 +280,11 @@ struct MCPOAuth {
     private func updated(_ credentials: MCPCredentials, response: Object, configuration: MCPOAuthConfiguration?) throws -> MCPCredentials {
         guard let token = response["access_token"] as? String, !token.isEmpty,
               (response["token_type"] as? String)?.lowercased() == "bearer",
-              let lifetime = response["expires_in"] as? Double, lifetime > 0 else { throw MCPServiceError.invalidMetadata }
+              let lifetime = response["expires_in"] as? Double, lifetime > 0 else { throw ToolConnectionServiceError.invalidMetadata }
         var result = credentials
         if let configuration, let granted = response["scope"] as? String,
            !Set(configuration.scopes).isSubset(of: Set(granted.split(separator: " ").map(String.init))) {
-            throw MCPServiceError.signInRequired
+            throw ToolConnectionServiceError.signInRequired
         }
         result.accessToken = token
         result.refreshToken = response["refresh_token"] as? String ?? credentials.refreshToken
@@ -295,7 +295,7 @@ struct MCPOAuth {
         var bytes = [UInt8](repeating: 0, count: 32)
         #if canImport(Security)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            throw MCPServiceError.credentialStorage
+            throw ToolConnectionServiceError.credentialStorage
         }
         #else
         // The system generator is cryptographically secure on every platform Swift runs on.

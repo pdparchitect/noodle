@@ -5,7 +5,7 @@ import XCTest
 @MainActor final class ResourceAssignmentTests: XCTestCase {
     private var base: URL!
     private var model: PionModel!
-    private var connection: MCPConnectionRecord!
+    private var connection: ToolConnection!
     private var folder: AgentFolder!
 
     override func setUpWithError() throws {
@@ -15,11 +15,11 @@ import XCTest
         folder = AgentFolder(path: shared.path, writable: false, description: "Recorded evidence")
         model = PionModel(root: base.appendingPathComponent("Repository"), messenger: nil, isScripted: true)
         try model.repository.prepare()
-        connection = try MCPConnectionRecord(name: "Evidence Search", endpoint: URL(string: "https://mcp.example.com")!)
-        var registry = MCPRegistry()
+        connection = try ToolConnection(name: "Evidence Search", endpoint: URL(string: "https://mcp.example.com")!)
+        var registry = ToolConnectionRegistry()
         registry.connections = [connection]
         try registry.save(root: model.repository.rootURL)
-        try model.mcp.reloadAssignments()
+        try model.connectionsController.reloadAssignments()
     }
 
     override func tearDownWithError() throws { model = nil; try? FileManager.default.removeItem(at: base) }
@@ -60,13 +60,13 @@ import XCTest
         let group = try model.createGroup(name: "Triage", description: nil, members: [first.id], folders: [folder], memberTools: [first.id: [connection.id]])
         XCTAssertEqual(try granted(first), [folder])
         XCTAssertTrue(try granted(second).isEmpty)
-        XCTAssertEqual(model.mcp.selectedIDs(for: first), [connection.id])
+        XCTAssertEqual(model.connectionsController.selectedIDs(for: first), [connection.id])
         let updated = try model.updateGroup(group, name: "Response", description: nil, members: [second.id], folders: [folder], memberTools: [second.id: []])
         XCTAssertEqual(updated.folders, [folder])
         XCTAssertTrue(try granted(first).isEmpty)
         XCTAssertEqual(try granted(second), [folder])
-        XCTAssertEqual(model.mcp.selectedIDs(for: first), [connection.id])
-        XCTAssertTrue(model.mcp.selectedIDs(for: second).isEmpty)
+        XCTAssertEqual(model.connectionsController.selectedIDs(for: first), [connection.id])
+        XCTAssertTrue(model.connectionsController.selectedIDs(for: second).isEmpty)
     }
 
     func testInvestigationResourcesCanBeCreatedEditedAndRevokedWithoutLosingTheCase() throws {
@@ -78,7 +78,7 @@ import XCTest
         }
         XCTAssertEqual(model.conversation(investigation.id)?.folders, [folder])
         XCTAssertEqual(try granted(lead), [folder])
-        XCTAssertEqual(model.mcp.selectedIDs(for: lead), [connection.id])
+        XCTAssertEqual(model.connectionsController.selectedIDs(for: lead), [connection.id])
         draft.title = "Resolved beacon"
         draft.folders = []
         draft.memberTools = [lead.id: []]
@@ -86,7 +86,7 @@ import XCTest
         XCTAssertEqual(updated.id, investigation.id)
         XCTAssertEqual(updated.title, draft.title)
         XCTAssertTrue(try granted(lead).isEmpty)
-        XCTAssertTrue(model.mcp.selectedIDs(for: lead).isEmpty)
+        XCTAssertTrue(model.connectionsController.selectedIDs(for: lead).isEmpty)
         XCTAssertEqual(model.caseRecord(investigation.id).evidence.first?.id, evidence.id)
     }
 
@@ -100,7 +100,7 @@ import XCTest
         let protected = AgentFolder(path: model.repository.rootURL.path)
         XCTAssertThrowsError(try model.updateGroup(group, name: "Changed", description: nil, members: [original.id], folders: [protected], memberTools: [original.id: [connection.id]]))
         XCTAssertEqual(model.conversation(group.id)?.displayName, "Triage")
-        XCTAssertTrue(model.mcp.selectedIDs(for: original).isEmpty)
+        XCTAssertTrue(model.connectionsController.selectedIDs(for: original).isEmpty)
     }
 
     func testClosedInvestigationsCannotChangeResourceGrants() throws {
