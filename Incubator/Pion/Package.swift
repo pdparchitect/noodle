@@ -13,8 +13,10 @@ let package = Package(
         .package(path: "../.."),
     ],
     targets: [
-        .target(name: "PionCore", dependencies: [.product(name: "NoodleCore", package: "noodle")]),
-        .testTarget(name: "PionCoreTests", dependencies: ["PionCore", .product(name: "NoodleCore", package: "noodle")]),
+        .target(name: "PionCore", dependencies: [.product(name: "NoodleCore", package: "noodle"),
+                                                .product(name: "NoodleMCP", package: "noodle")]),
+        .testTarget(name: "PionCoreTests", dependencies: ["PionCore", .product(name: "NoodleCore", package: "noodle"),
+                                                          .product(name: "NoodleMCP", package: "noodle")]),
     ],
     swiftLanguageModes: [.v6]
 )

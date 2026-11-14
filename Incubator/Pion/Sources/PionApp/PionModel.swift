@@ -83,6 +83,7 @@ import UniformTypeIdentifiers
             (try? repository.loadAgents())?.first { $0.id == id }?.displayName
         })
         mcp.toolRegistry = tools
+        mcp.serve(PionAdapters.all)
         mcp.onAssignmentsChange = { [weak self, toolAssignments] granted in
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             self?.toolBroker?.synchronizeSkills()
