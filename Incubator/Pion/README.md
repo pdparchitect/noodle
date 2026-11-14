@@ -45,7 +45,10 @@ and sign-in factors, and the org's System Log. Shodan shows what an address expo
 and Microsoft Defender XDR take a tenant ID and an app registration's client ID and secret; give the
 app read permissions such as User.Read.All, AuditLog.Read.All, SecurityAlert.Read.All and
 ThreatHunting.Read.All. CrowdStrike Falcon takes its cloud and an API client's ID and secret with read
-scopes for hosts and alerts; SentinelOne takes its console address and an API token. Each service you add is a separate account, so two accounts of the same service can sit side by
+scopes for hosts and alerts; SentinelOne takes its console address and an API token. Splunk, Elastic and Microsoft Sentinel let
+agents search logs in SPL, ES|QL and KQL: Splunk takes its address and an authentication token, Elastic
+its address and an API key, and Sentinel its tenant and workspace IDs with an app registration given the
+Log Analytics Reader role. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios

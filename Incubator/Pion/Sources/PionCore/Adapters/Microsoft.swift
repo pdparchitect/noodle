@@ -352,51 +352,14 @@ extension Defender {
         ], required: ["query"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let query = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !query.isEmpty, query.count <= 10_000 else { throw ServiceError.input("Give a KQL query of up to 10,000 characters.") }
+            let query = try ServiceInput.query(input.query)
             struct Body: Encodable { let Query: String; let Timespan: String? }
             struct Column: Decodable { let name: String }
-            struct Answer: Decodable { let schema: [Column]?; let results: [[String: Value]]? }
-            /// A cell as hunting returns it: text, a number, true or false, or something nested kept as its JSON.
-            enum Value: Codable {
-                case text(String), number(Double), flag(Bool), none, other(String)
-                init(from decoder: Decoder) throws {
-                    let container = try decoder.singleValueContainer()
-                    if container.decodeNil() { self = .none }
-                    else if let flag = try? container.decode(Bool.self) { self = .flag(flag) }
-                    else if let number = try? container.decode(Double.self) { self = .number(number) }
-                    else if let text = try? container.decode(String.self) { self = .text(text) }
-                    else { self = .other("…") }
-                }
-                func encode(to encoder: Encoder) throws {
-                    var container = encoder.singleValueContainer()
-                    switch self {
-                    case .text(let text), .other(let text): try container.encode(text)
-                    case .number(let number): try container.encode(number)
-                    case .flag(let flag): try container.encode(flag)
-                    case .none: try container.encodeNil()
-                    }
-                }
-                var shown: String {
-                    switch self {
-                    case .text(let text), .other(let text): text
-                    case .number(let number): number.rounded() == number ? String(Int(number)) : String(number)
-                    case .flag(let flag): String(flag)
-                    case .none: ""
-                    }
-                }
-            }
-            struct Rows: Encodable { let columns: [String]; let rows: [[String: Value]]; let truncated: Bool }
+            struct Answer: Decodable { let schema: [Column]?; let results: [[String: CellValue]]? }
             let answer = try await service.post(["security", "runHuntingQuery"],
                                                 body: Body(Query: query, Timespan: input.timespan?.trimmingCharacters(in: .whitespaces)), as: Answer.self)
             let columns = answer.schema?.map(\.name) ?? []
-            let all = answer.results ?? []
-            let rows = Array(all.prefix(100))
-            let shown = rows.prefix(20).map { row in columns.map { row[$0]?.shown ?? "" }.joined(separator: " | ") }
-            let text = rows.isEmpty ? "The query returned no rows."
-                : "\(all.count) row\(all.count == 1 ? "" : "s")\(all.count > rows.count ? ", first \(rows.count) kept" : ""):\n"
-                    + columns.joined(separator: " | ") + "\n" + shown.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Rows(columns: columns, rows: rows, truncated: all.count > rows.count))
+            return try ServiceTable(columns: columns, rows: (answer.results ?? []).map { row in columns.map { row[$0] ?? .none } }).result()
         }
     }
 }

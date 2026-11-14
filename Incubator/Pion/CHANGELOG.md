@@ -32,6 +32,7 @@
 
 ### Added
 
+- Splunk, Elastic and Microsoft Sentinel in Settings › Tools › Add Tools, so agents can search logs in SPL, ES|QL and KQL. Splunk takes its address and an authentication token, Elastic its address and an API key, and Sentinel its tenant, workspace and an app registration's client ID and secret. Searches only read; Splunk commands that write or send are refused.
 - CrowdStrike Falcon and SentinelOne in Settings › Tools › Add Tools. Falcon takes its cloud and an API client's ID and secret, SentinelOne its console address and an API token. Agents can find hosts and agents, with their status, containment and last activity, and list the alerts and threats raised on them.
 - Microsoft Entra ID and Microsoft Defender XDR in Settings › Tools › Add Tools, each tenant added with its directory (tenant) ID and an app registration's client ID and secret. Agents can find users and see their groups, roles and sign-in methods, read sign-in logs and risky users, list Defender alerts and incidents, and run read-only KQL hunting queries.
 - Shodan in Settings › Tools › Add Tools: agents can see what an IP address exposes, with its open ports, services and known vulnerabilities, and resolve hostnames and addresses both ways.

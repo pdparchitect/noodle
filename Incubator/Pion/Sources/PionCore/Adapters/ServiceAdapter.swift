@@ -94,6 +94,69 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     }
 }
 
+/// One cell of a query's results, as services return it: text, a number, true or false, a list of texts, or
+/// something nested, kept as a marker.
+public enum CellValue: Codable, Sendable {
+    case text(String), number(Double), flag(Bool), list([String]), none, other
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .none }
+        else if let flag = try? container.decode(Bool.self) { self = .flag(flag) }
+        else if let number = try? container.decode(Double.self) { self = .number(number) }
+        else if let text = try? container.decode(String.self) { self = .text(text) }
+        else if let list = try? container.decode([String].self) { self = .list(list) }
+        else { self = .other }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .text(let text): try container.encode(text)
+        case .number(let number): try container.encode(number)
+        case .flag(let flag): try container.encode(flag)
+        case .list(let list): try container.encode(list)
+        case .none: try container.encodeNil()
+        case .other: try container.encode("…")
+        }
+    }
+
+    var shown: String {
+        switch self {
+        case .text(let text): text
+        case .number(let number): number.rounded() == number && abs(number) < 1e15 ? String(Int(number)) : String(number)
+        case .flag(let flag): String(flag)
+        case .list(let list): list.joined(separator: ", ")
+        case .none: ""
+        case .other: "…"
+        }
+    }
+}
+
+/// A query's results: its columns and rows. The bot reads the first rows as a table; the structured result keeps
+/// up to 100 rows, each keyed by column.
+public struct ServiceTable: Sendable {
+    public let columns: [String]
+    public let rows: [[CellValue]]
+
+    public init(columns: [String], rows: [[CellValue]]) { self.columns = columns; self.rows = rows }
+
+    public func result() throws -> ServiceResult {
+        struct Kept: Encodable { let columns: [String]; let rows: [[String: CellValue]]; let total: Int; let truncated: Bool }
+        let kept = rows.prefix(100).map { row in
+            Dictionary(zip(columns, row), uniquingKeysWith: { first, _ in first })
+        }
+        guard !rows.isEmpty else {
+            return try ServiceResult(text: "The query returned no rows.", structured: Kept(columns: columns, rows: [], total: 0, truncated: false))
+        }
+        let shown = rows.prefix(20).map { $0.map(\.shown).joined(separator: " | ") }
+        var text = "\(rows.count) row\(rows.count == 1 ? "" : "s")\(rows.count > kept.count ? ", first \(kept.count) kept" : ""):\n"
+        text += columns.joined(separator: " | ") + "\n" + shown.joined(separator: "\n")
+        if rows.count > shown.count { text += "\n… \(min(rows.count, 100) - shown.count) more rows in the structured result." }
+        return try ServiceResult(text: text, structured: Kept(columns: columns, rows: kept, total: rows.count, truncated: rows.count > kept.count))
+    }
+}
+
 /// Checks for the values operations take, each refusing with a reason the bot can act on.
 public enum ServiceInput {
     /// An IPv4 or IPv6 address, as given.
@@ -137,6 +200,13 @@ public enum ServiceInput {
         return value
     }
 
+    /// A query in the service's own language: not empty, and short enough to send.
+    public static func query(_ value: String, limit: Int = 10_000) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= limit else { throw ServiceError.input("Give a query of up to \(limit) characters.") }
+        return value
+    }
+
     /// A list of between one and `limit` values, each checked.
     public static func list(_ values: [String], limit: Int, _ each: (String) throws -> String) throws -> [String] {
         guard (1...limit).contains(values.count) else { throw ServiceError.input("Give between 1 and \(limit) values.") }
@@ -162,11 +232,21 @@ public struct ServiceClient: Sendable {
         try decode(Answer.self, try await data(path, query: query, method: "POST", body: try JSONEncoder().encode(body)))
     }
 
+    /// Sends `form` URL-encoded, for services that take their parameters that way.
+    public func postForm<Answer: Decodable>(_ path: [String], form: [String: String], as answer: Answer.Type = Answer.self) async throws -> Answer {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let body = form.sorted { $0.key < $1.key }.map { name, value in
+            "\(name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name)=\(value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
+        }.joined(separator: "&")
+        return try decode(Answer.self, try await data(path, method: "POST", body: Data(body.utf8), contentType: "application/x-www-form-urlencoded"))
+    }
+
     private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
         do { return try JSONDecoder().decode(Answer.self, from: data) } catch { throw ServiceError.unreadable }
     }
 
-    public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil) async throws -> Data {
+    public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
+                     contentType: String = "application/json; charset=utf-8") async throws -> Data {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
@@ -182,7 +262,7 @@ public struct ServiceClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
-            request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
@@ -263,5 +343,6 @@ public struct OperationAdapter: MCPConnectionAdapter {
 public enum PionAdapters {
     public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
                                                                   "entra": Entra.adapter, "defender": Defender.adapter,
-                                                                  "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter]
+                                                                  "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
+                                                                  "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter]
 }

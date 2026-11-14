@@ -5,5 +5,6 @@ import PionCore
 /// security services, which its adapters answer.
 enum PionTools {
     static let catalogue: [ToolDefinition] = ToolCatalog.noodle + [VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset,
-                                                         CrowdStrike.preset, SentinelOne.preset]
+                                                         CrowdStrike.preset, SentinelOne.preset,
+                                                         Splunk.preset, Elastic.preset, Sentinel.preset]
 }
