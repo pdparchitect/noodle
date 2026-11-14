@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Settings › Tools › Add Tools lists Pion's security services and only the general services that help an investigation: Atlassian, Linear and Notion for tickets and notes; Axiom, Datadog, Grafana, Honeycomb and Sentry for observability; Semgrep, Socket and Sourcegraph for code; Cloudflare; and Exa, Perplexity, Tavily and Parallel Search for research.
 - Settings › Agents shows each agent's mark in place of a pencil. As in Noodle, clicking it opens the agent's profile, with buttons to message it in a window of its own or edit it.
 - Investigations have no scope. Creating and editing one asks for its title, objective, team and tools; agents are told to stay on the objective.
 - Investigations start unassessed, and only their lead agent sets the severity, through the case tool, with a note in the audit log. The toolbar shows it.
@@ -32,6 +33,7 @@
 
 ### Added
 
+- Google Cloud and Google Workspace in Settings › Tools › Add Tools, each with a service account's JSON key. Google Cloud takes an organization, folder or project, for audit logs, Security Command Center findings, who has access to what, and resource search. Google Workspace takes the admin to act as, for sign-in, admin, OAuth token, Drive and other audit reports. Both only read, and the key never leaves the Mac.
 - AWS in Settings › Tools › Add Tools, each account added with a default region and a read-only IAM user's access key. Agents can look up CloudTrail events, list GuardDuty, Security Hub and IAM Access Analyzer findings, trace an access key to its owner and last use, read the credential report, find EC2 instances by ID or IP address and security groups open to the internet, and query CloudWatch Logs Insights. Requests are signed with the key, which never leaves the Mac.
 - AbuseIPDB, urlscan.io, GreyNoise, AlienVault OTX and Have I Been Pwned in Settings › Tools › Add Tools, each with its API key. Agents can see an IP address's abuse reports and whether it is internet background noise, search earlier scans of web pages, find community threat reports that mention an indicator, and check the breaches and pastes an email address appears in. Nothing is reported or submitted for scanning.
 - Cloudflare Security, Wiz and GitHub in Settings › Tools › Add Tools. Cloudflare Security takes an account ID and an API token, for DNS records, the account audit log and a zone's firewall events. Wiz takes its data center and a service account's client ID and secret, for cloud security issues and read-only queries over its security graph. GitHub takes an organisation and a token, for its audit log, members and outside collaborators, and secret scanning alerts.

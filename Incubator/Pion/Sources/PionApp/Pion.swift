@@ -59,7 +59,7 @@ struct PionApp: App {
 
     override init() {
         // Before anything adds or uses a tool connection.
-        ToolCatalog.use(PionTools.catalogue)
+        ToolCatalog.use(PionCatalogue.entries)
         #if PION_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model

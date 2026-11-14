@@ -52,7 +52,10 @@ Log Analytics Reader role. Cloudflare Security takes an account ID and an API to
 center and a service account's client ID and secret, and GitHub an organisation and a token with
 read:org and read:audit_log. AbuseIPDB, urlscan.io, GreyNoise, AlienVault OTX and Have I Been Pwned
 each take an API key. AWS takes a default region and the access key of an IAM user given the SecurityAudit
-policy, plus logs:StartQuery and logs:GetQueryResults for Logs Insights. Each service you add is a separate account, so two accounts of the same service can sit side by
+policy, plus logs:StartQuery and logs:GetQueryResults for Logs Insights. Google Cloud takes an
+organization, folder or project and a service account's JSON key; give the account Logs Viewer, Security
+Center Findings Viewer and Cloud Asset Viewer there. Google Workspace takes a service account's key with
+domain-wide delegation for the admin.reports.audit.readonly scope, and the admin it acts as. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios
