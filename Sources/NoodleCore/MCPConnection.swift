@@ -25,6 +25,9 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     /// The request header a token connection sends its token in, such as Authorization or x-apikey.
     /// Nil for a connection that signs in through the browser. The token itself is kept in Keychain.
     public var tokenHeader: String?
+    /// A word the token follows in its header, such as SSWS; nil sends the token alone, or as a bearer
+    /// token in Authorization.
+    public var tokenScheme: String?
     /// Set for a connection that proves itself with a client ID and secret instead of signing in.
     public var clientCredentials: MCPClientCredentials?
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
@@ -36,9 +39,13 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
     public var settings: [String: String]?
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
-                description: String = "", instructions: String = "", tokenHeader: String? = nil,
+                description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
                 clientCredentials: MCPClientCredentials? = nil, adapter: String? = nil) throws {
         self.id = id
+        self.tokenScheme = try tokenScheme.map(Self.validatedTokenScheme)
+        guard tokenScheme == nil || tokenHeader != nil else {
+            throw MCPConnectionError.message("A token scheme needs a token header.")
+        }
         self.adapter = try adapter.map(Self.validatedAdapter)
         self.tokenHeader = try tokenHeader.map(Self.validatedTokenHeader)
         self.clientCredentials = try clientCredentials.map(Self.validatedClientCredentials)
@@ -68,6 +75,15 @@ public struct MCPConnectionRecord: Codable, Identifiable, Equatable, Sendable {
             throw MCPConnectionError.message("Enter the header the service expects the token in, such as Authorization or x-apikey.")
         }
         return name
+    }
+
+    /// A token scheme: one word of letters, digits and hyphens.
+    public static func validatedTokenScheme(_ scheme: String) throws -> String {
+        guard (1...32).contains(scheme.count), scheme.unicodeScalars.allSatisfy(
+            CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-").contains) else {
+            throw MCPConnectionError.message("Invalid token scheme.")
+        }
+        return scheme
     }
 
     /// An adapter's name: lowercase letters, digits and hyphens.
@@ -173,6 +189,11 @@ public struct MCPRegistry: Codable, Equatable, Sendable {
                 }
             }
             if let adapter = connection.adapter { _ = try MCPConnectionRecord.validatedAdapter(adapter) }
+            if let scheme = connection.tokenScheme {
+                guard connection.tokenHeader != nil, try MCPConnectionRecord.validatedTokenScheme(scheme) == scheme else {
+                    throw MCPConnectionError.message("Invalid saved MCP connection.")
+                }
+            }
             guard (connection.catalogueID?.count ?? 0) <= 100, (connection.settings?.count ?? 0) <= 20,
                   connection.settings?.allSatisfy({ $0.key.count <= 100 && $0.value.count <= 400 }) ?? true else {
                 throw MCPConnectionError.message("Invalid saved MCP connection.")

@@ -438,6 +438,15 @@ final class MCPServiceTests: XCTestCase {
         do { try await client.signIn(open, redirectURI: redirect, browser: Self.callback); XCTFail("an adapter connection signed in") } catch {}
     }
 
+    func testATokenGoesAfterItsConnectionsSchemeWhenItHasOne() async throws {
+        let record = try MCPConnectionRecord(name: "Directory", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
+        let client = service(vault: TestVault())
+        try await client.saveToken("org-token", for: record)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
+                                     connection: record)
+        XCTAssertEqual(FixtureProtocol.state.mcpHeaders.first?["Authorization"], "SSWS org-token")
+    }
+
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {
         let client = service(vault: TestVault())
         let keyed = try MCPConnectionRecord(name: "Keyed", endpoint: endpoint, tokenHeader: "x-apikey")

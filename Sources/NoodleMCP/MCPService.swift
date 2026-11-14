@@ -246,9 +246,11 @@ public actor MCPService {
         if let header = connection.tokenHeader {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
                   token.header == header else { throw MCPServiceError.signInRequired }
-            // A bare token in Authorization is a bearer token; one that names its own scheme goes as it is.
-            let value = header.caseInsensitiveCompare("Authorization") == .orderedSame && !token.value.contains(" ")
-                ? "Bearer " + token.value : token.value
+            // The connection's scheme goes first. Otherwise a bare token in Authorization is a bearer token, and
+            // one that names its own scheme goes as it is.
+            let value = if let scheme = connection.tokenScheme { scheme + " " + token.value }
+                else if header.caseInsensitiveCompare("Authorization") == .orderedSame && !token.value.contains(" ") { "Bearer " + token.value }
+                else { token.value }
             return (header, value)
         }
         if let exchange = connection.clientCredentials {

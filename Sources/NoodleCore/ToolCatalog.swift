@@ -94,6 +94,8 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let authorizationServer: URL?
     /// For a service that takes an API key or token instead of a sign-in: the header it goes in.
     public let tokenHeader: String?
+    /// The word the token follows in that header, such as SSWS.
+    public let tokenScheme: String?
     /// What each account fills in, used in `endpointTemplate` as {key}.
     public let fields: [ToolField]
     /// The address with a {key} for each field it needs, such as https://{domain}/mcp; nil for a fixed address.
@@ -104,7 +106,8 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let adapter: String?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
-                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+                tokenScheme: String? = nil, clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+        self.tokenScheme = tokenScheme
         self.adapter = adapter
         self.endpoint = endpoint
         self.oauth = oauth
@@ -117,8 +120,9 @@ public struct MCPToolConfiguration: Equatable, Sendable {
 
     /// A service whose address differs for each account, built from what the account fills in.
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
-                authorizationServer: URL? = nil, tokenHeader: String? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                adapter: String? = nil) {
+                authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
+                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+        self.tokenScheme = tokenScheme
         self.adapter = adapter
         self.clientCredentials = clientCredentials
         self.endpointTemplate = endpointTemplate
@@ -157,7 +161,7 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     /// Every addition is a separate account, including repeated presets.
     public func makeConnection(id: UUID = UUID(), name: String, description: String = "", instructions: String = "") throws -> MCPConnectionRecord {
         try MCPConnectionRecord(id: id, name: name, endpoint: endpoint, description: description, instructions: instructions,
-                                tokenHeader: tokenHeader)
+                                tokenHeader: tokenHeader, tokenScheme: tokenScheme)
     }
 }
 
@@ -185,6 +189,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
             let account = try configuration.account(values)
             var record = try MCPConnectionRecord(id: id, name: name, endpoint: account.endpoint, description: summary,
                                                  instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
+                                                 tokenScheme: configuration.tokenScheme,
                                                  clientCredentials: account.clientCredentials, adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings

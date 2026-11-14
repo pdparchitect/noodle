@@ -12,7 +12,8 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { requests.append(request) }
         let key = request.url!.path + (request.url!.query.map { "?" + $0 } ?? "")
-        let (status, body) = lock.withLock { answers[key] } ?? (404, #"{"error":"NotFound"}"#)
+        // An exact answer first, then one for the path whatever the query.
+        let (status, body) = lock.withLock { answers[key] ?? answers[request.url!.path] } ?? (404, #"{"error":"NotFound"}"#)
         return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }

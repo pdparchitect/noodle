@@ -246,4 +246,14 @@ final class ToolCatalogTests: XCTestCase {
         account.settings = ["domain": "contoso.okta.com"]
         XCTAssertNil(ToolCatalog.definition(for: account), "saved details that do not make its address")
     }
+
+    func testATokenSchemeIsAWordAndNeedsATokenHeader() throws {
+        let endpoint = URL(string: "https://acme.okta.com/api/v1")!
+        XCTAssertEqual(try MCPToolConfiguration(endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
+            .makeConnection(name: "Okta").tokenScheme, "SSWS")
+        for scheme in ["", "SS WS", "Bearer:", String(repeating: "a", count: 40)] {
+            XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: scheme), scheme)
+        }
+        XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenScheme: "SSWS"), "a scheme without a token")
+    }
 }

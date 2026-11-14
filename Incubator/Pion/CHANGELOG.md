@@ -32,6 +32,7 @@
 
 ### Added
 
+- Okta in Settings › Tools › Add Tools: add each org with its domain and an API token, and assign it to agents, who can find users, see their groups, apps and sign-in factors, and search the System Log by user, IP address, event type, failures and time. Nothing changes the org.
 - VirusTotal in Settings › Tools › Add Tools: add it with your API key and assign it to agents, who can look up the reputation of file hashes, domains, IP addresses and URLs. Lookups never submit anything for scanning.
 - Tool connections can use a token instead of signing in through the browser, as in Noodle: in Settings › Tools, Custom MCP's Sign-in choice of Token takes an API key and the header it goes in.
 - Tool connections can also use a client ID and secret, as in Noodle: Custom MCP's Client ID & Secret choice takes the service's token URL and both values.
