@@ -229,10 +229,17 @@ struct ConversationView: View {
         }
         if let investigation {
             ToolbarItem {
-                Button { model.exportInvestigation(investigation) } label: { Label("Export…", systemImage: "square.and.arrow.up") }
-                    .help("Export Investigation…")
-                    .accessibilityLabel("Export Investigation…")
+                Menu {
+                    Button("Export as Zip…") { model.exportInvestigation(investigation) }
+                    Button("Show in Finder") { model.reveal(conversation) }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .menuIndicator(.hidden)
+                .help("Export")
             }
+            // Apart from the export menu, so each sits in its own glass.
+            ToolbarSpacer(.fixed)
             ToolbarItem {
                 Button { window.showsInspector.toggle() } label: { Label("Case", systemImage: "sidebar.trailing") }
                     .help("Show or hide the case record (⌥⌘I)")
