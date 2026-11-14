@@ -37,6 +37,7 @@ struct ConversationView: View {
     @Bindable var window: WindowState
     let conversation: BotConversation
     @State private var composerHeight: CGFloat = 0
+    @AppStorage("PionInspectorWidth") private var inspectorWidth: Double = 360
     // Noodle's previews, capture and annotation, one of each per conversation shown.
     @State private var attachmentPreview = AttachmentPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
@@ -107,14 +108,19 @@ struct ConversationView: View {
         .navigationSubtitle(investigation?.title ?? subtitle)
         .toolbar { toolbar }
         // Hidden for an agent or group without forgetting it was open, so it is back on returning to an Investigation.
-        .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { shown in
-            if investigation != nil { window.showsInspector = shown }
-        })) {
+        // SwiftUI writes false back while it hides it, sometimes through the binding of the Investigation just
+        // left, so only the Case button and View › Hide Inspector change whether it shows.
+        .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { _ in })) {
             if let investigation {
                 // Its own for each Investigation, so evidence opened in one never shows open in another.
                 CaseInspector(model: model, window: window, investigation: investigation)
                     .id(investigation.id)
-                    .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
+                    // Back at the width it was left at, here and on the next launch; widths outside the
+                    // column's range come only from it opening or closing.
+                    .inspectorColumnWidth(min: 300, ideal: inspectorWidth, max: 520)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                        if (300...520).contains(width) { inspectorWidth = width }
+                    }
                     .background { Backdrop(frosted: true).ignoresSafeArea() }
             }
         }
@@ -206,6 +212,9 @@ struct ConversationView: View {
                             .disabled(investigation.isClosed || investigation.status == status)
                     }
                     Divider()
+                    // Shown, not chosen: only the lead agent sets it, through the case tool.
+                    Text("Severity: \(investigation.severityTitle), set by the lead agent")
+                    Divider()
                     if investigation.isClosed {
                         Button("Reopen") { model.setStatus(.open, of: investigation) }
                     } else {
@@ -219,16 +228,6 @@ struct ConversationView: View {
                 }
                 .help("Status")
             }
-            ToolbarItem {
-                // Shown, not chosen: only the lead agent sets it, through the case tool.
-                WidestLabel(title: investigation.severityTitle, symbol: "exclamationmark.triangle",
-                            choices: (Investigation.Severity.allCases.map(\.title) + ["Unassessed"]).map { ($0, "exclamationmark.triangle") })
-                    .foregroundStyle(investigation.severity == nil ? .secondary : .primary)
-                    .padding(.horizontal, 8)
-                    .help("Severity, set by the lead agent")
-            }
-            // What the Investigation is, apart from what can be done with it.
-            ToolbarSpacer(.fixed)
         }
         if let investigation {
             ToolbarItem {
