@@ -361,6 +361,15 @@ public struct ServiceClient: Sendable {
     public func data(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
                      contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false,
                      headers: [String: String] = [:]) async throws -> Data {
+        try await exchange(path, query: query, method: method, body: body, contentType: contentType, trailingSlash: trailingSlash,
+                           headers: headers).data
+    }
+
+    /// A request and its answer with the response, for an operation that needs its headers, such as a cookie that
+    /// later requests of the same job must carry.
+    public func exchange(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
+                         contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false,
+                         headers: [String: String] = [:]) async throws -> (data: Data, response: HTTPURLResponse) {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
@@ -383,7 +392,7 @@ public struct ServiceClient: Sendable {
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
-        case 200..<300: return data
+        case 200..<300: return (data, response)
         case 401, 403: throw ServiceError.rejected
         case 404: throw ServiceError.notFound
         case 429: throw ServiceError.rateLimited
@@ -465,5 +474,7 @@ public enum PionAdapters {
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
-                                                                  "google-cloud": GoogleCloud.adapter, "google-workspace": GoogleWorkspace.adapter]
+                                                                  "google-cloud": GoogleCloud.adapter, "google-workspace": GoogleWorkspace.adapter,
+                                                                  "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
+                                                                  "tenable": Tenable.adapter, "censys": Censys.adapter]
 }

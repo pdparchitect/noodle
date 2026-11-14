@@ -8,6 +8,8 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     let lock = NSLock()
     var requests: [URLRequest] = []
     var answers: [String: (Int, String)] = [:]
+    /// Headers every answer carries, such as a cookie the service sets.
+    var responseHeaders: [String: String] = [:]
 
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { requests.append(request) }
@@ -18,7 +20,7 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
         let candidates = [request.value(forHTTPHeaderField: "X-Amz-Target"), action.map { "action:" + $0 }, key, request.url!.path]
         let (status, body) = lock.withLock { candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first }
             ?? (404, #"{"error":"NotFound"}"#)
-        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: responseHeaders)!)
     }
 }
 

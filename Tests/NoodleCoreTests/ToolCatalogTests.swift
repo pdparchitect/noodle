@@ -256,4 +256,25 @@ final class ToolCatalogTests: XCTestCase {
         }
         XCTAssertThrowsError(try MCPConnectionRecord(name: "Bad", endpoint: endpoint, tokenScheme: "SSWS"), "a scheme without a token")
     }
+
+    func testATokenCanBeComposedFromTwoValues() throws {
+        let basic = ComposedToken(first: "Access ID", second: "Access Key", format: .basic)
+        XCTAssertEqual(try basic.compose(" su1d ", "key/with+chars"), Data("su1d:key/with+chars".utf8).base64EncodedString())
+        XCTAssertThrowsError(try basic.compose("has:colon", "k"), "Basic auth's first value cannot hold a colon")
+        XCTAssertThrowsError(try basic.compose("", "k"))
+        let keys = ComposedToken(first: "Access Key", second: "Secret Key", format: .template("accessKey={first};secretKey={second}"))
+        XCTAssertEqual(try keys.compose("abc", "def"), "accessKey=abc;secretKey=def")
+        XCTAssertThrowsError(try keys.compose("a;b", "c"), "a value cannot break out of its place in the template")
+        XCTAssertThrowsError(try keys.compose("a", "two\nlines"))
+
+        let tool = ToolDefinition(id: "logs", name: "Logs", summary: "Logs.", defaultInstructions: "Search.", iconName: "logs",
+            configuration: .mcp(.init(endpoint: URL(string: "https://api.logs.example/v1")!, tokenHeader: "Authorization", tokenScheme: "Basic",
+                                      composedToken: basic, adapter: "logs")))
+        XCTAssertTrue(tool.needsSetUp)
+        let account = try tool.makeConnection(name: "Logs")
+        XCTAssertEqual(account.tokenHeader, "Authorization")
+        XCTAssertEqual(account.tokenScheme, "Basic")
+        guard case .mcp(let configuration) = tool.configuration else { return XCTFail() }
+        XCTAssertEqual(configuration.composedToken, basic)
+    }
 }

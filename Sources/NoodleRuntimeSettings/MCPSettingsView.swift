@@ -292,7 +292,16 @@ public struct MCPEditor: View {
                             SecureField(existing?.clientCredentials != nil ? "Saved; enter both to replace them" : "Client secret", text: $clientSecret)
                         }
                     }
-                    if signIn == .token {
+                    if signIn == .token, let composed = composedToken {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(composed.first).font(.caption.weight(.semibold))
+                            TextField("Saved; enter both to replace them", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(composed.second).font(.caption.weight(.semibold))
+                            SecureField(composed.second, text: $clientSecret)
+                        }
+                    } else if signIn == .token {
                         if existing?.tokenParameter == nil {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Header").font(.caption.weight(.semibold))
@@ -330,6 +339,12 @@ public struct MCPEditor: View {
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
+    /// The two values an existing connection's token is made from, when its preset composes it.
+    private var composedToken: ComposedToken? {
+        guard let existing, case .mcp(let configuration)? = ToolCatalog.definition(for: existing)?.configuration else { return nil }
+        return configuration.composedToken
+    }
+
     private func save() {
         do {
             let record = try draft()
@@ -362,6 +377,13 @@ public struct MCPEditor: View {
             if id.isEmpty != clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw MCPConnectionError.message("Enter both the access key ID and the secret access key.")
             }
+        case .token where composedToken != nil:
+            // Its token is made from the two values; the connection itself stays as its preset made it.
+            record.tokenHeader = existing?.tokenHeader
+            record.tokenScheme = existing?.tokenScheme
+            if !clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !clientSecret.isEmpty {
+                _ = try composedToken!.compose(clientID, clientSecret)
+            }
         case .token where existing?.tokenParameter != nil:
             // A token its service takes only in the address keeps going there; only its value changes.
             record.tokenParameter = existing?.tokenParameter
@@ -392,8 +414,10 @@ public struct MCPEditor: View {
         onSaved(record)
         let newToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let composed = composedToken.flatMap { try? $0.compose(clientID, clientSecret) }
         let secret: MCPConnectionSecret? = switch signIn {
         case .browser: nil
+        case .token where composedToken != nil: composed.map { .token($0) }
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
         case .aws: id.isEmpty ? nil : .aws(accessKeyID: id, secretAccessKey: clientSecret, sessionToken: sessionToken)

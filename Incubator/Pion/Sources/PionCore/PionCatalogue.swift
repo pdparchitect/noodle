@@ -15,5 +15,6 @@ public enum PionCatalogue {
         VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset, CrowdStrike.preset, SentinelOne.preset,
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
         URLScan.preset, GreyNoise.preset, OTX.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset,
+        Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

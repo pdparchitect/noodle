@@ -84,6 +84,43 @@ public struct ToolField: Equatable, Sendable {
     }
 }
 
+/// A token made from two values the person enters, for services that take an ID and secret as Basic auth or two
+/// keys in one header. The result is kept and sent as the connection's token.
+public struct ComposedToken: Equatable, Sendable {
+    public enum Format: Equatable, Sendable {
+        /// base64 of first:second, as HTTP Basic auth takes it.
+        case basic
+        /// The text with {first} and {second} replaced, such as accessKey={first};secretKey={second}.
+        case template(String)
+    }
+    /// What the form calls each value.
+    public let first: String
+    public let second: String
+    public let format: Format
+
+    public init(first: String, second: String, format: Format) {
+        self.first = first; self.second = second; self.format = format
+    }
+
+    /// The token from the two values, each one line, and neither able to change the token's shape.
+    public func compose(_ first: String, _ second: String) throws -> String {
+        let values = [first, second].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard values.allSatisfy({ !$0.isEmpty && $0.count <= 4_096 && !$0.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) }) else {
+            throw MCPConnectionError.message("Enter the \(self.first) and \(self.second), each on one line.")
+        }
+        switch format {
+        case .basic:
+            guard !values[0].contains(":") else { throw MCPConnectionError.message("The \(self.first) cannot contain a colon.") }
+            return Data("\(values[0]):\(values[1])".utf8).base64EncodedString()
+        case .template(let template):
+            guard values.allSatisfy({ !$0.contains(where: { ";=,{}".contains($0) }) }) else {
+                throw MCPConnectionError.message("Enter the \(self.first) and \(self.second) as given, without ; = , or braces.")
+            }
+            return template.replacingOccurrences(of: "{first}", with: values[0]).replacingOccurrences(of: "{second}", with: values[1])
+        }
+    }
+}
+
 /// How a preset whose accounts use a client ID and secret gets its access tokens.
 public struct ClientCredentialsPreset: Equatable, Sendable {
     /// The token address, with a {key} for each field it needs.
@@ -109,6 +146,8 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let tokenScheme: String?
     /// For a service that takes its key only in its address: the query parameter it goes in.
     public let tokenParameter: String?
+    /// For a service whose token is made from two values, such as an ID and secret sent as Basic auth.
+    public let composedToken: ComposedToken?
     /// Whether its accounts prove themselves with a token, in a header or in their address.
     public var usesToken: Bool { tokenHeader != nil || tokenParameter != nil }
     /// What each account fills in, used in `endpointTemplate` as {key}.
@@ -126,10 +165,11 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     public let googleScopes: [String]?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
-                tokenScheme: String? = nil, tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                adapter: String? = nil) {
+                tokenScheme: String? = nil, tokenParameter: String? = nil, composedToken: ComposedToken? = nil,
+                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
         self.tokenScheme = tokenScheme
         self.tokenParameter = tokenParameter
+        self.composedToken = composedToken
         self.adapter = adapter
         signsForAWS = false
         googleScopes = nil
@@ -145,8 +185,9 @@ public struct MCPToolConfiguration: Equatable, Sendable {
     /// A service whose address differs for each account, built from what the account fills in.
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
-                tokenParameter: String? = nil, clientCredentials: ClientCredentialsPreset? = nil, signsForAWS: Bool = false,
-                googleScopes: [String]? = nil, adapter: String? = nil) {
+                tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
+                signsForAWS: Bool = false, googleScopes: [String]? = nil, adapter: String? = nil) {
+        self.composedToken = composedToken
         self.signsForAWS = signsForAWS
         self.googleScopes = googleScopes
         self.tokenParameter = tokenParameter

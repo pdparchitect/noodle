@@ -55,7 +55,9 @@ each take an API key. AWS takes a default region and the access key of an IAM us
 policy, plus logs:StartQuery and logs:GetQueryResults for Logs Insights. Google Cloud takes an
 organization, folder or project and a service account's JSON key; give the account Logs Viewer, Security
 Center Findings Viewer and Cloud Asset Viewer there. Google Workspace takes a service account's key with
-domain-wide delegation for the admin.reports.audit.readonly scope, and the admin it acts as. Each service you add is a separate account, so two accounts of the same service can sit side by
+domain-wide delegation for the admin.reports.audit.readonly scope, and the admin it acts as. Proofpoint TAP
+takes a service principal and secret, Sumo Logic an access ID and key, Tenable an access key and secret
+key, and Censys a personal access token. Each service you add is a separate account, so two accounts of the same service can sit side by
 side.
 
 ## Scenarios
