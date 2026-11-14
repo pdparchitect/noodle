@@ -195,5 +195,5 @@ public struct OperationAdapter: MCPConnectionAdapter {
 
 /// The adapters Pion serves its own connections with, by the name its catalogue entries give them.
 public enum PionAdapters {
-    public static let all: [String: any MCPConnectionAdapter] = [:]
+    public static let all: [String: any MCPConnectionAdapter] = ["virustotal": VirusTotal.adapter]
 }

@@ -38,7 +38,10 @@ Agents never change a system themselves: they recommend changes to you in the co
 ## Settings
 
 Harness signs in to the harnesses agents run on, Agents changes their models and archives them, and
-Tools connects them to services over MCP.
+Tools connects them to services, over MCP or through Pion's own lookups. Add VirusTotal there with
+your API key, then assign it to the agents that should check file hashes, domains, IP addresses and
+URLs. Each service you add is a separate account, so two accounts of the same service can sit side by
+side.
 
 ## Scenarios
 

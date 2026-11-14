@@ -4,7 +4,7 @@ import NoodleCore
 import XCTest
 
 /// A service that answers from a table and records what it was asked.
-private final class FakeService: ServiceAccess, @unchecked Sendable {
+final class FakeService: ServiceAccess, @unchecked Sendable {
     let lock = NSLock()
     var requests: [URLRequest] = []
     var answers: [String: (Int, String)] = [:]
