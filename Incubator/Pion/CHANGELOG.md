@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Switching conversations works as in Noodle: the transcript dissolves into the next one while the toolbar, message field and inspector stay in place, so nothing flashes. Clicking a conversation puts the keyboard in its message field; moving with the arrow keys keeps it in the sidebar.
 - Pion no longer asks for the camera, calendars or reminders, which it does not use.
 - Agents have generated marks of their own, kept through renames, in place of symbols.
 - The audit log reads as a timeline grouped by day, with each event named and marked.

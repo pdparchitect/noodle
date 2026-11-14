@@ -38,6 +38,8 @@ import SwiftUI
     var inspectorTab: InspectorTab = .caseRecord
     /// Asks the composer of the selected conversation to take the keyboard.
     var composerFocusRequest = UUID()
+    /// Set when the sidebar's selection moved with the arrow keys, which leaves the keyboard in the list, as in Noodle.
+    @ObservationIgnored var selectedFromKeyboard = false
     var searchText = ""
     var searchFocusRequest = UUID()
     var floatsOnTop = false

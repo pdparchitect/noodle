@@ -15,7 +15,6 @@ struct ConversationWindow: View {
         Group {
             if let conversation = model.conversation(selection) {
                 ConversationView(model: model, window: window, conversation: conversation)
-                    .id(conversation.id)
             } else {
                 ContentUnavailableView("No Conversation Selected", systemImage: "bubble.left.and.bubble.right")
             }
@@ -52,29 +51,13 @@ struct ConversationView: View {
     private var investigation: Investigation? { model.investigation(conversation.id) }
 
     var body: some View {
-        let messages = model.messages(in: conversation.id)
-        TranscriptScrollView(
-            initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(),
-            lastMessageID: messages.last?.id,
-            lastMessageIsFromUser: messages.last?.author == .user,
-            bottomOverlayHeight: composerHeight,
-            saveViewport: { Self.viewports[conversation.id] = $0 },
-            onInteraction: { model.markRead(conversation.id) },
-            containsMessage: { id in messages.contains { $0.id == id } },
-            onBackgroundTap: { window.composerFocusRequest = UUID() }
-        ) {
-            ConversationStart(model: model, window: window, conversation: conversation, investigation: investigation)
-                .id(TranscriptScrollTarget.start)
-            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                let previous = index > 0 ? messages[index - 1] : nil
-                MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
-                           selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
-                           continues: previous.map { $0.author == message.author && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
-                    .id(message.id)
-            }
+        // Noodle's dissolve: the transcript alone is rebuilt for another conversation, so the toolbar,
+        // composer and inspector stay put and the composer keeps the keyboard.
+        ConversationTransition(conversationID: conversation.id) {
+            transcript
+                // Noodle's shade: messages fade as they pass under the toolbar, and only once there is something under it.
+                .conversationTopFade()
         }
-        // Noodle's shade: messages fade as they pass under the toolbar, and only once there is something under it.
-        .conversationTopFade()
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottom) {
@@ -125,11 +108,45 @@ struct ConversationView: View {
         .toolbar { toolbar }
         .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { window.showsInspector = $0 })) {
             if let investigation {
+                // Its own for each Investigation, so a scope being edited or evidence opened never carries over.
                 CaseInspector(model: model, window: window, investigation: investigation)
+                    .id(investigation.id)
                     .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
                     .background { Backdrop(frosted: true).ignoresSafeArea() }
             }
         }
+        .onChange(of: conversation.id) { _, _ in
+            attachmentPreview.close()
+            screenCapturePreview.close()
+            conversationAnnotations.cancel()
+            selectedAttachmentID = nil
+        }
+    }
+
+    private var transcript: some View {
+        let messages = model.messages(in: conversation.id)
+        return TranscriptScrollView(
+            initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(),
+            lastMessageID: messages.last?.id,
+            lastMessageIsFromUser: messages.last?.author == .user,
+            bottomOverlayHeight: composerHeight,
+            saveViewport: { Self.viewports[conversation.id] = $0 },
+            onInteraction: { model.markRead(conversation.id) },
+            containsMessage: { id in messages.contains { $0.id == id } },
+            onBackgroundTap: { window.composerFocusRequest = UUID() }
+        ) {
+            ConversationStart(model: model, window: window, conversation: conversation, investigation: investigation)
+                .id(TranscriptScrollTarget.start)
+            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                let previous = index > 0 ? messages[index - 1] : nil
+                MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
+                           selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
+                           continues: previous.map { $0.author == message.author && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
+                    .id(message.id)
+            }
+        }
+        .id(conversation.id)
+        .transaction { $0.animation = nil }
     }
 
     private func showCapture() {

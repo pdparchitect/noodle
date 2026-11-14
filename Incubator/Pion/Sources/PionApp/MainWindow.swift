@@ -19,8 +19,8 @@ struct MainWindow: View {
                 .background { Backdrop(frosted: true).ignoresSafeArea() }
         } detail: {
             if let conversation = model.conversation(model.selection) {
+                // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
                 ConversationView(model: model, window: window, conversation: conversation)
-                    .id(conversation.id)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("Set Up Your Team", systemImage: "person.2")
@@ -46,6 +46,7 @@ struct MainWindow: View {
         }
         .onChange(of: model.selection) { _, id in
             if let id { model.markRead(id) }
+            guard !window.selectedFromKeyboard else { window.selectedFromKeyboard = false; return }
             window.composerFocusRequest = UUID()
         }
     }
@@ -66,7 +67,10 @@ struct Sidebar: View {
         let active = model.investigations.filter { !$0.isClosed }
             .sorted { ($0.severity, $0.updatedAt) > ($1.severity, $1.updatedAt) }
         let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
-        List(selection: $model.selection) {
+        List(selection: Binding(get: { model.selection }, set: { id in
+            window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
+            model.selection = id
+        })) {
             if !window.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ForEach(model.searchConversations(window.searchText)) { conversation in
                     ConversationChoiceRow(model: model, conversation: conversation).tag(conversation.id)

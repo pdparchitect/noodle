@@ -148,6 +148,7 @@ let project = Project(
                 "../../Sources/Noodle/MessageMarkdownCache.swift",
                 "../../Sources/Noodle/MessageLinkPreview.swift",
                 "../../Sources/Noodle/TranscriptScrollView.swift",
+                "../../Sources/Noodle/ConversationTransition.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
                 "../../Sources/Noodle/BotFolderPicker.swift",
             ],

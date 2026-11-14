@@ -114,7 +114,19 @@ struct Composer: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
         .padding(.top, 8)
-        .onChange(of: window.composerFocusRequest, initial: true) { focused = true }
+        .onChange(of: window.composerFocusRequest, initial: true) {
+            // As in Noodle: the flag can still read focused just after the sidebar took the keyboard,
+            // and a request must bring the caret back regardless.
+            if focused {
+                focused = false
+                DispatchQueue.main.async { focused = true }
+            } else { focused = true }
+        }
+        // The composer stays while the selection moves; what it held for the last conversation goes.
+        .onChange(of: conversation.id) { _, _ in
+            completion.detach()
+            if let recorder { Task { await recorder.discard() }; self.recorder = nil }
+        }
         .focusedSceneValue(\.pionDictation, DictationCommand(
             isRecording: recorder?.phase == .recording,
             isEnabled: !closed && (recorder == nil || recorder?.phase == .idle || recorder?.phase == .recording),
