@@ -318,8 +318,8 @@ struct ConversationStart: View {
         .frame(maxWidth: MessageRow.column, alignment: .leading)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
-        // The transcript runs under the toolbar; at rest its heading starts clear of it.
-        .padding(.top, 76)
+        // The transcript runs under the toolbar; at rest its heading lines up with the sidebar's first section and the inspector's divider.
+        .padding(.top, 20)
     }
 }
 
