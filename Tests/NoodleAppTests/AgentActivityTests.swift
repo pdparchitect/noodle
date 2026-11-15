@@ -233,7 +233,7 @@ import XCTest
         XCTAssertTrue(controller.output.isAtBottom)
     }
 
-    func testLogDimsTimesAndOutputAndSpacesEntries() throws {
+    func testLogTintsTimesDimsOutputAndSpacesEntries() throws {
         _ = NSApplication.shared
         let log = AgentActivityLog()
         log.record(.init(title: "Bash: started", detail: "ls -la"))
@@ -249,7 +249,8 @@ import XCTest
                 .flatMap { ($0.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any])?[.weight] as? CGFloat }
         }
         let title = text.range(of: "Bash: started").location, output = text.range(of: "ls -la").location
-        XCTAssertEqual(color(at: 1), .secondaryLabelColor)
+        XCTAssertEqual(color(at: 1), .systemTeal)
+        XCTAssertEqual(color(at: title - 2), .systemTeal, "The closing bracket is part of the time")
         XCTAssertEqual(color(at: title), .labelColor)
         XCTAssertGreaterThan(try XCTUnwrap(weight(at: title)), try XCTUnwrap(weight(at: output)))
         XCTAssertEqual(color(at: output), .secondaryLabelColor)
@@ -295,6 +296,26 @@ import XCTest
         button.performClick(nil)
         XCTAssertTrue(output.isAtBottom)
         XCTAssertTrue(output.latestButton.isHidden)
+    }
+
+    /// The log's I-beam covers the whole area, so the scroller and Follow Latest above it set the arrow themselves.
+    func testScrollerAndFollowLatestShowTheArrowCursor() throws {
+        _ = NSApplication.shared
+        let log = AgentActivityLog(entryLimit: 200)
+        for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
+        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Pointer"), log: log)
+        defer { controller.close() }
+        let output = controller.output
+        output.textView.scrollRangeToVisible((output.textView.string as NSString).range(of: "Line 10"))
+        let button = try XCTUnwrap(output.latestButton.contentView as? NSButton)
+        let event = try XCTUnwrap(NSEvent.enterExitEvent(with: .cursorUpdate, location: .zero, modifierFlags: [], timestamp: 0,
+                                                         windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        for view in [try XCTUnwrap(output.verticalScroller), button] as [NSView] {
+            XCTAssertTrue(view.trackingAreas.contains { $0.options.contains(.cursorUpdate) }, "\(type(of: view)) asks for cursor updates")
+            NSCursor.iBeam.set()
+            view.cursorUpdate(with: event)
+            XCTAssertEqual(NSCursor.current, NSCursor.arrow, "\(type(of: view)) shows the arrow")
+        }
     }
 
     func testNativeLogKeepsSelectionAndScrollPositionWhileAppendingAndEvicting() throws {

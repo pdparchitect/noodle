@@ -181,6 +181,7 @@ final class AgentActivityTextView: NSScrollView {
 
     init() {
         super.init(frame: .zero)
+        verticalScroller = ArrowCursorScroller()
         hasVerticalScroller = true
         autohidesScrollers = true
         borderType = .noBorder
@@ -200,7 +201,7 @@ final class AgentActivityTextView: NSScrollView {
         textView.setAccessibilityLabel("Agent Activity")
         documentView = textView
 
-        let button = NSButton(image: NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)!
+        let button = ArrowCursorButton(image: NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)!
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))!, target: self, action: #selector(followLatest))
         button.isBordered = false
         button.contentTintColor = .labelColor
@@ -320,6 +321,39 @@ final class ActivityLogTextView: NSTextView {
     var activityMenu: (() -> NSMenu?)?
 
     override func menu(for event: NSEvent) -> NSMenu? { activityMenu?() }
+}
+
+/// The log's I-beam covers the whole area, scroller and floating button included, so these ask for cursor
+/// updates of their own and show the arrow.
+@MainActor
+private final class ArrowCursorScroller: NSScroller {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addTrackingArea(.arrowCursor(owner: self))
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+}
+
+@MainActor
+private final class ArrowCursorButton: NSButton {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addTrackingArea(.arrowCursor(owner: self))
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+}
+
+private extension NSTrackingArea {
+    /// Follows the view's visible rect, so it never needs updating.
+    static func arrowCursor(owner: NSView) -> NSTrackingArea {
+        NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeAlways, .inVisibleRect], owner: owner, userInfo: nil)
+    }
 }
 
 @MainActor

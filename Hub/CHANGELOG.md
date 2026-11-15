@@ -13,6 +13,10 @@
 - Settings > Bots lists only the bots the Hub runs; bots a Mac hosts are edited on that Mac.
 - Suspend in a bot's profile is a button like Folder, Activity and New Session; a click offers how long.
 
+### Fixed
+
+- The activity window shows the arrow pointer over its scroller and Follow Latest button, instead of the text cursor.
+
 ## [0.52.0] - 2026-11-15
 
 ### Added

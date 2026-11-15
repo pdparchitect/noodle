@@ -15,6 +15,10 @@ All notable changes to Noodle are documented here, following
 - The activity window shows each entry's time in teal, so it stands apart from the title and output.
 - In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
 
+### Fixed
+
+- The activity window shows the arrow pointer over its scroller and Follow Latest button, instead of the text cursor.
+
 ## [0.86.0] - 2026-11-15
 
 ### Added
