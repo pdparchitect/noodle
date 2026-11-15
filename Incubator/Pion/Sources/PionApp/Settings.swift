@@ -131,7 +131,7 @@ struct PionSettingsView: View {
             KeybindingsSettingsView(sections: [
                 KeybindingsSection(title: "Conversations", actions: [PionShortcuts.newInvestigation, PionShortcuts.newGroup, PionShortcuts.newAgent,
                                                                      PionShortcuts.searchConversations,
-                                                                     PionShortcuts.capture, PionShortcuts.dictate, PionShortcuts.call, PionShortcuts.stop]),
+                                                                     PionShortcuts.capture, PionShortcuts.recordVoice, PionShortcuts.call, PionShortcuts.stop]),
                 KeybindingsSection(title: "Investigations", actions: [PionShortcuts.showInspector, PionShortcuts.closeInvestigation]),
                 KeybindingsSection(title: "Annotations", actions: [PionShortcuts.annotateSelection, PionShortcuts.annotateRegion,
                                                                    PionShortcuts.saveAnnotation],
@@ -140,7 +140,7 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Keybindings", systemImage: "keyboard") }
                 .tag(PionSettingsHost.Tab.keybindings)
-            // Noodle's own pane; Pion asks only for what dictation, capture and notifications need.
+            // Noodle's own pane; Pion asks only for what voice messages, capture and notifications need.
             PermissionsSettingsView(permissions: [.microphone, .screenRecording, .notifications])
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }

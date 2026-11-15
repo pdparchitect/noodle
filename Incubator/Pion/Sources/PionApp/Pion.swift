@@ -154,30 +154,12 @@ struct ConversationCommandContext {
     let search: (() -> Void)?
 }
 
-struct DictationCommand {
-    let isRecording: Bool
-    let isEnabled: Bool
-    let toggle: () -> Void
-
-    @MainActor func perform() {
-        guard isEnabled, NSApp.modalWindow == nil, let window = NSApp.keyWindow,
-              window.attachedSheet == nil, window.sheetParent == nil,
-              NSApp.currentEvent?.isARepeat != true else { return }
-        toggle()
-    }
-}
-
 private struct ConversationCommandKey: FocusedValueKey { typealias Value = ConversationCommandContext }
-private struct DictationCommandKey: FocusedValueKey { typealias Value = DictationCommand }
 
 extension FocusedValues {
     var pionConversation: ConversationCommandContext? {
         get { self[ConversationCommandKey.self] }
         set { self[ConversationCommandKey.self] = newValue }
-    }
-    var pionDictation: DictationCommand? {
-        get { self[DictationCommandKey.self] }
-        set { self[DictationCommandKey.self] = newValue }
     }
 }
 
@@ -187,7 +169,7 @@ struct PionCommands: Commands {
     let calls: PionCalls
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.pionConversation) private var context
-    @FocusedValue(\.pionDictation) private var dictation
+    @FocusedValue(\.voiceRecordingCommand) private var voiceRecording
     private let annotations = AnnotationCommandsState.shared
 
     private var activeWindow: WindowState { context?.window ?? window }
@@ -267,9 +249,10 @@ struct PionCommands: Commands {
                 .appShortcut(.annotateRegion)
                 .disabled(!annotations.conversationEnabled)
             Divider()
-            Button(dictation?.isRecording == true ? "Stop Dictation" : "Dictate") { dictation?.perform() }
-                .appShortcut(PionShortcuts.dictate)
-                .disabled(dictation?.isEnabled != true)
+            // Noodle's command, published by the composer of the key conversation.
+            Button(voiceRecording?.title ?? "Record Voice Message") { voiceRecording?.perform() }
+                .appShortcut(PionShortcuts.recordVoice)
+                .disabled(voiceRecording?.isEnabled != true)
             Button(calls.voiceCalls.call != nil ? "End Call" : "Call") { calls.toggleCall(in: conversationID) }
                 .appShortcut(.call)
                 .disabled(calls.voiceCalls.call == nil && model.conversation(conversationID).map(calls.canCallNow) != true)

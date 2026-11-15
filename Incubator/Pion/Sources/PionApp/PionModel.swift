@@ -688,6 +688,24 @@ import UniformTypeIdentifiers
         if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: body, repository: repository) }
     }
 
+    /// Sends a recording as Noodle does: the audio, with its transcript, attached to a voice message, together
+    /// with any files waiting in the composer. The text draft stays as it was.
+    func sendVoiceMessage(from url: URL, voice: VoiceMessage, to id: UUID) throws {
+        guard let conversation = conversation(id) else { throw WorkspaceError.missingConversation(id) }
+        let attachment = try repository.importAttachment(from: url, into: id, mediaType: "audio/x-caf", voice: voice)
+        let staged = pendingAttachments[id] ?? []
+        _ = try repository.sendUserMessage(conversationID: id, body: VoiceMessage.messageBody,
+                                           attachmentIDs: staged.map(\.id) + [attachment.id], now: now)
+        pendingAttachments[id] = []
+        readTranscript(id, notifying: false)
+        markRead(id)
+        if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: voice.transcript ?? "", repository: repository) }
+        onSent?(id, voice.transcript ?? VoiceMessage.messageBody, staged.map(\.originalFilename))
+    }
+
+    /// Each conversation's voice recorder, kept while Pion runs so switching away does not lose a recording.
+    @ObservationIgnored var voiceRecorders: [UUID: AnyObject] = [:]
+
     /// Makes an agent the group's lead, or leaves it without one; the members are told in a notice.
     func setLead(_ agentID: UUID?, of conversation: BotConversation) {
         let investigation = store.investigation(conversation.id)

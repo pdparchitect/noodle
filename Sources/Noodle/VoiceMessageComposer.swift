@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Speech
 import NoodleCore
@@ -138,5 +139,89 @@ struct VoiceMessageComposer<Content: View>: View {
             // recorder that started it, not the newly selected conversation.
             if mountedRecorder === recorder { sendError = error.localizedDescription }
         }
+    }
+}
+
+extension EnvironmentValues {
+    /// False in a column other than the focused one; true wherever a conversation is shown alone.
+    @Entry var isFocusedColumn = true
+}
+
+/// Published by the visible composer so menu commands follow the key chat
+/// window, including when focus is in its sidebar rather than its text editor.
+struct VoiceRecordingCommand {
+    private let presentation: @MainActor () -> (title: String, isEnabled: Bool)
+    private let toggle: () -> Void
+
+    @MainActor var title: String { presentation().title }
+    @MainActor var isEnabled: Bool { presentation().isEnabled }
+
+    init(phase: @escaping @MainActor () -> VoiceRecorder.Phase,
+         isSending: @escaping @MainActor () -> Bool, toggle: @escaping () -> Void) {
+        // Read observable recording state in the command's own view context;
+        // enabled state must update even when the composer doesn't change size.
+        presentation = {
+            let phase = phase()
+            return (phase == .recording ? "Stop Recording" : "Record Voice Message",
+                    !isSending() && (phase == .idle || phase == .recording))
+        }
+        self.toggle = toggle
+    }
+
+    @MainActor func perform() { perform(in: NSApp.keyWindow, bindings: .shared) }
+
+    @MainActor func perform(in window: NSWindow?, bindings: KeyboardBindings) {
+        guard isEnabled, bindings.recordingAction == nil, NSApp.modalWindow == nil, let window,
+              window.attachedSheet == nil, window.sheetParent == nil else { return }
+        // Holding the shortcut must not stop a recording as soon as startup
+        // completes and the command becomes enabled again.
+        if let event = NSApp.currentEvent, event.type == .keyDown {
+            if event.isARepeat { return }
+            // NSMenu can match a key equivalent with extra modifiers. Honor
+            // the saved binding exactly, while allowing Return in an open menu.
+            if !event.modifierFlags.intersection([.command, .control]).isEmpty,
+               !bindings.matches(.recordVoice, event: event) { return }
+        }
+        toggle()
+    }
+}
+
+/// A floating panel is not a scene, so focused scene values never reach the menu
+/// from it. Its chat publishes commands here and the panel runs their shortcuts.
+@MainActor final class FloatingPanelCommands {
+    var voiceRecording: VoiceRecordingCommand? {
+        didSet {
+            guard let voiceRecording, let ready = onRecordingReady else { return }
+            onRecordingReady = nil
+            ready(voiceRecording)
+        }
+    }
+    private var onRecordingReady: ((VoiceRecordingCommand) -> Void)?
+
+    /// Runs now if the chat is showing, otherwise once its composer mounts.
+    func whenRecordingReady(_ run: @escaping (VoiceRecordingCommand) -> Void) {
+        if let voiceRecording { run(voiceRecording) } else { onRecordingReady = run }
+    }
+}
+
+private struct FloatingPanelCommandsKey: EnvironmentKey {
+    static let defaultValue: FloatingPanelCommands? = nil
+}
+
+extension EnvironmentValues {
+    var floatingPanelCommands: FloatingPanelCommands? {
+        get { self[FloatingPanelCommandsKey.self] }
+        set { self[FloatingPanelCommandsKey.self] = newValue }
+    }
+}
+
+private struct VoiceRecordingCommandKey: FocusedValueKey {
+    typealias Value = VoiceRecordingCommand
+}
+
+extension FocusedValues {
+    var voiceRecordingCommand: VoiceRecordingCommand? {
+        get { self[VoiceRecordingCommandKey.self] }
+        set { self[VoiceRecordingCommandKey.self] = newValue }
     }
 }

@@ -134,6 +134,7 @@ let project = Project(
                 "../../Sources/Noodle/VoiceCaptureRecovery.swift",
                 "../../Sources/Noodle/VoiceInputDevice.swift",
                 "../../Sources/Noodle/VoiceMessagePlayer.swift",
+                "../../Sources/Noodle/VoiceMessageComposer.swift",
                 "../../Sources/Noodle/HarnessChoosers.swift",
                 "../../Sources/Noodle/PermissionsSettingsView.swift",
                 "../../Sources/Noodle/AppUpdater.swift",

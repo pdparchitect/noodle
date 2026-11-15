@@ -13,6 +13,7 @@
 
 ### Changed
 
+- The microphone and ⇧⌘D send voice messages, as in Noodle: the recording, with its transcript, goes to the conversation, and agents hear what was said. They used to dictate into the message field. In Settings › Keybindings the shortcut is now Record / Stop Voice Message.
 - Pion has no conversation picker: Conversation › Choose Conversation and its ⌃⌥Space shortcut are gone, as is its row in Settings › Keybindings. The sidebar and Search Conversations find conversations; a conversation in a window of its own has no search.
 - Settings › Keybindings no longer lists Usage, as in Noodle; ⇧⌘U still opens it.
 - In the Usage window's Disk measure, Sign-ins is now Logins: each login's folder holds what its harness keeps there, such as Codex's plugins, not only the sign-in itself.

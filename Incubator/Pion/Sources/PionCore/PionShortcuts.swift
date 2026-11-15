@@ -18,8 +18,8 @@ public enum PionShortcuts {
     public static let capture = ShortcutDefinition(
         id: ShortcutDefinition.capture.id, title: "Capture", summary: "Open the window picker or focus the existing capture preview.",
         defaultBinding: KeyBinding("s", modifiers: [.command, .shift]))
-    public static let dictate = ShortcutDefinition(
-        id: ShortcutDefinition.recordVoice.id, title: "Dictate / Stop Dictation", summary: "Start or stop dictating into the message field.",
+    public static let recordVoice = ShortcutDefinition(
+        id: ShortcutDefinition.recordVoice.id, title: "Record / Stop Voice Message", summary: "Start or stop recording in the current chat.",
         defaultBinding: KeyBinding("d", modifiers: [.command, .shift]))
     public static let call = ShortcutDefinition(
         id: ShortcutDefinition.call.id, title: "Call / End Call", summary: "Call the agent in the current chat, or end the call in progress.",
@@ -48,6 +48,6 @@ public enum PionShortcuts {
         id: ShortcutDefinition.saveAnnotation.id, title: "Save Annotation Comment", summary: "Save a new annotation or an unsent comment edit.",
         defaultBinding: KeyBinding("\r"))
 
-    public static let catalog = [newInvestigation, newGroup, newAgent, searchConversations, capture, dictate, call, stop,
+    public static let catalog = [newInvestigation, newGroup, newAgent, searchConversations, capture, recordVoice, call, stop,
                                  usage, showInspector, closeInvestigation, annotateSelection, annotateRegion, saveAnnotation]
 }

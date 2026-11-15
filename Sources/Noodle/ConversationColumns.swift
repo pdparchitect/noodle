@@ -6,11 +6,6 @@ import NoodleWallpaper
 import SwiftUI
 import UniformTypeIdentifiers
 
-extension EnvironmentValues {
-    /// False in a column other than the focused one; true wherever a conversation is shown alone.
-    @Entry var isFocusedColumn = true
-}
-
 /// View > As List shows one conversation beside the sidebar; As Columns shows several side by side.
 enum MainWindowLayout: String {
     case list, columns
