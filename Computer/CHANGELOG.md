@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- The Help menu has Report a Bug and Request a Feature, which open a new GitHub issue with Noodle Computer already chosen as the affected area.
+
 ## [0.33.9] - 2026-11-03
 
 ### Fixed

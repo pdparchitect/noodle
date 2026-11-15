@@ -1,5 +1,6 @@
 import AppKit
 import NoodleCore
+import NoodleSettingsUI
 import PionCore
 import SwiftUI
 
@@ -162,6 +163,9 @@ struct PionCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             CheckForUpdatesButton()
+        }
+        CommandGroup(replacing: .help) {
+            IssueReportButtons(area: "Incubator / Pion")
         }
         CommandGroup(replacing: .newItem) {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }

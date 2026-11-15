@@ -144,6 +144,8 @@ struct NoodleApp: App {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
                 Divider()
+                IssueReportButtons(area: "Noodle")
+                Divider()
                 BotSetupCommand(store: store)
                 Divider()
                 ConnectCommand(store: store)

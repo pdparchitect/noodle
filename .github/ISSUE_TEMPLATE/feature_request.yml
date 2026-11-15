@@ -7,11 +7,28 @@ body:
     attributes:
       value: |
         Search existing issues first. Discuss substantial changes here before starting a pull request.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Noodle
+        - Noodle Computer
+        - Noodle Browser
+        - Noodle Applet
+        - Noodle Mobile
+        - Noodle Hub
+        - Computer images
+        - Website or documentation
+        - Incubator / Pion
+        - Other or unsure
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
       label: Problem or unmet need
-      description: Which app or part of the project is affected? Describe what you are trying to accomplish and what gets in the way today.
+      description: Describe what you are trying to accomplish and what gets in the way today.
     validations:
       required: true
   - type: textarea

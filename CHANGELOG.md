@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- The Help menu has Report a Bug and Request a Feature, which open a new GitHub issue with Noodle already chosen as the affected area.
 - A bot's profile has Suspend beside its other buttons; a click offers how long, and a suspended bot shows Unsuspend.
 
 ### Changed

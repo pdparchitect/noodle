@@ -2,9 +2,9 @@ import AppKit
 import AppletBridge
 import AppletCore
 import NoodleLaunchChecks
+import NoodleSettingsUI
 import NoodleWallpaper
 import SwiftUI
-import NoodleSettingsUI
 import OSLog
 
 /// Claims the app's single running copy before SwiftUI makes its delegate, which opens its data.
@@ -52,6 +52,8 @@ struct NoodleAppletApp: App {
       }
       CommandGroup(replacing: .help) {
         Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }
+        Divider()
+        IssueReportButtons(area: "Noodle Applet")
       }
       AppletFileCommands(delegate: delegate, runtime: delegate.runtime)
       AppletSpaceCommands(library: delegate.library)

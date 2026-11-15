@@ -14,10 +14,13 @@ body:
       options:
         - Noodle
         - Noodle Computer
+        - Noodle Browser
         - Noodle Applet
+        - Noodle Mobile
         - Noodle Hub
         - Computer images
         - Website or documentation
+        - Incubator / Pion
         - Other or unsure
     validations:
       required: true

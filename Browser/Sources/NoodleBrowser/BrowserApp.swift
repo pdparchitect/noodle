@@ -68,6 +68,8 @@ struct NoodleBrowserApp: App {
                 Button("\(BrowserBuildIdentity.current.appName) Help") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
+                Divider()
+                IssueReportButtons(area: "Noodle Browser")
             }
             BrowserCommands(delegate: delegate, presentation: delegate.presentation, library: delegate.library)
         }

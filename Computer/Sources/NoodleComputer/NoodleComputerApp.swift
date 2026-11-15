@@ -4,9 +4,9 @@ import ComputerCore
 import ComputerEngine
 import ComputerExternal
 import NoodleLaunchChecks
+import NoodleSettingsUI
 import NoodleWallpaper
 import SwiftUI
-import NoodleSettingsUI
 import UniformTypeIdentifiers
 import Virtualization
 
@@ -45,6 +45,8 @@ struct NoodleComputerApp: App {
         Button("\(ComputerAppIdentity.name) Help") {
           NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
         }
+        Divider()
+        IssueReportButtons(area: "Noodle Computer")
       }
       ComputerFileCommands(delegate: delegate)
       ComputerSpaceCommands()

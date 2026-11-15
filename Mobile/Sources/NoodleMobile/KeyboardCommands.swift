@@ -92,10 +92,18 @@ struct NoodleCommands: Commands {
         }
         CommandGroup(replacing: .help) {
             Button("Noodle Help") { UIApplication.shared.open(NoodleCommands.help) }
+            Divider()
+            Button("Report a Bug") { UIApplication.shared.open(NoodleCommands.newIssue("bug_report.yml")) }
+            Button("Request a Feature") { UIApplication.shared.open(NoodleCommands.newIssue("feature_request.yml")) }
         }
     }
 
     static let help = URL(string: "https://github.com/pdparchitect/noodle")!
+
+    /// A GitHub issue form with Noodle Mobile chosen as the affected area, as the Mac apps' Help menus do.
+    static func newIssue(_ template: String) -> URL {
+        URL(string: "https://github.com/pdparchitect/noodle/issues/new?template=\(template)&area=Noodle%20Mobile")!
+    }
 
     /// A choice of stored values as checkmark items, as the Mac's View menu lists them. Toggles, not an inline
     /// picker, which brings its own separators and so a line between a section's heading and its items.

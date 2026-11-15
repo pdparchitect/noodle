@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- The Help menu has Report a Bug and Request a Feature, which open a new GitHub issue with Noodle Applet already chosen as the affected area.
+
 ## [0.34.2] - 2026-11-11
 
 ### Fixed
