@@ -6,6 +6,10 @@
 
 - An agent's profile has Suspend beside Message and Edit; a click offers how long, and a suspended agent shows Unsuspend.
 
+### Changed
+
+- In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
+
 ## [0.1.0] - 2026-11-15
 
 ### Fixed

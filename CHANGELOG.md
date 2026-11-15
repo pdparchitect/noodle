@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - A bot's profile has Suspend beside its other buttons; a click offers how long, and a suspended bot shows Unsuspend.
 
+### Changed
+
+- In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
+
 ## [0.86.0] - 2026-11-15
 
 ### Added

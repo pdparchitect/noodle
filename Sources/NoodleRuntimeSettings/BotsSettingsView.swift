@@ -16,6 +16,8 @@ public struct BotsSettingsView: View {
     private let appsColumnWidth: CGFloat = 64
     private let archivedColumnWidth: CGFloat = 64
 
+    /// An archived bot's switches are disabled; in an inactive window every switch is grey, so they are dimmed too.
+    private static let archivedOpacity = 0.4
     private static let suggestedIntervals = [5, 10, 15, 30, 45, 60, 120, 240, 480, 720, 1_440]
 
     private var agents: [AgentRecord] { listedAgents ?? store.agents }
@@ -133,7 +135,9 @@ public struct BotsSettingsView: View {
                 }
                 .font(.caption)
                 Group {
-                    if store.runtime.snapshot(for: agent.id).phase == .working {
+                    if archived {
+                        Text("Archived")
+                    } else if store.runtime.snapshot(for: agent.id).phase == .working {
                         Text("Active now")
                     } else if let date = store.runtime.lastActiveDates[agent.id] {
                         HStack(spacing: 0) {
@@ -157,6 +161,7 @@ public struct BotsSettingsView: View {
             .labelsHidden()
             .controlSize(.mini)
             .disabled(!store.runtime.heartbeatConfiguration.isEnabled || archived)
+            .opacity(archived ? Self.archivedOpacity : 1)
             .frame(width: heartbeatColumnWidth)
 
             Toggle(isOn: Binding(
@@ -177,6 +182,7 @@ public struct BotsSettingsView: View {
             .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived
                       || !OrganisationStatus.shared.allows(.unrestrictedAccess))
             .help(OrganisationStatus.shared.allows(.unrestrictedAccess) ? "" : Organisation.managedText)
+            .opacity(archived ? Self.archivedOpacity : 1)
             .frame(width: accessColumnWidth)
 
             if provider?.supportsAccountApps == true {
@@ -195,6 +201,7 @@ public struct BotsSettingsView: View {
                 .accessibilityLabel("\(agent.displayName), account apps")
                 .help(provider == .codex ? "Allow apps connected to ChatGPT" : "Allow connectors from Claude.ai")
                 .disabled(changingAccess || archived)
+                .opacity(archived ? Self.archivedOpacity : 1)
                 .frame(width: appsColumnWidth)
             } else {
                 Text("—")

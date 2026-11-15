@@ -8,6 +8,7 @@
 
 ### Changed
 
+- In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
 - Settings > Bots lists only the bots the Hub runs; bots a Mac hosts are edited on that Mac.
 - Suspend in a bot's profile is a button like Folder, Activity and New Session; a click offers how long.
 
