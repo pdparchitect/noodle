@@ -255,7 +255,7 @@ final class AgentActivityTextView: NSScrollView {
         textView.scrollToEndOfDocument(nil)
     }
 
-    /// Dims each entry's time and output and sets its title in semibold; the text itself stays as copied.
+    /// Tints each entry's time, dims its output and sets its title in semibold; the text itself stays as copied.
     static func style(_ storage: NSTextStorage, entries: [AgentActivityEntry]) {
         let regular = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let spaced = NSMutableParagraphStyle()
@@ -269,6 +269,8 @@ final class AgentActivityTextView: NSScrollView {
             let time = text.range(of: "] ").location
             let lineEnd = text.range(of: "\n").location
             if time != NSNotFound, lineEnd != NSNotFound, time < lineEnd, location + text.length <= storage.length {
+                // Teal sets the time apart from the title after it and the grey output of the entry before.
+                storage.addAttribute(.foregroundColor, value: NSColor.systemTeal, range: NSRange(location: location, length: time + 1))
                 storage.addAttributes([.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor],
                                       range: NSRange(location: location + time + 2, length: lineEnd - time - 2))
                 if index > 0 { storage.addAttribute(.paragraphStyle, value: spaced, range: NSRange(location: location, length: lineEnd)) }
