@@ -164,7 +164,7 @@ struct HubSettingsView: View {
 
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
-            HubNetworkSettingsView(link: host.hub.link)
+            HubNetworkSettingsView(link: host.hub.link, host: host)
                 .hubSettingsSize()
                 .tabItem { Label("Network", systemImage: "network") }
                 .tag(HubSettingsTab.network)

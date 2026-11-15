@@ -8,6 +8,7 @@ import SwiftUI
 /// Whether devices can reach the Hub, and the addresses invitations carry.
 struct HubNetworkSettingsView: View {
     @Bindable var link: HubLinkService
+    let host: HubSettingsHost
     @State private var opensAtLogin = SMAppService.mainApp.status
 
     var body: some View {
@@ -45,6 +46,9 @@ struct HubNetworkSettingsView: View {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
             NSLog("Noodle Hub could not change Open at Login: \(error.localizedDescription)")
+            // Otherwise the switch just flips back, with no sign of why.
+            host.problem = HubSettingsProblem(title: on ? "Could Not Open at Login" : "Could Not Stop Opening at Login",
+                                              message: error.localizedDescription)
         }
         opensAtLogin = SMAppService.mainApp.status
     }

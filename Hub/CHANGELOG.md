@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- When macOS refuses to change Open at Login, Settings says why instead of the switch silently turning back off.
 - The activity window shows the arrow pointer over its scroller and Follow Latest button, instead of the text cursor.
 
 ## [0.52.0] - 2026-11-15
