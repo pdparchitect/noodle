@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-15
+
 ### Added
 
 - Edit in a bot's profile moves it to another harness, login, model or effort its owner's plan lends.

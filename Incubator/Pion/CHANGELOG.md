@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
 ### Added
 
 - Usage, as in Noodle: Pion keeps what its agents use, and Pion › Usage (⇧⌘U) shows tokens, cost and storage for every agent. An agent's profile and its menu in the sidebar open it for that agent.
