@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.86.0] - 2026-11-15
+
 ### Added
 
 - Tool connections can use a token instead of signing in through the browser. In Settings › Tools, Custom MCP has a Sign-in choice of Browser or Token: paste the service's API key or token and name the header it goes in, such as Authorization or x-apikey. The token is kept in Keychain.

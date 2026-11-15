@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-15
+
 ### Fixed
 
 - Smoother conversation scrolling: unchanged messages reuse their formatted text when rows redraw.

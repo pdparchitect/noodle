@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-15
+
 ### Added
 
 - A bot's Activity window logs each move to another login when usage runs out, and each return to its own. While the bot is away from its own login, the window's title bar names the login it is running on, on the right.
+- Tool connections can use a token instead of signing in through the browser. In Settings › Tools, Custom MCP has a Sign-in choice of Browser or Token: paste the service's API key or token and name the header it goes in. Client ID & Secret is also offered: enter the service's token URL with both values, and the Hub exchanges them for access tokens and renews them as they expire.
 - The Activity window is easier to scan: times and output are dimmed, each step's name is in bold, and steps are spaced apart.
+
+### Fixed
+
+- The Tools sheets' top bars use the same blue text buttons as the rest of the Hub's settings.
 
 ## [0.51.0] - 2026-11-13
 
