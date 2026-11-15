@@ -4,11 +4,12 @@ import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
 import NoodleSettingsUI
+import PionCore
 import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Pion.
 @MainActor @Observable final class PionSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case general, conversation, harnesses, agents, groups, tools, permissions, updates }
+    enum Tab: Hashable { case general, conversation, harnesses, agents, groups, tools, keybindings, permissions, updates }
 
     let model: PionModel
     let setup: HarnessSetupController
@@ -127,6 +128,18 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(PionSettingsHost.Tab.tools)
+            KeybindingsSettingsView(sections: [
+                KeybindingsSection(title: "Conversations", actions: [PionShortcuts.newInvestigation, PionShortcuts.newGroup, PionShortcuts.newAgent,
+                                                                     PionShortcuts.searchConversations, PionShortcuts.chooseConversation,
+                                                                     PionShortcuts.capture, PionShortcuts.dictate, PionShortcuts.call, PionShortcuts.stop]),
+                KeybindingsSection(title: "Investigations", actions: [PionShortcuts.showInspector, PionShortcuts.closeInvestigation]),
+                KeybindingsSection(title: "Annotations", actions: [PionShortcuts.annotateSelection, PionShortcuts.annotateRegion,
+                                                                   PionShortcuts.saveAnnotation],
+                                   footer: "Select conversation text to add an annotation, or annotate a region of the Pion window. The same shortcuts work in attachment previews. Escape cancels an annotation."),
+            ])
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Keybindings", systemImage: "keyboard") }
+                .tag(PionSettingsHost.Tab.keybindings)
             // Noodle's own pane; Pion asks only for what dictation, capture and notifications need.
             PermissionsSettingsView(permissions: [.microphone, .screenRecording, .notifications])
                 .settingsContentSize(width: Self.width)

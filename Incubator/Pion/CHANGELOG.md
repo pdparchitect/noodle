@@ -4,6 +4,7 @@
 
 ### Added
 
+- Settings has a Keybindings tab, as in Noodle: change, clear or reset any of Pion's shortcuts, including New Investigation, Show Inspector, Close Investigation, Capture, Dictate, Call and the annotation shortcuts.
 - Voice calls, as in Noodle: call an agent whose harness has voices from its conversation's toolbar, its profile or Conversation › Call (⇧⌘C), with the call's card and what was said in the conversation. Agents can call you too; the call rings in a panel until you answer or decline, and a missed call is left in the conversation.
 - Settings has a Groups tab, as in Noodle, to archive a group or bring an archived one back.
 - Notifications, as in Noodle: agent replies while Pion is in the background, sign-ins and pauses. Settings > General chooses whether groups notify every reply or only mentions of your name, each group's menu in the sidebar can set its own, and Settings > Permissions shows notification access.

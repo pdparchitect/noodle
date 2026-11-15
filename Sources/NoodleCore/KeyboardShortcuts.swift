@@ -111,51 +111,115 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
     }
 }
 
-/// A missing override uses the default; an explicit nil disables the shortcut.
+/// A shortcut an app offers: what it is called and does, and its key until the person changes it. It is
+/// known by its id, so code shared between apps finds an app's own version of a shortcut by name.
+public struct ShortcutDefinition: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let summary: String
+    public let defaultBinding: KeyBinding
+
+    public init(id: String, title: String, summary: String, defaultBinding: KeyBinding) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.defaultBinding = defaultBinding
+    }
+
+    public static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+extension NoodleShortcut {
+    public var definition: ShortcutDefinition {
+        ShortcutDefinition(id: rawValue, title: title, summary: summary, defaultBinding: defaultBinding)
+    }
+
+    /// Noodle's shortcuts.
+    public static var catalog: [ShortcutDefinition] { allCases.map(\.definition) }
+}
+
+/// Noodle's shortcuts by name, as code shared with other apps asks for them.
+extension ShortcutDefinition {
+    public static var newBot: Self { NoodleShortcut.newBot.definition }
+    public static var newGroup: Self { NoodleShortcut.newGroup.definition }
+    public static var searchConversations: Self { NoodleShortcut.searchConversations.definition }
+    public static var recordVoice: Self { NoodleShortcut.recordVoice.definition }
+    public static var call: Self { NoodleShortcut.call.definition }
+    public static var capture: Self { NoodleShortcut.capture.definition }
+    public static var annotateSelection: Self { NoodleShortcut.annotateSelection.definition }
+    public static var annotateRegion: Self { NoodleShortcut.annotateRegion.definition }
+    public static var saveAnnotation: Self { NoodleShortcut.saveAnnotation.definition }
+    public static var chooseConversation: Self { NoodleShortcut.chooseConversation.definition }
+    public static var showUsage: Self { NoodleShortcut.showUsage.definition }
+    public static var stopBot: Self { NoodleShortcut.stopBot.definition }
+}
+
+/// The person's changes to an app's shortcuts. A missing override uses the default; an explicit nil disables
+/// the shortcut. A shortcut not in the app's list has no key.
 public struct KeyboardShortcutPreferences: Codable, Equatable, Sendable {
     private struct Override: Codable, Equatable, Sendable { let binding: KeyBinding? }
     private var overrides: [String: Override] = [:]
-    public init() {}
-    public init(data: Data?) {
-        self.init()
+    /// The app's shortcuts; not saved, so each launch reads its own.
+    private var catalog: [ShortcutDefinition] = NoodleShortcut.catalog
+
+    private enum CodingKeys: String, CodingKey { case overrides }
+
+    public init(catalog: [ShortcutDefinition] = NoodleShortcut.catalog) { self.catalog = catalog }
+    public init(data: Data?, catalog: [ShortcutDefinition] = NoodleShortcut.catalog) {
+        self.init(catalog: catalog)
         guard let data, var stored = try? JSONDecoder().decode(Self.self, from: data) else { return }
-        stored.overrides = stored.overrides.filter { NoodleShortcut(rawValue: $0.key) != nil }
+        stored.catalog = catalog
+        let known = Set(catalog.map(\.id))
+        stored.overrides = stored.overrides.filter { known.contains($0.key) }
         var seen = Set<KeyBinding>()
-        for action in NoodleShortcut.allCases {
+        for action in catalog {
             if let binding = stored.binding(for: action) {
                 guard binding.isValid, binding.reservedAction == nil, seen.insert(binding).inserted else { return }
             }
         }
         self = stored
     }
-    public func binding(for action: NoodleShortcut) -> KeyBinding? {
-        if let override = overrides[action.rawValue] { return override.binding }
+
+    public static func == (a: Self, b: Self) -> Bool { a.overrides == b.overrides }
+
+    /// This app's own version of the shortcut.
+    private func own(_ action: ShortcutDefinition) -> ShortcutDefinition? { catalog.first { $0.id == action.id } }
+
+    public func binding(for action: ShortcutDefinition) -> KeyBinding? {
+        guard let action = own(action) else { return nil }
+        if let override = overrides[action.id] { return override.binding }
         return action.defaultBinding
     }
     public var isDefault: Bool { overrides.isEmpty }
-    public func isModified(_ action: NoodleShortcut) -> Bool { overrides[action.rawValue] != nil }
-    public mutating func set(_ binding: KeyBinding?, for action: NoodleShortcut) throws {
+    public func isModified(_ action: ShortcutDefinition) -> Bool { overrides[action.id] != nil }
+    public mutating func set(_ binding: KeyBinding?, for action: ShortcutDefinition) throws {
+        guard let action = own(action) else { return }
         if let binding {
             guard binding.isValid else { throw ShortcutError.invalid }
             if let reserved = binding.reservedAction { throw ShortcutError.reserved(reserved) }
-            if let other = NoodleShortcut.allCases.first(where: { $0 != action && self.binding(for: $0) == binding }) {
-                throw ShortcutError.conflict(other)
+            if let other = catalog.first(where: { $0 != action && self.binding(for: $0) == binding }) {
+                throw ShortcutError.conflict(other.title)
             }
         }
-        if binding == action.defaultBinding { overrides[action.rawValue] = nil }
-        else { overrides[action.rawValue] = Override(binding: binding) }
+        if binding == action.defaultBinding { overrides[action.id] = nil }
+        else { overrides[action.id] = Override(binding: binding) }
     }
-    public mutating func reset(_ action: NoodleShortcut) throws { try set(action.defaultBinding, for: action) }
+    public mutating func reset(_ action: ShortcutDefinition) throws {
+        guard let action = own(action) else { return }
+        try set(action.defaultBinding, for: action)
+    }
     public mutating func resetAll() { overrides = [:] }
 }
 
 public enum ShortcutError: LocalizedError {
-    case invalid, reserved(String), conflict(NoodleShortcut)
+    /// `conflict` names the shortcut that already has the key.
+    case invalid, reserved(String), conflict(String)
     public var errorDescription: String? {
         switch self {
         case .invalid: "Choose a key with Command (⌘), Control (⌃) or Option (⌥)."
         case .reserved(let action): "That shortcut is used by \(action)."
-        case .conflict(let action): "Already assigned to \(action.title). Change or clear that shortcut first."
+        case .conflict(let title): "Already assigned to \(title). Change or clear that shortcut first."
         }
     }
 }

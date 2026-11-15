@@ -5,7 +5,7 @@ final class KeyboardShortcutsTests: XCTestCase {
     func testDefaultsAreValidAndUnique() throws {
         let preferences = KeyboardShortcutPreferences()
         var seen = Set<KeyBinding>()
-        for action in NoodleShortcut.allCases {
+        for action in NoodleShortcut.catalog {
             let binding = try XCTUnwrap(preferences.binding(for: action))
             XCTAssertTrue(binding.isValid, action.title)
             XCTAssertNil(binding.reservedAction, action.title)
@@ -91,5 +91,25 @@ final class KeyboardShortcutsTests: XCTestCase {
         XCTAssertEqual(KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences)).binding(for: .capture), custom)
         try preferences.set(nil, for: .capture)
         XCTAssertNil(KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences)).binding(for: .capture))
+    }
+
+    /// Another app on Noodle's core keeps its own list: its defaults, titles and conflicts, and no key for a
+    /// shortcut it does not have, while code shared with Noodle finds the ones it does by name.
+    func testAnAppsOwnListGivesItsDefaultsAndConflicts() throws {
+        let open = ShortcutDefinition(id: "openCase", title: "Open Case", summary: "Open a case.",
+                                      defaultBinding: KeyBinding("n"))
+        let capture = ShortcutDefinition(id: ShortcutDefinition.capture.id, title: "Capture Evidence", summary: "Capture a window.",
+                                         defaultBinding: KeyBinding("e", modifiers: [.command, .option]))
+        var preferences = KeyboardShortcutPreferences(catalog: [open, capture])
+        XCTAssertEqual(preferences.binding(for: open), KeyBinding("n"))
+        XCTAssertEqual(preferences.binding(for: .capture), KeyBinding("e", modifiers: [.command, .option]), "Found by name")
+        XCTAssertNil(preferences.binding(for: .newBot), "Not in this app's list")
+        XCTAssertThrowsError(try preferences.set(KeyBinding("n"), for: .capture)) { error in
+            XCTAssertEqual(error.localizedDescription, "Already assigned to Open Case. Change or clear that shortcut first.")
+        }
+        try preferences.set(KeyBinding("k", modifiers: [.command, .option]), for: open)
+        let restored = KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences), catalog: [open, capture])
+        XCTAssertEqual(restored.binding(for: open), KeyBinding("k", modifiers: [.command, .option]))
+        XCTAssertTrue(restored.isModified(open))
     }
 }

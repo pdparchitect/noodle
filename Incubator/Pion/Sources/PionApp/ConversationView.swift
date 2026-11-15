@@ -259,7 +259,7 @@ struct ConversationView: View {
                         Button("Reopen") { model.setStatus(.open, of: investigation) }
                     } else {
                         Button("Close Investigation…") { window.sheet = .close(investigation) }
-                            .keyboardShortcut("k", modifiers: [.command, .shift])
+                            .appShortcut(PionShortcuts.closeInvestigation)
                     }
                 } label: {
                     WidestLabel(title: investigation.outcome?.title ?? investigation.status.title, symbol: investigation.status.symbol,
@@ -284,7 +284,7 @@ struct ConversationView: View {
             ToolbarSpacer(.fixed)
             ToolbarItem {
                 Button { window.showsInspector.toggle() } label: { Label("Case", systemImage: "sidebar.trailing") }
-                    .help("Show or hide the case record (⌥⌘I)")
+                    .help(KeyboardBindings.shared.help("Show or hide the case record", for: PionShortcuts.showInspector))
             }
         }
     }

@@ -2,33 +2,38 @@ import AppKit
 import SwiftUI
 import NoodleCore
 
+/// One group of shortcuts in Settings > Keybindings.
+struct KeybindingsSection: Identifiable {
+    let title: String
+    let actions: [ShortcutDefinition]
+    var footer: String?
+    var id: String { title }
+
+    /// Noodle's own.
+    static let noodle: [KeybindingsSection] = [
+        KeybindingsSection(title: "Conversations", actions: [.newBot, .newGroup, .searchConversations, .capture, .recordVoice, .call, .stopBot]),
+        KeybindingsSection(title: "Any App", actions: [.chooseConversation]),
+        KeybindingsSection(title: "Annotations", actions: [.annotateSelection, .annotateRegion, .saveAnnotation],
+                           footer: "Select conversation text to add an annotation, or annotate a region of the Noodle window. The same shortcuts work in attachment previews. Escape cancels an annotation."),
+    ]
+}
+
 struct KeybindingsSettingsView: View {
     var bindings = KeyboardBindings.shared
-    @State private var errors: [NoodleShortcut: String] = [:]
+    var sections = KeybindingsSection.noodle
+    @State private var errors: [ShortcutDefinition: String] = [:]
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section("Conversations") {
-                    row(.newBot)
-                    row(.newGroup)
-                    row(.searchConversations)
-                    row(.capture)
-                    row(.recordVoice)
-                    row(.call)
-                    row(.stopBot)
-                }
-                Section("Any App") {
-                    row(.chooseConversation)
-                }
-                Section {
-                    row(.annotateSelection)
-                    row(.annotateRegion)
-                    row(.saveAnnotation)
-                } header: {
-                    Text("Annotations")
-                } footer: {
-                    Text("Select conversation text to add an annotation, or annotate a region of the Noodle window. The same shortcuts work in attachment previews. Escape cancels an annotation.")
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.actions) { row(bindings.own($0)) }
+                    } header: {
+                        Text(section.title)
+                    } footer: {
+                        if let footer = section.footer { Text(footer) }
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -47,13 +52,13 @@ struct KeybindingsSettingsView: View {
         .onDisappear { bindings.recordingAction = nil }
     }
 
-    private func reset(_ action: NoodleShortcut) {
+    private func reset(_ action: ShortcutDefinition) {
         if bindings.recordingAction == action { bindings.recordingAction = nil }
         do { try bindings.reset(action); errors[action] = nil }
         catch { errors[action] = error.localizedDescription }
     }
 
-    private func row(_ action: NoodleShortcut) -> some View {
+    private func row(_ action: ShortcutDefinition) -> some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(action.title)
@@ -85,7 +90,7 @@ struct KeybindingsSettingsView: View {
 }
 
 private struct ShortcutRecorder: NSViewRepresentable {
-    let action: NoodleShortcut
+    let action: ShortcutDefinition
     let bindings: KeyboardBindings
     let onError: (String?) -> Void
     func makeNSView(context: Context) -> ShortcutRecorderButton {
@@ -102,13 +107,13 @@ private struct ShortcutRecorder: NSViewRepresentable {
 /// Captures only while this control's Settings window is key. The monitor
 /// consumes recorded shortcuts before AppKit can dispatch menu commands.
 @MainActor final class ShortcutRecorderButton: NSButton {
-    let shortcutAction: NoodleShortcut
+    let shortcutAction: ShortcutDefinition
     let bindings: KeyboardBindings
     var onError: (String?) -> Void
     private var monitor: Any?
     private weak var previousResponder: NSResponder?
 
-    init(action: NoodleShortcut, bindings: KeyboardBindings, onError: @escaping (String?) -> Void) {
+    init(action: ShortcutDefinition, bindings: KeyboardBindings, onError: @escaping (String?) -> Void) {
         shortcutAction = action; self.bindings = bindings; self.onError = onError
         super.init(frame: .zero)
         bezelStyle = .rounded; font = .monospacedSystemFont(ofSize: 12, weight: .medium)

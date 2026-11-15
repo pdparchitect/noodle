@@ -69,8 +69,9 @@ struct PionApp: App {
     }()
 
     override init() {
-        // Before anything adds or uses a tool connection.
+        // Before anything adds or uses a tool connection, or reads a shortcut.
         ToolCatalog.use(PionCatalogue.entries)
+        KeyboardBindings.catalog = PionShortcuts.catalog
         #if PION_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
@@ -164,17 +165,17 @@ struct PionCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }
-                .keyboardShortcut("n")
+                .appShortcut(PionShortcuts.newInvestigation)
                 .disabled(model.agents.isEmpty)
             Button("New Group") { activeWindow.sheet = .newGroup }
-                .keyboardShortcut("n", modifiers: [.command, .option])
+                .appShortcut(PionShortcuts.newGroup)
                 .disabled(model.agents.isEmpty)
             Button("New Agent") { activeWindow.sheet = .newAgent }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .appShortcut(PionShortcuts.newAgent)
         }
         CommandGroup(after: .sidebar) {
             Button(activeWindow.showsInspector ? "Hide Inspector" : "Show Inspector") { activeWindow.showsInspector.toggle() }
-                .keyboardShortcut("i", modifiers: [.command, .option])
+                .appShortcut(PionShortcuts.showInspector)
                 .disabled(model.investigation(conversationID) == nil)
             Divider()
             ViewOptions()
@@ -182,10 +183,10 @@ struct PionCommands: Commands {
         }
         CommandMenu("Conversation") {
             Button("Search Conversations") { context?.search() }
-                .keyboardShortcut("f")
+                .appShortcut(PionShortcuts.searchConversations)
                 .disabled(context == nil)
             Button("Choose Conversation…") { activeWindow.sheet = .chooseConversation }
-                .keyboardShortcut(.space, modifiers: [.control, .option])
+                .appShortcut(PionShortcuts.chooseConversation)
                 .disabled(context == nil)
             Divider()
             Button("Open in New Window") {
@@ -211,13 +212,13 @@ struct PionCommands: Commands {
                 .disabled(!annotations.conversationEnabled)
             Divider()
             Button(dictation?.isRecording == true ? "Stop Dictation" : "Dictate") { dictation?.perform() }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .appShortcut(PionShortcuts.dictate)
                 .disabled(dictation?.isEnabled != true)
             Button(calls.voiceCalls.call != nil ? "End Call" : "Call") { calls.toggleCall(in: conversationID) }
                 .appShortcut(.call)
                 .disabled(calls.voiceCalls.call == nil && model.conversation(conversationID).map(calls.canCallNow) != true)
             Button("Stop") { model.stop(in: conversationID) }
-                .keyboardShortcut(".")
+                .appShortcut(PionShortcuts.stop)
                 .disabled(model.stoppableAgent(in: conversationID) == nil)
         }
     }
