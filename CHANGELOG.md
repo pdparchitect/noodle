@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- In Settings > General, a Mac whose organisation set policies shows one row that opens the list of them, instead of listing them.
 - The activity window shows each entry's time in teal, so it stands apart from the title and output.
 - In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
 

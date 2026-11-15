@@ -60,6 +60,21 @@ import HubLink
         }
     }
 
+    /// On a managed Mac, General shows one row that opens the organisation's policies, not the policies themselves;
+    /// on any other Mac it shows nothing about them.
+    func testGeneralSettingsOpensOrganisationPoliciesFromOneRow() async throws {
+        let f = try fixture()
+        addTeardownBlock { @MainActor in Organisation.enforce(UnmanagedPolicy()) }
+        let unmanaged = host(GeneralSettingsView().environment(f.store).defaultAppStorage(f.runtime.defaults))
+        _ = try await control(BotNameStyle.real.displayName, in: unmanaged)
+        XCTAssertFalse(hasControl("Show Policies", in: unmanaged))
+        TestOrganisationPolicy.enforce { _ in false }
+        let settings = host(GeneralSettingsView().environment(f.store).defaultAppStorage(f.runtime.defaults))
+        _ = try await control("Show Policies", in: settings)
+        XCTAssertFalse(hasControl("Enterprise feature", in: settings), "The list waits behind the row")
+        XCTAssertFalse(hasControl("Set", in: settings))
+    }
+
     /// View › Sidebar holds the order and the line shown; Settings no longer repeats them.
     func testGeneralSettingsNoLongerSortsOrChoosesTheSidebarLine() async throws {
         let f = try fixture()
