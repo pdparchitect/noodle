@@ -11,7 +11,7 @@ public struct CaseToolProvider: ToolProvider {
         instructions: """
         Every group you are in is an Investigation. Pass its conversation ID as --conversation. Start with read: it returns the objective, the status, the severity and the case record so far.
 
-        Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
+        Every result also carries its data as JSON in structuredContent, such as the new item's id, for scripts that chain calls with tool --run. Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
         The champion may make one agent the lead; read says who it is, or that there is none. The lead runs the Investigation: it hears the champion's messages a few seconds before the others, splits the work among the team with @mentions by what each agent does, keeps the case record coherent, and gives the champion one summary with its recommendations rather than leaving them to piece replies together. Only the lead sets the severity with severity, once the evidence lets you judge it and again when that changes, and moves the status to triaging or contained with status, each with a note. If you are not the lead, work what it hands you, record what you find, and report back to it in the Investigation; raise anything urgent or anything it has missed. Without a lead, severity and status stay as they are: ask the champion to choose one if it matters. Only the champion closes an Investigation.
         """,
@@ -97,7 +97,9 @@ public struct CaseToolProvider: ToolProvider {
 
         switch tool {
         case "read":
-            return Self.result(Self.describe(investigation, store.caseRecord(id), lead: leadOf(id), agentName: agentName))
+            let record = store.caseRecord(id), lead = leadOf(id)
+            return try Self.result(Self.describe(investigation, record, lead: lead, agentName: agentName),
+                                   CaseView(investigation, record, lead: lead, leadName: lead.flatMap(agentName)))
         case "entity":
             guard let kind = CaseRecord.Entity.Kind(rawValue: text("kind")) else { throw ToolProviderError("--kind is one of host, identity, service, indicator or other.") }
             let entityName = try required("name")
@@ -106,14 +108,14 @@ public struct CaseToolProvider: ToolProvider {
                 let entity = record.record(entity: kind, name: entityName, detail: detail, by: actor, at: Date())
                 return (entity, "entity", "\(entity.id) \(kind.rawValue) \(entityName)")
             }
-            return Self.result("Recorded \(entity.id): \(kind.rawValue) \(entity.name).")
+            return try Self.result("Recorded \(entity.id): \(kind.rawValue) \(entity.name).", entity)
         case "evidence":
             let source = try required("source"), method = try required("method"), result = try required("result")
             let evidence = try store.updateCase(id, by: actor) { record, _ in
                 let item = record.record(evidenceFrom: source, method: method, result: result, by: actor, at: Date())
                 return (item, "evidence", "\(item.id) from \(source)")
             }
-            return Self.result("Recorded \(evidence.id). Cite it in findings.")
+            return try Self.result("Recorded \(evidence.id). Cite it in findings.", evidence)
         case "finding":
             let claim = try required("claim")
             guard let confidence = CaseRecord.Finding.Confidence(rawValue: text("confidence")) else {
@@ -127,7 +129,7 @@ public struct CaseToolProvider: ToolProvider {
                                                     entities: strings("entities"), by: actor, at: Date())
                     return (finding, "finding", "\(finding.id) \(confidence.rawValue): \(claim)")
                 }
-                return Self.result("Recorded \(finding.id).")
+                return try Self.result("Recorded \(finding.id).", finding)
             } catch let error as CaseError { throw ToolProviderError(error.message) }
         case "status":
             guard let status = Investigation.Status(rawValue: text("status")), status == .triaging || status == .contained else {
@@ -137,7 +139,8 @@ public struct CaseToolProvider: ToolProvider {
             let note = try required("note")
             do { try store.setStatus(status, of: id, by: actor, note: note) }
             catch let error as CaseError { throw ToolProviderError(error.message) }
-            return Self.result("\(investigation.reference) is now \(status.title.lowercased()). \(name) set it.")
+            return try Self.result("\(investigation.reference) is now \(status.title.lowercased()). \(name) set it.",
+                                   ["reference": investigation.reference, "status": status.rawValue])
         case "severity":
             guard let severity = Investigation.Severity(rawValue: text("severity")) else {
                 throw ToolProviderError("--severity is low, medium, high or critical.")
@@ -151,7 +154,8 @@ public struct CaseToolProvider: ToolProvider {
                 value.severity = severity
                 return [("severity", "\(from) → \(severity.title): \(note)")]
             }
-            return Self.result("\(investigation.reference) is now \(severity.title.lowercased()) severity. \(name) set it.")
+            return try Self.result("\(investigation.reference) is now \(severity.title.lowercased()) severity. \(name) set it.",
+                                   ["reference": investigation.reference, "severity": severity.rawValue])
         default:
             throw ToolProviderError("The case tool has no command \(tool).")
         }
@@ -167,6 +171,31 @@ public struct CaseToolProvider: ToolProvider {
     }
 
     // MARK: Results
+
+    /// The text for the agent to read, and the same as JSON in structuredContent, so a script can use it.
+    static func result(_ text: String, _ structured: some Encodable) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let object = try JSONSerialization.jsonObject(with: encoder.encode(structured))
+        return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": text]],
+                                                           "structuredContent": object, "isError": false], options: [.sortedKeys])
+    }
+
+    /// An Investigation and its case record as a script reads them.
+    struct CaseView: Encodable {
+        let reference: String, title: String, objective: String, status: String
+        let outcome: String?, severity: String?, champion: String, source: String?
+        let lead: UUID?, leadName: String?
+        let entities: [CaseRecord.Entity], evidence: [CaseRecord.Evidence], findings: [CaseRecord.Finding]
+
+        init(_ investigation: Investigation, _ record: CaseRecord, lead: UUID?, leadName: String?) {
+            reference = investigation.reference; title = investigation.title; objective = investigation.objective
+            status = investigation.status.rawValue; outcome = investigation.outcome?.rawValue
+            severity = investigation.severity?.rawValue; champion = investigation.champion; source = investigation.source
+            self.lead = lead; self.leadName = leadName
+            entities = record.entities; evidence = record.evidence; findings = record.findings
+        }
+    }
 
     static func result(_ text: String, isError: Bool = false) -> Data {
         (try? JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": text]], "isError": isError])) ?? Data()

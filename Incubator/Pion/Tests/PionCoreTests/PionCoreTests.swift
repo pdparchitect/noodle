@@ -87,6 +87,34 @@ final class PionCoreTests: XCTestCase {
         return ((object?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
     }
 
+    private func structured(_ tool: String, _ arguments: [String: Any]) async throws -> [String: Any] {
+        let lead = self.lead
+        let provider = CaseToolProvider(store: store, leadOf: { _ in lead }) { _ in "Rafe" }
+        let data = try await provider.call(tool, arguments: JSONSerialization.data(withJSONObject: arguments), files: [],
+                                           context: ToolCallContext(agentID: agent, workspace: root))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try XCTUnwrap(object["structuredContent"] as? [String: Any], "every case tool result carries JSON")
+    }
+
+    func testEveryCaseToolResultCarriesJSONForScripts() async throws {
+        lead = agent
+        let investigation = try open()
+        let id = investigation.id.uuidString
+        let entity = try await structured("entity", ["conversation": id, "kind": "host", "name": "LT-0423"])
+        XCTAssertEqual(entity["name"] as? String, "LT-0423")
+        let evidence = try await structured("evidence", ["conversation": id, "source": "Defender", "method": "q", "result": "Beacon"])
+        let evidenceID = try XCTUnwrap(evidence["id"] as? String)
+        let finding = try await structured("finding", ["conversation": id, "claim": "Beaconing", "evidence": [evidenceID], "confidence": "high"])
+        XCTAssertEqual(finding["evidence"] as? [String], [evidenceID])
+        let severity = try await structured("severity", ["conversation": id, "severity": "high", "note": "n"])
+        XCTAssertEqual(severity["severity"] as? String, "high")
+        let read = try await structured("read", ["conversation": id])
+        XCTAssertEqual(read["reference"] as? String, investigation.reference)
+        XCTAssertEqual(read["severity"] as? String, "high")
+        XCTAssertEqual(read["leadName"] as? String, "Rafe")
+        XCTAssertEqual((read["evidence"] as? [[String: Any]])?.first?["id"] as? String, evidenceID)
+    }
+
     func testTheCaseToolRefusesAConversationThatIsNotAnInvestigation() async throws {
         do {
             _ = try await call("read", ["conversation": UUID().uuidString])
