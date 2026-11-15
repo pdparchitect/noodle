@@ -77,6 +77,7 @@ struct PionApp: App {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
+        if !model.isScripted { connectNotifications() }
         model.start()
         // Noodle's updater, on Pion's own channel; it stays off in development builds.
         if !model.isScripted { AppUpdater.shared.start() }

@@ -9,6 +9,7 @@ import SwiftUI
 struct MainWindow: View {
     let model: PionModel
     @Bindable var window: WindowState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -37,6 +38,7 @@ struct MainWindow: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
         .onOpenURL { _ = model.connectionsController.receiveAuthorizationCallback($0) }
+        .onAppear { window.openMain = { openWindow(id: "main") } }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .alert("Something Went Wrong", isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
@@ -176,6 +178,17 @@ struct ConversationRowMenu: View {
                 ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { Text($0.title).tag($0) }
             }
             .disabled(closed)
+        }
+        if agent == nil {
+            Picker("Notifications", selection: Binding(
+                get: { model.chosenNotifications(of: conversation.id) ?? .default },
+                set: { model.setNotifications($0, conversationID: conversation.id) })) {
+                Text(model.groupNotifications == .mentions ? "Default (Mentions Only)" : "Default (All Messages)")
+                    .tag(LinkNotifications.default)
+                Text("All Messages").tag(LinkNotifications.all)
+                Text("Mentions Only").tag(LinkNotifications.mentions)
+                Text("Muted").tag(LinkNotifications.muted)
+            }
         }
         Divider()
         if let agent {

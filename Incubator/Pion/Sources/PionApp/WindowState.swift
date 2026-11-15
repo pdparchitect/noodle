@@ -43,5 +43,7 @@ import SwiftUI
     var searchText = ""
     var searchFocusRequest = UUID()
     var floatsOnTop = false
+    /// Opens the main window, or brings it forward, for a notification clicked while it is closed.
+    @ObservationIgnored var openMain: (() -> Void)?
 }
 

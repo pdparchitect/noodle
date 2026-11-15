@@ -1,3 +1,4 @@
+import HubLink
 import NoodleBrand
 import NoodleCore
 import NoodleRuntime
@@ -83,7 +84,7 @@ struct PionSettingsView: View {
 
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
-            GeneralSettingsView(runtime: host.runtime)
+            GeneralSettingsView(model: host.model)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(PionSettingsHost.Tab.general)
@@ -103,8 +104,8 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
                 .tag(PionSettingsHost.Tab.tools)
-            // Noodle's own pane; Pion asks only for what dictation and capture need.
-            PermissionsSettingsView(permissions: [.microphone, .screenRecording])
+            // Noodle's own pane; Pion asks only for what dictation, capture and notifications need.
+            PermissionsSettingsView(permissions: [.microphone, .screenRecording, .notifications])
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Permissions", systemImage: "hand.raised") }
                 .tag(PionSettingsHost.Tab.permissions)
@@ -145,9 +146,10 @@ private struct ConversationSettingsView: View {
     }
 }
 
-/// Names for new agents and sleep while they work. What the main window shows lives in the View menu.
+/// Names for new agents, how groups notify and sleep while agents work. What the main window shows lives in the View menu.
 private struct GeneralSettingsView: View {
-    let runtime: AgentRuntimeCoordinator
+    let model: PionModel
+    private var runtime: AgentRuntimeCoordinator { model.runtime }
     @AppStorage(PionModel.agentNameStyleKey) private var nameStyle = PionModel.defaultAgentNameStyle.rawValue
 
     var body: some View {
@@ -158,6 +160,14 @@ private struct GeneralSettingsView: View {
                     Text("Human").tag(BotNameStyle.real.rawValue)
                 }
                 .pickerStyle(.segmented)
+            }
+            Section {
+                Picker("In groups, notify me for", selection: Binding(get: { model.groupNotifications },
+                                                                      set: { model.groupNotifications = $0 })) {
+                    Text("All messages").tag(LinkNotifications.all)
+                    Text("Only when my name is mentioned").tag(LinkNotifications.mentions)
+                }
+                .help("Your name is your full name, or your first name alone. An agent's own conversation always notifies, and a group can have its own setting in its menu in the sidebar.")
             }
             Section {
                 Toggle("Keep Mac awake while agents work", isOn: Binding(

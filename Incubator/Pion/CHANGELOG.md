@@ -4,6 +4,7 @@
 
 ### Added
 
+- Notifications, as in Noodle: agent replies while Pion is in the background, sign-ins and pauses. Settings > General chooses whether groups notify every reply or only mentions of your name, each group's menu in the sidebar can set its own, and Settings > Permissions shows notification access.
 - Settings has a Conversation tab, as in Noodle: message delivery, new sessions, the microphone, descriptions in the @ name menu and web link previews.
 - An agent's profile has Suspend beside Message and Edit; a click offers how long, and a suspended agent shows Unsuspend.
 

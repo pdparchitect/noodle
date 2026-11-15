@@ -1,4 +1,5 @@
 import Foundation
+import HubLink
 import NoodleBrand
 import NoodleCore
 import NoodleRuntime
@@ -45,6 +46,12 @@ import UniformTypeIdentifiers
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
     private(set) var readUpTo: [UUID: UUID] = [:]
+    /// How groups notify the champion, kept where Noodle keeps it.
+    private(set) var groupNotificationSettings = GroupNotificationSettings()
+    /// Agent replies that notify the champion, as their conversations are set; the app shows them.
+    @ObservationIgnored var onMessagesArrived: (([ChatMessage]) -> Void)?
+    /// A conversation that notifies less than before, whose shown replies the app takes back.
+    @ObservationIgnored var onNotificationsNarrowed: ((UUID) -> Void)?
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
@@ -194,6 +201,7 @@ import UniformTypeIdentifiers
     func reload() {
         reloadWorkspace()
         reloadPion()
+        groupNotificationSettings = (try? repository.loadGroupNotifications()) ?? GroupNotificationSettings()
     }
 
     private func reloadWorkspace() {
@@ -226,6 +234,8 @@ import UniformTypeIdentifiers
         if selection == id { markRead(id) }
         guard notifying, !isScripted else { return }
         let arrived = messages.filter { !known.contains($0.id) && $0.author != .user }
+        let shown = arrived.filter { if case .agent = $0.author { notifies($0) } else { false } }
+        if !shown.isEmpty { onMessagesArrived?(shown) }
         guard !arrived.isEmpty, let recipients = try? repository.notificationRecipientIDs(for: arrived) else { return }
         let reached = agents.filter { recipients.contains($0.id) }
         if !reached.isEmpty { runtime.notify(reached, repository: repository) }
@@ -331,6 +341,57 @@ import UniformTypeIdentifiers
     }
 
     private static let readKey = "PionReadUpTo"
+
+    // MARK: Notifications
+
+    /// How a conversation notifies: a group as set on its own, or else as set for all groups. An agent's own
+    /// conversation notifies every reply.
+    func notifications(of id: UUID) -> LinkNotifications {
+        guard conversations.first(where: { $0.id == id })?.kind == .group else { return .all }
+        return LinkNotifications.effective(chosenNotifications(of: id), inGroups: groupNotifications)
+    }
+
+    /// How a group was set to notify on its own; nil keeps the default.
+    func chosenNotifications(of id: UUID) -> LinkNotifications? {
+        groupNotificationSettings.levels[id].map(LinkNotifications.init(rawValue:))
+    }
+
+    /// How groups that keep the default notify: every reply, or only those naming the champion.
+    var groupNotifications: LinkNotifications {
+        get { groupNotificationSettings.inGroups == LinkNotifications.mentions.rawValue ? .mentions : .all }
+        set {
+            guard newValue == .all || newValue == .mentions, newValue != groupNotifications else { return }
+            var updated = groupNotificationSettings
+            updated.inGroups = newValue.rawValue
+            saveGroupNotifications(updated)
+        }
+    }
+
+    /// Sets how a group notifies, `default` keeping the level for all groups.
+    func setNotifications(_ level: LinkNotifications, conversationID: UUID) {
+        guard level != (chosenNotifications(of: conversationID) ?? .default),
+              conversations.first(where: { $0.id == conversationID })?.kind == .group else { return }
+        var updated = groupNotificationSettings
+        updated.levels[conversationID] = level == .default ? nil : level.rawValue
+        saveGroupNotifications(updated)
+    }
+
+    /// Whether a new reply notifies the champion, as its conversation is set to.
+    func notifies(_ message: ChatMessage) -> Bool {
+        notifications(of: message.conversationID).notifies(message.body, name: champion)
+    }
+
+    /// Groups that now notify less take back what they showed.
+    private func saveGroupNotifications(_ updated: GroupNotificationSettings) {
+        do {
+            try repository.saveGroupNotifications(updated)
+            let before = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, notifications(of: $0.id)) })
+            groupNotificationSettings = updated
+            for (id, level) in before where level != notifications(of: id) && notifications(of: id) != .all {
+                onNotificationsNarrowed?(id)
+            }
+        } catch { problem = error.localizedDescription }
+    }
 
     /// The name an author goes by.
     func name(of author: MessageAuthor) -> String {
