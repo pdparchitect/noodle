@@ -10,6 +10,7 @@
 
 ### Changed
 
+- The Agents tab in Settings has Noodle's sparkles icon.
 - The activity window shows each entry's time in teal, so it stands apart from the title and output.
 - In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
 

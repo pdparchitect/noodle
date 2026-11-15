@@ -98,7 +98,7 @@ struct PionSettingsView: View {
                 .tag(PionSettingsHost.Tab.harnesses)
             BotsSettingsView(store: host, agents: host.agents)
                 .settingsContentSize(width: Self.width)
-                .tabItem { Label("Agents", systemImage: "person.2") }
+                .tabItem { Label("Agents", systemImage: "sparkles") }
                 .tag(PionSettingsHost.Tab.agents)
             ToolConnectionsSettingsView(store: host)
                 .settingsContentSize(width: Self.width)
