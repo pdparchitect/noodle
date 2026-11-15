@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Settings › Keybindings no longer lists Usage, as in Noodle; ⇧⌘U still opens it.
 - In the Usage window's Disk measure, Sign-ins is now Logins: each login's folder holds what its harness keeps there, such as Codex's plugins, not only the sign-in itself.
 
 ## [0.2.0] - 2026-11-15
