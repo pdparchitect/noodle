@@ -145,6 +145,8 @@ struct AgentProfileButton: View {
     var inSheet = false
     /// From Settings, as in Noodle: a message opens in a window of its own, beside Settings.
     var opensMessageInWindow = false
+    /// Shows the name beside the mark, clickable with it.
+    var showsName = false
     var edit: (() -> Void)?
     @Environment(\.openWindow) private var openWindow
     @State private var showsProfile = false
@@ -152,7 +154,15 @@ struct AgentProfileButton: View {
 
     var body: some View {
         Button { showsProfile = true } label: {
-            AgentMark(agent: agent, size: size, phase: phase).contentShape(Circle())
+            if showsName {
+                HStack(spacing: 4) {
+                    AgentMark(agent: agent, size: size, phase: phase)
+                    Text(agent.displayName).font(.caption)
+                }
+                .contentShape(Rectangle())
+            } else {
+                AgentMark(agent: agent, size: size, phase: phase).contentShape(Circle())
+            }
         }
         .buttonStyle(.plain)
         .help("Show \(agent.displayName)’s profile")

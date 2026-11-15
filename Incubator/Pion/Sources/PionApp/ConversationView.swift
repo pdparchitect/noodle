@@ -305,9 +305,8 @@ struct ConversationStart: View {
             if conversation.kind == .group {
                 HStack(spacing: 6) {
                     ForEach(model.members(of: conversation)) { agent in
-                        HStack(spacing: 4) {
-                            AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent)) { window.sheet = .editAgent(agent) }
-                            Text(agent.displayName).font(.caption)
+                        AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent), showsName: true) {
+                            window.sheet = .editAgent(agent)
                         }
                         .padding(.trailing, 4)
                     }
