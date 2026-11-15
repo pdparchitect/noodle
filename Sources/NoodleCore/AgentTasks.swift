@@ -208,3 +208,22 @@ extension WorkspaceRepository {
         return value
     }
 }
+
+extension AgentTask {
+    /// Open tasks as every app lists them: those waiting on the person first, then the ones in progress, then those
+    /// waiting on someone else, the most recently changed first within each. Archived bots' tasks are left out.
+    public static func openList(_ tasks: [(agent: AgentRecord, tasks: [AgentTask])],
+                                waitingOnMeOnly: Bool) -> [(agent: AgentRecord, task: AgentTask)] {
+        func rank(_ task: AgentTask) -> Int { task.waitingOn == .user ? 0 : task.state == .open ? 1 : 2 }
+        return tasks.filter { $0.agent.archivedAt == nil }.flatMap { entry in
+            entry.tasks.filter { waitingOnMeOnly ? $0.state == .waiting && $0.waitingOn == .user : !$0.state.isFinished }
+                .map { (agent: entry.agent, task: $0) }
+        }.sorted { (rank($0.task), $1.task.updatedAt) < (rank($1.task), $0.task.updatedAt) }
+    }
+
+    /// Where a task's conversation is: its own, or else the person's direct one with its bot.
+    public func conversationID(in conversations: [BotConversation], agentID: UUID) -> UUID? {
+        if let id = conversationID, conversations.contains(where: { $0.id == id }) { return id }
+        return conversations.first { $0.kind == .direct && $0.participantIDs == [agentID] }?.id
+    }
+}

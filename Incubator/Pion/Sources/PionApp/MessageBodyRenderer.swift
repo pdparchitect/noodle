@@ -64,20 +64,6 @@ import SwiftUI
         return result
     }
 
-    private static func markdown(_ text: String) -> AttributedString {
-        var rendered = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                                                                             failurePolicy: .returnPartiallyParsedIfPossible)))
-            ?? AttributedString(text)
-        // Collect ranges before editing attributes, so changing a run cannot invalidate iteration.
-        let unsafeLinks = rendered.runs.compactMap { run in
-            run.link.map { ["http", "https", "mailto"].contains($0.scheme?.lowercased() ?? "") } == false ? run.range : nil
-        }
-        let code = rendered.runs.compactMap { $0.inlinePresentationIntent?.contains(.code) == true ? $0.range : nil }
-        for range in unsafeLinks { rendered[range].link = nil }
-        for range in code {
-            rendered[range].font = .system(size: 12.5, design: .monospaced)
-            rendered[range].backgroundColor = Color.secondary.opacity(0.12)
-        }
-        return rendered
-    }
+    /// Noodle's own Markdown, so prose, links and inline code read the same in both apps.
+    private static func markdown(_ text: String) -> AttributedString { MessageMarkdownCache.render(text) }
 }

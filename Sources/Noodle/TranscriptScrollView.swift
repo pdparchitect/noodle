@@ -257,3 +257,8 @@ struct TranscriptScrollView<Content: View>: View {
         if let viewport = viewportRecorder.lastUserViewport { saveViewport(viewport) }
     }
 }
+
+extension Notification.Name {
+    /// Asks the transcript showing a message to scroll to it, as after a click on its notification.
+    static let revealTranscriptMessage = Notification.Name("revealTranscriptMessage")
+}

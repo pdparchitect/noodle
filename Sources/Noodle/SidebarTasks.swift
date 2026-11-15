@@ -1,12 +1,22 @@
 import SwiftUI
 import HubLink
 import NoodleCore
-import NoodleRuntimeSettings
+
+/// What the Tasks section needs from the app whose bots keep tasks.
+@MainActor protocol AgentTaskHost: AnyObject {
+    func openTasks(waitingOnMeOnly: Bool) -> [(agent: AgentRecord, task: AgentTask)]
+    func taskAgentName(_ id: UUID) -> String?
+    /// The bot's picture, 22 points across.
+    func taskAvatar(_ agent: AgentRecord) -> AnyView
+    func openConversation(for task: AgentTask, of agentID: UUID)
+    func sendFeedback(_ text: String, on task: AgentTask, of agentID: UUID) throws
+    func reportTaskError(_ message: String)
+}
 
 /// The sidebar's Tasks section: a few tasks, then a link to the rest. Clicking a task opens a
 /// popover for writing to its bot about it, never a control that changes the task.
 struct SidebarTasks: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any AgentTaskHost
     let filter: TaskListFilter
     /// In a list, a collapsible section; in the icon grid, plain rows under a title.
     let inList: Bool
@@ -41,7 +51,7 @@ struct SidebarTasks: View {
     @ViewBuilder
     private func rows(_ shown: [(agent: AgentRecord, task: AgentTask)], total: Int) -> some View {
         ForEach(shown, id: \.task.id) { entry in
-            TaskRow(agent: entry.agent, task: entry.task)
+            TaskRow(store: store, agent: entry.agent, task: entry.task)
                 .selectionDisabled()
                 .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
         }
@@ -54,14 +64,14 @@ struct SidebarTasks: View {
 }
 
 private struct TaskRow: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any AgentTaskHost
     let agent: AgentRecord
     let task: AgentTask
     @State private var isPresented = false
 
     var body: some View {
         HStack(spacing: 8) {
-            BotAvatar(agent: agent, size: 22)
+            store.taskAvatar(agent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(task.title)
                     .lineLimit(1)
@@ -81,7 +91,7 @@ private struct TaskRow: View {
         .help(task.note ?? task.title)
         .accessibilityAddTraits(.isButton)
         .popover(isPresented: $isPresented, arrowEdge: .trailing) {
-            TaskFeedbackPopover(agent: agent, task: task) { isPresented = false }
+            TaskFeedbackPopover(store: store, agent: agent, task: task) { isPresented = false }
         }
     }
 }
@@ -89,7 +99,7 @@ private struct TaskRow: View {
 /// Writing to a bot about one of its tasks. The words go to the task's conversation, carrying the
 /// task, and the bot moves the task on.
 private struct TaskFeedbackPopover: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any AgentTaskHost
     let agent: AgentRecord
     let task: AgentTask
     let dismiss: () -> Void
@@ -119,7 +129,7 @@ private struct TaskFeedbackPopover: View {
                 .focused($isFocused)
             HStack {
                 Button("Open Conversation") {
-                    if let id = store.conversationID(for: task, of: agent.id) { store.selectedConversationID = id }
+                    store.openConversation(for: task, of: agent.id)
                     dismiss()
                 }
                 .buttonStyle(.link)
@@ -129,7 +139,7 @@ private struct TaskFeedbackPopover: View {
                         try store.sendFeedback(text, on: task, of: agent.id)
                         dismiss()
                     } catch {
-                        store.errorMessage = error.localizedDescription
+                        store.reportTaskError(error.localizedDescription)
                     }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
@@ -144,7 +154,7 @@ private struct TaskFeedbackPopover: View {
 
 @MainActor
 enum TaskState {
-    static func line(for task: AgentTask, store: NoodleStore) -> String {
+    static func line(for task: AgentTask, store: any AgentTaskHost) -> String {
         switch task.state {
         case .open: return "In progress"
         case .done: return "Done"
@@ -152,7 +162,7 @@ enum TaskState {
         case .waiting:
             switch task.waitingOn {
             case .user: return "Waiting on you"
-            case .agent(let id): return "Waiting on \(store.agents.first { $0.id == id }?.displayName ?? "a bot")"
+            case .agent(let id): return "Waiting on \(store.taskAgentName(id) ?? "a bot")"
             case .system, nil: return "Waiting"
             }
         }
@@ -165,5 +175,20 @@ enum TaskState {
         case .done: "checkmark.circle"
         case .dropped: "xmark.circle"
         }
+    }
+}
+
+/// Time for today, day and month for this year, and the year only when it differs.
+enum SidebarTimestamp {
+    static func text(
+        for date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
+    ) -> String {
+        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        if calendar.isDate(date, inSameDayAs: now) {
+            return date.formatted(style.hour().minute())
+        }
+        style = style.day().month(.abbreviated)
+        if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
+        return date.formatted(style)
     }
 }

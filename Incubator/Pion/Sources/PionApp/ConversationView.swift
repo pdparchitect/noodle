@@ -388,10 +388,13 @@ struct MessageRow: View {
                 HStack {
                     Spacer(minLength: 120)
                     VStack(alignment: .trailing, spacing: 4) {
+                        // Written from a task in the sidebar.
+                        if let task = message.task { MessageTaskLabel(task: task) }
                         MessageBody(text: message.body, message: message, fills: false)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
+                            .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
                         linkPreview
                         files
                         HStack(spacing: 6) {
@@ -409,6 +412,7 @@ struct MessageRow: View {
                     if !continues { header }
                     MessageBody(text: message.body, message: message)
                         .padding(.leading, 30)
+                        .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
                     linkPreview.padding(.leading, 30)
                     files.padding(.leading, 30)
                 }
@@ -420,18 +424,34 @@ struct MessageRow: View {
         .padding(.horizontal, 28)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .contextMenu {
-            Button("Copy", systemImage: "doc.on.doc") { copyText(message.body) }
-            if let agent = authorAgent {
-                Divider()
-                Button("Show Activity", systemImage: "list.bullet.rectangle") { model.showActivity(for: agent) }
-                Button("Edit Agent…", systemImage: "pencil") { window.sheet = .editAgent(agent) }
-            }
-        }
+        // Noodle's message menu: react, copy, then Pion's own items for the agent who wrote it.
+        .background(MessageContextMenu(
+            selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
+            react: { model.toggleReaction($0, on: message) },
+            copy: { copyText(message.body) },
+            preview: nil, reveal: nil,
+            more: authorAgent.map { agent in [
+                .init(title: "Show Activity", symbol: "list.bullet.rectangle") { model.showActivity(for: agent) },
+                .init(title: "Edit Agent…", symbol: "pencil") { window.sheet = .editAgent(agent) },
+            ] } ?? []))
     }
 
     private var authorAgent: AgentRecord? {
         if case .agent(let id) = message.author { model.agent(id) } else { nil }
+    }
+
+    /// Noodle's reaction badges, in the corner of the message.
+    @ViewBuilder private var reactions: some View {
+        if !(message.reactions ?? []).isEmpty {
+            MessageReactionBadges(message: message, name: { author in
+                switch author {
+                case .user: "You"
+                case .agent(let id): model.agent(id)?.displayName ?? "Agent"
+                case .system: pionAppName
+                }
+            }, change: { model.changeReaction($0, to: $1, on: message) }, remove: { model.removeReaction($0, on: message) })
+                .fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     /// Noodle's card for the first web page a message links to, unless that page is already attached.

@@ -1,5 +1,5 @@
 import AppKit
-import HubWire
+import HubLink
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -81,6 +81,7 @@ struct Sidebar: View {
     @State private var closedLimit = SidebarOptions.closedShown
     @FocusState private var searchFocused: Bool
     @SceneStorage("PionClosedExpanded") private var closedExpanded = true
+    @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
 
     var body: some View {
         @Bindable var model = model
@@ -97,6 +98,8 @@ struct Sidebar: View {
                         .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
                 }
             } else {
+                // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
+                SidebarTasks(store: model, filter: taskFilter, inList: true)
                 // A section shows only once it has something in it.
                 if !active.isEmpty {
                 Section {
@@ -377,4 +380,11 @@ struct AgentRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
+}
+
+extension PionModel: AgentTaskHost {
+    func taskAgentName(_ id: UUID) -> String? { agent(id)?.displayName }
+    func taskAvatar(_ agent: AgentRecord) -> AnyView { AnyView(AgentMark(agent: agent, size: 22)) }
+    func openConversation(for task: AgentTask, of agentID: UUID) { selection = conversationID(for: task, of: agentID) }
+    func reportTaskError(_ message: String) { problem = message }
 }

@@ -88,7 +88,7 @@ private struct SidebarList: View {
                 // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        SidebarTasks(filter: taskFilter, inList: false)
+                        SidebarTasks(store: store, filter: taskFilter, inList: false)
                         grid("Pinned", sections.pinned)
                         grid("Unread", sections.unread)
                         grid("Bots", sections.bots)
@@ -99,7 +99,7 @@ private struct SidebarList: View {
                 }
             } else {
                 List(selection: Binding(get: { store.selectedConversationID }, set: select)) {
-                    SidebarTasks(filter: taskFilter, inList: true)
+                    SidebarTasks(store: store, filter: taskFilter, inList: true)
                     section("Pinned", sections.pinned) { $0 }
                     section("Unread", sections.unread) { $0 }
                     section("Bots", sections.bots) { $0 }
@@ -582,20 +582,6 @@ struct SidebarIconLabel: Equatable {
     }
 }
 
-/// Time for today, day and month for this year, and the year only when it differs.
-enum SidebarTimestamp {
-    static func text(
-        for date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
-    ) -> String {
-        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        if calendar.isDate(date, inSameDayAs: now) {
-            return date.formatted(style.hour().minute())
-        }
-        style = style.day().month(.abbreviated)
-        if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
-        return date.formatted(style)
-    }
-}
 
 
 /// View › Sidebar › Space Picker: the shown space in the sidebar's toolbar, beside the window's buttons, to

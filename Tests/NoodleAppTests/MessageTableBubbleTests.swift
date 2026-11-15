@@ -151,11 +151,11 @@ import HubLink
         let body = "Here you go:\n\n| Day | Messages |\n|---|---|\n| Sep 1 | 4 |\n\nAll **quiet**."
         let message = ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id), body: body, delivery: .delivered)
         // Notifications take plain text only, so the Markdown goes too.
-        XCTAssertEqual(NoodleNotifications.content(message: message, from: f.a, in: f.directA).body,
+        XCTAssertEqual(AgentNotifications.content(message: message, from: f.a, in: f.directA).body,
                        "Here you go:\nAll quiet.")
         let tableOnly = ChatMessage(conversationID: f.directA.id, author: .agent(f.a.id),
                                     body: "| A |\n|---|\n| 1 |", delivery: .delivered)
-        XCTAssertEqual(NoodleNotifications.content(message: tableOnly, from: f.a, in: f.directA).body, "Sent a table")
+        XCTAssertEqual(AgentNotifications.content(message: tableOnly, from: f.a, in: f.directA).body, "Sent a table")
 
         _ = try f.repository.sendUserMessage(conversationID: f.directB.id, body: body)
         f.store.refreshTranscripts()

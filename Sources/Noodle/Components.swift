@@ -282,8 +282,6 @@ struct MessageBubble: View {
     @Environment(\.isNarrowTranscript) private var isNarrowTranscript
     @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
     @AppStorage(MessageTextLayout.defaultsKey) private var textLayout = MessageTextLayout.defaultValue.rawValue
-    @State private var inspectedReaction: String?
-    @State private var changingReaction = false
     @State private var isVisible = false
     /// The voice message whose transcript is open.
     @State private var transcriptAttachmentID: UUID?
@@ -370,12 +368,7 @@ struct MessageBubble: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: Self.contentSpacing) {
                 // Written from a task in the sidebar.
-                if let task = message.task {
-                    Label(task.title, systemImage: "checklist")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                if let task = message.task { MessageTaskLabel(task: task) }
                 if showsTextBubble(attachments: attachments) {
                     // Tables and the long message layout split the text into separate bubbles;
                     // reactions mark the first.
@@ -491,7 +484,13 @@ struct MessageBubble: View {
 
     @ViewBuilder private var cornerReactions: some View {
         if hasReactions {
-            reactionBadges
+            MessageReactionBadges(message: message, name: { author in
+                switch author {
+                case .user: "You"
+                case .agent(let id): store.agents.first { $0.id == id }?.displayName ?? "Bot"
+                case .system: "Noodle"
+                }
+            }, change: { store.changeReaction($0, to: $1, on: message) }, remove: { store.removeReaction($0, on: message) })
                 .fixedSize(horizontal: true, vertical: false)
                 .offset(x: 5, y: -Self.reactionOverhang)
         }
@@ -549,93 +548,6 @@ struct MessageBubble: View {
                 return { forwardAttachment(item) }
             }
         )
-    }
-
-    private var reactionBadges: some View {
-        let groups = Dictionary(grouping: message.reactions ?? [], by: \.emoji)
-        let emojis = (message.reactions ?? []).map(\.emoji).reduce(into: [String]()) {
-            if !$0.contains($1) { $0.append($1) }
-        }
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: -6) { badges(emojis, groups: groups) }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 48))], alignment: .leading, spacing: 4) {
-                badges(emojis, groups: groups)
-            }
-            .frame(maxWidth: 280)
-        }
-    }
-
-    @ViewBuilder private func badges(_ emojis: [String], groups: [String: [MessageReaction]]) -> some View {
-        ForEach(emojis, id: \.self) { emoji in
-            let reactions = groups[emoji] ?? []
-            let isMine = reactions.contains { $0.author == .user }
-            let names = reactions.map { reaction in
-                switch reaction.author {
-                case .user: return "You"
-                case .agent(let id): return store.agents.first { $0.id == id }?.displayName ?? "Bot"
-                case .system: return "Noodle"
-                }
-            }.joined(separator: ", ")
-            Button {
-                changingReaction = false
-                inspectedReaction = emoji
-            } label: {
-                HStack(spacing: 4) {
-                    Text(emoji).font(.system(size: 14))
-                    if reactions.count > 1 {
-                        Text("\(reactions.count)").font(.system(size: 10, weight: .medium))
-                    }
-                }
-                .padding(.horizontal, reactions.count > 1 ? 7 : 0)
-                .frame(minWidth: 28, minHeight: 28)
-                .background(isMine ? Color.accentColor.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
-                // An opaque base keeps overlapping badges distinct instead of blending together.
-                .background(Color(nsColor: .windowBackgroundColor), in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(Color(nsColor: .textBackgroundColor).opacity(0.85), lineWidth: 1.5)
-                }
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: Binding(
-                get: { inspectedReaction == emoji },
-                set: { if !$0 { inspectedReaction = nil } }
-            ), arrowEdge: .bottom) {
-                VStack(spacing: 16) {
-                    Text(emoji).font(.system(size: 26))
-                    Text(names).font(.system(size: 13))
-                        .multilineTextAlignment(.center)
-                    if isMine {
-                        Divider()
-                        if changingReaction {
-                            Text("Change Reaction").font(.caption).foregroundStyle(.secondary)
-                            LazyVGrid(columns: Array(repeating: GridItem(.fixed(36)), count: 6), spacing: 10) {
-                                ForEach(["❤️", "👍", "👎", "😂", "🎉", "❓", "👀", "⏳", "✅", "🙏", "🔥", "💡"], id: \.self) { replacement in
-                                    Button {
-                                        inspectedReaction = nil
-                                        store.changeReaction(emoji, to: replacement, on: message)
-                                    } label: {
-                                        Text(replacement).font(.system(size: 22)).frame(width: 36, height: 36)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Change to \(replacement)")
-                                }
-                            }
-                        } else {
-                            Button("Change Reaction…") { changingReaction = true }
-                        }
-                        Button("Remove My Reaction") {
-                            inspectedReaction = nil
-                            store.removeReaction(emoji, on: message)
-                        }
-                    }
-                }
-                .frame(width: 260)
-                .padding(20)
-            }
-            .help("\(emoji) — \(names). Click to see who reacted.")
-            .accessibilityLabel("\(emoji), \(names)")
-        }
     }
 }
 

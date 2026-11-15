@@ -4,6 +4,8 @@
 
 ### Added
 
+- Reactions, as in Noodle: agents' reactions such as 👀, ⏳ and ✅ show on their messages, and right-clicking a message reacts, with More Emoji…; clicking a reaction shows who reacted and lets you change or remove yours.
+- Tasks, as in Noodle: View › Sidebar can list the agents' tasks above the conversations, all open ones or only those waiting on you. Clicking one writes to its agent about it, and that message is labelled with the task.
 - As in Noodle, the conversation's toolbar says why an agent doesn't answer and offers Sign In, Unsuspend or Kick, and an agent's menu in the sidebar has Organize, Kick and New Session.
 - Pasting a picture or file into the message field attaches it, and so does long text; Edit › Paste as Attachment (⌥⌘V) attaches any text, as in Noodle.
 - The Dock shows how many conversations wait for you, as in Noodle: muted groups never count, and a group set to mentions counts once a reply names you.
@@ -18,6 +20,7 @@
 
 ### Changed
 
+- Removing an agent from a team or group asks first, as in Noodle, and inline code in messages reads as in Noodle.
 - A notice such as an agent moving to another harness, or someone joining a group, shows as Noodle's small centred note instead of a message from Pion.
 - The microphone and ⇧⌘D send voice messages, as in Noodle: the recording, with its transcript, goes to the conversation, and agents hear what was said. They used to dictate into the message field. In Settings › Keybindings the shortcut is now Record / Stop Voice Message.
 - Pion has no conversation picker: Conversation › Choose Conversation and its ⌃⌥Space shortcut are gone, as is its row in Settings › Keybindings. The sidebar and Search Conversations find conversations; a conversation in a window of its own has no search.

@@ -250,9 +250,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         #if NOODLE_DEV_HOOKS
         // A new bundle identifier would ask for notification permission over the screenshot.
-        if ScenarioSession.active == nil { NoodleNotifications.configure(delegate: self) }
+        if ScenarioSession.active == nil { AgentNotifications.configureForNoodle(delegate: self) }
         #else
-        NoodleNotifications.configure(delegate: self)
+        AgentNotifications.configureForNoodle(delegate: self)
         #endif
         // A migration milestone must finish before Sparkle can offer its successor.
         if NoodleStore.active?.storageReady == true { AppUpdater.shared.start() }
@@ -300,14 +300,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let signIn = notification.request.content.userInfo[NoodleNotifications.signInKey] != nil
-        // A ringing call only rings, in front or not: its panel shows who calls.
-        let call = notification.request.content.userInfo[NoodleNotifications.callKey] != nil
-        Task { @MainActor in
-            completionHandler(
-                call ? [.sound] : signIn || NoodleNotifications.shouldPresentActivity ? [.banner, .sound] : []
-            )
-        }
+        Task { @MainActor in completionHandler(AgentNotifications.presentation(of: notification)) }
     }
 
     nonisolated func userNotificationCenter(
@@ -315,10 +308,8 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
-        let conversationID = (userInfo[NoodleNotifications.conversationIDKey] as? String).flatMap(UUID.init)
-        let messageID = (userInfo[NoodleNotifications.messageIDKey] as? String).flatMap(UUID.init)
-        let signIn = userInfo[NoodleNotifications.signInKey] != nil
+        let click = AgentNotifications.click(in: response)
+        let conversationID = click.conversationID, messageID = click.messageID, signIn = click.isSignIn
 
         Task { @MainActor in
             if signIn {

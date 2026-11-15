@@ -1,13 +1,24 @@
 import SwiftUI
 import NoodleCore
-import NoodleRuntimeSettings
 
-/// The same add/remove interface is used when creating and editing a group.
+/// What the picker calls the bots and the group they join.
+struct GroupMemberWords {
+    var bot = "bot"
+    var bots = "bots"
+    var group = "group"
+}
+
+/// The same add/remove interface is used when creating and editing a group, in every app.
 struct GroupMemberPicker: View {
     let agents: [AgentRecord]
     @Binding var selectedIDs: Set<UUID>
     /// The group's lead, made from a member's context menu; nil where a group can have no lead.
     var lead: Binding<UUID?>? = nil
+    var words = GroupMemberWords()
+    /// A member in the grid, 48 points across, opening its profile.
+    let member: (AgentRecord) -> AnyView
+    /// A bot in the list to add from, 32 points across.
+    let chooserPicture: (AgentRecord) -> AnyView
     @State private var showingAdd = false
     @State private var search = ""
     @State private var memberPendingRemoval: AgentRecord?
@@ -26,11 +37,11 @@ struct GroupMemberPicker: View {
                 Text("Members").font(.caption.weight(.semibold))
                 Spacer()
                 Button { search = ""; showingAdd = true } label: {
-                    Label("Add Bots", systemImage: "plus")
+                    Label("Add \(words.bots.capitalized)", systemImage: "plus")
                 }
                 .disabled(addable.allSatisfy { selectedIDs.contains($0.id) })
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
-                    GroupMemberChooser(agents: addable, selectedIDs: $selectedIDs, search: $search)
+                    GroupMemberChooser(agents: addable, selectedIDs: $selectedIDs, search: $search, words: words, picture: chooserPicture)
                 }
             }
             ScrollView {
@@ -38,7 +49,7 @@ struct GroupMemberPicker: View {
                     Button { search = ""; showingAdd = true } label: {
                         VStack(spacing: 10) {
                             Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle)
-                            Text("Add bots to this group")
+                            Text("Add \(words.bots) to this \(words.group)")
                         }
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -47,14 +58,13 @@ struct GroupMemberPicker: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(addable.isEmpty)
-                    .help("Add Bots")
-                    .accessibilityLabel("Add bots to this group")
+                    .help("Add \(words.bots.capitalized)")
+                    .accessibilityLabel("Add \(words.bots) to this \(words.group)")
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
                         ForEach(selected) { agent in
                             VStack(spacing: 8) {
-                                AgentProfileButton(agent: agent, size: 48, showsShadow: true,
-                                    opensMessageInSeparateWindow: true)
+                                member(agent)
                                     .grayscale(agent.archivedAt == nil ? 0 : 1)
                                     .accessibilityValue(agent.archivedAt == nil ? "" : "Archived")
                                     .overlay(alignment: .topTrailing) {
@@ -68,8 +78,8 @@ struct GroupMemberPicker: View {
                                         }
                                         .buttonStyle(.plain)
                                         .offset(x: 10, y: -8)
-                                        .help("Remove \(agent.displayName) from group")
-                                        .accessibilityLabel("Remove \(agent.displayName) from group")
+                                        .help("Remove \(agent.displayName) from \(words.group)")
+                                        .accessibilityLabel("Remove \(agent.displayName) from \(words.group)")
                                     }
                                 Text(agent.displayName)
                                     .font(.caption)
@@ -102,7 +112,7 @@ struct GroupMemberPicker: View {
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         }
         .confirmationDialog(
-            "Remove \(memberPendingRemoval?.displayName ?? "bot") from group?",
+            "Remove \(memberPendingRemoval?.displayName ?? words.bot) from \(words.group)?",
             isPresented: Binding(
                 get: { memberPendingRemoval != nil },
                 set: { if !$0 { memberPendingRemoval = nil } }
@@ -110,7 +120,7 @@ struct GroupMemberPicker: View {
             titleVisibility: .visible,
             presenting: memberPendingRemoval
         ) { agent in
-            Button("Remove from Group", role: .destructive) {
+            Button("Remove from \(words.group.capitalized)", role: .destructive) {
                 selectedIDs.remove(agent.id)
                 if lead?.wrappedValue == agent.id { lead?.wrappedValue = nil }
             }
@@ -123,6 +133,8 @@ struct GroupMemberChooser: View {
     let agents: [AgentRecord]
     @Binding var selectedIDs: Set<UUID>
     @Binding var search: String
+    var words = GroupMemberWords()
+    let picture: (AgentRecord) -> AnyView
 
     private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
     private var available: [AgentRecord] {
@@ -134,7 +146,7 @@ struct GroupMemberChooser: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            TextField("Search bots", text: $search)
+            TextField("Search \(words.bots)", text: $search)
                 .textFieldStyle(.roundedBorder)
             ScrollView {
                 LazyVStack(spacing: 4) {
@@ -143,7 +155,7 @@ struct GroupMemberChooser: View {
                             selectedIDs.insert(agent.id)
                         } label: {
                             HStack(spacing: 12) {
-                                BotAvatar(agent: agent, size: 32)
+                                picture(agent)
                                 Text(agent.displayName).foregroundStyle(Color.primary)
                                 Spacer()
                                 Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
@@ -152,10 +164,10 @@ struct GroupMemberChooser: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Add \(agent.displayName) to group")
+                        .accessibilityLabel("Add \(agent.displayName) to \(words.group)")
                     }
                     if available.isEmpty {
-                        Text(selected.count == agents.count ? "All bots added" : "No matching bots")
+                        Text(selected.count == agents.count ? "All \(words.bots) added" : "No matching \(words.bots)")
                             .foregroundStyle(.secondary).padding()
                     }
                 }

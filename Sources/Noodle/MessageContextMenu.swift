@@ -25,6 +25,14 @@ struct MessageContextMenu: NSViewRepresentable {
     var saveTable: (() -> Void)? = nil
     /// For a file: sends it on to another bot or group.
     var forward: (() -> Void)? = nil
+    /// The app's own items, after the message's, such as showing the author's activity.
+    var more: [Item] = []
+
+    struct Item {
+        let title: String
+        let symbol: String
+        let action: () -> Void
+    }
 
     func makeNSView(context: Context) -> MenuHost { MenuHost() }
 
@@ -47,7 +55,7 @@ struct MessageContextMenu: NSViewRepresentable {
             let menu = NSMenu()
             menu.autoenablesItems = false
             actions = []
-            for emojis in [["❤️", "👍", "👎", "😂", "🎉", "❓"], ["👀", "⏳", "✅", "🙏", "🔥", "💡"]] {
+            for emojis in MessageReactionChoices.rows {
                 let item = NSMenuItem()
                 item.view = EmojiRow(emojis: emojis, selected: configuration.selected) { [weak menu] emoji in
                     menu?.cancelTracking()
@@ -83,6 +91,10 @@ struct MessageContextMenu: NSViewRepresentable {
             }
             if let forward = configuration.forward {
                 addItem("Forward…", symbol: "arrowshape.turn.up.right", to: menu, action: forward)
+            }
+            if !configuration.more.isEmpty {
+                menu.addItem(.separator())
+                for item in configuration.more { addItem(item.title, symbol: item.symbol, to: menu, action: item.action) }
             }
             // Inspect only when opening the menu, not while scrolling the transcript.
             // Decode detection also covers real images with generic attachment MIME types.

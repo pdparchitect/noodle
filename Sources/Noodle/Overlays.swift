@@ -1139,3 +1139,19 @@ private struct GroupDescriptionEditor: View {
         }
     }
 }
+
+extension GroupMemberPicker {
+    /// Noodle's: each member opens its profile, and messaging it opens a window of its own beside the sheet.
+    init(agents: [AgentRecord], selectedIDs: Binding<Set<UUID>>, lead: Binding<UUID?>? = nil) {
+        self.init(agents: agents, selectedIDs: selectedIDs, lead: lead,
+                  member: { AnyView(AgentProfileButton(agent: $0, size: 48, showsShadow: true, opensMessageInSeparateWindow: true)) },
+                  chooserPicture: { AnyView(BotAvatar(agent: $0, size: 32)) })
+    }
+}
+
+extension GroupMemberChooser {
+    /// Noodle's: each bot by its picture.
+    init(agents: [AgentRecord], selectedIDs: Binding<Set<UUID>>, search: Binding<String>) {
+        self.init(agents: agents, selectedIDs: selectedIDs, search: search, picture: { AnyView(BotAvatar(agent: $0, size: 32)) })
+    }
+}

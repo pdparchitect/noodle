@@ -40,125 +40,13 @@ struct ConversationChoiceRow: View {
     }
 }
 
-/// The team as Noodle shows a group's members: marks in a grid, each removable, with more added from
-/// a searchable list. A member's context menu makes it the lead, which is then marked as such.
-struct AgentMemberPicker: View {
-    let model: PionModel
-    @Binding var selection: Set<UUID>
-    @Binding var lead: UUID?
-    @State private var adding = false
-    @State private var search = ""
-
-    /// The lead first, as Noodle lists a group's members; the rest keep their order.
-    private var members: [AgentRecord] {
-        let chosen = model.agents.filter { selection.contains($0.id) }
-        return chosen.filter { $0.id == lead } + chosen.filter { $0.id != lead }
-    }
-    private var available: [AgentRecord] {
-        model.agents.filter { !selection.contains($0.id)
-            && (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search)) }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Members").font(.caption.weight(.semibold))
-                Spacer()
-                Button { search = ""; adding = true } label: { Label("Add Agents", systemImage: "plus") }
-                    .disabled(model.agents.allSatisfy { selection.contains($0.id) })
-                    .popover(isPresented: $adding, arrowEdge: .bottom) { chooser }
-            }
-            ScrollView {
-                if members.isEmpty {
-                    Button { search = ""; adding = true } label: {
-                        VStack(spacing: 10) {
-                            Image(systemName: "person.crop.circle.badge.plus").font(.largeTitle)
-                            Text("Add agents to the team")
-                        }
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 32)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12, alignment: .top)], spacing: 16) {
-                        ForEach(members) { agent in
-                            VStack(spacing: 6) {
-                                AgentProfileButton(model: model, agent: agent, size: 44, inSheet: true)
-                                    .overlay(alignment: .topTrailing) {
-                                        Button {
-                                            selection.remove(agent.id)
-                                            if lead == agent.id { lead = nil }
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 16))
-                                                .symbolRenderingMode(.palette)
-                                                .foregroundStyle(.white, Color(nsColor: .darkGray))
-                                                .padding(4)
-                                                .contentShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .offset(x: 10, y: -8)
-                                        .help("Remove \(agent.displayName)")
-                                        .accessibilityLabel("Remove \(agent.displayName)")
-                                    }
-                                Text(agent.displayName).font(.caption).lineLimit(2).multilineTextAlignment(.center)
-                                if agent.id == lead {
-                                    Text("Lead").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                            .contextMenu {
-                                if agent.id == lead {
-                                    Button("Remove as Lead") { lead = nil }
-                                } else {
-                                    Button("Make Lead") { lead = agent.id }
-                                }
-                            }
-                        }
-                    }
-                    .padding(12)
-                }
-            }
-            // A few rows, then it scrolls rather than pushing the sheet past the window.
-            .frame(minHeight: 120, maxHeight: 260)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-        }
-    }
-
-    private var chooser: some View {
-        VStack(spacing: 12) {
-            TextField("Search agents", text: $search).textFieldStyle(.roundedBorder)
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(available) { agent in
-                        Button { selection.insert(agent.id) } label: {
-                            HStack(spacing: 10) {
-                                AgentMark(agent: agent, size: 28)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(agent.displayName).foregroundStyle(.primary)
-                                    if let description = agent.publicDescription {
-                                        Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    }
-                                }
-                                Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
-                            }
-                            .padding(8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Add \(agent.displayName)")
-                    }
-                    if available.isEmpty {
-                        Text(search.isEmpty ? "Every agent is on the team" : "No matching agents").foregroundStyle(.secondary).padding()
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .frame(width: 320, height: 300)
+/// Noodle's member picker, with Pion's words and agent marks.
+extension GroupMemberPicker {
+    init(model: PionModel, selection: Binding<Set<UUID>>, lead: Binding<UUID?>) {
+        self.init(agents: model.agents, selectedIDs: selection, lead: lead,
+                  words: GroupMemberWords(bot: "agent", bots: "agents", group: "team"),
+                  member: { AnyView(AgentProfileButton(model: model, agent: $0, size: 48, inSheet: true)) },
+                  chooserPicture: { AnyView(AgentMark(agent: $0, size: 32)) })
     }
 }
 
@@ -330,7 +218,7 @@ struct NewInvestigationSheet: View {
                                           footnote: "Shared with every agent on the team as the goal they work toward.")
                     FoldersSettingsRow(folders: $draft.folders, owner: .group)
                 case .team:
-                    AgentMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
+                    GroupMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
                     TeamFootnote(isNew: investigation == nil, setsSeverity: true)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $draft.memberTools)
@@ -414,7 +302,7 @@ struct GroupEditorSheet: View {
                                           footnote: "Shared with every agent in this group so they understand its purpose.")
                     FoldersSettingsRow(folders: $folders, owner: .group)
                 case .team:
-                    AgentMemberPicker(model: model, selection: $members, lead: $lead)
+                    GroupMemberPicker(model: model, selection: $members, lead: $lead)
                     TeamFootnote(isNew: group == nil, setsSeverity: false)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $memberTools)

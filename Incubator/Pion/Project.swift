@@ -154,6 +154,10 @@ let project = Project(
                 "../../Sources/Noodle/MessageMarkdownCache.swift",
                 "../../Sources/Noodle/MessageLinkPreview.swift",
                 "../../Sources/Noodle/MessageParts.swift",
+                "../../Sources/Noodle/MessageContextMenu.swift",
+                "../../Sources/Noodle/SidebarTasks.swift",
+                "../../Sources/Noodle/AgentNotifications.swift",
+                "../../Sources/Noodle/GroupMemberPicker.swift",
                 "../../Sources/Noodle/TranscriptScrollView.swift",
                 "../../Sources/Noodle/ConversationTransition.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
@@ -220,6 +224,7 @@ let project = Project(
             infoPlist: .default,
             // Test the model without launching the app or starting anyone's harnesses.
             sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift", "Sources/PionApp/MessageBodyRenderer.swift",
+                      "../../Sources/Noodle/MessageMarkdownCache.swift",
                       "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift", "Sources/PionApp/BackdropGames.swift",
                       "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),

@@ -1,5 +1,6 @@
 import AppKit
 import NoodleCore
+import NoodleRuntimeSettings
 import SwiftUI
 
 /// Calls bots place with `messenger --call`. They ring in a panel until the person answers or
@@ -120,13 +121,14 @@ extension NoodleStore {
     }
 }
 
-extension NoodleStore: VoiceCallHost, IncomingCallHost {
+extension NoodleStore: VoiceCallHost, IncomingCallHost, AgentTaskHost {
     func startCall(in conversation: BotConversation) { startVoiceCall(in: conversation) }
     func callerName(_ agentID: UUID) -> String? { agents.first { $0.id == agentID }?.displayName }
     func caller(_ agentID: UUID) -> AgentRecord? { agents.first { $0.id == agentID } }
     func answer(_ id: UUID) { answerCall(id) }
     func decline(_ id: UUID) { declineCall(id) }
     func callerPicture(_ agent: AgentRecord) -> AnyView { AnyView(ConversationAvatar(participants: [agent], isGroup: false, size: 44)) }
-    func ring(_ call: AgentCallRequest, from agent: AgentRecord) { NoodleNotifications.ring(call, from: agent) }
-    func stopRingingNotification() { NoodleNotifications.stopRinging() }
+    func taskAvatar(_ agent: AgentRecord) -> AnyView { AnyView(BotAvatar(agent: agent, size: 22)) }
+    func ring(_ call: AgentCallRequest, from agent: AgentRecord) { AgentNotifications.ring(call, from: agent) }
+    func stopRingingNotification() { AgentNotifications.stopRinging() }
 }

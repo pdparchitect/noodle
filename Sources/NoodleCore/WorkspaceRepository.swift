@@ -1607,6 +1607,24 @@ public struct WorkspaceRepository: Sendable {
     }
 
     @discardableResult
+    /// The person's reaction, picked again, comes off; otherwise it goes on.
+    public func togglePersonReaction(_ emoji: String, on message: ChatMessage) throws {
+        let latest = try loadMessages(conversationID: message.conversationID).first { $0.id == message.id }
+        let present = latest?.reactions?.contains { $0.author == .user && $0.emoji == emoji } ?? false
+        try setReaction(conversationID: message.conversationID, messageID: message.id, author: .user, emoji: emoji, present: !present)
+    }
+
+    /// Swaps the person's reaction for another, adding first so a failed write cannot lose the one they had.
+    public func changePersonReaction(_ emoji: String, to replacement: String, on message: ChatMessage) throws {
+        guard emoji != replacement else { return }
+        try setReaction(conversationID: message.conversationID, messageID: message.id, author: .user, emoji: replacement, present: true)
+        try setReaction(conversationID: message.conversationID, messageID: message.id, author: .user, emoji: emoji, present: false)
+    }
+
+    public func removePersonReaction(_ emoji: String, on message: ChatMessage) throws {
+        try setReaction(conversationID: message.conversationID, messageID: message.id, author: .user, emoji: emoji, present: false)
+    }
+
     public func setReaction(
         conversationID: UUID, messageID: UUID, author: MessageAuthor,
         emoji: String, present: Bool, now: Date = Date()

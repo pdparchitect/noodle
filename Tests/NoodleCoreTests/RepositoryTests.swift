@@ -1233,6 +1233,28 @@ final class RepositoryTests: XCTestCase {
         XCTAssertEqual(saved.reactionChanges?.last?.removed, true)
     }
 
+    /// The person's own reaction, as every app's message menu and badge change it: a second pick takes it back, a
+    /// change keeps others' reactions, and removing leaves the bot's.
+    func testThePersonsReactionTogglesChangesAndRemoves() throws {
+        let bot = try repository.createAgent(named: "Reactor")
+        let sent = try repository.sendAgentMessage(agentID: bot.agent.id, conversationID: bot.conversation.id, body: "Done")
+        try repository.setReaction(conversationID: bot.conversation.id, messageID: sent.id, author: .agent(bot.agent.id),
+                                   emoji: "👀", present: true)
+        func reactions() throws -> [String] {
+            try XCTUnwrap(repository.loadMessages(conversationID: bot.conversation.id).first { $0.id == sent.id })
+                .reactions?.map { "\($0.author == .user ? "me" : "bot") \($0.emoji)" }.sorted() ?? []
+        }
+        try repository.togglePersonReaction("👍", on: sent)
+        XCTAssertEqual(try reactions(), ["bot 👀", "me 👍"])
+        try repository.changePersonReaction("👍", to: "✅", on: sent)
+        XCTAssertEqual(try reactions(), ["bot 👀", "me ✅"])
+        try repository.togglePersonReaction("✅", on: sent)
+        XCTAssertEqual(try reactions(), ["bot 👀"])
+        try repository.togglePersonReaction("🔥", on: sent)
+        try repository.removePersonReaction("🔥", on: sent)
+        XCTAssertEqual(try reactions(), ["bot 👀"])
+    }
+
     func testReactionFeedbackOnReadAndOwnMessagesIsDeliveredOnce() throws {
         let bot = try repository.createAgent(named: "Builder")
         let sent = try repository.sendAgentMessage(agentID: bot.agent.id,

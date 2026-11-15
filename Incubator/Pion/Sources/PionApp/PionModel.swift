@@ -52,6 +52,8 @@ import UniformTypeIdentifiers
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
     private(set) var readUpTo: [UUID: UUID] = [:]
+    /// Each agent's tasks, as the messenger keeps them.
+    private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
     /// Whether the main window shows the welcome: offered once to someone with no agents, then from Help > Welcome.
     private(set) var showsWelcome = false
     /// How groups notify the champion, kept where Noodle keeps it.
@@ -103,6 +105,7 @@ import UniformTypeIdentifiers
                 if let conversation = UUID(uuidString: pair.key), let message = UUID(uuidString: pair.value) { result[conversation] = message }
             }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadPion() } }
+        messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
         messenger.onWakesChanged = { [weak self] id in
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
@@ -229,6 +232,7 @@ import UniformTypeIdentifiers
         reloadWorkspace()
         reloadPion()
         groupNotificationSettings = (try? repository.loadGroupNotifications()) ?? GroupNotificationSettings()
+        tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
     }
 
     private func reloadWorkspace() {
@@ -471,6 +475,9 @@ import UniformTypeIdentifiers
         let start = readUpTo[id].flatMap { read in messages.firstIndex { $0.id == read } }.map { $0 + 1 } ?? 0
         return messages[start...].filter { if case .agent = $0.author { true } else { false } }
     }
+
+    /// Tells the Dock again, as once notifications are allowed and the badge can show.
+    func refreshBadge() { badge = nil; updateBadge() }
 
     private func updateBadge() {
         let count = badgedConversationIDs.count
@@ -745,6 +752,50 @@ import UniformTypeIdentifiers
 
     /// Each conversation's voice recorder, kept while Pion runs so switching away does not lose a recording.
     @ObservationIgnored var voiceRecorders: [UUID: AnyObject] = [:]
+
+    // MARK: Tasks, listed and answered as in Noodle
+
+    func reloadTasks(of id: UUID) { tasksByAgent[id] = (try? repository.currentTasks(agentID: id)) ?? [] }
+
+    func openTasks(waitingOnMeOnly: Bool) -> [(agent: AgentRecord, task: AgentTask)] {
+        AgentTask.openList(agents.map { ($0, tasksByAgent[$0.id] ?? []) }, waitingOnMeOnly: waitingOnMeOnly)
+    }
+
+    func conversationID(for task: AgentTask, of agentID: UUID) -> UUID? {
+        task.conversationID(in: conversations, agentID: agentID)
+    }
+
+    /// Sends the champion's words about a task to its conversation, carrying the task so its agent knows which one
+    /// to move on. Only the agent changes the task.
+    func sendFeedback(_ text: String, on task: AgentTask, of agentID: UUID) throws {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty, let id = conversationID(for: task, of: agentID), let conversation = conversation(id) else { return }
+        _ = try repository.sendUserMessage(conversationID: id, body: body, task: TaskReference(task, agentID: agentID), now: now)
+        readTranscript(id, notifying: false)
+        markRead(id)
+        if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+    }
+
+    // MARK: Reactions, through Noodle's own rules
+
+    func toggleReaction(_ emoji: String, on message: ChatMessage) {
+        react(message) { try repository.togglePersonReaction(emoji, on: message) }
+    }
+
+    func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {
+        react(message) { try repository.changePersonReaction(emoji, to: replacement, on: message) }
+    }
+
+    func removeReaction(_ emoji: String, on message: ChatMessage) {
+        react(message) { try repository.removePersonReaction(emoji, on: message) }
+    }
+
+    private func react(_ message: ChatMessage, _ change: () throws -> Void) {
+        do {
+            try change()
+            readTranscript(message.conversationID, notifying: false)
+        } catch { problem = error.localizedDescription }
+    }
 
     /// Makes an agent the group's lead, or leaves it without one; the members are told in a notice.
     func setLead(_ agentID: UUID?, of conversation: BotConversation) {

@@ -1,4 +1,5 @@
 import AppKit
+import HubLink
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -272,11 +273,6 @@ struct PionCommands: Commands {
     }
 }
 
-extension Notification.Name {
-    /// Asks the transcript Pion shares with Noodle to scroll to a message; Noodle declares the same name in its own app.
-    static let revealTranscriptMessage = Notification.Name("Pion.revealTranscriptMessage")
-}
-
 /// View › Background › Frosted or Solid: whether the desktop shows through the window.
 enum WindowSurface: String {
     case frosted, solid
@@ -296,6 +292,7 @@ struct WindowSurfaceBackground: ViewModifier {
 /// View › Background (Frosted or Solid, and the effect) and View › Sidebar, kept per person as Noodle keeps its view options.
 struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
+    @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
@@ -320,6 +317,13 @@ struct ViewOptions: View {
         Divider()
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
+            Divider()
+            // As Noodle's: the agents' tasks above the conversations, or none.
+            Picker("Tasks", selection: $tasks) {
+                ForEach(TaskListFilter.allCases) { Text($0.menuName).tag($0) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
         }
     }
 }

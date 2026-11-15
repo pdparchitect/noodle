@@ -428,14 +428,14 @@ final class NoodleStore {
         }
         self.runtime.onSignInRequired = { [weak self] id in
             guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
-            NoodleNotifications.postSignInRequired(for: agent)
+            AgentNotifications.postSignInRequired(for: agent)
         }
         self.runtime.onPaused = { [weak self] id in
             guard let self, self.connectsServices, let agent = self.agents.first(where: { $0.id == id }) else { return }
             let snapshot = self.runtime.snapshot(for: id)
             guard let summary = snapshot.pauseSummary else { return }
             let conversation = self.conversations.first { $0.kind == .direct && $0.participantIDs == [id] }
-            NoodleNotifications.postPaused(agent, summary: summary, detail: snapshot.detail, conversationID: conversation?.id)
+            AgentNotifications.postPaused(agent, summary: summary, detail: snapshot.detail, conversationID: conversation?.id)
         }
         self.runtime.onHarnessSwitch = { [weak self] id, line in self?.postHarnessSwitch(line, agentID: id) }
         self.runtime.connectSignIns(setup: harnessSetup, profiles: harnessProfiles, repository: self.repository) { [weak self] in
@@ -940,7 +940,7 @@ final class NoodleStore {
     /// Takes back the replies a group showed in Notification Center.
     private func withdrawNotifications(of conversationID: UUID) {
         guard connectsServices else { return }
-        NoodleNotifications.withdraw(conversation: conversationID)
+        AgentNotifications.withdraw(conversation: conversationID)
     }
 
     /// Whether a conversation shows in Unread: unread, and not a muted group, whose row only dims its dot.
@@ -1327,19 +1327,21 @@ final class NoodleStore {
     /// then the ones in progress, then those waiting on someone else, the most recently changed first
     /// within each. A task is in the space when its conversation is.
     func openTasks(waitingOnMeOnly: Bool) -> [(agent: AgentRecord, task: AgentTask)] {
-        func rank(_ task: AgentTask) -> Int { task.waitingOn == .user ? 0 : task.state == .open ? 1 : 2 }
-        return agents.filter { $0.archivedAt == nil }.flatMap { agent in
-            (tasksByAgent[agent.id] ?? []).filter { waitingOnMeOnly ? $0.state == .waiting && $0.waitingOn == .user : !$0.state.isFinished }
-                .filter { task in conversationID(for: task, of: agent.id).map(spaceHolds) ?? false }
-                .map { (agent: agent, task: $0) }
-        }.sorted { (rank($0.task), $1.task.updatedAt) < (rank($1.task), $0.task.updatedAt) }
+        AgentTask.openList(agents.map { agent in
+            (agent, (tasksByAgent[agent.id] ?? []).filter { task in conversationID(for: task, of: agent.id).map(spaceHolds) ?? false })
+        }, waitingOnMeOnly: waitingOnMeOnly)
     }
 
     /// Where a task's conversation is: its own, or else the person's direct one with its bot.
     func conversationID(for task: AgentTask, of agentID: UUID) -> UUID? {
-        if let id = task.conversationID, conversations.contains(where: { $0.id == id }) { return id }
-        return conversations.first { $0.kind == .direct && $0.participantIDs == [agentID] }?.id
+        task.conversationID(in: conversations, agentID: agentID)
     }
+
+    func taskAgentName(_ id: UUID) -> String? { agents.first { $0.id == id }?.displayName }
+    func openConversation(for task: AgentTask, of agentID: UUID) {
+        if let id = conversationID(for: task, of: agentID) { selectedConversationID = id }
+    }
+    func reportTaskError(_ message: String) { errorMessage = message }
 
     /// Sends the person's words about a task to its conversation, carrying the task so its bot knows
     /// which one to move on. Only the bot changes the task.
@@ -2772,21 +2774,14 @@ final class NoodleStore {
 
     func toggleReaction(_ emoji: String, on message: ChatMessage) {
         do {
-            let latest = try repository.loadMessages(conversationID: message.conversationID)
-                .first { $0.id == message.id }
-            let hasReaction = latest?.reactions?.contains { $0.author == .user && $0.emoji == emoji } ?? false
-            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
-                                       author: .user, emoji: emoji, present: !hasReaction)
+            try repository.togglePersonReaction(emoji, on: message)
             refreshTranscripts()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        } catch { errorMessage = error.localizedDescription }
     }
 
     func removeReaction(_ emoji: String, on message: ChatMessage) {
         do {
-            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
-                                       author: .user, emoji: emoji, present: false)
+            try repository.removePersonReaction(emoji, on: message)
             refreshTranscripts()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -2867,14 +2862,8 @@ final class NoodleStore {
     }
 
     func changeReaction(_ emoji: String, to replacement: String, on message: ChatMessage) {
-        guard emoji != replacement else { return }
         do {
-            // Add first so a failed write cannot silently lose the existing reaction.
-            // Idempotent writes preserve an already-present replacement and other people's badges.
-            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
-                                       author: .user, emoji: replacement, present: true)
-            try repository.setReaction(conversationID: message.conversationID, messageID: message.id,
-                                       author: .user, emoji: emoji, present: false)
+            try repository.changePersonReaction(emoji, to: replacement, on: message)
             refreshTranscripts()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -2970,7 +2959,7 @@ final class NoodleStore {
         // A muted group is silent, and one in Mentions only speaks up only for the person's name.
         let messages = messages.filter(notifies)
         guard !messages.isEmpty else { return }
-        let presentsNotifications = NoodleNotifications.shouldPresentActivity
+        let presentsNotifications = AgentNotifications.shouldPresentActivity
         if MessageReceivedSound.playsInApp(newMessages: messages.count,
                                            presentsNotifications: presentsNotifications) {
             MessageReceivedSound.play()
@@ -2983,7 +2972,7 @@ final class NoodleStore {
                   let conversation = conversations.first(where: { $0.id == message.conversationID }) else {
                 continue
             }
-            NoodleNotifications.post(
+            AgentNotifications.post(
                 message: message,
                 from: agent,
                 in: conversation
