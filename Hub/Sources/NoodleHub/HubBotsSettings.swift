@@ -349,12 +349,19 @@ struct HubGroupsSettingsView: View {
     private func row(_ group: BotConversation, owner: UUID?, agents: [AgentRecord]) -> some View {
         let ownerName = owner.flatMap { id in host.hub.access.users.first { $0.id == id }?.name }
         let members = group.participantIDs.compactMap { id in agents.first { $0.id == id }?.displayName }.joined(separator: ", ")
+        let archived = group.archivedAt != nil
         return HStack(spacing: 12) {
+            // Every group has the same picture, so an archived one is dimmed rather than grayed.
             HubGroupProfileButton(host: host, group: group, owner: ownerName, members: members)
+                .opacity(archived ? 0.4 : 1)
+                .accessibilityValue(archived ? "Archived" : "")
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.displayName).lineLimit(1)
                 Text([ownerName, members.isEmpty ? nil : members].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if archived {
+                    Text("Archived").font(.caption).foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Toggle(isOn: Binding(get: { group.archivedAt != nil }, set: { host.setArchived($0, id: group.id) })) {
