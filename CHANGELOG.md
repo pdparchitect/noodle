@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Every sheet's top bar uses the same blue text buttons. New Tool, a tool's setup, Custom MCP, New Browser, New Computer, Hub sign-in, editing a Hub, Edit Spaces and the Hub's Archived, Users and Computers & Browsers lists had bordered buttons instead.
 - Suite Installer starts with every supported component selected, including Terminal, and lets you turn off any of them, including Noodle.
 - Noodle Installer offers its optional companions again; Suite Installer also offers Noodle Hub. Noodle and Hub disk images each contain only their respective app; the Suite disk image includes all released Mac apps and the Terminal command. Downloads list Noodle, Hub, then Suite.
 

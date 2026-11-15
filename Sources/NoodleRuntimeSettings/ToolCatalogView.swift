@@ -23,7 +23,7 @@ public struct ToolCatalogView: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Cancel", action: onCancel).buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
                 Spacer()
                 Text("New Tool").font(.headline)
                 Spacer()
@@ -227,7 +227,7 @@ private struct PresetSetUpForm: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Back", action: onBack).keyboardShortcut(.cancelAction)
+                Button("Back", action: onBack).buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
                 Spacer()
                 Text(tool.name).font(.headline)
                 Spacer()
@@ -238,6 +238,7 @@ private struct PresetSetUpForm: View {
                         try onAdd(name, values, secret)
                     } catch { self.error = error.localizedDescription }
                 }
+                .buttonStyle(.sheetHeader)
                 .disabled(!complete)
                 .keyboardShortcut(.defaultAction)
             }.padding(16)

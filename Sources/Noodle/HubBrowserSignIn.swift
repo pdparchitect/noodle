@@ -3,6 +3,7 @@ import HubLink
 import NoodleHubClient
 import NoodleSettingsUI
 import SwiftUI
+import NoodleRuntimeSettings
 
 /// Signing in to the page of a Hub bot's browser watched live in a panel, as on the iPhone: the header's
 /// Sign In… button asks the Hub once for the page's fields, and the live view shows them in a sheet.
@@ -67,11 +68,11 @@ struct HubBrowserSignInSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(working)
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction).disabled(working)
                 Spacer()
                 Text("Sign In").font(.headline)
                 Spacer()
-                Button("Fill", action: fill).keyboardShortcut(.defaultAction).disabled(working || entry.isEmpty)
+                Button("Fill", action: fill).buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction).disabled(working || entry.isEmpty)
             }.padding(16)
             Divider()
             Form {

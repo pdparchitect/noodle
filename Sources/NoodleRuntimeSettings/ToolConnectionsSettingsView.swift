@@ -218,14 +218,15 @@ public struct ToolConnectionEditor: View {
         VStack(spacing: 0) {
             HStack {
                 if let onBack {
-                    Button("Back", action: onBack)
+                    Button("Back", action: onBack).buttonStyle(.sheetHeader)
                 } else {
-                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
                 }
                 Spacer()
                 Text(existing != nil ? "Edit MCP" : "Custom MCP").font(.headline)
                 Spacer()
                 Button(existing == nil ? "Add & Connect" : "Save", action: save)
+                    .buttonStyle(.sheetHeader)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || endpoint.isEmpty || saving)
                     .keyboardShortcut(.defaultAction)
             }.padding(16)

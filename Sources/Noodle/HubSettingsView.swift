@@ -300,7 +300,7 @@ private struct HubArchivedSheet: View {
             HStack {
                 Text("Archived on \(hubName)").font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Done") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
             }
             .padding(16)
             Divider()
@@ -380,7 +380,7 @@ private struct HubCompanionsSheet: View {
             HStack {
                 Text("Computers & Browsers on \(hubName)").font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Done") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
             }
             .padding(16)
             if listed.count > 1 {
@@ -505,11 +505,11 @@ private struct HubCompanionEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(saving)
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction).disabled(saving)
                 Spacer()
                 Text(title).font(.headline)
                 Spacer()
-                Button("Save", action: submit).keyboardShortcut(.defaultAction)
+                Button("Save", action: submit).buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
                     .disabled(saving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(16)
             Divider()
@@ -567,7 +567,7 @@ private struct HubUsersSheet: View {
             HStack {
                 Text("Users on \(hubName)").font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Done") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
             }
             .padding(16)
             Divider()

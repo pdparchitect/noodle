@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import NoodleRuntimeSettings
 import HubLink
 import NoodleCore
 
@@ -220,6 +221,7 @@ struct SpaceEditorSheet: View {
                 Text("Edit Spaces").font(.headline)
                 Spacer()
                 Button("Done") { dismiss() }
+                    .buttonStyle(.sheetHeader)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(16)

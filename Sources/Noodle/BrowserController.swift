@@ -6,6 +6,7 @@ import NoodleCore
 import NoodleHubClient
 import Observation
 import SwiftUI
+import NoodleRuntimeSettings
 
 @MainActor @Observable final class BrowserController {
     private(set) var registry = BrowserAssignments()
@@ -224,11 +225,11 @@ struct NewBrowserSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(making)
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction).disabled(making)
                 Spacer()
                 Text("New Browser").font(.headline)
                 Spacer()
-                Button("Create", action: make).keyboardShortcut(.defaultAction)
+                Button("Create", action: make).buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
                     .disabled(making || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(16)
             Divider()

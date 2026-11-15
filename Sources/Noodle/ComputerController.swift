@@ -380,11 +380,11 @@ struct NewComputerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(making)
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction).disabled(making)
                 Spacer()
                 Text("New Computer").font(.headline)
                 Spacer()
-                Button("Create", action: make).keyboardShortcut(.defaultAction)
+                Button("Create", action: make).buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
                     .disabled(making || chosen == nil || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(16)
             Divider()
