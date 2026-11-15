@@ -141,6 +141,19 @@ import NoodleCore
         XCTAssertTrue(enabled(other), "Others still open theirs")
     }
 
+    /// An archived group's picture opens no profile, as an archived bot's does.
+    func testAnArchivedGroupsPictureOpensNoProfile() async throws {
+        let f = try fixture(), group = try f.group()
+        XCTAssertTrue(f.store.setArchived(true, conversationID: group.id))
+        let settings = host(GroupsSettingsView().environment(f.store).preferredColorScheme(.dark))
+        settings.window?.orderFront(nil)
+        let picture = try await control("Show profile for Project", in: settings)
+        XCTAssertFalse(enabled(picture))
+        press(picture)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(NSApp.windows.contains { $0.isVisible && $0 !== settings.window && self.hasControl("Close group profile", in: $0.contentView ?? NSView()) })
+    }
+
     private func hostSettings(_ f: StoreFixture) -> NSView {
         host(BotsSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
     }

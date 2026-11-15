@@ -373,7 +373,9 @@ struct HubGroupsSettingsView: View {
         let archived = group.archivedAt != nil
         return HStack(spacing: 12) {
             // Every group has the same picture, so an archived one is dimmed rather than grayed.
+            // Nothing in its profile applies to an archived group, so the picture opens none until it is brought back.
             HubGroupProfileButton(host: host, group: group, owner: ownerName, members: members)
+                .disabled(archived)
                 .opacity(archived ? 0.4 : 1)
                 .accessibilityValue(archived ? "Archived" : "")
             VStack(alignment: .leading, spacing: 2) {

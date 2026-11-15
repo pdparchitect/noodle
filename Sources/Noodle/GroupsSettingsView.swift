@@ -41,7 +41,9 @@ struct GroupsSettingsView: View {
         let hub = store.hubMirror(forConversation: group.id)
         let members = store.participants(for: group).map(\.displayName).joined(separator: ", ")
         return HStack(spacing: 12) {
+            // Nothing in its profile applies to an archived group, so the picture opens none until it is brought back.
             GroupProfileButton(group: group)
+                .disabled(group.archivedAt != nil)
             VStack(alignment: .leading, spacing: 3) {
                 Text(group.displayName)
                 Text([hub?.pairing.hub?.name, members.isEmpty ? nil : members].compactMap { $0 }.joined(separator: " · "))
