@@ -2186,13 +2186,9 @@ final class NoodleStore {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
-        guard AttachmentForwarding.canForward(attachment) else { throw WorkspaceError.invalidAttachment }
-        let copy = try repository.importAttachment(from: attachmentFileURL(attachment), into: conversationID,
-                                                   mediaType: attachment.mediaType, originalFilename: attachment.originalFilename)
+        let (copy, message) = try repository.forward(attachment, to: conversationID, comment: comment)
         attachmentsByConversation[conversationID, default: []].append(copy)
         let body = comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = try repository.sendUserMessage(conversationID: conversationID,
-                                                     body: body.isEmpty ? "Sent 1 attachment" : body, attachmentIDs: [copy.id])
         messagesByConversation[conversationID, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
             conversations[index].updatedAt = message.createdAt
@@ -2528,27 +2524,7 @@ final class NoodleStore {
     }
 
     private func copyAttachment(_ attachment: ConversationAttachment, at url: URL) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-
-        if attachment.mediaType.hasPrefix("image/"),
-           let image = NSImage(contentsOf: url),
-           let tiffData = image.tiffRepresentation,
-           let bitmap = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmap.representation(using: .png, properties: [:]) {
-            let item = NSPasteboardItem()
-            item.setString(url.absoluteString, forType: .fileURL)
-            item.setData(pngData, forType: .png)
-            item.setData(tiffData, forType: .tiff)
-            if pasteboard.writeObjects([item]) { return }
-            pasteboard.clearContents()
-        }
-
-        if pasteboard.writeObjects([url as NSURL]) {
-            return
-        }
-
-        errorMessage = "The attachment could not be copied."
+        if !AttachmentDrag.copy(attachment, fileURL: url) { errorMessage = "The attachment could not be copied." }
     }
 
     func attachmentFileURL(_ attachment: ConversationAttachment) -> URL {
@@ -3050,4 +3026,58 @@ struct ErrorLink: Equatable {
 /// A change count observed on its own, for state kept per conversation.
 @MainActor @Observable final class ObservedRevision {
     var value = 0
+}
+
+extension NoodleStore {
+    func attachmentDragProvider(_ attachment: ConversationAttachment) -> NSItemProvider {
+        if hubKeeping(attachment) != nil {
+            // Promised, and downloaded from the Hub when dropped.
+            return AttachmentDrag.promisedProvider(for: attachment) { [weak self] in
+                guard let url = await self?.downloadedFile(attachment) else { throw WorkspaceError.invalidAttachment }
+                return url
+            }
+        }
+        return AttachmentDrag.dragProvider(for: attachment, fileURL: attachmentFileURL(attachment)) { errorMessage = $0 }
+    }
+
+    /// A drop on a conversation in the sidebar. A file dragged out of another conversation is sent there at
+    /// once, as Forward… sends it with no comment; anything else opens the conversation with it staged.
+    func drop(_ providers: [NSItemProvider], onConversation conversationID: UUID) -> Bool {
+        guard !providers.isEmpty, let conversation = conversations.first(where: { $0.id == conversationID }),
+              composerUnavailableReason(for: conversation) == nil else { return false }
+        Task {
+            await AttachmentDrag.drop(providers, on: conversationID, forward: { attachment in
+                guard await self.downloadedFile(attachment) != nil else { return }
+                try self.forward(attachment, to: conversationID, comment: "")
+            }, stage: { others in
+                self.selectedConversationID = conversationID
+                self.importAttachments(from: others, into: conversationID)
+            }, failed: { self.errorMessage = $0 })
+        }
+        return true
+    }
+
+    func saveAttachment(_ attachment: ConversationAttachment) {
+        withDownloadedFile(attachment) { [weak self] in self?.saveAttachment(attachment, from: $0) }
+    }
+
+    private func saveAttachment(_ attachment: ConversationAttachment, from fileURL: URL) {
+        AttachmentDrag.presentSavePanel(for: attachment, fileURL: fileURL) { [weak self] in self?.errorMessage = $0 }
+    }
+
+    func saveTable(_ table: MessageTable) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Table.csv"
+        let save = { [weak self] (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url else { return }
+            do {
+                try Data(table.csv.utf8).write(to: destination, options: .atomic)
+            } catch {
+                self?.errorMessage = "The table could not be saved: \(error.localizedDescription)"
+            }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
+        else { panel.begin(completionHandler: save) }
+    }
 }

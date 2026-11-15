@@ -1,34 +1,26 @@
 import NoodleCore
 import SwiftUI
 
-/// Forward…: a file of one conversation sent on to another bot or group.
-enum AttachmentForwarding {
-    /// Files only: a recording, a comment on another file and a link stay where they were made.
-    static func canForward(_ attachment: ConversationAttachment) -> Bool {
-        attachment.url == nil && attachment.voice == nil && attachment.annotation == nil
-    }
-
-    /// The bots and groups a file can go to, found and ordered as the conversation picker finds them: by
-    /// name, newest first. The file's own conversation and those that take no messages now are left out.
-    @MainActor static func targets(in store: NoodleStore, from conversationID: UUID, search: String) -> [AgentPickerItem] {
-        let open = Set(store.conversations.filter {
-            $0.id != conversationID && store.composerUnavailableReason(for: $0) == nil
-        }.map(\.id))
-        return AgentPickerItem.visible(AgentPickerItem.items(in: store, floating: []).filter { open.contains($0.id) },
-                                       filter: search)
-    }
-}
-
 extension EnvironmentValues {
     /// Opens Forward… for a file, presented by the conversation rather than the message it is in.
     @Entry var forwardAttachment: (@MainActor (ConversationAttachment) -> Void)?
 }
 
-/// Picks the bot or group a file goes to, with an optional comment, and sends it there.
+/// A conversation Forward… can send to.
+struct ForwardTarget: Identifiable {
+    let id: UUID
+    let title: String
+}
+
+/// Forward…: picks the conversation a file goes to, with an optional comment, and sends it there. The app
+/// gives the conversations a search finds, each one's picture and the sending.
 struct ForwardAttachmentSheet: View {
-    @Environment(NoodleStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let attachment: ConversationAttachment
+    let targets: (String) -> [ForwardTarget]
+    /// A conversation's picture, 28 points across.
+    let picture: (UUID) -> AnyView
+    let send: (UUID, String) async throws -> Void
     @State private var search = ""
     @State private var chosenID: UUID?
     @State private var comment = ""
@@ -36,7 +28,7 @@ struct ForwardAttachmentSheet: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        let targets = AttachmentForwarding.targets(in: store, from: attachment.conversationID, search: search)
+        let targets = targets(search)
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Button("Cancel") { dismiss() }
@@ -46,7 +38,7 @@ struct ForwardAttachmentSheet: View {
                 Spacer()
                 Text("Forward").font(.headline)
                 Spacer()
-                Button("Send", action: send)
+                Button("Send", action: forward)
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
                     .disabled(chosenID == nil)
@@ -84,13 +76,11 @@ struct ForwardAttachmentSheet: View {
         }
     }
 
-    private func row(_ item: AgentPickerItem) -> some View {
-        let conversation = store.conversations.first { $0.id == item.id }
+    private func row(_ item: ForwardTarget) -> some View {
         let chosen = chosenID == item.id
         return Button { chosenID = item.id } label: {
             HStack(spacing: 10) {
-                ConversationAvatar(participants: conversation.map { store.shownParticipants(for: $0) } ?? [],
-                                   isGroup: conversation?.kind == .group, size: 28)
+                picture(item.id)
                 Text(item.title).lineLimit(1)
                 Spacer()
                 if chosen {
@@ -107,21 +97,15 @@ struct ForwardAttachmentSheet: View {
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
-    private func send() {
+    private func forward() {
         guard let chosenID else { return }
-        // A file only its Hub has comes down first, to go up again with the forwarded copy.
-        guard store.hubKeeping(attachment) == nil else {
-            Task {
-                guard await store.downloadedFile(attachment) != nil else { return }
-                send()
+        Task {
+            do {
+                try await send(chosenID, comment)
+                dismiss()
+            } catch {
+                failure = error.localizedDescription
             }
-            return
-        }
-        do {
-            try store.forward(attachment, to: chosenID, comment: comment)
-            dismiss()
-        } catch {
-            failure = error.localizedDescription
         }
     }
 }

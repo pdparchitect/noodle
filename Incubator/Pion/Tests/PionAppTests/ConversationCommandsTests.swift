@@ -44,7 +44,7 @@ import XCTest
         let file = root.appendingPathComponent("capture.txt")
         try Data("netstat".utf8).write(to: file)
         model.attach([file], to: investigation.id)
-        model.drafts[investigation.id] = "Capture attached"
+        model.drafts[investigation.id].text = "Capture attached"
         model.sendDraft(to: investigation.id)
         let zip = root.appendingPathComponent("Export.zip")
 

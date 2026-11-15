@@ -159,6 +159,7 @@ struct Sidebar: View {
             Section {
                 ForEach(conversations) { conversation in
                     ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(conversation.id)
+                        .conversationDropTarget { model.drop($0, onConversation: conversation.id) }
                         .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
                 }
             } header: {
@@ -208,7 +209,7 @@ private struct SidebarSearchResults: View {
                 Section("Messages") {
                     ForEach(search.mentions, id: \.messageID) { match in
                         if let conversation = model.conversation(match.conversationID) {
-                            MentionRow(picture: picture(of: conversation), title: model.title(of: conversation),
+                            MentionRow(picture: AnyView(ConversationPicture(model: model, conversation: conversation, size: 42)), title: model.title(of: conversation),
                                        timestamp: SidebarTimestamp.text(for: match.createdAt),
                                        snippet: term.highlighted(match.snippet))
                                 .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
@@ -238,14 +239,23 @@ private struct SidebarSearchResults: View {
         }
     }
 
-    private func picture(of conversation: BotConversation) -> AnyView {
+}
+
+/// A conversation's picture where it stands for the whole conversation: an Investigation's severity, an agent's
+/// mark, or a group's.
+struct ConversationPicture: View {
+    let model: PionModel
+    let conversation: BotConversation
+    let size: CGFloat
+
+    var body: some View {
         if let investigation = model.investigation(conversation.id) {
-            return AnyView(SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed).frame(width: 42, height: 42))
+            SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed).frame(width: size, height: size)
+        } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
+            AgentMark(agent: agent, size: size)
+        } else {
+            SymbolMark(symbol: "person.3.fill", size: size)
         }
-        if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
-            return AnyView(AgentMark(agent: agent, size: 42))
-        }
-        return AnyView(SymbolMark(symbol: "person.3.fill", size: 42))
     }
 }
 

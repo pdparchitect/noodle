@@ -506,11 +506,8 @@ struct MessageBubble: View {
             selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
             react: { store.toggleReaction($0, on: message) },
             copy: {
-                if let url = attachment?.url {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                    NSPasteboard.general.setString(url.absoluteString, forType: .URL)
-                } else if let attachment { store.copyAttachment(attachment) }
+                // A link copies as its address.
+                if let attachment { store.copyAttachment(attachment) }
                 else {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message.body, forType: .string)
@@ -544,7 +541,7 @@ struct MessageBubble: View {
             copyTable: table.map { table in { MessageTableActions.copy(table) } },
             saveTable: table.map { table in { store.saveTable(table) } },
             forward: attachment.flatMap { item -> (() -> Void)? in
-                guard AttachmentForwarding.canForward(item), let forwardAttachment else { return nil }
+                guard item.isForwardable, let forwardAttachment else { return nil }
                 return { forwardAttachment(item) }
             }
         )

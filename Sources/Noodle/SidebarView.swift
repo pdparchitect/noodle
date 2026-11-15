@@ -339,7 +339,6 @@ private struct ConversationRowContent: Equatable {
 
 private struct ConversationRow: View, Equatable {
     @Environment(NoodleStore.self) private var store
-    @State private var isDropTargeted = false
     let conversationID: UUID
     let isGroup: Bool
     /// Not drawn by the row, but the list's selection look reaches it only when the row is updated.
@@ -397,18 +396,7 @@ private struct ConversationRow: View, Equatable {
             }
         }
         .frame(height: 66)
-        // A file dropped here goes to this conversation; the row shows where it will land.
-        .background {
-            if isDropTargeted {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.25))
-                    .padding(.horizontal, -6)
-                    .accessibilityHidden(true)
-            }
-        }
-        .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isDropTargeted) { providers in
-            store.drop(providers, onConversation: conversationID)
-        }
+        .conversationDropTarget { store.drop($0, onConversation: conversationID) }
         .overlay(alignment: .leading) {
             if content.isUnread {
                 // A muted group's dot is dimmed: new replies show, but do not ask for attention.

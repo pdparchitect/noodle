@@ -59,16 +59,16 @@ import XCTest
 
     func testOnlyFilesCanBeForwardedAndOnlyToAConversationThatExists() throws {
         let f = try fixture(), file = try sentFile(f)
-        XCTAssertTrue(AttachmentForwarding.canForward(file))
+        XCTAssertTrue(file.isForwardable)
         XCTAssertThrowsError(try f.store.forward(file, to: UUID(), comment: "Hi"))
         let link = try f.repository.importLinkAttachment(try XCTUnwrap(URL(string: "https://example.com")), into: f.directA.id)
-        XCTAssertFalse(AttachmentForwarding.canForward(link))
+        XCTAssertFalse(link.isForwardable)
         XCTAssertThrowsError(try f.store.forward(link, to: f.directB.id, comment: "Hi"))
         let audio = f.runtime.root.appendingPathComponent("recording.caf")
         try Data([0, 1, 2, 3]).write(to: audio)
         let voice = VoiceMessage(transcript: "A note", duration: 2, waveform: [0.5], localeIdentifier: "en-GB")
-        XCTAssertFalse(AttachmentForwarding.canForward(try f.repository.importAttachment(
-            from: audio, into: f.directA.id, mediaType: "audio/x-caf", voice: voice)))
+        XCTAssertFalse(try f.repository.importAttachment(
+            from: audio, into: f.directA.id, mediaType: "audio/x-caf", voice: voice).isForwardable)
         XCTAssertTrue(f.store.messages(for: f.directB).isEmpty)
     }
 

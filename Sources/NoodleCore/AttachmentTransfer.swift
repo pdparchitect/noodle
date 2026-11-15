@@ -236,5 +236,26 @@ extension WorkspaceRepository {
             return try importAttachment(data: data, originalFilename: originalFilename, into: conversationID, mediaType: mediaType, now: now)
         }
     }
+
+    /// Sends a file on to another conversation as one message from the person, with the comment as its words,
+    /// as if they had attached it there. The file is copied, so each conversation keeps its own.
+    public func forward(_ attachment: ConversationAttachment, to conversationID: UUID, comment: String,
+                        now: Date = Date()) throws -> (attachment: ConversationAttachment, message: ChatMessage) {
+        guard try loadConversations().contains(where: { $0.id == conversationID }) else {
+            throw WorkspaceError.missingConversation(conversationID)
+        }
+        guard attachment.isForwardable else { throw WorkspaceError.invalidAttachment }
+        let copy = try importAttachment(from: attachmentFileURL(attachment), into: conversationID,
+                                        mediaType: attachment.mediaType, now: now, originalFilename: attachment.originalFilename)
+        let body = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = try sendUserMessage(conversationID: conversationID, body: body.isEmpty ? "Sent 1 attachment" : body,
+                                          attachmentIDs: [copy.id], now: now)
+        return (copy, message)
+    }
+}
+
+extension ConversationAttachment {
+    /// Files only: a recording, a comment on another file and a link stay where they were made.
+    public var isForwardable: Bool { url == nil && voice == nil && annotation == nil }
 }
 #endif

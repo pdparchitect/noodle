@@ -12,7 +12,7 @@ import XCTest
         let direct = try XCTUnwrap(model.directConversation(of: agent))
         let attached = model.attach([.data(Data([1, 2, 3]), originalFilename: "Pasted Image.png", mediaType: "image/png")], to: direct.id)
         XCTAssertTrue(attached)
-        XCTAssertEqual(model.pendingAttachments[direct.id]?.map(\.originalFilename), ["Pasted Image.png"])
+        XCTAssertEqual(model.drafts[direct.id].attachments.map(\.originalFilename), ["Pasted Image.png"])
         XCTAssertFalse(model.attach([], to: direct.id))
     }
 }

@@ -58,6 +58,8 @@ struct ConversationView: View {
     @State private var choosingPhotos = false
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var selectedAttachmentID: UUID?
+    /// The file Forward… was chosen for, held here rather than by its message.
+    @State private var forwarding: ConversationAttachment?
     /// Where the reader was in each conversation, kept while Pion runs.
     @State private static var viewports: [UUID: TranscriptViewport] = [:]
 
@@ -82,6 +84,15 @@ struct ConversationView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
         }
         .environment(\.conversationAnnotations, conversationAnnotations)
+        .environment(\.forwardAttachment) { forwarding = $0 }
+        .sheet(item: $forwarding) { attachment in
+            ForwardAttachmentSheet(attachment: attachment,
+                                   targets: { model.forwardTargets(from: attachment.conversationID, search: $0)
+                                       .map { ForwardTarget(id: $0.id, title: model.title(of: $0)) } },
+                                   picture: { id in AnyView(model.conversation(id).map { ConversationPicture(model: model, conversation: $0, size: 28) }) },
+                                   send: { try model.forward(attachment, to: $0, comment: $1) })
+                .noodleSheetSizing()
+        }
         .background(AttachmentPreviewHost(controller: attachmentPreview))
         .background(ConversationAnnotationHost(controller: conversationAnnotations, conversationID: conversation.id,
             title: investigation?.reference ?? conversation.displayName,
@@ -377,6 +388,7 @@ struct MessageRow: View {
     let preview: (ConversationAttachment) -> Void
     let continues: Bool
     @State private var hovering = false
+    @Environment(\.forwardAttachment) private var forwardAttachment
 
     var body: some View {
         Group {
@@ -436,6 +448,20 @@ struct MessageRow: View {
             ] } ?? []))
     }
 
+    /// Noodle's menu for a file: react to its message, copy it, look at it, keep a copy, find it, send it on.
+    private func attachmentMenu(_ attachment: ConversationAttachment) -> MessageContextMenu {
+        MessageContextMenu(
+            selected: Set((message.reactions ?? []).filter { $0.author == .user }.map(\.emoji)),
+            react: { model.toggleReaction($0, on: message) },
+            copy: { if !AttachmentDrag.copy(attachment, fileURL: model.fileURL(attachment)) { model.problem = "The attachment could not be copied." } },
+            preview: { preview(attachment) },
+            reveal: attachment.url == nil ? { NSWorkspace.shared.activateFileViewerSelecting([model.fileURL(attachment)]) } : nil,
+            save: attachment.isSavable ? {
+                AttachmentDrag.presentSavePanel(for: attachment, fileURL: model.fileURL(attachment)) { model.problem = $0 }
+            } : nil,
+            forward: attachment.isForwardable ? { forwardAttachment?(attachment) } : nil)
+    }
+
     private var authorAgent: AgentRecord? {
         if case .agent(let id) = message.author { model.agent(id) } else { nil }
     }
@@ -471,7 +497,9 @@ struct MessageRow: View {
                                         isSelected: selectedAttachmentID == attachment.id,
                                         select: { selectedAttachmentID = attachment.id },
                                         preview: { preview(attachment) })
-                    .contextMenu { AttachmentMenu(model: model, attachment: attachment) { preview(attachment) } }
+                    // As in Noodle: dragged out as a copy of its file, and Noodle's menu for it.
+                    .onDrag { AttachmentDrag.dragProvider(for: attachment, fileURL: model.fileURL(attachment)) { model.problem = $0 } }
+                    .overlay { attachmentMenu(attachment) }
             }
         }
     }

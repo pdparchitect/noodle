@@ -49,9 +49,8 @@ import UniformTypeIdentifiers
     private(set) var caseRevision = 0
     /// What the main window shows.
     var selection: UUID?
-    var drafts: [UUID: String] = [:]
-    /// Files added to a conversation's composer and not sent yet.
-    var pendingAttachments: [UUID: [ConversationAttachment]] = [:]
+    /// What is being written in each conversation, with its files, kept as Noodle keeps it.
+    var drafts = ConversationDrafts()
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
     /// Which conversations wait for the champion, kept where Noodle keeps them.
@@ -138,7 +137,15 @@ import UniformTypeIdentifiers
         // Before the first capability check, so Apple Intelligence is offered as ready where the Mac has it.
         if !isScripted { offerAppleModel() }
         reload()
-        for conversation in conversations { readTranscript(conversation.id, notifying: false) }
+        for conversation in conversations {
+            readTranscript(conversation.id, notifying: false)
+            // As in Noodle, an annotation not sent yet waits in the draft until a message carries it.
+            let saved = (try? repository.loadAttachments(conversationID: conversation.id)) ?? []
+            if saved.contains(where: { $0.annotation != nil }) {
+                remember(saved)
+                drafts.restoreAnnotations(saved, messages: messages(in: conversation.id), conversationID: conversation.id)
+            }
+        }
         launchRead = true
         guard !isScripted, !running else { return }
         do {
@@ -845,10 +852,10 @@ import UniformTypeIdentifiers
     func sendVoiceMessage(from url: URL, voice: VoiceMessage, to id: UUID) throws {
         guard let conversation = conversation(id) else { throw WorkspaceError.missingConversation(id) }
         let attachment = try repository.importAttachment(from: url, into: id, mediaType: "audio/x-caf", voice: voice)
-        let staged = pendingAttachments[id] ?? []
+        let staged = drafts[id].attachments
         _ = try repository.sendUserMessage(conversationID: id, body: VoiceMessage.messageBody,
                                            attachmentIDs: staged.map(\.id) + [attachment.id], now: now)
-        pendingAttachments[id] = []
+        drafts[id].attachments = []
         readTranscript(id, notifying: false)
         markRead(id)
         if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: voice.transcript ?? "", repository: repository) }
@@ -897,8 +904,7 @@ import UniformTypeIdentifiers
         let agent = conversation.kind == .direct ? self.agent(conversation.participantIDs.first) : nil
         do {
             try runtime.delete(conversation, agent: agent, agents: agents, repository: repository)
-            drafts[conversation.id] = nil
-            pendingAttachments[conversation.id] = nil
+            drafts.clear(conversation.id)
             if selection == conversation.id { selection = nil }
             reload()
             return true
@@ -947,15 +953,14 @@ import UniformTypeIdentifiers
     }
 
     func sendDraft(to id: UUID) {
-        let text = drafts[id] ?? "", files = pendingAttachments[id] ?? []
+        let text = drafts[id].text, files = drafts[id].attachments
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty, let conversation = conversation(id) else { return }
         do {
             let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
             _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? files.map(\.originalFilename).joined(separator: ", ") : body,
                                                attachmentIDs: files.map(\.id), now: now)
             onSent?(id, body, files.map(\.originalFilename))
-            drafts[id] = ""
-            pendingAttachments[id] = []
+            drafts.clear(id)
             readTranscript(id, notifying: false)
             markRead(id)
             if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
@@ -971,7 +976,8 @@ import UniformTypeIdentifiers
         var attached = false
         for payload in payloads {
             do {
-                pendingAttachments[id, default: []].append(try repository.importAttachment(payload, into: id, now: now))
+                let attachment = try repository.importAttachment(payload, into: id, now: now)
+                remember([attachment], pending: attachment)
                 attached = true
             } catch { problem = "\(payload.displayName) could not be attached: \(error.localizedDescription)" }
         }
@@ -979,20 +985,62 @@ import UniformTypeIdentifiers
     }
 
     func removePending(_ attachment: ConversationAttachment, from id: UUID) {
-        pendingAttachments[id]?.removeAll { $0.id == attachment.id }
+        drafts[id].attachments.removeAll { $0.id == attachment.id }
         try? repository.removeAttachment(attachment)
     }
 
     func attachment(_ id: UUID, in conversation: UUID) -> ConversationAttachment? { attachments[conversation]?[id] }
 
+    func fileURL(_ attachment: ConversationAttachment) -> URL { repository.attachmentFileURL(attachment) }
+
+    /// The files a message carries, in its order.
+    func files(of message: ChatMessage) -> [ConversationAttachment] {
+        message.attachments.compactMap { attachment($0, in: message.conversationID) }
+    }
+
+    /// An annotation on a file, saved beside it as a new attachment for the next message.
+    func saveAnnotation(_ annotation: AttachmentAnnotation, content: Data, source: ConversationAttachment) throws {
+        let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
+        let attachment = try repository.importAttachment(data: content,
+            originalFilename: "Annotation — \(stem.prefix(160)).\(annotation.fileExtension)", into: source.conversationID,
+            mediaType: annotation.mediaType, annotation: annotation)
+        remember([attachment], pending: attachment)
+    }
+
+    /// An annotation can be changed until a message carries it.
+    func canEditAnnotation(_ attachment: ConversationAttachment) -> Bool {
+        drafts.canEditAnnotation(attachment, messages: messages(in: attachment.conversationID))
+    }
+
+    // MARK: Forward…, as Noodle forwards
+
+    /// The other conversations a file can go to, by name, newest first; closed Investigations take no messages.
+    func forwardTargets(from id: UUID, search: String) -> [BotConversation] {
+        let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return conversations.filter { $0.id != id && investigation($0.id)?.isClosed != true }
+            .filter { term.isEmpty || title(of: $0).localizedStandardContains(term) }
+            .sorted { lastActivity(of: $0) > lastActivity(of: $1) }
+    }
+
+    /// Sends a file on to another conversation as one message from the champion, with the comment as its words.
+    /// What is being written there stays as it is.
+    func forward(_ attachment: ConversationAttachment, to id: UUID, comment: String) throws {
+        guard let conversation = conversation(id) else { throw WorkspaceError.missingConversation(id) }
+        let (copy, _) = try repository.forward(attachment, to: id, comment: comment, now: now)
+        remember([copy])
+        readTranscript(id, notifying: false)
+        if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+        onSent?(id, comment.trimmingCharacters(in: .whitespacesAndNewlines), [copy.originalFilename])
+    }
+
     /// Files saved into a conversation outside `attach`, such as captures, annotations and what they mark.
     func remember(_ saved: [ConversationAttachment], pending: ConversationAttachment? = nil) {
         for attachment in saved { attachments[attachment.conversationID, default: [:]][attachment.id] = attachment }
         if let pending {
-            if let index = pendingAttachments[pending.conversationID]?.firstIndex(where: { $0.id == pending.id }) {
-                pendingAttachments[pending.conversationID]![index] = pending
+            if let index = drafts[pending.conversationID].attachments.firstIndex(where: { $0.id == pending.id }) {
+                drafts[pending.conversationID].attachments[index] = pending
             } else {
-                pendingAttachments[pending.conversationID, default: []].append(pending)
+                drafts[pending.conversationID].attachments.append(pending)
             }
         }
     }

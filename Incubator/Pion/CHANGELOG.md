@@ -17,6 +17,8 @@
 - Pin and Unpin, in a conversation's menu, keep Investigations, groups and agents in a Pinned section at the top of the sidebar, in the order pinned, as in Noodle.
 - View › Sidebar has Noodle's choices of the line under each name (latest message, description or status) and of the order: Newest First, Unread First or an Unread section.
 - Search Conversations also finds messages, as in Noodle: Investigations, groups and agents that match come first, then each message that says the term, with the words around it; picking one opens the conversation at that message.
+- A file in a message has Noodle's menu: react, Copy, Quick Look, Save…, Show in Finder and Forward…, which sends it on to another conversation with a comment. Files drag out to Finder and other apps, and a file dropped on a sidebar row is forwarded there, or waits in that conversation if it came from elsewhere.
+- As in Noodle, an annotation you haven't sent yet waits in its conversation after Pion quits.
 
 ### Fixed
 

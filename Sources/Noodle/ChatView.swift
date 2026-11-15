@@ -70,7 +70,7 @@ struct ChatView: View {
             }
             .environment(\.conversationAnnotations, conversationAnnotations)
             .environment(\.forwardAttachment) { forwarding = $0 }
-            .sheet(item: $forwarding) { ForwardAttachmentSheet(attachment: $0).environment(store).noodleSheetSizing() }
+            .sheet(item: $forwarding) { ForwardAttachmentSheet(attachment: $0, store: store).noodleSheetSizing() }
             .background(ConversationAnnotationHost(controller: conversationAnnotations,
                 conversationID: conversation.id, title: store.title(for: conversation),
                 save: { note, content, source, raw in

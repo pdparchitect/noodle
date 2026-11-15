@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
 import HubLink
@@ -100,6 +101,88 @@ enum AttachmentDrag {
         return dragged.last { $0.file == file }?.attachment
     }
 
+    /// The provider a drag out of a conversation offers: the file's own copy, remembered so a drop on another
+    /// conversation can forward it, or nothing when it cannot be read.
+    @MainActor static func dragProvider(for attachment: ConversationAttachment, fileURL: URL,
+                                        failed: (String) -> Void) -> NSItemProvider {
+        do {
+            let export = try exportedProvider(for: attachment, fileURL: fileURL)
+            remember(attachment, exportedAs: export.file)
+            return export.provider
+        } catch {
+            failed("The attachment could not be dragged: \(error.localizedDescription)")
+            return NSItemProvider()
+        }
+    }
+
+    /// A link as its address; a picture as itself, so it pastes as one, along with its file; anything else as
+    /// its file. False when nothing could be written.
+    @MainActor @discardableResult
+    static func copy(_ attachment: ConversationAttachment, fileURL url: URL, to pasteboard: NSPasteboard = .general) -> Bool {
+        pasteboard.clearContents()
+        if let link = attachment.url {
+            pasteboard.setString(link.absoluteString, forType: .string)
+            pasteboard.setString(link.absoluteString, forType: .URL)
+            return true
+        }
+        if attachment.mediaType.hasPrefix("image/"),
+           let image = NSImage(contentsOf: url),
+           let tiffData = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmap.representation(using: .png, properties: [:]) {
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .fileURL)
+            item.setData(pngData, forType: .png)
+            item.setData(tiffData, forType: .tiff)
+            if pasteboard.writeObjects([item]) { return true }
+            pasteboard.clearContents()
+        }
+        return pasteboard.writeObjects([url as NSURL])
+    }
+
+    /// Save…: asks where, on the key window, then keeps a copy there.
+    @MainActor static func presentSavePanel(for attachment: ConversationAttachment, fileURL: URL,
+                                            failed: @escaping @MainActor (String) -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = (attachment.originalFilename as NSString).lastPathComponent
+        let save = { (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url else { return }
+            do {
+                try AttachmentDrag.save(fileURL: fileURL, to: destination)
+            } catch {
+                failed("The attachment could not be saved: \(error.localizedDescription)")
+            }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
+        else { panel.begin(completionHandler: save) }
+    }
+
+    /// A drop on a conversation in the sidebar: a file dragged out of another conversation is forwarded there,
+    /// as Forward… sends it with no comment; anything else is given to `stage`, to wait in that conversation.
+    @MainActor static func drop(_ providers: [NSItemProvider], on conversationID: UUID,
+                                forward: (ConversationAttachment) async throws -> Void,
+                                stage: ([NSItemProvider]) -> Void, failed: (String) -> Void) async {
+        var others: [NSItemProvider] = []
+        for provider in providers {
+            guard let attachment = await draggedAttachment(in: provider) else {
+                others.append(provider)
+                continue
+            }
+            // Back on its own conversation, it is already there.
+            guard attachment.conversationID != conversationID else { continue }
+            guard attachment.isForwardable else {
+                others.append(provider)
+                continue
+            }
+            do {
+                try await forward(attachment)
+            } catch {
+                failed("The attachment could not be sent: \(error.localizedDescription)")
+            }
+        }
+        if !others.isEmpty { stage(others) }
+    }
+
     /// Copies the stored file to where the person chose in the save panel, which already confirmed any replacement.
     static func save(fileURL: URL, to destination: URL) throws {
         try requirePlainFile(fileURL)
@@ -144,89 +227,27 @@ extension ConversationAttachment {
     var isSavable: Bool { url == nil && annotation == nil }
 }
 
-extension NoodleStore {
-    func attachmentDragProvider(_ attachment: ConversationAttachment) -> NSItemProvider {
-        if hubKeeping(attachment) != nil {
-            // Promised, and downloaded from the Hub when dropped.
-            return AttachmentDrag.promisedProvider(for: attachment) { [weak self] in
-                guard let url = await self?.downloadedFile(attachment) else { throw WorkspaceError.invalidAttachment }
-                return url
-            }
-        }
-        do {
-            let export = try AttachmentDrag.exportedProvider(for: attachment, fileURL: attachmentFileURL(attachment))
-            AttachmentDrag.remember(attachment, exportedAs: export.file)
-            return export.provider
-        } catch {
-            errorMessage = "The attachment could not be dragged: \(error.localizedDescription)"
-            return NSItemProvider()
-        }
-    }
+/// A sidebar row that takes a dropped file for its conversation, and shows where it will land.
+private struct ConversationDropTarget: ViewModifier {
+    let drop: ([NSItemProvider]) -> Bool
+    @State private var isTargeted = false
 
-    /// A drop on a conversation in the sidebar. A file dragged out of another conversation is sent there at
-    /// once, as Forward… sends it with no comment; anything else opens the conversation with it staged.
-    func drop(_ providers: [NSItemProvider], onConversation conversationID: UUID) -> Bool {
-        guard !providers.isEmpty, let conversation = conversations.first(where: { $0.id == conversationID }),
-              composerUnavailableReason(for: conversation) == nil else { return false }
-        Task {
-            var others: [NSItemProvider] = []
-            for provider in providers {
-                guard let attachment = await AttachmentDrag.draggedAttachment(in: provider) else {
-                    others.append(provider)
-                    continue
-                }
-                // Back on its own conversation, it is already there.
-                guard attachment.conversationID != conversationID else { continue }
-                guard AttachmentForwarding.canForward(attachment) else {
-                    others.append(provider)
-                    continue
-                }
-                guard await downloadedFile(attachment) != nil else { continue }
-                do {
-                    try forward(attachment, to: conversationID, comment: "")
-                } catch {
-                    errorMessage = "The attachment could not be sent: \(error.localizedDescription)"
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if isTargeted {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.25))
+                        .padding(.horizontal, -6)
+                        .accessibilityHidden(true)
                 }
             }
-            guard !others.isEmpty else { return }
-            selectedConversationID = conversationID
-            importAttachments(from: others, into: conversationID)
-        }
-        return true
+            .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isTargeted, perform: drop)
     }
+}
 
-    func saveAttachment(_ attachment: ConversationAttachment) {
-        withDownloadedFile(attachment) { [weak self] in self?.saveAttachment(attachment, from: $0) }
-    }
-
-    private func saveAttachment(_ attachment: ConversationAttachment, from fileURL: URL) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = (attachment.originalFilename as NSString).lastPathComponent
-        let save = { [weak self] (response: NSApplication.ModalResponse) in
-            guard response == .OK, let destination = panel.url else { return }
-            do {
-                try AttachmentDrag.save(fileURL: fileURL, to: destination)
-            } catch {
-                self?.errorMessage = "The attachment could not be saved: \(error.localizedDescription)"
-            }
-        }
-        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
-        else { panel.begin(completionHandler: save) }
-    }
-
-    func saveTable(_ table: MessageTable) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "Table.csv"
-        let save = { [weak self] (response: NSApplication.ModalResponse) in
-            guard response == .OK, let destination = panel.url else { return }
-            do {
-                try Data(table.csv.utf8).write(to: destination, options: .atomic)
-            } catch {
-                self?.errorMessage = "The table could not be saved: \(error.localizedDescription)"
-            }
-        }
-        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
-        else { panel.begin(completionHandler: save) }
+extension View {
+    func conversationDropTarget(_ drop: @escaping ([NSItemProvider]) -> Bool) -> some View {
+        modifier(ConversationDropTarget(drop: drop))
     }
 }

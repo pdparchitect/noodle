@@ -1155,3 +1155,44 @@ extension GroupMemberChooser {
         self.init(agents: agents, selectedIDs: selectedIDs, search: search, picture: { AnyView(BotAvatar(agent: $0, size: 32)) })
     }
 }
+
+/// Forward…: a file of one conversation sent on to another bot or group.
+enum AttachmentForwarding {
+    /// The bots and groups a file can go to, found and ordered as the conversation picker finds them: by
+    /// name, newest first. The file's own conversation and those that take no messages now are left out.
+    @MainActor static func targets(in store: NoodleStore, from conversationID: UUID, search: String) -> [AgentPickerItem] {
+        let open = Set(store.conversations.filter {
+            $0.id != conversationID && store.composerUnavailableReason(for: $0) == nil
+        }.map(\.id))
+        return AgentPickerItem.visible(AgentPickerItem.items(in: store, floating: []).filter { open.contains($0.id) },
+                                       filter: search)
+    }
+}
+
+extension ForwardAttachmentSheet {
+    /// Noodle's bots and groups, with their pictures. A file only its Hub has comes down first, to go up again
+    /// with the forwarded copy.
+    init(attachment: ConversationAttachment, store: NoodleStore) {
+        self.init(attachment: attachment,
+                  targets: { search in
+                      AttachmentForwarding.targets(in: store, from: attachment.conversationID, search: search)
+                          .map { ForwardTarget(id: $0.id, title: $0.title) }
+                  },
+                  picture: { id in
+                      let conversation = store.conversations.first { $0.id == id }
+                      return AnyView(ConversationAvatar(participants: conversation.map { store.shownParticipants(for: $0) } ?? [],
+                                                        isGroup: conversation?.kind == .group, size: 28))
+                  },
+                  send: { id, comment in
+                      if store.hubKeeping(attachment) != nil, await store.downloadedFile(attachment) == nil {
+                          throw HubDownloadFailed()
+                      }
+                      try store.forward(attachment, to: id, comment: comment)
+                  })
+    }
+}
+
+/// The sheet stays open, saying why, when the Hub's file does not come down.
+private struct HubDownloadFailed: LocalizedError {
+    var errorDescription: String? { "The file could not be downloaded from its Hub." }
+}

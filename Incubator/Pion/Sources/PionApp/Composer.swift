@@ -17,9 +17,9 @@ struct Composer: View {
     @State private var showingAttachmentMenu = false
 
     private var closed: Bool { investigation?.isClosed == true }
-    private var text: String { model.drafts[conversation.id] ?? "" }
+    private var text: String { model.drafts[conversation.id].text }
     private var canSend: Bool {
-        !closed && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(model.pendingAttachments[conversation.id] ?? []).isEmpty)
+        !closed && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.drafts[conversation.id].attachments.isEmpty)
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct Composer: View {
     private func field(record: @escaping () -> Void) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                let pending = model.pendingAttachments[conversation.id] ?? []
+                let pending = model.drafts[conversation.id].attachments
                 if !pending.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
@@ -66,7 +66,7 @@ struct Composer: View {
                 }
                 // The field keeps its place while listening, so the composer never changes height.
                 ScrollableChatComposer(
-                    text: Binding(get: { text }, set: { model.drafts[conversation.id] = $0 }),
+                    text: Binding(get: { text }, set: { model.drafts[conversation.id].text = $0 }),
                     isFocused: $focused,
                     conversationID: conversation.id,
                     placeholder: closed ? "\(investigation?.reference ?? "This Investigation") is closed" : placeholder,
