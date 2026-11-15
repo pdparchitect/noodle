@@ -23,6 +23,7 @@ import NoodleVoicePeer
     public let runtime: AgentRuntimeCoordinator
     public let harnessProfiles: HarnessProfilesController
     public let usage: UsageHistory
+    public let storage: StorageUsage
     public let access: HubAccess
     public let tokenLimits: HubTokenLimits
     public let connections: HubConnections
@@ -57,6 +58,9 @@ import NoodleVoicePeer
         RestrictedHarnessStorage.removeSharedLogins(root: root, loginHome: HarnessStorage.userHome)
         harnessProfiles.subscriptionUsage = self.runtime.subscriptionUsage
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
+        let applicationSupport = root.deletingLastPathComponent()
+        storage = StorageUsage(dataRoot: root, applicationSupport: applicationSupport,
+                               library: applicationSupport.deletingLastPathComponent())
         access = HubAccess(url: root.appendingPathComponent("access.json"))
         access.log = HubActivityLog(url: root.appendingPathComponent("activity.jsonl"))
         tokenLimits = HubTokenLimits(access: access, usage: usage)

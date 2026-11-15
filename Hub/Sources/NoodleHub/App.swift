@@ -50,7 +50,8 @@ struct NoodleHubApp: App {
             let access = delegate.settings.hub.access
             UsageView(history: delegate.settings.hub.usage, agents: delegate.settings.agents,
                       people: UsagePeople(names: Dictionary(uniqueKeysWithValues: access.users.map { ($0.id, $0.name) }),
-                                          botOwners: access.botOwners))
+                                          botOwners: access.botOwners),
+                      storage: delegate.settings.hub.storage)
         }
         .defaultSize(width: 860, height: 680)
         .windowResizability(.contentMinSize)

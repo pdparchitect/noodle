@@ -5,6 +5,7 @@
 ### Added
 
 - Edit in a bot's profile moves it to another harness, login, model or effort its owner's plan lends.
+- The Usage window has a Disk measure: a pie chart of the space the Hub takes, by kind or by bot. It shows the last measurement at once and measures again in the background.
 
 ### Changed
 
