@@ -89,7 +89,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: "Mark a region of the \(ProductIdentity.current.name) window, an attachment preview, or a live capture."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
         case .chooseConversation: "From any app, pick a bot or group to float over your work."
-        case .showUsage: "Show token usage and cost for every bot."
+        case .showUsage: "Show token usage, cost and disk space for every bot."
         case .stopBot: "End the turn the bot in the current chat is working on."
         }
     }

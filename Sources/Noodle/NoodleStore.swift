@@ -232,6 +232,7 @@ final class NoodleStore {
     let harnessProfiles: HarnessProfilesController
     let runtime: AgentRuntimeCoordinator
     let usage: UsageHistory
+    let storage: StorageUsage
     /// The bots here given a spending budget, and those that used it up.
     let budgets: BotBudgets
     /// The Noodle Hubs this Mac joined.
@@ -302,6 +303,8 @@ final class NoodleStore {
         self.runtime.harnessProfiles = self.repository.harnessProfiles
         usage = UsageHistory(url: self.repository.rootURL.appendingPathComponent("usage.sqlite"))
         budgets = BotBudgets(usage: usage)
+        storage = StorageUsage(dataRoot: self.repository.rootURL, applicationSupport: applicationSupport,
+                               library: applicationSupport.deletingLastPathComponent())
         self.runtime.onUsage = { [usage, budgets] sample in
             usage.record(sample)
             budgets.check()

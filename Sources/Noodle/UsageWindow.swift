@@ -23,6 +23,6 @@ struct NoodleUsageView: View {
     @Environment(NoodleStore.self) private var store
 
     var body: some View {
-        UsageView(history: store.usage, agents: store.agents)
+        UsageView(history: store.usage, agents: store.agents, storage: store.storage)
     }
 }

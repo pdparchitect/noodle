@@ -66,7 +66,7 @@ struct UsageReport {
     }
 
     enum Metric: String, CaseIterable, Identifiable {
-        case tokens = "Tokens", cost = "Cost"
+        case tokens = "Tokens", cost = "Cost", disk = "Disk"
         var id: Self { self }
     }
 
@@ -177,6 +177,59 @@ struct UsageReport {
     }
 }
 
+/// A disk measurement as slices of one pie, largest first.
+struct StorageReport {
+    enum Grouping: String, CaseIterable, Identifiable {
+        case kind = "Kind", bot = "Bot"
+        var id: Self { self }
+    }
+
+    struct Row: Identifiable, Equatable {
+        let group: String
+        let bytes: Int64
+        var id: String { group }
+    }
+
+    static let removedBots = "Removed Bots"
+
+    let rows: [Row]
+    /// Pie slices in legend order: the largest groups by name, then Other.
+    let groups: [String]
+    let slices: [Row]
+    let total: Int64
+
+    /// `bots` names the bots that still exist; folders of any other bot count together.
+    init(snapshot: StorageSnapshot, grouping: Grouping, bots: [UUID: String]) {
+        var sums: [String: Int64] = [:]
+        switch grouping {
+        case .kind:
+            for (kind, bytes) in snapshot.kinds { sums[kind.rawValue, default: 0] += bytes }
+        case .bot:
+            var labels: [UUID: String] = [:]
+            for (name, ids) in Dictionary(grouping: bots.keys, by: { bots[$0]! }) {
+                for (index, id) in ids.sorted(by: { $0.uuidString < $1.uuidString }).enumerated() {
+                    labels[id] = index == 0 ? name : "\(name) (\(index + 1))"
+                }
+            }
+            for (id, bytes) in snapshot.bots { sums[labels[id] ?? Self.removedBots, default: 0] += bytes }
+        }
+        rows = sums.filter { $0.value > 0 }.map { Row(group: $0.key, bytes: $0.value) }
+            .sorted { ($0.bytes, $1.group) > ($1.bytes, $0.group) }
+        let named = rows.prefix(UsageReport.colorCount).map(\.group).sorted()
+        groups = rows.count > UsageReport.colorCount ? named + [UsageReport.otherGroup] : named
+        let rest = rows.dropFirst(UsageReport.colorCount).reduce(0) { $0 + $1.bytes }
+        let rows = rows
+        slices = groups.map { group in
+            group == UsageReport.otherGroup ? Row(group: group, bytes: rest) : rows.first { $0.group == group }!
+        }
+        total = rows.reduce(0) { $0 + $1.bytes }
+    }
+
+    func share(of row: Row) -> Double? {
+        total > 0 ? Double(row.bytes) / Double(total) : nil
+    }
+}
+
 /// Token use and cost per bot, harness and model, for Noodle and Noodle Hub, and per user on a Hub.
 public struct UsageView: View {
     public static let windowID = "usage"
@@ -184,10 +237,12 @@ public struct UsageView: View {
     let history: UsageHistory
     let agents: [AgentRecord]
     let people: UsagePeople
+    let storage: StorageUsage?
     @State private var span = UsageReport.Span.month
     @State private var grouping = UsageReport.Grouping.agent
     @State private var user: UsageReport.UserFilter?
     @State private var metric = UsageReport.Metric.tokens
+    @State private var storageGrouping = StorageReport.Grouping.kind
     @State private var selectedBucket: Date?
     /// Read only while the window is on screen: SwiftUI keeps a closed window alive to reopen it.
     @State private var days: [UsageDay]?
@@ -204,14 +259,33 @@ public struct UsageView: View {
         return Color(red: red, green: green, blue: blue)
     }
 
-    /// `people` adds grouping and filtering by user, on a Hub.
-    public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople()) {
+    /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure.
+    public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople(), storage: StorageUsage? = nil) {
         self.history = history
         self.agents = agents
         self.people = people
+        self.storage = storage
     }
 
     public var body: some View {
+        Group {
+            if metric == .disk, let storage {
+                disk(storage)
+            } else {
+                ledger()
+            }
+        }
+        .frame(minWidth: 840, minHeight: 560)
+        .background(WindowVisibilityObserver { visible = $0 })
+        // Each time the Disk measure comes on screen, measure again behind the last result.
+        .task(id: visible && metric == .disk) {
+            if visible, metric == .disk { storage?.refresh() }
+        }
+        .toolbar { toolbar() }
+    }
+
+    @ViewBuilder
+    private func ledger() -> some View {
         let now = Date()
         let range = UsageReport.range(span, now: now)
         let report = UsageReport(days: days ?? [], span: span, grouping: people.isEmpty && grouping == .user ? .agent : grouping,
@@ -235,72 +309,106 @@ public struct UsageView: View {
                 }
             }
         }
-        .frame(minWidth: 840, minHeight: 560)
-        .background(WindowVisibilityObserver { visible = $0 })
         .task(id: LedgerQuery(revision: history.revision, span: span, agentID: history.agentFilter, visible: visible)) {
             guard visible else { return }
             let range = UsageReport.range(span, now: Date())
             days = history.days(from: range.lowerBound, to: range.upperBound, agentID: history.agentFilter)
         }
         .navigationSubtitle(rangeText(range))
-        .toolbar { toolbar() }
+    }
+
+    @ViewBuilder
+    private func disk(_ storage: StorageUsage) -> some View {
+        let bots = Dictionary(agents.map { ($0.id, $0.displayName) }) { first, _ in first }
+        Group {
+            if let snapshot = storage.snapshot {
+                let report = StorageReport(snapshot: snapshot, grouping: storageGrouping, bots: bots)
+                VStack(spacing: 0) {
+                    diskSummary(snapshot)
+                        .padding([.horizontal, .top], 20)
+                    pie(report)
+                        .frame(minHeight: 200)
+                        .padding(20)
+                    Divider()
+                    diskBreakdown(report)
+                        .frame(minHeight: 140)
+                }
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .frame(width: 200)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .navigationSubtitle(storage.isMeasuring ? "Measuring" : storage.snapshot.map { "Measured \($0.date.formatted(date: .omitted, time: .shortened))" } ?? "")
     }
 
     @ToolbarContentBuilder
     private func toolbar() -> some ToolbarContent {
         let filter = Binding(get: { history.agentFilter }, set: { history.agentFilter = $0 })
-        ToolbarItem(placement: .principal) {
-            Picker("Period", selection: $span) {
-                ForEach(UsageReport.Span.allCases) { Text($0.rawValue).tag($0) }
+        if metric != .disk {
+            ToolbarItem(placement: .principal) {
+                Picker("Period", selection: $span) {
+                    ForEach(UsageReport.Span.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .help("Period")
             }
-            .pickerStyle(.segmented)
-            .help("Period")
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Picker("Bot", selection: filter) {
-                Text("All Bots").tag(UUID?.none)
-                Divider()
-                ForEach(agents) { agent in
-                    Label {
-                        Text(agent.displayName)
-                    } icon: {
-                        if let image = BotAvatar.menuImage(for: agent) { Image(nsImage: image) }
+            ToolbarItem(placement: .primaryAction) {
+                Picker("Bot", selection: filter) {
+                    Text("All Bots").tag(UUID?.none)
+                    Divider()
+                    ForEach(agents) { agent in
+                        Label {
+                            Text(agent.displayName)
+                        } icon: {
+                            if let image = BotAvatar.menuImage(for: agent) { Image(nsImage: image) }
+                        }
+                        .tag(Optional(agent.id))
                     }
-                    .tag(Optional(agent.id))
+                }
+                .pickerStyle(.menu)
+                // Toolbars show only a label's icon unless told otherwise.
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 6)
+                .help("Bot")
+            }
+            if !people.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker("User", selection: $user) {
+                        Text("All Users").tag(UsageReport.UserFilter?.none)
+                        Divider()
+                        ForEach(people.users) { Text($0.name).tag(Optional(UsageReport.UserFilter.user($0.id))) }
+                        Text(UsagePeople.unknown).tag(Optional(UsageReport.UserFilter.unknown))
+                    }
+                    .pickerStyle(.menu)
+                    .padding(.horizontal, 6)
+                    .help("User")
                 }
             }
-            .pickerStyle(.menu)
-            // Toolbars show only a label's icon unless told otherwise.
-            .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 6)
-            .help("Bot")
-        }
-        if !people.isEmpty {
+            ToolbarSpacer(.fixed)
             ToolbarItem(placement: .primaryAction) {
-                Picker("User", selection: $user) {
-                    Text("All Users").tag(UsageReport.UserFilter?.none)
-                    Divider()
-                    ForEach(people.users) { Text($0.name).tag(Optional(UsageReport.UserFilter.user($0.id))) }
-                    Text(UsagePeople.unknown).tag(Optional(UsageReport.UserFilter.unknown))
+                Picker("Group By", selection: $grouping) {
+                    ForEach(UsageReport.Grouping.allCases.filter { $0 != .user || !people.isEmpty }) { Text("By \($0.rawValue)").tag($0) }
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, 6)
-                .help("User")
+                .help("Group By")
             }
-        }
-        ToolbarSpacer(.fixed)
-        ToolbarItem(placement: .primaryAction) {
-            Picker("Group By", selection: $grouping) {
-                ForEach(UsageReport.Grouping.allCases.filter { $0 != .user || !people.isEmpty }) { Text("By \($0.rawValue)").tag($0) }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                Picker("Group By", selection: $storageGrouping) {
+                    ForEach(StorageReport.Grouping.allCases) { Text("By \($0.rawValue)").tag($0) }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, 6)
+                .help("Group By")
             }
-            .pickerStyle(.menu)
-            .padding(.horizontal, 6)
-            .help("Group By")
         }
         ToolbarSpacer(.fixed)
         ToolbarItem(placement: .primaryAction) {
             Picker("Measure", selection: $metric) {
-                ForEach(UsageReport.Metric.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(UsageReport.Metric.allCases.filter { $0 != .disk || storage != nil }) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .help("Measure")
@@ -430,6 +538,50 @@ public struct UsageView: View {
         .monospacedDigit()
     }
 
+    private func diskSummary(_ snapshot: StorageSnapshot) -> some View {
+        HStack(spacing: 0) {
+            stat("Total", Self.byteText(snapshot.total))
+            ForEach([StorageSnapshot.Kind.bots, .conversations, .harnesses, .caches], id: \.self) { kind in
+                Divider().frame(height: 36)
+                stat(kind.rawValue, Self.byteText(snapshot.kinds[kind] ?? 0))
+            }
+        }
+        .padding(.vertical, 12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func pie(_ report: StorageReport) -> some View {
+        Chart(report.slices) { slice in
+            SectorMark(angle: .value("Size", slice.bytes), angularInset: 1)
+                .foregroundStyle(by: .value(storageGrouping.rawValue, slice.group))
+                .cornerRadius(3)
+        }
+        .chartForegroundStyleScale(domain: report.groups, range: report.groups.map { color(for: $0, in: report.groups) })
+        .chartLegend(position: .trailing, alignment: .center)
+    }
+
+    private func diskBreakdown(_ report: StorageReport) -> some View {
+        Table(report.rows) {
+            TableColumn(storageGrouping.rawValue) { row in
+                HStack(spacing: 6) {
+                    Circle().fill(color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
+                    Text(row.group).lineLimit(1)
+                }
+            }
+            .width(min: 140, ideal: 260)
+            TableColumn("Size") { row in Text(Self.byteText(row.bytes)) }
+                .width(min: 64, ideal: 100)
+                .alignment(.numeric)
+            TableColumn("Share") { row in
+                Text(report.share(of: row)?.formatted(.percent.precision(.fractionLength(0))) ?? "—")
+            }
+            .width(min: 64, ideal: 88)
+            .alignment(.numeric)
+        }
+        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .monospacedDigit()
+    }
+
     private func color(for group: String, in groups: [String]) -> Color {
         guard group != UsageReport.otherGroup, let index = groups.firstIndex(of: group), index < Self.hues.count else { return .gray }
         return Self.hues[index]
@@ -441,6 +593,10 @@ public struct UsageView: View {
 
     private static func tokenText(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
+    }
+
+    private static func byteText(_ value: Int64) -> String {
+        value.formatted(.byteCount(style: .file))
     }
 
     private static func costText(_ value: Double) -> String {
