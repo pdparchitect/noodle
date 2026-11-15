@@ -125,6 +125,22 @@ import NoodleCore
         conversationWindow.close()
     }
 
+    /// An archived bot's picture stays in its row, grayed, but opens no profile: nothing in it applies until
+    /// the bot is brought back with its Archived switch.
+    func testAnArchivedBotsPictureOpensNoProfile() async throws {
+        let f = try fixture()
+        XCTAssertTrue(f.store.setArchived(true, agentID: f.a.id))
+        let settings = hostSettings(f)
+        settings.window?.orderFront(nil)
+        let picture = try await control("Show profile for \(f.a.displayName)", in: settings)
+        XCTAssertFalse(enabled(picture))
+        press(picture)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(NSApp.windows.contains { $0.isVisible && $0 !== settings.window && self.hasControl("Close bot profile", in: $0.contentView ?? NSView()) })
+        let other = try await control("Show profile for \(f.b.displayName)", in: settings)
+        XCTAssertTrue(enabled(other), "Others still open theirs")
+    }
+
     private func hostSettings(_ f: StoreFixture) -> NSView {
         host(BotsSettingsView(store: f.store).environment(f.store).preferredColorScheme(.dark))
     }

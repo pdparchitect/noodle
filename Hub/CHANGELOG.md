@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- In Settings > Bots, an archived bot's picture no longer opens its profile; bring the bot back with its Archived switch first.
+
 ## [0.53.0] - 2026-11-15
 
 ### Added

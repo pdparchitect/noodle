@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- In Settings > Agents, an archived agent's picture no longer opens its profile; bring the agent back with its Archived switch first.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added

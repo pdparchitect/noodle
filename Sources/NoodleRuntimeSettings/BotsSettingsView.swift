@@ -112,9 +112,11 @@ public struct BotsSettingsView: View {
         let changingAccess = store.runtime.changingAccess.contains(agent.id)
         let archived = agent.archivedAt != nil
         return HStack(spacing: 12) {
-            // Grayed as in a group's member grid, a hint beside the Archived switch.
+            // Grayed as in a group's member grid, a hint beside the Archived switch. Nothing in its profile applies
+            // to an archived bot, so the picture opens none until the bot is brought back.
             store.botProfileButton(agent)
                 .grayscale(archived ? 1 : 0)
+                .disabled(archived)
                 .accessibilityValue(archived ? "Archived" : "")
             VStack(alignment: .leading, spacing: 3) {
                 Text(agent.displayName).font(.body)
