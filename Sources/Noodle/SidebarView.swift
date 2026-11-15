@@ -153,7 +153,8 @@ private struct SidebarList: View {
                 Section("Messages") {
                     ForEach(search.mentions, id: \.messageID) { match in
                         if let conversation = store.conversations.first(where: { $0.id == match.conversationID }) {
-                            MentionRow(participants: store.shownParticipants(for: conversation), isGroup: conversation.kind == .group,
+                            MentionRow(picture: AnyView(ConversationAvatar(participants: store.shownParticipants(for: conversation),
+                                                                           isGroup: conversation.kind == .group, size: 42)),
                                        title: store.title(for: conversation), timestamp: SidebarTimestamp.text(for: match.createdAt),
                                        snippet: term.highlighted(match.snippet))
                                 .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
@@ -436,40 +437,6 @@ private struct ConversationRow: View, Equatable {
         let muted = content.isMuted ? "Muted, " : ""
         let paused = pause.map { "\($0), " } ?? ""
         return "\(unread)\(muted)\(content.title), \(paused)\(detail)"
-    }
-}
-
-/// A message found by a search: the conversation it is in, when it was said and the words around the term.
-private struct MentionRow: View {
-    let participants: [AgentRecord]
-    let isGroup: Bool
-    let title: String
-    let timestamp: String
-    let snippet: AttributedString
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ConversationAvatar(participants: participants, isGroup: isGroup, size: 42)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(timestamp)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.tertiary)
-                }
-                Text(snippet)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(height: 66)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
     }
 }
 

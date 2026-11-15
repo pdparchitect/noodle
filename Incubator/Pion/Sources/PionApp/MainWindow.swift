@@ -82,87 +82,20 @@ struct Sidebar: View {
     @FocusState private var searchFocused: Bool
     @SceneStorage("PionClosedExpanded") private var closedExpanded = true
     @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
+    @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
+    @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
+    @State private var showsAllMentions = false
 
     var body: some View {
-        @Bindable var model = model
-        let active = model.investigations.filter { !$0.isClosed }
-            .sorted { ($0.severityRank, $0.updatedAt) > ($1.severityRank, $1.updatedAt) }
-        let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
-        List(selection: Binding(get: { model.selection }, set: { id in
-            window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
-            model.selection = id
-        })) {
-            if !window.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ForEach(model.searchConversations(window.searchText)) { conversation in
-                    ConversationChoiceRow(model: model, conversation: conversation).tag(conversation.id)
-                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
-                }
+        let line = ConversationRowDetail(rawValue: rowDetail) ?? .standard
+        Group {
+            if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions) {
+                SidebarSearchResults(model: model, window: window, search: search, line: line, showsAll: $showsAllMentions)
             } else {
-                // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
-                SidebarTasks(store: model, filter: taskFilter, inList: true)
-                // A section shows only once it has something in it.
-                if !active.isEmpty {
-                Section {
-                    ForEach(active) { investigation in
-                        InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
-                            .contextMenu {
-                                if let conversation = model.conversation(investigation.id) {
-                                    ConversationRowMenu(model: model, window: window, conversation: conversation)
-                                }
-                            }
-                    }
-                } header: {
-                    Text("Investigations")
-                }
-                }
-                // Closed ones only when asked for, a few at a time, to look back at.
-                if showsClosed, !closed.isEmpty {
-                    Section(isExpanded: $closedExpanded) {
-                        ForEach(closed.prefix(closedLimit)) { investigation in
-                            InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
-                                .contextMenu {
-                                    if let conversation = model.conversation(investigation.id) {
-                                        ConversationRowMenu(model: model, window: window, conversation: conversation)
-                                    }
-                                }
-                        }
-                        if closed.count > closedLimit {
-                            Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
-                                closedLimit += SidebarOptions.closedShown
-                            }
-                            .buttonStyle(.link)
-                            .font(.caption)
-                            .selectionDisabled()
-                        }
-                    } header: {
-                        Text("Closed")
-                    }
-                }
-                if !model.groups.isEmpty {
-                    Section {
-                        ForEach(model.groups) { group in
-                            GroupRow(model: model, group: group).tag(group.id)
-                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: group) }
-                        }
-                    } header: {
-                        Text("Groups")
-                    }
-                }
-                if !model.agents.isEmpty {
-                Section {
-                    ForEach(model.agents) { agent in
-                        if let direct = model.directConversation(of: agent) {
-                            AgentRow(model: model, agent: agent, unread: model.isUnread(direct.id)).tag(direct.id)
-                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: direct) }
-                        }
-                    }
-                } header: {
-                    Text("Agents")
-                }
-                }
+                list(line: line)
             }
         }
-        .listStyle(.sidebar)
+        .onChange(of: window.searchText) { showsAllMentions = false }
         .searchable(text: $window.searchText, placement: .sidebar, prompt: "Search Conversations")
         .searchFocused($searchFocused)
         .onChange(of: window.searchFocusRequest) { searchFocused = true }
@@ -176,6 +109,143 @@ struct Sidebar: View {
                     .help("New Investigation, Group or Agent")
             }
         }
+    }
+
+    /// The sidebar when nothing is searched for.
+    private func list(line: ConversationRowDetail) -> some View {
+        let sections = model.sidebarSections(ConversationOrder(rawValue: order) ?? .standard)
+        let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
+        return List(selection: Binding(get: { model.selection }, set: { id in
+            window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
+            model.selection = id
+        })) {
+            // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
+            SidebarTasks(store: model, filter: taskFilter, inList: true)
+            // As Noodle's, and a section shows only once it has something in it.
+            rows(sections.pinned, header: "Pinned", line: line)
+            rows(sections.unread, header: "Unread", line: line)
+            rows(sections.investigations, header: "Investigations", line: line)
+            // Closed ones only when asked for, a few at a time, to look back at.
+            if showsClosed, !closed.isEmpty {
+                Section(isExpanded: $closedExpanded) {
+                    ForEach(closed.prefix(closedLimit)) { investigation in
+                        InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
+                            .contextMenu {
+                                if let conversation = model.conversation(investigation.id) {
+                                    ConversationRowMenu(model: model, window: window, conversation: conversation)
+                                }
+                            }
+                    }
+                    if closed.count > closedLimit {
+                        Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
+                            closedLimit += SidebarOptions.closedShown
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                        .selectionDisabled()
+                    }
+                } header: {
+                    Text("Closed")
+                }
+            }
+            rows(sections.groups, header: "Groups", line: line)
+            rows(sections.agents, header: "Agents", line: line)
+        }
+        .listStyle(.sidebar)
+    }
+
+    @ViewBuilder private func rows(_ conversations: [BotConversation], header: String, line: ConversationRowDetail) -> some View {
+        if !conversations.isEmpty {
+            Section {
+                ForEach(conversations) { conversation in
+                    ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(conversation.id)
+                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
+                }
+            } header: {
+                Text(header)
+            }
+        }
+    }
+}
+
+/// Noodle's search results: Investigations, groups and agents by name, then each message that says the term,
+/// landing on that message when picked.
+private struct SidebarSearchResults: View {
+    private enum Pick: Hashable { case conversation(UUID), mention(UUID) }
+
+    let model: PionModel
+    let window: WindowState
+    let search: PionModel.SidebarSearch
+    let line: ConversationRowDetail
+    @Binding var showsAll: Bool
+    @State private var pickedMention: UUID?
+
+    var body: some View {
+        List(selection: Binding<Pick?>(get: {
+            guard let id = model.selection else { return nil }
+            if let pickedMention, search.mentions.contains(where: { $0.messageID == pickedMention && $0.conversationID == id }) {
+                return .mention(pickedMention)
+            }
+            return .conversation(id)
+        }, set: { pick in
+            switch pick {
+            case .conversation(let id):
+                pickedMention = nil
+                model.selection = id
+            case .mention(let messageID):
+                pickedMention = messageID
+                model.selection = search.mentions.first { $0.messageID == messageID }?.conversationID
+                // After the transcript for the selection is on screen.
+                DispatchQueue.main.async { NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID) }
+            case nil:
+                model.selection = nil
+            }
+        })) {
+            section("Investigations", search.investigations)
+            section("Groups", search.groups)
+            section("Agents", search.agents)
+            if !search.mentions.isEmpty, let term = ConversationSearch(window.searchText) {
+                Section("Messages") {
+                    ForEach(search.mentions, id: \.messageID) { match in
+                        if let conversation = model.conversation(match.conversationID) {
+                            MentionRow(picture: picture(of: conversation), title: model.title(of: conversation),
+                                       timestamp: SidebarTimestamp.text(for: match.createdAt),
+                                       snippet: term.highlighted(match.snippet))
+                                .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
+                                .tag(Pick.mention(match.messageID))
+                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
+                        }
+                    }
+                    if search.hiddenMentions > 0 {
+                        Button("Show All \(search.mentions.count + search.hiddenMentions)") { showsAll = true }
+                            .buttonStyle(.link)
+                            .selectionDisabled()
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    @ViewBuilder private func section(_ title: String, _ conversations: [BotConversation]) -> some View {
+        if !conversations.isEmpty {
+            Section(title) {
+                ForEach(conversations) { conversation in
+                    ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(Pick.conversation(conversation.id))
+                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
+                }
+            }
+        }
+    }
+
+    private func picture(of conversation: BotConversation) -> AnyView {
+        if let investigation = model.investigation(conversation.id) {
+            return AnyView(SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed).frame(width: 42, height: 42))
+        }
+        if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
+            return AnyView(AgentMark(agent: agent, size: 42))
+        }
+        return AnyView(SymbolMark(symbol: "person.3.fill", size: 42))
     }
 }
 
@@ -194,6 +264,10 @@ struct ConversationRowMenu: View {
         let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
         let closed = investigation?.isClosed == true
         Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+        Button(model.isPinned(conversation.id) ? "Unpin" : "Pin") {
+            model.setPinned(!model.isPinned(conversation.id), conversationID: conversation.id)
+        }
+        .disabled(closed)
         Divider()
         Button(investigation != nil ? "Edit Investigation…" : agent != nil ? "Edit Agent…" : "Edit Group…") {
             window.edit(conversation, in: model)
@@ -317,7 +391,7 @@ struct InvestigationRow: View {
     let investigation: Investigation
 
     var body: some View {
-        let unread = model.isUnread(investigation.id)
+        let unread = model.countsAsUnread(investigation.id)
         HStack(alignment: .top, spacing: 8) {
             SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
                 .padding(.top, 3)
@@ -342,15 +416,15 @@ struct InvestigationRow: View {
 struct GroupRow: View {
     let model: PionModel
     let group: BotConversation
+    var line = ConversationRowDetail.standard
 
     var body: some View {
-        let members = model.members(of: group)
-        let unread = model.isUnread(group.id)
+        let unread = model.countsAsUnread(group.id)
         HStack(spacing: 8) {
             SymbolMark(symbol: "person.3.fill", size: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(group.displayName).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
-                Text(members.map(\.displayName).formatted(.list(type: .and)))
+                Text(model.rowDetail(for: group, showing: line))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }
@@ -364,6 +438,9 @@ struct AgentRow: View {
     let model: PionModel
     let agent: AgentRecord
     let unread: Bool
+    /// The agent's own conversation, whose line shows under the name; a paused or failed agent says so instead.
+    var conversation: BotConversation?
+    var line = ConversationRowDetail.standard
 
     var body: some View {
         let phase = model.phase(of: agent)
@@ -371,7 +448,8 @@ struct AgentRow: View {
             AgentMark(agent: agent, size: 22, phase: phase)
             VStack(alignment: .leading, spacing: 1) {
                 Text(agent.displayName).font(.callout.weight(unread ? .semibold : .regular))
-                if let detail = model.phaseDetail(of: agent) ?? agent.publicDescription {
+                if let detail = model.interruption(of: agent) ?? conversation.map({ model.rowDetail(for: $0, showing: line) })
+                    ?? model.phaseDetail(of: agent) ?? agent.publicDescription {
                     Text(detail).font(.caption).foregroundStyle(phase == .failed ? Color.red : Color.secondary).lineLimit(1)
                 }
             }

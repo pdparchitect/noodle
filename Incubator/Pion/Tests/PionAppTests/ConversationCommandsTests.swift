@@ -26,12 +26,16 @@ import XCTest
         try model.send("Unusual beacon from the laptop", in: direct.id)
         model.selection = group.id
 
-        XCTAssertEqual(model.searchConversations("avery").map(\.id), [direct.id])
-        XCTAssertEqual(model.searchConversations("network analyst").map(\.id), [direct.id])
-        XCTAssertEqual(model.searchConversations("RESPONSE").map(\.id), [group.id])
-        XCTAssertEqual(model.searchConversations("beacon").map(\.id), [direct.id])
-        XCTAssertEqual(Set(model.searchConversations("  ").map(\.id)), Set([direct.id, group.id]))
-        XCTAssertTrue(model.searchConversations("missing").isEmpty)
+        func found(_ text: String) -> [UUID]? {
+            model.sidebarSearch(text, showingAll: true).map { ($0.investigations + $0.groups + $0.agents).map(\.id) }
+        }
+        XCTAssertEqual(found("avery"), [group.id, direct.id], "As in Noodle, a group is found by an agent in it")
+        XCTAssertEqual(found("network analyst"), [direct.id])
+        XCTAssertEqual(found("RESPONSE"), [group.id])
+        XCTAssertEqual(found("beacon"), [])
+        XCTAssertEqual(model.sidebarSearch("beacon", showingAll: true)?.mentions.map(\.conversationID), [direct.id])
+        XCTAssertNil(found("  "))
+        XCTAssertEqual(found("missing"), [])
         XCTAssertEqual(model.selection, group.id)
     }
 
@@ -58,8 +62,8 @@ import XCTest
         let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: agent.id))
         model.setStatus(.closed, of: investigation, outcome: .resolved)
 
-        XCTAssertEqual(model.searchConversations(investigation.reference).map(\.id), [investigation.id])
-        XCTAssertEqual(model.searchConversations("beaconing").map(\.id), [investigation.id])
+        XCTAssertEqual(model.sidebarSearch(investigation.reference, showingAll: true)?.investigations.map(\.id), [investigation.id])
+        XCTAssertEqual(model.sidebarSearch("beaconing", showingAll: true)?.investigations.map(\.id), [investigation.id])
     }
 
     func testStopTargetsTheRequestedDirectConversationAndRecordsItOnce() throws {

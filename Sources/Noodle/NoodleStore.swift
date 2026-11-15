@@ -773,17 +773,13 @@ final class NoodleStore {
     /// Pinned bots and groups always sit on top, in the order they were pinned, whatever the order; the rest come
     /// newest message first. An Unread section takes the unread ones out of the others until they are read.
     func sidebarSections(_ order: ConversationOrder) -> SidebarSections {
-        let pinnedIDs = Set(shownPinnedIDs)
-        let unpinned = filteredConversations.filter { !pinnedIDs.contains($0.id) }
-        let newest = unpinned.sorted { lastMessageDate(of: $0) > lastMessageDate(of: $1) }
-        let unread = order.unread(newest, isUnread: countsAsUnread), unreadIDs = Set(unread.map(\.id))
-        let rest = order.arranged(newest.filter { !unreadIDs.contains($0.id) }, isUnread: countsAsUnread)
-        let visible = Dictionary(uniqueKeysWithValues: filteredConversations.map { ($0.id, $0) })
+        let sections = order.sections(filteredConversations, pinned: shownPinnedIDs, lastActivity: lastMessageDate(of:),
+                                      isUnread: { self.countsAsUnread($0) })
         return SidebarSections(
-            unread: unread,
-            pinned: shownPinnedIDs.compactMap { visible[$0] },
-            bots: rest.filter { $0.kind == .direct },
-            groups: rest.filter { $0.kind == .group }
+            unread: sections.unread,
+            pinned: sections.pinned,
+            bots: sections.rest.filter { $0.kind == .direct },
+            groups: sections.rest.filter { $0.kind == .group }
         )
     }
 
@@ -2289,7 +2285,7 @@ final class NoodleStore {
     /// The unread conversations the Dock counts: muted groups are left out, and a group in Mentions only counts once
     /// a reply names the person.
     var badgedConversationIDs: Set<UUID> {
-        unreadConversationIDs.filter { notifications(of: $0).countsUnread(mentioned: mentionedConversationIDs.contains($0)) }
+        ConversationUnread(unread: unreadConversationIDs, mentioned: mentionedConversationIDs).badged(notifications(of:))
     }
 
     func updateDockBadge() {
@@ -2890,22 +2886,11 @@ final class NoodleStore {
     private func registerUnreadMessages(_ messages: [ChatMessage]) {
         guard !messages.isEmpty else { return }
 
-        var updated = unreadConversationIDs, mentioned = mentionedConversationIDs
-        var viewed: Set<UUID> = []
-        for message in messages {
-            if conversationWindows.isViewing(message.conversationID) {
-                updated.remove(message.conversationID)
-                mentioned.remove(message.conversationID)
-                viewed.insert(message.conversationID)
-            } else {
-                updated.insert(message.conversationID)
-                if case .agent = message.author, LinkMention.mentions(message.body, name: mentionName(in: message.conversationID)) {
-                    mentioned.insert(message.conversationID)
-                }
-            }
-        }
+        var state = ConversationUnread(unread: unreadConversationIDs, mentioned: mentionedConversationIDs)
+        let viewed = state.register(messages, isViewing: conversationWindows.isViewing, mentionName: mentionName(in:))
         // Read as it arrived, so the person's other devices show it read too.
         viewed.forEach(shareRead)
+        let updated = state.unread, mentioned = state.mentioned
 
         guard updated != unreadConversationIDs || mentioned != mentionedConversationIDs else { return }
         if mentioned != mentionedConversationIDs { mentionedConversationIDs = mentioned }
@@ -2960,7 +2945,7 @@ final class NoodleStore {
     func preview(for conversation: BotConversation) -> String {
         guard let message = messages(for: conversation).last(where: { $0.author != .system }) else { return "No messages yet" }
         if let cached = previewTexts[conversation.id], cached.messageID == message.id, cached.body == message.body { return cached.text }
-        let text = MarkdownPlainText.convert(MessageSegment.previewText(message.body))
+        let text = ConversationRowDetail.latestMessage(in: [message])
         previewTexts[conversation.id] = (message.id, message.body, text)
         return text
     }
@@ -2969,16 +2954,7 @@ final class NoodleStore {
     func sidebarDetail(for conversation: BotConversation, showing detail: ConversationRowDetail) -> String {
         let conversation = current(conversation)
         let agent = conversation.kind == .direct ? participants(for: conversation).first : nil
-        return detail.line(isGroup: conversation.kind == .group,
-                           description: agent?.publicDescription ?? conversation.publicDescription,
-                           status: agent?.status,
-                           latestReply: {
-                               agent.flatMap { agent in
-                                   WidgetBots.statusLine(status: nil, messages: self.messages(for: conversation), agentID: agent.id) {
-                                       MarkdownPlainText.convert(MessageSegment.previewText($0))
-                                   }
-                               }
-                           },
+        return detail.line(for: conversation, agent: agent, messages: messages(for: conversation),
                            latestMessage: preview(for: conversation))
     }
 

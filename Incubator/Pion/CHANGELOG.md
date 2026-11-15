@@ -14,6 +14,9 @@
 - The Dock shows how many conversations wait for you, as in Noodle: muted groups never count, and a group set to mentions counts once a reply names you.
 - Your messages say whether they were Saved, Sent, Delivered or Not delivered, and a message's first web link gets a preview card, as in Noodle.
 - The Help menu starts with Pion Help, which opens Pion's page, as Noodle's does.
+- Pin and Unpin, in a conversation's menu, keep Investigations, groups and agents in a Pinned section at the top of the sidebar, in the order pinned, as in Noodle.
+- View › Sidebar has Noodle's choices of the line under each name (latest message, description or status) and of the order: Newest First, Unread First or an Unread section.
+- Search Conversations also finds messages, as in Noodle: Investigations, groups and agents that match come first, then each message that says the term, with the words around it; picking one opens the conversation at that message.
 
 ### Fixed
 
@@ -24,6 +27,7 @@
 ### Changed
 
 - The agent editor names a harness's default login by its account, as Noodle does, instead of Default.
+- Groups and agents in the sidebar come newest message first, as in Noodle, instead of by name; open Investigations still come most severe first.
 - Removing an agent from a team or group asks first, as in Noodle, and inline code in messages reads as in Noodle.
 - A notice such as an agent moving to another harness, or someone joining a group, shows as Noodle's small centred note instead of a message from Pion.
 - The microphone and ⇧⌘D send voice messages, as in Noodle: the recording, with its transcript, goes to the conversation, and agents hear what was said. They used to dictate into the message field. In Settings › Keybindings the shortcut is now Record / Stop Voice Message.

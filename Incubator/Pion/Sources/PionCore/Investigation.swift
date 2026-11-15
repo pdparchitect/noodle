@@ -37,6 +37,9 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
         public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rank < rhs.rank }
     }
 
+    /// Unassessed first, then low to critical, for sorting.
+    public var severityRank: Int { severity.map { Severity.allCases.firstIndex(of: $0)! + 1 } ?? 0 }
+
     public let id: UUID
     /// Shown as INV-0007; numbers are never reused.
     public let number: Int

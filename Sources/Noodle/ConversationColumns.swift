@@ -572,9 +572,6 @@ struct MainWindowLayoutCommands: View {
 /// and whether it has a space picker.
 struct SidebarCommands: View {
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
-    @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
-    @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
-    @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
     @AppStorage(SidebarSpacePicker.key) private var showsSpacePicker = false
 
     var body: some View {
@@ -585,23 +582,7 @@ struct SidebarCommands: View {
             .pickerStyle(.inline)
             .labelsHidden()
             Divider()
-            Picker("Line", selection: $detail) {
-                ForEach(ConversationRowDetail.allCases) { Text("Show \($0.name)").tag($0.rawValue) }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-            Divider()
-            Picker("Order", selection: $order) {
-                ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-            Divider()
-            Picker("Tasks", selection: $tasks) {
-                ForEach(TaskListFilter.allCases) { Text($0.menuName).tag($0) }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
+            SidebarListPickers()
             Divider()
             Toggle("Space Picker", isOn: $showsSpacePicker)
         }

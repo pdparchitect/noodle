@@ -1,3 +1,4 @@
+import HubLink
 import NoodleBrand
 import NoodleCore
 import NoodleRuntimeSettings
@@ -28,14 +29,16 @@ struct ConversationSheets: ViewModifier {
 struct ConversationChoiceRow: View {
     let model: PionModel
     let conversation: BotConversation
+    var line = ConversationRowDetail.standard
 
     var body: some View {
         if let investigation = model.investigation(conversation.id) {
             InvestigationRow(model: model, investigation: investigation)
         } else if conversation.kind == .group {
-            GroupRow(model: model, group: conversation)
+            GroupRow(model: model, group: conversation, line: line)
         } else if let agent = model.agent(conversation.participantIDs.first) {
-            AgentRow(model: model, agent: agent, unread: model.isUnread(conversation.id))
+            AgentRow(model: model, agent: agent, unread: model.countsAsUnread(conversation.id),
+                     conversation: conversation, line: line)
         }
     }
 }

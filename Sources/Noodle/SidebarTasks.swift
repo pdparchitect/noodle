@@ -192,3 +192,64 @@ enum SidebarTimestamp {
         return date.formatted(style)
     }
 }
+
+/// View › Sidebar's line under each name, the order and which tasks it lists, as one block of inline pickers.
+struct SidebarListPickers: View {
+    @AppStorage(ConversationRowDetail.key) private var detail = ConversationRowDetail.standard.rawValue
+    @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
+    @AppStorage(TaskListFilter.key) private var tasks = TaskListFilter.standard
+
+    var body: some View {
+        Picker("Line", selection: $detail) {
+            ForEach(ConversationRowDetail.allCases) { Text("Show \($0.name)").tag($0.rawValue) }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+        Divider()
+        Picker("Order", selection: $order) {
+            ForEach(ConversationOrder.allCases) { Text($0.name).tag($0.rawValue) }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+        Divider()
+        Picker("Tasks", selection: $tasks) {
+            ForEach(TaskListFilter.allCases) { Text($0.menuName).tag($0) }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+    }
+}
+
+/// A message found by a search: the conversation it is in, when it was said and the words around the term.
+struct MentionRow: View {
+    /// The conversation's picture, 42 points across.
+    let picture: AnyView
+    let title: String
+    let timestamp: String
+    let snippet: AttributedString
+
+    var body: some View {
+        HStack(spacing: 10) {
+            picture
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(timestamp)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                }
+                Text(snippet)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(height: 66)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}

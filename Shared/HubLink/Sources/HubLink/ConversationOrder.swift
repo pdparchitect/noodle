@@ -1,3 +1,5 @@
+import Foundation
+
 /// How the conversation list orders bots and groups, so new messages are easy to find. The list itself comes
 /// newest message first; this decides where the unread ones go.
 public enum ConversationOrder: String, CaseIterable, Identifiable, Sendable {
@@ -33,4 +35,25 @@ public enum ConversationOrder: String, CaseIterable, Identifiable, Sendable {
         guard self == .unreadFirst else { return items }
         return items.filter(isUnread) + items.filter { !isUnread($0) }
     }
+
+    /// A sidebar's sections: pins on top in the order they were pinned, then, newest message first, an Unread
+    /// section when the order has one and the rest, the unread ones ahead when they come first.
+    public func sections<Item: Identifiable>(_ items: [Item], pinned: [Item.ID], lastActivity: (Item) -> Date,
+                                             isUnread: (Item) -> Bool) -> ConversationSections<Item> {
+        let pinnedIDs = Set(pinned)
+        let byID = Dictionary(items.map { ($0.id, $0) }) { first, _ in first }
+        // Said in the same second, they keep the order given, so the list does not jump about.
+        let newest = items.filter { !pinnedIDs.contains($0.id) }.enumerated()
+            .sorted { (lastActivity($0.element), -$0.offset) > (lastActivity($1.element), -$1.offset) }.map(\.element)
+        let unread = self.unread(newest, isUnread: isUnread), unreadIDs = Set(unread.map(\.id))
+        return ConversationSections(unread: unread, pinned: pinned.compactMap { byID[$0] },
+                                    rest: arranged(newest.filter { !unreadIDs.contains($0.id) }, isUnread: isUnread))
+    }
+}
+
+/// What ``ConversationOrder/sections(_:pinned:lastActivity:isUnread:)`` gives; each app splits the rest its own way.
+public struct ConversationSections<Item> {
+    public var unread: [Item]
+    public var pinned: [Item]
+    public var rest: [Item]
 }

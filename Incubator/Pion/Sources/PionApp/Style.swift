@@ -26,8 +26,6 @@ extension Investigation.Severity {
 extension Investigation {
     /// The secondary colour until the lead assesses it.
     var severityColor: Color { severity?.color ?? .secondary }
-    /// Unassessed first, then low to critical, for sorting.
-    var severityRank: Int { severity.map { Severity.allCases.firstIndex(of: $0)! + 1 } ?? 0 }
 }
 
 extension AgentRuntimePhase {

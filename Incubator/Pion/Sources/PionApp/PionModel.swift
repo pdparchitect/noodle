@@ -1,5 +1,6 @@
 import Foundation
 import HubLink
+import HubWire
 import NoodleBrand
 import NoodleCore
 import NoodleRuntime
@@ -53,7 +54,8 @@ import UniformTypeIdentifiers
     var pendingAttachments: [UUID: [ConversationAttachment]] = [:]
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
-    private(set) var readUpTo: [UUID: UUID] = [:]
+    /// Which conversations wait for the champion, kept where Noodle keeps them.
+    private(set) var unread = ConversationUnread()
     /// Each agent's tasks, as the messenger keeps them.
     private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
     /// Whether the main window shows the welcome: offered once to someone with no agents, then from Help > Welcome.
@@ -79,6 +81,10 @@ import UniformTypeIdentifiers
     private let toolAssignments = ToolAssignmentStore()
     private var loop: Task<Void, Never>?
     private var transcriptDates: [UUID: Date] = [:]
+    /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
+    private(set) var pinnedIDs: [UUID] = []
+    /// Whether the transcripts there at launch were read, so later messages count as new.
+    private var launchRead = false
     private var running = false
 
     /// `hidesInstalledHarnesses` leaves out harnesses installed outside Pion's own storage, as on a Mac that never had any.
@@ -106,10 +112,6 @@ import UniformTypeIdentifiers
         harnessProfiles.subscriptionUsage = runtime.subscriptionUsage
         self.isScripted = isScripted
         messenger = MessengerBroker(repository: repository)
-        readUpTo = (UserDefaults.standard.dictionary(forKey: Self.readKey) as? [String: String] ?? [:])
-            .reduce(into: [:]) { result, pair in
-                if let conversation = UUID(uuidString: pair.key), let message = UUID(uuidString: pair.value) { result[conversation] = message }
-            }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadPion() } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
         messenger.onWakesChanged = { [weak self] id in
@@ -137,6 +139,7 @@ import UniformTypeIdentifiers
         if !isScripted { offerAppleModel() }
         reload()
         for conversation in conversations { readTranscript(conversation.id, notifying: false) }
+        launchRead = true
         guard !isScripted, !running else { return }
         do {
             for id in try repository.synchronizeAgentWorkspaces(agents) {
@@ -255,6 +258,9 @@ import UniformTypeIdentifiers
         reloadWorkspace()
         reloadPion()
         groupNotificationSettings = (try? repository.loadGroupNotifications()) ?? GroupNotificationSettings()
+        unread = ConversationUnread(repository: repository, known: Set(everyConversation.map(\.id)))
+        let pins = ((try? repository.loadPinnedConversationIDs()) ?? []).filter(Set(conversations.map(\.id)).contains)
+        if pins != pinnedIDs { pinnedIDs = pins }
         budgets.onChange = { [weak self] in self?.applyBudgets() }
         budgets.load(everyAgent, repository: repository)
         tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
@@ -286,8 +292,12 @@ import UniformTypeIdentifiers
         guard modified != transcriptDates[id] || transcripts[id] == nil else { return }
         transcriptDates[id] = modified
         let messages = (try? repository.loadMessages(conversationID: id)) ?? []
+        // Only what was there at launch is history; a conversation first seen later is new.
+        let firstRead = transcripts[id] == nil && !launchRead
         let known = Set((transcripts[id] ?? []).map(\.id))
         transcripts[id] = messages
+        // As in Noodle: what arrives after the first read is unread unless the conversation is open.
+        if !firstRead { registerUnread(messages.filter { !known.contains($0.id) && $0.author != .user }) }
         if messages.contains(where: { !$0.attachments.isEmpty }) {
             attachments[id] = Dictionary(((try? repository.loadAttachments(conversationID: id)) ?? []).map { ($0.id, $0) }) { first, _ in first }
         }
@@ -310,22 +320,45 @@ import UniformTypeIdentifiers
 
     func messages(in id: UUID) -> [ChatMessage] { transcripts[id] ?? [] }
 
-    /// Search every conversation, including closed cases, without changing the sidebar's selection.
-    func searchConversations(_ query: String) -> [BotConversation] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return conversations.filter { conversation in
-            guard !query.isEmpty else { return true }
+    /// What the sidebar shows while searching, as Noodle searches: Investigations, groups and agents by name,
+    /// then each message that says the term.
+    struct SidebarSearch {
+        var investigations: [BotConversation] = [], groups: [BotConversation] = [], agents: [BotConversation] = []
+        var mentions: [LinkMessageMatch] = []
+        /// How many more mentions Show All would list.
+        var hiddenMentions = 0
+    }
+
+    /// Nil while nothing is searched for. Closed Investigations are found too.
+    func sidebarSearch(_ text: String, showingAll: Bool) -> SidebarSearch? {
+        guard let search = ConversationSearch(text) else { return nil }
+        let listed = conversations.sorted { lastActivity(of: $0) > lastActivity(of: $1) }
+        let byID = Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0) })
+        let sections = search.sections(listed.map { conversation in
             let investigation = investigation(conversation.id)
             let agent = conversation.kind == .direct ? agent(conversation.participantIDs.first) : nil
-            let fields = [conversation.displayName, conversation.publicDescription, agent?.displayName,
-                          agent?.publicDescription, investigation?.reference, investigation?.title, investigation?.objective]
-            return fields.compactMap { $0 }.contains { $0.localizedStandardContains(query) }
-                || messages(in: conversation.id).contains { $0.body.localizedStandardContains(query) }
-        }.sorted {
-            let left = investigation($0.id)?.title ?? $0.displayName
-            let right = investigation($1.id)?.title ?? $1.displayName
-            return left.localizedStandardCompare(right) == .orderedAscending
+            return ConversationSearch.Candidate(
+                id: conversation.id, isGroup: conversation.kind == .group,
+                name: investigation.map { "\($0.reference) \($0.title)" } ?? agent?.displayName ?? conversation.displayName,
+                about: investigation?.objective ?? agent?.publicDescription ?? conversation.publicDescription ?? "",
+                members: conversation.kind == .group ? members(of: conversation).map(\.displayName) : [])
+        })
+        let groups = sections.groups.compactMap { byID[$0] }
+        var result = SidebarSearch(investigations: groups.filter { investigation($0.id) != nil },
+                                   groups: groups.filter { investigation($0.id) == nil },
+                                   agents: sections.bots.compactMap { byID[$0] })
+        let mentions = search.messageMatches(in: listed.map { (id: $0.id, messages: messages(in: $0.id)) },
+                                             limit: LinkMessageSearch.maximumLimit) { message in
+            (message.id, message.createdAt,
+             message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
         }
+        (result.mentions, result.hiddenMentions) = search.shown(mentions, besideNames: !sections.isEmpty, showingAll: showingAll)
+        return result
+    }
+
+    /// When anything was last said, by anyone.
+    private func lastActivity(of conversation: BotConversation) -> Date {
+        messages(in: conversation.id).last?.createdAt ?? conversation.createdAt
     }
 
     /// As in Noodle, Stop acts on the agent in a direct conversation, never a whole group.
@@ -365,11 +398,54 @@ import UniformTypeIdentifiers
         } catch { problem = error.localizedDescription }
     }
 
-    /// Groups that are not Investigations: the teams.
-    var groups: [BotConversation] {
-        let claimed = Set(investigations.map(\.id))
-        return conversations.filter { $0.kind == .group && !claimed.contains($0.id) }
-            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+    struct SidebarSections {
+        var pinned: [BotConversation] = [], unread: [BotConversation] = []
+        var investigations: [BotConversation] = [], groups: [BotConversation] = [], agents: [BotConversation] = []
+    }
+
+    /// Noodle's order: pins on top as pinned, an Unread section when chosen, the rest newest message first, with
+    /// open Investigations by severity first. Closed ones keep a section of their own.
+    func sidebarSections(_ order: ConversationOrder) -> SidebarSections {
+        let listed = conversations.filter { investigation($0.id)?.isClosed != true }
+        let sections = order.sections(listed, pinned: pinnedIDs,
+                                      lastActivity: lastActivity(of:),
+                                      isUnread: { self.countsAsUnread($0.id) })
+        let rest = sections.rest
+        // Most severe first, newest message first within each severity.
+        let cases = rest.compactMap { conversation in investigation(conversation.id).map { (conversation, $0.severityRank) } }
+            .enumerated().sorted { ($0.element.1, -$0.offset) > ($1.element.1, -$1.offset) }.map(\.element.0)
+        return SidebarSections(
+            pinned: sections.pinned, unread: sections.unread,
+            investigations: order.arranged(cases) { self.countsAsUnread($0.id) },
+            groups: rest.filter { $0.kind == .group && investigation($0.id) == nil },
+            agents: rest.filter { $0.kind == .direct })
+    }
+
+    /// An Investigation's title, an agent's name or a group's.
+    func title(of conversation: BotConversation) -> String {
+        investigation(conversation.id)?.title
+            ?? (conversation.kind == .direct ? agent(conversation.participantIDs.first)?.displayName : nil)
+            ?? conversation.displayName
+    }
+
+    func isPinned(_ id: UUID) -> Bool { pinnedIDs.contains(id) }
+
+    func setPinned(_ pinned: Bool, conversationID: UUID) {
+        guard pinned != isPinned(conversationID) else { return }
+        var updated = pinnedIDs.filter { $0 != conversationID }
+        if pinned { updated.append(conversationID) }
+        do {
+            try repository.savePinnedConversationIDs(updated)
+            pinnedIDs = updated
+        } catch { problem = error.localizedDescription }
+    }
+
+    /// The line under a row's name, as Noodle's View > Sidebar Line chooses it.
+    func rowDetail(for conversation: BotConversation, showing detail: ConversationRowDetail) -> String {
+        let messages = messages(in: conversation.id)
+        let agent = conversation.kind == .direct ? agent(conversation.participantIDs.first) : nil
+        return detail.line(for: conversation, agent: agent, messages: messages,
+                           latestMessage: ConversationRowDetail.latestMessage(in: messages))
     }
 
     /// The conversation each agent has with the champion alone.
@@ -397,6 +473,13 @@ import UniformTypeIdentifiers
         isScripted ? scriptedPhases[agent.id] ?? .ready : runtime.snapshot(for: agent.id).phase
     }
 
+    /// What stops the agent, suspended or paused, which a sidebar row says before anything else.
+    func interruption(of agent: AgentRecord) -> String? {
+        if isScripted { return nil }
+        if agent.isSuspended(), let until = agent.suspendedUntil { return AgentRecord.suspension(until: until) }
+        return runtime.snapshot(for: agent.id).pauseSummary
+    }
+
     func phaseDetail(of agent: AgentRecord) -> String? {
         if isScripted { return agent.status }
         if agent.isSuspended(), let until = agent.suspendedUntil { return AgentRecord.suspension(until: until) }
@@ -404,19 +487,27 @@ import UniformTypeIdentifiers
         return snapshot.pauseSummary ?? agent.status
     }
 
-    func isUnread(_ id: UUID) -> Bool {
-        guard selection != id, let last = messages(in: id).last, last.author != .user else { return false }
-        return readUpTo[id] != last.id
-    }
+    func isUnread(_ id: UUID) -> Bool { selection != id && unread.unread.contains(id) }
+
+    /// Unread and not a muted group, as Noodle shows it: a muted group's row is not marked.
+    func countsAsUnread(_ id: UUID) -> Bool { isUnread(id) && notifications(of: id) != .muted }
 
     func markRead(_ id: UUID) {
-        guard let last = messages(in: id).last, readUpTo[id] != last.id else { return }
-        readUpTo[id] = last.id
-        defer { updateBadge() }
-        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: readUpTo.map { ($0.key.uuidString, $0.value.uuidString) }), forKey: Self.readKey)
+        guard unread.markRead(id) else { return }
+        saveUnread()
     }
 
-    private static let readKey = "PionReadUpTo"
+    private func registerUnread(_ messages: [ChatMessage]) {
+        guard !messages.isEmpty else { return }
+        let before = unread
+        unread.register(messages, isViewing: { $0 == selection }, mentionName: { _ in champion })
+        if unread != before { saveUnread() }
+    }
+
+    private func saveUnread() {
+        do { try unread.save(to: repository) } catch { problem = error.localizedDescription }
+        updateBadge()
+    }
 
     // MARK: Apple Intelligence
 
@@ -487,18 +578,7 @@ import UniformTypeIdentifiers
     /// The unread conversations the Dock counts, as Noodle counts them: a muted group never, a group in Mentions only
     /// once an unread reply names the champion.
     var badgedConversationIDs: Set<UUID> {
-        Set(conversations.map(\.id).filter { id in
-            isUnread(id) && notifications(of: id).countsUnread(mentioned: unreadMessages(in: id).contains {
-                LinkMention.mentions($0.body, name: champion)
-            })
-        })
-    }
-
-    /// Agents' messages after the last one read.
-    private func unreadMessages(in id: UUID) -> [ChatMessage] {
-        let messages = messages(in: id)
-        let start = readUpTo[id].flatMap { read in messages.firstIndex { $0.id == read } }.map { $0 + 1 } ?? 0
-        return messages[start...].filter { if case .agent = $0.author { true } else { false } }
+        unread.badged(notifications(of:)).subtracting([selection].compactMap { $0 })
     }
 
     /// Tells the Dock again, as once notifications are allowed and the badge can show.
