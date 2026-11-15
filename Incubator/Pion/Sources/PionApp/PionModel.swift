@@ -73,7 +73,8 @@ import UniformTypeIdentifiers
     private var running = false
 
     /// `hidesInstalledHarnesses` leaves out harnesses installed outside Pion's own storage, as on a Mac that never had any.
-    init(root: URL, messenger launcher: URL?, isScripted: Bool = false, hidesInstalledHarnesses: Bool = false) {
+    init(root: URL, messenger launcher: URL?, isScripted: Bool = false, hidesInstalledHarnesses: Bool = false,
+         harnessDefaults: UserDefaults = .standard) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: launcher)
         connectionsController = ToolConnectionsController(repository: repository)
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
@@ -81,7 +82,8 @@ import UniformTypeIdentifiers
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)
         if !isScripted { discovery.removeSupersededManagedHarnesses() }
-        runtime = AgentRuntimeCoordinator(discovery: discovery, harnesses: HarnessSelection(defaults: .standard))
+        runtime = AgentRuntimeCoordinator(discovery: discovery,
+                                          harnesses: HarnessSelection(defaults: harnessDefaults, onByDefault: PionHarnesses.onByDefault))
         runtime.remoteModels = RemoteModelAccountStore(repository: root)
         runtime.harnessProfiles = repository.harnessProfiles
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)

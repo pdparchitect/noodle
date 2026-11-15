@@ -65,7 +65,7 @@ private struct WelcomeSteps: View {
     init(model: PionModel, setup: HarnessSetupController) {
         self.model = model
         self.setup = setup
-        _steps = State(initialValue: FirstBotSetup(setup: setup, runtime: model.runtime))
+        _steps = State(initialValue: FirstBotSetup(setup: setup, runtime: model.runtime, accounts: PionHarnesses.featured))
     }
 
     private var id: HarnessProvider { steps.selection }
@@ -120,7 +120,7 @@ private struct WelcomeSteps: View {
     private var harnessStep: some View {
         VStack(spacing: 16) {
             HStack(spacing: 10) {
-                ForEach(FirstBotSetup.featured) { tile(for: $0) }
+                ForEach(steps.accounts) { tile(for: $0) }
             }
             Button("Not Now") { model.finishWelcome() }
                 .buttonStyle(.link)
@@ -138,9 +138,9 @@ private struct WelcomeSteps: View {
                     .accessibilityHidden(true)
                 VStack(spacing: 2) {
                     Text(name(provider)).font(.headline)
-                    if let maker = FirstBotSetup.maker(provider) {
-                        Text("by \(maker)").font(.caption).foregroundStyle(.secondary)
-                    }
+                    // Apple Intelligence has no account; it runs on this Mac.
+                    Text(FirstBotSetup.maker(provider).map { "by \($0)" } ?? "on this Mac")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 status(for: provider)
             }

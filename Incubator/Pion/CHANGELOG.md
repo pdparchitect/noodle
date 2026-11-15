@@ -15,6 +15,7 @@
 
 ### Changed
 
+- Codex, Claude and Apple Intelligence are the harnesses on for a new install and offered by the welcome; Grok, Muse and the rest wait to be turned on in Settings > Harness.
 - With nothing set up, the sidebar shows no empty Investigations or Agents headings, and the window says No Agents with a short prompt to create one.
 - Settings badges the Harness, Tools, Permissions and Update tabs when they need attention, and is as wide as Noodle's.
 - The Agents tab in Settings has Noodle's sparkles icon.

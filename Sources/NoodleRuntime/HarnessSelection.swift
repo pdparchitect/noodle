@@ -35,6 +35,8 @@ public final class HarnessSelection {
     static let usageRetryProfilesDefaultsKey = "Noodle.harness.usageRetryProfiles"
 
     @ObservationIgnored private let defaults: UserDefaults?
+    /// On until the person turns them off; the rest wait to be turned on. The app's own set.
+    @ObservationIgnored private let onByDefault: Set<HarnessProvider>
     /// The person's own choices; a harness without one keeps its default.
     private var choices: [String: Bool]
     /// Whether a bot whose harness runs out of usage continues on another one. Off until the person turns it on.
@@ -51,14 +53,17 @@ public final class HarnessSelection {
     /// Everything on and nothing saved, for runtimes no person chooses for.
     public init() {
         defaults = nil
+        onByDefault = Set(HarnessProvider.allCases)
         choices = Dictionary(uniqueKeysWithValues: HarnessProvider.allCases.map { ($0.rawValue, true) })
         fallbackIsOn = false
         fallbackTargets = []
         usageRetryTargets = []
     }
 
-    public init(defaults: UserDefaults) {
+    /// `onByDefault` is the app's own set of harnesses on for a new install; without one, Noodle's.
+    public init(defaults: UserDefaults, onByDefault: Set<HarnessProvider>? = nil) {
         self.defaults = defaults
+        self.onByDefault = onByDefault ?? Set(HarnessProvider.allCases.filter(\.isOnByDefault))
         choices = defaults.dictionary(forKey: Self.defaultsKey) as? [String: Bool] ?? [:]
         fallbackIsOn = defaults.bool(forKey: Self.fallbackDefaultsKey)
         fallbackTargets = Self.unique((defaults.stringArray(forKey: Self.fallbacksDefaultsKey) ?? []).compactMap(HarnessFallbackTarget.init(identifier:)))
@@ -69,7 +74,7 @@ public final class HarnessSelection {
     /// One the organisation doesn't allow is off whatever the person chose, and their choice comes
     /// back once it is allowed again.
     public func isOn(_ provider: HarnessProvider) -> Bool {
-        OrganisationStatus.shared.allows(.harness(provider)) && (choices[provider.rawValue] ?? provider.isOnByDefault)
+        OrganisationStatus.shared.allows(.harness(provider)) && (choices[provider.rawValue] ?? onByDefault.contains(provider))
     }
 
     public func set(_ provider: HarnessProvider, on: Bool) {

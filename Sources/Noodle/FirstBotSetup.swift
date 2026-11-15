@@ -13,7 +13,7 @@ final class FirstBotSetup {
 
     static let dismissedKey = "Noodle.firstBotSetup.dismissed"
 
-    /// The accounts offered for a quick start; every other harness is set up in Settings.
+    /// Noodle's accounts offered for a quick start; every other harness is set up in Settings.
     static let featured = HarnessProvider.allCases.filter(\.isOnByDefault)
 
     /// A tile names the product by its short name, with its maker beneath.
@@ -45,10 +45,14 @@ final class FirstBotSetup {
     private var signInStarted = false
     private let setup: HarnessSetupController
     private let runtime: AgentRuntimeCoordinator
+    /// The accounts this app offers, in order.
+    let accounts: [HarnessProvider]
 
-    init(setup: HarnessSetupController, runtime: AgentRuntimeCoordinator) {
+    /// Without `accounts`, Noodle's.
+    init(setup: HarnessSetupController, runtime: AgentRuntimeCoordinator, accounts: [HarnessProvider]? = nil) {
         self.setup = setup
         self.runtime = runtime
+        self.accounts = accounts ?? Self.featured
     }
 
     var selection: HarnessProvider { chosen ?? preferred }
@@ -72,9 +76,9 @@ final class FirstBotSetup {
     /// Whatever needs the least from the user.
     var preferred: HarnessProvider {
         for wanted in [Readiness.ready, .signIn, .checking, .install] {
-            if let match = Self.featured.first(where: { readiness($0) == wanted }) { return match }
+            if let match = accounts.first(where: { readiness($0) == wanted }) { return match }
         }
-        return .codex
+        return accounts.first ?? .codex
     }
 
     var canContinue: Bool {
