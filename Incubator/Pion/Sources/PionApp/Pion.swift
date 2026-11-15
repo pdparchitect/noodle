@@ -24,6 +24,7 @@ struct PionApp: App {
         Window(pionAppName, id: "main") {
             MainWindow(model: delegate.model, window: delegate.window, setup: delegate.settings.setup)
                 .environment(delegate.calls)
+                .environment(delegate.settings)
                 .frame(minWidth: 980, minHeight: 640)
                 // Pion's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
@@ -42,6 +43,7 @@ struct PionApp: App {
         WindowGroup("Conversation", id: "conversation", for: UUID.self) { $id in
             ConversationWindow(model: delegate.model, selection: $id)
                 .environment(delegate.calls)
+                .environment(delegate.settings)
                 .frame(minWidth: 720, minHeight: 540)
                 .background { Backdrop().ignoresSafeArea() }
                 .modifier(WindowSurfaceBackground())
@@ -203,6 +205,13 @@ struct PionCommands: Commands {
                 openWindow(id: "main")
                 model.showWelcome()
             }
+        }
+        CommandGroup(after: .pasteboard) {
+            // As Noodle's: handled by the focused composer; elsewhere nothing answers and the menu beeps.
+            Button("Paste as Attachment") {
+                NSApp.sendAction(#selector(ComposerTextView.pasteAsAttachment(_:)), to: nil, from: nil)
+            }
+            .keyboardShortcut("v", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .newItem) {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }

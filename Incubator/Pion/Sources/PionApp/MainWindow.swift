@@ -54,6 +54,7 @@ struct MainWindow: View {
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
+        .modifier(RecoveryConfirmations(window: window))
         .onOpenURL { _ = model.connectionsController.receiveAuthorizationCallback($0) }
         .onAppear { window.openMain = { openWindow(id: "main") } }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
@@ -220,6 +221,16 @@ struct ConversationRowMenu: View {
                 openWindow(id: UsageView.windowID)
             }
             Button("Show Workspace in Finder") { model.reveal(conversation) }
+            // As Noodle's: tidy its memory while idle; Kick, also back from a fallback harness; a fresh session.
+            Divider()
+            Button("Organize") { model.runtime.organize(agent.id) }
+                .disabled(!model.runtime.canOrganize(agent.id))
+            if model.runtime.snapshot(for: agent.id).phase == .failed || model.runtime.runningHarness(for: agent.id) != nil {
+                Button("Kick") { window.kickRequest = model.runtime.kick(agent: agent, repository: model.repository) }
+                    .disabled(model.runtime.changingAccess.contains(agent.id))
+            }
+            Button("New Session") { window.newSessionAgent = agent }
+                .disabled(model.runtime.changingAccess.contains(agent.id))
         } else {
             Button("Show in Finder") { model.reveal(conversation) }
         }

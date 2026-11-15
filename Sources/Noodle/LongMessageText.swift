@@ -3,21 +3,6 @@ import SwiftUI
 import NoodleCore
 import HubLink
 
-/// Keep pasted documents and long replies from taking over the conversation.
-enum LongTextPolicy {
-    static func requiresPreview(_ text: String) -> Bool {
-        var lines = 1
-        for (index, character) in text.enumerated() {
-            if index >= 1_200 { return true }
-            if character.isNewline {
-                lines += 1
-                if lines > 12 { return true }
-            }
-        }
-        return false
-    }
-}
-
 /// A message's prose, or one stretch of it between tables.
 struct MessageText: View {
     let message: ChatMessage

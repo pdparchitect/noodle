@@ -438,20 +438,8 @@ final class NoodleStore {
             NoodleNotifications.postPaused(agent, summary: summary, detail: snapshot.detail, conversationID: conversation?.id)
         }
         self.runtime.onHarnessSwitch = { [weak self] id, line in self?.postHarnessSwitch(line, agentID: id) }
-        self.harnessProfiles.onSignedIn = { [weak self] id in
-            guard let self, let provider = self.harnessProfiles.profile(id)?.provider else { return }
-            self.runtime.retryAfterSignIn(provider: provider, profile: id, agents: self.agents, repository: self.repository)
-        }
-        self.harnessSetup.onSignedIn = { [weak self] provider in
-            guard let self else { return }
-            self.runtime.retryAfterSignIn(provider: provider, profile: nil, agents: self.agents, repository: self.repository)
-        }
-        self.runtime.checkSignIn = { [weak self] agent in
-            guard let self, let installation = self.runtime.installation(for: agent) else { return nil }
-            guard let profile = self.runtime.runningProfile(for: agent, repository: self.repository) else {
-                return await self.harnessSetup.signedIn(installation)
-            }
-            return await self.harnessProfiles.signedIn(profile, installation: installation)
+        self.runtime.connectSignIns(setup: harnessSetup, profiles: harnessProfiles, repository: self.repository) { [weak self] in
+            self?.agents ?? []
         }
         if connectsServices {
             spaceSync = SpaceCloudSync.ifEntitled(list: spaceList, stateFile: self.repository.rootURL.appendingPathComponent("spaces-sync.json"))
@@ -2332,13 +2320,7 @@ final class NoodleStore {
     /// The unread conversations the Dock counts: muted groups are left out, and a group in Mentions only counts once
     /// a reply names the person.
     var badgedConversationIDs: Set<UUID> {
-        unreadConversationIDs.filter {
-            switch notifications(of: $0) {
-            case .muted: false
-            case .mentions: mentionedConversationIDs.contains($0)
-            default: true
-            }
-        }
+        unreadConversationIDs.filter { notifications(of: $0).countsUnread(mentioned: mentionedConversationIDs.contains($0)) }
     }
 
     func updateDockBadge() {
@@ -2459,63 +2441,19 @@ final class NoodleStore {
                                          textAsAttachment: Bool = false) -> Bool {
         guard conversations.contains(where: { $0.id == conversationID }) else { return false }
 
-        let values = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        if !values.isEmpty {
-            var imported = false
-            for value in values {
-                do {
-                    try importAttachmentFile(from: value, into: conversationID)
-                    imported = true
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
-            }
-            return imported
-        }
-
-        if let pngData = pasteboard.data(forType: .png) {
+        guard let payloads = AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: textAsAttachment) else { return false }
+        var imported = false
+        for payload in payloads {
             do {
-                try importAttachment(
-                    data: pngData,
-                    originalFilename: "Pasted Image.png",
-                    mediaType: "image/png",
-                    into: conversationID
-                )
-                return true
-            } catch {
-                errorMessage = error.localizedDescription
-                return false
-            }
-        }
-
-        if let tiffData = pasteboard.data(forType: .tiff) {
-            do {
-                try importAttachment(
-                    data: tiffData,
-                    originalFilename: "Pasted Image.tiff",
-                    mediaType: "image/tiff",
-                    into: conversationID
-                )
-                return true
-            } catch {
-                errorMessage = error.localizedDescription
-                return false
-            }
-        }
-
-        if let text = pasteboard.string(forType: .string), !text.isEmpty,
-           textAsAttachment || LongTextPolicy.requiresPreview(text) {
-            do {
-                try importAttachment(data: Data(text.utf8), originalFilename: "Pasted Text.txt",
-                                     mediaType: "text/plain", into: conversationID)
+                drafts[conversationID].attachments.append(try storeAttachment(payload, in: conversationID))
+                imported = true
             } catch {
                 errorMessage = error.localizedDescription
             }
-            // Even on failure, leave the draft and clipboard intact for retry.
-            return true
         }
-
-        return false
+        // Pasted text that could not be attached stays on the clipboard and out of the draft, for a retry.
+        if case .data(_, _, "text/plain")? = payloads.first { return true }
+        return imported
     }
 
     func importPhoto(data: Data, into conversationID: UUID) throws {
@@ -2550,17 +2488,7 @@ final class NoodleStore {
 
     /// Copies a file into the conversation, ready to be sent there.
     private func storeAttachment(_ payload: AttachmentTransferPayload, in conversationID: UUID) throws -> ConversationAttachment {
-        let attachment: ConversationAttachment
-        switch payload {
-        case .file(let url):
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            attachment = try repository.importAttachment(from: url, into: conversationID, mediaType: mediaType)
-        case .data(let data, let originalFilename, let mediaType):
-            attachment = try repository.importAttachment(data: data, originalFilename: originalFilename,
-                                                         into: conversationID, mediaType: mediaType)
-        }
+        let attachment = try repository.importAttachment(payload, into: conversationID)
         attachmentsByConversation[conversationID, default: []].append(attachment)
         return attachment
     }

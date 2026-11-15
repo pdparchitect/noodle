@@ -4,15 +4,21 @@
 
 ### Added
 
+- As in Noodle, the conversation's toolbar says why an agent doesn't answer and offers Sign In, Unsuspend or Kick, and an agent's menu in the sidebar has Organize, Kick and New Session.
+- Pasting a picture or file into the message field attaches it, and so does long text; Edit › Paste as Attachment (⌥⌘V) attaches any text, as in Noodle.
+- The Dock shows how many conversations wait for you, as in Noodle: muted groups never count, and a group set to mentions counts once a reply names you.
+- Your messages say whether they were Saved, Sent, Delivered or Not delivered, and a message's first web link gets a preview card, as in Noodle.
 - The Help menu starts with Pion Help, which opens Pion's page, as Noodle's does.
 
 ### Fixed
 
+- An agent waiting for sign-in while it runs on a fallback login comes back by itself once that login works again, as in Noodle; Pion checked the agent's own login instead.
 - Apple Intelligence is no longer Unavailable in the welcome on a Mac that has it: Pion adds Apple's on-device model once for a new install, where before it waited to be added in Settings › Harness. Removed there, it stays removed.
 - In Settings > Agents, an archived agent's picture no longer opens its profile; bring the agent back with its Archived switch first.
 
 ### Changed
 
+- A notice such as an agent moving to another harness, or someone joining a group, shows as Noodle's small centred note instead of a message from Pion.
 - The microphone and ⇧⌘D send voice messages, as in Noodle: the recording, with its transcript, goes to the conversation, and agents hear what was said. They used to dictate into the message field. In Settings › Keybindings the shortcut is now Record / Stop Voice Message.
 - Pion has no conversation picker: Conversation › Choose Conversation and its ⌃⌥Space shortcut are gone, as is its row in Settings › Keybindings. The sidebar and Search Conversations find conversations; a conversation in a window of its own has no search.
 - Settings › Keybindings no longer lists Usage, as in Noodle; ⇧⌘U still opens it.

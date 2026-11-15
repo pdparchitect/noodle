@@ -204,24 +204,21 @@ extension NoodleStore {
 
     private func pauseSummary(for conversation: BotConversation, namingSuspended: Bool) -> String? {
         if let setAside = setAsideAgent(of: conversation) { return setAside.helpURL == nil ? "Can't start" : "Needs an upgrade" }
-        let waiting = Set(agentsWaitingForKick(in: conversation).map(\.id))
-        let paused = shownParticipants(for: conversation).filter {
-            waiting.contains($0.id) || $0.isSuspended() || hubPause(ofAgent: $0.id) != nil
-        }
-        guard let first = paused.first else { return nil }
-        guard conversation.kind == .group else {
-            if first.isSuspended(), let until = first.suspendedUntil { return AgentRecord.suspension(until: until) }
-            return waiting.contains(first.id) ? runtime.snapshot(for: first.id).pauseSummary : hubPause(ofAgent: first.id)?.shown()
-        }
-        let named = namingSuspended ? paused : paused.filter { !$0.isSuspended() }
-        return named.isEmpty ? nil : "Paused: " + named.map(\.displayName).joined(separator: ", ")
+        return pause(of: conversation, namingSuspended: namingSuspended)?.summary
     }
 
     /// The full message behind the pause shown over a conversation.
     func pauseDetail(for conversation: BotConversation) -> String? {
         if let setAside = setAsideAgent(of: conversation) { return setAside.message }
-        if let agent = agentsWaitingForKick(in: conversation).first { return runtime.snapshot(for: agent.id).detail }
-        return shownParticipants(for: conversation).lazy.compactMap { self.hubPause(ofAgent: $0.id)?.detail }.first
+        return pause(of: conversation)?.detail
+    }
+
+    /// Why the conversation's bots don't answer, as every app works it out, with a Hub's own limits for bots it keeps.
+    func pause(of conversation: BotConversation, namingSuspended: Bool = true) -> ConversationPause? {
+        ConversationPause.of(conversation, participants: shownParticipants(for: conversation), runtime: runtime,
+                             waitsForKick: { self.runsHere($0.id) }, canUnsuspend: { self.canSuspend($0.id) },
+                             heldElsewhere: { agent in self.hubPause(ofAgent: agent.id).map { ($0.shown(), $0.detail) } },
+                             namingSuspended: namingSuspended)
     }
 }
 
@@ -236,32 +233,14 @@ struct ConversationPauseControl: View {
     @Binding var kickRequest: AgentKickRequest?
 
     var body: some View {
-        if let summary = store.pauseSummary(for: conversation) {
-            HStack(spacing: 8) {
-                Text(summary)
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-                    .help(store.pauseDetail(for: conversation) ?? summary)
-                if let agent = store.agentsWaitingForKick(in: conversation).first,
-                   store.runtime.snapshot(for: agent.id).failure == .authenticationRequired {
-                    Button("Sign In…") {
-                        store.showHarnessSettings()
-                        openSettings()
-                    }
-                    .help("Sign in to the harness \(agent.displayName) uses")
-                } else if let agent = store.shownParticipants(for: conversation).first(where: { $0.isSuspended() }),
-                          store.canSuspend(agent.id) {
-                    Button("Unsuspend") { store.setSuspended(until: nil, agentID: agent.id) }
-                        .help("Let \(agent.displayName) take new turns again")
-                } else if let agent = store.agentsWaitingForKick(in: conversation).first {
-                    Button("Kick") {
-                        kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                    }
-                    .disabled(store.runtime.changingAccess.contains(agent.id))
-                    .help("Kick \(agent.displayName)")
-                }
-            }
-            .padding(.horizontal, 6)
+        if store.setAsideAgents.contains(where: { conversation.kind == .direct && $0.id == conversation.participantIDs.first }),
+           let summary = store.pauseSummary(for: conversation) {
+            Text(summary).foregroundStyle(.red).lineLimit(1).help(store.pauseDetail(for: conversation) ?? summary).padding(.horizontal, 6)
+        } else if let pause = store.pause(of: conversation) {
+            ConversationPauseBar(pause: pause, runtime: store.runtime,
+                                 signIn: { store.showHarnessSettings(); openSettings() },
+                                 unsuspend: { store.setSuspended(until: nil, agentID: $0.id) },
+                                 kick: { kickRequest = store.runtime.kick(agent: $0, repository: store.repository) })
         }
     }
 }
@@ -294,57 +273,6 @@ struct ConversationStatusAvatar: View {
             RuntimeStatusMark(status: status, size: dotSize)
         }
         .help(store.runtimeHelp(for: conversation))
-    }
-}
-
-/// Counts message row work so tests can prove that typing leaves the transcript alone,
-/// that re-evaluated rows do not detect their links again, and which messages the transcript holds.
-@MainActor enum TranscriptRenderProbe {
-    private(set) static var bubbleBodies = 0
-    private(set) static var linkScans = 0
-    private(set) static var transcriptRows = 0
-    private(set) static var firstTranscriptRow: UUID?
-    static func bubbleBody() {
-        #if DEBUG
-        bubbleBodies += 1
-        #endif
-    }
-    static func transcript(_ messages: some Collection<ChatMessage>) {
-        #if DEBUG
-        transcriptRows = messages.count
-        firstTranscriptRow = messages.first?.id
-        #endif
-    }
-    static func linkScan() {
-        #if DEBUG
-        linkScans += 1
-        #endif
-    }
-}
-
-/// Rows are re-evaluated far more often than their text changes, and finding a
-/// link parses the whole message. Keyed by the text, so an edited message is scanned again.
-@MainActor final class MessageLinkCache {
-    static let shared = MessageLinkCache()
-
-    private final class Box {
-        let value: URL?
-        init(_ value: URL?) { self.value = value }
-    }
-
-    private let values = NSCache<NSString, Box>()
-
-    private init() {
-        values.countLimit = 1_000
-    }
-
-    func firstPublicWebURL(in body: String) -> URL? {
-        let key = body as NSString
-        if let cached = values.object(forKey: key) { return cached.value }
-        TranscriptRenderProbe.linkScan()
-        let url = MessageLink.firstPublicWebURL(in: body)
-        values.setObject(Box(url), forKey: key)
-        return url
     }
 }
 
@@ -412,19 +340,9 @@ struct MessageBubble: View {
         if let call = message.call {
             VoiceCallCard(store: store, message: message, record: call)
         } else if isSystem {
-            HStack {
-                Spacer(minLength: 80)
-                // Groups announce member changes; a bot's own conversation, only a change of harness.
-                Label(message.body, systemImage: store.conversation(withID: message.conversationID)?.kind == .direct
-                      ? "arrow.left.arrow.right" : "person.2.fill")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                Spacer(minLength: 80)
-            }
+            // Groups announce member changes; a bot's own conversation, only a change of harness.
+            ConversationNoticeView(text: message.body,
+                                   isDirect: store.conversation(withID: message.conversationID)?.kind == .direct)
         } else {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser { Spacer(minLength: sideGap) }
@@ -469,9 +387,7 @@ struct MessageBubble: View {
                     }
                 }
 
-                if let linkPreviewURL, !attachments.contains(where: {
-                    $0.url.flatMap { MessageLink.publicWebURL(from: $0) } == linkPreviewURL
-                }) {
+                if let linkPreviewURL = MessageLinkPreviews.url(for: message, attachments: attachments) {
                     MessageLinkPreview(url: linkPreviewURL, shouldLoad: isVisible)
                 }
 
@@ -489,10 +405,7 @@ struct MessageBubble: View {
                 }
 
                 if isUser {
-                    Text(deliveryLabel)
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.tertiary)
-                        .padding(.trailing, 5)
+                    MessageDeliveryLabel(delivery: message.delivery)
                 }
             }
 
@@ -532,10 +445,6 @@ struct MessageBubble: View {
         var text = text
         for run in text.runs where run.link != nil { text[run.range].underlineStyle = .single }
         return text
-    }
-
-    private var linkPreviewURL: URL? {
-        MessageLinkCache.shared.firstPublicWebURL(in: message.body)
     }
 
     private func attachmentPreview(_ attachment: ConversationAttachment) -> some View {
@@ -728,16 +637,6 @@ struct MessageBubble: View {
             .accessibilityLabel("\(emoji), \(names)")
         }
     }
-
-    private var deliveryLabel: String {
-        switch message.delivery {
-        case .saved: return "Saved"
-        case .queued: return "Sent"
-        case .delivered: return "Delivered"
-        case .failed: return "Not delivered"
-        }
-    }
-
 }
 
 private extension NSColor {

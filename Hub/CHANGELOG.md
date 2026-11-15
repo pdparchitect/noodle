@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A bot waiting for sign-in while it runs on a fallback login comes back by itself once that login works again, as in Noodle; the Hub checked the bot's own login instead.
 - In Settings > Groups, an archived group's picture no longer opens its profile; bring the group back with its Archived switch first.
 - A bot's profile puts its buttons on two rows when there are more than four, so labels like New Session are no longer squeezed.
 - In Settings > Bots, an archived bot's picture no longer opens its profile; bring the bot back with its Archived switch first.

@@ -193,4 +193,48 @@ public enum AttachmentTransfer {
         return filename
     }
 }
+/// Keep pasted documents and long replies from taking over the conversation.
+public enum LongTextPolicy {
+    public static func requiresPreview(_ text: String) -> Bool {
+        var lines = 1
+        for (index, character) in text.enumerated() {
+            if index >= 1_200 { return true }
+            if character.isNewline {
+                lines += 1
+                if lines > 12 { return true }
+            }
+        }
+        return false
+    }
+}
+
+extension AttachmentTransfer {
+    /// What a paste into the composer attaches: the files copied, else a picture, else text long enough to take over
+    /// the conversation (any text when `textAsAttachment`). Nil leaves the paste to the text field.
+    public static func pastedPayloads(fileURLs: [URL], png: Data?, tiff: Data?, text: String?,
+                                      textAsAttachment: Bool) -> [AttachmentTransferPayload]? {
+        if !fileURLs.isEmpty { return fileURLs.map { .file($0) } }
+        if let png { return [.data(png, originalFilename: "Pasted Image.png", mediaType: "image/png")] }
+        if let tiff { return [.data(tiff, originalFilename: "Pasted Image.tiff", mediaType: "image/tiff")] }
+        if let text, !text.isEmpty, textAsAttachment || LongTextPolicy.requiresPreview(text) {
+            return [.data(Data(text.utf8), originalFilename: "Pasted Text.txt", mediaType: "text/plain")]
+        }
+        return nil
+    }
+}
+
+extension WorkspaceRepository {
+    /// Copies a file or pasted data into the conversation, ready to be sent there.
+    public func importAttachment(_ payload: AttachmentTransferPayload, into conversationID: UUID, now: Date = Date()) throws -> ConversationAttachment {
+        switch payload {
+        case .file(let url):
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+            return try importAttachment(from: url, into: conversationID, mediaType: mediaType, now: now)
+        case .data(let data, let originalFilename, let mediaType):
+            return try importAttachment(data: data, originalFilename: originalFilename, into: conversationID, mediaType: mediaType, now: now)
+        }
+    }
+}
 #endif

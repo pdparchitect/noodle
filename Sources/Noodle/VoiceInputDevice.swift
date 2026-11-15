@@ -91,7 +91,7 @@ struct VoiceInputDevice: Identifiable, Equatable {
     }
 }
 
-/// Settings > Conversation's microphone choice, shared by Noodle and Pion. The list is reread while it shows,
+/// Settings > Conversation's microphone choice, for any app that compiles this file. The list is reread while it shows,
 /// so a microphone plugged in or out appears without reopening Settings.
 struct MicrophoneSettingsSection: View {
     @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""

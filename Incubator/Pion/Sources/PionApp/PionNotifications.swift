@@ -135,6 +135,8 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
             }
         }
         model.onNotificationsNarrowed = { PionNotifications.withdraw(conversation: $0) }
+        // As Noodle's: the Dock shows how many conversations wait for the champion.
+        model.onBadge = { NSApp.dockTile.badgeLabel = $0 == 0 ? nil : String($0) }
         model.runtime.onSignInRequired = { [weak self] id in
             guard let agent = self?.model.agent(id) else { return }
             PionNotifications.postSignInRequired(for: agent)

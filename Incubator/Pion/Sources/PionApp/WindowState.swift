@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleRuntime
 import PionCore
 import SwiftUI
 
@@ -42,6 +43,9 @@ import SwiftUI
     var searchText = ""
     var searchFocusRequest = UUID()
     var floatsOnTop = false
+    /// Kick's question, and the agent whose New Session is being confirmed, as in Noodle.
+    var kickRequest: AgentKickRequest?
+    var newSessionAgent: AgentRecord?
     /// Opens the main window, or brings it forward, for a notification clicked while it is closed.
     @ObservationIgnored var openMain: (() -> Void)?
 }

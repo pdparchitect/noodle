@@ -455,3 +455,23 @@ public final class HarnessSetupController {
     }
     public func cancelAll() { for id in Array(operations.keys) { cancel(id) } }
 }
+
+extension AgentRuntimeCoordinator {
+    /// A login signing in retries the bots waiting for it, and a bot waiting for sign-in comes back by itself once
+    /// the login it runs on works again: its fallback's while it is on one, otherwise its own.
+    public func connectSignIns(setup: HarnessSetupController, profiles: HarnessProfilesController, repository: WorkspaceRepository,
+                               agents: @escaping @MainActor () -> [AgentRecord]) {
+        profiles.onSignedIn = { [weak self, weak profiles] id in
+            guard let self, let provider = profiles?.profile(id)?.provider else { return }
+            retryAfterSignIn(provider: provider, profile: id, agents: agents(), repository: repository)
+        }
+        setup.onSignedIn = { [weak self] provider in
+            self?.retryAfterSignIn(provider: provider, profile: nil, agents: agents(), repository: repository)
+        }
+        checkSignIn = { [weak self, weak setup, weak profiles] agent in
+            guard let self, let setup, let profiles, let installation = installation(for: agent) else { return nil }
+            guard let profile = runningProfile(for: agent, repository: repository) else { return await setup.signedIn(installation) }
+            return await profiles.signedIn(profile, installation: installation)
+        }
+    }
+}

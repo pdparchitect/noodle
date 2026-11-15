@@ -56,6 +56,9 @@ import UniformTypeIdentifiers
     private(set) var showsWelcome = false
     /// How groups notify the champion, kept where Noodle keeps it.
     private(set) var groupNotificationSettings = GroupNotificationSettings()
+    /// The number the Dock shows, told whenever it may have changed.
+    @ObservationIgnored var onBadge: ((Int) -> Void)?
+    @ObservationIgnored private var badge: Int?
     /// Agent replies that notify the champion, as their conversations are set; the app shows them.
     @ObservationIgnored var onMessagesArrived: (([ChatMessage]) -> Void)?
     /// A conversation that notifies less than before, whose shown replies the app takes back.
@@ -192,6 +195,7 @@ import UniformTypeIdentifiers
         runtime.checkHeartbeats()
         runtime.checkWakes(repository: repository)
         for conversation in conversations { readTranscript(conversation.id, notifying: true) }
+        updateBadge()
     }
 
     /// Holds suspended agents in the runtime, as Noodle does, and starts those whose suspension ran out.
@@ -272,6 +276,7 @@ import UniformTypeIdentifiers
     func refresh() {
         reload()
         for conversation in conversations { readTranscript(conversation.id, notifying: false) }
+        updateBadge()
     }
 
     func messages(in id: UUID) -> [ChatMessage] { transcripts[id] ?? [] }
@@ -378,6 +383,7 @@ import UniformTypeIdentifiers
     func markRead(_ id: UUID) {
         guard let last = messages(in: id).last, readUpTo[id] != last.id else { return }
         readUpTo[id] = last.id
+        defer { updateBadge() }
         UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: readUpTo.map { ($0.key.uuidString, $0.value.uuidString) }), forKey: Self.readKey)
     }
 
@@ -395,6 +401,15 @@ import UniformTypeIdentifiers
             try AppleLocalModelStore(repository: repository.rootURL).setSystemModelAdded(true)
             defaults.set(true, forKey: Self.appleModelOfferedKey)
         } catch { problem = error.localizedDescription }
+    }
+
+    // MARK: Pauses
+
+    /// Why a conversation's agents don't answer for now, as Noodle works it out: Pion runs all its agents, so any
+    /// failed one waits for Kick or a sign-in.
+    func pause(of conversation: BotConversation) -> ConversationPause? {
+        ConversationPause.of(conversation, participants: members(of: conversation), runtime: runtime,
+                                    waitsForKick: { _ in true }, canUnsuspend: { _ in true })
     }
 
     // MARK: Welcome
@@ -440,6 +455,30 @@ import UniformTypeIdentifiers
 
     // MARK: Notifications
 
+    /// The unread conversations the Dock counts, as Noodle counts them: a muted group never, a group in Mentions only
+    /// once an unread reply names the champion.
+    var badgedConversationIDs: Set<UUID> {
+        Set(conversations.map(\.id).filter { id in
+            isUnread(id) && notifications(of: id).countsUnread(mentioned: unreadMessages(in: id).contains {
+                LinkMention.mentions($0.body, name: champion)
+            })
+        })
+    }
+
+    /// Agents' messages after the last one read.
+    private func unreadMessages(in id: UUID) -> [ChatMessage] {
+        let messages = messages(in: id)
+        let start = readUpTo[id].flatMap { read in messages.firstIndex { $0.id == read } }.map { $0 + 1 } ?? 0
+        return messages[start...].filter { if case .agent = $0.author { true } else { false } }
+    }
+
+    private func updateBadge() {
+        let count = badgedConversationIDs.count
+        guard count != badge else { return }
+        badge = count
+        onBadge?(count)
+    }
+
     /// How a conversation notifies: a group as set on its own, or else as set for all groups. An agent's own
     /// conversation notifies every reply.
     func notifications(of id: UUID) -> LinkNotifications {
@@ -483,6 +522,7 @@ import UniformTypeIdentifiers
             try repository.saveGroupNotifications(updated)
             let before = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, notifications(of: $0.id)) })
             groupNotificationSettings = updated
+            updateBadge()
             for (id, level) in before where level != notifications(of: id) && notifications(of: id) != .all {
                 onNotificationsNarrowed?(id)
             }
@@ -740,15 +780,19 @@ import UniformTypeIdentifiers
     }
 
     /// Copies files into the conversation, ready to go with the next message.
-    func attach(_ urls: [URL], to id: UUID) {
-        for url in urls {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    func attach(_ urls: [URL], to id: UUID) { attach(urls.map { .file($0) }, to: id) }
+
+    /// Files, pictures or pasted text waiting in the composer, stored as Noodle stores them. True when any was attached.
+    @discardableResult
+    func attach(_ payloads: [AttachmentTransferPayload], to id: UUID) -> Bool {
+        var attached = false
+        for payload in payloads {
             do {
-                let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType?.preferredMIMEType ?? "application/octet-stream"
-                pendingAttachments[id, default: []].append(try repository.importAttachment(from: url, into: id, mediaType: type, now: now))
-            } catch { problem = "\(url.lastPathComponent) could not be attached: \(error.localizedDescription)" }
+                pendingAttachments[id, default: []].append(try repository.importAttachment(payload, into: id, now: now))
+                attached = true
+            } catch { problem = "\(payload.displayName) could not be attached: \(error.localizedDescription)" }
         }
+        return attached
     }
 
     func removePending(_ attachment: ConversationAttachment, from id: UUID) {
@@ -938,4 +982,13 @@ import UniformTypeIdentifiers
 @MainActor enum ScenarioClock {
     static var offset: TimeInterval = 0
     static var now: Date { Date().addingTimeInterval(offset) }
+}
+
+private extension AttachmentTransferPayload {
+    var displayName: String {
+        switch self {
+        case .file(let url): url.lastPathComponent
+        case .data(_, let name, _): name
+        }
+    }
 }

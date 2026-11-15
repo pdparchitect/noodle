@@ -1,6 +1,7 @@
 import PhotosUI
 import HubLink
 import NoodleCore
+import NoodleRuntimeSettings
 import NoodleWallpaper
 import PionCore
 import SwiftUI
@@ -21,6 +22,7 @@ struct ConversationWindow: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $selection))
+        .modifier(RecoveryConfirmations(window: window))
         // A window of its own has no sidebar to search, so Search Conversations is the main window's alone.
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $selection, window: window, search: nil))
         .onChange(of: selection, initial: true) { _, id in
@@ -37,6 +39,8 @@ struct ConversationView: View {
     @Bindable var window: WindowState
     let conversation: BotConversation
     @Environment(PionCalls.self) private var calls
+    @Environment(PionSettingsHost.self) private var host
+    @Environment(\.openSettings) private var openSettings
     @State private var composerHeight: CGFloat = 0
     // The column's ideal, read from the width it was left at only as the inspector opens. The width is
     // kept in defaults, not app storage: a stored value the view watches redraws it on every step of a
@@ -233,6 +237,15 @@ struct ConversationView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        // Noodle's pause line: why an agent here doesn't answer, and Sign In, Unsuspend or Kick to bring it back.
+        if let pause = model.pause(of: conversation) {
+            ToolbarItem {
+                ConversationPauseBar(pause: pause, runtime: model.runtime,
+                                     signIn: { host.selectedTab = .harnesses; openSettings() },
+                                     unsuspend: { model.setSuspended(until: nil, agent: $0) },
+                                     kick: { window.kickRequest = model.runtime.kick(agent: $0, repository: model.repository) })
+            }
+        }
         // The call button, or this conversation's call controls, as in Noodle; only an agent with voices has one.
         if calls.voiceCallTarget(for: conversation) != nil || calls.voiceCalls.call?.conversationID == conversation.id {
             ToolbarItem { VoiceCallToolbarControl(store: calls, conversation: conversation) }
@@ -367,7 +380,11 @@ struct MessageRow: View {
 
     var body: some View {
         Group {
-            if message.author == .user {
+            if message.author == .system {
+                // Noodle's notice: a change of harness, or who joined or left a group.
+                ConversationNoticeView(text: message.body, isDirect: conversation.kind == .direct)
+                    .padding(.top, 10)
+            } else if message.author == .user {
                 HStack {
                     Spacer(minLength: 120)
                     VStack(alignment: .trailing, spacing: 4) {
@@ -375,10 +392,15 @@ struct MessageRow: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
+                        linkPreview
                         files
-                        // Always laid out, only shown on hover, so pointing at a message never moves the others.
-                        Text(message.createdAt.pionShort).font(.caption2).foregroundStyle(.tertiary)
-                            .opacity(hovering ? 1 : 0)
+                        HStack(spacing: 6) {
+                            // Always laid out, only shown on hover, so pointing at a message never moves the others.
+                            Text(message.createdAt.pionShort).font(.caption2).foregroundStyle(.tertiary)
+                                .opacity(hovering ? 1 : 0)
+                            // As Noodle's: whether it reached the conversation, and whether an agent got it.
+                            MessageDeliveryLabel(delivery: message.delivery)
+                        }
                     }
                 }
                 .padding(.top, 10)
@@ -387,6 +409,7 @@ struct MessageRow: View {
                     if !continues { header }
                     MessageBody(text: message.body, message: message)
                         .padding(.leading, 30)
+                    linkPreview.padding(.leading, 30)
                     files.padding(.leading, 30)
                 }
                 .padding(.top, continues ? 2 : 14)
@@ -409,6 +432,13 @@ struct MessageRow: View {
 
     private var authorAgent: AgentRecord? {
         if case .agent(let id) = message.author { model.agent(id) } else { nil }
+    }
+
+    /// Noodle's card for the first web page a message links to, unless that page is already attached.
+    @ViewBuilder private var linkPreview: some View {
+        if let url = MessageLinkPreviews.url(for: message, attachments: model.files(of: message)) {
+            MessageLinkPreview(url: url, shouldLoad: true).frame(maxWidth: 420, alignment: .leading)
+        }
     }
 
     /// The files sent with the message as Noodle shows them: pictures, cards and annotations, each opening
@@ -534,5 +564,17 @@ private struct WidestLabel: View {
             Label(title, systemImage: symbol)
         }
         .labelStyle(.titleAndIcon)
+    }
+}
+
+/// Noodle's questions before Kick and New Session, presented by the window that asked.
+struct RecoveryConfirmations: ViewModifier {
+    @Bindable var window: WindowState
+    @Environment(PionSettingsHost.self) private var host
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(AgentKickConfirmation(store: host, request: $window.kickRequest))
+            .modifier(NewSessionConfirmation(store: host, agent: $window.newSessionAgent))
     }
 }

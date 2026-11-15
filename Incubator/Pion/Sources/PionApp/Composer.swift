@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -74,6 +75,14 @@ struct Composer: View {
                     separatesPreferredAgents: conversation.kind == .group,
                     completion: completion,
                     submit: { model.sendDraft(to: conversation.id) },
+                    // As Noodle's: a pasted picture or file attaches, and so does long text, or any with Paste as Attachment.
+                    pasteAttachments: { pasteboard in
+                        AttachmentTransfer.pastedPayloads(from: pasteboard).map { model.attach($0, to: conversation.id) } ?? false
+                    },
+                    forcePasteAttachments: { pasteboard in
+                        AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: true)
+                            .map { model.attach($0, to: conversation.id) } ?? false
+                    },
                     dropFiles: { model.attach($0, to: conversation.id) }
                 )
                 // It measures its own text; a flexible frame would stretch it to whatever height is offered.

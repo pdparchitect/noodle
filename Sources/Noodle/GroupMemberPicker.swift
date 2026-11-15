@@ -12,7 +12,7 @@ struct GroupMemberPicker: View {
     @State private var search = ""
     @State private var memberPendingRemoval: AgentRecord?
 
-    /// The lead first, as Pion lists its teams; the rest keep their order.
+    /// The lead first; the rest keep their order.
     private var selected: [AgentRecord] {
         let members = agents.filter { selectedIDs.contains($0.id) }
         return members.filter { $0.id == lead?.wrappedValue } + members.filter { $0.id != lead?.wrappedValue }

@@ -1546,6 +1546,16 @@ public struct LinkNotifications: RawRepresentable, Codable, Hashable, Sendable {
         return inGroups == .mentions ? .mentions : .all
     }
 
+    /// Whether an unread conversation at this level counts for the Dock: a muted one never, one in Mentions only once
+    /// a reply named the user.
+    public func countsUnread(mentioned: Bool) -> Bool {
+        switch self {
+        case .muted: false
+        case .mentions: mentioned
+        default: true
+        }
+    }
+
     /// Whether a reply saying `text` notifies the user called `name` at this level.
     public func notifies(_ text: String, name: String) -> Bool {
         switch self {

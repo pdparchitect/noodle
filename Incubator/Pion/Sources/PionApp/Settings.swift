@@ -25,22 +25,8 @@ import SwiftUI
                                        installer: ManagedHarnessInstaller(store: model.repository.managedHarnesses),
                                        profiles: model.repository.harnessProfiles)
         setup.subscriptionUsage = model.runtime.subscriptionUsage
-        model.harnessProfiles.onSignedIn = { [weak self] id in
-            guard let self, let provider = self.harnessProfiles.profile(id)?.provider else { return }
-            self.runtime.retryAfterSignIn(provider: provider, profile: id, agents: self.agents, repository: self.repository)
-        }
-        setup.onSignedIn = { [weak self] provider in
-            guard let self else { return }
-            self.runtime.retryAfterSignIn(provider: provider, profile: nil, agents: self.agents, repository: self.repository)
-        }
-        // An agent waiting for sign-in comes back by itself once its login works again.
-        model.runtime.checkSignIn = { [weak self] agent in
-            guard let self, let installation = self.runtime.installation(for: agent) else { return nil }
-            guard self.runtime.runningHarness(for: agent.id) == nil,
-                  let profile = try? self.repository.loadAgentHarnessProfile(agent) else {
-                return await self.setup.signedIn(installation)
-            }
-            return await self.harnessProfiles.signedIn(profile, installation: installation)
+        model.runtime.connectSignIns(setup: setup, profiles: model.harnessProfiles, repository: model.repository) { [weak self] in
+            self?.agents ?? []
         }
     }
 
