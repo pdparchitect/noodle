@@ -49,7 +49,7 @@ public struct ToolCatalogView: View {
                                     }
                                     Spacer(minLength: 8)
                                     ToolMaturityBadge(maturity: tool.maturity)
-                                    Text(tool.adapter != nil ? ProductIdentity.current.name : tool.kind.rawValue)
+                                    Text(tool.kind.rawValue)
                                         .font(.caption2).foregroundStyle(.secondary)
                                     Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
                                 }.padding(9).contentShape(Rectangle())

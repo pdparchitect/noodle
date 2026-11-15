@@ -3,10 +3,11 @@ import Synchronization
 
 /// The catalogue describes tools, not a particular protocol. New kinds add a
 /// configuration case and a setup handler; they do not inherit MCP fields.
-/// How a catalogue entry's tools are served: by a hosted MCP server, or by the app's own adapter.
+/// How a catalogue entry's tools are served: by a hosted MCP server, or by the app's own adapter calling the
+/// service's API directly.
 public enum ToolKind: String, Equatable, Sendable {
     case mcp = "MCP"
-    case adapter = "App"
+    case adapter = "API"
 }
 
 /// What adding a catalogue entry makes: a tool connection, which an MCP server or the app's adapter serves.
