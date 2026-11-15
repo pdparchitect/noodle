@@ -121,6 +121,8 @@ import UniformTypeIdentifiers
 
     func start() {
         do { try repository.prepare() } catch { problem = error.localizedDescription }
+        // Before the first capability check, so Apple Intelligence is offered as ready where the Mac has it.
+        if !isScripted { offerAppleModel() }
         reload()
         for conversation in conversations { readTranscript(conversation.id, notifying: false) }
         guard !isScripted, !running else { return }
@@ -380,6 +382,20 @@ import UniformTypeIdentifiers
     }
 
     private static let readKey = "PionReadUpTo"
+
+    // MARK: Apple Intelligence
+
+    static let appleModelOfferedKey = "PionAppleModel.offered"
+
+    /// Noodle leaves Apple's on-device model out until someone adds it; it is one of Pion's own harnesses, so
+    /// Pion adds it once. Someone who removes it in Settings keeps it removed.
+    func offerAppleModel(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: Self.appleModelOfferedKey) else { return }
+        do {
+            try AppleLocalModelStore(repository: repository.rootURL).setSystemModelAdded(true)
+            defaults.set(true, forKey: Self.appleModelOfferedKey)
+        } catch { problem = error.localizedDescription }
+    }
 
     // MARK: Welcome
 

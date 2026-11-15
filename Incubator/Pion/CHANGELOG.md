@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Apple Intelligence is no longer Unavailable in the welcome on a Mac that has it: Pion adds Apple's on-device model once for a new install, where before it waited to be added in Settings › Harness. Removed there, it stays removed.
 - In Settings > Agents, an archived agent's picture no longer opens its profile; bring the agent back with its Archived switch first.
 
 ### Changed

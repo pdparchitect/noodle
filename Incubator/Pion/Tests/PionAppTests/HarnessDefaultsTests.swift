@@ -25,3 +25,23 @@ import XCTest
         XCTAssertFalse(reopened.runtime.harnesses.isOn(.muse))
     }
 }
+
+/// Apple Intelligence is one of Pion's own, so its on-device model is added for a new install, once: someone who
+/// removes it in Settings keeps it removed.
+@MainActor final class AppleModelDefaultTests: XCTestCase {
+    func testTheOnDeviceModelIsAddedOnceAndStaysRemovedWhenRemoved() throws {
+        let suite = "PionAppleModel-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionAppleModel-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true, harnessDefaults: defaults)
+        let store = AppleLocalModelStore(repository: root)
+        XCTAssertFalse(store.systemModelAdded)
+        model.offerAppleModel(defaults: defaults)
+        XCTAssertTrue(store.systemModelAdded)
+        try store.setSystemModelAdded(false)
+        model.offerAppleModel(defaults: defaults)
+        XCTAssertFalse(store.systemModelAdded, "Removed in Settings, it stays removed")
+    }
+}
