@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- A bot's profile has Suspend beside its other buttons; a click offers how long, and a suspended bot shows Unsuspend.
+
 ## [0.86.0] - 2026-11-15
 
 ### Added

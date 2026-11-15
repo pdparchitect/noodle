@@ -1,4 +1,5 @@
 import NoodleCore
+import HubWire
 import SwiftUI
 
 /// An agent's generated mark: arcs on two or three rings around a small core, on a graphite disc.
@@ -223,12 +224,36 @@ private struct AgentProfile: View {
                     if let edit {
                         Button(action: edit) { action("Edit", "pencil") }.help("Edit Agent")
                     }
+                    if agent.archivedAt == nil {
+                        if message != nil || edit != nil { Divider().frame(height: 32) }
+                        suspend
+                    }
                 }
                 .buttonStyle(.plain)
+            } else if agent.archivedAt == nil {
+                suspend.buttonStyle(.plain)
             }
         }
         .padding(20)
         .frame(width: 300)
+    }
+
+    /// Unsuspend for one already suspended; otherwise Suspend, which looks like the buttons beside it and
+    /// offers how long, as Noodle's does.
+    @ViewBuilder private var suspend: some View {
+        if agent.isSuspended() {
+            Button { model.setSuspended(until: nil, agent: agent) } label: { action("Unsuspend", "play.circle") }
+                .help("Unsuspend Agent")
+        } else {
+            Menu {
+                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                    Button(choice.title) { model.setSuspended(until: choice.until(), agent: agent) }
+                }
+            } label: { action("Suspend", "pause.circle") }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .help("Suspend Agent")
+        }
     }
 
     private func action(_ title: String, _ symbol: String) -> some View {

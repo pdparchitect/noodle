@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Suspend in a bot's profile is a button like Folder, Activity and New Session; a click offers how long.
+
 ## [0.52.0] - 2026-11-15
 
 ### Added

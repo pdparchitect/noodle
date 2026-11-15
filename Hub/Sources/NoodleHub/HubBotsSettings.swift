@@ -69,16 +69,6 @@ struct HubBotProfileButton: View {
                     Button("Stop") { host.stop(id: agent.id) }
                         .help("End the turn \(agent.displayName) is working on")
                 }
-                if agent.isSuspended() {
-                    Button("Unsuspend") { host.setSuspended(until: nil, id: agent.id) }
-                } else {
-                    Menu("Suspend") {
-                        ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                            Button(choice.title) { host.setSuspended(until: choice.until(), id: agent.id) }
-                        }
-                    }
-                    .fixedSize()
-                }
             }
             HStack(spacing: 8) {
                 Button {
@@ -110,6 +100,29 @@ struct HubBotProfileButton: View {
                 .help("New Session")
                 .accessibilityLabel("New Session")
                 .disabled(device != nil || host.runtime.changingAccess.contains(agent.id))
+                if agent.archivedAt == nil, device == nil, owner != nil {
+                    Divider().frame(height: 32).accessibilityHidden(true)
+                    if agent.isSuspended() {
+                        Button { host.setSuspended(until: nil, id: agent.id) } label: {
+                            actionLabel("Unsuspend", systemImage: "play.circle")
+                        }
+                        .help("Unsuspend")
+                        .accessibilityLabel("Unsuspend")
+                    } else {
+                        // Looks like the buttons beside it; a click offers how long.
+                        Menu {
+                            ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                                Button(choice.title) { host.setSuspended(until: choice.until(), id: agent.id) }
+                            }
+                        } label: {
+                            actionLabel("Suspend", systemImage: "pause.circle")
+                        }
+                        .menuStyle(.button)
+                        .menuIndicator(.hidden)
+                        .help("Suspend")
+                        .accessibilityLabel("Suspend")
+                    }
+                }
             }
             .buttonStyle(.plain)
         }

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- An agent's profile has Suspend beside Message and Edit; a click offers how long, and a suspended agent shows Unsuspend.
+
 ## [0.1.0] - 2026-11-15
 
 ### Fixed

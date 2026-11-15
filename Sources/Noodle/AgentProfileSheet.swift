@@ -1,6 +1,7 @@
 import AppKit
 import BrowserBridge
 import ComputerBridge
+import HubLink
 import SwiftUI
 import NoodleCore
 import NoodleRuntimeSettings
@@ -87,6 +88,9 @@ struct AgentProfileSheet: View {
 
     private var isShared: Bool { store.isShared(agent.id) }
 
+    /// The bot as the store has it now, so Suspend and Unsuspend follow a change made here.
+    private var current: AgentRecord { store.agents.first { $0.id == agent.id } ?? agent }
+
     /// The direct conversation a call would start in, while the bot can take one now and isn't already on it.
     private var callableConversation: BotConversation? {
         guard let direct = store.conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agent.id] }),
@@ -96,7 +100,7 @@ struct AgentProfileSheet: View {
     }
 
     private enum Action: Hashable {
-        case reply, message, call, computer, browser, edit, usage
+        case reply, message, call, computer, browser, edit, usage, suspend
     }
 
     private var actions: [Action] {
@@ -108,6 +112,7 @@ struct AgentProfileSheet: View {
         if !store.browsers.assigned(to: agent).isEmpty { actions.append(.browser) }
         // A bot someone shared is only talked with.
         if !isShared { actions += [.edit, .usage] }
+        if current.archivedAt == nil, store.canSuspend(agent.id) { actions.append(.suspend) }
         return actions
     }
 
@@ -180,6 +185,27 @@ struct AgentProfileSheet: View {
             }
             .help("Show Usage")
             .accessibilityLabel("Show Usage")
+        case .suspend:
+            if current.isSuspended() {
+                Button { store.setSuspended(until: nil, agentID: agent.id) } label: {
+                    actionLabel("Unsuspend", systemImage: "play.circle")
+                }
+                .help("Unsuspend Bot")
+                .accessibilityLabel("Unsuspend Bot")
+            } else {
+                // Looks like the buttons beside it; a click offers how long.
+                Menu {
+                    ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                        Button(choice.title) { store.setSuspended(until: choice.until(), agentID: agent.id) }
+                    }
+                } label: {
+                    actionLabel("Suspend", systemImage: "pause.circle")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .help("Suspend Bot")
+                .accessibilityLabel("Suspend Bot")
+            }
         }
     }
 
