@@ -7,12 +7,13 @@ import NoodleRuntimeSettings
 import SwiftUI
 
 /// A bot's avatar in Settings > Bots, opening its profile: whose it is, how it is doing,
-/// and its folder, activity and New Session.
+/// and its folder, activity, New Session, Edit and Suspend.
 struct HubBotProfileButton: View {
     let host: HubSettingsHost
     let agent: AgentRecord
     @State private var showsProfile = false
     @State private var newSessionAgent: AgentRecord?
+    @State private var editing: AgentRecord?
 
     var body: some View {
         Button { showsProfile = true } label: {
@@ -27,6 +28,7 @@ struct HubBotProfileButton: View {
         .accessibilityLabel("Show profile for \(agent.displayName)")
         .popover(isPresented: $showsProfile, arrowEdge: .leading) { profile }
         .modifier(NewSessionConfirmation(store: host, agent: $newSessionAgent))
+        .sheet(item: $editing) { HubEditBotSheet(host: host, agent: $0) }
     }
 
     private var profile: some View {
@@ -102,6 +104,16 @@ struct HubBotProfileButton: View {
                 .disabled(device != nil || host.runtime.changingAccess.contains(agent.id))
                 if agent.archivedAt == nil, device == nil, owner != nil {
                     Divider().frame(height: 32).accessibilityHidden(true)
+                    Button {
+                        showsProfile = false
+                        // Let the popover close before the sheet is presented.
+                        DispatchQueue.main.async { editing = agent }
+                    } label: {
+                        actionLabel("Edit", systemImage: "pencil")
+                    }
+                    .help("Edit Bot")
+                    .accessibilityLabel("Edit Bot")
+                    Divider().frame(height: 32).accessibilityHidden(true)
                     if agent.isSuspended() {
                         Button { host.setSuspended(until: nil, id: agent.id) } label: {
                             actionLabel("Unsuspend", systemImage: "play.circle")
@@ -141,6 +153,122 @@ struct HubBotProfileButton: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+    }
+}
+
+/// Edit Bot on the Hub: the harness, login, model and effort a bot runs on, from those its owner's plan lends,
+/// so an admin can move it when the plan changes. Who the bot is stays its owner's to edit.
+struct HubEditBotSheet: View {
+    let host: HubSettingsHost
+    let agent: AgentRecord
+    @Environment(\.dismiss) private var dismiss
+    @State private var harness: HubHarness?
+    /// Empty is the harness default.
+    @State private var model = ""
+    /// Empty is the model's default.
+    @State private var effort = ""
+    @State private var error: String?
+
+    private var owner: HubUser? {
+        host.hub.access.owner(ofBot: agent.id).flatMap { id in host.hub.access.users.first { $0.id == id } }
+    }
+
+    /// The harnesses installed here that the owner's plan lends, by name.
+    private var harnesses: [HubPlanEditor.Entry] {
+        guard let owner else { return [] }
+        let lent = host.hub.access.harnesses(for: owner)
+        return HubPlanEditor.harnesses(host).filter { lent.contains($0.harness) }.sorted { $0.title < $1.title }
+    }
+
+    /// The models of the chosen harness the plan lends; nil for any, the harness default included.
+    private var lentModels: Set<String>? {
+        guard let owner, let harness else { return [] }
+        return host.hub.access.models(on: harness, for: owner)
+    }
+
+    private var models: [HarnessModel] {
+        guard let harness else { return [] }
+        let all = host.runtime.models(for: harness.provider.rawValue, profile: harness.profile)
+        guard let lent = lentModels else { return all }
+        let known = all.filter { lent.contains($0.id) }
+        // A lent model the harness does not list yet still shows, by its identifier.
+        return known + lent.subtracting(known.map(\.id)).sorted().map {
+            HarnessModel(id: $0, displayName: $0, description: "", supportedEfforts: [], defaultEffort: "", isDefault: false)
+        }
+    }
+
+    private var efforts: [HarnessEffort] { models.first { $0.id == model }?.supportedEfforts ?? [] }
+
+    private var canSave: Bool {
+        guard let harness, let owner else { return false }
+        return host.hub.access.lends(harness, model: model.isEmpty ? nil : model, to: owner)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
+                Spacer()
+                Text("Edit \(agent.displayName)").font(.headline)
+                Spacer()
+                Button("Save", action: save).buttonStyle(.sheetHeader).disabled(!canSave).keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            Form {
+                Picker("Harness", selection: $harness) {
+                    if harness.map({ current in !harnesses.contains { $0.harness == current } }) ?? true {
+                        Text("Not lent").tag(harness)
+                    }
+                    ForEach(harnesses, id: \.harness) { Text($0.title).tag(Optional($0.harness)) }
+                }
+                Picker("Model", selection: $model) {
+                    if lentModels == nil { Text("Default").tag("") }
+                    if !model.isEmpty, !models.contains(where: { $0.id == model }) { Text("\(model) (not lent)").tag(model) }
+                    ForEach(models) { Text($0.displayName).tag($0.id) }
+                }
+                .disabled(harness == nil)
+                if !efforts.isEmpty {
+                    Picker("Effort", selection: $effort) {
+                        Text("Default").tag("")
+                        ForEach(efforts) { Text($0.id.capitalized).tag($0.id) }
+                    }
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+            }
+            .formStyle(.grouped)
+        }
+        .frame(width: 420)
+        .noodleSheetSizing()
+        .onAppear {
+            host.runtime.refreshCapabilities()
+            if let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) {
+                harness = HubHarness(provider: provider, profile: try? host.hub.repository.loadAgentHarnessProfile(agent))
+            }
+            model = agent.modelIdentifier ?? ""
+            effort = agent.reasoningEffort ?? ""
+        }
+        .onChange(of: harness) { old, _ in
+            guard old != nil else { return }
+            // Another harness has its own models; start from the first the plan lends.
+            model = lentModels == nil ? "" : models.first?.id ?? ""
+            effort = ""
+        }
+        .onChange(of: model) {
+            // Until the harness lists its models there are no efforts to check against.
+            if !effort.isEmpty, !efforts.isEmpty, !efforts.contains(where: { $0.id == effort }) { effort = "" }
+        }
+    }
+
+    private func save() {
+        guard let harness else { return }
+        do {
+            try host.hub.bots.changeHarness(of: agent.id, to: harness, model: model.isEmpty ? nil : model,
+                                            reasoningEffort: effort.isEmpty ? nil : effort)
+            dismiss()
+        } catch { self.error = error.localizedDescription }
     }
 }
 

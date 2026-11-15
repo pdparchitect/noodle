@@ -1785,25 +1785,50 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                               harness: harness, model: model, lent: lent.sorted())
     }
 
+    /// The bots this Hub runs, leaving out those a Mac hosts, which keep only their conversations here.
+    public func botsRunHere() throws -> [AgentRecord] {
+        try repository.loadAgents().filter { access.host(ofBot: $0.id) == nil }
+    }
+
     /// Moves a bot here to a model its owner's plan lends, as its owner would in Edit Bot.
     public func changeModel(of id: UUID, to model: String) throws {
-        guard let agent = try repository.loadAgents().first(where: { $0.id == id }), access.host(ofBot: id) == nil,
-              let owner = access.owner(ofBot: id).flatMap({ id in access.users.first { $0.id == id } }),
-              let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) else {
+        let (agent, _) = try ownedHere(id)
+        guard let provider = agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)) else {
             throw LinkError("This bot’s model can’t be changed here.")
         }
         let harness = HubHarness(provider: provider, profile: try repository.loadAgentHarnessProfile(agent))
+        try changeHarness(of: id, to: harness, model: model, reasoningEffort: agent.reasoningEffort)
+    }
+
+    /// Moves a bot here to a harness, login and model its owner's plan lends, as its owner would in Edit Bot;
+    /// a nil model is the harness default.
+    public func changeHarness(of id: UUID, to harness: HubHarness, model: String?, reasoningEffort: String?) throws {
+        let (agent, owner) = try ownedHere(id)
         guard access.lends(harness, model: model, to: owner) else {
-            throw LinkError("\(owner.name)’s plan does not lend \(model) on \(provider.displayName).")
+            throw LinkError("\(owner.name)’s plan does not lend \(model ?? "the default model") on \(harness.provider.displayName).")
         }
         let updated = try repository.updateAgent(
-            agent, displayName: agent.displayName, harnessIdentifier: agent.harnessIdentifier, modelIdentifier: model,
-            reasoningEffort: agent.reasoningEffort, publicDescription: agent.publicDescription,
+            agent, displayName: agent.displayName, harnessIdentifier: harness.provider.rawValue, modelIdentifier: model,
+            reasoningEffort: reasoningEffort, publicDescription: agent.publicDescription,
             avatarSymbolName: agent.avatarSymbolName, avatarColorIndex: agent.avatarColorIndex, avatarImageData: agent.avatarImageData)
+        try repository.updateAgentHarnessProfile(updated, profile: harness.profile)
+        // A voice belongs to its harness; on another, the Hub picks one for its name.
+        if agent.harnessIdentifier != harness.provider.rawValue {
+            try repository.updateAgentVoice(updated, voice: validVoice(try repository.loadAgentVoice(agent), on: harness.provider))
+        }
         if running || watching { runtime.restart(agent: updated, repository: repository) }
         onChange?(owner.id, .botsChanged)
         tellGuests(of: id)
         onBotsEdited?()
+    }
+
+    /// A bot this Hub runs, with the person it belongs to.
+    private func ownedHere(_ id: UUID) throws -> (AgentRecord, HubUser) {
+        guard let agent = try repository.loadAgents().first(where: { $0.id == id }), access.host(ofBot: id) == nil,
+              let owner = access.owner(ofBot: id).flatMap({ id in access.users.first { $0.id == id } }) else {
+            throw LinkError("This bot’s harness can’t be changed here.")
+        }
+        return (agent, owner)
     }
 
     /// Reads the user's current plan, not the one they were on when `user` was read.

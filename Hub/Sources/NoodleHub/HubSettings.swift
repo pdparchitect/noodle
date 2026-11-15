@@ -19,7 +19,7 @@ struct HubSettingsProblem: Equatable {
 }
 
 /// Gives the shared Harness and Bots settings what they need from the Hub.
-/// The Hub has no bot editor yet; a bot's profile holds its folder, activity and New Session.
+/// A bot's profile holds its folder, activity, New Session, Edit for its harness and model, and Suspend.
 @MainActor @Observable final class HubSettingsHost: BotSettingsHost {
     let hub: Hub
     let setup: HarnessSetupController
@@ -181,7 +181,7 @@ struct HubSettingsView: View {
                 .tabItem { Label("Plans", systemImage: "rectangle.stack.badge.person.crop") }
                 .tag(HubSettingsTab.plans)
             // Bots come and go from paired devices, so the list is reread while it is open.
-            TimelineView(.periodic(from: .now, by: 2)) { _ in BotsSettingsView(store: host, agents: host.agents) }
+            TimelineView(.periodic(from: .now, by: 2)) { _ in BotsSettingsView(store: host, agents: (try? host.hub.bots.botsRunHere()) ?? []) }
                 .hubSettingsSize()
                 .tabItem { Label("Bots", systemImage: "sparkles") }
                 .tag(HubSettingsTab.bots)

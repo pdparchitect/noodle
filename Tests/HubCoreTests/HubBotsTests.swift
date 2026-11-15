@@ -232,6 +232,42 @@ import XCTest
         XCTAssertEqual(f.hub.bots.unlentModels(), [])
     }
 
+    /// Settings > Bots lists only the bots the Hub runs; one a Mac hosts keeps only its conversations here.
+    func testBotsRunHereLeaveOutBotsAMacHosts() async throws {
+        let f = try await fixture()
+        guard case .bot(let alfred) = try await f.device.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))),
+              case .bot(let jeeves) = try await f.device.request(.createBot(LinkBotDraft(name: "Jeeves", provider: "claude-code"))) else {
+            return XCTFail("no bots")
+        }
+        f.hub.access.setHost(try XCTUnwrap(f.hub.access.devices.first), ofBot: jeeves.id)
+        XCTAssertEqual(try f.hub.bots.botsRunHere().map(\.id), [alfred.id])
+    }
+
+    /// From Settings > Bots, an admin moves a bot to another harness, login and model its owner's plan lends,
+    /// as its owner would in Edit Bot; one the plan does not lend is refused and changes nothing.
+    func testChangingAHarnessStaysWithinTheOwnersPlan() async throws {
+        let f = try await fixture()
+        let codex = HubHarness(provider: .codex, profile: nil)
+        f.hub.access.setModels(["sonnet"], for: claude, in: f.hub.access.plans[1])
+        guard case .bot(let alfred) = try await f.device.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code", model: "sonnet"))) else {
+            return XCTFail("no bot")
+        }
+        XCTAssertThrowsError(try f.hub.bots.changeHarness(of: alfred.id, to: codex, model: "gpt-5", reasoningEffort: "high"))
+        XCTAssertThrowsError(try f.hub.bots.changeHarness(of: alfred.id, to: claude, model: "opus", reasoningEffort: nil))
+        XCTAssertEqual(try f.hub.repository.loadAgents().first { $0.id == alfred.id }?.harnessIdentifier, "claude-code")
+
+        f.hub.access.set(codex, included: true, in: f.hub.access.plans[1])
+        try f.hub.bots.changeHarness(of: alfred.id, to: codex, model: "gpt-5", reasoningEffort: "high")
+        let agent = try XCTUnwrap(f.hub.repository.loadAgents().first { $0.id == alfred.id })
+        XCTAssertEqual(agent.harnessIdentifier, "codex")
+        XCTAssertEqual(agent.modelIdentifier, "gpt-5")
+        XCTAssertEqual(agent.reasoningEffort, "high")
+        XCTAssertEqual(agent.displayName, "Alfred")
+        XCTAssertNil(try f.hub.repository.loadAgentHarnessProfile(agent))
+        guard case .bots(let bots) = try await f.device.request(.bots) else { return XCTFail("no bots") }
+        XCTAssertEqual(bots.first { $0.id == alfred.id }?.draft.provider, "codex")
+    }
+
     /// A bot without a model runs on the harness default, whichever models the plan lists.
     func testABotWithoutAModelRunsOnTheHarnessDefault() async throws {
         let f = try await fixture()

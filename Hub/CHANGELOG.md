@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Edit in a bot's profile moves it to another harness, login, model or effort its owner's plan lends.
+
 ### Changed
 
+- Settings > Bots lists only the bots the Hub runs; bots a Mac hosts are edited on that Mac.
 - Suspend in a bot's profile is a button like Folder, Activity and New Session; a click offers how long.
 
 ## [0.52.0] - 2026-11-15
