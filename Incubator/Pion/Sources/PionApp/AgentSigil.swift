@@ -212,12 +212,6 @@ private struct AgentProfile: View {
         return actions
     }
 
-    private static func rows<Item>(_ items: [Item]) -> [[Item]] {
-        guard !items.isEmpty else { return [] }
-        let rowCount = (items.count + 3) / 4
-        let perRow = (items.count + rowCount - 1) / rowCount
-        return stride(from: 0, to: items.count, by: perRow).map { Array(items[$0..<min($0 + perRow, items.count)]) }
-    }
 
     @ViewBuilder private func button(for item: Action) -> some View {
         switch item {
@@ -272,7 +266,7 @@ private struct AgentProfile: View {
                 .frame(maxWidth: .infinity)
             VStack(spacing: 8) {
                 // Up to four a row, as evenly as they split, as Noodle's profile.
-                ForEach(Self.rows(actions), id: \.self) { row in
+                ForEach(ProfileActionRows.split(actions), id: \.self) { row in
                     HStack(spacing: 8) {
                         ForEach(row, id: \.self) { item in
                             if item != row.first { Divider().frame(height: 32).accessibilityHidden(true) }

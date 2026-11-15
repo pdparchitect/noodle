@@ -72,67 +72,13 @@ struct HubBotProfileButton: View {
                         .help("End the turn \(agent.displayName) is working on")
                 }
             }
-            HStack(spacing: 8) {
-                Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([host.repository.directory(for: agent)])
-                    showsProfile = false
-                } label: {
-                    actionLabel("Folder", systemImage: "folder")
-                }
-                .help("Show Folder")
-                .accessibilityLabel("Show Folder")
-                Divider().frame(height: 32).accessibilityHidden(true)
-                Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    host.activityWindows.show(agent: agent, log: host.runtime.activity.log(for: agent.id))
-                    showsProfile = false
-                } label: {
-                    actionLabel("Activity", systemImage: "list.bullet.rectangle")
-                }
-                .help("Activity")
-                .accessibilityLabel("Activity")
-                Divider().frame(height: 32).accessibilityHidden(true)
-                Button {
-                    showsProfile = false
-                    // Let the popover close before the confirmation is presented.
-                    DispatchQueue.main.async { newSessionAgent = agent }
-                } label: {
-                    actionLabel("New Session", systemImage: "arrow.counterclockwise")
-                }
-                .help("New Session")
-                .accessibilityLabel("New Session")
-                .disabled(device != nil || host.runtime.changingAccess.contains(agent.id))
-                if agent.archivedAt == nil, device == nil, owner != nil {
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                    Button {
-                        showsProfile = false
-                        // Let the popover close before the sheet is presented.
-                        DispatchQueue.main.async { editing = agent }
-                    } label: {
-                        actionLabel("Edit", systemImage: "pencil")
-                    }
-                    .help("Edit Bot")
-                    .accessibilityLabel("Edit Bot")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                    if agent.isSuspended() {
-                        Button { host.setSuspended(until: nil, id: agent.id) } label: {
-                            actionLabel("Unsuspend", systemImage: "play.circle")
+            VStack(spacing: 8) {
+                ForEach(ProfileActionRows.split(actions(device: device, owner: owner)), id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(row, id: \.self) { item in
+                            if item != row.first { Divider().frame(height: 32).accessibilityHidden(true) }
+                            button(for: item, device: device)
                         }
-                        .help("Unsuspend")
-                        .accessibilityLabel("Unsuspend")
-                    } else {
-                        // Looks like the buttons beside it; a click offers how long.
-                        Menu {
-                            ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                                Button(choice.title) { host.setSuspended(until: choice.until(), id: agent.id) }
-                            }
-                        } label: {
-                            actionLabel("Suspend", systemImage: "pause.circle")
-                        }
-                        .menuStyle(.button)
-                        .menuIndicator(.hidden)
-                        .help("Suspend")
-                        .accessibilityLabel("Suspend")
                     }
                 }
             }
@@ -140,6 +86,81 @@ struct HubBotProfileButton: View {
         }
         .padding(20)
         .frame(width: 320)
+    }
+
+    private enum Action: Hashable { case folder, activity, newSession, edit, suspend }
+
+    /// Edit and Suspend only for a bot the Hub runs for its owner; its owner's Mac edits one it hosts.
+    private func actions(device: String?, owner: String?) -> [Action] {
+        var actions: [Action] = [.folder, .activity, .newSession]
+        if agent.archivedAt == nil, device == nil, owner != nil { actions += [.edit, .suspend] }
+        return actions
+    }
+
+    @ViewBuilder private func button(for item: Action, device: String?) -> some View {
+        switch item {
+        case .folder:
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([host.repository.directory(for: agent)])
+                showsProfile = false
+            } label: {
+                actionLabel("Folder", systemImage: "folder")
+            }
+            .help("Show Folder")
+            .accessibilityLabel("Show Folder")
+        case .activity:
+            Button {
+                NSApp.activate(ignoringOtherApps: true)
+                host.activityWindows.show(agent: agent, log: host.runtime.activity.log(for: agent.id))
+                showsProfile = false
+            } label: {
+                actionLabel("Activity", systemImage: "list.bullet.rectangle")
+            }
+            .help("Activity")
+            .accessibilityLabel("Activity")
+        case .newSession:
+            Button {
+                showsProfile = false
+                // Let the popover close before the confirmation is presented.
+                DispatchQueue.main.async { newSessionAgent = agent }
+            } label: {
+                actionLabel("New Session", systemImage: "arrow.counterclockwise")
+            }
+            .help("New Session")
+            .accessibilityLabel("New Session")
+            .disabled(device != nil || host.runtime.changingAccess.contains(agent.id))
+        case .edit:
+            Button {
+                showsProfile = false
+                // Let the popover close before the sheet is presented.
+                DispatchQueue.main.async { editing = agent }
+            } label: {
+                actionLabel("Edit", systemImage: "pencil")
+            }
+            .help("Edit Bot")
+            .accessibilityLabel("Edit Bot")
+        case .suspend:
+            if agent.isSuspended() {
+                Button { host.setSuspended(until: nil, id: agent.id) } label: {
+                    actionLabel("Unsuspend", systemImage: "play.circle")
+                }
+                .help("Unsuspend")
+                .accessibilityLabel("Unsuspend")
+            } else {
+                // Looks like the buttons beside it; a click offers how long.
+                Menu {
+                    ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                        Button(choice.title) { host.setSuspended(until: choice.until(), id: agent.id) }
+                    }
+                } label: {
+                    actionLabel("Suspend", systemImage: "pause.circle")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .help("Suspend")
+                .accessibilityLabel("Suspend")
+            }
+        }
     }
 
     private func actionLabel(_ title: String, systemImage: String) -> some View {

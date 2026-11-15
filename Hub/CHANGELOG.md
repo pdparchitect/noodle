@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A bot's profile puts its buttons on two rows when there are more than four, so labels like New Session are no longer squeezed.
 - In Settings > Bots, an archived bot's picture no longer opens its profile; bring the bot back with its Archived switch first.
 
 ## [0.53.0] - 2026-11-15
