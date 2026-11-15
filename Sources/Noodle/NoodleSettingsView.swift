@@ -157,11 +157,8 @@ struct GeneralSettingsView: View {
 struct ChatSettingsView: View {
     @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showBotDescriptions = true
     @AppStorage(WebLinkPreview.defaultsKey) private var previewsWebLinks = true
-    @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
     @AppStorage(FloatingConversations.keepsOneDefaultsKey) private var keepsOneFloat = false
     @AppStorage(MessageReceivedSound.defaultsKey) private var receivedSound = MessageReceivedSound.defaultName
-    @State private var microphones: [VoiceInputDevice] = []
-    @State private var defaultMicrophoneID: UInt32 = 0
     private let microphoneDevices: () -> [VoiceInputDevice]
     private let systemMicrophoneID: () -> UInt32
 
@@ -184,26 +181,7 @@ struct ChatSettingsView: View {
                 }
                 .onChange(of: receivedSound) { MessageReceivedSound.play() }
             }
-            Section {
-                Picker("Microphone", selection: $microphoneUID) {
-                    Text(microphones.first(where: { $0.audioID == defaultMicrophoneID })
-                        .map { "System Default — \($0.name)" } ?? "System Default").tag("")
-                    ForEach(microphones) { microphone in
-                        Text(microphone.name).tag(microphone.id)
-                    }
-                    if !microphoneUID.isEmpty && !microphones.contains(where: { $0.id == microphoneUID }) {
-                        Text("Selected microphone unavailable").tag(microphoneUID)
-                    }
-                }
-            }
-            .task {
-                while !Task.isCancelled {
-                    microphones = microphoneDevices()
-                    defaultMicrophoneID = systemMicrophoneID()
-                    do { try await Task.sleep(for: .seconds(2)) } catch { break }
-                }
-            }
-
+            MicrophoneSettingsSection(devices: microphoneDevices, systemID: systemMicrophoneID)
             Section {
                 Toggle("Show descriptions in the @ name menu", isOn: $showBotDescriptions)
             } footer: {

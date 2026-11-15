@@ -339,7 +339,7 @@ final class SpokenAudio: @unchecked Sendable {
 
     struct StartFailure: LocalizedError {
         var errorDescription: String? {
-            "The call could not use the microphone or speakers. Reconnect your headphones or choose another microphone in Settings → Chat, then call again."
+            "The call could not use the microphone or speakers. Reconnect your headphones or choose another microphone in Settings → Conversation, then call again."
         }
     }
 }

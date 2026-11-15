@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Microphone problems point to Settings → Conversation, where the microphone is chosen, instead of a Chat tab that no longer exists.
 - The activity window shows the arrow pointer over its scroller and Follow Latest button, instead of the text cursor.
 
 ## [0.86.0] - 2026-11-15

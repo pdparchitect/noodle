@@ -39,7 +39,7 @@ and talk things through with it. Noodle for iPhone calls your bots on the Hub
 the same way, on the iPhone's call screen, so a call goes on while the phone is
 locked and can be muted or ended from the Lock Screen.
 
-Calls use the microphone chosen for dictation in **Settings → Chat**. For a bot
+Calls use the microphone chosen for dictation in **Settings → Conversation**. For a bot
 on a Noodle Hub, your voice goes to the Hub over your connection to it, and the
 Hub connects to the bot's voice.
 

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Settings has a Conversation tab, as in Noodle: message delivery, new sessions, the microphone, descriptions in the @ name menu and web link previews.
 - An agent's profile has Suspend beside Message and Edit; a click offers how long, and a suspended agent shows Unsuspend.
 
 ### Changed

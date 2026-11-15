@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreAudio
 import AudioToolbox
+import SwiftUI
 
 /// Store stable device UIDs, never transient Core Audio object IDs. Selecting a
 /// microphone affects this recorder only, not the Mac's system input setting.
@@ -39,8 +40,8 @@ struct VoiceInputDevice: Identifiable, Equatable {
     static func resolve(uid: String, devices: [Self], defaultID: AudioDeviceID) throws -> Self {
         guard let device = devices.first(where: { uid.isEmpty ? $0.audioID == defaultID : $0.id == uid }) else {
             throw VoiceFailure(uid.isEmpty
-                ? "No microphone is available. Connect one and choose it in Settings → Chat."
-                : "The selected microphone is disconnected. Choose another in Settings → Chat.")
+                ? "No microphone is available. Connect one and choose it in Settings → Conversation."
+                : "The selected microphone is disconnected. Choose another in Settings → Conversation.")
         }
         return device
     }
@@ -87,5 +88,37 @@ struct VoiceInputDevice: Identifiable, Equatable {
         guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, memory) == noErr else { return false }
         return UnsafeMutableAudioBufferListPointer(memory.assumingMemoryBound(to: AudioBufferList.self))
             .contains { $0.mNumberChannels > 0 }
+    }
+}
+
+/// Settings > Conversation's microphone choice, shared by Noodle and Pion. The list is reread while it shows,
+/// so a microphone plugged in or out appears without reopening Settings.
+struct MicrophoneSettingsSection: View {
+    @AppStorage(VoiceInputDevice.defaultsKey) private var microphoneUID = ""
+    @State private var microphones: [VoiceInputDevice] = []
+    @State private var defaultMicrophoneID: UInt32 = 0
+    var devices: () -> [VoiceInputDevice] = VoiceInputDevice.available
+    var systemID: () -> UInt32 = { VoiceInputDevice.defaultDeviceID }
+
+    var body: some View {
+        Section {
+            Picker("Microphone", selection: $microphoneUID) {
+                Text(microphones.first(where: { $0.audioID == defaultMicrophoneID })
+                    .map { "System Default — \($0.name)" } ?? "System Default").tag("")
+                ForEach(microphones) { microphone in
+                    Text(microphone.name).tag(microphone.id)
+                }
+                if !microphoneUID.isEmpty && !microphones.contains(where: { $0.id == microphoneUID }) {
+                    Text("Selected microphone unavailable").tag(microphoneUID)
+                }
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                microphones = devices()
+                defaultMicrophoneID = systemID()
+                do { try await Task.sleep(for: .seconds(2)) } catch { break }
+            }
+        }
     }
 }

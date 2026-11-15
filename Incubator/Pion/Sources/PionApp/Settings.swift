@@ -7,7 +7,7 @@ import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Pion.
 @MainActor @Observable final class PionSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case general, harnesses, agents, tools, permissions, updates }
+    enum Tab: Hashable { case general, conversation, harnesses, agents, tools, permissions, updates }
 
     let model: PionModel
     let setup: HarnessSetupController
@@ -87,6 +87,10 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(PionSettingsHost.Tab.general)
+            ConversationSettingsView()
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }
+                .tag(PionSettingsHost.Tab.conversation)
             HarnessesSettingsView(store: host, setup: host.setup)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Harness", systemImage: "terminal") }
@@ -114,6 +118,30 @@ struct PionSettingsView: View {
             AgentEditorSheet(model: host.model, agent: host.model.agent(agent.id) ?? agent, initialTab: host.agentEditorTab)
         }
         .task { await host.setup.refreshAll(host.runtime) }
+    }
+}
+
+/// Noodle's Conversation settings, but for the received-message sound and floating conversations, which Pion
+/// does not have.
+private struct ConversationSettingsView: View {
+    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showsDescriptions = true
+    @AppStorage(WebLinkPreview.defaultsKey) private var previewsWebLinks = true
+
+    var body: some View {
+        Form {
+            ConversationRuntimeSettingsSections()
+            MicrophoneSettingsSection()
+            Section {
+                Toggle("Show descriptions in the @ name menu", isOn: $showsDescriptions)
+            } footer: {
+                Text("Show each agent's public description beside its name. Private backstories are never shown.")
+            }
+            Section {
+                Toggle("Preview web links", isOn: $previewsWebLinks)
+                    .help("Open web links in Quick Look first, with a button to continue in your browser. When off, links open in your browser.")
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

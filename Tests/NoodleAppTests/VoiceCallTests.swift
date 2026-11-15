@@ -260,7 +260,7 @@ private struct FixtureError: LocalizedError {
         XCTAssertEqual(starts.counts, [1, VoiceCallAudioStart.attempts])
         XCTAssertEqual(waits, VoiceCallAudioStart.attempts - 1)
 
-        let disconnected = VoiceFailure("The selected microphone is disconnected. Choose another in Settings → Chat.")
+        let disconnected = VoiceFailure("The selected microphone is disconnected. Choose another in Settings → Conversation.")
         let unplugged = CallAudioStarts(processed: [disconnected],
                                         apart: Array(repeating: disconnected, count: VoiceCallAudioStart.attempts))
         do {

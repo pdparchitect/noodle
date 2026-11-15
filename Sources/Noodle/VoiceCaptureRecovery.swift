@@ -98,7 +98,7 @@ import Foundation
 final class VoiceAudioQueue: @unchecked Sendable {
     struct Unresponsive: LocalizedError {
         var errorDescription: String? {
-            "The microphone isn’t responding. Reconnect it or choose another in Settings → Chat."
+            "The microphone isn’t responding. Reconnect it or choose another in Settings → Conversation."
         }
     }
 
