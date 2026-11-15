@@ -50,6 +50,8 @@ import UniformTypeIdentifiers
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
     private(set) var readUpTo: [UUID: UUID] = [:]
+    /// Whether the main window shows the welcome: offered once to someone with no agents, then from Help > Welcome.
+    private(set) var showsWelcome = false
     /// How groups notify the champion, kept where Noodle keeps it.
     private(set) var groupNotificationSettings = GroupNotificationSettings()
     /// Agent replies that notify the champion, as their conversations are set; the app shows them.
@@ -70,11 +72,14 @@ import UniformTypeIdentifiers
     private var transcriptDates: [UUID: Date] = [:]
     private var running = false
 
-    init(root: URL, messenger launcher: URL?, isScripted: Bool = false) {
+    /// `hidesInstalledHarnesses` leaves out harnesses installed outside Pion's own storage, as on a Mac that never had any.
+    init(root: URL, messenger launcher: URL?, isScripted: Bool = false, hidesInstalledHarnesses: Bool = false) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: launcher)
         connectionsController = ToolConnectionsController(repository: repository)
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
-        let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses)
+        var environment = ProcessInfo.processInfo.environment
+        if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
+        let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)
         if !isScripted { discovery.removeSupersededManagedHarnesses() }
         runtime = AgentRuntimeCoordinator(discovery: discovery, harnesses: HarnessSelection(defaults: .standard))
         runtime.remoteModels = RemoteModelAccountStore(repository: root)
@@ -368,6 +373,47 @@ import UniformTypeIdentifiers
     }
 
     private static let readKey = "PionReadUpTo"
+
+    // MARK: Welcome
+
+    static let welcomeDismissedKey = "PionWelcome.dismissed"
+
+    /// The welcome, once, for someone with no agents yet. Afterwards the empty window and Help > Welcome offer it.
+    func offerWelcome(defaults: UserDefaults = .standard) {
+        guard agents.isEmpty, !defaults.bool(forKey: Self.welcomeDismissedKey) else { return }
+        showsWelcome = true
+    }
+
+    /// Help > Welcome: the welcome again, agents or not.
+    func showWelcome() { showsWelcome = true }
+
+    func finishWelcome(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: Self.welcomeDismissedKey)
+        showsWelcome = false
+    }
+
+    /// The welcome makes the team only for someone with no agents yet; shown again from the Help menu, it only
+    /// sets up the account chosen, and returns nil. The team is made on `provider`, in a group they share.
+    func createStarterTeamIfFirst(on provider: HarnessProvider) throws -> (team: [AgentRecord], group: BotConversation)? {
+        guard agents.isEmpty else { return nil }
+        let style = BotNameStyle(rawValue: UserDefaults.standard.string(forKey: Self.agentNameStyleKey) ?? "") ?? Self.defaultAgentNameStyle
+        var team: [AgentRecord] = []
+        for member in PionStarterTeam.members {
+            let name = suggestedAgentName(style: style)
+            team.append(try createAgent(name: name, description: member.publicDescription, instructions: member.instructions,
+                                        provider: provider, model: nil, symbol: member.symbol, color: member.colorIndex))
+        }
+        let group = try createGroup(name: PionStarterTeam.groupName, description: PionStarterTeam.groupDescription,
+                                    members: Set(team.map(\.id)), lead: team.first?.id)
+        return (team, group)
+    }
+
+    /// Opens the team's group, where they introduce themselves.
+    func introduceStarterTeam(in groupID: UUID) {
+        selection = groupID
+        guard !isScripted, let group = conversation(groupID) else { return }
+        runtime.introduce(group.participantIDs, in: groupID, repository: repository)
+    }
 
     // MARK: Notifications
 

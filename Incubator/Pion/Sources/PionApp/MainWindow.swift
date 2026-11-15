@@ -1,6 +1,7 @@
 import AppKit
 import HubWire
 import NoodleCore
+import NoodleRuntime
 import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
@@ -9,9 +10,22 @@ import SwiftUI
 struct MainWindow: View {
     let model: PionModel
     @Bindable var window: WindowState
+    let setup: HarnessSetupController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        @Bindable var model = model
+        if model.showsWelcome {
+            WelcomeView(model: model, setup: setup)
+                .background { Backdrop().ignoresSafeArea() }
+                .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+                .onAppear { window.openMain = { openWindow(id: "main") } }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         @Bindable var model = model
         NavigationSplitView {
             Sidebar(model: model, window: window)
@@ -28,7 +42,10 @@ struct MainWindow: View {
                 } description: {
                     Text("Create an agent to start investigating.")
                 } actions: {
+                    Button("Set Up Your Team") { model.showWelcome() }
+                        .buttonStyle(.borderedProminent)
                     Button("New Agent") { window.sheet = .newAgent }
+                        .buttonStyle(.link)
                 }
             } else {
                 ContentUnavailableView("No Conversation Selected", systemImage: "shield.lefthalf.filled")

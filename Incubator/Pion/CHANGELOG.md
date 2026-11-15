@@ -4,6 +4,7 @@
 
 ### Added
 
+- A welcome on first launch, as in Noodle: choose an account, and Pion installs it and signs in, then makes a starter team (a lead investigator, a triage analyst and a threat intelligence analyst) in a group they share. Help › Welcome and Set Up Your Team in the empty window bring it back.
 - The Help menu has Report a Bug and Request a Feature, which open a new GitHub issue with Pion already chosen as the affected area.
 - Settings has a Keybindings tab, as in Noodle: change, clear or reset any of Pion's shortcuts, including New Investigation, Show Inspector, Close Investigation, Capture, Dictate, Call and the annotation shortcuts.
 - Voice calls, as in Noodle: call an agent whose harness has voices from its conversation's toolbar, its profile or Conversation › Call (⇧⌘C), with the call's card and what was said in the conversation. Agents can call you too; the call rings in a panel until you answer or decline, and a missed call is left in the conversation.

@@ -20,7 +20,7 @@ struct PionApp: App {
 
     var body: some Scene {
         Window(pionAppName, id: "main") {
-            MainWindow(model: delegate.model, window: delegate.window)
+            MainWindow(model: delegate.model, window: delegate.window, setup: delegate.settings.setup)
                 .environment(delegate.calls)
                 .frame(minWidth: 980, minHeight: 640)
                 // Pion's background effect over the window's own background, frosted or solid.
@@ -82,9 +82,25 @@ struct PionApp: App {
         }
         #endif
         let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var rehearsing = false
+        #if PION_DEV_HOOKS
+        // --rehearse: as on a Mac that never had Pion or any harness, in a folder of its own emptied each time,
+        // to walk through the welcome with real downloads and sign-ins. Your own agents and logins are kept.
+        if CommandLine.arguments.contains("--rehearse") {
+            do { try Rehearsal.begin(in: applicationSupport) } catch { fatalError("Could not start the rehearsal: \(error)") }
+            rehearsing = true
+            UserDefaults.standard.removeObject(forKey: PionModel.welcomeDismissedKey)
+            for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix("NSWindow Frame ") {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        } else {
+            Rehearsal.end(in: applicationSupport)
+        }
+        #endif
         let messenger = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/messenger")
         model = PionModel(root: HarnessStorage.dataRoot(applicationSupport: applicationSupport),
-                          messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil)
+                          messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil,
+                          hidesInstalledHarnesses: rehearsing)
         super.init()
     }
 
@@ -93,6 +109,7 @@ struct PionApp: App {
         _ = calls
         if !model.isScripted { connectNotifications() }
         model.start()
+        model.offerWelcome()
         // Noodle's updater, on Pion's own channel; it stays off in development builds.
         if !model.isScripted { AppUpdater.shared.start() }
         #if PION_DEV_HOOKS
@@ -166,6 +183,12 @@ struct PionCommands: Commands {
         }
         CommandGroup(replacing: .help) {
             IssueReportButtons(area: "Incubator / Pion")
+            Divider()
+            Button("Welcome") {
+                // The welcome fills the main window, which may be closed.
+                openWindow(id: "main")
+                model.showWelcome()
+            }
         }
         CommandGroup(replacing: .newItem) {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }
