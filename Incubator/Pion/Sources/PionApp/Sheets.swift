@@ -90,7 +90,11 @@ struct AgentMemberPicker: View {
     @State private var adding = false
     @State private var search = ""
 
-    private var members: [AgentRecord] { model.agents.filter { selection.contains($0.id) } }
+    /// The lead first, as Noodle lists a group's members; the rest keep their order.
+    private var members: [AgentRecord] {
+        let chosen = model.agents.filter { selection.contains($0.id) }
+        return chosen.filter { $0.id == lead } + chosen.filter { $0.id != lead }
+    }
     private var available: [AgentRecord] {
         model.agents.filter { !selection.contains($0.id)
             && (search.isEmpty || $0.displayName.localizedCaseInsensitiveContains(search)) }

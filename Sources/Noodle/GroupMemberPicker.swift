@@ -12,7 +12,11 @@ struct GroupMemberPicker: View {
     @State private var search = ""
     @State private var memberPendingRemoval: AgentRecord?
 
-    private var selected: [AgentRecord] { agents.filter { selectedIDs.contains($0.id) } }
+    /// The lead first, as Pion lists its teams; the rest keep their order.
+    private var selected: [AgentRecord] {
+        let members = agents.filter { selectedIDs.contains($0.id) }
+        return members.filter { $0.id == lead?.wrappedValue } + members.filter { $0.id != lead?.wrappedValue }
+    }
     /// Archived bots stay members until removed, but are never added.
     private var addable: [AgentRecord] { agents.filter { $0.archivedAt == nil } }
 
