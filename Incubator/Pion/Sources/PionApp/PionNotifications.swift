@@ -11,6 +11,9 @@ import UserNotifications
     static let conversationIDKey = "conversationID"
     static let messageIDKey = "messageID"
     static let signInKey = "signIn"
+    static let callKey = "call"
+    /// One at a time: a call rings again by replacing it.
+    private static let ringingIdentifier = "Pion.ringing"
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.pdparchitect.pion", category: "Notifications")
 
@@ -60,6 +63,22 @@ import UserNotifications
         if let conversationID { content.userInfo = [conversationIDKey: conversationID.uuidString] }
         // One per agent: a later pause replaces the earlier banner.
         add(content, identifier: "paused-\(agent.id.uuidString)", agent: agent)
+    }
+
+    /// Rings for a call an agent placed. It is time-sensitive, so it rings through a Focus that lets Pion's
+    /// time-sensitive notifications through; the ringing panel shows who calls.
+    static func ring(_ call: AgentCallRequest, from agent: AgentRecord) {
+        let content = UNMutableNotificationContent()
+        content.title = agent.displayName
+        content.body = MessageSegment.notificationText(call.reason)
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = [conversationIDKey: call.conversationID.uuidString, callKey: call.id.uuidString]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: ringingIdentifier, content: content, trigger: nil))
+    }
+
+    static func stopRinging() {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [ringingIdentifier])
     }
 
     /// Takes back the replies shown from a conversation, as when its group is muted.
@@ -131,8 +150,10 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let signIn = notification.request.content.userInfo[PionNotifications.signInKey] != nil
+        // A ringing call only rings, in front or not: its panel shows who calls.
+        let call = notification.request.content.userInfo[PionNotifications.callKey] != nil
         Task { @MainActor in
-            completionHandler(signIn || PionNotifications.shouldPresentActivity ? [.banner, .sound] : [])
+            completionHandler(call ? [.sound] : signIn || PionNotifications.shouldPresentActivity ? [.banner, .sound] : [])
         }
     }
 

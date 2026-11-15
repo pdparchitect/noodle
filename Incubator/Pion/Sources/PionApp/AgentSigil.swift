@@ -192,6 +192,14 @@ private struct AgentProfile: View {
     let agent: AgentRecord
     let message: (() -> Void)?
     let edit: (() -> Void)?
+    @Environment(PionCalls.self) private var calls
+
+    /// The agent's own conversation, while it can take a call and is not already on one, as in Noodle.
+    private var callable: BotConversation? {
+        guard let direct = model.directConversation(of: agent), calls.canCallNow(in: direct),
+              calls.voiceCalls.call?.conversationID != direct.id else { return nil }
+        return direct
+    }
 
     var body: some View {
         let phase = model.phase(of: agent)
@@ -220,7 +228,16 @@ private struct AgentProfile: View {
                     if let message {
                         Button(action: message) { action("Message", "bubble.left") }.help("Direct Message")
                     }
-                    if message != nil, edit != nil { Divider().frame(height: 32) }
+                    if let callable {
+                        if message != nil { Divider().frame(height: 32) }
+                        Button {
+                            calls.startCall(in: callable)
+                            // The call's controls are in its conversation, so show it.
+                            message?()
+                        } label: { action("Call", "phone") }
+                            .help("Call \(agent.displayName)")
+                    }
+                    if message != nil || callable != nil, edit != nil { Divider().frame(height: 32) }
                     if let edit {
                         Button(action: edit) { action("Edit", "pencil") }.help("Edit Agent")
                     }

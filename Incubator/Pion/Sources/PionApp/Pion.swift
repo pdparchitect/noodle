@@ -20,6 +20,7 @@ struct PionApp: App {
     var body: some Scene {
         Window(pionAppName, id: "main") {
             MainWindow(model: delegate.model, window: delegate.window)
+                .environment(delegate.calls)
                 .frame(minWidth: 980, minHeight: 640)
                 // Pion's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
@@ -30,13 +31,14 @@ struct PionApp: App {
         .windowBackgroundDragBehavior(.enabled)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
-            PionCommands(model: delegate.model, window: delegate.window)
+            PionCommands(model: delegate.model, window: delegate.window, calls: delegate.calls)
             #if PION_DEV_HOOKS
             ScenarioCommands()
             #endif
         }
         WindowGroup("Conversation", id: "conversation", for: UUID.self) { $id in
             ConversationWindow(model: delegate.model, selection: $id)
+                .environment(delegate.calls)
                 .frame(minWidth: 720, minHeight: 540)
                 .background { Backdrop().ignoresSafeArea() }
                 .modifier(WindowSurfaceBackground())
@@ -47,6 +49,7 @@ struct PionApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         Settings {
             PionSettingsView(host: delegate.settings)
+                .environment(delegate.calls)
         }
         .windowResizability(.contentSize)
     }
@@ -56,6 +59,14 @@ struct PionApp: App {
     let model: PionModel
     let window = WindowState()
     lazy var settings = PionSettingsHost(model: model)
+    lazy var calls: PionCalls = {
+        let calls = PionCalls(model: model)
+        calls.open = { [weak self] id in
+            self?.model.selection = id
+            self?.window.openMain?()
+        }
+        return calls
+    }()
 
     override init() {
         // Before anything adds or uses a tool connection.
@@ -77,6 +88,7 @@ struct PionApp: App {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
+        _ = calls
         if !model.isScripted { connectNotifications() }
         model.start()
         // Noodle's updater, on Pion's own channel; it stays off in development builds.
@@ -137,6 +149,7 @@ extension FocusedValues {
 struct PionCommands: Commands {
     let model: PionModel
     let window: WindowState
+    let calls: PionCalls
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.pionConversation) private var context
     @FocusedValue(\.pionDictation) private var dictation
@@ -200,6 +213,9 @@ struct PionCommands: Commands {
             Button(dictation?.isRecording == true ? "Stop Dictation" : "Dictate") { dictation?.perform() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(dictation?.isEnabled != true)
+            Button(calls.voiceCalls.call != nil ? "End Call" : "Call") { calls.toggleCall(in: conversationID) }
+                .appShortcut(.call)
+                .disabled(calls.voiceCalls.call == nil && model.conversation(conversationID).map(calls.canCallNow) != true)
             Button("Stop") { model.stop(in: conversationID) }
                 .keyboardShortcut(".")
                 .disabled(model.stoppableAgent(in: conversationID) == nil)

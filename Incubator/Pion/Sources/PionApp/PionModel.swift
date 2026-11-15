@@ -56,6 +56,8 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onMessagesArrived: (([ChatMessage]) -> Void)?
     /// A conversation that notifies less than before, whose shown replies the app takes back.
     @ObservationIgnored var onNotificationsNarrowed: ((UUID) -> Void)?
+    /// What the champion sent, with the files' names, for a call in that conversation to hear about.
+    @ObservationIgnored var onSent: ((UUID, String, [String]) -> Void)?
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
@@ -132,6 +134,9 @@ import UniformTypeIdentifiers
             }
         }
     }
+
+    /// Agents may place calls once something can ring them; without a handler they are told calls are unavailable.
+    func handleCallRequests(_ handler: @escaping @Sendable (UUID) -> Void) { messenger.onCallRequested = handler }
 
     func stop() {
         loop?.cancel()
@@ -610,6 +615,7 @@ import UniformTypeIdentifiers
         _ = try repository.sendUserMessage(conversationID: id, body: body, now: now)
         readTranscript(id, notifying: false)
         markRead(id)
+        onSent?(id, body, [])
         if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: body, repository: repository) }
     }
 
@@ -637,6 +643,7 @@ import UniformTypeIdentifiers
             let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
             _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? files.map(\.originalFilename).joined(separator: ", ") : body,
                                                attachmentIDs: files.map(\.id), now: now)
+            onSent?(id, body, files.map(\.originalFilename))
             drafts[id] = ""
             pendingAttachments[id] = []
             readTranscript(id, notifying: false)

@@ -79,7 +79,7 @@ struct ConversationWindowView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
-                if let conversation { VoiceCallToolbarControl(conversation: conversation) }
+                if let conversation { VoiceCallToolbarControl(store: store, conversation: conversation) }
             }
 
             ToolbarItem(placement: .primaryAction) {

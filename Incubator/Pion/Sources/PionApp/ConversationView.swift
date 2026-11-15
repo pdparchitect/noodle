@@ -36,6 +36,7 @@ struct ConversationView: View {
     let model: PionModel
     @Bindable var window: WindowState
     let conversation: BotConversation
+    @Environment(PionCalls.self) private var calls
     @State private var composerHeight: CGFloat = 0
     // The column's ideal, read from the width it was left at only as the inspector opens. The width is
     // kept in defaults, not app storage: a stored value the view watches redraws it on every step of a
@@ -147,6 +148,10 @@ struct ConversationView: View {
 
     private var transcript: some View {
         let messages = model.messages(in: conversation.id)
+        // What was said on calls, placed among the messages sent while they ran, as Noodle shows it.
+        let spoken = VoiceCallLayout.spokenLines(in: messages, live: calls.liveCallCardID(in: conversation.id).map {
+            ($0, calls.voiceCalls.call?.lines ?? [])
+        })
         return TranscriptScrollView(
             initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(),
             lastMessageID: messages.last?.id,
@@ -161,10 +166,28 @@ struct ConversationView: View {
                 .id(TranscriptScrollTarget.start)
             ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                 let previous = index > 0 ? messages[index - 1] : nil
-                MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
-                           selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
-                           continues: previous.map { $0.author == message.author && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
-                    .id(message.id)
+                VStack(spacing: 0) {
+                    if let call = message.call {
+                        VoiceCallCard(store: calls, message: message, record: call)
+                            .padding(.top, 14)
+                            .frame(maxWidth: MessageRow.column)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 28)
+                    } else {
+                        MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
+                                   selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
+                                   continues: previous.map { $0.call == nil && $0.author == message.author
+                                       && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
+                    }
+                    if let block = spoken[message.id] {
+                        VoiceCallBlockView(store: calls, block: block)
+                            .padding(.top, 8)
+                            .frame(maxWidth: MessageRow.column)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 28)
+                    }
+                }
+                .id(message.id)
             }
         }
         .id(conversation.id)
@@ -210,6 +233,10 @@ struct ConversationView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        // The call button, or this conversation's call controls, as in Noodle; only an agent with voices has one.
+        if calls.voiceCallTarget(for: conversation) != nil || calls.voiceCalls.call?.conversationID == conversation.id {
+            ToolbarItem { VoiceCallToolbarControl(store: calls, conversation: conversation) }
+        }
         if investigation?.isClosed != true {
             ToolbarItem {
                 Button { window.edit(conversation, in: model) } label: { Label("Edit…", systemImage: "pencil") }

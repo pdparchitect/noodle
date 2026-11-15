@@ -391,7 +391,7 @@ struct MessageBubble: View {
         VStack(spacing: 0) {
             row
             if let spokenBlock {
-                VoiceCallBlockView(block: spokenBlock).padding(.top, 8)
+                VoiceCallBlockView(store: store, block: spokenBlock).padding(.top, 8)
             }
         }
             // Every row keeps the badge's clearance, reactions or not, so reacting never moves
@@ -410,7 +410,7 @@ struct MessageBubble: View {
     @ViewBuilder private var row: some View {
         let attachments = store.attachments(for: message)
         if let call = message.call {
-            VoiceCallCard(message: message, record: call)
+            VoiceCallCard(store: store, message: message, record: call)
         } else if isSystem {
             HStack {
                 Spacer(minLength: 80)

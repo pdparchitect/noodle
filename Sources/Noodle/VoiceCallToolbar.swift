@@ -1,17 +1,29 @@
 import NoodleCore
 import SwiftUI
 
+/// What the call views need from the app that shows them.
+@MainActor protocol VoiceCallHost: AnyObject {
+    var voiceCalls: VoiceCallController { get }
+    /// The bot a conversation's call goes to, or nil when it has none.
+    func voiceCallTarget(for conversation: BotConversation) -> AgentRecord?
+    func canCallNow(in conversation: BotConversation) -> Bool
+    func startCall(in conversation: BotConversation)
+    /// The card of the call in progress in a conversation.
+    func liveCallCardID(in conversationID: UUID) -> UUID?
+    func callerName(_ agentID: UUID) -> String?
+}
+
 /// The call button, or while this conversation is on a call, its controls.
 /// The chat stays free during a call; what is said shows on the call's card.
 struct VoiceCallToolbarControl: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any VoiceCallHost
     let conversation: BotConversation
 
     var body: some View {
         if let call = store.voiceCalls.call, call.conversationID == conversation.id {
             ongoing(call)
         } else if let agent = store.voiceCallTarget(for: conversation) {
-            Button { store.startVoiceCall(in: conversation) } label: {
+            Button { store.startCall(in: conversation) } label: {
                 Label("Call", systemImage: "phone")
             }
             .help("Call \(agent.displayName)")
@@ -77,7 +89,7 @@ struct VoiceCallTimer: View {
 /// Where a call starts in its conversation: live while it runs, then its length. What was
 /// said follows it as speech bubbles, among whatever was sent during the call.
 struct VoiceCallCard: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any VoiceCallHost
     let message: ChatMessage
     let record: VoiceCallRecord
 
@@ -122,7 +134,7 @@ struct VoiceCallCard: View {
     }
 
     private var botName: String {
-        store.agents.first { $0.id == record.agentID }?.displayName ?? "Bot"
+        store.callerName(record.agentID) ?? "Bot"
     }
 }
 
@@ -136,7 +148,7 @@ struct VoiceCallBlock: Equatable {
 /// A stretch of what was said on a call, kept to a two-line preview so a long call stays
 /// compact. Clicking it shows the whole stretch.
 struct VoiceCallBlockView: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any VoiceCallHost
     let block: VoiceCallBlock
     @State private var showsAll = false
 
@@ -179,7 +191,7 @@ struct VoiceCallBlockView: View {
         }
     }
 
-    private var botName: String { store.agents.first { $0.id == block.agentID }?.displayName ?? "Bot" }
+    private var botName: String { store.callerName(block.agentID) ?? "Bot" }
     private func speaker(_ line: VoiceCallLine) -> String { line.speaker == .person ? "You" : botName }
 }
 

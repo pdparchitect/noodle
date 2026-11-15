@@ -500,7 +500,7 @@ struct ColumnHeader: View {
                 .buttonStyle(.borderless)
             ConversationPauseControl(conversation: conversation, kickRequest: $kickRequest)
             Group {
-                VoiceCallToolbarControl(conversation: conversation)
+                VoiceCallToolbarControl(store: store, conversation: conversation)
                 ConversationCompanionsMenu(conversation: conversation)
                 Button(action: close) { Label("Close Column", systemImage: "xmark") }
                     .help("Close Column")

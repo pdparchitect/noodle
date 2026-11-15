@@ -673,7 +673,7 @@ private struct MainToolbarCallControl: View {
             // A message waits for the bot; a call needs it running now.
             .disabled(!now)
         case .ongoing(let id):
-            if let conversation = store.conversation(withID: id) { VoiceCallToolbarControl(conversation: conversation) }
+            if let conversation = store.conversation(withID: id) { VoiceCallToolbarControl(store: store, conversation: conversation) }
         case .none:
             EmptyView()
         }
