@@ -236,6 +236,45 @@ private struct SheetDescriptionField: View {
     }
 }
 
+/// A note of several lines: Return starts a new line, and the field grows with the text, and the sheet with
+/// it, up to about twelve lines, then scrolls.
+private struct SheetNoteEditor: View {
+    let title: String
+    let prompt: String
+    @Binding var text: String
+    @State private var textHeight: CGFloat = 0
+    private static let font = Font.system(size: 13)
+    private static let minimum: CGFloat = 64, maximum: CGFloat = 220
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold))
+            TextEditor(text: $text)
+                .font(Self.font)
+                .autocorrectionDisabled(false)
+                .accessibilityLabel(title)
+                .frame(height: min(max(textHeight, Self.minimum), Self.maximum))
+                .background(alignment: .topLeading) {
+                    // The text as the editor lays it out, measured but not shown, so the field knows its height.
+                    Text(text.isEmpty ? " " : text + "\n")
+                        .font(Self.font)
+                        .padding(.horizontal, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { textHeight = $0 }
+                }
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(prompt).font(Self.font).foregroundStyle(.tertiary)
+                            .padding(.leading, 5).allowsHitTesting(false)
+                    }
+                }
+                .roundedBorderEditor()
+        }
+    }
+}
+
 private struct SheetInstructionsEditor: View {
     let title: String
     @Binding var text: String
@@ -690,7 +729,7 @@ struct CloseInvestigationSheet: View {
                     ForEach(Investigation.Outcome.allCases, id: \.self) { Text($0.title) }
                 }
                 .pickerStyle(.segmented)
-                SheetDescriptionField(title: "Note", prompt: "What was concluded", text: $note)
+                SheetNoteEditor(title: "Note", prompt: "What was concluded", text: $note)
             }
             .padding(20)
         }

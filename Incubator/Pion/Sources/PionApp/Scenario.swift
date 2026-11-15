@@ -500,6 +500,7 @@ enum ScenarioTime {
             case "new-investigation": window.sheet = .newInvestigation
             case "new-group": window.sheet = .newGroup
             case "new-agent": window.sheet = .newAgent
+            case "close": if let investigation = model.investigation(model.selection) { window.sheet = .close(investigation) }
             default: window.sheet = nil
             }
         }
