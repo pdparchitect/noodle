@@ -1870,18 +1870,8 @@ final class NoodleStore {
             return true
         }
 
-        if let agent {
-            runtime.stop(agentID: agent.id, revokeAccess: false)
-        }
-
         do {
-            if let agent {
-                try repository.deleteAgent(agent)
-                runtime.stop(agentID: agent.id)
-            } else {
-                try repository.deleteConversation(id: conversation.id)
-                restartBots(BotConversation.botsWithChangedFolders(from: conversation, to: nil))
-            }
+            try runtime.delete(conversation, agent: agent, agents: agents.filter { runsHere($0.id) }, repository: repository)
 
             drafts.clear(conversation.id)
             if selectedConversationID == conversation.id {
@@ -1892,20 +1882,13 @@ final class NoodleStore {
             groupBeingEdited = nil
             return true
         } catch {
-            if let agent {
-                runtime.start(agent: agent, repository: repository)
-            }
             errorMessage = error.localizedDescription
             return false
         }
     }
 
     func deletionMessage(for conversation: BotConversation) -> String {
-        let name = title(for: conversation)
-        if conversation.kind == .direct {
-            return "\u{201c}\(name)\u{201d}, its workspace, and its direct conversation will be permanently deleted. It will also be removed from every group. This cannot be undone."
-        }
-        return "\u{201c}\(name)\u{201d}, its messages, and its attachments will be permanently deleted. The bots in the group will not be deleted. This cannot be undone."
+        ConversationDeletion.message(name: title(for: conversation), isDirect: conversation.kind == .direct)
     }
 
     @ObservationIgnored lazy var voiceCalls = VoiceCallController(
@@ -1979,15 +1962,13 @@ final class NoodleStore {
     /// Reads every bot's budget from its agent.json, so one changed elsewhere applies too.
     private func reloadBudgets() {
         budgets.onChange = { [weak self] in self?.applyBudgets() }
-        budgets.replace(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in
-            (try? repository.loadAgentBudget(agent)).flatMap { $0 }.map { (agent.id, $0) }
-        }))
+        budgets.load(agents, repository: repository)
         applyBudgets()
     }
 
     /// Holds the bots out of budget and starts again those that may continue.
     private func applyBudgets() {
-        start(runtime.hold(budgets.holds.mapValues(BotBudgets.status(until:)), for: .budget))
+        start(budgets.applyHolds(to: runtime))
     }
 
     /// Holds the suspended bots here and starts again those whose suspension ended. It only compares
@@ -2056,25 +2037,11 @@ final class NoodleStore {
     /// Sets how many tokens the bot may use per period, or lets it use any number when nil. It applies
     /// straight away, to tokens already used in the period too, unless they were used before a reset.
     func setBudget(_ limit: TokenLimit?, for agent: AgentRecord) {
-        let current = budgets.budgets[agent.id]
-        let budget = limit.map { BotBudget(limit: $0, resetAt: current?.resetAt) }
-        save(budget, for: agent)
+        do { try budgets.setLimit(limit, for: agent, repository: repository) } catch { errorMessage = error.localizedDescription }
     }
 
-    /// Forgets the tokens the bot used so far, so it may use its whole budget again from now.
     func resetBudget(for agent: AgentRecord) {
-        guard var budget = budgets.budgets[agent.id] else { return }
-        budget.resetAt = budgets.now()
-        save(budget, for: agent)
-    }
-
-    private func save(_ budget: BotBudget?, for agent: AgentRecord) {
-        do {
-            try repository.updateAgentBudget(agent, budget: budget)
-            budgets.set(budget, for: agent.id)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        do { try budgets.reset(agent, repository: repository) } catch { errorMessage = error.localizedDescription }
     }
 
     /// What a bot with this name sounds like until a voice is chosen for it.

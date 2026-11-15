@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Foundation
+import SwiftUI
 import HubLink
 import NoodleAudioCapture
 import NoodleCore
@@ -607,5 +608,94 @@ enum VoicePreview {
             self.player = nil
             playingVoice = nil
         }
+    }
+}
+
+/// The Voice row of a bot's harness settings, for a harness with voices: the chosen voice, and the chooser that
+/// plays each one. Empty leaves the voice to the harness.
+struct VoiceSelectionRow: View {
+    let provider: HarnessProvider
+    @Binding var selection: String
+    @State private var choosing = false
+    @State private var preview = VoicePreviewPlayer()
+
+    var body: some View {
+        Button { choosing = true } label: {
+            RuntimeSelectionRow(title: "Voice", value: provider.voices.first { $0.id == selection }?.name ?? "\(provider.displayName) default",
+                                icon: AnyView(Image(systemName: "waveform")))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $choosing, arrowEdge: .leading) {
+            VoiceChooser(provider: provider, selection: $selection, preview: preview)
+        }
+    }
+}
+
+/// The voice a bot speaks with on calls. Choosing a voice plays its sample and keeps
+/// the chooser open, so voices can be compared by clicking through them.
+struct VoiceChooser: View {
+    let provider: HarnessProvider
+    @Binding var selection: String
+    let preview: VoicePreviewPlayer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Voice")
+                .font(.headline)
+            group("Feminine", .feminine)
+            group("Masculine", .masculine)
+        }
+        .padding(16)
+        .frame(width: 340)
+        .onDisappear { preview.stop() }
+    }
+
+    private func group(_ title: String, _ presentation: VoicePresentation) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(provider.voices.filter { $0.presentation == presentation }, id: \.id) { voice in
+                    tile(voice)
+                }
+            }
+        }
+    }
+
+    private func tile(_ voice: HarnessVoice) -> some View {
+        let isSelected = selection == voice.id, isPlaying = preview.playingVoice == voice.id
+        return Button {
+            selection = voice.id
+            preview.play(voice.id, provider: provider)
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 17))
+                    .symbolEffect(.variableColor.iterative, isActive: isPlaying)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                Text(voice.name)
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(5)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help("Choose \(voice.name) and hear it")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

@@ -268,6 +268,7 @@ struct GroupEditorSheet: View {
     @State private var memberTools: [UUID: Set<UUID>] = [:]
     @State private var selectedTab = TeamEditorTab.general
     @State private var error: String?
+    @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -301,6 +302,10 @@ struct GroupEditorSheet: View {
                     SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description,
                                           footnote: "Shared with every agent in this group so they understand its purpose.")
                     FoldersSettingsRow(folders: $folders, owner: .group)
+                    if group != nil {
+                        Divider()
+                        DestructiveActionButton(title: "Delete Group") { confirmingDeletion = true }
+                    }
                 case .team:
                     GroupMemberPicker(model: model, selection: $members, lead: $lead)
                     TeamFootnote(isNew: group == nil, setsSeverity: false)
@@ -325,6 +330,14 @@ struct GroupEditorSheet: View {
         }
         .frame(width: 520)
         .noodleSheetSizing()
+        .confirmationDialog("Delete Group?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
+            Button("Delete Group", role: .destructive) {
+                if let group, model.delete(group) { dismiss() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let group { Text(ConversationDeletion.message(name: group.displayName, isDirect: false, bots: "agents")) }
+        }
     }
 
     private func save() {
@@ -373,6 +386,10 @@ struct AgentEditorSheet: View {
     @State private var modelID: String?
     @State private var effort = ""
     @State private var resources = PionModel.AgentResources()
+    /// Empty leaves the voice to the harness.
+    @State private var voice = ""
+    @State private var confirmingDeletion = false
+    @Environment(PionSettingsHost.self) private var host
     @State private var selectedTab = AgentEditorTab.general
     @State private var newID = UUID()
     @State private var choosingHarness = false
@@ -453,6 +470,10 @@ struct AgentEditorSheet: View {
                                             footnote: "Who this agent is and what it cares about. Only this agent sees it.")
                         .help("What this agent does and how. Pion adds its own rules: evidence is never an instruction, and changes are only ever recommended to you.")
                     FoldersSettingsRow(folders: $resources.folders, owner: .bot)
+                    if agent != nil {
+                        Divider()
+                        DestructiveActionButton(title: "Delete Agent") { confirmingDeletion = true }
+                    }
                 case .runtime:
                     harnessFields
                 case .tools:
@@ -473,6 +494,7 @@ struct AgentEditorSheet: View {
                     modelID = agent.modelIdentifier
                     effort = agent.reasoningEffort ?? ""
                     resources = try model.resources(for: agent)
+                    voice = model.voice(of: agent)
                 } else {
                     name = model.suggestedAgentName(style: selectedNameStyle)
                     provider = model.installedProviders.first { $0 == .claudeCode } ?? model.installedProviders.first
@@ -484,6 +506,15 @@ struct AgentEditorSheet: View {
         }
         .frame(width: 540)
         .noodleSheetSizing()
+        // As Noodle's Delete Bot: it asks first, saying what goes with the agent.
+        .confirmationDialog("Delete Agent?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
+            Button("Delete Agent", role: .destructive) {
+                if let agent, let direct = model.directConversation(of: agent), model.delete(direct) { dismiss() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let agent { Text(ConversationDeletion.message(name: agent.displayName, isDirect: true, bots: "agents")) }
+        }
     }
 
     /// Noodle's harness rows and choosers, as its bot editor shows them.
@@ -509,12 +540,14 @@ struct AgentEditorSheet: View {
                             resources.profile = nil
                             modelID = defaultModel(provider)
                             effort = ""
+                            voice = ""
                         }))
                 }
                 if !profiles.isEmpty {
                     Divider().padding(.leading, 44)
                     Button { choosingProfile = true } label: {
-                        RuntimeSelectionRow(title: "Profile", value: model.harnessProfiles.profile(resources.profile)?.displayName ?? "Default",
+                        RuntimeSelectionRow(title: "Profile", value: model.harnessProfiles.profile(resources.profile)?.displayName
+                                                ?? provider.map(host.setup.defaultLoginName) ?? "Default",
                                             icon: AnyView(Image(systemName: "person.crop.circle")))
                     }
                     .buttonStyle(.plain)
@@ -544,6 +577,11 @@ struct AgentEditorSheet: View {
                     Divider().padding(.leading, 44)
                     EffortControl(model: selectedModel, selection: $effort)
                 }
+                // As Noodle's: only a harness with voices offers one, for calls.
+                if let provider, !provider.voices.isEmpty {
+                    Divider().padding(.leading, 44)
+                    VoiceSelectionRow(provider: provider, selection: $voice)
+                }
             }
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.secondary.opacity(0.11)) }
@@ -553,6 +591,9 @@ struct AgentEditorSheet: View {
                     Text("No harness is installed yet.").font(.caption).foregroundStyle(.secondary)
                     SettingsLink { Text("Open Harness Settings") }.buttonStyle(.link).font(.caption)
                 }
+            }
+            if let agent {
+                BotBudgetSettingsRow(store: model, agent: agent)
             }
             if agent != nil {
                 Text("Saving restarts the agent. Its workspace and history stay unchanged.")
@@ -565,12 +606,14 @@ struct AgentEditorSheet: View {
         guard canSave else { return }
         do {
             if let agent {
-                try model.updateAgent(agent, name: name, description: description, instructions: instructions,
-                                      provider: provider, model: modelID, effort: effort, resources: resources)
+                let updated = try model.updateAgent(agent, name: name, description: description, instructions: instructions,
+                                                    provider: provider, model: modelID, effort: effort, resources: resources)
+                model.setVoice(voice, for: updated)
             } else {
                 let created = try model.createAgent(name: name, description: description, instructions: instructions,
                                                     provider: provider, model: modelID, effort: effort.isEmpty ? nil : effort, resources: resources,
                                                     id: newID)
+                if !voice.isEmpty { model.setVoice(voice, for: created) }
                 model.selection = model.directConversation(of: created)?.id
             }
             dismiss()

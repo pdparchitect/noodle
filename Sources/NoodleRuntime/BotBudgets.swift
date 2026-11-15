@@ -62,3 +62,34 @@ import Observation
         usage.spending(agent: agent, after: budget.start(now: now()))
     }
 }
+
+extension BotBudgets {
+    /// Every bot's budget, as its agent.json keeps it.
+    public func load(_ agents: [AgentRecord], repository: WorkspaceRepository) {
+        replace(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in
+            (try? repository.loadAgentBudget(agent)).flatMap { $0 }.map { (agent.id, $0) }
+        }))
+    }
+
+    /// Sets the bot's limit, or takes it away when nil, keeping when it was last reset, and saves it with the bot.
+    public func setLimit(_ limit: TokenLimit?, for agent: AgentRecord, repository: WorkspaceRepository) throws {
+        try save(limit.map { BotBudget(limit: $0, resetAt: budgets[agent.id]?.resetAt) }, for: agent, repository: repository)
+    }
+
+    /// Forgets the tokens the bot used so far, so it may use its whole budget again from now.
+    public func reset(_ agent: AgentRecord, repository: WorkspaceRepository) throws {
+        guard var budget = budgets[agent.id] else { return }
+        budget.resetAt = now()
+        try save(budget, for: agent, repository: repository)
+    }
+
+    /// Holds the bots out of budget in the runtime; returns those it let go, for the app to start.
+    public func applyHolds(to runtime: AgentRuntimeCoordinator) -> Set<UUID> {
+        runtime.hold(holds.mapValues(Self.status(until:)), for: .budget)
+    }
+
+    private func save(_ budget: BotBudget?, for agent: AgentRecord, repository: WorkspaceRepository) throws {
+        try repository.updateAgentBudget(agent, budget: budget)
+        set(budget, for: agent.id)
+    }
+}

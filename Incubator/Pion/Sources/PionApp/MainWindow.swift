@@ -382,6 +382,8 @@ struct AgentRow: View {
     }
 }
 
+extension PionModel: BotBudgetHost {}
+
 extension PionModel: AgentTaskHost {
     func taskAgentName(_ id: UUID) -> String? { agent(id)?.displayName }
     func taskAvatar(_ agent: AgentRecord) -> AnyView { AnyView(AgentMark(agent: agent, size: 22)) }

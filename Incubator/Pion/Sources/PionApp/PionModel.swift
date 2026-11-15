@@ -17,6 +17,8 @@ import UniformTypeIdentifiers
     let harnessProfiles: HarnessProfilesController
     /// What the agents used, as Noodle keeps it, for the Usage window.
     let usage: UsageHistory
+    /// Each agent's spending budget, counted from `usage`, as in Noodle.
+    let budgets: BotBudgets
     let connectionsController: ToolConnectionsController
 
     struct AgentResources {
@@ -93,7 +95,11 @@ import UniformTypeIdentifiers
                                           harnesses: HarnessSelection(defaults: harnessDefaults, onByDefault: PionHarnesses.onByDefault))
         runtime.remoteModels = RemoteModelAccountStore(repository: root)
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
-        runtime.onUsage = { [usage] in usage.record($0) }
+        budgets = BotBudgets(usage: usage)
+        runtime.onUsage = { [usage, budgets] in
+            usage.record($0)
+            budgets.check()
+        }
         runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         runtime.harnessProfiles = repository.harnessProfiles
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
@@ -196,12 +202,29 @@ import UniformTypeIdentifiers
         if agents.map(\.id) != before { restartBrokers() }
         runtime.reconcile(agents: agents, repository: repository)
         runtime.checkHeartbeats()
+        budgets.checkExpired()
         runtime.checkWakes(repository: repository)
         for conversation in conversations { readTranscript(conversation.id, notifying: true) }
         updateBadge()
     }
 
     /// Holds suspended agents in the runtime, as Noodle does, and starts those whose suspension ran out.
+    /// Holds the agents out of budget and starts again those that may continue, as Noodle does.
+    private func applyBudgets() {
+        guard !isScripted else { return }
+        let released = budgets.applyHolds(to: runtime)
+        guard running else { return }
+        for agent in agents where released.contains(agent.id) { runtime.start(agent: agent, repository: repository) }
+    }
+
+    func setBudget(_ limit: TokenLimit?, for agent: AgentRecord) {
+        do { try budgets.setLimit(limit, for: agent, repository: repository) } catch { problem = error.localizedDescription }
+    }
+
+    func resetBudget(for agent: AgentRecord) {
+        do { try budgets.reset(agent, repository: repository) } catch { problem = error.localizedDescription }
+    }
+
     private func applySuspensions() {
         guard !isScripted else { return }
         let released = runtime.hold(AgentRecord.suspensions(of: agents), for: .suspension)
@@ -232,6 +255,8 @@ import UniformTypeIdentifiers
         reloadWorkspace()
         reloadPion()
         groupNotificationSettings = (try? repository.loadGroupNotifications()) ?? GroupNotificationSettings()
+        budgets.onChange = { [weak self] in self?.applyBudgets() }
+        budgets.load(everyAgent, repository: repository)
         tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
     }
 
@@ -774,6 +799,33 @@ import UniformTypeIdentifiers
         readTranscript(id, notifying: false)
         markRead(id)
         if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+    }
+
+    /// The voice an agent speaks with on calls; empty leaves it to the harness.
+    func voice(of agent: AgentRecord) -> String { (try? repository.loadAgentVoice(agent)).flatMap { $0 } ?? "" }
+
+    func setVoice(_ voice: String, for agent: AgentRecord) {
+        do { try repository.updateAgentVoice(agent, voice: voice.isEmpty ? nil : voice) } catch { problem = error.localizedDescription }
+    }
+
+    // MARK: Deleting, as Noodle deletes
+
+    /// Deletes an agent with its workspace and its own conversation, or a group with its messages. Investigations
+    /// close rather than go.
+    @discardableResult
+    func delete(_ conversation: BotConversation) -> Bool {
+        let agent = conversation.kind == .direct ? self.agent(conversation.participantIDs.first) : nil
+        do {
+            try runtime.delete(conversation, agent: agent, agents: agents, repository: repository)
+            drafts[conversation.id] = nil
+            pendingAttachments[conversation.id] = nil
+            if selection == conversation.id { selection = nil }
+            reload()
+            return true
+        } catch {
+            problem = error.localizedDescription
+            return false
+        }
     }
 
     // MARK: Reactions, through Noodle's own rules

@@ -426,7 +426,7 @@ struct EditBotSheet: View {
                     )
                     // A bot on a Hub spends its owner's plan there.
                     if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil, store.runsHere(agent.id) {
-                        BotBudgetSettingsRow(agent: agent)
+                        BotBudgetSettingsRow(store: store, agent: agent)
                     }
                     Text("Saving restarts the bot. Its workspace and history stay unchanged.")
                         .font(.caption).foregroundStyle(.secondary)

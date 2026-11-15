@@ -1,10 +1,19 @@
 import NoodleCore
 import NoodleRuntime
+import NoodleSettingsUI
 import SwiftUI
+
+/// What the budget row and sheet need from the app whose bots have budgets.
+@MainActor protocol BotBudgetHost: AnyObject {
+    var budgets: BotBudgets { get }
+    var usage: UsageHistory { get }
+    func setBudget(_ limit: TokenLimit?, for agent: AgentRecord)
+    func resetBudget(for agent: AgentRecord)
+}
 
 /// Opens the bot's spending budget in a sheet, which saves it on Apply, as Background does.
 struct BotBudgetSettingsRow: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any BotBudgetHost
     let agent: AgentRecord
     @State private var editing = false
 
@@ -24,12 +33,12 @@ struct BotBudgetSettingsRow: View {
             }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $editing) { BotBudgetSheet(agent: agent).noodleSheetSizing() }
+        .sheet(isPresented: $editing) { BotBudgetSheet(store: store, agent: agent).noodleSheetSizing() }
     }
 }
 
 private struct BotBudgetSheet: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any BotBudgetHost
     @Environment(\.dismiss) private var dismiss
     let agent: AgentRecord
     @State private var draft: TokenLimit?

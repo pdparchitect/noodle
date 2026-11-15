@@ -63,6 +63,7 @@ struct PionApp: App {
         Settings {
             PionSettingsView(host: delegate.settings)
                 .environment(delegate.calls)
+                .environment(delegate.settings)
         }
         .windowResizability(.contentSize)
     }

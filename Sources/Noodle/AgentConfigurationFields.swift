@@ -18,8 +18,6 @@ struct AgentConfigurationFields: View {
     /// The edited bot's workspace; a new bot has none yet.
     var workspace: URL? = nil
     @State private var choosingHarness = false
-    @State private var choosingVoice = false
-    @State private var voicePreview = VoicePreviewPlayer()
     @State private var choosingProfile = false
     @State private var choosingModel = false
 
@@ -169,18 +167,7 @@ struct AgentConfigurationFields: View {
                 if let selectedProvider, !selectedProvider.voices.isEmpty {
                     Divider().padding(.leading, 44)
 
-                    Button { choosingVoice = true } label: {
-                        RuntimeSelectionRow(
-                            title: "Voice",
-                            value: selectedProvider.voices.first { $0.id == selectedVoice }?.name
-                                ?? "\(selectedProvider.displayName) default",
-                            icon: AnyView(Image(systemName: "waveform"))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $choosingVoice, arrowEdge: .leading) {
-                        VoiceChooser(provider: selectedProvider, selection: $selectedVoice, preview: voicePreview)
-                    }
+                    VoiceSelectionRow(provider: selectedProvider, selection: $selectedVoice)
                 }
             }
             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -252,71 +239,3 @@ extension View {
     }
 }
 
-/// The voice a bot speaks with on calls. Choosing a voice plays its sample and keeps
-/// the chooser open, so voices can be compared by clicking through them.
-struct VoiceChooser: View {
-    let provider: HarnessProvider
-    @Binding var selection: String
-    let preview: VoicePreviewPlayer
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Choose Voice")
-                .font(.headline)
-            group("Feminine", .feminine)
-            group("Masculine", .masculine)
-        }
-        .padding(16)
-        .frame(width: 340)
-        .onDisappear { preview.stop() }
-    }
-
-    private func group(_ title: String, _ presentation: VoicePresentation) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                ForEach(provider.voices.filter { $0.presentation == presentation }, id: \.id) { voice in
-                    tile(voice)
-                }
-            }
-        }
-    }
-
-    private func tile(_ voice: HarnessVoice) -> some View {
-        let isSelected = selection == voice.id, isPlaying = preview.playingVoice == voice.id
-        return Button {
-            selection = voice.id
-            preview.play(voice.id, provider: provider)
-        } label: {
-            VStack(spacing: 5) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 17))
-                    .symbolEffect(.variableColor.iterative, isActive: isPlaying)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                Text(voice.name)
-                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .background(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1.5)
-            }
-            .overlay(alignment: .topTrailing) {
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(5)
-                }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .help("Choose \(voice.name) and hear it")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}

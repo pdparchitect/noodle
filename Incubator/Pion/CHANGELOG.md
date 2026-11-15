@@ -4,6 +4,9 @@
 
 ### Added
 
+- The agent editor has Noodle's Spending Budget: a token limit over a period, after which the agent finishes its turn and waits until older usage leaves the period or you reset it.
+- For a harness with voices, the agent editor offers the voice the agent speaks with on calls, and plays each one, as in Noodle.
+- Delete Agent and Delete Group, at the bottom of their editors, ask first and say what goes with them, as in Noodle.
 - Reactions, as in Noodle: agents' reactions such as 👀, ⏳ and ✅ show on their messages, and right-clicking a message reacts, with More Emoji…; clicking a reaction shows who reacted and lets you change or remove yours.
 - Tasks, as in Noodle: View › Sidebar can list the agents' tasks above the conversations, all open ones or only those waiting on you. Clicking one writes to its agent about it, and that message is labelled with the task.
 - As in Noodle, the conversation's toolbar says why an agent doesn't answer and offers Sign In, Unsuspend or Kick, and an agent's menu in the sidebar has Organize, Kick and New Session.
@@ -20,6 +23,7 @@
 
 ### Changed
 
+- The agent editor names a harness's default login by its account, as Noodle does, instead of Default.
 - Removing an agent from a team or group asks first, as in Noodle, and inline code in messages reads as in Noodle.
 - A notice such as an agent moving to another harness, or someone joining a group, shows as Noodle's small centred note instead of a message from Pion.
 - The microphone and ⇧⌘D send voice messages, as in Noodle: the recording, with its transcript, goes to the conversation, and agents hear what was said. They used to dictate into the message field. In Settings › Keybindings the shortcut is now Record / Stop Voice Message.

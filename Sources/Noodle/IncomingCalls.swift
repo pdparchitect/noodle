@@ -121,7 +121,7 @@ extension NoodleStore {
     }
 }
 
-extension NoodleStore: VoiceCallHost, IncomingCallHost, AgentTaskHost {
+extension NoodleStore: VoiceCallHost, IncomingCallHost, AgentTaskHost, BotBudgetHost {
     func startCall(in conversation: BotConversation) { startVoiceCall(in: conversation) }
     func callerName(_ agentID: UUID) -> String? { agents.first { $0.id == agentID }?.displayName }
     func caller(_ agentID: UUID) -> AgentRecord? { agents.first { $0.id == agentID } }
