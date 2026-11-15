@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- The Help menu starts with Pion Help, which opens Pion's page, as Noodle's does.
+
 ### Fixed
 
 - Apple Intelligence is no longer Unavailable in the welcome on a Mac that has it: Pion adds Apple's on-device model once for a new install, where before it waited to be added in Settings › Harness. Removed there, it stays removed.

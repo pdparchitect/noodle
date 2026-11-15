@@ -208,6 +208,11 @@ struct PionCommands: Commands {
             Divider()
         }
         CommandGroup(replacing: .help) {
+            // As Noodle's: its own page in the repository, where its README explains it.
+            Button("\(pionAppName) Help") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/tree/main/Incubator/Pion")!)
+            }
+            Divider()
             IssueReportButtons(area: "Incubator / Pion")
             Divider()
             Button("Welcome") {
