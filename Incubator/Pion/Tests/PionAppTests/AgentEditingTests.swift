@@ -110,4 +110,33 @@ import XCTest
         XCTAssertThrowsError(try model.updateGroup(group, name: "Changed", description: nil, members: []))
         XCTAssertEqual(model.conversation(group.id)?.displayName, "Triage")
     }
+
+    /// Settings > Agents lists archived agents too, as Noodle's Bots tab does, so one can be brought back.
+    func testArchivedAgentsLeaveTheSidebarButStayInSettings() throws {
+        let kept = try agent("Avery")
+        let archived = try agent("Morgan")
+        _ = try model.repository.setAgentArchived(true, agentID: archived.id)
+        model.refresh()
+        XCTAssertEqual(model.agents.map(\.id), [kept.id])
+        XCTAssertEqual(Set(model.everyAgent.map(\.id)), [kept.id, archived.id])
+        XCTAssertNotNil(model.everyAgent.first { $0.id == archived.id }?.archivedAt)
+        _ = try model.repository.setAgentArchived(false, agentID: archived.id)
+        model.refresh()
+        XCTAssertEqual(Set(model.agents.map(\.id)), [kept.id, archived.id])
+    }
+
+    /// Settings > Groups lists archived groups, but not Investigations, which close instead, and brings one back.
+    func testArchivedGroupsLeaveTheSidebarButStayInSettings() throws {
+        let avery = try agent("Avery")
+        let group = try model.createGroup(name: "Triage", description: nil, members: [avery.id])
+        model.selection = group.id
+        model.setGroupArchived(true, id: group.id)
+        XCTAssertNil(model.conversation(group.id))
+        XCTAssertNil(model.selection, "An archived group leaves the window it was open in")
+        XCTAssertEqual(model.groupsInSettings.map(\.id), [group.id])
+        XCTAssertNotNil(model.groupsInSettings.first?.archivedAt)
+        model.setGroupArchived(false, id: group.id)
+        XCTAssertNotNil(model.conversation(group.id))
+        XCTAssertNil(model.groupsInSettings.first?.archivedAt)
+    }
 }

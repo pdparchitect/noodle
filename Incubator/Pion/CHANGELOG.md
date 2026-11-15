@@ -4,18 +4,21 @@
 
 ### Added
 
+- Settings has a Groups tab, as in Noodle, to archive a group or bring an archived one back.
 - Notifications, as in Noodle: agent replies while Pion is in the background, sign-ins and pauses. Settings > General chooses whether groups notify every reply or only mentions of your name, each group's menu in the sidebar can set its own, and Settings > Permissions shows notification access.
 - Settings has a Conversation tab, as in Noodle: message delivery, new sessions, the microphone, descriptions in the @ name menu and web link previews.
 - An agent's profile has Suspend beside Message and Edit; a click offers how long, and a suspended agent shows Unsuspend.
 
 ### Changed
 
+- Settings badges the Harness, Tools, Permissions and Update tabs when they need attention, and is as wide as Noodle's.
 - The Agents tab in Settings has Noodle's sparkles icon.
 - The activity window shows each entry's time in teal, so it stands apart from the title and output.
-- In Settings > Bots, an archived bot says Archived instead of when it was last active, and its switches other than Archived are dimmed.
+- In Settings > Agents, an archived agent says Archived instead of when it was last active, and its switches other than Archived are dimmed.
 
 ### Fixed
 
+- An agent archived in Settings > Agents stays listed there, so it can be brought back.
 - The activity window shows the arrow pointer over its scroller and Follow Latest button, instead of the text cursor.
 
 ## [0.1.0] - 2026-11-15

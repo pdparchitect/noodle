@@ -33,6 +33,10 @@ import UniformTypeIdentifiers
     let isScripted: Bool
 
     private(set) var agents: [AgentRecord] = []
+    /// Every agent, archived ones too, for Settings > Agents to bring one back.
+    private(set) var everyAgent: [AgentRecord] = []
+    /// Every conversation, archived ones too, for Settings > Groups to bring a group back.
+    private(set) var everyConversation: [BotConversation] = []
     private(set) var conversations: [BotConversation] = []
     private(set) var investigations: [Investigation] = []
     private(set) var transcripts: [UUID: [ChatMessage]] = [:]
@@ -205,11 +209,15 @@ import UniformTypeIdentifiers
     }
 
     private func reloadWorkspace() {
-        let loadedAgents = ((try? repository.loadAgents()) ?? []).filter { $0.archivedAt == nil }
+        let allAgents = ((try? repository.loadAgents()) ?? [])
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        if allAgents != everyAgent { everyAgent = allAgents }
+        let loadedAgents = allAgents.filter { $0.archivedAt == nil }
         if loadedAgents != agents { agents = loadedAgents }
         applySuspensions()
-        let loadedConversations = ((try? repository.loadConversations()) ?? []).filter { $0.archivedAt == nil }
+        let allConversations = (try? repository.loadConversations()) ?? []
+        if allConversations != everyConversation { everyConversation = allConversations }
+        let loadedConversations = allConversations.filter { $0.archivedAt == nil }
         if loadedConversations != conversations { conversations = loadedConversations }
     }
 
@@ -289,6 +297,20 @@ import UniformTypeIdentifiers
     func conversation(_ id: UUID?) -> BotConversation? { id.flatMap { id in conversations.first { $0.id == id } } }
     func investigation(_ id: UUID?) -> Investigation? { id.flatMap { id in investigations.first { $0.id == id } } }
     func agent(_ id: UUID?) -> AgentRecord? { id.flatMap { id in agents.first { $0.id == id } } }
+
+    /// The groups Settings > Groups lists, archived ones too; Investigations close rather than archive.
+    var groupsInSettings: [BotConversation] {
+        everyConversation.filter { $0.kind == .group && investigation($0.id) == nil }
+    }
+
+    /// Archives a group, taking it out of the sidebar and the window it was open in, or brings it back.
+    func setGroupArchived(_ archived: Bool, id: UUID) {
+        do {
+            _ = try repository.setConversationArchived(archived, conversationID: id)
+            if archived, selection == id { selection = nil }
+            reload()
+        } catch { problem = error.localizedDescription }
+    }
 
     /// Groups that are not Investigations: the teams.
     var groups: [BotConversation] {

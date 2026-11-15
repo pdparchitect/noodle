@@ -8,7 +8,7 @@ import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Pion.
 @MainActor @Observable final class PionSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case general, conversation, harnesses, agents, tools, permissions, updates }
+    enum Tab: Hashable { case general, conversation, harnesses, agents, groups, tools, permissions, updates }
 
     let model: PionModel
     let setup: HarnessSetupController
@@ -80,7 +80,25 @@ import SwiftUI
 
 struct PionSettingsView: View {
     @Bindable var host: PionSettingsHost
-    private static let width: CGFloat = 720
+    @ObservedObject private var appUpdater = AppUpdater.shared
+    private let permissions = AppPermissionChecker.shared
+    /// As Noodle's: wide enough for every tab in the toolbar, none left in its overflow menu.
+    private static let width: CGFloat = 740
+
+    /// Harnesses whose row asks for attention, or whose agents failed and can be kicked, as Noodle counts them.
+    private var harnessesNeedingAttention: Int {
+        HarnessProvider.allCases.filter { id in
+            host.runtime.harnesses.isOn(id) && (host.setup.needsAttention(id) || host.agents.contains {
+                let snapshot = host.runtime.snapshot(for: $0.id)
+                return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
+            })
+        }.count
+    }
+
+    /// Tools whose row shows Needs attention.
+    private var toolsNeedingAttention: Int {
+        host.connectionsController.registry.connections.filter { host.connectionsController.errors[$0.id] != nil }.count
+    }
 
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
@@ -96,10 +114,15 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Harness", systemImage: "terminal") }
                 .tag(PionSettingsHost.Tab.harnesses)
-            BotsSettingsView(store: host, agents: host.agents)
+            // Archived agents too, so one can be brought back.
+            BotsSettingsView(store: host, agents: host.model.everyAgent)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Agents", systemImage: "sparkles") }
                 .tag(PionSettingsHost.Tab.agents)
+            GroupsSettingsView(model: host.model)
+                .settingsContentSize(width: Self.width)
+                .tabItem { Label("Groups", systemImage: "person.3") }
+                .tag(PionSettingsHost.Tab.groups)
             ToolConnectionsSettingsView(store: host)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Tools", systemImage: "puzzlepiece.extension") }
@@ -114,11 +137,89 @@ struct PionSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(PionSettingsHost.Tab.updates)
         }
-        .onAppear { AppUpdater.shared.probeForUpdate() }
+        .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
+                                              "Tools": toolsNeedingAttention,
+                                              "Permissions": permissions.needingAttention,
+                                              "Update": appUpdater.availableVersion == nil ? 0 : 1]))
+        // Check on opening Settings so the tabs are badged before they are selected.
+        .onAppear {
+            appUpdater.probeForUpdate()
+            permissions.refresh()
+        }
         .sheet(item: $host.agentBeingEdited) { agent in
             AgentEditorSheet(model: host.model, agent: host.model.agent(agent.id) ?? agent, initialTab: host.agentEditorTab)
         }
         .task { await host.setup.refreshAll(host.runtime) }
+    }
+}
+
+/// Every group with an Archived switch, as Noodle's Settings > Groups; Investigations close rather than archive.
+private struct GroupsSettingsView: View {
+    let model: PionModel
+    @State private var showsArchiveInfo = false
+    private let archivedColumnWidth: CGFloat = 64
+
+    var body: some View {
+        let groups = model.groupsInSettings
+        Form {
+            Section {
+                if groups.isEmpty {
+                    Text("No groups").foregroundStyle(.secondary)
+                } else {
+                    SettingsRowList(groups) { group in row(group) }
+                }
+            } header: {
+                if !groups.isEmpty {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Archived") { showsArchiveInfo.toggle() }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("About archiving")
+                            .help("About archiving")
+                            .frame(width: archivedColumnWidth)
+                            .popover(isPresented: $showsArchiveInfo) { GroupArchiveInfo() }
+                    }
+                    .font(.caption)
+                    .textCase(nil)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func row(_ group: BotConversation) -> some View {
+        let members = group.participantIDs.compactMap { id in model.everyAgent.first { $0.id == id }?.displayName }
+            .joined(separator: ", ")
+        return HStack(spacing: 12) {
+            SymbolMark(symbol: "person.3.fill", size: 32)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(group.displayName)
+                if !members.isEmpty {
+                    Text(members).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle(isOn: Binding(get: { group.archivedAt != nil }, set: { model.setGroupArchived($0, id: group.id) })) {
+                Text("Archived")
+            }
+            .labelsHidden()
+            .controlSize(.mini)
+            .accessibilityLabel("\(group.displayName), archived")
+            .frame(width: archivedColumnWidth)
+        }
+    }
+}
+
+private struct GroupArchiveInfo: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Archived").font(.headline)
+            Text("An archived group keeps its messages and attachments, but leaves the sidebar and takes no new messages. Its agents keep running in their other conversations.")
+            Text("Turning this off brings the group back as it was.")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(20)
+        .frame(width: 360, alignment: .leading)
     }
 }
 

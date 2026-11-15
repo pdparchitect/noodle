@@ -269,13 +269,7 @@ extension PionModel {
         } catch { problem = error.localizedDescription }
     }
 
-    func archive(_ group: BotConversation) {
-        do {
-            _ = try repository.setConversationArchived(true, conversationID: group.id)
-            if selection == group.id { selection = nil }
-            reload()
-        } catch { problem = error.localizedDescription }
-    }
+    func archive(_ group: BotConversation) { setGroupArchived(true, id: group.id) }
 }
 
 struct InvestigationRow: View {
