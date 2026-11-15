@@ -131,7 +131,8 @@ struct PionSettingsView: View {
             KeybindingsSettingsView(sections: [
                 KeybindingsSection(title: "Conversations", actions: [PionShortcuts.newInvestigation, PionShortcuts.newGroup, PionShortcuts.newAgent,
                                                                      PionShortcuts.searchConversations, PionShortcuts.chooseConversation,
-                                                                     PionShortcuts.capture, PionShortcuts.dictate, PionShortcuts.call, PionShortcuts.stop]),
+                                                                     PionShortcuts.capture, PionShortcuts.dictate, PionShortcuts.call, PionShortcuts.stop,
+                                                                     PionShortcuts.usage]),
                 KeybindingsSection(title: "Investigations", actions: [PionShortcuts.showInspector, PionShortcuts.closeInvestigation]),
                 KeybindingsSection(title: "Annotations", actions: [PionShortcuts.annotateSelection, PionShortcuts.annotateRegion,
                                                                    PionShortcuts.saveAnnotation],

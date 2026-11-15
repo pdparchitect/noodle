@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleRuntimeSettings
 import HubWire
 import SwiftUI
 
@@ -173,7 +174,11 @@ struct AgentProfileButton: View {
                          message: model.directConversation(of: agent).map { direct in { finish {
                              if inSheet || opensMessageInWindow { openWindow(id: "conversation", value: direct.id) } else { model.selection = direct.id }
                          } } },
-                         edit: inSheet ? nil : edit.map { edit in { finish(edit) } })
+                         edit: inSheet ? nil : edit.map { edit in { finish(edit) } },
+                         usage: { finish {
+                             model.usage.agentFilter = agent.id
+                             openWindow(id: UsageView.windowID)
+                         } })
                 .onDisappear {
                     // The popover detaches first, then the editor or conversation opens.
                     if let pending { self.pending = nil; DispatchQueue.main.async(execute: pending) }
@@ -192,7 +197,49 @@ private struct AgentProfile: View {
     let agent: AgentRecord
     let message: (() -> Void)?
     let edit: (() -> Void)?
+    let usage: () -> Void
     @Environment(PionCalls.self) private var calls
+
+    private enum Action: Hashable { case message, call, edit, usage, suspend }
+
+    private var actions: [Action] {
+        var actions: [Action] = []
+        if message != nil { actions.append(.message) }
+        if callable != nil { actions.append(.call) }
+        if edit != nil { actions.append(.edit) }
+        actions.append(.usage)
+        if agent.archivedAt == nil { actions.append(.suspend) }
+        return actions
+    }
+
+    private static func rows<Item>(_ items: [Item]) -> [[Item]] {
+        guard !items.isEmpty else { return [] }
+        let rowCount = (items.count + 3) / 4
+        let perRow = (items.count + rowCount - 1) / rowCount
+        return stride(from: 0, to: items.count, by: perRow).map { Array(items[$0..<min($0 + perRow, items.count)]) }
+    }
+
+    @ViewBuilder private func button(for item: Action) -> some View {
+        switch item {
+        case .message:
+            if let message { Button(action: message) { action("Message", "bubble.left") }.help("Direct Message") }
+        case .call:
+            if let callable {
+                Button {
+                    calls.startCall(in: callable)
+                    // The call's controls are in its conversation, so show it.
+                    message?()
+                } label: { action("Call", "phone") }
+                    .help("Call \(agent.displayName)")
+            }
+        case .edit:
+            if let edit { Button(action: edit) { action("Edit", "pencil") }.help("Edit Agent") }
+        case .usage:
+            Button(action: usage) { action("Usage", "chart.bar") }.help("Show Usage")
+        case .suspend:
+            suspend
+        }
+    }
 
     /// The agent's own conversation, while it can take a call and is not already on one, as in Noodle.
     private var callable: BotConversation? {
@@ -223,33 +270,18 @@ private struct AgentProfile: View {
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity)
-            if message != nil || edit != nil {
-                HStack(spacing: 8) {
-                    if let message {
-                        Button(action: message) { action("Message", "bubble.left") }.help("Direct Message")
-                    }
-                    if let callable {
-                        if message != nil { Divider().frame(height: 32) }
-                        Button {
-                            calls.startCall(in: callable)
-                            // The call's controls are in its conversation, so show it.
-                            message?()
-                        } label: { action("Call", "phone") }
-                            .help("Call \(agent.displayName)")
-                    }
-                    if message != nil || callable != nil, edit != nil { Divider().frame(height: 32) }
-                    if let edit {
-                        Button(action: edit) { action("Edit", "pencil") }.help("Edit Agent")
-                    }
-                    if agent.archivedAt == nil {
-                        if message != nil || edit != nil { Divider().frame(height: 32) }
-                        suspend
+            VStack(spacing: 8) {
+                // Up to four a row, as evenly as they split, as Noodle's profile.
+                ForEach(Self.rows(actions), id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(row, id: \.self) { item in
+                            if item != row.first { Divider().frame(height: 32).accessibilityHidden(true) }
+                            button(for: item)
+                        }
                     }
                 }
-                .buttonStyle(.plain)
-            } else if agent.archivedAt == nil {
-                suspend.buttonStyle(.plain)
             }
+            .buttonStyle(.plain)
         }
         .padding(20)
         .frame(width: 300)

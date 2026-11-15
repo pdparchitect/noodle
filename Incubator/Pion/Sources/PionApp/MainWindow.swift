@@ -215,6 +215,10 @@ struct ConversationRowMenu: View {
         Divider()
         if let agent {
             Button("Show Activity") { model.showActivity(for: agent) }
+            Button("Show Usage") {
+                model.usage.agentFilter = agent.id
+                openWindow(id: UsageView.windowID)
+            }
             Button("Show Workspace in Finder") { model.reveal(conversation) }
         } else {
             Button("Show in Finder") { model.reveal(conversation) }

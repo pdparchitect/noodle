@@ -30,6 +30,9 @@ public enum PionShortcuts {
     public static let stop = ShortcutDefinition(
         id: ShortcutDefinition.stopBot.id, title: "Stop Agent", summary: "End the turn the agent in the current chat is working on.",
         defaultBinding: KeyBinding("."))
+    public static let usage = ShortcutDefinition(
+        id: ShortcutDefinition.showUsage.id, title: "Usage", summary: "Show token usage, cost and storage for every agent.",
+        defaultBinding: KeyBinding("u", modifiers: [.command, .shift]))
     public static let showInspector = ShortcutDefinition(
         id: "showInspector", title: "Show / Hide Inspector", summary: "Show or hide an investigation's case record and audit log.",
         defaultBinding: KeyBinding("i", modifiers: [.command, .option]))
@@ -49,5 +52,5 @@ public enum PionShortcuts {
         defaultBinding: KeyBinding("\r"))
 
     public static let catalog = [newInvestigation, newGroup, newAgent, searchConversations, chooseConversation, capture, dictate, call, stop,
-                                 showInspector, closeInvestigation, annotateSelection, annotateRegion, saveAnnotation]
+                                 usage, showInspector, closeInvestigation, annotateSelection, annotateRegion, saveAnnotation]
 }

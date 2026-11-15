@@ -1,5 +1,7 @@
 import AppKit
 import NoodleCore
+import NoodleRuntime
+import NoodleRuntimeSettings
 import NoodleSettingsUI
 import PionCore
 import SwiftUI
@@ -48,6 +50,13 @@ struct PionApp: App {
         .defaultLaunchBehavior(.suppressed)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
+        Window("Usage", id: UsageView.windowID) {
+            UsageView(history: delegate.model.usage, agents: delegate.model.everyAgent, storage: delegate.storage)
+        }
+        .defaultSize(width: 860, height: 680)
+        .windowResizability(.contentMinSize)
+        // Opened from the app menu, next to Settings.
+        .commandsRemoved()
         Settings {
             PionSettingsView(host: delegate.settings)
                 .environment(delegate.calls)
@@ -60,6 +69,12 @@ struct PionApp: App {
     let model: PionModel
     let window = WindowState()
     lazy var settings = PionSettingsHost(model: model)
+    /// What Pion keeps on disk, for the Usage window.
+    lazy var storage: StorageUsage = {
+        let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return StorageUsage(dataRoot: model.repository.rootURL, applicationSupport: applicationSupport,
+                            library: applicationSupport.deletingLastPathComponent())
+    }()
     lazy var calls: PionCalls = {
         let calls = PionCalls(model: model)
         calls.open = { [weak self] id in
@@ -180,6 +195,17 @@ struct PionCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             CheckForUpdatesButton()
+        }
+        // "After Settings" draws above it; this section sits between Settings and Services, as in Noodle.
+        CommandGroup(before: .systemServices) {
+            Button {
+                model.usage.agentFilter = nil
+                openWindow(id: UsageView.windowID)
+            } label: {
+                Label("Usage", systemImage: "chart.bar").labelStyle(.titleAndIcon)
+            }
+            .appShortcut(PionShortcuts.usage)
+            Divider()
         }
         CommandGroup(replacing: .help) {
             IssueReportButtons(area: "Incubator / Pion")

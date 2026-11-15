@@ -15,6 +15,8 @@ import UniformTypeIdentifiers
     let runtime: AgentRuntimeCoordinator
     let store: PionStore
     let harnessProfiles: HarnessProfilesController
+    /// What the agents used, as Noodle keeps it, for the Usage window.
+    let usage: UsageHistory
     let connectionsController: ToolConnectionsController
 
     struct AgentResources {
@@ -85,6 +87,9 @@ import UniformTypeIdentifiers
         runtime = AgentRuntimeCoordinator(discovery: discovery,
                                           harnesses: HarnessSelection(defaults: harnessDefaults, onByDefault: PionHarnesses.onByDefault))
         runtime.remoteModels = RemoteModelAccountStore(repository: root)
+        usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
+        runtime.onUsage = { [usage] in usage.record($0) }
+        runtime.recordedUsage = { [usage] in usage.recorded(session: $0) }
         runtime.harnessProfiles = repository.harnessProfiles
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
         harnessProfiles.subscriptionUsage = runtime.subscriptionUsage

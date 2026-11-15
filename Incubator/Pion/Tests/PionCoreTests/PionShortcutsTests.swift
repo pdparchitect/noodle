@@ -23,6 +23,6 @@ final class PionShortcutsTests: XCTestCase {
         XCTAssertEqual(preferences.binding(for: .newGroup)?.displayName, "⌥⌘N")
         XCTAssertEqual(preferences.binding(for: .recordVoice)?.displayName, "⇧⌘D")
         XCTAssertNil(preferences.binding(for: .newBot), "Pion's agents come from New Agent")
-        XCTAssertNil(preferences.binding(for: .showUsage))
+        XCTAssertEqual(preferences.binding(for: .showUsage)?.displayName, "⇧⌘U")
     }
 }
