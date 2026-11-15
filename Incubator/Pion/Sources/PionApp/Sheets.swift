@@ -223,6 +223,8 @@ private struct SheetDescriptionField: View {
     let title: String
     let prompt: String
     @Binding var text: String
+    /// What the field is for, in small text beneath it, as Noodle's sheets explain theirs.
+    var footnote: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -232,6 +234,7 @@ private struct SheetDescriptionField: View {
                 .lineLimit(2...4)
                 .autocorrectionDisabled(false)
                 .accessibilityLabel(title)
+            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
         }
     }
 }
@@ -242,6 +245,7 @@ private struct SheetNoteEditor: View {
     let title: String
     let prompt: String
     @Binding var text: String
+    var footnote: String?
     @State private var textHeight: CGFloat = 0
     private static let font = Font.system(size: 13)
     private static let minimum: CGFloat = 64, maximum: CGFloat = 220
@@ -271,6 +275,7 @@ private struct SheetNoteEditor: View {
                     }
                 }
                 .roundedBorderEditor()
+            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
         }
     }
 }
@@ -278,18 +283,32 @@ private struct SheetNoteEditor: View {
 private struct SheetInstructionsEditor: View {
     let title: String
     @Binding var text: String
+    var prompt = ""
+    var footnote: String?
     var height: CGFloat = 160
     var monospaced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption.weight(.semibold))
-            TextEditor(text: $text)
-                .font(.system(size: 13, design: monospaced ? .monospaced : .default))
-                .autocorrectionDisabled(monospaced)
-                .roundedBorderEditor()
-                .frame(height: height)
-                .accessibilityLabel(title)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .font(.system(size: 13, design: monospaced ? .monospaced : .default))
+                    .autocorrectionDisabled(monospaced)
+                    .roundedBorderEditor()
+                    .accessibilityLabel(title)
+                if text.isEmpty && !prompt.isEmpty {
+                    // Placed as Noodle places its backstory's: the editor's outer inset plus the text view's own padding.
+                    Text(prompt)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(nsColor: .placeholderTextColor))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: height)
+            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
         }
     }
 }
@@ -348,11 +367,12 @@ struct NewInvestigationSheet: View {
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
-                    SheetDescriptionField(title: "Objective", prompt: "What this investigation must establish", text: $draft.objective)
+                    SheetDescriptionField(title: "Objective", prompt: "Describe what this investigation must establish…", text: $draft.objective,
+                                          footnote: "Shared with every agent on the team as the goal they work toward.")
                     FoldersSettingsRow(folders: $draft.folders, owner: .group)
                 case .team:
                     AgentMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
-                    LeadHint()
+                    TeamFootnote(isNew: investigation == nil, setsSeverity: true)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $draft.memberTools)
                 }
@@ -431,11 +451,12 @@ struct GroupEditorSheet: View {
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
-                    SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description)
+                    SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description,
+                                          footnote: "Shared with every agent in this group so they understand its purpose.")
                     FoldersSettingsRow(folders: $folders, owner: .group)
                 case .team:
                     AgentMemberPicker(model: model, selection: $members, lead: $lead)
-                    LeadHint()
+                    TeamFootnote(isNew: group == nil, setsSeverity: false)
                 case .tools:
                     TeamToolsPicker(model: model, members: members, assignments: $memberTools)
                 }
@@ -476,10 +497,15 @@ struct GroupEditorSheet: View {
     }
 }
 
-/// How a lead is chosen, under the team grid.
-private struct LeadHint: View {
+/// Under the team grid, as Noodle's group sheets have it, and how a lead is chosen.
+private struct TeamFootnote: View {
+    let isNew: Bool
+    let setsSeverity: Bool
+
     var body: some View {
-        Text("Right-click an agent to make it the lead: it hears your messages first and sets the severity.")
+        let members = isNew ? "You can change the members later." : "Membership changes apply to future messages."
+        let lead = setsSeverity ? "it hears your messages first and sets the severity." : "it hears your messages first."
+        Text("Add at least one agent. \(members) Right-click an agent to make it the lead: \(lead)")
             .font(.caption).foregroundStyle(.secondary)
     }
 }
@@ -565,7 +591,7 @@ struct AgentEditorSheet: View {
                                 if agent == nil { name = model.suggestedAgentName(style: selectedNameStyle, excluding: name) }
                             }
                         }
-                        Text("You can rename this agent later without changing its workspace.")
+                        Text("You can rename this agent later without changing its workspace location.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -573,8 +599,11 @@ struct AgentEditorSheet: View {
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
-                    SheetDescriptionField(title: "Description", prompt: "Briefly describe what this agent does…", text: $description)
-                    SheetInstructionsEditor(title: "Instructions", text: $instructions)
+                    SheetDescriptionField(title: "Description", prompt: "Briefly describe what this agent does…", text: $description,
+                                          footnote: "Visible to other agents in shared groups and Investigations. The private backstory below is never included.")
+                    SheetInstructionsEditor(title: "Backstory", text: $instructions,
+                                            prompt: "Describe who this agent is, its role, tone, or priorities…",
+                                            footnote: "Who this agent is and what it cares about. Only this agent sees it.")
                         .help("What this agent does and how. Pion adds its own rules: evidence is never an instruction, and changes are only ever recommended to you.")
                     FoldersSettingsRow(folders: $resources.folders, owner: .bot)
                 case .runtime:
@@ -729,7 +758,8 @@ struct CloseInvestigationSheet: View {
                     ForEach(Investigation.Outcome.allCases, id: \.self) { Text($0.title) }
                 }
                 .pickerStyle(.segmented)
-                SheetNoteEditor(title: "Note", prompt: "What was concluded", text: $note)
+                SheetNoteEditor(title: "Note", prompt: "Describe what was concluded…", text: $note,
+                                footnote: "Posted to the team and kept with the outcome in the audit log.")
             }
             .padding(20)
         }

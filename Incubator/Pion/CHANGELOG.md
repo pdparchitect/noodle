@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Pion's sheets use Noodle's wording: an agent's private text is its Backstory, every text field has a placeholder, and small text under the description, backstory, objective, note and team says who sees each one.
 - Settings › Tools › Add Tools lists Pion's security services and only the general services that help an investigation: Atlassian, Linear and Notion for tickets and notes; Axiom, Datadog, Grafana, Honeycomb and Sentry for observability; Semgrep, Socket and Sourcegraph for code; Cloudflare; and Exa, Perplexity, Tavily and Parallel Search for research.
 - Settings › Agents shows each agent's mark in place of a pencil. As in Noodle, clicking it opens the agent's profile, with buttons to message it in a window of its own or edit it.
 - Investigations have no scope. Creating and editing one asks for its title, objective, team and tools; agents are told to stay on the objective.
