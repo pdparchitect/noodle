@@ -150,7 +150,8 @@ struct PionApp: App {
 struct ConversationCommandContext {
     let selection: Binding<UUID?>
     let window: WindowState
-    let search: () -> Void
+    /// Nil where there is no sidebar to search.
+    let search: (() -> Void)?
 }
 
 struct DictationCommand {
@@ -240,12 +241,9 @@ struct PionCommands: Commands {
             Divider()
         }
         CommandMenu("Conversation") {
-            Button("Search Conversations") { context?.search() }
+            Button("Search Conversations") { context?.search?() }
                 .appShortcut(PionShortcuts.searchConversations)
-                .disabled(context == nil)
-            Button("Choose Conversation…") { activeWindow.sheet = .chooseConversation }
-                .appShortcut(PionShortcuts.chooseConversation)
-                .disabled(context == nil)
+                .disabled(context?.search == nil)
             Divider()
             Button("Open in New Window") {
                 if let conversationID { openWindow(id: "conversation", value: conversationID) }

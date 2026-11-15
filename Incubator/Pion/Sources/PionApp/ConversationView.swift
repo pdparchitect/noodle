@@ -21,8 +21,8 @@ struct ConversationWindow: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $selection))
-        .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $selection, window: window,
-            search: { window.sheet = .chooseConversation }))
+        // A window of its own has no sidebar to search, so Search Conversations is the main window's alone.
+        .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $selection, window: window, search: nil))
         .onChange(of: selection, initial: true) { _, id in
             if let id { model.markRead(id) }
             window.composerFocusRequest = UUID()

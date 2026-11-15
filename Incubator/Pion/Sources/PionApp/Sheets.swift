@@ -19,7 +19,6 @@ struct ConversationSheets: ViewModifier {
             case .editAgent(let agent): AgentEditorSheet(model: model, agent: model.agent(agent.id) ?? agent)
             case .editGroup(let group): GroupEditorSheet(model: model, group: model.conversation(group.id) ?? group)
             case .editInvestigation(let investigation): NewInvestigationSheet(model: model, investigation: model.investigation(investigation.id) ?? investigation)
-            case .chooseConversation: ConversationPicker(model: model, selection: $selection)
             case .close(let investigation): CloseInvestigationSheet(model: model, investigation: investigation)
             }
         }
@@ -38,46 +37,6 @@ struct ConversationChoiceRow: View {
         } else if let agent = model.agent(conversation.participantIDs.first) {
             AgentRow(model: model, agent: agent, unread: model.isUnread(conversation.id))
         }
-    }
-}
-
-struct ConversationPicker: View {
-    let model: PionModel
-    @Binding var selection: UUID?
-    @State private var query = ""
-    @State private var choice: UUID?
-    @FocusState private var searchFocused: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    private var matches: [BotConversation] { model.searchConversations(query) }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(heading: "Choose Conversation", title: "Open", enabled: choice != nil, action: open)
-            Divider()
-            TextField("Search Conversations", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .focused($searchFocused)
-                .onSubmit(open)
-                .padding(16)
-            List(selection: $choice) {
-                ForEach(matches) { conversation in
-                    ConversationChoiceRow(model: model, conversation: conversation).tag(conversation.id)
-                }
-            }
-            .frame(height: 320)
-            .overlay { if matches.isEmpty { ContentUnavailableView.search(text: query) } }
-        }
-        .onAppear { choice = selection ?? matches.first?.id; searchFocused = true }
-        .onChange(of: query) { if !matches.contains(where: { $0.id == choice }) { choice = matches.first?.id } }
-        .frame(width: 480)
-        .noodleSheetSizing()
-    }
-
-    private func open() {
-        guard let choice else { return }
-        selection = choice
-        dismiss()
     }
 }
 
