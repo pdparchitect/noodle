@@ -19,6 +19,8 @@ final class StorageUsageTests: XCTestCase {
         try write("Conversations/a/messages.json", bytes: 100_000)
         try write("usage.sqlite", bytes: 50_000)
         try write("spaces.json", bytes: 10)
+        // A login's home holds what its harness keeps there, such as Codex's plugins, not only the credentials.
+        try write("HarnessProfiles/\(UUID().uuidString)/home/.codex/plugins/plugin.bin", bytes: 40_000)
         try write("Caches/thing", bytes: 20_000, in: root.appendingPathComponent("Library"))
         try write("This Mac Hub/hub.key", bytes: 10, in: support)
 
@@ -33,6 +35,8 @@ final class StorageUsageTests: XCTestCase {
         XCTAssertGreaterThan(snapshot.kinds[.hubs] ?? 0, 0)
         XCTAssertGreaterThan(snapshot.kinds[.other] ?? 0, 0)
         XCTAssertNil(snapshot.kinds[.harnesses])
+        XCTAssertGreaterThanOrEqual(snapshot.kinds[.logins] ?? 0, 40_000)
+        XCTAssertEqual(StorageSnapshot.Kind.logins.rawValue, "Logins")
     }
 
     @MainActor func testRefreshKeepsTheLastSnapshotUntilTheNewOneLands() async throws {

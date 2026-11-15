@@ -4,7 +4,7 @@ import Observation
 /// How much disk the app's own data takes, measured on demand rather than recorded over time.
 public struct StorageSnapshot: Equatable, Sendable {
     public enum Kind: String, CaseIterable, Sendable {
-        case bots = "Bots", conversations = "Conversations", harnesses = "Harnesses", signIns = "Sign-ins",
+        case bots = "Bots", conversations = "Conversations", harnesses = "Harnesses", logins = "Logins",
              usage = "Usage Records", hubs = "Hubs", caches = "Caches", other = "Other"
     }
 
@@ -40,7 +40,8 @@ public struct StorageSnapshot: Equatable, Sendable {
             let kind: Kind = switch name {
             case "Conversations": .conversations
             case "Harnesses": .harnesses
-            case "HarnessProfiles", "HarnessLogins": .signIns
+            // Each login's own home: its credentials and whatever its harness keeps beside them, such as plugins.
+            case "HarnessProfiles", "HarnessLogins": .logins
             case "Hubs": .hubs
             case _ where name.hasPrefix("usage.sqlite"): .usage
             default: .other

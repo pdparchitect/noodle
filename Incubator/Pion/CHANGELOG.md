@@ -6,6 +6,10 @@
 
 - In Settings > Agents, an archived agent's picture no longer opens its profile; bring the agent back with its Archived switch first.
 
+### Changed
+
+- In the Usage window's Disk measure, Sign-ins is now Logins: each login's folder holds what its harness keeps there, such as Codex's plugins, not only the sign-in itself.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added

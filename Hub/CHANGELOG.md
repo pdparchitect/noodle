@@ -8,6 +8,10 @@
 - A bot's profile puts its buttons on two rows when there are more than four, so labels like New Session are no longer squeezed.
 - In Settings > Bots, an archived bot's picture no longer opens its profile; bring the bot back with its Archived switch first.
 
+### Changed
+
+- In the Usage window's Disk measure, Sign-ins is now Logins: each login's folder holds what its harness keeps there, such as Codex's plugins, not only the sign-in itself.
+
 ## [0.53.0] - 2026-11-15
 
 ### Added
