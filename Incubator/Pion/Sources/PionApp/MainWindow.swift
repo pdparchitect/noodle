@@ -24,9 +24,9 @@ struct MainWindow: View {
                 ConversationView(model: model, window: window, conversation: conversation)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
-                    Label("Set Up Your Team", systemImage: "person.2")
+                    Label("No Agents", systemImage: "person.2")
                 } description: {
-                    Text("Investigations are worked by agents. Create your first one.")
+                    Text("Create an agent to start investigating.")
                 } actions: {
                     Button("New Agent") { window.sheet = .newAgent }
                 }
@@ -79,6 +79,8 @@ struct Sidebar: View {
                         .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
                 }
             } else {
+                // A section shows only once it has something in it.
+                if !active.isEmpty {
                 Section {
                     ForEach(active) { investigation in
                         InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
@@ -90,6 +92,7 @@ struct Sidebar: View {
                     }
                 } header: {
                     Text("Investigations")
+                }
                 }
                 // Closed ones only when asked for, a few at a time, to look back at.
                 if showsClosed, !closed.isEmpty {
@@ -124,6 +127,7 @@ struct Sidebar: View {
                         Text("Groups")
                     }
                 }
+                if !model.agents.isEmpty {
                 Section {
                     ForEach(model.agents) { agent in
                         if let direct = model.directConversation(of: agent) {
@@ -133,6 +137,7 @@ struct Sidebar: View {
                     }
                 } header: {
                     Text("Agents")
+                }
                 }
             }
         }

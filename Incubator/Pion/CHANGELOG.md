@@ -14,6 +14,7 @@
 
 ### Changed
 
+- With nothing set up, the sidebar shows no empty Investigations or Agents headings, and the window says No Agents with a short prompt to create one.
 - Settings badges the Harness, Tools, Permissions and Update tabs when they need attention, and is as wide as Noodle's.
 - The Agents tab in Settings has Noodle's sparkles icon.
 - The activity window shows each entry's time in teal, so it stands apart from the title and output.

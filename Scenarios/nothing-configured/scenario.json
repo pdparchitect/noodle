@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "title": "Nothing configured",
+  "clock": "10:00",
+  "harnesses": {},
+  "agents": [],
+  "present": { "window": { "size": [1240, 820] } },
+  "timeline": [
+    { "wait": 1.0 },
+    { "capture": "01-empty" }
+  ]
+}
