@@ -430,13 +430,15 @@ struct MessageRow: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         // Written from a task in the sidebar.
                         if let task = message.task { MessageTaskLabel(task: task) }
-                        MessageBody(text: message.body, message: message, fills: false) { model.problem = $0 }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
-                            .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
+                        if showsText {
+                            MessageBody(text: message.body, message: message, fills: false) { model.problem = $0 }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
+                                .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
+                        }
                         linkPreview
-                        files
+                        filesWithReactions
                         HStack(spacing: 6) {
                             // Always laid out, only shown on hover, so pointing at a message never moves the others.
                             Text(message.createdAt.pionShort).font(.caption2).foregroundStyle(.tertiary)
@@ -450,11 +452,13 @@ struct MessageRow: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     if !continues { header }
-                    MessageBody(text: message.body, message: message) { model.problem = $0 }
-                        .padding(.leading, 30)
-                        .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
+                    if showsText {
+                        MessageBody(text: message.body, message: message) { model.problem = $0 }
+                            .padding(.leading, 30)
+                            .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
+                    }
                     linkPreview.padding(.leading, 30)
-                    files.padding(.leading, 30)
+                    filesWithReactions.padding(.leading, 30)
                 }
                 .padding(.top, continues ? 2 : 14)
             }
@@ -514,6 +518,14 @@ struct MessageRow: View {
         if let url = MessageLinkPreviews.url(for: message, attachments: model.files(of: message)) {
             MessageLinkPreview(url: url, shouldLoad: true).frame(maxWidth: 420, alignment: .leading)
         }
+    }
+
+    /// As in Noodle: a voice message with nothing but its recordings shows no text of its own.
+    private var showsText: Bool { VoiceMessage.showsText(message.body, with: model.files(of: message)) }
+
+    /// Reactions mark the text, and the files only when there is no text to mark.
+    private var filesWithReactions: some View {
+        files.overlay(alignment: .topTrailing) { if !showsText { reactions.offset(x: 5, y: -12) } }
     }
 
     /// The files sent with the message as Noodle shows them: pictures, cards and annotations, each opening

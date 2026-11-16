@@ -456,7 +456,7 @@ struct MessageBubble: View {
 
     /// A voice message with nothing but its recordings shows no bubble of its own.
     private func showsTextBubble(attachments: [ConversationAttachment]) -> Bool {
-        !(message.body == VoiceMessage.messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil })
+        VoiceMessage.showsText(message.body, with: attachments)
     }
 
     @ViewBuilder private var cornerReactions: some View {

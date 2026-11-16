@@ -22,4 +22,9 @@ public struct VoiceMessage: Codable, Hashable, Sendable {
     }
 
     public static let messageBody = "Voice message"
+
+    /// Whether a message has text to show: a voice message with nothing but its recordings has none.
+    public static func showsText(_ body: String, with attachments: [ConversationAttachment]) -> Bool {
+        !(body == messageBody && !attachments.isEmpty && attachments.allSatisfy { $0.voice != nil })
+    }
 }

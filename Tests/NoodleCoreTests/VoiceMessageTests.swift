@@ -17,6 +17,20 @@ final class VoiceMessageTests: XCTestCase {
         }
     }
 
+    /// A voice message with nothing but its recordings has no text to show; any other text, or another file, does.
+    func testOnlyAVoiceMessageOfRecordingsShowsNoText() {
+        let conversationID = UUID()
+        func file(voice: Bool) -> ConversationAttachment {
+            ConversationAttachment(conversationID: conversationID, originalFilename: "a.m4a", storedFilename: "a.m4a",
+                                   mediaType: "audio/mp4", byteCount: 3,
+                                   voice: voice ? VoiceMessage(transcript: "Hi", duration: 1, waveform: [], localeIdentifier: nil) : nil)
+        }
+        XCTAssertFalse(VoiceMessage.showsText(VoiceMessage.messageBody, with: [file(voice: true)]))
+        XCTAssertTrue(VoiceMessage.showsText(VoiceMessage.messageBody, with: [file(voice: true), file(voice: false)]))
+        XCTAssertTrue(VoiceMessage.showsText(VoiceMessage.messageBody, with: []))
+        XCTAssertTrue(VoiceMessage.showsText("Listen to this", with: [file(voice: true)]))
+    }
+
     func testVoiceSurvivesStorageAndReachesAgentWithoutBodyDuplication() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("noodle-voice-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
