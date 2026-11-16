@@ -85,10 +85,7 @@ struct PionApp: App {
     }()
     lazy var calls: PionCalls = {
         let calls = PionCalls(model: model)
-        calls.open = { [weak self] id in
-            self?.model.selection = id
-            self?.window.openMain?()
-        }
+        calls.open = { [weak self] id in self?.showConversation(id) }
         return calls
     }()
 
@@ -139,6 +136,7 @@ struct PionApp: App {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
         _ = calls
+        PionIntentApp.delegate = self
         if !model.isScripted {
             NSApp.servicesProvider = services
             NSUpdateDynamicServices()
@@ -168,7 +166,10 @@ struct PionApp: App {
         let retain = { [weak self] in
             guard let self else { return }
             windows.retainConversations(Set(self.model.everyConversation.map(\.id)))
-            if !self.model.isScripted { self.model.publishShareDestinations() }
+            guard !self.model.isScripted else { return }
+            self.model.publishShareDestinations()
+            // As Noodle's: Siri and Spotlight offer the conversations by name.
+            PionAppShortcuts.updateAppShortcutParameters()
         }
         model.onConversationsChanged = retain
         retain()
@@ -181,6 +182,14 @@ struct PionApp: App {
         #if PION_DEV_HOOKS
         ScenarioSession.active?.begin()
         #endif
+    }
+
+    /// As in Noodle: a window already showing the conversation comes forward, else the main window shows it.
+    func showConversation(_ id: UUID) {
+        if PionWindows.conversations?.focus(id) != true {
+            model.selection = id
+            window.openMain?()
+        }
     }
 
     /// Send to Pion wakes Pion with pion://shared, but what it sent is also picked up whenever Pion comes forward.

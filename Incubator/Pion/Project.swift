@@ -166,6 +166,7 @@ let project = Project(
                 "../../Sources/Noodle/AttachmentLayout.swift",
                 "../../Sources/Noodle/SheetControls.swift",
                 "../../Sources/Noodle/NoodleServices.swift",
+                "../../Sources/Noodle/IntentSupport.swift",
                 "../../Sources/Noodle/AttachmentInlinePreview.swift",
                 "../../Sources/Noodle/MessageMarkdownCache.swift",
                 "../../Sources/Noodle/MessageLinkPreview.swift",

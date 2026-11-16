@@ -2,7 +2,6 @@ import AppIntents
 import AppKit
 import Foundation
 import NoodleCore
-import UniformTypeIdentifiers
 
 struct NoodleConversationEntity: AppEntity {
     static let typeDisplayRepresentation = TypeDisplayRepresentation(
@@ -136,13 +135,13 @@ struct SendNoodleCommandIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let conversationID = try NoodleIntentEnvironment.id(of: conversation.id)
+        let conversationID = try ConversationIntentSupport.id(of: conversation.id)
         let text = (command ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let files = files ?? []
         guard !text.isEmpty || !files.isEmpty else { throw $command.needsValueError("What would you like to send?") }
 
         let store = NoodleIntentEnvironment.store()
-        try store.sendCommand(text, files: files.map(NoodleIntentEnvironment.payload), to: conversationID)
+        try store.sendCommand(text, files: files.map(ConversationIntentSupport.payload), to: conversationID)
         if opensConversation {
             try await continueInForeground(alwaysConfirm: false)
             try store.openConversation(conversationID)
@@ -172,7 +171,7 @@ struct OpenChatIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        try NoodleIntentEnvironment.store().openConversation(NoodleIntentEnvironment.id(of: conversation.id))
+        try NoodleIntentEnvironment.store().openConversation(ConversationIntentSupport.id(of: conversation.id))
         NSApp.activate()
         return .result()
     }
@@ -197,7 +196,7 @@ struct CallAgentIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        try NoodleIntentEnvironment.store().callFromShortcut(NoodleIntentEnvironment.id(of: bot.id))
+        try NoodleIntentEnvironment.store().callFromShortcut(ConversationIntentSupport.id(of: bot.id))
         NSApp.activate()
         return .result()
     }
@@ -284,29 +283,5 @@ private enum NoodleIntentEnvironment {
         let store = NoodleStore.active ?? NoodleStore(repository: repository())
         store.startMonitoring()
         return store
-    }
-
-    static func id(of entityID: String) throws -> UUID {
-        guard let id = UUID(uuidString: entityID) else { throw NoodleIntentError.missingConversation }
-        return id
-    }
-
-    /// A file Shortcuts passes, by its location when it has one, as a dropped file is copied.
-    static func payload(_ file: IntentFile) -> AttachmentTransferPayload {
-        if let url = file.fileURL { return .file(url) }
-        let type = file.type ?? UTType(filenameExtension: (file.filename as NSString).pathExtension)
-        return .data(file.data, originalFilename: file.filename,
-                     mediaType: type?.preferredMIMEType ?? "application/octet-stream")
-    }
-}
-
-private enum NoodleIntentError: LocalizedError {
-    case missingConversation
-
-    var errorDescription: String? {
-        switch self {
-        case .missingConversation:
-            "That Noodle conversation is no longer available."
-        }
     }
 }

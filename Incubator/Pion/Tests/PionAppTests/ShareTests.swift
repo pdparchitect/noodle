@@ -22,4 +22,24 @@ import XCTest
         XCTAssertEqual(model.messages(in: direct.id).last?.author, .user)
         XCTAssertTrue(try inbox.pending().isEmpty)
     }
+
+    /// Shortcuts' Send to Agent, as in Noodle: the message and its files go at once, and the draft you were
+    /// writing stays where it was.
+    func testShortcutsSendLeavesTheDraftAlone() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionShortcut-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let direct = try XCTUnwrap(model.directConversation(of: avery))
+        model.drafts[direct.id].text = "half written"
+
+        try model.sendFromShortcut("Check the firewall logs", files: [.data(Data("log".utf8), originalFilename: "fw.log",
+                                                                            mediaType: "text/plain")], to: direct.id)
+        let sent = try XCTUnwrap(model.messages(in: direct.id).last)
+        XCTAssertEqual(sent.body, "Check the firewall logs")
+        XCTAssertEqual(sent.attachmentIDs?.count, 1)
+        XCTAssertEqual(model.drafts[direct.id].text, "half written")
+        XCTAssertThrowsError(try model.sendFromShortcut("Hello", files: [], to: UUID()))
+    }
 }

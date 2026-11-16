@@ -65,9 +65,9 @@ rm -rf -- "$app"
 ditto "$source_app" "$app"
 contents="$app/Contents"
 plist="$contents/Info.plist"
-# Nothing that runs a harness: no Agent Host and no helpers. Scenario agents are scripted. No Send to Pion either,
-# which would offer the scenarios bundle in every Share menu.
-rm -rf -- "$contents/XPCServices" "$contents/Helpers" "$contents/PlugIns"
+# Nothing that runs a harness: no Agent Host and no helpers. Scenario agents are scripted. No Send to Pion or
+# Shortcuts actions either, which would offer the scenarios bundle in every Share menu and in Shortcuts.
+rm -rf -- "$contents/XPCServices" "$contents/Helpers" "$contents/PlugIns" "$contents/Resources/Metadata.appintents"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Pion" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Pion" "$plist"

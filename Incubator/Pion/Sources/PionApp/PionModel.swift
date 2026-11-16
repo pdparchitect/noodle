@@ -381,7 +381,7 @@ import UniformTypeIdentifiers
     }
 
     /// When anything was last said, by anyone.
-    private func lastActivity(of conversation: BotConversation) -> Date {
+    func lastActivity(of conversation: BotConversation) -> Date {
         messages(in: conversation.id).last?.createdAt ?? conversation.createdAt
     }
 
@@ -1015,6 +1015,19 @@ import UniformTypeIdentifiers
             markRead(id)
             deliver(body, in: conversation)
         } catch { problem = error.localizedDescription }
+    }
+
+    /// Shortcuts' Send to Agent: the message and its files go at once, beside whatever waits in the message field.
+    func sendFromShortcut(_ text: String, files: [AttachmentTransferPayload], to id: UUID) throws {
+        guard let conversation = conversation(id), composerUnavailableReason(for: conversation) == nil,
+              investigation(id)?.isClosed != true else { throw WorkspaceError.missingConversation(id) }
+        let attached = try files.map { try repository.importAttachment($0, into: id, now: now) }
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? attached.map(\.originalFilename).joined(separator: ", ") : body,
+                                           attachmentIDs: attached.map(\.id), now: now)
+        onSent?(id, body, attached.map(\.originalFilename))
+        readTranscript(id, notifying: false)
+        deliver(body, in: conversation)
     }
 
     /// Copies files into the conversation, ready to go with the next message.
