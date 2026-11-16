@@ -52,8 +52,11 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             }
             if let conversationID, model.conversation(conversationID) != nil {
-                model.selection = conversationID
-                window.openMain?()
+                // As in Noodle: a window already showing it comes forward, else the main window shows it.
+                if PionWindows.conversations?.focus(conversationID) != true {
+                    model.selection = conversationID
+                    window.openMain?()
+                }
                 if let messageID { NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID) }
             }
             NSApp.activate(ignoringOtherApps: true)

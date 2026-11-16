@@ -56,7 +56,21 @@ struct MainWindow: View {
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
         .modifier(RecoveryConfirmations(window: window))
         .onOpenURL { _ = model.connectionsController.receiveAuthorizationCallback($0) }
-        .onAppear { window.openMain = { openWindow(id: "main") } }
+        .onAppear {
+            window.openMain = { openWindow(id: "main") }
+            // As in Noodle: the conversations left in windows of their own open again, unless they float.
+            PionWindows.conversations?.openMainWindow = { openWindow(id: "main") }
+            PionWindows.conversations?.restoreWindows { id in
+                if !FloatingConversations.shared.contains(id) { openWindow(id: "conversation", value: id) }
+            }
+        }
+        .background {
+            if let registry = PionWindows.conversations {
+                ConversationWindowHost(registry: registry, conversationID: model.selection, isMainWindow: true) {
+                    if let id = $0 { model.markRead(id) }
+                }
+            }
+        }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .onChange(of: model.selection) { _, id in
@@ -215,10 +229,10 @@ struct ConversationRowMenu: View {
         // agent's housekeeping, and last stopping, suspending and closing or archiving.
         Button("Open in New Window") {
             // Opened in a window, a floating conversation stops floating, as Noodle docks it.
-            PionFloating.panels?.close(conversation.id)
+            PionWindows.panels?.close(conversation.id)
             openWindow(id: "conversation", value: conversation.id)
         }
-        Button("Float on Top") { PionFloating.float(conversation.id) }
+        Button("Float on Top") { PionWindows.float(conversation.id) }
         Divider()
         Button(model.isPinned(conversation.id) ? "Unpin" : "Pin") {
             model.setPinned(!model.isPinned(conversation.id), conversationID: conversation.id)

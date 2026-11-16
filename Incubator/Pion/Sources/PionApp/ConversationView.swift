@@ -11,6 +11,8 @@ struct ConversationWindow: View {
     let model: PionModel
     @Binding var selection: UUID?
     @State private var window = WindowState()
+    @Environment(\.floatingPanelCommands) private var panel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -21,8 +23,29 @@ struct ConversationWindow: View {
             }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let selection, model.conversation(selection) != nil {
+                    Button { PionWindows.returnToMainWindow(selection, model: model) } label: {
+                        Label("Show in Main Window", systemImage: "pip.exit")
+                    }
+                    .help("Show in Main Window")
+                }
+            }
+        }
+        // Noodle's window registry: what this window shows is read while it is on screen, and the window opens again.
+        .background {
+            if let registry = PionWindows.conversations {
+                ConversationWindowHost(registry: registry, conversationID: selection) { if let id = $0 { model.markRead(id) } }
+            }
+        }
         .modifier(ConversationSheets(model: model, window: window, selection: $selection))
         .modifier(RecoveryConfirmations(window: window))
+        // As in Noodle, a conversation deleted elsewhere takes its window with it.
+        .onChange(of: selection.map { model.conversation($0) == nil } == true) { _, missing in
+            guard missing, let selection else { return }
+            if panel != nil { PionWindows.panels?.close(selection) } else { dismiss() }
+        }
         // A window of its own has no sidebar to search, so Search Conversations is the main window's alone.
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $selection, window: window, search: nil))
         .onChange(of: selection, initial: true) { _, id in

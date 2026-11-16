@@ -34,4 +34,24 @@ import XCTest
         model.refresh()
         XCTAssertFalse(model.isUnread(group.id), "An open conversation is read as messages arrive")
     }
+
+    /// As in Noodle: what is on screen counts, a separate window included, not the main window's selection.
+    func testArrivalsAreReadWhereTheyAreOnScreen() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionUnread-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let direct = try XCTUnwrap(model.directConversation(of: avery))
+        let group = try model.createGroup(name: "Watch", description: nil, members: [avery.id])
+        model.selection = direct.id
+        // The group is in a window of its own; Pion is in the background, so the main window shows nothing.
+        model.isViewing = { $0 == group.id }
+        for id in [direct.id, group.id] {
+            _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: id, body: "Contained.")
+        }
+        model.refresh()
+        XCTAssertTrue(model.unread.unread.contains(direct.id), "Selected but not on screen")
+        XCTAssertFalse(model.isUnread(group.id), "On screen in its own window")
+    }
 }

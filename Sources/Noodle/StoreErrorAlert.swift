@@ -13,7 +13,7 @@ import Observation
     private let link: (String) -> (title: String, url: URL)?
     /// The alert for this message closed, so its button is no longer wanted.
     private let linkUsed: (String) -> Void
-    private let window: () -> NSWindow?
+    private let window: @MainActor () -> NSWindow?
     private let open: (URL) -> Void
     private var alert: NSAlert?
     private var keyObserver: NSObjectProtocol?
@@ -27,7 +27,7 @@ import Observation
 
     init(title: String, message: @escaping () -> String?, clear: @escaping () -> Void,
          link: @escaping (String) -> (title: String, url: URL)? = { _ in nil }, linkUsed: @escaping (String) -> Void = { _ in },
-         window: @escaping () -> NSWindow? = StoreErrorAlert.frontWindow,
+         window: @escaping @MainActor () -> NSWindow? = StoreErrorAlert.frontWindow,
          open: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.title = title
         self.message = message

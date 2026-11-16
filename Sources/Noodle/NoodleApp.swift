@@ -700,7 +700,7 @@ private struct SelectedConversationWindowHost: View {
 
     var body: some View {
         ConversationWindowHost(registry: store.conversationWindows,
-            conversationID: store.selectedConversationID, isMainWindow: true,
+            conversationID: store.selectedConversationID, isMainWindow: true, title: NoodleAppIdentity.name,
             markRead: store.markConversationRead)
     }
 }

@@ -22,9 +22,11 @@
 - A patch or diff an agent sends opens in Noodle's review: each file's changes, ticking files off as viewed, and commenting on selected lines or marking a region, which waits in the message field as any annotation does.
 - Settings › Conversation has Noodle's Message received sound, played when a reply arrives while Pion is in front and by the notification otherwise, and Noodle's Keep one floating conversation.
 - As in Noodle, the harnesses Pion installed update by themselves while it runs (unless turned off in Settings › Harnesses), and agents stopped by sleep start again as soon as the Mac wakes.
+- A conversation in a window of its own has Show in Main Window, as in Noodle; its window opens again where it was when Pion opens, and closes when the conversation is deleted.
 
 ### Fixed
 
+- As in Noodle, a reply is read when its conversation is on screen, in the main window, a window of its own or a floating one; before, only the main window's selection counted, even with Pion in the background, and a notification for a conversation open in its own window opened it in the main window too.
 - Something going wrong is said over whichever Pion window is in front, a sheet or a floating conversation included, as in Noodle; before, it waited for the main window and went unseen while that was closed.
 - Picking a message in search results or in a notification scrolls to it, and a conversation you come back to opens where you left it while Pion runs; before, Pion lost its place in the transcript.
 - In a team with a lead, the lead hears your message first, as the team editor says and as in Noodle, also when you send from the message field or with Forward…; before, only an Investigation's opening message did that, and the rest woke everyone at once.

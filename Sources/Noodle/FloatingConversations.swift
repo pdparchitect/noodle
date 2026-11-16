@@ -118,6 +118,12 @@ import Observation
 
     func close(_ id: UUID) { panels[id]?.close() }
 
+    /// Stops the conversation floating, its panel open or not.
+    func unfloat(_ id: UUID) {
+        floating.set(false, for: id)
+        close(id)
+    }
+
     /// A hosted SwiftUI view can reset the window's own minimum, so the delegate holds it.
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         let minimum = sender.frameRect(forContentRect: NSRect(origin: .zero, size: FloatingConversationPanel.minimumSize)).size

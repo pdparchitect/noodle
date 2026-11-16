@@ -56,6 +56,9 @@ import UniformTypeIdentifiers
     /// The last message read in each conversation, so the sidebar can mark the rest as new.
     /// Which conversations wait for the champion, kept where Noodle keeps them.
     private(set) var unread = ConversationUnread()
+    /// Whether a conversation is on screen, from Noodle's window registry; without one, the selection.
+    @ObservationIgnored var isViewing: ((UUID) -> Bool)?
+    private func viewing(_ id: UUID) -> Bool { isViewing?(id) ?? (selection == id) }
     /// Each agent's tasks, as the messenger keeps them.
     private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
     /// Whether the main window shows the welcome: offered once to someone with no agents, then from Help > Welcome.
@@ -73,6 +76,8 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onSent: ((UUID, String, [String]) -> Void)?
     /// Agents were added, archived, brought back or deleted.
     @ObservationIgnored var onAgentsChanged: (() -> Void)?
+    /// Conversations were added or deleted.
+    @ObservationIgnored var onConversationsChanged: (() -> Void)?
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
@@ -292,7 +297,9 @@ import UniformTypeIdentifiers
         }
         applySuspensions()
         let allConversations = (try? repository.loadConversations()) ?? []
+        let changedSet = allConversations.map(\.id) != everyConversation.map(\.id)
         if allConversations != everyConversation { everyConversation = allConversations }
+        if changedSet { onConversationsChanged?() }
         let loadedConversations = allConversations.filter { $0.archivedAt == nil }
         if loadedConversations != conversations { conversations = loadedConversations }
     }
@@ -319,7 +326,7 @@ import UniformTypeIdentifiers
         if messages.contains(where: { !$0.attachments.isEmpty }) {
             attachments[id] = Dictionary(((try? repository.loadAttachments(conversationID: id)) ?? []).map { ($0.id, $0) }) { first, _ in first }
         }
-        if selection == id { markRead(id) }
+        if viewing(id) { markRead(id) }
         guard notifying, !isScripted else { return }
         let arrived = messages.filter { !known.contains($0.id) && $0.author != .user }
         let shown = arrived.filter { if case .agent = $0.author { notifies($0) } else { false } }
@@ -516,7 +523,7 @@ import UniformTypeIdentifiers
     private func registerUnread(_ messages: [ChatMessage]) {
         guard !messages.isEmpty else { return }
         let before = unread
-        unread.register(messages, isViewing: { $0 == selection }, mentionName: { _ in champion })
+        unread.register(messages, isViewing: viewing, mentionName: { _ in champion })
         if unread != before { saveUnread() }
     }
 
