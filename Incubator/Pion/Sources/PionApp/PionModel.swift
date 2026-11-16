@@ -844,18 +844,13 @@ import UniformTypeIdentifiers
 
     @discardableResult
     func updateGroup(_ group: BotConversation, name: String, description: String?, members: Set<UUID>,
-                     folders: [AgentFolder]? = nil, memberTools: [UUID: Set<UUID>] = [:]) throws -> BotConversation {
+                     folders: [AgentFolder]? = nil) throws -> BotConversation {
         guard investigation(group.id) == nil else { throw CaseError("Use the investigation's controls to edit its team.") }
         _ = try ConversationName.validated(name)
-        try validateMemberTools(memberTools, members: members)
         let folders = try folders.map { try AgentFolder.validated($0, protecting: AgentFolder.protectedLocations(root: repository.rootURL)) }
         let before = conversation(group.id) ?? group
-        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let updated = try checkpoint.undoing({
-            try assignMemberTools(memberTools)
-            return try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
-                                              participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
-        }, undo: connectionsController.reloadAssignments)
+        let updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
+                                                 participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
@@ -875,20 +870,6 @@ import UniformTypeIdentifiers
         // As in Noodle: a profile of another harness gives way to the harness's default login.
         return AgentResources(folders: folders, connections: resources.connections,
                               profile: harnessProfiles.validProfile(resources.profile, harnessIdentifier: provider?.rawValue))
-    }
-
-    private func validateMemberTools(_ assignments: [UUID: Set<UUID>], members: Set<UUID>) throws {
-        guard !members.isEmpty, members.isSubset(of: Set(agents.map(\.id))), Set(assignments.keys).isSubset(of: members) else {
-            throw CaseError("Choose current team members before assigning tools.")
-        }
-        for ids in assignments.values { try connectionsController.validateAssignment(ids) }
-    }
-
-    private func assignMemberTools(_ assignments: [UUID: Set<UUID>]) throws {
-        for (id, connections) in assignments {
-            guard let agent = agent(id) else { throw WorkspaceError.missingAgent(id) }
-            try connectionsController.assign(connections, to: agent, synchronizeWorkspace: false)
-        }
     }
 
     /// Folder grants are copied into agent configuration and fixed when its sandbox launches.
@@ -1190,16 +1171,11 @@ import UniformTypeIdentifiers
 
     @discardableResult
     func createGroup(name: String, description: String?, members: Set<UUID>, folders: [AgentFolder] = [],
-                     memberTools: [UUID: Set<UUID>] = [:], lead: UUID? = nil) throws -> BotConversation {
+                     lead: UUID? = nil) throws -> BotConversation {
         _ = try ConversationName.validated(name)
         let folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
-        try validateMemberTools(memberTools, members: members)
-        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let group = try checkpoint.undoing({
-            try assignMemberTools(memberTools)
-            return try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
-                                              existingAgents: agents, folders: folders, leadID: lead, now: now)
-        }, undo: connectionsController.reloadAssignments)
+        let group = try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
+                                               existingAgents: agents, folders: folders, leadID: lead, now: now)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: nil, to: group))
@@ -1238,7 +1214,6 @@ import UniformTypeIdentifiers
         var lead: UUID?
         var staff: Set<UUID> = []
         var folders: [AgentFolder] = []
-        var memberTools: [UUID: Set<UUID>] = [:]
         /// The lead is always one of them.
         var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
     }
@@ -1250,26 +1225,18 @@ import UniformTypeIdentifiers
         guard !title.isEmpty else { throw CaseError("Give the investigation a title.") }
         let members = draft.members
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
-        try validateMemberTools(draft.memberTools, members: members)
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
-        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let toolsChanged = draft.memberTools.contains { id, ids in agent(id).map { connectionsController.selectedIDs(for: $0) != ids } ?? false }
-        let (group, updated) = try checkpoint.undoing({
-            try assignMemberTools(draft.memberTools)
-            let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
-                publicDescription: draft.objective, participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
-            let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
-                var events: [(event: String, detail: String)] = []
-                if value.title != title { events.append(("title", title)); value.title = title }
-                if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
-                if Set(before.participantIDs) != members { events.append(("staff", "Updated the investigation team.")) }
-                if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
-                if toolsChanged { events.append(("tools", "Updated the team's agent tool assignments.")) }
-                return events
-            }
-            return (group, updated)
-        }, undo: connectionsController.reloadAssignments)
+        let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
+            publicDescription: draft.objective, participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+        let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
+            var events: [(event: String, detail: String)] = []
+            if value.title != title { events.append(("title", title)); value.title = title }
+            if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
+            if Set(before.participantIDs) != members { events.append(("staff", "Updated the investigation team.")) }
+            if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
+            return events
+        }
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
@@ -1285,10 +1252,9 @@ import UniformTypeIdentifiers
         let members = draft.members
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
-        try validateMemberTools(draft.memberTools, members: members)
         let number = (investigations.map(\.number).max() ?? 0) + 1
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
-                                    members: members, folders: folders, memberTools: draft.memberTools, lead: draft.lead)
+                                    members: members, folders: folders, lead: draft.lead)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, number: number, now: now)
         reload()

@@ -55,13 +55,16 @@ import XCTest
         XCTAssertFalse(model.toolManifests(for: renamed.id).contains { $0.id == connection.skillName })
     }
 
-    func testGroupFoldersFollowMembershipWhileToolsStayAssignedToTheChosenAgent() throws {
+    /// As in Noodle: a group shares folders with whoever is in it, and its tools stay each agent's own.
+    func testGroupFoldersFollowMembershipWhileToolsStayEachAgentsOwn() throws {
         let first = try agent(), second = try agent("Brisk Otter")
-        let group = try model.createGroup(name: "Triage", description: nil, members: [first.id], folders: [folder], memberTools: [first.id: [connection.id]])
+        _ = try model.updateAgent(first, name: first.displayName, description: nil, instructions: "Investigate.", provider: nil, model: nil,
+                                  resources: .init(connections: [connection.id]))
+        let group = try model.createGroup(name: "Triage", description: nil, members: [first.id], folders: [folder])
         XCTAssertEqual(try granted(first), [folder])
         XCTAssertTrue(try granted(second).isEmpty)
         XCTAssertEqual(model.connectionsController.selectedIDs(for: first), [connection.id])
-        let updated = try model.updateGroup(group, name: "Response", description: nil, members: [second.id], folders: [folder], memberTools: [second.id: []])
+        let updated = try model.updateGroup(group, name: "Response", description: nil, members: [second.id], folders: [folder])
         XCTAssertEqual(updated.folders, [folder])
         XCTAssertTrue(try granted(first).isEmpty)
         XCTAssertEqual(try granted(second), [folder])
@@ -71,7 +74,9 @@ import XCTest
 
     func testInvestigationResourcesCanBeCreatedEditedAndRevokedWithoutLosingTheCase() throws {
         let lead = try agent()
-        var draft = PionModel.Draft(title: "Beacon", objective: "Find its source", lead: lead.id, folders: [folder], memberTools: [lead.id: [connection.id]])
+        _ = try model.updateAgent(lead, name: lead.displayName, description: nil, instructions: "Investigate.", provider: nil, model: nil,
+                                  resources: .init(connections: [connection.id]))
+        var draft = PionModel.Draft(title: "Beacon", objective: "Find its source", lead: lead.id, folders: [folder])
         let investigation = try model.open(draft)
         let evidence = try model.store.updateCase(investigation.id, by: .champion("Avery")) { record, _ in
             (record.record(evidenceFrom: "EDR", method: "Query", result: "Beacon", by: .champion("Avery"), at: Date()), "evidence", "Recorded")
@@ -81,12 +86,11 @@ import XCTest
         XCTAssertEqual(model.connectionsController.selectedIDs(for: lead), [connection.id])
         draft.title = "Resolved beacon"
         draft.folders = []
-        draft.memberTools = [lead.id: []]
         let updated = try model.updateInvestigation(investigation, draft: draft)
         XCTAssertEqual(updated.id, investigation.id)
         XCTAssertEqual(updated.title, draft.title)
         XCTAssertTrue(try granted(lead).isEmpty)
-        XCTAssertTrue(model.connectionsController.selectedIDs(for: lead).isEmpty)
+        XCTAssertEqual(model.connectionsController.selectedIDs(for: lead), [connection.id], "The agent's own tools stay")
         XCTAssertEqual(model.caseRecord(investigation.id).evidence.first?.id, evidence.id)
     }
 
@@ -98,7 +102,7 @@ import XCTest
         XCTAssertTrue(try granted(original).isEmpty)
         let group = try model.createGroup(name: "Triage", description: nil, members: [original.id])
         let protected = AgentFolder(path: model.repository.rootURL.path)
-        XCTAssertThrowsError(try model.updateGroup(group, name: "Changed", description: nil, members: [original.id], folders: [protected], memberTools: [original.id: [connection.id]]))
+        XCTAssertThrowsError(try model.updateGroup(group, name: "Changed", description: nil, members: [original.id], folders: [protected]))
         XCTAssertEqual(model.conversation(group.id)?.displayName, "Triage")
         XCTAssertTrue(model.connectionsController.selectedIDs(for: original).isEmpty)
     }

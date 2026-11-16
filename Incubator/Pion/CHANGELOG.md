@@ -65,6 +65,7 @@
 
 ### Changed
 
+- New Group, Group Info and the Investigation sheet are one page, as Noodle's Group Info is: what it is for, the members, then shared folders. They no longer have Team and Tools tabs; an agent's tools are set in its own editor only, and a group never changes them.
 - An agent's profile shows the status the agent set for itself, as in Noodle, faded once it may be out of date, and what the agent is doing when it set none. It follows a change made in it for an archived agent too, and its Message button is dimmed when there is no conversation to open.
 - Settings › General is Noodle's, so generated agent names are Real or Playful, as there.
 - Tables in messages sort by a click on a column heading, and the menu in their corner copies a table as CSV or saves it, as in Noodle.

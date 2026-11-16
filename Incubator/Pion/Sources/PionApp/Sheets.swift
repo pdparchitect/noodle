@@ -95,23 +95,17 @@ private struct SheetNoteEditor: View {
     }
 }
 
-private enum TeamEditorTab: String, CaseIterable {
-    case general = "General", team = "Team", tools = "Tools"
-}
-
 struct NewInvestigationSheet: View {
     let model: PionModel
     let investigation: Investigation?
     @State private var draft = PionModel.Draft()
     @State private var loaded = false
-    @State private var selectedTab = TeamEditorTab.general
     @State private var error: String?
     @FocusState private var titleFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(model: PionModel, investigation: Investigation? = nil) { self.model = model; self.investigation = investigation }
 
-    private var members: Set<UUID> { draft.members }
     private var canSave: Bool {
         loaded && investigation?.isClosed != true && !draft.members.isEmpty
             && !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -137,18 +131,12 @@ struct NewInvestigationSheet: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                SheetTabPicker(selection: $selectedTab)
-                switch selectedTab {
-                case .general:
-                    SheetDescriptionField(title: "Objective", prompt: "Describe what this investigation must establish…", text: $draft.objective,
-                                          footnote: "Shared with every agent on the team as the goal they work toward.")
-                    FoldersSettingsRow(folders: $draft.folders, owner: .group)
-                case .team:
-                    GroupMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
-                    TeamFootnote(isNew: investigation == nil, setsSeverity: true)
-                case .tools:
-                    TeamToolsPicker(model: model, members: members, assignments: $draft.memberTools)
-                }
+                // As Noodle's group sheets: what it is for, who is on it, then the folders they share.
+                SheetDescriptionField(title: "Objective", prompt: "Describe what this investigation must establish…", text: $draft.objective,
+                                      footnote: "Shared with every agent on the team as the goal they work toward.")
+                GroupMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
+                TeamFootnote(isNew: investigation == nil, setsSeverity: true, isEmpty: draft.members.isEmpty)
+                FoldersSettingsRow(folders: $draft.folders, owner: .group)
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
             .padding(20)
@@ -169,12 +157,10 @@ struct NewInvestigationSheet: View {
     private func save() {
         guard canSave else { return }
         do {
-            var chosen = draft
-            chosen.memberTools = draft.memberTools.filter { members.contains($0.key) }
             if let investigation {
-                try model.updateInvestigation(investigation, draft: chosen)
+                try model.updateInvestigation(investigation, draft: draft)
             } else {
-                let created = try model.open(chosen)
+                let created = try model.open(draft)
                 model.selection = created.id
             }
             dismiss()
@@ -191,8 +177,6 @@ struct GroupEditorSheet: View {
     @State private var members: Set<UUID> = []
     @State private var lead: UUID?
     @State private var folders: [AgentFolder] = []
-    @State private var memberTools: [UUID: Set<UUID>] = [:]
-    @State private var selectedTab = TeamEditorTab.general
     @State private var error: String?
     @State private var confirmingDeletion = false
     @FocusState private var nameFocused: Bool
@@ -200,14 +184,11 @@ struct GroupEditorSheet: View {
 
     init(model: PionModel, group: BotConversation? = nil) { self.model = model; self.group = group }
 
-    /// As in Noodle, an existing group's Save waits for a change, which here can be a member's tools too.
+    /// As in Noodle, an existing group's Save waits for a change.
     private var canSave: Bool {
         guard ConversationName.error(for: name) == nil, !members.isEmpty else { return false }
         guard let group else { return true }
         return group.editChanges(name: name, description: description, members: members, folders: folders, lead: lead)
-            || memberTools.contains { id, tools in
-                model.agent(id).map { model.connectionsController.selectedIDs(for: $0) != tools } ?? false
-            }
     }
 
     var body: some View {
@@ -230,21 +211,15 @@ struct GroupEditorSheet: View {
                     }
                 }
                 NameValidationMessage(name: name)
-                SheetTabPicker(selection: $selectedTab)
-                switch selectedTab {
-                case .general:
-                    SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description,
-                                          footnote: "Shared with every agent in this group so they understand its purpose.")
-                    FoldersSettingsRow(folders: $folders, owner: .group)
-                    if group != nil {
-                        Divider()
-                        DestructiveActionButton(title: "Delete Group") { confirmingDeletion = true }
-                    }
-                case .team:
-                    GroupMemberPicker(model: model, selection: $members, lead: $lead)
-                    TeamFootnote(isNew: group == nil, setsSeverity: false)
-                case .tools:
-                    TeamToolsPicker(model: model, members: members, assignments: $memberTools)
+                // Noodle's Group Info, in its order: description, members, folders, then Delete.
+                SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $description,
+                                      footnote: "Shared with every agent in this group so they understand its purpose.")
+                GroupMemberPicker(model: model, selection: $members, lead: $lead)
+                TeamFootnote(isNew: group == nil, setsSeverity: false, isEmpty: members.isEmpty)
+                FoldersSettingsRow(folders: $folders, owner: .group)
+                if group != nil {
+                    Divider()
+                    DestructiveActionButton(title: "Delete Group") { confirmingDeletion = true }
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
@@ -277,13 +252,11 @@ struct GroupEditorSheet: View {
     private func save() {
         guard canSave else { return }
         do {
-            let assignments = memberTools.filter { members.contains($0.key) }
             if let group {
-                let updated = try model.updateGroup(group, name: name, description: description, members: members, folders: folders, memberTools: assignments)
+                let updated = try model.updateGroup(group, name: name, description: description, members: members, folders: folders)
                 if updated.lead != lead { model.setLead(lead, of: updated) }
             } else {
-                let created = try model.createGroup(name: name, description: description, members: members, folders: folders,
-                                                    memberTools: assignments, lead: lead)
+                let created = try model.createGroup(name: name, description: description, members: members, folders: folders, lead: lead)
                 model.selection = created.id
             }
             dismiss()
@@ -291,16 +264,17 @@ struct GroupEditorSheet: View {
     }
 }
 
-/// Under the team grid, as Noodle's group sheets have it, and how a lead is chosen.
+/// Under the team grid, as Noodle's group sheets have it, and how a lead is chosen; red while no one is on it.
 private struct TeamFootnote: View {
     let isNew: Bool
     let setsSeverity: Bool
+    let isEmpty: Bool
 
     var body: some View {
         let members = isNew ? "You can change the members later." : "Membership changes apply to future messages."
         let lead = setsSeverity ? "it hears your messages first and sets the severity." : "it hears your messages first."
         Text("Add at least one agent. \(members) Right-click an agent to make it the lead: \(lead)")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(isEmpty ? Color.red : Color.secondary)
     }
 }
 
@@ -529,43 +503,6 @@ struct CloseInvestigationSheet: View {
         .noodleSheetSizing()
     }
 }
-
-/// Tool access belongs to each agent, even when edited from a team's conversation.
-private struct TeamToolsPicker: View {
-    let model: PionModel
-    let members: Set<UUID>
-    @Binding var assignments: [UUID: Set<UUID>]
-    @State private var expanded: UUID?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if members.isEmpty {
-                ContentUnavailableView("No Team Members", systemImage: "person.2")
-            }
-            ForEach(model.agents.filter { members.contains($0.id) }) { agent in
-                let count = (assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent)).count
-                DisclosureGroup(isExpanded: Binding(get: { expanded == agent.id }, set: { expanded = $0 ? agent.id : nil })) {
-                    ToolAssignmentList(controller: model.connectionsController, selectedIDs: Binding(
-                        get: { assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent) },
-                        set: { assignments[agent.id] = $0 }), member: "agent")
-                        .padding(.top, 8)
-                } label: {
-                    HStack {
-                        AgentMark(agent: agent, size: 20)
-                        Text(agent.displayName)
-                        Spacer()
-                        Text(count == 1 ? "1 tool" : "\(count) tools").foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { expanded = expanded == agent.id ? nil : agent.id } }
-                }
-                .help("Tool assignments apply to this agent in every conversation.")
-            }
-        }
-        .onAppear { expanded = model.agents.first(where: { members.contains($0.id) })?.id }
-    }
-}
-
 
 /// Pion runs its agents on this Mac alone, so nothing is lent by a Hub.
 extension PionModel: AgentConfigurationHost {
