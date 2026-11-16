@@ -92,6 +92,8 @@ struct PionApp: App {
         // Before anything adds or uses a tool connection, or reads a shortcut.
         ToolCatalog.use(PionCatalogue.entries)
         KeyboardBindings.catalog = PionShortcuts.catalog
+        // Noodle's sidebar line, but an agent's row says what it does until the champion picks otherwise.
+        UserDefaults.standard.register(defaults: [ConversationRowDetail.key: ConversationRowDetail.description.rawValue])
         #if PION_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
