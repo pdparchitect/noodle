@@ -262,3 +262,49 @@ extension Notification.Name {
     /// Asks the transcript showing a message to scroll to it, as after a click on its notification.
     static let revealTranscriptMessage = Notification.Name("revealTranscriptMessage")
 }
+
+/// Which messages a transcript holds, in every app: the newest page, or from where the reader last was, and a page
+/// more each time the top is reached. Layout work for every update grows with the rows a transcript holds, not with
+/// what is on screen. Later replies add to what shows rather than pushing the oldest rows out from under the reader.
+enum TranscriptPaging {
+    /// Messages shown when a conversation opens, and added each time the top is reached.
+    static let pageSize = 100
+
+    /// The index of the oldest message shown: from `firstShownID` once set, else the newest page and the reading position.
+    static func firstShown(in messages: [ChatMessage], firstShownID: UUID?, reading: UUID?) -> Int {
+        if let firstShownID, let index = messages.firstIndex(where: { $0.id == firstShownID }) { return index }
+        let reading = reading.flatMap { id in messages.firstIndex { $0.id == id } }
+        return min(max(messages.count - pageSize, 0), reading ?? .max)
+    }
+
+    /// The message to show from once the top is reached.
+    static func pageBefore(_ first: Int, in messages: [ChatMessage]) -> UUID { messages[max(first - pageSize, 0)].id }
+}
+
+/// The row at the top of a transcript with older messages: reaching it shows the page before. Rows keep their place by ID.
+struct TranscriptOlderPage: View {
+    let first: Int
+    let load: () -> Void
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            // Keyed by the first row, so a page too short to push it off screen still loads the next.
+            .task(id: first, load)
+    }
+}
+
+extension View {
+    /// Holds a transcript's first shown message once it shows, and moves it back to show a message revealed above it.
+    func transcriptPaging(firstShownID: Binding<UUID?>, shown: ArraySlice<ChatMessage>, all: [ChatMessage], first: Int) -> some View {
+        onAppear { firstShownID.wrappedValue = firstShownID.wrappedValue ?? shown.first?.id }
+            .onChange(of: shown.first?.id) { _, id in firstShownID.wrappedValue = firstShownID.wrappedValue ?? id }
+            .onReceive(NotificationCenter.default.publisher(for: .revealTranscriptMessage)) { notification in
+                guard let id = notification.object as? UUID, let index = all.firstIndex(where: { $0.id == id }),
+                      index < first else { return }
+                firstShownID.wrappedValue = id
+            }
+    }
+}

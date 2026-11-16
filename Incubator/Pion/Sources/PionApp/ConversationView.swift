@@ -162,51 +162,12 @@ struct ConversationView: View {
     }
 
     private var transcript: some View {
-        let messages = model.messages(in: conversation.id)
-        // What was said on calls, placed among the messages sent while they ran, as Noodle shows it.
-        let spoken = VoiceCallLayout.spokenLines(in: messages, live: calls.liveCallCardID(in: conversation.id).map {
-            ($0, calls.voiceCalls.call?.lines ?? [])
-        })
-        return TranscriptScrollView(
-            initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(),
-            lastMessageID: messages.last?.id,
-            lastMessageIsFromUser: messages.last?.author == .user,
-            bottomOverlayHeight: composerHeight,
-            saveViewport: { Self.viewports[conversation.id] = $0 },
-            onInteraction: { model.markRead(conversation.id) },
-            containsMessage: { id in messages.contains { $0.id == id } },
-            onBackgroundTap: { window.composerFocusRequest = UUID() }
-        ) {
-            ConversationStart(model: model, window: window, conversation: conversation, investigation: investigation)
-                .id(TranscriptScrollTarget.start)
-            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                let previous = index > 0 ? messages[index - 1] : nil
-                VStack(spacing: 0) {
-                    if let call = message.call {
-                        VoiceCallCard(store: calls, message: message, record: call)
-                            .padding(.top, 14)
-                            .frame(maxWidth: MessageRow.column)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 28)
-                    } else {
-                        MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
-                                   selectedAttachmentID: $selectedAttachmentID, preview: { showPreview($0, among: model.files(of: message)) },
-                                   continues: previous.map { $0.call == nil && $0.author == message.author
-                                       && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
-                    }
-                    if let block = spoken[message.id] {
-                        VoiceCallBlockView(store: calls, block: block)
-                            .padding(.top, 8)
-                            .frame(maxWidth: MessageRow.column)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 28)
-                    }
-                }
-                .id(message.id)
-            }
-        }
-        .id(conversation.id)
-        .transaction { $0.animation = nil }
+        Transcript(model: model, window: window, conversation: conversation, investigation: investigation,
+                   initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(), bottomOverlayHeight: composerHeight,
+                   selectedAttachmentID: $selectedAttachmentID, saveViewport: { Self.viewports[conversation.id] = $0 },
+                   preview: { showPreview($0, among: $1) })
+            // A conversation of its own starts from its newest page.
+            .id(conversation.id)
     }
 
     private func showCapture() {
@@ -299,6 +260,77 @@ struct ConversationView: View {
 }
 
 /// What a conversation is about, above its first message.
+/// The messages of a conversation, Noodle's way: a page at a time from the newest, calls placed among them.
+private struct Transcript: View {
+    let model: PionModel
+    let window: WindowState
+    let conversation: BotConversation
+    let investigation: Investigation?
+    let initialViewport: TranscriptViewport
+    let bottomOverlayHeight: CGFloat
+    @Binding var selectedAttachmentID: UUID?
+    let saveViewport: (TranscriptViewport) -> Void
+    let preview: (ConversationAttachment, [ConversationAttachment]) -> Void
+    @Environment(PionCalls.self) private var calls
+    /// The oldest message shown. Until set, the newest page and the opening reading position show.
+    @State private var firstShownID: UUID?
+
+    var body: some View {
+        let all = model.messages(in: conversation.id)
+        let first = TranscriptPaging.firstShown(in: all, firstShownID: firstShownID, reading: initialViewport.messageID)
+        let messages = all[first...]
+        // What was said on calls, placed among the messages sent while they ran, as Noodle shows it.
+        let spoken = VoiceCallLayout.spokenLines(in: all, live: calls.liveCallCardID(in: conversation.id).map {
+            ($0, calls.voiceCalls.call?.lines ?? [])
+        })
+        TranscriptScrollView(
+            initialViewport: initialViewport,
+            lastMessageID: messages.last?.id,
+            lastMessageIsFromUser: messages.last?.author == .user,
+            bottomOverlayHeight: bottomOverlayHeight,
+            saveViewport: saveViewport,
+            onInteraction: { model.markRead(conversation.id) },
+            containsMessage: { id in all.contains { $0.id == id } },
+            onBackgroundTap: { window.composerFocusRequest = UUID() }
+        ) {
+            if first == 0 {
+                ConversationStart(model: model, window: window, conversation: conversation, investigation: investigation)
+                    .id(TranscriptScrollTarget.start)
+            } else {
+                TranscriptOlderPage(first: first) { firstShownID = TranscriptPaging.pageBefore(first, in: all) }
+            }
+            // Indices into all, so the first shown row knows the message before it even when that one is not loaded.
+            ForEach(Array(zip(messages.indices, messages)), id: \.1.id) { index, message in
+                let previous = index > 0 ? all[index - 1] : nil
+                VStack(spacing: 0) {
+                    if let call = message.call {
+                        VoiceCallCard(store: calls, message: message, record: call)
+                            .padding(.top, 14)
+                            .frame(maxWidth: MessageRow.column)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 28)
+                    } else {
+                        MessageRow(model: model, window: window, conversation: conversation, investigation: investigation, message: message,
+                                   selectedAttachmentID: $selectedAttachmentID, preview: { preview($0, model.files(of: message)) },
+                                   continues: previous.map { $0.call == nil && $0.author == message.author
+                                       && message.createdAt.timeIntervalSince($0.createdAt) < 600 } ?? false)
+                    }
+                    if let block = spoken[message.id] {
+                        VoiceCallBlockView(store: calls, block: block)
+                            .padding(.top, 8)
+                            .frame(maxWidth: MessageRow.column)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 28)
+                    }
+                }
+                .id(TranscriptScrollTarget.message(message.id))
+            }
+        }
+        .transaction { $0.animation = nil }
+        .transcriptPaging(firstShownID: $firstShownID, shown: messages, all: all, first: first)
+    }
+}
+
 struct ConversationStart: View {
     let model: PionModel
     let window: WindowState
