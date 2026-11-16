@@ -18,6 +18,8 @@ struct MainWindow: View {
         if model.showsWelcome {
             WelcomeView(model: model, setup: setup)
                 .background { Backdrop().ignoresSafeArea() }
+                // Noodle's: the close button asks first, and leaving counts as Not Now.
+                .background(WelcomeCloseGuard { model.finishWelcome() })
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
                 .onAppear { window.openMain = { openWindow(id: "main") } }
         } else {

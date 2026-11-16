@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import NoodleCore
@@ -353,5 +354,62 @@ extension FirstBotSetupSteps where Leading == EmptyView {
          finish: @escaping () -> Void, picture: @escaping (AgentRecord) -> AnyView, roles: [String], columnWidth: CGFloat = 140) {
         self.init(setup: setup, runtime: runtime, accounts: accounts, makeTeam: makeTeam, introduce: introduce, finish: finish,
                   picture: picture, roles: roles, columnWidth: columnWidth) { EmptyView() }
+    }
+}
+
+/// While the welcome shows, the window's close button asks first, and closing counts as Not Now.
+/// It borrows the button's action rather than the window's delegate, which SwiftUI owns.
+struct WelcomeCloseGuard: NSViewRepresentable {
+    let leave: @MainActor () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { context.coordinator.attach(to: view.window, leave: leave) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) { context.coordinator.leave = leave }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.detach() }
+
+    @MainActor final class Coordinator: NSObject {
+        var leave: @MainActor () -> Void = {}
+        private weak var button: NSButton?
+        private weak var originalTarget: AnyObject?
+        private var originalAction: Selector?
+
+        func attach(to window: NSWindow?, leave: @escaping @MainActor () -> Void) {
+            guard button == nil, let button = window?.standardWindowButton(.closeButton) else { return }
+            self.leave = leave
+            self.button = button
+            originalTarget = button.target
+            originalAction = button.action
+            button.target = self
+            button.action = #selector(confirmClose(_:))
+        }
+
+        func detach() {
+            guard let button else { return }
+            button.target = originalTarget
+            button.action = originalAction
+            self.button = nil
+        }
+
+        @objc private func confirmClose(_ sender: NSButton) {
+            guard let window = sender.window else { return }
+            let alert = NSAlert()
+            alert.messageText = "Leave the welcome?"
+            alert.informativeText = "You can come back to it from Help > Welcome."
+            alert.addButton(withTitle: "Leave")
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn, let self else { return }
+                self.detach()
+                self.leave()
+                window.performClose(nil)
+            }
+        }
     }
 }

@@ -37,6 +37,7 @@
 
 ### Fixed
 
+- Closing the welcome asks first, as in Noodle, and leaving counts as Not Now instead of bringing the welcome back.
 - Deleting a login in Settings › Harness says so when it can't move its agents back to the default login, and then keeps the login, as in Noodle.
 - As in Noodle: long text that can't be attached when pasted stays on the clipboard instead of filling the message field; an agent's voice follows its name until you pick one, and opening Edit Runtime no longer clears the voice; New Agent picks up a harness installed while it is open and needs one to create the agent.
 - As in Noodle, a name with several lines or past the length limit, kept from earlier versions, shows its first line, shortened; an agent's first heartbeat counts from what was last said, not from when Pion opened; and a stop that can't be noted in the conversation says so.
