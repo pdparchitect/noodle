@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- New messages are found as Noodle finds them: Pion's own notices, such as a new lead, no longer make a conversation unread, reactions (yours included) reach the other agents, an agent that just spoke isn't woken by its heartbeat, and a transcript rewritten within the same second is still read.
 - As in Noodle, a reply is read when its conversation is on screen, in the main window, a window of its own or a floating one; before, only the main window's selection counted, even with Pion in the background, and a notification for a conversation open in its own window opened it in the main window too.
 - Something going wrong is said over whichever Pion window is in front, a sheet or a floating conversation included, as in Noodle; before, it waited for the main window and went unseen while that was closed.
 - Picking a message in search results or in a notification scrolls to it, and a conversation you come back to opens where you left it while Pion runs; before, Pion lost its place in the transcript.

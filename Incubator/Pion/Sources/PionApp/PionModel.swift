@@ -88,7 +88,7 @@ import UniformTypeIdentifiers
     private let tools = ToolProviderRegistry()
     private let toolAssignments = ToolAssignmentStore()
     private var loop: Task<Void, Never>?
-    private var transcriptDates: [UUID: Date] = [:]
+    private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
     private(set) var pinnedIDs: [UUID] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
@@ -148,7 +148,7 @@ import UniformTypeIdentifiers
         if !isScripted { offerAppleModel() }
         reload()
         for conversation in conversations {
-            readTranscript(conversation.id, notifying: false)
+            readTranscript(conversation.id)
             // As in Noodle, an annotation not sent yet waits in the draft until a message carries it.
             let saved = (try? repository.loadAttachments(conversationID: conversation.id)) ?? []
             if saved.contains(where: { $0.annotation != nil }) {
@@ -228,7 +228,7 @@ import UniformTypeIdentifiers
         runtime.checkHeartbeats()
         budgets.checkExpired()
         runtime.checkWakes(repository: repository)
-        for conversation in conversations { readTranscript(conversation.id, notifying: true) }
+        for conversation in conversations { readTranscript(conversation.id) }
         updateBadge()
     }
 
@@ -311,36 +311,38 @@ import UniformTypeIdentifiers
         caseRevision += 1
     }
 
-    /// Reads a transcript whose file changed. New messages from agents reach the other agents in a group.
-    private func readTranscript(_ id: UUID, notifying: Bool) {
-        let file = repository.conversationDirectory(id: id).appendingPathComponent("messages.json")
-        let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        guard modified != transcriptDates[id] || transcripts[id] == nil else { return }
-        transcriptDates[id] = modified
-        let messages = (try? repository.loadMessages(conversationID: id)) ?? []
-        // Only what was there at launch is history; a conversation first seen later is new.
-        let firstRead = transcripts[id] == nil && !launchRead
-        let known = Set((transcripts[id] ?? []).map(\.id))
-        transcripts[id] = messages
-        // As in Noodle: what arrives after the first read is unread unless the conversation is open.
-        if !firstRead { registerUnread(messages.filter { !known.contains($0.id) && $0.author != .user }) }
-        if messages.contains(where: { !$0.attachments.isEmpty }) {
+    /// Reads a transcript whose files changed. As in Noodle: bots' new messages make the conversation unread
+    /// unless it is on screen, and what bots say and anyone's reactions reach the other members.
+    private func readTranscript(_ id: UUID) {
+        let revision = TranscriptRevision(of: id, in: repository), previous = transcriptRevisions[id]
+        let messagesChanged = transcripts[id] == nil || !revision.hasSameMessages(as: previous)
+        let attachmentsChanged = !revision.hasSameAttachments(as: previous)
+        guard messagesChanged || attachmentsChanged else { return }
+        transcriptRevisions[id] = revision
+        if attachmentsChanged {
             attachments[id] = Dictionary(((try? repository.loadAttachments(conversationID: id)) ?? []).map { ($0.id, $0) }) { first, _ in first }
         }
+        guard messagesChanged else { return }
+        // Only what was there at launch is history; a conversation first seen later is new.
+        let firstRead = transcripts[id] == nil && !launchRead
+        let before = transcripts[id] ?? []
+        transcripts[id] = (try? repository.loadMessages(conversationID: id)) ?? []
         if viewing(id) { markRead(id) }
-        guard notifying, !isScripted else { return }
-        let arrived = messages.filter { !known.contains($0.id) && $0.author != .user }
-        let shown = arrived.filter { if case .agent = $0.author { notifies($0) } else { false } }
+        guard !firstRead else { return }
+        let arrivals = TranscriptArrivals(before: before, after: transcripts[id] ?? [])
+        registerUnread(arrivals.messages)
+        guard !isScripted, !arrivals.isEmpty else { return }
+        let shown = arrivals.messages.filter(notifies)
         if !shown.isEmpty { onMessagesArrived?(shown) }
-        guard !arrived.isEmpty, let recipients = try? repository.notificationRecipientIDs(for: arrived) else { return }
-        let reached = agents.filter { recipients.contains($0.id) }
-        if !reached.isEmpty { runtime.notify(reached, repository: repository) }
+        do {
+            try arrivals.deliver(to: runtime, agents: agents, conversations: conversations, repository: repository)
+        } catch { problem = error.localizedDescription }
     }
 
     /// Reads every changed transcript again, for a scenario that writes messages itself.
     func refresh() {
         reload()
-        for conversation in conversations { readTranscript(conversation.id, notifying: false) }
+        for conversation in conversations { readTranscript(conversation.id) }
         updateBadge()
     }
 
@@ -399,7 +401,7 @@ import UniformTypeIdentifiers
         else if !runtime.stopTurn(agent: agent, repository: repository) { return }
         do {
             if let message = try repository.appendStopNotice(agentID: agent.id) {
-                readTranscript(message.conversationID, notifying: false)
+                readTranscript(message.conversationID)
             }
         } catch { problem = error.localizedDescription }
     }
@@ -788,7 +790,7 @@ import UniformTypeIdentifiers
                                                   participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
         } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
         reload()
-        readTranscript(group.id, notifying: true)
+        readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
         return updated
     }
@@ -869,7 +871,7 @@ import UniformTypeIdentifiers
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty, let conversation = conversation(id) else { return }
         _ = try repository.sendUserMessage(conversationID: id, body: body, now: now)
-        readTranscript(id, notifying: false)
+        readTranscript(id)
         markRead(id)
         onSent?(id, body, [])
         deliver(body, in: conversation)
@@ -906,7 +908,7 @@ import UniformTypeIdentifiers
         _ = try repository.sendUserMessage(conversationID: id, body: VoiceMessage.messageBody,
                                            attachmentIDs: staged.map(\.id) + [attachment.id], now: now)
         drafts[id].attachments = []
-        readTranscript(id, notifying: false)
+        readTranscript(id)
         markRead(id)
         deliver(voice.transcript ?? "", in: conversation)
         onSent?(id, voice.transcript ?? VoiceMessage.messageBody, staged.map(\.originalFilename))
@@ -933,7 +935,7 @@ import UniformTypeIdentifiers
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty, let id = conversationID(for: task, of: agentID), let conversation = conversation(id) else { return }
         _ = try repository.sendUserMessage(conversationID: id, body: body, task: TaskReference(task, agentID: agentID), now: now)
-        readTranscript(id, notifying: false)
+        readTranscript(id)
         markRead(id)
         if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
     }
@@ -981,7 +983,7 @@ import UniformTypeIdentifiers
     private func react(_ message: ChatMessage, _ change: () throws -> Void) {
         do {
             try change()
-            readTranscript(message.conversationID, notifying: false)
+            readTranscript(message.conversationID)
         } catch { problem = error.localizedDescription }
     }
 
@@ -997,7 +999,7 @@ import UniformTypeIdentifiers
                                             detail: agentID.flatMap { agent($0)?.displayName } ?? "No lead"), to: conversation.id)
             }
             reload()
-            readTranscript(conversation.id, notifying: false)
+            readTranscript(conversation.id)
             if !isScripted { runtime.notify(members(of: updated), repository: repository) }
         } catch { problem = error.localizedDescription }
     }
@@ -1011,7 +1013,7 @@ import UniformTypeIdentifiers
                                                attachmentIDs: files.map(\.id), now: now)
             onSent?(id, body, files.map(\.originalFilename))
             drafts.clear(id)
-            readTranscript(id, notifying: false)
+            readTranscript(id)
             markRead(id)
             deliver(body, in: conversation)
         } catch { problem = error.localizedDescription }
@@ -1026,7 +1028,7 @@ import UniformTypeIdentifiers
         _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? attached.map(\.originalFilename).joined(separator: ", ") : body,
                                            attachmentIDs: attached.map(\.id), now: now)
         onSent?(id, body, attached.map(\.originalFilename))
-        readTranscript(id, notifying: false)
+        readTranscript(id)
         deliver(body, in: conversation)
     }
 
@@ -1108,7 +1110,7 @@ import UniformTypeIdentifiers
         guard let conversation = conversation(id) else { throw WorkspaceError.missingConversation(id) }
         let (copy, _) = try repository.forward(attachment, to: id, comment: comment, now: now)
         remember([copy])
-        readTranscript(id, notifying: false)
+        readTranscript(id)
         deliver(comment.trimmingCharacters(in: .whitespacesAndNewlines), in: conversation)
         onSent?(id, comment.trimmingCharacters(in: .whitespacesAndNewlines), [copy.originalFilename])
     }
@@ -1139,7 +1141,7 @@ import UniformTypeIdentifiers
                                                 existingAgents: agents, folders: folders, leadID: lead, now: now)
         } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
         reload()
-        readTranscript(group.id, notifying: false)
+        readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: nil, to: group))
         return group
     }
@@ -1210,7 +1212,7 @@ import UniformTypeIdentifiers
             }
         } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
         reload()
-        readTranscript(group.id, notifying: true)
+        readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
         if group.lead != draft.lead { setLead(draft.lead, of: group) }
         return updated
@@ -1230,7 +1232,7 @@ import UniformTypeIdentifiers
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, number: number, now: now)
         reload()
-        readTranscript(group.id, notifying: false)
+        readTranscript(group.id)
         let leading = draft.lead.flatMap { agent($0)?.displayName }
             .map { "@\($0) leads, and sets the severity once the evidence allows." }
             ?? "There is no lead yet, so the severity stays unassessed until I choose one."

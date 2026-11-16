@@ -25,12 +25,6 @@ private struct TranscriptSnapshot: Sendable {
     let revisions: [UUID: TranscriptRevision]
 }
 
-private struct TranscriptRevision: Equatable, Sendable {
-    let messagesModifiedAt: Date?
-    let messagesSize: UInt64?
-    let attachmentsModifiedAt: Date?
-}
-
 @MainActor
 @Observable
 final class NoodleStore {
@@ -1002,7 +996,7 @@ final class NoodleStore {
                 }
             )
             transcriptRevisions = Dictionary(uniqueKeysWithValues: conversations.map {
-                ($0.id, Self.transcriptRevision(for: $0.id, repository: repository))
+                ($0.id, TranscriptRevision(of: $0.id, in: repository))
             })
             for conversation in conversations {
                 drafts.restoreAnnotations(attachmentsByConversation[conversation.id, default: []],
@@ -2584,17 +2578,16 @@ final class NoodleStore {
         var messagesChanged = Set(currentMessages.keys) != conversationIDs
         var attachmentsChanged = Set(currentAttachments.keys) != conversationIDs
         for conversation in conversations {
-            let revision = transcriptRevision(for: conversation.id, repository: repository)
+            let revision = TranscriptRevision(of: conversation.id, in: repository)
             revisions[conversation.id] = revision
-            if revision.messagesModifiedAt == currentRevisions[conversation.id]?.messagesModifiedAt,
-               revision.messagesSize == currentRevisions[conversation.id]?.messagesSize,
+            if revision.hasSameMessages(as: currentRevisions[conversation.id]),
                let current = currentMessages[conversation.id] {
                 messages[conversation.id] = current
             } else {
                 messages[conversation.id] = try repository.loadMessages(conversationID: conversation.id)
                 messagesChanged = true
             }
-            if revision.attachmentsModifiedAt == currentRevisions[conversation.id]?.attachmentsModifiedAt,
+            if revision.hasSameAttachments(as: currentRevisions[conversation.id]),
                let current = currentAttachments[conversation.id] {
                 attachments[conversation.id] = current
             } else {
@@ -2613,52 +2606,14 @@ final class NoodleStore {
         )
     }
 
-    nonisolated private static func transcriptRevision(
-        for conversationID: UUID,
-        repository: WorkspaceRepository
-    ) -> TranscriptRevision {
-        // Every conversation, every second: one lstat each, not FileManager's attributes,
-        // which also read extended attributes and the owner's name.
-        func entry(_ path: String) -> stat? {
-            var info = stat()
-            return lstat(path, &info) == 0 ? info : nil
-        }
-        func date(_ time: timespec) -> Date {
-            Date(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1_000_000_000)
-        }
-        let directory = repository.conversationDirectory(id: conversationID).path
-        let messages = entry(directory + "/messages.json"), attachments = entry(directory + "/Attachments")
-        return TranscriptRevision(
-            messagesModifiedAt: messages.map { date($0.st_mtimespec) },
-            messagesSize: messages.map { UInt64($0.st_size) },
-            attachmentsModifiedAt: attachments.map { date($0.st_mtimespec) }
-        )
-    }
-
     private func applyTranscriptSnapshot(_ snapshot: TranscriptSnapshot) {
         transcriptRevisions = snapshot.revisions
         guard snapshot.conversationsChanged || snapshot.messagesChanged || snapshot.attachmentsChanged else { return }
 
-        let newAgentMessages: [ChatMessage]
-        let reactionChanges: [MessageReactionChange]
-        if snapshot.messagesChanged {
-            let knownMessageIDs = Set(messagesByConversation.values.flatMap { $0.map(\.id) })
-            let knownReactionIDs = Set(messagesByConversation.values.flatMap { $0 }
-                .flatMap { $0.reactionChanges ?? [] }.map(\.id))
-            newAgentMessages = snapshot.messages.values
-                .flatMap { $0 }
-                .filter { message in
-                    guard !knownMessageIDs.contains(message.id) else { return false }
-                    if case .agent = message.author { return true }
-                    return false
-                }
-                .sorted { $0.createdAt < $1.createdAt }
-            reactionChanges = snapshot.messages.values.flatMap { $0 }
-                .flatMap { $0.reactionChanges ?? [] }.filter { !knownReactionIDs.contains($0.id) }
-        } else {
-            newAgentMessages = []
-            reactionChanges = []
-        }
+        // Read before the new transcripts replace them.
+        let arrivals = snapshot.messagesChanged
+            ? TranscriptArrivals(before: messagesByConversation.values.joined(), after: snapshot.messages.values.joined())
+            : nil
 
         if snapshot.conversationsChanged {
             conversations = snapshot.conversations
@@ -2666,22 +2621,14 @@ final class NoodleStore {
         }
         if snapshot.messagesChanged { messagesByConversation = snapshot.messages }
         if snapshot.attachmentsChanged { attachmentsByConversation = snapshot.attachments }
-        for message in newAgentMessages {
-            if case .agent(let id) = message.author { runtime.recordActivity(for: id) }
+        guard let arrivals else { return }
+        do {
+            try arrivals.deliver(to: runtime, agents: agents, conversations: snapshot.conversations, repository: repository)
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        notifyGroupParticipants(for: newAgentMessages)
-        for change in reactionChanges {
-            if case .agent(let id) = change.author { runtime.recordActivity(for: id) }
-        }
-        let reactionRecipientIDs = Set(reactionChanges.flatMap { change in
-            (snapshot.conversations.first { $0.id == change.conversationID }?.participantIDs ?? [])
-                .filter { change.author != .agent($0) }
-        })
-        if !reactionRecipientIDs.isEmpty {
-            runtime.notify(agents.filter { reactionRecipientIDs.contains($0.id) }, repository: repository)
-        }
-        registerUnreadMessages(newAgentMessages)
-        postNotifications(for: newAgentMessages)
+        registerUnreadMessages(arrivals.messages)
+        postNotifications(for: arrivals.messages)
     }
 
     func participants(for conversation: BotConversation) -> [AgentRecord] {
@@ -2805,20 +2752,6 @@ final class NoodleStore {
                 runtime.notify(participants(for: conversation), in: conversation, body: message.body, repository: repository)
             }
         }, problem: { errorMessage = $0 })
-    }
-
-    private func notifyGroupParticipants(for messages: [ChatMessage]) {
-        guard !messages.isEmpty else { return }
-
-        do {
-            let recipientIDs = try repository.notificationRecipientIDs(for: messages)
-            let recipients = agents.filter { recipientIDs.contains($0.id) }
-            if !recipients.isEmpty {
-                runtime.notify(recipients, repository: repository)
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 
     private func registerUnreadMessages(_ messages: [ChatMessage]) {

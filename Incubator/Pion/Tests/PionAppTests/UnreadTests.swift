@@ -54,4 +54,38 @@ import XCTest
         XCTAssertTrue(model.unread.unread.contains(direct.id), "Selected but not on screen")
         XCTAssertFalse(model.isUnread(group.id), "On screen in its own window")
     }
+
+    /// As in Noodle: the app's own notices, such as a new lead, leave a conversation as read as it was.
+    func testNoticesDoNotMakeAConversationUnread() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionUnread-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let group = try model.createGroup(name: "Watch", description: nil, members: [avery.id])
+        model.markRead(group.id)
+        model.selection = nil
+        model.setLead(avery.id, of: group)
+        XCTAssertTrue(model.messages(in: group.id).contains { $0.author == .system }, "The lead is announced")
+        XCTAssertFalse(model.isUnread(group.id))
+    }
+
+    /// As in Noodle: a transcript rewritten within the same second is still read again, by its size.
+    func testATranscriptChangedWithinTheSameSecondIsRead() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionUnread-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let direct = try XCTUnwrap(model.directConversation(of: avery))
+        let file = model.repository.conversationDirectory(id: direct.id).appendingPathComponent("messages.json")
+        let stamp = Date(timeIntervalSince1970: 1_800_000_000)
+        _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: direct.id, body: "One.")
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: file.path)
+        model.refresh()
+        _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: direct.id, body: "Two.")
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: file.path)
+        model.refresh()
+        XCTAssertEqual(model.messages(in: direct.id).last?.body, "Two.")
+    }
 }
