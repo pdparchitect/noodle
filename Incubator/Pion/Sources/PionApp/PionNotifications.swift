@@ -15,12 +15,8 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
         AgentNotifications.replySound = { MessageReceivedSound.notificationSound() }
         AgentNotifications.configure(delegate: self)
         model.onMessagesArrived = { [weak self] messages in
-            guard let model = self?.model, MessageReceivedSound.announce(newMessages: messages.count) else { return }
-            for message in messages {
-                guard case .agent(let id) = message.author, let agent = model.agent(id),
-                      let conversation = model.conversation(message.conversationID) else { continue }
-                AgentNotifications.post(message: message, from: agent, in: conversation)
-            }
+            guard let model = self?.model else { return }
+            AgentNotifications.post(replies: messages, agent: { model.agent($0) }, conversation: { model.conversation($0) })
         }
         model.onNotificationsNarrowed = { AgentNotifications.withdraw(conversation: $0) }
         // As Noodle's: the Dock shows how many conversations wait for the champion.

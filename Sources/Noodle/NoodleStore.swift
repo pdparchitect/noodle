@@ -2730,22 +2730,9 @@ final class NoodleStore {
     private func postNotifications(for messages: [ChatMessage]) {
         guard connectsServices else { return }
         // A muted group is silent, and one in Mentions only speaks up only for the person's name.
-        let messages = messages.filter(notifies)
-        guard !messages.isEmpty else { return }
-        guard MessageReceivedSound.announce(newMessages: messages.count) else { return }
-
-        for message in messages {
-            guard case .agent(let agentID) = message.author,
-                  let agent = agents.first(where: { $0.id == agentID }),
-                  let conversation = conversations.first(where: { $0.id == message.conversationID }) else {
-                continue
-            }
-            AgentNotifications.post(
-                message: message,
-                from: agent,
-                in: conversation
-            )
-        }
+        AgentNotifications.post(replies: messages.filter(notifies),
+                                agent: { id in self.agents.first { $0.id == id } },
+                                conversation: { id in self.conversations.first { $0.id == id } })
     }
 
     func title(for conversation: BotConversation) -> String {

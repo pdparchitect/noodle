@@ -57,6 +57,17 @@ import UserNotifications
         return content
     }
 
+    /// Posts the bots' replies among `messages`, those that notify, once the reply sound has had its say: the person's
+    /// own messages and the app's notices never post.
+    static func post(replies messages: [ChatMessage], agent: (UUID) -> AgentRecord?, conversation: (UUID) -> BotConversation?) {
+        guard !messages.isEmpty, MessageReceivedSound.announce(newMessages: messages.count) else { return }
+        for message in messages {
+            guard case .agent(let id) = message.author, let agent = agent(id),
+                  let conversation = conversation(message.conversationID) else { continue }
+            post(message: message, from: agent, in: conversation)
+        }
+    }
+
     static func post(message: ChatMessage, from agent: AgentRecord, in conversation: BotConversation) {
         guard shouldPresentActivity else { return }
         let content = content(message: message, from: agent, in: conversation)
