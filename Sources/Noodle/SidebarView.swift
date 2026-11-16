@@ -68,14 +68,6 @@ private struct SidebarList: View {
     let searchIsFocused: Bool
     let focusComposer: () -> Void
     let focusRequest: UUID?
-    /// The message picked in the search results, so its row shows selected rather than its conversation's.
-    @State private var pickedMention: UUID?
-
-    /// A row of the search results: a bot or group, or one message in one.
-    private enum SearchPick: Hashable {
-        case conversation(UUID), mention(UUID)
-    }
-
     var body: some View {
         @Bindable var store = store
 
@@ -100,10 +92,10 @@ private struct SidebarList: View {
             } else {
                 List(selection: Binding(get: { store.selectedConversationID }, set: select)) {
                     SidebarTasks(store: store, filter: taskFilter, inList: true)
-                    section("Pinned", sections.pinned) { $0 }
-                    section("Unread", sections.unread) { $0 }
-                    section("Bots", sections.bots) { $0 }
-                    section("Groups", sections.groups) { $0 }
+                    section("Pinned", sections.pinned)
+                    section("Unread", sections.unread)
+                    section("Bots", sections.bots)
+                    section("Groups", sections.groups)
                 }
                 .listStyle(.sidebar)
             }
@@ -129,70 +121,44 @@ private struct SidebarList: View {
 
     /// One list, whichever style the sidebar has: the bots and groups that match, then each message that does.
     private func searchResults(_ search: NoodleStore.SidebarSearch) -> some View {
-        List(selection: Binding<SearchPick?>(get: {
-            guard let id = store.selectedConversationID else { return nil }
-            if let pickedMention, search.mentions.contains(where: { $0.messageID == pickedMention && $0.conversationID == id }) {
-                return .mention(pickedMention)
-            }
-            return .conversation(id)
-        }, set: { pick in
-            switch pick {
-            case .conversation(let id):
-                pickedMention = nil
-                select(id)
-            case .mention(let messageID):
-                pickedMention = messageID
-                select(search.mentions.first { $0.messageID == messageID }?.conversationID)
-            case nil:
-                select(nil)
-            }
-        })) {
-            section("Bots", search.bots) { SearchPick.conversation($0) }
-            section("Groups", search.groups) { SearchPick.conversation($0) }
-            if !search.mentions.isEmpty, let term = ConversationSearch(store.searchText) {
-                Section("Messages") {
-                    ForEach(search.mentions, id: \.messageID) { match in
-                        if let conversation = store.conversations.first(where: { $0.id == match.conversationID }) {
-                            MentionRow(picture: AnyView(ConversationAvatar(participants: store.shownParticipants(for: conversation),
-                                                                           isGroup: conversation.kind == .group, size: 42)),
-                                       title: store.title(for: conversation), timestamp: SidebarTimestamp.text(for: match.createdAt),
-                                       snippet: term.highlighted(match.snippet))
-                                .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
-                                .listRowSeparator(.visible, edges: .bottom)
-                                .listRowSeparatorTint(Color.primary.opacity(0.12))
-                                .tag(SearchPick.mention(match.messageID))
-                                .contextMenu { menu(for: conversation) }
-                        }
-                    }
-                    if search.hiddenMentions > 0 {
-                        Button("Show All \(search.mentions.count + search.hiddenMentions)") { store.showsAllMentions = true }
-                            .buttonStyle(.link)
-                            .selectionDisabled()
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
+        SidebarSearchResults(
+            sections: [("Bots", search.bots), ("Groups", search.groups)],
+            mentions: search.mentions, hiddenMentions: search.hiddenMentions, term: ConversationSearch(store.searchText),
+            selection: store.selectedConversationID, select: select,
+            pickMessage: { match in
+                select(match.conversationID)
+                store.revealMessage(match.messageID, in: match.conversationID)
+            },
+            showAll: { store.showsAllMentions = true },
+            conversation: { id in store.conversations.first { $0.id == id } },
+            mentionPicture: { AnyView(ConversationAvatar(participants: store.shownParticipants(for: $0), isGroup: $0.kind == .group, size: 42)) },
+            mentionTitle: { store.title(for: $0) },
+            row: { conversationRow($0) },
+            menu: { menu(for: $0) })
     }
 
     @ViewBuilder
-    private func section<Tag: Hashable>(_ title: String, _ conversations: [BotConversation], tag: @escaping (UUID) -> Tag) -> some View {
+    private func section(_ title: String, _ conversations: [BotConversation]) -> some View {
         if !conversations.isEmpty {
             Section(title) {
                 ForEach(conversations) { conversation in
-                    ConversationRow(conversationID: conversation.id, isGroup: conversation.kind == .group,
-                        isSelected: store.selectedConversationID == conversation.id,
-                        content: ConversationRowContent(conversation, store: store, detail: ConversationRowDetail(rawValue: rowDetail) ?? .standard))
-                        .equatable()
-                        // Outside the equatable row, where the list can see them.
-                        .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
-                        .listRowSeparator(.visible, edges: .bottom)
-                        .listRowSeparatorTint(Color.primary.opacity(0.12))
-                        .tag(tag(conversation.id))
+                    conversationRow(conversation)
+                        .tag(conversation.id)
                         .contextMenu { menu(for: conversation) }
                 }
             }
         }
+    }
+
+    private func conversationRow(_ conversation: BotConversation) -> some View {
+        ConversationRow(conversationID: conversation.id, isGroup: conversation.kind == .group,
+            isSelected: store.selectedConversationID == conversation.id,
+            content: ConversationRowContent(conversation, store: store, detail: ConversationRowDetail(rawValue: rowDetail) ?? .standard))
+            .equatable()
+            // Outside the equatable row, where the list can see them.
+            .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
+            .listRowSeparator(.visible, edges: .bottom)
+            .listRowSeparatorTint(Color.primary.opacity(0.12))
     }
 
     /// A section as a grid of pictures under its title, set like a list's section header.

@@ -99,3 +99,13 @@ extension ConversationDrafts {
         self[conversationID].attachments.append(contentsOf: saved.filter { !existing.contains($0.id) })
     }
 }
+
+extension WorkspaceRepository {
+    /// Saves an annotation on a file as an attachment of its own, named after the file it marks.
+    public func importAnnotation(_ annotation: AttachmentAnnotation, content: Data, on source: ConversationAttachment)
+        throws -> ConversationAttachment {
+        let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
+        return try importAttachment(data: content, originalFilename: "Annotation — \(stem.prefix(160)).\(annotation.fileExtension)",
+                                    into: source.conversationID, mediaType: annotation.mediaType, annotation: annotation)
+    }
+}

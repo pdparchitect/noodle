@@ -90,7 +90,22 @@ struct Sidebar: View {
         let line = ConversationRowDetail(rawValue: rowDetail) ?? .standard
         Group {
             if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions) {
-                SidebarSearchResults(model: model, window: window, search: search, line: line, showsAll: $showsAllMentions)
+                SidebarSearchResults(
+                    sections: [("Investigations", search.investigations), ("Groups", search.groups), ("Agents", search.agents)],
+                    mentions: search.mentions, hiddenMentions: search.hiddenMentions, term: ConversationSearch(window.searchText),
+                    selection: model.selection, select: { model.selection = $0 },
+                    pickMessage: { match in
+                        model.selection = match.conversationID
+                        // After the transcript for the selection is on screen.
+                        DispatchQueue.main.async { NotificationCenter.default.post(name: .revealTranscriptMessage, object: match.messageID) }
+                    },
+                    showAll: { showsAllMentions = true },
+                    conversation: { model.conversation($0) },
+                    mentionPicture: { AnyView(ConversationPicture(model: model, conversation: $0, size: 42)) },
+                    mentionTitle: { model.title(of: $0) },
+                    row: { ConversationChoiceRow(model: model, conversation: $0, line: line) },
+                    menu: { ConversationRowMenu(model: model, window: window, conversation: $0) })
+                .overlay { if search.isEmpty { ContentUnavailableView.search(text: window.searchText) } }
             } else {
                 list(line: line)
             }
@@ -167,78 +182,6 @@ struct Sidebar: View {
             }
         }
     }
-}
-
-/// Noodle's search results: Investigations, groups and agents by name, then each message that says the term,
-/// landing on that message when picked.
-private struct SidebarSearchResults: View {
-    private enum Pick: Hashable { case conversation(UUID), mention(UUID) }
-
-    let model: PionModel
-    let window: WindowState
-    let search: PionModel.SidebarSearch
-    let line: ConversationRowDetail
-    @Binding var showsAll: Bool
-    @State private var pickedMention: UUID?
-
-    var body: some View {
-        List(selection: Binding<Pick?>(get: {
-            guard let id = model.selection else { return nil }
-            if let pickedMention, search.mentions.contains(where: { $0.messageID == pickedMention && $0.conversationID == id }) {
-                return .mention(pickedMention)
-            }
-            return .conversation(id)
-        }, set: { pick in
-            switch pick {
-            case .conversation(let id):
-                pickedMention = nil
-                model.selection = id
-            case .mention(let messageID):
-                pickedMention = messageID
-                model.selection = search.mentions.first { $0.messageID == messageID }?.conversationID
-                // After the transcript for the selection is on screen.
-                DispatchQueue.main.async { NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID) }
-            case nil:
-                model.selection = nil
-            }
-        })) {
-            section("Investigations", search.investigations)
-            section("Groups", search.groups)
-            section("Agents", search.agents)
-            if !search.mentions.isEmpty, let term = ConversationSearch(window.searchText) {
-                Section("Messages") {
-                    ForEach(search.mentions, id: \.messageID) { match in
-                        if let conversation = model.conversation(match.conversationID) {
-                            MentionRow(picture: AnyView(ConversationPicture(model: model, conversation: conversation, size: 42)), title: model.title(of: conversation),
-                                       timestamp: SidebarTimestamp.text(for: match.createdAt),
-                                       snippet: term.highlighted(match.snippet))
-                                .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
-                                .tag(Pick.mention(match.messageID))
-                                .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
-                        }
-                    }
-                    if search.hiddenMentions > 0 {
-                        Button("Show All \(search.mentions.count + search.hiddenMentions)") { showsAll = true }
-                            .buttonStyle(.link)
-                            .selectionDisabled()
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
-    }
-
-    @ViewBuilder private func section(_ title: String, _ conversations: [BotConversation]) -> some View {
-        if !conversations.isEmpty {
-            Section(title) {
-                ForEach(conversations) { conversation in
-                    ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(Pick.conversation(conversation.id))
-                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
-                }
-            }
-        }
-    }
-
 }
 
 /// A conversation's picture where it stands for the whole conversation: an Investigation's severity, an agent's

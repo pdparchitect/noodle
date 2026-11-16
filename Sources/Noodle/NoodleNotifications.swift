@@ -20,17 +20,21 @@ extension AgentNotifications {
 }
 
 extension NoodleStore {
+    /// Shows a message in its conversation: a transcript mounted later restores the place, and one already on
+    /// screen scrolls to it. The latest message is the bottom, which keeps following new replies.
+    func revealMessage(_ messageID: UUID, in conversationID: UUID) {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }),
+              messages(for: conversation).contains(where: { $0.id == messageID }) else { return }
+        let isLatest = messages(for: conversation).last?.id == messageID
+        saveTranscriptViewport(isLatest ? TranscriptViewport()
+            : TranscriptViewport(isAtBottom: false, messageID: messageID), for: conversationID)
+        NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID)
+    }
+
     /// Lands on the notified message, in whichever window shows its conversation.
     func openNotification(conversationID: UUID, messageID: UUID?) {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
-        if let messageID, messages(for: conversation).contains(where: { $0.id == messageID }) {
-            // The latest message is the bottom, which keeps following new replies.
-            let isLatest = messages(for: conversation).last?.id == messageID
-            // A transcript mounted later restores this; one already on screen scrolls to it.
-            saveTranscriptViewport(isLatest ? TranscriptViewport()
-                : TranscriptViewport(isAtBottom: false, messageID: messageID), for: conversationID)
-            NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID)
-        }
+        if let messageID { revealMessage(messageID, in: conversationID) }
         guard !conversationWindows.focus(conversationID) else { return }
         // Also covers a closed main window and a launch from the notification, before any window exists.
         selectedConversationID = conversationID

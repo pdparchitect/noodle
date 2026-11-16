@@ -334,6 +334,8 @@ import UniformTypeIdentifiers
         var mentions: [LinkMessageMatch] = []
         /// How many more mentions Show All would list.
         var hiddenMentions = 0
+
+        var isEmpty: Bool { investigations.isEmpty && groups.isEmpty && agents.isEmpty && mentions.isEmpty }
     }
 
     /// Nil while nothing is searched for. Closed Investigations are found too.
@@ -354,11 +356,7 @@ import UniformTypeIdentifiers
         var result = SidebarSearch(investigations: groups.filter { investigation($0.id) != nil },
                                    groups: groups.filter { investigation($0.id) == nil },
                                    agents: sections.bots.compactMap { byID[$0] })
-        let mentions = search.messageMatches(in: listed.map { (id: $0.id, messages: messages(in: $0.id)) },
-                                             limit: LinkMessageSearch.maximumLimit) { message in
-            (message.id, message.createdAt,
-             message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
-        }
+        let mentions = search.messageMatches(in: listed.map { (id: $0.id, messages: messages(in: $0.id)) })
         (result.mentions, result.hiddenMentions) = search.shown(mentions, besideNames: !sections.isEmpty, showingAll: showingAll)
         return result
     }
@@ -1000,10 +998,7 @@ import UniformTypeIdentifiers
 
     /// An annotation on a file, saved beside it as a new attachment for the next message.
     func saveAnnotation(_ annotation: AttachmentAnnotation, content: Data, source: ConversationAttachment) throws {
-        let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
-        let attachment = try repository.importAttachment(data: content,
-            originalFilename: "Annotation — \(stem.prefix(160)).\(annotation.fileExtension)", into: source.conversationID,
-            mediaType: annotation.mediaType, annotation: annotation)
+        let attachment = try repository.importAnnotation(annotation, content: content, on: source)
         remember([attachment], pending: attachment)
     }
 

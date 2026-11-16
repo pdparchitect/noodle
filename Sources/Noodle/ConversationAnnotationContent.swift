@@ -19,10 +19,7 @@ enum ConversationAnnotationContent {
             let savedNote = AttachmentAnnotation(source: savedSource, quote: note.quote, comment: note.comment,
                 region: note.region, sourceMessageID: note.sourceMessageID)
             let data = savedNote.region == nil ? Data(savedNote.textRepresentation.utf8) : content
-            let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
-            let attachment = try repository.importAttachment(data: data,
-                originalFilename: "Annotation — \(stem.prefix(160)).\(savedNote.fileExtension)",
-                into: source.conversationID, mediaType: savedNote.mediaType, annotation: savedNote)
+            let attachment = try repository.importAnnotation(savedNote, content: data, on: source)
             return Saved(source: savedSource, attachment: attachment)
         } catch {
             try? repository.removeAttachment(savedSource)

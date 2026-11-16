@@ -27,3 +27,15 @@ extension ConversationRowDetail {
              latestMessage: latestMessage)
     }
 }
+
+extension ConversationSearch {
+    /// Each message that says the term, newest first, read as its row shows it, without markdown; the app's own
+    /// notices are left out.
+    public func messageMatches(in conversations: [(id: UUID, messages: [ChatMessage])],
+                               limit: Int = LinkMessageSearch.maximumLimit) -> [LinkMessageMatch] {
+        messageMatches(in: conversations, limit: limit) { message in
+            (message.id, message.createdAt,
+             message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
+        }
+    }
+}

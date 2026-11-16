@@ -253,3 +253,81 @@ struct MentionRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// What a sidebar search found, as one list in every app: each section of conversations that match, then each
+/// message that says the term. Picking a message opens its conversation there.
+struct SidebarSearchResults<Row: View, RowMenu: View>: View {
+    private enum Pick: Hashable { case conversation(UUID), mention(UUID) }
+
+    let sections: [(title: String, conversations: [BotConversation])]
+    let mentions: [LinkMessageMatch]
+    let hiddenMentions: Int
+    let term: ConversationSearch?
+    let selection: UUID?
+    let select: (UUID?) -> Void
+    /// Opens a message's conversation at that message.
+    let pickMessage: (LinkMessageMatch) -> Void
+    let showAll: () -> Void
+    let conversation: (UUID) -> BotConversation?
+    /// A message's conversation as its row says it: its picture, 42 points across, and its name.
+    let mentionPicture: (BotConversation) -> AnyView
+    let mentionTitle: (BotConversation) -> String
+    @ViewBuilder let row: (BotConversation) -> Row
+    @ViewBuilder let menu: (BotConversation) -> RowMenu
+    @State private var pickedMention: UUID?
+
+    var body: some View {
+        List(selection: Binding<Pick?>(get: {
+            guard let id = selection else { return nil }
+            if let pickedMention, mentions.contains(where: { $0.messageID == pickedMention && $0.conversationID == id }) {
+                return .mention(pickedMention)
+            }
+            return .conversation(id)
+        }, set: { pick in
+            switch pick {
+            case .conversation(let id):
+                pickedMention = nil
+                select(id)
+            case .mention(let messageID):
+                pickedMention = messageID
+                if let match = mentions.first(where: { $0.messageID == messageID }) { pickMessage(match) }
+            case nil:
+                select(nil)
+            }
+        })) {
+            ForEach(sections, id: \.title) { section in
+                if !section.conversations.isEmpty {
+                    Section(section.title) {
+                        ForEach(section.conversations) { conversation in
+                            row(conversation)
+                                .tag(Pick.conversation(conversation.id))
+                                .contextMenu { menu(conversation) }
+                        }
+                    }
+                }
+            }
+            if !mentions.isEmpty, let term {
+                Section("Messages") {
+                    ForEach(mentions, id: \.messageID) { match in
+                        if let conversation = conversation(match.conversationID) {
+                            MentionRow(picture: mentionPicture(conversation), title: mentionTitle(conversation),
+                                       timestamp: SidebarTimestamp.text(for: match.createdAt),
+                                       snippet: term.highlighted(match.snippet))
+                                .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
+                                .listRowSeparator(.visible, edges: .bottom)
+                                .listRowSeparatorTint(Color.primary.opacity(0.12))
+                                .tag(Pick.mention(match.messageID))
+                                .contextMenu { menu(conversation) }
+                        }
+                    }
+                    if hiddenMentions > 0 {
+                        Button("Show All \(mentions.count + hiddenMentions)", action: showAll)
+                            .buttonStyle(.link)
+                            .selectionDisabled()
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+}

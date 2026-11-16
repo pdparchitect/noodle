@@ -756,10 +756,7 @@ final class NoodleStore {
             if delay > .zero { try? await Task.sleep(for: delay) }
             guard !Task.isCancelled else { return }
             let matches = await Task.detached(priority: .userInitiated) {
-                search.messageMatches(in: conversations, limit: LinkMessageSearch.maximumLimit) { message in
-                    (message.id, message.createdAt,
-                     message.author == .system ? nil : MarkdownPlainText.convert(MessageSegment.previewText(message.body)))
-                }
+                search.messageMatches(in: conversations)
             }.value
             guard !Task.isCancelled else { return }
             self?.mentionMatches = (search.term, matches)
@@ -2459,10 +2456,7 @@ final class NoodleStore {
         guard conversations.contains(where: { $0.id == source.conversationID }) else {
             throw WorkspaceError.missingConversation(source.conversationID)
         }
-        let stem = URL(fileURLWithPath: source.originalFilename).deletingPathExtension().lastPathComponent
-        let attachment = try repository.importAttachment(data: content,
-            originalFilename: "Annotation — \(stem.prefix(160)).\(annotation.fileExtension)", into: source.conversationID,
-            mediaType: annotation.mediaType, annotation: annotation)
+        let attachment = try repository.importAnnotation(annotation, content: content, on: source)
         attachmentsByConversation[source.conversationID, default: []].append(attachment)
         drafts[source.conversationID].attachments.append(attachment)
     }
