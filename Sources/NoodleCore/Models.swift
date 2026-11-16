@@ -150,6 +150,14 @@ extension BotConversation {
     public static func editWakesMembers(from before: BotConversation, to after: BotConversation) -> Bool {
         Set(before.participantIDs) != Set(after.participantIDs) || (before.publicDescription ?? "") != (after.publicDescription ?? "")
     }
+
+    /// Whether a group's sheet changes it, in every app, so Save waits for a change: its name, description, members,
+    /// folders or lead. Spaces around the words and the members' order are not a change.
+    public func editChanges(name: String, description: String, members: Set<UUID>, folders: [AgentFolder], lead: UUID?) -> Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines) != displayName
+            || description.trimmingCharacters(in: .whitespacesAndNewlines) != (publicDescription ?? "")
+            || members != Set(participantIDs) || folders != (self.folders ?? []) || lead != self.lead
+    }
 }
 
 /// Someone other than a bot's owner who talks with it, as its bot knows them.

@@ -128,8 +128,10 @@ struct NewBotSheet: View {
                 }
                 switch selectedTab {
                 case .general:
-                    BotPublicDescriptionEditor(publicDescription: $publicDescription)
-                    BotBackstoryEditor(backstory: $backstory)
+                    SheetDescriptionField(title: "Description", prompt: "Briefly describe what this bot does…", text: $publicDescription, lines: 2...3,
+                                          footnote: "Visible to other bots in shared groups. The private backstory below is never included.")
+                    SheetInstructionsEditor(title: "Backstory", text: $backstory, prompt: "Describe who this bot is, its role, tone, or priorities…",
+                                            footnote: "Who this bot is and what it cares about. Only this bot sees it.")
                     ConversationBackgroundSettingsRow(draft: $backgroundDraft)
                     if HubHarnessChoice(identifier: selectedHarnessIdentifier) == nil {
                         FoldersSettingsRow(folders: $folders, owner: .bot)
@@ -351,8 +353,10 @@ struct EditBotSheet: View {
                 BotEditorTabPicker(selection: $selectedTab, harnessIdentifier: selectedHarnessIdentifier)
                 switch selectedTab {
                 case .general:
-                    BotPublicDescriptionEditor(publicDescription: $publicDescription)
-                    BotBackstoryEditor(backstory: $backstory)
+                    SheetDescriptionField(title: "Description", prompt: "Briefly describe what this bot does…", text: $publicDescription, lines: 2...3,
+                                          footnote: "Visible to other bots in shared groups. The private backstory below is never included.")
+                    SheetInstructionsEditor(title: "Backstory", text: $backstory, prompt: "Describe who this bot is, its role, tone, or priorities…",
+                                            footnote: "Who this bot is and what it cares about. Only this bot sees it.")
                     if let conversation = directConversation {
                         ConversationBackgroundSettingsRow(conversation: conversation, draft: $backgroundDraft)
                     }
@@ -670,64 +674,6 @@ struct BotSharingPeople: View {
     }
 }
 
-private struct BotPublicDescriptionEditor: View {
-    @Binding var publicDescription: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Description")
-                .font(.caption.weight(.semibold))
-
-            TextField(
-                "Briefly describe what this bot does…",
-                text: $publicDescription,
-                axis: .vertical
-            )
-            .textFieldStyle(.roundedBorder)
-            .lineLimit(2...3)
-            .autocorrectionDisabled(false)
-
-            Text("Visible to other bots in shared groups. The private backstory below is never included.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct BotBackstoryEditor: View {
-    @Binding var backstory: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Backstory")
-                .font(.caption.weight(.semibold))
-
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $backstory)
-                    .font(.system(size: 13))
-                    .autocorrectionDisabled(false)
-                    .roundedBorderEditor()
-
-                if backstory.isEmpty {
-                    Text("Describe who this bot is, its role, tone, or priorities…")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(nsColor: .placeholderTextColor))
-                        .padding(.horizontal, 7)
-                        // Match the editor's outer inset; the native text view
-                        // contributes its own horizontal line-fragment padding.
-                        .padding(.vertical, 4)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(height: 160)
-
-            Text("Who this bot is and what it cares about. Only this bot sees it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 private struct BotIconEditor: View {
     @Binding var symbolName: String?
     @Binding var colorIndex: Int
@@ -821,7 +767,8 @@ struct GroupInfoSheet: View {
 
                 NameValidationMessage(name: name)
 
-                GroupDescriptionEditor(publicDescription: $publicDescription)
+                SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $publicDescription,
+                                      footnote: "Shared with every bot in this group so they understand its purpose.")
 
                 GroupMemberPicker(agents: store.groupCandidates(on: store.hubMirror(forConversation: conversation.id)),
                                   selectedIDs: $selectedIDs, lead: store.canLead(conversation) ? $leadID : nil)
@@ -879,14 +826,8 @@ struct GroupInfoSheet: View {
     }
 
     private var canSave: Bool {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (
-            trimmedName != conversation.displayName ||
-                trimmedDescription != (conversation.publicDescription ?? "") ||
-                selectedIDs != Set(conversation.participantIDs) || folders != (conversation.folders ?? []) || backgroundDraft != nil ||
-                leadID != conversation.lead
-        )
+        ConversationName.error(for: name) == nil && !selectedIDs.isEmpty && (backgroundDraft != nil ||
+            conversation.editChanges(name: name, description: publicDescription, members: selectedIDs, folders: folders, lead: leadID))
     }
 }
 
@@ -950,7 +891,8 @@ struct NewGroupSheet: View {
             NameValidationMessage(name: name)
                 .padding(.horizontal, 16)
 
-            GroupDescriptionEditor(publicDescription: $publicDescription)
+            SheetDescriptionField(title: "Description", prompt: "Describe the purpose and context of this group…", text: $publicDescription,
+                                  footnote: "Shared with every bot in this group so they understand its purpose.")
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
@@ -1042,30 +984,6 @@ private struct GroupLocationTile: View {
         .buttonStyle(.plain)
         .help(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-private struct GroupDescriptionEditor: View {
-    @Binding var publicDescription: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Description")
-                .font(.caption.weight(.semibold))
-
-            TextField(
-                "Describe the purpose and context of this group…",
-                text: $publicDescription,
-                axis: .vertical
-            )
-            .textFieldStyle(.roundedBorder)
-            .lineLimit(2...4)
-            .autocorrectionDisabled(false)
-
-            Text("Shared with every bot in this group so they understand its purpose.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
     }
 }
 

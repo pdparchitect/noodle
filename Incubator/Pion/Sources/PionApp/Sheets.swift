@@ -54,26 +54,6 @@ extension GroupMemberPicker {
     }
 }
 
-private struct SheetDescriptionField: View {
-    let title: String
-    let prompt: String
-    @Binding var text: String
-    /// What the field is for, in small text beneath it, as Noodle's sheets explain theirs.
-    var footnote: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold))
-            TextField(prompt, text: $text, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(2...4)
-                .autocorrectionDisabled(false)
-                .accessibilityLabel(title)
-            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-}
-
 /// A note of several lines: Return starts a new line, and the field grows with the text, and the sheet with
 /// it, up to about twelve lines, then scrolls.
 private struct SheetNoteEditor: View {
@@ -110,39 +90,6 @@ private struct SheetNoteEditor: View {
                     }
                 }
                 .roundedBorderEditor()
-            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-}
-
-private struct SheetInstructionsEditor: View {
-    let title: String
-    @Binding var text: String
-    var prompt = ""
-    var footnote: String?
-    var height: CGFloat = 160
-    var monospaced = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold))
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $text)
-                    .font(.system(size: 13, design: monospaced ? .monospaced : .default))
-                    .autocorrectionDisabled(monospaced)
-                    .roundedBorderEditor()
-                    .accessibilityLabel(title)
-                if text.isEmpty && !prompt.isEmpty {
-                    // Placed as Noodle places its backstory's: the editor's outer inset plus the text view's own padding.
-                    Text(prompt)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(nsColor: .placeholderTextColor))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(height: height)
             if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
         }
     }
@@ -253,7 +200,15 @@ struct GroupEditorSheet: View {
 
     init(model: PionModel, group: BotConversation? = nil) { self.model = model; self.group = group }
 
-    private var canSave: Bool { ConversationName.error(for: name) == nil && !members.isEmpty }
+    /// As in Noodle, an existing group's Save waits for a change, which here can be a member's tools too.
+    private var canSave: Bool {
+        guard ConversationName.error(for: name) == nil, !members.isEmpty else { return false }
+        guard let group else { return true }
+        return group.editChanges(name: name, description: description, members: members, folders: folders, lead: lead)
+            || memberTools.contains { id, tools in
+                model.agent(id).map { model.connectionsController.selectedIDs(for: $0) != tools } ?? false
+            }
+    }
 
     var body: some View {
         VStack(spacing: 0) {

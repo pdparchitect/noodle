@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleRuntimeSettings
 import SwiftUI
 
 // The pieces every app's create and edit sheets are made of, so they look and behave alike.
@@ -55,6 +56,59 @@ struct NameValidationMessage: View {
                 .font(.caption)
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// A short description of a few lines, titled above and explained beneath.
+struct SheetDescriptionField: View {
+    let title: String
+    let prompt: String
+    @Binding var text: String
+    var lines: ClosedRange<Int> = 2...4
+    var footnote: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold))
+            TextField(prompt, text: $text, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(lines)
+                .autocorrectionDisabled(false)
+                .accessibilityLabel(title)
+            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+}
+
+/// A bot's backstory or instructions: a fixed-height editor, titled above and explained beneath.
+struct SheetInstructionsEditor: View {
+    let title: String
+    @Binding var text: String
+    var prompt = ""
+    var footnote: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold))
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .font(.system(size: 13))
+                    .autocorrectionDisabled(false)
+                    .roundedBorderEditor()
+                    .accessibilityLabel(title)
+                if text.isEmpty && !prompt.isEmpty {
+                    // The editor's outer inset; the text view adds its own line-fragment padding.
+                    Text(prompt)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(nsColor: .placeholderTextColor))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: 160)
+            if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
         }
     }
 }
