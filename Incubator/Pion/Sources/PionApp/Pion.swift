@@ -123,11 +123,28 @@ struct PionApp: App {
         super.init()
     }
 
+    /// Set once Pion is quitting, so the floating conversations it closes float again next time.
+    private var isTerminating = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
         _ = calls
+        // Noodle's floating conversations, showing Pion's conversation view.
+        PionFloating.panels = FloatingConversationPanels(floating: .shared, isTerminating: { [weak self] in self?.isTerminating == true },
+            toggleCall: { [weak self] in self?.calls.toggleCall(in: $0) }, savesFrames: true) { [weak self] id, commands in
+            guard let self else { return NSView() }
+            let view = NSHostingView(rootView: ConversationWindow(model: self.model, selection: .constant(id))
+                .environment(self.calls).environment(self.settings).environment(\.floatingPanelCommands, commands)
+                .background { FloatingWindowBackdrop().ignoresSafeArea() })
+            // The panel owns its size; the conversation must not resize it to fit.
+            view.sizingOptions = []
+            return view
+        }
         if !model.isScripted { connectNotifications() }
         model.start()
+        // As in Noodle, what floated when Pion quit floats again.
+        FloatingConversations.shared.retain(Set(model.conversations.map(\.id)))
+        for id in FloatingConversations.shared.ids { PionFloating.float(id) }
         model.offerWelcome()
         // Noodle's updater, on Pion's own channel; it stays off in development builds.
         if !model.isScripted { AppUpdater.shared.start() }
@@ -138,13 +155,15 @@ struct PionApp: App {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let working = model.agents.filter { model.phase(of: $0) == .working }
-        guard !model.isScripted, !working.isEmpty else { return .terminateNow }
+        guard !model.isScripted, !working.isEmpty else { isTerminating = true; return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Quit \(pionAppName)?"
         alert.informativeText = "\(working.count == 1 ? "1 agent is" : "\(working.count) agents are") working. They stop until \(pionAppName) opens again."
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
-        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        isTerminating = true
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) { model.stop() }
@@ -172,6 +191,7 @@ struct PionCommands: Commands {
     let window: WindowState
     let calls: PionCalls
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @FocusedValue(\.pionConversation) private var context
     @FocusedValue(\.voiceRecordingCommand) private var voiceRecording
     private let annotations = AnnotationCommandsState.shared
@@ -242,10 +262,13 @@ struct PionCommands: Commands {
                 if let conversationID { openWindow(id: "conversation", value: conversationID) }
             }
             .disabled(conversationID == nil)
-            Toggle("Float on Top", isOn: Binding(get: { activeWindow.floatsOnTop }, set: {
-                activeWindow.floatsOnTop = $0
-                NSApp.keyWindow?.level = $0 ? .floating : .normal
-            }))
+            Button("Float on Top") {
+                guard let conversationID else { return }
+                // From a window of its own, the panel takes that window's place.
+                let separate = context?.search == nil ? NSApp.keyWindow : nil
+                PionFloating.float(conversationID, replacing: separate?.frame)
+                if separate != nil { dismissWindow(id: "conversation", value: conversationID) }
+            }
             .disabled(conversationID == nil)
             Button("Export Investigation…") {
                 if let investigation = model.investigation(conversationID) { model.exportInvestigation(investigation) }
@@ -328,4 +351,14 @@ enum SidebarOptions {
     static let showsClosedKey = "PionSidebarShowsClosed"
     /// How many closed Investigations the sidebar lists before offering more.
     static let closedShown = 5
+}
+
+/// Noodle's floating conversations: kept above other apps, on every Space, and floating again after Pion opens.
+@MainActor enum PionFloating {
+    static var panels: FloatingConversationPanels?
+
+    static func float(_ id: UUID, replacing frame: NSRect? = nil) {
+        guard let panels else { return }
+        panels.float(id, replacing: frame, hasSavedFrame: panels.hasSavedFrame(id))
+    }
 }

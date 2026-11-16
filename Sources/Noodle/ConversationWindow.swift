@@ -432,7 +432,42 @@ struct ConversationWindowHost: NSViewRepresentable {
     }
 }
 
-extension Notification.Name {
-    /// The object is the conversation ID whose separate or floating window should return to its input.
-    static let focusConversationComposer = Notification.Name("Noodle.focusConversationComposer")
+extension FloatingConversationPanels {
+    /// Noodle's panels, each showing the conversation as its own window does.
+    static let shared = FloatingConversationPanels(floating: .shared,
+        isTerminating: { NoodleStore.active?.conversationWindows.isTerminating == true },
+        toggleCall: { NoodleStore.active?.toggleVoiceCall(in: $0) }) { id, commands in
+        guard let store = NoodleStore.active else { return NSView() }
+        let view = NSHostingView(rootView: ConversationWindowView(conversationID: id, isFloatingPanel: true)
+            .environment(store).environment(\.floatingPanelCommands, commands))
+        // The panel owns its size; the chat must not resize it to fit content.
+        view.sizingOptions = []
+        return view
+    }
+}
+
+extension NoodleStore {
+    /// Opens the conversation as a floating panel, replacing its normal separate window if one is open.
+    func floatConversation(_ id: UUID, from frame: NSRect? = nil) {
+        guard conversations.contains(where: { $0.id == id }) else { return }
+        let replaced = conversationWindows.closeSeparateWindow(id)
+        FloatingConversationPanels.shared.float(id, replacing: frame ?? replaced, hasSavedFrame: conversationWindows.hasSavedFrame(id))
+    }
+
+    /// Opens the conversation in a normal separate window, docking its floating panel if one is open.
+    func dockConversation(_ id: UUID) {
+        FloatingConversations.shared.set(false, for: id)
+        FloatingConversationPanels.shared.close(id)
+        conversationWindows.present(id)
+    }
+
+    /// Shows the conversation in the main window and closes its separate window or floating panel.
+    func returnConversationToMainWindow(_ id: UUID) {
+        guard conversations.contains(where: { $0.id == id }) else { return }
+        selectedConversationID = id
+        // The main window comes forward first, so the app never passes through having no window.
+        conversationWindows.showMainWindow()
+        FloatingConversationPanels.shared.close(id)
+        _ = conversationWindows.closeSeparateWindow(id)
+    }
 }

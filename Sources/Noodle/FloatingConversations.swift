@@ -38,57 +38,41 @@ import Observation
     }
 }
 
-extension NoodleStore {
-    /// Opens the conversation as a floating panel, replacing its normal separate window if one is open.
-    func floatConversation(_ id: UUID, from frame: NSRect? = nil) {
-        guard conversations.contains(where: { $0.id == id }) else { return }
-        let replaced = conversationWindows.closeSeparateWindow(id)
-        let visible = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main)?.visibleFrame
-        var landing: NSRect?
-        if let from = frame ?? replaced, let visible {
-            landing = FloatingConversationPanel.compactFrame(from: from, visible: visible)
-        } else if !conversationWindows.hasSavedFrame(id), let visible {
-            landing = FloatingConversationPanel.landingFrame(near: NSEvent.mouseLocation, visible: visible)
-        }
-        FloatingConversationPanels.shared.show(id, frame: landing) { $0.makeKeyAndOrderFront(nil) }
-    }
-
-    /// Opens the conversation in a normal separate window, docking its floating panel if one is open.
-    func dockConversation(_ id: UUID) {
-        FloatingConversations.shared.set(false, for: id)
-        FloatingConversationPanels.shared.close(id)
-        conversationWindows.present(id)
-    }
-
-    /// Shows the conversation in the main window and closes its separate window or floating panel.
-    func returnConversationToMainWindow(_ id: UUID) {
-        guard conversations.contains(where: { $0.id == id }) else { return }
-        selectedConversationID = id
-        // The main window comes forward first, so the app never passes through having no window.
-        conversationWindows.showMainWindow()
-        FloatingConversationPanels.shared.close(id)
-        _ = conversationWindows.closeSeparateWindow(id)
-    }
-}
-
 /// One floating panel per conversation. The panels host the same view as a separate window.
 @MainActor final class FloatingConversationPanels: NSObject, NSWindowDelegate {
-    static let shared = FloatingConversationPanels(floating: .shared,
-        isTerminating: { NoodleStore.active?.conversationWindows.isTerminating == true }) { id, commands in
-        guard let store = NoodleStore.active else { return NSView() }
-        let view = NSHostingView(rootView: ConversationWindowView(conversationID: id, isFloatingPanel: true)
-            .environment(store).environment(\.floatingPanelCommands, commands))
-        // The panel owns its size; the chat must not resize it to fit content.
-        view.sizingOptions = []
-        return view
-    }
     private let floating: FloatingConversations
     private let isTerminating: () -> Bool
+    /// Calls or hangs up in a conversation, for the call shortcut typed in a panel.
+    private let toggleCall: (UUID?) -> Void
     private let content: (UUID, FloatingPanelCommands) -> NSView
+    /// Whether each panel keeps its own frame, for an app without a window registry that keeps it.
+    private let savesFrames: Bool
     private var panels: [UUID: FloatingConversationPanel] = [:]
 
-    init(floating: FloatingConversations, isTerminating: @escaping () -> Bool, content: @escaping (UUID, FloatingPanelCommands) -> NSView) {
-        self.floating = floating; self.isTerminating = isTerminating; self.content = content
+    init(floating: FloatingConversations, isTerminating: @escaping () -> Bool, toggleCall: @escaping (UUID?) -> Void = { _ in },
+         savesFrames: Bool = false, content: @escaping (UUID, FloatingPanelCommands) -> NSView) {
+        self.floating = floating; self.isTerminating = isTerminating; self.toggleCall = toggleCall
+        self.savesFrames = savesFrames; self.content = content
+    }
+
+    private static func frameName(_ id: UUID) -> String { "FloatingConversation-\(id.uuidString)" }
+
+    /// Whether the panel kept a frame of its own from an earlier float.
+    func hasSavedFrame(_ id: UUID) -> Bool {
+        savesFrames && UserDefaults.standard.string(forKey: "NSWindow Frame \(Self.frameName(id))") != nil
+    }
+
+    /// Floats the conversation: shrunk from the window it replaces, or else where it last floated, or else
+    /// beside the pointer.
+    func float(_ id: UUID, replacing replaced: NSRect?, hasSavedFrame: Bool) {
+        let visible = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main)?.visibleFrame
+        var landing: NSRect?
+        if let replaced, let visible {
+            landing = FloatingConversationPanel.compactFrame(from: replaced, visible: visible)
+        } else if !hasSavedFrame, let visible {
+            landing = FloatingConversationPanel.landingFrame(near: NSEvent.mouseLocation, visible: visible)
+        }
+        show(id, frame: landing) { $0.makeKeyAndOrderFront(nil) }
     }
 
     func panel(for id: UUID) -> NSPanel? { panels[id] }
@@ -121,7 +105,10 @@ extension NoodleStore {
     private func open(_ id: UUID, frame: NSRect?, present: (NSPanel) -> Void) -> NSPanel {
         let panel = FloatingConversationPanel.make(frame: frame ?? NSRect(origin: .zero, size: FloatingConversationPanel.compactSize))
         if frame == nil { panel.center() }
+        // Restored from where it last floated, unless asked to land somewhere.
+        if savesFrames { _ = panel.setFrameAutosaveName(Self.frameName(id)); if let frame { panel.setFrame(frame, display: false) } }
         panel.conversationID = id
+        panel.toggleCall = toggleCall
         panel.delegate = self
         panel.contentView = content(id, panel.commands)
         panels[id] = panel
@@ -151,6 +138,7 @@ final class FloatingConversationPanel: NSPanel {
     static let compactSize = NSSize(width: 420, height: 560)
     static let minimumSize = NSSize(width: 380, height: 360)
     var conversationID: UUID?
+    var toggleCall: (UUID?) -> Void = { _ in }
     /// The panel is not a scene, so its chat's menu commands arrive here and the panel runs their shortcuts.
     let commands = FloatingPanelCommands()
     var bindings = KeyboardBindings.shared
@@ -171,8 +159,8 @@ final class FloatingConversationPanel: NSPanel {
             command.perform(in: self, bindings: bindings)
             return true
         }
-        if event.type == .keyDown, bindings.matches(.call, event: event), let store = NoodleStore.active {
-            if !event.isARepeat { store.toggleVoiceCall(in: conversationID) }
+        if event.type == .keyDown, bindings.matches(.call, event: event) {
+            if !event.isARepeat { toggleCall(conversationID) }
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -242,4 +230,9 @@ struct FloatingWindowBackdrop: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
+
+extension Notification.Name {
+    /// The object is the conversation ID whose separate or floating window should return to its input.
+    static let focusConversationComposer = Notification.Name("Noodle.focusConversationComposer")
 }

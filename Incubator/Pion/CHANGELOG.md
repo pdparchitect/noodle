@@ -29,6 +29,7 @@
 
 ### Changed
 
+- Float on Top is Noodle's: the conversation moves to a small panel that stays above other apps, on every Space and beside full-screen apps, and floats again where it was after Pion reopens. It's also in each conversation's menu in the sidebar. Before, it only raised the window it was chosen in, until Pion quit.
 - The agent editor names a harness's default login by its account, as Noodle does, instead of Default.
 - Groups and agents in the sidebar come newest message first, as in Noodle, instead of by name; open Investigations still come most severe first.
 - Removing an agent from a team or group asks first, as in Noodle, and inline code in messages reads as in Noodle.

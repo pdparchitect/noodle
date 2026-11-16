@@ -217,6 +217,7 @@ struct ConversationRowMenu: View {
         let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
         let closed = investigation?.isClosed == true
         Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+        Button("Float on Top") { PionFloating.float(conversation.id) }
         Button(model.isPinned(conversation.id) ? "Unpin" : "Pin") {
             model.setPinned(!model.isPinned(conversation.id), conversationID: conversation.id)
         }

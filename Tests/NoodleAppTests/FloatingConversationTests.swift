@@ -152,6 +152,41 @@ import NoodleCore
         XCTAssertTrue(floating.contains(kept))
     }
 
+    func testAPanelThatSavesItsFrameFloatsAgainWhereItWas() {
+        let id = UUID()
+        let name = "NSWindow Frame FloatingConversation-\(id.uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: name) }
+        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false },
+                                                savesFrames: true) { _, _ in NSView() }
+        XCTAssertFalse(panels.hasSavedFrame(id))
+        let moved = NSRect(x: 120, y: 140, width: 430, height: 570)
+        let panel = panels.show(id, frame: moved, present: { _ in })
+        panel.saveFrame(usingName: "FloatingConversation-\(id.uuidString)")
+        panel.close()
+        XCTAssertTrue(panels.hasSavedFrame(id))
+        XCTAssertEqual(panels.show(id, frame: nil, present: { _ in }).frame.size, moved.size)
+        // Without saving, nothing is kept: Noodle's window registry keeps its panels' frames.
+        XCTAssertFalse(FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false })
+            { _, _ in NSView() }.hasSavedFrame(id))
+    }
+
+    func testThePanelsCallShortcutGoesToTheAppForItsConversation() throws {
+        var called: [UUID?] = []
+        let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false },
+                                                toggleCall: { called.append($0) }) { _, _ in NSView() }
+        let id = UUID()
+        let panel = try XCTUnwrap(panels.show(id, frame: nil, present: { _ in }) as? FloatingConversationPanel)
+        let bindings = KeyboardBindings(defaults: defaults())
+        try bindings.set(KeyBinding("k", modifiers: [.command, .control]), for: .call)
+        panel.bindings = bindings
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .control], timestamp: 0,
+            windowNumber: panel.windowNumber, context: nil, characters: "k", charactersIgnoringModifiers: "k",
+            isARepeat: false, keyCode: 40))
+        XCTAssertTrue(panel.performKeyEquivalent(with: event))
+        XCTAssertEqual(called, [id])
+        panel.close()
+    }
+
     func testPanelCannotBeResizedBelowItsMinimumWhateverTheHostedViewAllows() {
         let panels = FloatingConversationPanels(floating: FloatingConversations(defaults: defaults()), isTerminating: { false }) { _, _ in NSView() }
         let panel = panels.show(UUID(), frame: nil, present: { _ in })

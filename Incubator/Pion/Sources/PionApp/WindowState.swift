@@ -42,7 +42,6 @@ import SwiftUI
     @ObservationIgnored var selectedFromKeyboard = false
     var searchText = ""
     var searchFocusRequest = UUID()
-    var floatsOnTop = false
     /// Kick's question, and the agent whose New Session is being confirmed, as in Noodle.
     var kickRequest: AgentKickRequest?
     var newSessionAgent: AgentRecord?
