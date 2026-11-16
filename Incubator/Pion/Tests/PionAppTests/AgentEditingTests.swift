@@ -1,3 +1,4 @@
+import HubLink
 import NoodleBrand
 import NoodleCore
 import PionCore
@@ -139,6 +140,32 @@ import XCTest
         _ = try model.repository.setAgentArchived(false, agentID: archived.id)
         model.refresh()
         XCTAssertEqual(Set(model.agents.map(\.id)), [kept.id, archived.id])
+    }
+
+    /// As in Noodle: an archived agent's conversation leaves the sidebar, the window and the Dock with it,
+    /// read, since out of the sidebar it could never be read; an archived group is read too.
+    func testArchivingTakesAConversationOutOfTheSidebarRead() throws {
+        model.start()
+        let avery = try agent("Avery")
+        let morgan = try agent("Morgan")
+        let direct = try XCTUnwrap(model.directConversation(of: morgan))
+        let group = try model.createGroup(name: "Triage", description: nil, members: [avery.id])
+        model.selection = nil
+        for (agentID, id) in [(morgan.id, direct.id), (avery.id, group.id)] {
+            _ = try model.repository.sendAgentMessage(agentID: agentID, conversationID: id, body: "Contained.")
+        }
+        model.refresh()
+        XCTAssertEqual(model.badgedConversationIDs, [direct.id, group.id])
+        model.selection = direct.id
+        model.setArchived(true, agentID: morgan.id)
+        model.setGroupArchived(true, id: group.id)
+        XCTAssertNil(model.conversation(direct.id))
+        XCTAssertNil(model.selection)
+        XCTAssertTrue(model.badgedConversationIDs.isEmpty)
+        XCTAssertFalse(model.sidebarSections(.newestFirst).agents.contains { $0.id == direct.id })
+        model.setArchived(false, agentID: morgan.id)
+        XCTAssertNotNil(model.conversation(direct.id))
+        XCTAssertFalse(model.isUnread(direct.id))
     }
 
     /// Settings > Groups lists archived groups, but not Investigations, which close instead, and brings one back.

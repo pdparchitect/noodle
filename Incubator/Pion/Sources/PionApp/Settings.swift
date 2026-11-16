@@ -54,13 +54,7 @@ import SwiftUI
         AnyView(Button("Edit Runtime…") { self.agentEditorTab = .runtime; self.agentBeingEdited = agent }.buttonStyle(.link))
     }
     func canArchive(_ agent: AgentRecord) -> Bool { true }
-    func setArchived(_ archived: Bool, agent: AgentRecord) {
-        do {
-            _ = try repository.setAgentArchived(archived, agentID: agent.id)
-            if archived { runtime.stop(agentID: agent.id) }
-            model.reload()
-        } catch { model.problem = error.localizedDescription }
-    }
+    func setArchived(_ archived: Bool, agent: AgentRecord) { model.setArchived(archived, agentID: agent.id) }
     func refreshCompanionSkills() {}
     func openCompanionLibrary(_ app: CompanionApp) async throws {}
 }

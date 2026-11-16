@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Archiving an agent takes its conversation out of the sidebar, the Dock count and searches, and out of the window if open, as in Noodle. Archived agents and groups leave nothing unread, and archiving a group takes its shared folders away from its agents, until it is brought back.
 - When creating or saving an agent, group or Investigation fails and Pion cannot fully undo it, the error says what failed first, then what could not be undone.
 - Group Info's Save stays dimmed until something changes, as in Noodle.
 - Each conversation opens where you left it, after Pion quits too, and a message opened from a search or a notification is where its conversation opens, even in a window not open yet, as in Noodle.

@@ -1046,9 +1046,7 @@ final class NoodleStore {
     /// A group is archived itself; a bot's direct conversation follows its bot.
     /// Views may hold an older copy, so the current one decides.
     func isArchived(_ conversation: BotConversation) -> Bool {
-        let conversation = current(conversation)
-        if conversation.kind == .group { return conversation.archivedAt != nil }
-        return participants(for: conversation).first?.archivedAt != nil
+        current(conversation).isArchived(among: agents)
     }
 
     func activeParticipants(for conversation: BotConversation) -> [AgentRecord] {

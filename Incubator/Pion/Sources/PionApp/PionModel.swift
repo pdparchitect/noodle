@@ -307,7 +307,8 @@ import UniformTypeIdentifiers
             onConversationsChanged?()
             try? transcriptPositions.retainConversations(Set(allConversations.map(\.id)))
         }
-        let loadedConversations = allConversations.filter { $0.archivedAt == nil }
+        runtime.archivedAgentIDs = Set(allAgents.filter { $0.archivedAt != nil }.map(\.id))
+        let loadedConversations = allConversations.filter { !$0.isArchived(among: allAgents) }
         if loadedConversations != conversations { conversations = loadedConversations }
     }
 
@@ -453,13 +454,34 @@ import UniformTypeIdentifiers
         everyConversation.filter { $0.kind == .group && investigation($0.id) == nil }
     }
 
-    /// Archives a group, taking it out of the sidebar and the window it was open in, or brings it back.
-    func setGroupArchived(_ archived: Bool, id: UUID) {
+    /// As in Noodle: archiving keeps the agent's workspace, memory and conversations, and only stops it running;
+    /// its conversation leaves the sidebar with it.
+    func setArchived(_ archived: Bool, agentID: UUID) {
         do {
-            _ = try repository.setConversationArchived(archived, conversationID: id)
-            if archived, selection == id { selection = nil }
+            _ = try repository.setAgentArchived(archived, agentID: agentID)
+            if archived, let direct = conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agentID] }) {
+                leave(direct.id)
+            }
             reload()
         } catch { problem = error.localizedDescription }
+    }
+
+    /// Archives a group, taking it out of the sidebar and the window it was open in, or brings it back. Its
+    /// members lose or regain its shared folders.
+    func setGroupArchived(_ archived: Bool, id: UUID) {
+        do {
+            let before = everyConversation.first { $0.id == id }
+            let updated = try repository.setConversationArchived(archived, conversationID: id)
+            if archived { leave(id) }
+            reload()
+            synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
+        } catch { problem = error.localizedDescription }
+    }
+
+    /// Out of the sidebar, an unread conversation could never be read.
+    private func leave(_ id: UUID) {
+        markRead(id)
+        if selection == id { selection = nil }
     }
 
     struct SidebarSections {

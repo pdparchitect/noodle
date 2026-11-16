@@ -151,6 +151,12 @@ extension BotConversation {
         Set(before.participantIDs) != Set(after.participantIDs) || (before.publicDescription ?? "") != (after.publicDescription ?? "")
     }
 
+    /// A group is archived itself; a bot's direct conversation follows its bot.
+    public func isArchived(among agents: [AgentRecord]) -> Bool {
+        if kind == .group { return archivedAt != nil }
+        return participantIDs.first.flatMap { id in agents.first { $0.id == id } }?.archivedAt != nil
+    }
+
     /// Whether a group's sheet changes it, in every app, so Save waits for a change: its name, description, members,
     /// folders or lead. Spaces around the words and the members' order are not a change.
     public func editChanges(name: String, description: String, members: Set<UUID>, folders: [AgentFolder], lead: UUID?) -> Bool {

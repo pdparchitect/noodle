@@ -312,12 +312,8 @@ extension PionModel {
     }
 
     func archive(_ agent: AgentRecord) {
-        do {
-            _ = try repository.setAgentArchived(true, agentID: agent.id)
-            runtime.stop(agentID: agent.id)
-            reload()
-            activityWindows.synchronize(agents: agents)
-        } catch { problem = error.localizedDescription }
+        setArchived(true, agentID: agent.id)
+        activityWindows.synchronize(agents: agents)
     }
 
     func archive(_ group: BotConversation) { setGroupArchived(true, id: group.id) }
