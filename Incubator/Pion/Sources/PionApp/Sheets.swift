@@ -54,22 +54,6 @@ extension GroupMemberPicker {
     }
 }
 
-/// The sections of an editor, centred at their own width, as in Noodle's bot editor.
-private struct SheetTabPicker<Tab: RawRepresentable & CaseIterable & Hashable>: View where Tab.RawValue == String, Tab.AllCases: RandomAccessCollection {
-    @Binding var selection: Tab
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Picker("Section", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
-            ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize(horizontal: true, vertical: false)
-        .frame(maxWidth: .infinity, alignment: .center)
-    }
-}
-
 private struct SheetDescriptionField: View {
     let title: String
     let prompt: String
@@ -160,15 +144,6 @@ private struct SheetInstructionsEditor: View {
             }
             .frame(height: height)
             if let footnote { Text(footnote).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-}
-
-private struct SheetNameValidation: View {
-    let name: String
-    var body: some View {
-        if !name.isEmpty, let error = ConversationName.error(for: name) {
-            Text(error).font(.caption).foregroundStyle(.red)
         }
     }
 }
@@ -299,7 +274,7 @@ struct GroupEditorSheet: View {
                         Text(members.count == 1 ? "1 agent" : "\(members.count) agents").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                SheetNameValidation(name: name)
+                NameValidationMessage(name: name)
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:
@@ -460,7 +435,7 @@ struct AgentEditorSheet: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                SheetNameValidation(name: name)
+                NameValidationMessage(name: name)
                 SheetTabPicker(selection: $selectedTab)
                 switch selectedTab {
                 case .general:

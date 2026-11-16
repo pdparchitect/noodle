@@ -164,6 +164,7 @@ let project = Project(
                 "../../Sources/Noodle/ScreenCaptureService.swift",
                 "../../Sources/Noodle/CaptureAttachment.swift",
                 "../../Sources/Noodle/AttachmentLayout.swift",
+                "../../Sources/Noodle/SheetControls.swift",
                 "../../Sources/Noodle/AttachmentInlinePreview.swift",
                 "../../Sources/Noodle/MessageMarkdownCache.swift",
                 "../../Sources/Noodle/MessageLinkPreview.swift",
@@ -241,7 +242,7 @@ let project = Project(
             // Test the model without launching the app or starting anyone's harnesses.
             sources: ["Tests/PionAppTests/**", "Sources/PionApp/PionModel.swift", "Sources/PionApp/MessageBodyRenderer.swift",
                       "../../Sources/Noodle/MessageMarkdownCache.swift",
-                      "Sources/PionApp/WindowState.swift", "Sources/PionApp/SheetControls.swift", "Sources/PionApp/BackdropGames.swift",
+                      "Sources/PionApp/WindowState.swift", "../../Sources/Noodle/SheetControls.swift", "Sources/PionApp/BackdropGames.swift",
                       "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),
                            .package(product: "HubLink"), .package(product: "NoodleBrand"), .package(product: "NoodleRuntimeSettings")],

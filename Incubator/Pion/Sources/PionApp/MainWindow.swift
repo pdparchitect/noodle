@@ -292,7 +292,7 @@ struct ConversationRowMenu: View {
         Divider()
         if let agent {
             if model.stoppableAgent(in: conversation.id) != nil { Button("Stop") { model.stop(in: conversation.id) } }
-            SuspendAgentMenu(model: model, agent: agent)
+            SuspendMenu(isSuspended: agent.isSuspended(), noun: "Agent") { model.setSuspended(until: $0, agent: agent) }
             Button("Archive Agent") { model.archive(agent) }
         } else if let investigation {
             if closed {
@@ -307,23 +307,6 @@ struct ConversationRowMenu: View {
 }
 
 /// Suspend Agent's choices of how long, as Noodle offers them, or Unsuspend Agent for one already suspended.
-struct SuspendAgentMenu: View {
-    let model: PionModel
-    let agent: AgentRecord
-
-    var body: some View {
-        if agent.isSuspended() {
-            Button("Unsuspend Agent") { model.setSuspended(until: nil, agent: agent) }
-        } else {
-            Menu("Suspend Agent") {
-                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                    Button(choice.title) { model.setSuspended(until: choice.until(), agent: agent) }
-                }
-            }
-        }
-    }
-}
-
 /// One activity window per agent, Noodle's own, kept for the whole app.
 @MainActor private let activityWindows = AgentActivityWindows()
 

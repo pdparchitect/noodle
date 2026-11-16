@@ -19,26 +19,9 @@ private struct BotEditorTabPicker: View {
     let harnessIdentifier: String
     /// What was chosen on this Mac means nothing on a Hub, and one Hub's means nothing on another.
     var onToolsHomeChange: () -> Void = {}
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        Picker("Bot settings", selection: $selection.animation(reduceMotion ? nil : .easeInOut(duration: 0.22))) {
-            ForEach(BotEditorTab.allCases, id: \.self) { tab in Text(tab.rawValue).tag(tab) }
-        }.pickerStyle(.segmented).labelsHidden()
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(maxWidth: .infinity, alignment: .center)
+        SheetTabPicker(label: "Bot settings", selection: $selection)
             .onChange(of: HubHarnessChoice(identifier: harnessIdentifier)?.hub) { onToolsHomeChange() }
-    }
-}
-
-struct NameValidationMessage: View {
-    let name: String
-    var body: some View {
-        if !name.isEmpty, let error = ConversationName.error(for: name) {
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
 
@@ -281,19 +264,7 @@ struct NewBotSheet: View {
     }
 
     private func sheetHeader(title: String, createTitle: String, action: @escaping () -> Void) -> some View {
-        HStack {
-            Button("Cancel") { dismiss() }
-                .buttonStyle(.plain)
-                .foregroundStyle(.blue)
-            Spacer()
-            Text(title).font(.headline)
-            Spacer()
-            Button(createTitle, action: action)
-                .buttonStyle(.plain)
-                .foregroundStyle(canCreate ? Color.blue : .secondary)
-                .disabled(!canCreate)
-        }
-        .padding(16)
+        SheetHeader(heading: title, title: createTitle, enabled: canCreate, action: action)
     }
 }
 
@@ -345,19 +316,7 @@ struct EditBotSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("Edit Bot").font(.headline)
-                Spacer()
-                Button("Save", action: save)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(canSave ? Color.blue : .secondary)
-                    .disabled(!canSave)
-            }
-            .padding(16)
+            SheetHeader(heading: "Edit Bot", title: "Save", enabled: canSave, action: save)
 
             Divider()
 
@@ -836,19 +795,7 @@ struct GroupInfoSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("Group Info").font(.headline)
-                Spacer()
-                Button("Save", action: save)
-                .buttonStyle(.plain)
-                .foregroundStyle(canSave ? Color.blue : .secondary)
-                .disabled(!canSave)
-            }
-            .padding(16)
+            SheetHeader(heading: "Group Info", title: "Save", enabled: canSave, action: save)
 
             Divider()
 
@@ -986,28 +933,10 @@ struct NewGroupSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("New Group").font(.headline)
-                Spacer()
-                Button("Create") {
-                    _ = store.createGroup(
-                        named: name,
-                        publicDescription: publicDescription,
-                        participantIDs: selectedIDs,
-                        folders: hub == nil ? folders : [],
-                        background: backgroundDraft,
-                        on: hub
-                    )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(canCreate ? Color.blue : .secondary)
-                .disabled(!canCreate)
+            SheetHeader(heading: "New Group", title: "Create", enabled: canCreate) {
+                _ = store.createGroup(named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
+                                      folders: hub == nil ? folders : [], background: backgroundDraft, on: hub)
             }
-            .padding(16)
 
             Divider()
 

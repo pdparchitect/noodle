@@ -18,7 +18,7 @@ extension NoodleStore {
               voiceCallTarget(for: conversation)?.id == agentID else {
             return endUnansweredCall(request, .missed, at: now)
         }
-        ring(request)
+        startRinging(request)
         thisMac.ringCall(of: agentID, now: now)
     }
 
@@ -26,21 +26,11 @@ extension NoodleStore {
     func ringHubCall(_ request: AgentCallRequest, now: Date = Date()) {
         guard !ringingCalls.contains(where: { $0.id == request.id }), request.expiresAt > now,
               !runsHere(request.agentID), voiceCalls.call == nil, isCallable(request.agentID) else { return }
-        ring(request)
+        startRinging(request)
     }
 
     /// Stops ringing a call answered or declined elsewhere, or that the Hub left as missed.
     func stopRinging(_ id: UUID) { _ = takeRingingCall(id) }
-
-    private func ring(_ request: AgentCallRequest) {
-        ringingCalls.append(request)
-        guard connectsServices else { return }
-        IncomingCallPanel.shared.update(self)
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(0, request.expiresAt.timeIntervalSinceNow)))
-            self?.expireCalls(at: Date())
-        }
-    }
 
     /// Ends quietly the calls of bots deleted or archived while they rang: there is nobody left to answer.
     func dropCallsOfGoneBots() {
@@ -101,14 +91,10 @@ extension NoodleStore {
         refreshTranscripts()
     }
 
-    private func takeRingingCall(_ id: UUID) -> AgentCallRequest? {
-        // Answered, declined or missed here, or ended before it rang here: the owner's devices stop too.
-        thisMac.stopRinging(id)
-        guard let index = ringingCalls.firstIndex(where: { $0.id == id }) else { return nil }
-        let request = ringingCalls.remove(at: index)
-        if connectsServices { IncomingCallPanel.shared.update(self) }
-        return request
-    }
+    var showsIncomingCalls: Bool { connectsServices }
+
+    /// Answered, declined or missed here, or ended before it rang here: the owner's devices stop too.
+    func stoppedRinging(_ id: UUID) { thisMac.stopRinging(id) }
 }
 
 extension NoodleStore: VoiceCallHost, IncomingCallHost, AgentTaskHost, BotBudgetHost {

@@ -122,6 +122,26 @@ struct ProfileCard: View {
     }
 }
 
+/// Suspend, in a conversation's menu in every app: how long, or Unsuspend for one suspended. Nil lifts a suspension.
+struct SuspendMenu: View {
+    let isSuspended: Bool
+    /// What is suspended, such as "Bot".
+    let noun: String
+    let set: (Date?) -> Void
+
+    var body: some View {
+        if isSuspended {
+            Button("Unsuspend \(noun)") { set(nil) }
+        } else {
+            Menu("Suspend \(noun)") {
+                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
+                    Button(choice.title) { set(choice.until()) }
+                }
+            }
+        }
+    }
+}
+
 /// The capsule under a profile's name: Archived, a status, or what an agent is doing.
 struct ProfileStatusBadge: View {
     let text: String

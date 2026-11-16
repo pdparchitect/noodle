@@ -579,14 +579,6 @@ struct SuspendBotMenu: View {
     let agent: AgentRecord
 
     var body: some View {
-        if agent.isSuspended() {
-            Button("Unsuspend Bot") { store.setSuspended(until: nil, agentID: agent.id) }
-        } else {
-            Menu("Suspend Bot") {
-                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                    Button(choice.title) { store.setSuspended(until: choice.until(), agentID: agent.id) }
-                }
-            }
-        }
+        SuspendMenu(isSuspended: agent.isSuspended(), noun: "Bot") { store.setSuspended(until: $0, agentID: agent.id) }
     }
 }

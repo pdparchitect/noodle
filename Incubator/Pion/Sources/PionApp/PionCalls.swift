@@ -11,7 +11,7 @@ import SwiftUI
     private let model: PionModel
     /// Shows a conversation, for a call answered from the ringing panel.
     @ObservationIgnored var open: (UUID) -> Void = { _ in }
-    private(set) var ringingCalls: [AgentCallRequest] = []
+    var ringingCalls: [AgentCallRequest] = []
     @ObservationIgnored private let guesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
 
     @ObservationIgnored lazy var voiceCalls = VoiceCallController(
@@ -102,15 +102,13 @@ import SwiftUI
               voiceCallTarget(for: conversation)?.id == agentID else {
             return endUnansweredCall(request, .missed, at: now)
         }
-        ringingCalls.append(request)
-        IncomingCallPanel.shared.update(self)
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(0, request.expiresAt.timeIntervalSinceNow)))
-            self?.expireCalls(at: Date())
-        }
+        startRinging(request)
     }
 
-    private func expireCalls(at now: Date) {
+    var showsIncomingCalls: Bool { true }
+    func stoppedRinging(_ id: UUID) {}
+
+    func expireCalls(at now: Date) {
         for request in ringingCalls where request.expiresAt <= now { endUnansweredCall(request, .missed, at: now) }
     }
 
@@ -147,10 +145,4 @@ import SwiftUI
         for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
     }
 
-    private func takeRingingCall(_ id: UUID) -> AgentCallRequest? {
-        guard let index = ringingCalls.firstIndex(where: { $0.id == id }) else { return nil }
-        let request = ringingCalls.remove(at: index)
-        IncomingCallPanel.shared.update(self)
-        return request
-    }
 }

@@ -4,7 +4,13 @@ import SwiftUI
 
 /// What the ringing panel needs from the app whose bots place calls.
 @MainActor protocol IncomingCallHost: AnyObject {
-    var ringingCalls: [AgentCallRequest] { get }
+    var ringingCalls: [AgentCallRequest] { get set }
+    /// False where nothing is shown, as in tests: calls are kept and no panel rings.
+    var showsIncomingCalls: Bool { get }
+    /// Ends the calls that rang for too long.
+    func expireCalls(at now: Date)
+    /// A call stopped ringing here, for the app to stop it wherever else it rings.
+    func stoppedRinging(_ id: UUID)
     func isCallable(_ agentID: UUID) -> Bool
     func caller(_ agentID: UUID) -> AgentRecord?
     func answer(_ id: UUID)
@@ -14,6 +20,28 @@ import SwiftUI
     /// Rings with a time-sensitive notification, again every few seconds while the call rings.
     func ring(_ call: AgentCallRequest, from agent: AgentRecord)
     func stopRingingNotification()
+}
+
+extension IncomingCallHost {
+    /// Rings a call: it joins those ringing, the panel shows it, and it expires when its time is up.
+    func startRinging(_ request: AgentCallRequest) {
+        ringingCalls.append(request)
+        guard showsIncomingCalls else { return }
+        IncomingCallPanel.shared.update(self)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, request.expiresAt.timeIntervalSinceNow)))
+            self?.expireCalls(at: Date())
+        }
+    }
+
+    /// Takes a call off those ringing, answered, declined or missed, and stops it ringing everywhere.
+    func takeRingingCall(_ id: UUID) -> AgentCallRequest? {
+        stoppedRinging(id)
+        guard let index = ringingCalls.firstIndex(where: { $0.id == id }) else { return nil }
+        let request = ringingCalls.remove(at: index)
+        if showsIncomingCalls { IncomingCallPanel.shared.update(self) }
+        return request
+    }
 }
 
 /// Floats in the top right corner over every app and Space while a call rings. It rings with a
