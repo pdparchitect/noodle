@@ -1,5 +1,6 @@
 import AppKit
 import HubLink
+import NoodleCore
 import NoodleRuntimeSettings
 import SwiftUI
 
@@ -26,6 +27,34 @@ struct ProfileCardAction: Identifiable {
     }
 
     static func custom(_ id: String, _ view: some View) -> Self { Self(id: id, kind: .custom(AnyView(view))) }
+}
+
+extension ProfileCardAction {
+    /// A bot's actions, in the same order in every app: Reply in a group, Message, Call, the app's own such as
+    /// Computer and Browser, Edit, Usage, then Suspend. Calling shows the call's conversation, or else closes.
+    /// A nil action is left out; Message without a conversation to open is dimmed.
+    @MainActor static func botActions(noun: String, name: String, reply: (() -> Void)?, message: (() -> Void)?,
+                                      canMessage: Bool = true, call: (() -> Void)?, close: @escaping () -> Void,
+                                      extra: [ProfileCardAction] = [], edit: (() -> Void)?, usage: (() -> Void)?,
+                                      suspension: (isSuspended: Bool, set: (Date?) -> Void)?) -> [Self] {
+        var actions: [Self] = []
+        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
+        if let message {
+            actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", disabled: !canMessage, action: message))
+        }
+        if let call {
+            actions.append(.button("Call", systemImage: "phone", help: "Call \(name)") {
+                call()
+                // The call's controls are in its conversation, so show it.
+                (message ?? close)()
+            })
+        }
+        actions += extra
+        if let edit { actions.append(.button("Edit", systemImage: "pencil", help: "Edit \(noun)", action: edit)) }
+        if let usage { actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage", action: usage)) }
+        if let suspension { actions.append(.suspend(isSuspended: suspension.isSuspended, noun: noun, set: suspension.set)) }
+        return actions
+    }
 }
 
 /// A bot's, agent's or group's profile, the same in every app: its picture and name, a status, what it is for, and
@@ -171,6 +200,16 @@ struct ProfileStatusBadge: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+extension ProfileStatusBadge {
+    /// Archived, or the status the bot set itself, faded once older than a heartbeat, since the bot has had its
+    /// chance to update it and it may no longer hold; nil when it set none.
+    static func bot(_ agent: AgentRecord, heartbeat: TimeInterval) -> Self? {
+        if agent.archivedAt != nil { return Self(text: "Archived", faded: true) }
+        guard let status = agent.status else { return nil }
+        return Self(text: status, faded: agent.isStatusStale(after: heartbeat), setAt: agent.statusSetAt)
     }
 }
 

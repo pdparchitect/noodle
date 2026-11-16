@@ -24,14 +24,9 @@ struct AgentProfileSheet: View {
     }
 
     @MainActor private var status: AnyView? {
-        if store.agents.first(where: { $0.id == agent.id })?.archivedAt != nil {
-            return AnyView(ProfileStatusBadge(text: "Archived", faded: true))
-        }
-        guard let status = agent.status else { return nil }
-        // Older than a heartbeat, the bot has had its chance to update it, so it may no longer hold.
-        let stale = current.isStatusStale(after: TimeInterval(store.runtime.heartbeatConfiguration.intervalMinutes * 60))
-        return AnyView(ProfileStatusBadge(text: status, faded: stale, setAt: current.statusSetAt)
-            .accessibilityLabel("Status: \(status)"))
+        guard let badge = ProfileStatusBadge.bot(current, heartbeat: TimeInterval(store.runtime.heartbeatConfiguration.intervalMinutes * 60))
+        else { return nil }
+        return current.archivedAt != nil ? AnyView(badge) : AnyView(badge.accessibilityLabel("Status: \(badge.text)"))
     }
 
     private var isShared: Bool { store.isShared(agent.id) }
@@ -48,22 +43,10 @@ struct AgentProfileSheet: View {
     }
 
     private var actions: [ProfileCardAction] {
-        var actions: [ProfileCardAction] = []
-        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
-        if let directMessage {
-            actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", disabled: !canOpenDirectMessage,
-                                   action: directMessage))
-        }
-        if let callable = callableConversation {
-            actions.append(.button("Call", systemImage: "phone", help: "Call \(agent.displayName)") {
-                store.startVoiceCall(in: callable)
-                // The call's controls are in its conversation, so show it.
-                if let directMessage { directMessage() } else { dismiss() }
-            })
-        }
+        var companions: [ProfileCardAction] = []
         let computers = store.computers.assigned(to: agent)
         if !computers.isEmpty {
-            actions.append(.custom("computer", CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
+            companions.append(.custom("computer", CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
                 items: computers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state,
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon) }) { id in
                 try await store.computers.open(ComputerLink.url(computer: id, terminal: nil, view: nil))
@@ -71,25 +54,26 @@ struct AgentProfileSheet: View {
         }
         let browsers = store.browsers.assigned(to: agent)
         if !browsers.isEmpty {
-            actions.append(.custom("browser", CompanionOpenButton(title: "Browser", systemImage: "globe",
+            companions.append(.custom("browser", CompanionOpenButton(title: "Browser", systemImage: "globe",
                 items: browsers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready",
                     symbol: $0.symbol, colour: $0.colour, icon: $0.icon) }) { id in
                 try await store.browsers.open(BrowserLink.url(browser: id, tab: nil))
             }))
         }
-        // A bot someone shared is only talked with.
-        if !isShared {
-            actions.append(.button("Edit", systemImage: "pencil", help: "Edit Bot", action: edit))
-            actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage") {
+        let dismiss = dismiss
+        return ProfileCardAction.botActions(
+            noun: "Bot", name: agent.displayName, reply: reply, message: directMessage, canMessage: canOpenDirectMessage,
+            call: callableConversation.map { conversation in { store.startVoiceCall(in: conversation) } }, close: { dismiss() },
+            extra: companions,
+            // A bot someone shared is only talked with.
+            edit: isShared ? nil : edit,
+            usage: isShared ? nil : {
                 store.usage.agentFilter = agent.id
                 openWindow(id: UsageView.windowID)
                 dismiss()
-            })
-        }
-        if current.archivedAt == nil, store.canSuspend(agent.id) {
-            actions.append(.suspend(isSuspended: current.isSuspended(), noun: "Bot") { store.setSuspended(until: $0, agentID: agent.id) })
-        }
-        return actions
+            },
+            suspension: current.archivedAt == nil && store.canSuspend(agent.id)
+                ? (current.isSuspended(), { store.setSuspended(until: $0, agentID: agent.id) }) : nil)
     }
 }
 

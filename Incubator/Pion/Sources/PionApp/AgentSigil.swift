@@ -172,11 +172,13 @@ struct AgentProfileButton: View {
         .help("Show \(agent.displayName)’s profile")
         .accessibilityLabel("Show profile for \(agent.displayName)")
         .popover(isPresented: $showsProfile, arrowEdge: .leading) {
-            AgentProfile(model: model, agent: model.agent(agent.id) ?? agent,
+            // Archived agents too, so the profile follows a change made in it.
+            AgentProfile(model: model, agent: model.everyAgent.first { $0.id == agent.id } ?? agent,
                          reply: reply.map { reply in { finish(reply) } },
-                         message: model.directConversation(of: agent).map { direct in { finish {
+                         message: { finish {
+                             guard let direct = model.directConversation(of: agent) else { return }
                              if inSheet || opensMessageInWindow { openWindow(id: "conversation", value: direct.id) } else { model.selection = direct.id }
-                         } } },
+                         } },
                          edit: inSheet ? nil : edit.map { edit in { finish(edit) } },
                          usage: { finish {
                              model.usage.agentFilter = agent.id
@@ -196,12 +198,12 @@ struct AgentProfileButton: View {
     }
 }
 
-/// Noodle's profile card, with Pion's mark and what the agent is doing.
+/// Noodle's profile card, with Pion's mark; under the name, the status the agent set, or else what it is doing.
 private struct AgentProfile: View {
     let model: PionModel
     let agent: AgentRecord
     let reply: (() -> Void)?
-    let message: (() -> Void)?
+    let message: () -> Void
     let edit: (() -> Void)?
     let usage: () -> Void
     let close: () -> Void
@@ -209,31 +211,20 @@ private struct AgentProfile: View {
 
     var body: some View {
         let phase = model.phase(of: agent)
+        let heartbeat = TimeInterval(model.runtime.heartbeatConfiguration.intervalMinutes * 60)
         ProfileCard(picture: AnyView(AgentMark(agent: agent, size: 88, phase: phase)), name: agent.displayName,
-                    status: AnyView(agent.archivedAt != nil ? ProfileStatusBadge(text: "Archived", faded: true)
-                        : ProfileStatusBadge(text: model.phaseDetail(of: agent) ?? phase.title, dot: phase.color,
-                                             faded: true, isProblem: phase == .failed)),
-                    description: ProfileCard.description(agent.publicDescription), actions: actions,
+                    status: AnyView(ProfileStatusBadge.bot(agent, heartbeat: heartbeat)
+                        ?? ProfileStatusBadge(text: model.phaseDetail(of: agent) ?? phase.title, dot: phase.color,
+                                              faded: true, isProblem: phase == .failed)),
+                    description: ProfileCard.description(agent.publicDescription),
+                    actions: ProfileCardAction.botActions(
+                        noun: "Agent", name: agent.displayName, reply: reply, message: message,
+                        canMessage: model.directConversation(of: agent) != nil,
+                        call: callable.map { conversation in { calls.startCall(in: conversation) } }, close: close,
+                        edit: edit, usage: usage,
+                        suspension: agent.archivedAt == nil
+                            ? (agent.isSuspended(), { model.setSuspended(until: $0, agent: agent) }) : nil),
                     closeLabel: "Close agent profile", close: close)
-    }
-
-    private var actions: [ProfileCardAction] {
-        var actions: [ProfileCardAction] = []
-        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
-        if let message { actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", action: message)) }
-        if let callable {
-            actions.append(.button("Call", systemImage: "phone", help: "Call \(agent.displayName)") {
-                calls.startCall(in: callable)
-                // The call's controls are in its conversation, so show it.
-                if let message { message() } else { close() }
-            })
-        }
-        if let edit { actions.append(.button("Edit", systemImage: "pencil", help: "Edit Agent", action: edit)) }
-        actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage", action: usage))
-        if agent.archivedAt == nil {
-            actions.append(.suspend(isSuspended: agent.isSuspended(), noun: "Agent") { model.setSuspended(until: $0, agent: agent) })
-        }
-        return actions
     }
 
     /// The agent's own conversation, while it can take a call and is not already on one, as in Noodle.

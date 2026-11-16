@@ -60,6 +60,7 @@
 
 ### Changed
 
+- An agent's profile shows the status the agent set for itself, as in Noodle, faded once it may be out of date, and what the agent is doing when it set none. It follows a change made in it for an archived agent too, and its Message button is dimmed when there is no conversation to open.
 - Settings › General is Noodle's, so generated agent names are Real or Playful, as there.
 - Tables in messages sort by a click on a column heading, and the menu in their corner copies a table as CSV or saves it, as in Noodle.
 - A long conversation opens quickly, as in Noodle: it shows its newest 100 messages and the 100 before each time you reach the top.
