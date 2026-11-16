@@ -141,6 +141,7 @@ let project = Project(
                 "../../Sources/Noodle/AttachmentPreviewController.swift",
                 "../../Sources/Noodle/AttachmentDrag.swift",
                 "../../Sources/Noodle/ForwardAttachmentSheet.swift",
+                "../../Sources/Noodle/PatchReview.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
                 "../../Sources/Noodle/AnnotationContent.swift",

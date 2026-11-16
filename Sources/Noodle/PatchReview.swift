@@ -4,6 +4,17 @@ import NoodleRuntimeSettings
 import ScreenCaptureKit
 import SwiftUI
 
+/// What a patch review needs from its app: which files were ticked off, where the patch is, and the comments on it.
+@MainActor protocol PatchReviewHost: AnyObject {
+    func viewedPatchFiles(_ attachment: ConversationAttachment) -> Set<String>
+    func saveViewedPatchFiles(_ paths: Set<String>, for attachment: ConversationAttachment)
+    func attachmentFileURL(_ attachment: ConversationAttachment) -> URL
+    /// Saves a comment on the patch into its conversation's draft.
+    func saveAnnotation(_ annotation: AttachmentAnnotation, content: Data, source: ConversationAttachment) throws
+    /// Comments on the patch, sent or still waiting to be.
+    func patchAnnotations(on attachment: ConversationAttachment) -> [AttachmentAnnotation]
+}
+
 @MainActor final class PatchReviewWindows: NSObject, NSWindowDelegate {
     @MainActor private final class Review {
         let panel: PatchReviewPanel
@@ -31,7 +42,7 @@ import SwiftUI
     func model(for attachment: ConversationAttachment) -> PatchReviewModel? { reviews[attachment.id]?.model }
 
     /// Opens the review of `attachment`, or brings it forward. `frame` is in screen coordinates.
-    func open(_ attachment: ConversationAttachment, patch: Patch, store: NoodleStore, frame: NSRect? = nil) {
+    func open(_ attachment: ConversationAttachment, patch: Patch, store: any PatchReviewHost, frame: NSRect? = nil) {
         if let review = reviews[attachment.id] {
             if let frame { review.panel.setFrame(frame, display: true) }
             return review.panel.makeKeyAndOrderFront(nil)
@@ -91,14 +102,14 @@ import SwiftUI
 
     /// Comments on the selected lines, or on the whole patch when none are, with the editor and
     /// annotation of every other preview, so the note waits in the composer and reaches the bot as any other does.
-    private func annotate(_ review: Review, store: NoodleStore) {
+    private func annotate(_ review: Review, store: any PatchReviewHost) {
         guard !review.editor.hasPendingAnnotation, review.capture == nil else { NSSound.beep(); return }
         review.editor.annotateConversation(in: review.panel, source: review.model.attachment,
                                            quote: review.model.selectedQuote, save: Self.save(to: store))
     }
 
     /// Marks a region of a picture of the review, as in a conversation or any other preview.
-    private func markRegion(_ review: Review, store: NoodleStore) {
+    private func markRegion(_ review: Review, store: any PatchReviewHost) {
         guard !review.editor.hasPendingAnnotation, review.capture == nil else { NSSound.beep(); return }
         let panel = review.panel, frame = panel.frame
         review.capture = Task { @MainActor [weak review, weak store] in
@@ -136,7 +147,7 @@ import SwiftUI
                                                           configuration: config)
     }
 
-    private static func save(to store: NoodleStore) -> (AttachmentAnnotation, Data, ConversationAttachment) throws -> Void {
+    private static func save(to store: any PatchReviewHost) -> (AttachmentAnnotation, Data, ConversationAttachment) throws -> Void {
         { [weak store] note, content, source in
             guard let store else { throw WorkspaceError.missingConversation(source.conversationID) }
             try store.saveAnnotation(note, content: content, source: source)
@@ -287,7 +298,7 @@ private final class PatchReviewPanel: NSPanel {
 /// A patch: what it changes, the walkthrough of its commits, and every file to tick off.
 struct PatchReviewView: View {
     @Bindable var model: PatchReviewModel
-    let store: NoodleStore
+    let store: any PatchReviewHost
     @State private var walkthroughHeight: CGFloat = 0
     @State private var lineFrames = LineFrames()
     /// Whether the line pressed on was left, which makes the press a drag rather than a click.
@@ -457,8 +468,7 @@ struct PatchReviewView: View {
 
     /// Comments on this patch, sent or still in the composer, by file, under the lines they quote.
     private var comments: [String: [Comment]] {
-        let notes = (store.attachmentsByConversation[model.attachment.conversationID] ?? [])
-            .compactMap(\.annotation).filter { $0.sourceAttachmentID == model.attachment.id }
+        let notes = store.patchAnnotations(on: model.attachment)
         var placed: [String: [Comment]] = [:]
         for note in notes {
             guard let quote = note.quote, let place = model.patch.place(of: quote) else { continue }

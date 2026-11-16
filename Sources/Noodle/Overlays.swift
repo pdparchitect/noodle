@@ -1196,3 +1196,10 @@ extension ForwardAttachmentSheet {
 private struct HubDownloadFailed: LocalizedError {
     var errorDescription: String? { "The file could not be downloaded from its Hub." }
 }
+
+extension NoodleStore: PatchReviewHost {
+    func patchAnnotations(on attachment: ConversationAttachment) -> [AttachmentAnnotation] {
+        (attachmentsByConversation[attachment.conversationID] ?? []).compactMap(\.annotation)
+            .filter { $0.sourceAttachmentID == attachment.id }
+    }
+}

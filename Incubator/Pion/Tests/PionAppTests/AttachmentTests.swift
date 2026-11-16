@@ -57,3 +57,29 @@ import XCTest
         XCTAssertEqual(model.drafts[to.id].text, "Half a thought")
     }
 }
+
+/// Noodle's patch review in Pion: the files ticked off stay ticked across launches, kept where Noodle keeps them,
+/// and the review shows the comments made on the patch.
+@MainActor final class PatchReviewTests: XCTestCase {
+    func testViewedFilesAndCommentsComeFromThePatchsConversation() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionPatch-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let chat = try XCTUnwrap(model.directConversation(of: avery))
+        let url = root.appendingPathComponent("fix.diff")
+        try Data("--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n".utf8).write(to: url)
+        model.attach([url], to: chat.id)
+        let patch = try XCTUnwrap(model.drafts[chat.id].attachments.first)
+        model.saveViewedPatchFiles(["x"], for: patch)
+        let note = AttachmentAnnotation(source: patch, quote: "+b", comment: "Why b?")
+        try model.saveAnnotation(note, content: Data(note.textRepresentation.utf8), source: patch)
+        XCTAssertEqual(model.patchAnnotations(on: patch).map(\.comment), ["Why b?"])
+
+        let reopened = PionModel(root: root, messenger: nil, isScripted: true)
+        reopened.start()
+        XCTAssertEqual(reopened.viewedPatchFiles(patch), ["x"])
+        XCTAssertEqual(reopened.attachmentFileURL(patch), model.fileURL(patch))
+    }
+}

@@ -1007,6 +1007,26 @@ import UniformTypeIdentifiers
         drafts.canEditAnnotation(attachment, messages: messages(in: attachment.conversationID))
     }
 
+    // MARK: Patch review, as Noodle reviews
+
+    /// Which files of each patch the champion ticked off, kept where Noodle keeps them.
+    @ObservationIgnored private lazy var patchReviewState = PatchReviewStore(
+        fileURL: repository.rootURL.appendingPathComponent("patch-reviews.json"))
+
+    func viewedPatchFiles(_ attachment: ConversationAttachment) -> Set<String> { patchReviewState.viewed(attachment) }
+
+    func saveViewedPatchFiles(_ paths: Set<String>, for attachment: ConversationAttachment) {
+        do { try patchReviewState.save(paths, for: attachment) }
+        catch { problem = "Could not save which files you viewed: \(error.localizedDescription)" }
+    }
+
+    func attachmentFileURL(_ attachment: ConversationAttachment) -> URL { fileURL(attachment) }
+
+    func patchAnnotations(on attachment: ConversationAttachment) -> [AttachmentAnnotation] {
+        (attachments[attachment.conversationID] ?? [:]).values.compactMap(\.annotation)
+            .filter { $0.sourceAttachmentID == attachment.id }
+    }
+
     // MARK: Forward…, as Noodle forwards
 
     /// The other conversations a file can go to, by name, newest first; closed Investigations take no messages.

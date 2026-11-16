@@ -232,6 +232,13 @@ struct ConversationView: View {
             NSWorkspace.shared.open(model.fileURL(attachment))
             return
         }
+        // As in Noodle, a patch opens in Noodle's review; a file that only has the name of one opens as any other.
+        if attachment.isPatchFile, let patch = PatchCache.patchNow(at: model.fileURL(attachment)) {
+            attachmentPreview.close()
+            screenCapturePreview.close()
+            patchReviews.open(attachment, patch: patch, store: model)
+            return
+        }
         screenCapturePreview.close()
         let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = model.canEditAnnotation(attachment)
             ? { attachment, comment in try model.reviseAnnotationComment(attachment, comment: comment) } : nil
