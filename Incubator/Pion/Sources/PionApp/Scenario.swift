@@ -225,8 +225,8 @@ struct PionScenario: Decodable {
     weak var window: WindowState?
     private var agentIDs: [String: UUID] = [:]
     private var conversationIDs: [String: UUID] = [:]
-    private var keyWaiters: [CheckedContinuation<Void, Never>] = []
-    private var lineWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Noodle's line protocol with scripts/scenario.sh.
+    private let terminal = ScenarioTerminal()
     private var takesShots = false
 
     private init(scenario: PionScenario?, selection: String?, root: URL) throws {
@@ -454,7 +454,7 @@ struct PionScenario: Decodable {
 
     private func perform(_ step: PionScenario.Step) async throws {
         if let wait = step.wait { try await Task.sleep(for: .seconds(takesShots ? min(wait, 0.3) : wait)) }
-        if step.waitFor == "key", !takesShots { await withCheckedContinuation { keyWaiters.append($0) } }
+        if step.waitFor == "key", !takesShots { await terminal.awaitKey() }
         let now = ScenarioClock.now
         let agent = step.agent.flatMap { agentIDs[$0] }
         let conversation = step.in.flatMap { conversationIDs[$0] }
@@ -518,32 +518,17 @@ struct PionScenario: Decodable {
 
     /// Tells scripts/scenario.sh, and when it is capturing, waits for its empty line before going on.
     private func announce(_ line: String) async {
-        print(line)
-        fflush(stdout)
+        terminal.write(line)
         guard takesShots else { return }
-        await withCheckedContinuation { lineWaiters.append($0) }
+        await terminal.awaitAnswer()
     }
 
     /// Next Step from the menu, or a line from the terminal.
-    func nextStep() {
-        let waiters = keyWaiters
-        keyWaiters = []
-        waiters.forEach { $0.resume() }
-    }
+    func nextStep() { terminal.nextStep() }
 
     private func readTerminal() {
         guard CommandLine.arguments.contains("--scenario") else { return }
-        Thread.detachNewThread {
-            while readLine() != nil {
-                Task { @MainActor in
-                    guard let session = ScenarioSession.active else { return }
-                    if !session.lineWaiters.isEmpty {
-                        let waiter = session.lineWaiters.removeFirst()
-                        waiter.resume()
-                    } else { session.nextStep() }
-                }
-            }
-        }
+        terminal.start()
     }
 
     // MARK: Picker

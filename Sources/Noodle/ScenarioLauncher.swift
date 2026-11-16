@@ -225,4 +225,55 @@ enum ScenarioTime {
         throw ScenarioError("\"\(text)\" is not a time: use \"HH:mm\", \"-2d HH:mm\", \"-15m\" or \"-3h\".")
     }
 }
+
+/// The line protocol with scripts/scenario.sh. The app writes a line; where the script must act first, as when it
+/// photographs a shot, it answers with a newline. A newline nobody waits for is Next Step. Launch Services attaches
+/// no terminal, so the input ends at once, nothing waits for an answer again, and only the menu is left.
+@MainActor final class ScenarioTerminal {
+    private var answerWaiters: [CheckedContinuation<Void, Never>] = []
+    private var keyWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var ended = true
+
+    /// The timeline is stopped until Next Step or a newline from the terminal.
+    var isWaitingForKey: Bool { !keyWaiters.isEmpty }
+
+    func write(_ line: String) {
+        FileHandle.standardOutput.write(Data("\(line)\n".utf8))
+    }
+
+    /// Waits for the script's newline, unless the terminal is gone.
+    func awaitAnswer() async {
+        guard !ended else { return }
+        await withCheckedContinuation { answerWaiters.append($0) }
+    }
+
+    func awaitKey() async {
+        await withCheckedContinuation { keyWaiters.append($0) }
+    }
+
+    /// Scenarios > Next Step, or a newline nobody waited for.
+    func nextStep() {
+        let waiters = keyWaiters
+        keyWaiters = []
+        waiters.forEach { $0.resume() }
+    }
+
+    func start() {
+        ended = false
+        Task { @MainActor in
+            do {
+                // Every newline counts, which the line sequence would not say of an empty line.
+                for try await byte in FileHandle.standardInput.bytes where byte == 10 {
+                    if let waiter = self.answerWaiters.first { self.answerWaiters.removeFirst(); waiter.resume() }
+                    else { self.nextStep() }
+                }
+            } catch {}
+            self.ended = true
+            let waiters = self.answerWaiters
+            self.answerWaiters = []
+            waiters.forEach { $0.resume() }
+        }
+    }
+}
+
 #endif

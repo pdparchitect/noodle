@@ -949,7 +949,7 @@ extension Scenario {
     var pause: (@MainActor (Pause) async -> Bool)?
     var sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     /// The timeline is stopped at `waitFor: key` until Next Step or a line from the terminal.
-    var isWaitingForKey: Bool { !keyWaiters.isEmpty }
+    var isWaitingForKey: Bool { terminal.isWaitingForKey }
     /// A capture run: scripts/scenario.sh photographs each `capture` step and nobody is at the keyboard.
     var takesShots = false {
         didSet {
@@ -990,9 +990,7 @@ extension Scenario {
     private var arrivalWaiters: [CheckedContinuation<Void, Never>] = []
     private var timelineEnded = false
     private var nextAutoReply: [UUID: Int] = [:]
-    private var keyWaiters: [CheckedContinuation<Void, Never>] = []
-    private var shotWaiters: [CheckedContinuation<Void, Never>] = []
-    private var terminalEnded = true
+    private let terminal = ScenarioTerminal()
     private var liveMessages: [String: ChatMessage] = [:]
     /// What opened this scenario, a name or a path, which Reload opens again; nil while only the picker is open.
     private(set) var selection: String?
@@ -1302,11 +1300,7 @@ extension Scenario {
     }
 
     /// Scenarios > Next Step, or a line from the terminal.
-    func nextStep() {
-        let waiters = keyWaiters
-        keyWaiters = []
-        waiters.forEach { $0.resume() }
-    }
+    func nextStep() { terminal.nextStep() }
 
     private func answer(_ pause: Pause) async -> Bool {
         if let answer = self.pause { return await answer(pause) }
@@ -1316,15 +1310,15 @@ extension Scenario {
             // A capture run has nobody at the keyboard.
             guard !takesShots else { break }
             write("SCENARIO WAITING choose Scenarios > Next Step, or press Return here")
-            await withCheckedContinuation { keyWaiters.append($0) }
+            await terminal.awaitKey()
         case .shot(let name):
-            guard takesShots, !terminalEnded else { break }
+            guard takesShots, !terminal.ended else { break }
             // Let the last change settle on screen before it is photographed.
             try? await Task.sleep(for: .milliseconds(700))
             // A patch open for review is what the shot is of; otherwise the main window.
             guard let window = store.patchReviews.frontmost ?? mainWindow, let region = mainWindowRegion else { break }
             write("SCENARIO SHOT \(name) id=\(window.windowNumber) rect=\(region)")
-            await withCheckedContinuation { shotWaiters.append($0) }
+            await terminal.awaitAnswer()
         }
         return true
     }
@@ -1339,15 +1333,14 @@ extension Scenario {
     /// Ends a capture run. The script answers once its recorder has stopped, so the window is still up on the last frame.
     func announceDone() async {
         write("SCENARIO DONE")
-        guard !terminalEnded else { return }
-        await withCheckedContinuation { shotWaiters.append($0) }
+        await terminal.awaitAnswer()
     }
 
     /// Tells the script the window is up and where. A capture run waits for the answer, so a recording can start first.
     func announceReady() async {
         write("SCENARIO READY rect=\(mainWindowRegion ?? "none") \(scenario.title)")
-        guard takesShots, !terminalEnded else { return }
-        await withCheckedContinuation { shotWaiters.append($0) }
+        guard takesShots else { return }
+        await terminal.awaitAnswer()
     }
 
     // MARK: Presentation
@@ -1426,28 +1419,10 @@ extension Scenario {
 
     // MARK: Terminal
 
-    private func write(_ line: String) {
-        FileHandle.standardOutput.write(Data("\(line)\n".utf8))
-    }
+    private func write(_ line: String) { terminal.write(line) }
 
     /// scripts/scenario.sh answers a shot with a newline once it is taken; at `waitFor: key` Return does what Next Step does.
-    /// Launch Services attaches no terminal, so the lines end at once and only the menu is left.
-    private func readTerminal() {
-        terminalEnded = false
-        Task { @MainActor in
-            do {
-                // Every newline counts, which the line sequence would not say of an empty line.
-                for try await byte in FileHandle.standardInput.bytes where byte == 10 {
-                    if let waiter = self.shotWaiters.first { self.shotWaiters.removeFirst(); waiter.resume() }
-                    else { self.nextStep() }
-                }
-            } catch {}
-            self.terminalEnded = true
-            let waiters = self.shotWaiters
-            self.shotWaiters = []
-            waiters.forEach { $0.resume() }
-        }
-    }
+    private func readTerminal() { terminal.start() }
 }
 
 // MARK: - Launch, picker and menu
