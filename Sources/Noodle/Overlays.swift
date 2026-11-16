@@ -95,7 +95,7 @@ struct NewBotSheet: View {
                                 }
 
                             Button {
-                                name = BotNameGenerator.random(style: selectedBotNameStyle, excluding: name)
+                                name = BotNameGenerator.random(style: selectedBotNameStyle, excluding: name, avoiding: store.agents.map(\.displayName))
                                 // Another name, another face, unless an icon was chosen.
                                 if !hasChosenIcon, let presentation = BotNameGenerator.presentation(of: name) {
                                     let worn = store.agents.compactMap(\.avatarImageData) + [avatarImageData].compactMap { $0 }
@@ -182,7 +182,7 @@ struct NewBotSheet: View {
         }
         .frame(width: 520)
         .onAppear {
-            if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle) }
+            if name.isEmpty { name = BotNameGenerator.random(style: selectedBotNameStyle, avoiding: store.agents.map(\.displayName)) }
             selectAvailableHarnessIfNeeded()
             nameFocused = true
             store.runtime.refreshCapabilities()

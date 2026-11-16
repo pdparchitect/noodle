@@ -26,17 +26,10 @@ public enum StarterTeam {
                backstory: "You are a careful researcher who checks everything twice. You find out what is true, say where it comes from and how sure you are, and keep your answers short.")
     ]
 
-    /// A name for each member, none of them `taken` nor shared. Shorter than the team when the names run out.
+    /// A name for each member, none of them `taken` nor shared.
     public static func names(style: BotNameStyle, avoiding taken: Set<String>) -> [String] {
-        var taken = taken
         var names: [String] = []
-        for _ in members {
-            var name = BotNameGenerator.random(style: style)
-            for _ in 0..<32 where taken.contains(name) { name = BotNameGenerator.random(style: style) }
-            guard !taken.contains(name) else { break }
-            taken.insert(name)
-            names.append(name)
-        }
+        for _ in members { names.append(BotNameGenerator.random(style: style, avoiding: taken.union(names))) }
         return names
     }
 

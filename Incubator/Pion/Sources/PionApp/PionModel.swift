@@ -789,15 +789,7 @@ import UniformTypeIdentifiers
     static let defaultAgentNameStyle = BotNameStyle.playful
 
     func suggestedAgentName(style: BotNameStyle = PionModel.defaultAgentNameStyle, excluding: String? = nil) -> String {
-        let taken = Set((agents.map(\.displayName) + [excluding].compactMap { $0 }).map { $0.lowercased() })
-        for _ in 0..<64 {
-            let candidate = BotNameGenerator.random(style: style, excluding: excluding)
-            if !taken.contains(candidate.lowercased()) { return candidate }
-        }
-        let base = BotNameGenerator.random(style: style)
-        var suffix = 2
-        while taken.contains("\(base) \(suffix)".lowercased()) { suffix += 1 }
-        return "\(base) \(suffix)"
+        BotNameGenerator.random(style: style, excluding: excluding, avoiding: agents.map(\.displayName))
     }
 
     func agentInstructions(_ agent: AgentRecord) throws -> String {

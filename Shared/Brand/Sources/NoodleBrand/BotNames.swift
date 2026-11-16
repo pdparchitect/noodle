@@ -43,7 +43,7 @@ public enum BotNameGenerator {
         "Sasha", "Yuki"
     ]
 
-    private static let realNames = feminineNames + masculineNames + eitherNames
+    static let realNames = feminineNames + masculineNames + eitherNames
 
     private static let descriptors = [
         "Amber", "Bright", "Brisk", "Calm", "Clever", "Copper", "Cozy", "Curious",
@@ -58,6 +58,21 @@ public enum BotNameGenerator {
         "Otter", "Panda", "Pebble", "Pixel", "Quill", "Robin", "Sparrow", "Sprout",
         "Starling", "Thistle", "Tiger", "Willow", "Wren", "Yak", "Zinnia", "Zuzu"
     ]
+
+    /// A name not among `taken`, whatever its case, nor `current`; when every name is taken, one with a number.
+    public static func random(style: BotNameStyle, excluding current: String? = nil, avoiding taken: some Sequence<String>) -> String {
+        let current = current?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taken = Set((Array(taken) + [current].compactMap { $0 }).map { $0.lowercased() })
+        for _ in 0..<64 {
+            let candidate = random(style: style, excluding: current)
+            if !taken.contains(candidate.lowercased()) { return candidate }
+        }
+        if style == .real, let name = realNames.shuffled().first(where: { !taken.contains($0.lowercased()) }) { return name }
+        let base = random(style: style)
+        var suffix = 2
+        while taken.contains("\(base) \(suffix)".lowercased()) { suffix += 1 }
+        return "\(base) \(suffix)"
+    }
 
     public static func random(style: BotNameStyle, excluding current: String? = nil) -> String {
         let current = current?.trimmingCharacters(in: .whitespacesAndNewlines)
