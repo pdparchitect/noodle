@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- As in Noodle, a pin or notification setting is forgotten once its conversation is deleted, and an archived conversation keeps both until it comes back; pinning something while a group was archived no longer lost the group's pin.
 - A voice message shows just its recording, as in Noodle, without a "Voice message" bubble above it; its reactions sit on the recording.
 - Archiving an agent takes its conversation out of the sidebar, the Dock count and searches, and out of the window if open, as in Noodle. Archived agents and groups leave nothing unread, and archiving a group takes its shared folders away from its agents, until it is brought back.
 - When creating or saving an agent, group or Investigation fails and Pion cannot fully undo it, the error says what failed first, then what could not be undone.

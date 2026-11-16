@@ -157,6 +157,20 @@ public struct WorkspaceRepository: Sendable {
         rootURL.appendingPathComponent("group-notifications.json")
     }
 
+    /// The pins and groups' own notification levels of the conversations in `known`. Those of conversations
+    /// gone are dropped and saved; `pinsChanged` and `notificationsChanged` say which, for whoever mirrors them.
+    public func keptConversationSettings(of known: Set<UUID>) throws -> KeptConversationSettings {
+        let storedPins = try loadPinnedConversationIDs()
+        let pins = storedPins.filter(known.contains)
+        if pins != storedPins { try savePinnedConversationIDs(pins) }
+        let storedNotifications = try loadGroupNotifications()
+        var notifications = storedNotifications
+        notifications.levels = storedNotifications.levels.filter { known.contains($0.key) }
+        if notifications != storedNotifications { try saveGroupNotifications(notifications) }
+        return KeptConversationSettings(pins: pins, notifications: notifications,
+                                        pinsChanged: pins != storedPins, notificationsChanged: notifications != storedNotifications)
+    }
+
     public var harnessProfiles: HarnessProfileStore { HarnessProfileStore(root: rootURL) }
     public var managedHarnesses: ManagedHarnessStore { ManagedHarnessStore(root: rootURL) }
 
@@ -1863,6 +1877,13 @@ private struct PinnedConversations: Codable {
 }
 
 /// How this Mac's own groups notify the person: each group's own level, and the one for groups that keep the default.
+public struct KeptConversationSettings: Sendable {
+    public let pins: [UUID]
+    public let notifications: GroupNotificationSettings
+    public let pinsChanged: Bool
+    public let notificationsChanged: Bool
+}
+
 public struct GroupNotificationSettings: Codable, Equatable, Sendable {
     public var version = 1
     /// "all", "mentions" or "muted", for each group with a level of its own.

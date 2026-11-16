@@ -281,10 +281,14 @@ import UniformTypeIdentifiers
     func reload() {
         reloadWorkspace()
         reloadPion()
-        groupNotificationSettings = (try? repository.loadGroupNotifications()) ?? GroupNotificationSettings()
-        unread = ConversationUnread(repository: repository, known: Set(everyConversation.map(\.id)))
-        let pins = ((try? repository.loadPinnedConversationIDs()) ?? []).filter(Set(conversations.map(\.id)).contains)
-        if pins != pinnedIDs { pinnedIDs = pins }
+        // As in Noodle: an archived conversation keeps its pin and level, since it can come back; one gone loses them.
+        let known = Set(everyConversation.map(\.id))
+        do {
+            let kept = try repository.keptConversationSettings(of: known)
+            groupNotificationSettings = kept.notifications
+            if kept.pins != pinnedIDs { pinnedIDs = kept.pins }
+        } catch { problem = error.localizedDescription }
+        unread = ConversationUnread(repository: repository, known: known)
         budgets.onChange = { [weak self] in self?.applyBudgets() }
         budgets.load(everyAgent, repository: repository)
         tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })

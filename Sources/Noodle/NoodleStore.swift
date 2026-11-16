@@ -987,20 +987,11 @@ final class NoodleStore {
             try? transcriptPositions.retainConversations(knownConversationIDs)
             try? patchReviewState.retainConversations(knownConversationIDs)
             conversationWindows.retainConversations(knownConversationIDs)
-            let storedPinnedIDs = try repository.loadPinnedConversationIDs()
-            pinnedConversationIDs = storedPinnedIDs.filter(knownConversationIDs.contains)
-            if pinnedConversationIDs != storedPinnedIDs {
-                try repository.savePinnedConversationIDs(pinnedConversationIDs)
-                thisMac.hub?.pinsChanged()
-            }
-            let storedNotifications = try repository.loadGroupNotifications()
-            var keptNotifications = storedNotifications
-            keptNotifications.levels = storedNotifications.levels.filter { knownConversationIDs.contains($0.key) }
-            groupNotificationSettings = keptNotifications
-            if keptNotifications != storedNotifications {
-                try repository.saveGroupNotifications(keptNotifications)
-                thisMac.hub?.notificationsChanged()
-            }
+            let kept = try repository.keptConversationSettings(of: knownConversationIDs)
+            pinnedConversationIDs = kept.pins
+            if kept.pinsChanged { thisMac.hub?.pinsChanged() }
+            groupNotificationSettings = kept.notifications
+            if kept.notificationsChanged { thisMac.hub?.notificationsChanged() }
             // Members out of reach stay stored, so a space is never pruned here.
             spaceList.reload()
             let storedUnreadIDs = try repository.loadUnreadConversationIDs()

@@ -24,4 +24,30 @@ import XCTest
         XCTAssertNil(model.conversation(group.id))
         XCTAssertNotNil(model.agent(morgan.id))
     }
+
+    /// As in Noodle: a deleted group's own notification level and pin go with it, kept only while it was there;
+    /// an archived group keeps both, since it can come back.
+    func testADeletedGroupLeavesNoLevelOrPinBehind() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionDelete-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let gone = try model.createGroup(name: "Gone", description: nil, members: [avery.id])
+        let kept = try model.createGroup(name: "Kept", description: nil, members: [avery.id])
+        for group in [gone, kept] {
+            model.setNotifications(.muted, conversationID: group.id)
+            model.setPinned(true, conversationID: group.id)
+        }
+        model.setGroupArchived(true, id: kept.id)
+        // Deleted elsewhere, as by an agent or another Pion, so only what is stored is left to tidy.
+        try model.repository.deleteConversation(id: gone.id)
+        model.refresh()
+
+        XCTAssertEqual(Array(try model.repository.loadGroupNotifications().levels.keys), [kept.id])
+        XCTAssertEqual(try model.repository.loadPinnedConversationIDs(), [kept.id])
+        model.setGroupArchived(false, id: kept.id)
+        XCTAssertEqual(model.pinnedIDs, [kept.id], "An archived group keeps its pin")
+        XCTAssertEqual(model.notifications(of: kept.id), .muted)
+    }
 }
