@@ -58,7 +58,6 @@ private struct SidebarEmptyState: View {
 
 private struct SidebarList: View {
     @Environment(NoodleStore.self) private var store
-    @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversationOrder.key) private var conversationOrder = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
@@ -202,15 +201,10 @@ private struct SidebarList: View {
             Button("Pin") { store.setPinned(true, conversationID: conversation.id) }
         }
         if store.canNotifyMentions(conversation) {
-            Picker("Notifications", selection: Binding(
+            NotificationsPicker(chosen: Binding(
                 get: { store.chosenNotifications(of: conversation.id) ?? .default },
-                set: { store.setNotifications($0, conversationID: conversation.id) })) {
-                Text(store.defaultNotifications(of: conversation.id) == .mentions ? "Default (Mentions Only)" : "Default (All Messages)")
-                    .tag(LinkNotifications.default)
-                Text("All Messages").tag(LinkNotifications.all)
-                Text("Mentions Only").tag(LinkNotifications.mentions)
-                Text("Muted").tag(LinkNotifications.muted)
-            }
+                set: { store.setNotifications($0, conversationID: conversation.id) }),
+                defaultIsMentions: store.defaultNotifications(of: conversation.id) == .mentions)
         } else if store.canMute(conversation) {
             if store.isMuted(conversation.id) {
                 Button("Unmute") { store.setMuted(false, conversationID: conversation.id) }
@@ -240,27 +234,10 @@ private struct SidebarList: View {
             Button("Change Background…") { store.backgroundBeingEdited = conversation }
             if let agent = store.participants(for: conversation).first, store.runsHere(agent.id) {
                 Divider()
-                Button("Show Activity") { store.showActivity(for: agent) }
-                Button("Show Usage") {
-                    store.usage.agentFilter = agent.id
-                    openWindow(id: UsageView.windowID)
-                }
-                Button("Show Workspace in Finder") {
-                    store.revealWorkspace(for: agent)
-                }
-                Divider()
-                Button("Organize") { store.runtime.organize(agent.id) }
-                    .disabled(!store.runtime.canOrganize(agent.id))
-                Divider()
-                // Kick also takes a bot on a fallback harness back to its own.
-                if store.runtime.snapshot(for: agent.id).phase == .failed || store.runtime.runningHarness(for: agent.id) != nil {
-                    Button("Kick") {
-                        kickRequest = store.runtime.kick(agent: agent, repository: store.repository)
-                    }
-                    .disabled(store.runtime.changingAccess.contains(agent.id))
-                }
-                Button("New Session") { newSessionAgent = agent }
-                    .disabled(store.runtime.changingAccess.contains(agent.id))
+                AgentHousekeepingItems(agent: agent, runtime: store.runtime, repository: store.repository,
+                    showActivity: { store.showActivity(for: agent) }, filterUsage: { store.usage.agentFilter = agent.id },
+                    revealWorkspace: { store.revealWorkspace(for: agent) }, kick: { kickRequest = $0 },
+                    newSession: { newSessionAgent = agent })
             }
         }
         switch conversation.kind {

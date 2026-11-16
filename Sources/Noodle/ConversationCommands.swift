@@ -37,12 +37,7 @@ struct ConversationCommands: Commands {
             Button(command?.title ?? "Record Voice Message") { command?.perform() }
                 .appShortcut(.recordVoice)
                 .disabled(command?.isEnabled != true)
-            Button(isOnCall() ? "End Call" : "Call") {
-                // Holding the shortcut must not end the call it just started.
-                if let event = NSApp.currentEvent, event.type == .keyDown, event.isARepeat { return }
-                toggleCall()
-            }
-            .appShortcut(.call)
+            CallCommandButton(isOnCall: isOnCall(), toggle: toggleCall)
             Button("Stop", action: stop)
                 .appShortcut(.stopBot)
                 .disabled(!canStop())

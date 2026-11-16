@@ -1,3 +1,4 @@
+import AppKit
 import NoodleCore
 import SwiftUI
 
@@ -239,5 +240,20 @@ enum VoiceCallLayout {
             }
         }
         return placed
+    }
+}
+
+/// Call or End Call in the Conversation menu, in every app. Holding its shortcut must not end the call it just
+/// started.
+struct CallCommandButton: View {
+    let isOnCall: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(isOnCall ? "End Call" : "Call") {
+            if let event = NSApp.currentEvent, event.type == .keyDown, event.isARepeat { return }
+            toggle()
+        }
+        .appShortcut(.call)
     }
 }

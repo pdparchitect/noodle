@@ -227,7 +227,6 @@ struct ConversationRowMenu: View {
     let model: PionModel
     let window: WindowState
     let conversation: BotConversation
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let investigation = model.investigation(conversation.id)
@@ -235,11 +234,7 @@ struct ConversationRowMenu: View {
         let closed = investigation?.isClosed == true
         // As in Noodle: where it opens, then pinning and notifications, editing, looking at it elsewhere, the
         // agent's housekeeping, and last stopping, suspending and closing or archiving.
-        Button("Open in New Window") {
-            // Opened in a window, a floating conversation stops floating, as Noodle docks it.
-            PionWindows.panels?.close(conversation.id)
-            openWindow(id: "conversation", value: conversation.id)
-        }
+        Button("Open in New Window") { PionWindows.dock(conversation.id) }
         Button("Float on Top") { PionWindows.float(conversation.id) }
         Divider()
         Button(model.isPinned(conversation.id) ? "Unpin" : "Pin") {
@@ -247,15 +242,10 @@ struct ConversationRowMenu: View {
         }
         .disabled(closed)
         if agent == nil {
-            Picker("Notifications", selection: Binding(
+            NotificationsPicker(chosen: Binding(
                 get: { model.chosenNotifications(of: conversation.id) ?? .default },
-                set: { model.setNotifications($0, conversationID: conversation.id) })) {
-                Text(model.groupNotifications == .mentions ? "Default (Mentions Only)" : "Default (All Messages)")
-                    .tag(LinkNotifications.default)
-                Text("All Messages").tag(LinkNotifications.all)
-                Text("Mentions Only").tag(LinkNotifications.mentions)
-                Text("Muted").tag(LinkNotifications.muted)
-            }
+                set: { model.setNotifications($0, conversationID: conversation.id) }),
+                defaultIsMentions: model.groupNotifications == .mentions)
         }
         Divider()
         Button(investigation != nil ? "Edit Investigation…" : agent != nil ? "Edit Agent…" : "Edit Group…") {
@@ -270,23 +260,10 @@ struct ConversationRowMenu: View {
         }
         Divider()
         if let agent {
-            Button("Show Activity") { model.showActivity(for: agent) }
-            Button("Show Usage") {
-                model.usage.agentFilter = agent.id
-                openWindow(id: UsageView.windowID)
-            }
-            Button("Show Workspace in Finder") { model.reveal(conversation) }
-            Divider()
-            Button("Organize") { model.runtime.organize(agent.id) }
-                .disabled(!model.runtime.canOrganize(agent.id))
-            Divider()
-            // Kick also takes an agent on a fallback harness back to its own.
-            if model.runtime.snapshot(for: agent.id).phase == .failed || model.runtime.runningHarness(for: agent.id) != nil {
-                Button("Kick") { window.kickRequest = model.runtime.kick(agent: agent, repository: model.repository) }
-                    .disabled(model.runtime.changingAccess.contains(agent.id))
-            }
-            Button("New Session") { window.newSessionAgent = agent }
-                .disabled(model.runtime.changingAccess.contains(agent.id))
+            AgentHousekeepingItems(agent: agent, runtime: model.runtime, repository: model.repository,
+                showActivity: { model.showActivity(for: agent) }, filterUsage: { model.usage.agentFilter = agent.id },
+                revealWorkspace: { model.reveal(conversation) }, kick: { window.kickRequest = $0 },
+                newSession: { window.newSessionAgent = agent })
         } else {
             Button("Show in Finder") { model.reveal(conversation) }
             if let investigation {

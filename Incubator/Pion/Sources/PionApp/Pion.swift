@@ -306,9 +306,7 @@ struct PionCommands: Commands {
                 .appShortcut(PionShortcuts.searchConversations)
                 .disabled(context?.search == nil)
             Divider()
-            Button("Open in New Window") {
-                if let conversationID { openWindow(id: "conversation", value: conversationID) }
-            }
+            Button("Open in New Window") { if let conversationID { PionWindows.dock(conversationID) } }
             .disabled(conversationID == nil)
             Button("Float on Top") {
                 // As in Noodle, the panel takes the place of the conversation's own window if it has one.
@@ -332,8 +330,7 @@ struct PionCommands: Commands {
             Button(voiceRecording?.title ?? "Record Voice Message") { voiceRecording?.perform() }
                 .appShortcut(PionShortcuts.recordVoice)
                 .disabled(voiceRecording?.isEnabled != true)
-            Button(calls.voiceCalls.call != nil ? "End Call" : "Call") { calls.toggleCall(in: conversationID) }
-                .appShortcut(.call)
+            CallCommandButton(isOnCall: calls.voiceCalls.call != nil) { calls.toggleCall(in: conversationID) }
                 .disabled(calls.voiceCalls.call == nil && model.conversation(conversationID).map(calls.canCallNow) != true)
             Button("Stop") { model.stop(in: conversationID) }
                 .appShortcut(PionShortcuts.stop)
@@ -409,6 +406,13 @@ enum SidebarOptions {
     static func float(_ id: UUID) {
         guard let conversations, let panels else { return }
         conversations.float(id, in: panels)
+    }
+
+    /// Opens the conversation in its own window, or brings that window forward, and stops it floating, as Noodle
+    /// docks it.
+    static func dock(_ id: UUID) {
+        guard let conversations, let panels else { return }
+        conversations.dock(id, panels: panels)
     }
 
     /// Shows the conversation in the main window, closing its own window or panel.
