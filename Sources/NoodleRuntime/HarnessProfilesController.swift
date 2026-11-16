@@ -40,6 +40,12 @@ public final class HarnessProfilesController {
         profiles.first { $0.id == id }
     }
 
+    /// `id` when it is a profile of the harness named by `harnessIdentifier`; nil otherwise, the harness's default login.
+    public func validProfile(_ id: UUID?, harnessIdentifier: String?) -> UUID? {
+        guard let profile = profile(id), profile.provider.rawValue == harnessIdentifier else { return nil }
+        return profile.id
+    }
+
     func reload() {
         profiles = (try? store.load()) ?? []
     }

@@ -38,6 +38,26 @@ import XCTest
         XCTAssertEqual(created.displayName.split(separator: " ").count, 2)
     }
 
+    /// As in Noodle: a login profile of another harness, or a voice the harness doesn't have, is dropped, not refused,
+    /// and an agent moved to another harness leaves its old profile behind.
+    func testAProfileOrVoiceNotOfTheAgentsHarnessIsDropped() throws {
+        let claude = try model.harnessProfiles.create(provider: .claudeCode, named: "Work")
+        let codex = try model.harnessProfiles.create(provider: .codex, named: "Work")
+        let created = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil,
+                                            resources: .init(profile: claude.id))
+        XCTAssertNil(try model.repository.loadAgentHarnessProfile(created))
+        model.setVoice("not-a-voice", for: created)
+        XCTAssertEqual(model.voice(of: created), "")
+        model.setVoice("juniper", for: created)
+        XCTAssertEqual(model.voice(of: created), "juniper")
+
+        let kept = try model.updateAgent(created, name: "Avery", description: nil, instructions: "", provider: .codex, model: nil,
+                                         resources: .init(profile: codex.id))
+        XCTAssertEqual(try model.repository.loadAgentHarnessProfile(kept), codex.id)
+        let moved = try model.updateAgent(kept, name: "Avery", description: nil, instructions: "", provider: .claudeCode, model: nil)
+        XCTAssertNil(try model.repository.loadAgentHarnessProfile(moved))
+    }
+
     /// A change that fails is undone, and its own error is what the person reads, with what could not be undone after it.
     func testAFailedChangeKeepsItsOwnErrorWhenUndoingItFailsToo() throws {
         let repository = WorkspaceRepository(rootURL: root)

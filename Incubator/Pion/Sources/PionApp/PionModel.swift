@@ -819,7 +819,7 @@ import UniformTypeIdentifiers
                 try repository.updateAgentFolders(updated, folders: resources.folders)
                 try repository.updateAgentHarnessProfile(updated, profile: resources.profile)
                 try connectionsController.assign(resources.connections, to: updated, synchronizeWorkspace: false)
-            } else if current.harnessIdentifier != updated.harnessIdentifier, profile != nil {
+            } else if profile != nil, harnessProfiles.validProfile(profile, harnessIdentifier: updated.harnessIdentifier) == nil {
                 // A profile belongs to its harness; a new harness uses its own default login.
                 try repository.updateAgentHarnessProfile(updated, profile: nil)
             }
@@ -870,12 +870,9 @@ import UniformTypeIdentifiers
     private func validated(_ resources: AgentResources, provider: HarnessProvider?) throws -> AgentResources {
         let folders = try AgentFolder.validated(resources.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         try connectionsController.validateAssignment(resources.connections)
-        if let profile = resources.profile {
-            guard let saved = harnessProfiles.profile(profile), saved.provider == provider else {
-                throw CaseError("Choose a profile belonging to this harness.")
-            }
-        }
-        return AgentResources(folders: folders, connections: resources.connections, profile: resources.profile)
+        // As in Noodle: a profile of another harness gives way to the harness's default login.
+        return AgentResources(folders: folders, connections: resources.connections,
+                              profile: harnessProfiles.validProfile(resources.profile, harnessIdentifier: provider?.rawValue))
     }
 
     private func validateMemberTools(_ assignments: [UUID: Set<UUID>], members: Set<UUID>) throws {
@@ -927,6 +924,7 @@ import UniformTypeIdentifiers
         reload()
         if running {
             restartBrokers()
+            runtime.authorizeSelectedHarness(created.agent)
             runtime.start(agent: created.agent, repository: repository)
         }
         return created.agent
@@ -1010,8 +1008,11 @@ import UniformTypeIdentifiers
     /// The voice an agent speaks with on calls; empty leaves it to the harness.
     func voice(of agent: AgentRecord) -> String { (try? repository.loadAgentVoice(agent)).flatMap { $0 } ?? "" }
 
+    /// As in Noodle, a voice the agent's harness doesn't have leaves the choice to the harness.
     func setVoice(_ voice: String, for agent: AgentRecord) {
-        do { try repository.updateAgentVoice(agent, voice: voice.isEmpty ? nil : voice) } catch { problem = error.localizedDescription }
+        let current = everyAgent.first { $0.id == agent.id } ?? agent
+        do { try repository.updateAgentVoice(current, voice: HarnessProvider.validVoice(voice, harnessIdentifier: current.harnessIdentifier)) }
+        catch { problem = error.localizedDescription }
     }
 
     // MARK: Deleting, as Noodle deletes

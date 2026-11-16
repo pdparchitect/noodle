@@ -1630,8 +1630,7 @@ final class NoodleStore {
     }
 
     private func validHarnessProfile(_ id: UUID?, harnessIdentifier: String) -> UUID? {
-        guard let profile = harnessProfiles.profile(id), profile.provider.rawValue == harnessIdentifier else { return nil }
-        return profile.id
+        harnessProfiles.validProfile(id, harnessIdentifier: harnessIdentifier)
     }
 
     /// Bots on a deleted profile return to the default profile, never to another account.
@@ -1898,8 +1897,7 @@ final class NoodleStore {
 
     /// A voice from another harness is dropped rather than kept for a harness that cannot use it.
     private func validVoice(_ voice: String?, harnessIdentifier: String) -> String? {
-        guard let voice, HarnessProvider(rawValue: harnessIdentifier)?.voices.contains(where: { $0.id == voice }) == true else { return nil }
-        return voice
+        HarnessProvider.validVoice(voice, harnessIdentifier: harnessIdentifier)
     }
 
     @ObservationIgnored var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
