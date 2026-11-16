@@ -47,4 +47,25 @@ import NoodleCore
         }
         if let firstError { throw firstError }
     }
+
+    /// Runs `change`; if it throws, puts the settings back, runs `undo` for what lies outside them, and rethrows
+    /// the change's own error, followed by what could not be put back.
+    func undoing<T>(_ change: () throws -> T, undo: () throws -> Void = {}) throws -> T {
+        do { return try change() } catch {
+            do { try restore(); try undo() } catch let failure {
+                throw RollbackError(message: Self.detail(error, rollback: failure))
+            }
+            throw error
+        }
+    }
+
+    /// A failed change's message, with why it could not be fully undone.
+    static func detail(_ error: Error, rollback: Error) -> String {
+        "\(error.localizedDescription) Previous settings could not be fully restored: \(rollback.localizedDescription)"
+    }
+
+    private struct RollbackError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
 }

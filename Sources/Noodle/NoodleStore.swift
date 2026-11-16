@@ -1447,8 +1447,8 @@ final class NoodleStore {
             try reminders.assign(reminderListIDs, to: result.agent, synchronizeWorkspace: false)
             try self.imageGeneration.assign(imageGeneration, to: result.agent)
             try repository.synchronizeAgentWorkspace(result.agent)
-        } catch {
-            var detail = error.localizedDescription
+        } catch let failure {
+            var detail = failure.localizedDescription
             do {
                 try checkpoint?.restore()
                 try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
@@ -1456,7 +1456,7 @@ final class NoodleStore {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
                 }
-            } catch { detail += " Previous settings could not be fully restored: \(error.localizedDescription)" }
+            } catch { detail = AgentSettingsCheckpoint.detail(failure, rollback: error) }
             errorMessage = detail
             return false
         }

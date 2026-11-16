@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- When creating or saving an agent, group or Investigation fails and Pion cannot fully undo it, the error says what failed first, then what could not be undone.
 - Group Info's Save stays dimmed until something changes, as in Noodle.
 - Each conversation opens where you left it, after Pion quits too, and a message opened from a search or a notification is where its conversation opens, even in a window not open yet, as in Noodle.
 - Searching the sidebar no longer slows typing: what was said is searched once typing pauses, in the background, as in Noodle. Messages in a conversation found only by its description no longer fold under Show All.

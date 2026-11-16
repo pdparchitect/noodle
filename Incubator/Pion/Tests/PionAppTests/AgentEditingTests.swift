@@ -37,6 +37,22 @@ import XCTest
         XCTAssertEqual(created.displayName.split(separator: " ").count, 2)
     }
 
+    /// A change that fails is undone, and its own error is what the person reads, with what could not be undone after it.
+    func testAFailedChangeKeepsItsOwnErrorWhenUndoingItFailsToo() throws {
+        let repository = WorkspaceRepository(rootURL: root)
+        try repository.prepare()
+        let checkpoint = try AgentSettingsCheckpoint(repository: repository)
+        XCTAssertThrowsError(try checkpoint.undoing({ throw CaseError("The folder is gone.") },
+                                                     undo: { throw CaseError("The agent is still there.") })) { error in
+            XCTAssertEqual(error.localizedDescription,
+                           "The folder is gone. Previous settings could not be fully restored: The agent is still there.")
+        }
+        XCTAssertThrowsError(try checkpoint.undoing { throw CaseError("The folder is gone.") }) { error in
+            XCTAssertEqual(error.localizedDescription, "The folder is gone.")
+        }
+        XCTAssertEqual(try checkpoint.undoing { 7 }, 7)
+    }
+
     func testEditingAnAgentPersistsItsIdentityInstructionsAndConversationName() throws {
         let original = try agent()
         let conversation = try XCTUnwrap(model.directConversation(of: original))

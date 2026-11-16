@@ -289,7 +289,6 @@ struct ConversationRowMenu: View {
     }
 }
 
-/// Suspend Agent's choices of how long, as Noodle offers them, or Unsuspend Agent for one already suspended.
 /// One activity window per agent, Noodle's own, kept for the whole app.
 @MainActor private let activityWindows = AgentActivityWindows()
 

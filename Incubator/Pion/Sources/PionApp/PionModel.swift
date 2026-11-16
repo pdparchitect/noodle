@@ -781,10 +781,9 @@ import UniformTypeIdentifiers
         let previous = try agentInstructions(current)
         let checkpoint = try AgentSettingsCheckpoint(repository: repository, agent: current, conversations: conversations)
         let profile = try repository.loadAgentHarnessProfile(current)
-        let updated: AgentRecord
-        do {
+        let updated = try checkpoint.undoing({
             let chosenEffort = effort.map { $0.isEmpty ? nil : $0 } ?? current.reasoningEffort
-            updated = try repository.updateAgent(current, displayName: name, harnessIdentifier: provider?.rawValue,
+            let updated = try repository.updateAgent(current, displayName: name, harnessIdentifier: provider?.rawValue,
                 modelIdentifier: model, reasoningEffort: chosenEffort, publicDescription: description,
                 avatarSymbolName: current.avatarSymbolName, avatarColorIndex: current.avatarColorIndex,
                 avatarImageData: current.avatarImageData, now: now)
@@ -804,11 +803,8 @@ import UniformTypeIdentifiers
                 try repository.updateConversation(conversation)
             }
             try repository.synchronizeAgentWorkspace(updated)
-        } catch {
-            do { try checkpoint.restore(); try connectionsController.reloadAssignments(); try repository.synchronizeAgentWorkspace(current) }
-            catch { throw CaseError("The agent could not be saved or fully restored: \(error.localizedDescription)") }
-            throw error
-        }
+            return updated
+        }, undo: { try connectionsController.reloadAssignments(); try repository.synchronizeAgentWorkspace(current) })
         reload()
         if running && !isScripted {
             runtime.authorizeSelectedHarness(updated)
@@ -827,12 +823,11 @@ import UniformTypeIdentifiers
         let folders = try folders.map { try AgentFolder.validated($0, protecting: AgentFolder.protectedLocations(root: repository.rootURL)) }
         let before = conversation(group.id) ?? group
         let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let updated: BotConversation
-        do {
+        let updated = try checkpoint.undoing({
             try assignMemberTools(memberTools)
-            updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
-                                                  participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
-        } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
+            return try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
+                                              participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+        }, undo: connectionsController.reloadAssignments)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
@@ -897,17 +892,12 @@ import UniformTypeIdentifiers
                                                  reasoningEffort: effort, publicDescription: description,
                                                  avatarSymbolName: symbol, avatarColorIndex: color,
                                                  backstory: instructions + "\n\n" + AgentPrinciples.text, id: id, now: now)
-        do {
+        try checkpoint.undoing({
             try repository.updateAgentFolders(created.agent, folders: resources.folders)
             try repository.updateAgentHarnessProfile(created.agent, profile: resources.profile)
             try connectionsController.assign(resources.connections, to: created.agent, synchronizeWorkspace: false)
             try repository.synchronizeAgentWorkspace(created.agent)
-        } catch {
-            let failure = error
-            try checkpoint.restore(); try connectionsController.reloadAssignments()
-            try repository.deleteAgent(created.agent)
-            throw failure
-        }
+        }, undo: { try connectionsController.reloadAssignments(); try repository.deleteAgent(created.agent) })
         reload()
         if running {
             restartBrokers()
@@ -1176,12 +1166,11 @@ import UniformTypeIdentifiers
         let folders = try AgentFolder.validated(folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         try validateMemberTools(memberTools, members: members)
         let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let group: BotConversation
-        do {
+        let group = try checkpoint.undoing({
             try assignMemberTools(memberTools)
-            group = try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
-                                                existingAgents: agents, folders: folders, leadID: lead, now: now)
-        } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
+            return try repository.createGroup(named: name, publicDescription: description, participantIDs: Array(members),
+                                              existingAgents: agents, folders: folders, leadID: lead, now: now)
+        }, undo: connectionsController.reloadAssignments)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: nil, to: group))
@@ -1236,14 +1225,12 @@ import UniformTypeIdentifiers
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
         let checkpoint = try AgentSettingsCheckpoint(repository: repository)
-        let group: BotConversation
-        let updated: Investigation
         let toolsChanged = draft.memberTools.contains { id, ids in agent(id).map { connectionsController.selectedIDs(for: $0) != ids } ?? false }
-        do {
+        let (group, updated) = try checkpoint.undoing({
             try assignMemberTools(draft.memberTools)
-            group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
+            let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
                 publicDescription: draft.objective, participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
-            updated = try store.update(current.id, by: .champion(champion), now: now) { value in
+            let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
                 var events: [(event: String, detail: String)] = []
                 if value.title != title { events.append(("title", title)); value.title = title }
                 if value.objective != draft.objective { events.append(("objective", draft.objective)); value.objective = draft.objective }
@@ -1252,7 +1239,8 @@ import UniformTypeIdentifiers
                 if toolsChanged { events.append(("tools", "Updated the team's agent tool assignments.")) }
                 return events
             }
-        } catch { try checkpoint.restore(); try connectionsController.reloadAssignments(); throw error }
+            return (group, updated)
+        }, undo: connectionsController.reloadAssignments)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
