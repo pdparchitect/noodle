@@ -181,6 +181,25 @@ struct VoiceCallSetup: Equatable {
 }
 
 /// One call at a time across the app: starting another hangs up the current one.
+extension VoiceCallLine {
+    /// The last few things said in a conversation, which a call's voice hears first; calls and notices are left out.
+    static func recent(_ messages: [ChatMessage], count: Int = 12) -> [VoiceCallLine] {
+        messages.suffix(count).compactMap { message in
+            guard message.call == nil else { return nil }
+            switch message.author {
+            case .user: return .init(.person, message.body)
+            case .agent: return .init(.bot, message.body)
+            case .system: return nil
+            }
+        }
+    }
+}
+
+extension AgentRecord {
+    /// Whether its harness speaks, which a call needs.
+    var hasCallVoices: Bool { HarnessProvider(rawValue: harnessIdentifier ?? "")?.voices.isEmpty == false }
+}
+
 @MainActor @Observable final class VoiceCallController {
     struct Call: Equatable {
         let id = UUID()
@@ -697,5 +716,23 @@ struct VoiceChooser: View {
         .buttonStyle(.plain)
         .help("Choose \(voice.name) and hear it")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+extension VoiceCallController {
+    /// Calls a bot on this Mac: starts it, tells the voice who it is and what was said lately, and picks its voice.
+    func startLocal(_ agent: AgentRecord, conversationID: UUID, messages: [ChatMessage], personName: String,
+                    runtime: AgentRuntimeCoordinator, repository: WorkspaceRepository, guesser: any VoicePresentationGuessing,
+                    answeredCallReason: String? = nil, answeredCallID: UUID? = nil, media: (any VoiceCallMedia)? = nil) {
+        let recentLines = VoiceCallLine.recent(messages)
+        runtime.start(agent: agent, repository: repository)
+        let identity = (try? repository.loadAgentBackstory(agent)).map {
+            VoiceCallIdentity(name: agent.displayName, description: agent.publicDescription, backstory: $0)
+        }
+        Task {
+            let voice = await BotVoice.forCall(agent, repository: repository, guesser: guesser)
+            start(agentID: agent.id, conversationID: conversationID, voice: voice, personName: personName, identity: identity,
+                  recentLines: recentLines, answeredCallReason: answeredCallReason, answeredCallID: answeredCallID, media: media)
+        }
     }
 }

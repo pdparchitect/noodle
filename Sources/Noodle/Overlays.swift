@@ -1203,3 +1203,25 @@ extension NoodleStore: PatchReviewHost {
             .filter { $0.sourceAttachmentID == attachment.id }
     }
 }
+
+/// Settings › Groups: every group; a group's picture opens its profile. A Hub's groups are unarchived from that Hub
+/// in Settings › Hub, as on Mobile.
+struct GroupsSettingsView: View {
+    @Environment(NoodleStore.self) private var store
+
+    var body: some View {
+        GroupsSettingsList(
+            groups: store.conversations.filter { $0.kind == .group }, members: "bots",
+            // Nothing in its profile applies to an archived group, so the picture opens none until it is brought back.
+            picture: { AnyView(GroupProfileButton(group: $0).disabled($0.archivedAt != nil)) },
+            subtitle: { group in
+                let members = store.participants(for: group).map(\.displayName).joined(separator: ", ")
+                return [store.hubMirror(forConversation: group.id)?.pairing.hub?.name, members.isEmpty ? nil : members]
+                    .compactMap { $0 }.joined(separator: " · ")
+            },
+            archived: { group in
+                guard store.hubMirror(forConversation: group.id) == nil else { return nil }
+                return Binding(get: { group.archivedAt != nil }, set: { store.setArchived($0, conversationID: group.id) })
+            })
+    }
+}

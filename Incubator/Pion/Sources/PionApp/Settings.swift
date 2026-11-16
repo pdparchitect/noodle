@@ -152,73 +152,18 @@ struct PionSettingsView: View {
     }
 }
 
-/// Every group with an Archived switch, as Noodle's Settings > Groups; Investigations close rather than archive.
+/// Noodle's Settings › Groups, with Pion's group mark; Investigations close rather than archive.
 private struct GroupsSettingsView: View {
     let model: PionModel
-    @State private var showsArchiveInfo = false
-    private let archivedColumnWidth: CGFloat = 64
 
     var body: some View {
-        let groups = model.groupsInSettings
-        Form {
-            Section {
-                if groups.isEmpty {
-                    Text("No groups").foregroundStyle(.secondary)
-                } else {
-                    SettingsRowList(groups) { group in row(group) }
-                }
-            } header: {
-                if !groups.isEmpty {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button("Archived") { showsArchiveInfo.toggle() }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("About archiving")
-                            .help("About archiving")
-                            .frame(width: archivedColumnWidth)
-                            .popover(isPresented: $showsArchiveInfo) { GroupArchiveInfo() }
-                    }
-                    .font(.caption)
-                    .textCase(nil)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private func row(_ group: BotConversation) -> some View {
-        let members = group.participantIDs.compactMap { id in model.everyAgent.first { $0.id == id }?.displayName }
-            .joined(separator: ", ")
-        return HStack(spacing: 12) {
-            SymbolMark(symbol: "person.3.fill", size: 32)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(group.displayName)
-                if !members.isEmpty {
-                    Text(members).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle(isOn: Binding(get: { group.archivedAt != nil }, set: { model.setGroupArchived($0, id: group.id) })) {
-                Text("Archived")
-            }
-            .labelsHidden()
-            .controlSize(.mini)
-            .accessibilityLabel("\(group.displayName), archived")
-            .frame(width: archivedColumnWidth)
-        }
-    }
-}
-
-private struct GroupArchiveInfo: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Archived").font(.headline)
-            Text("An archived group keeps its messages and attachments, but leaves the sidebar and takes no new messages. Its agents keep running in their other conversations.")
-            Text("Turning this off brings the group back as it was.")
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(20)
-        .frame(width: 360, alignment: .leading)
+        GroupsSettingsList(
+            groups: model.groupsInSettings, members: "agents",
+            picture: { _ in AnyView(SymbolMark(symbol: "person.3.fill", size: 32)) },
+            subtitle: { group in
+                group.participantIDs.compactMap { id in model.everyAgent.first { $0.id == id }?.displayName }.joined(separator: ", ")
+            },
+            archived: { group in Binding(get: { group.archivedAt != nil }, set: { model.setGroupArchived($0, id: group.id) }) })
     }
 }
 

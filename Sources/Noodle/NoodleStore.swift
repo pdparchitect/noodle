@@ -2073,7 +2073,7 @@ final class NoodleStore {
     func voiceCallTarget(for conversation: BotConversation) -> AgentRecord? {
         guard conversation.kind == .direct, let agent = participants(for: conversation).first else { return nil }
         if let mirror = hubMirror(forAgent: agent.id) { return mirror.canCall(agent: agent.id) ? agent : nil }
-        guard runsHere(agent.id), HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.isEmpty == false else { return nil }
+        guard runsHere(agent.id), agent.hasCallVoices else { return nil }
         return agent
     }
 
@@ -2089,24 +2089,15 @@ final class NoodleStore {
         // Answering a call the bot placed needs no check: it is running to have placed it.
         guard answeredCallID != nil || canCallNow(in: conversation) else { return }
         let personName = (try? repository.loadAgentOwner(agent))?.name ?? "User"
-        let recentLines = messages(for: conversation).suffix(12).compactMap { message -> VoiceCallLine? in
-            switch message.author {
-            case .user: .init(.person, message.body)
-            case .agent: .init(.bot, message.body)
-            case .system: nil
-            }
+        guard !runsHere(agent.id) else {
+            return voiceCalls.startLocal(agent, conversationID: conversation.id, messages: messages(for: conversation),
+                                         personName: personName, runtime: runtime, repository: repository, guesser: voiceGuesser,
+                                         answeredCallReason: answeredCallReason, answeredCallID: answeredCallID, media: media)
         }
-        let onHub = !runsHere(agent.id)
-        if !onHub { runtime.start(agent: agent, repository: repository) }
-        let identity = onHub ? nil : (try? repository.loadAgentBackstory(agent)).map {
-            VoiceCallIdentity(name: agent.displayName, description: agent.publicDescription, backstory: $0)
-        }
-        Task {
-            // A Hub starts its bot and picks its voice itself.
-            let voice = onHub ? nil : await BotVoice.forCall(agent, repository: repository, guesser: voiceGuesser)
-            voiceCalls.start(agentID: agent.id, conversationID: conversation.id, voice: voice,
-                             personName: personName, identity: identity, recentLines: recentLines, answeredCallReason: answeredCallReason, answeredCallID: answeredCallID, media: media)
-        }
+        // A Hub starts its bot and picks its voice itself.
+        voiceCalls.start(agentID: agent.id, conversationID: conversation.id, voice: nil, personName: personName,
+                         recentLines: VoiceCallLine.recent(messages(for: conversation)), answeredCallReason: answeredCallReason,
+                         answeredCallID: answeredCallID, media: media)
     }
 
     /// There is one call at a time, so this ends it from any window; otherwise it calls the conversation's bot.

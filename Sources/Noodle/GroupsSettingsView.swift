@@ -2,13 +2,17 @@ import SwiftUI
 import NoodleCore
 import NoodleRuntimeSettings
 
-/// Every group; a group's picture opens its profile.
-struct GroupsSettingsView: View {
-    @Environment(NoodleStore.self) private var store
+/// Settings › Groups in every app: each group with an Archived switch. The app gives each group's picture, the line
+/// under its name, and the switch, or nil where the group is archived elsewhere, such as on its Hub.
+struct GroupsSettingsList: View {
+    let groups: [BotConversation]
+    /// What the app calls a group's members, for the note on archiving.
+    let members: String
+    let picture: (BotConversation) -> AnyView
+    let subtitle: (BotConversation) -> String
+    let archived: (BotConversation) -> Binding<Bool>?
     @State private var showsArchiveInfo = false
     private let archivedColumnWidth: CGFloat = 64
-
-    private var groups: [BotConversation] { store.conversations.filter { $0.kind == .group } }
 
     var body: some View {
         Form {
@@ -27,7 +31,7 @@ struct GroupsSettingsView: View {
                             .accessibilityLabel("About archiving")
                             .help("About archiving")
                             .frame(width: archivedColumnWidth)
-                            .popover(isPresented: $showsArchiveInfo) { GroupArchiveInfo() }
+                            .popover(isPresented: $showsArchiveInfo) { GroupArchiveInfo(members: members) }
                     }
                     .font(.caption)
                     .textCase(nil)
@@ -38,31 +42,22 @@ struct GroupsSettingsView: View {
     }
 
     private func row(_ group: BotConversation) -> some View {
-        let hub = store.hubMirror(forConversation: group.id)
-        let members = store.participants(for: group).map(\.displayName).joined(separator: ", ")
+        let subtitle = subtitle(group)
         return HStack(spacing: 12) {
-            // Nothing in its profile applies to an archived group, so the picture opens none until it is brought back.
-            GroupProfileButton(group: group)
-                .disabled(group.archivedAt != nil)
+            picture(group)
             VStack(alignment: .leading, spacing: 3) {
                 Text(group.displayName)
-                Text([hub?.pairing.hub?.name, members.isEmpty ? nil : members].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // A Hub's groups are unarchived from that Hub in Settings > Hub, as on Mobile.
-            if hub == nil {
-                Toggle(isOn: Binding(get: { group.archivedAt != nil },
-                                     set: { store.setArchived($0, conversationID: group.id) })) {
-                    Text("Archived")
-                }
-                .labelsHidden()
-                .controlSize(.mini)
-                .accessibilityLabel("\(group.displayName), archived")
-                .frame(width: archivedColumnWidth)
+            if let archived = archived(group) {
+                Toggle(isOn: archived) { Text("Archived") }
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .accessibilityLabel("\(group.displayName), archived")
+                    .frame(width: archivedColumnWidth)
             } else {
                 Text("—")
                     .foregroundStyle(.tertiary)
@@ -71,14 +66,15 @@ struct GroupsSettingsView: View {
             }
         }
     }
-
 }
 
 private struct GroupArchiveInfo: View {
+    let members: String
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Archived").font(.headline)
-            Text("An archived group keeps its messages and attachments, but leaves the sidebar and takes no new messages. Its bots keep running in their other conversations.")
+            Text("An archived group keeps its messages and attachments, but leaves the sidebar and takes no new messages. Its \(members) keep running in their other conversations.")
             Text("Turning this off brings the group back as it was.")
         }
         .fixedSize(horizontal: false, vertical: true)

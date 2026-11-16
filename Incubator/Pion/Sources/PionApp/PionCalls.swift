@@ -34,7 +34,7 @@ import SwiftUI
     /// Calls are one-to-one with an agent whose harness has voices. It need not be running: calling starts it.
     func voiceCallTarget(for conversation: BotConversation) -> AgentRecord? {
         guard !model.isScripted, conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first),
-              HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.voices.isEmpty == false else { return nil }
+              agent.hasCallVoices else { return nil }
         return agent
     }
 
@@ -50,24 +50,9 @@ import SwiftUI
 
     private func start(in conversation: BotConversation, answeredCallReason: String?) {
         guard let agent = voiceCallTarget(for: conversation) else { return }
-        let recentLines = model.messages(in: conversation.id).suffix(12).compactMap { message -> VoiceCallLine? in
-            guard message.call == nil else { return nil }
-            switch message.author {
-            case .user: return .init(.person, message.body)
-            case .agent: return .init(.bot, message.body)
-            case .system: return nil
-            }
-        }
-        model.runtime.start(agent: agent, repository: model.repository)
-        let identity = (try? model.repository.loadAgentBackstory(agent)).map {
-            VoiceCallIdentity(name: agent.displayName, description: agent.publicDescription, backstory: $0)
-        }
-        let personName = model.champion
-        Task {
-            let voice = await BotVoice.forCall(agent, repository: model.repository, guesser: guesser)
-            voiceCalls.start(agentID: agent.id, conversationID: conversation.id, voice: voice, personName: personName,
-                             identity: identity, recentLines: recentLines, answeredCallReason: answeredCallReason)
-        }
+        voiceCalls.startLocal(agent, conversationID: conversation.id, messages: model.messages(in: conversation.id),
+                              personName: model.champion, runtime: model.runtime, repository: model.repository, guesser: guesser,
+                              answeredCallReason: answeredCallReason)
     }
 
     /// The card of the call in progress in a conversation, once it connected.

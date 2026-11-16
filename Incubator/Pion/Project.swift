@@ -147,6 +147,7 @@ let project = Project(
                 "../../Sources/Noodle/MessageReceivedSound.swift",
                 "../../Sources/Noodle/ScenarioLauncher.swift",
                 "../../Sources/Noodle/ProfileCard.swift",
+                "../../Sources/Noodle/GroupsSettingsView.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
                 "../../Sources/Noodle/AnnotationContent.swift",
