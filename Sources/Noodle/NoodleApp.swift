@@ -238,7 +238,8 @@ struct NoodleApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let services = NoodleServices()
+    private let services = NoodleServices(publish: { NoodleStore.active?.publishShareDestinations() },
+                                          deliver: { await NoodleStore.active?.processSharedInbox() })
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         WindowFocusGuard.shared.start()

@@ -71,7 +71,7 @@ rm -rf -- "$contents/XPCServices" "$contents/Helpers" "$contents/PlugIns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Pion" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Pion" "$plist"
-for key in CFBundleURLTypes NoodleAgentHostService NoodleApplicationIdentifier NoodleSharedGroup; do
+for key in CFBundleURLTypes NoodleAgentHostService NoodleApplicationIdentifier NoodleSharedGroup NSServices; do
     /usr/libexec/PlistBuddy -c "Delete :$key" "$plist" >/dev/null 2>&1 || true
 done
 /usr/libexec/PlistBuddy -c "Add :PionScenariosRoot string $scenarios" "$plist"

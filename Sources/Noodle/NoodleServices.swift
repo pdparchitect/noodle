@@ -3,14 +3,23 @@ import SwiftUI
 import NoodleCore
 import NoodleSharing
 
+/// Services › Send to Agent… in every app: the same composer as the Share extension, in a panel of the app's own.
 @MainActor
 final class NoodleServices: NSObject, NSWindowDelegate {
     private var panels: [NSWindow: ShareComposerModel] = [:]
+    /// Brings the conversations the composer offers up to date, and delivers what it sent.
+    private let publish: () -> Void
+    private let deliver: () async -> Void
+
+    init(publish: @escaping () -> Void, deliver: @escaping () async -> Void) {
+        self.publish = publish
+        self.deliver = deliver
+    }
 
     @objc func sendToAgent(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         do {
             let inbox = try SharedInbox.configured()
-            NoodleStore.active?.publishShareDestinations()
+            publish()
             var inputs: [ShareInput] = []
             let files = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
             if !files.isEmpty {
@@ -27,11 +36,12 @@ final class NoodleServices: NSObject, NSWindowDelegate {
             panel.title = "Send to Agent"
             panel.isReleasedWhenClosed = false
             panel.delegate = self
+            let deliver = deliver
             panel.contentView = NSHostingView(rootView: ShareComposer(model: model, send: { [weak panel] in
                 do {
                     try model.send()
                     panel?.close()
-                    Task { await NoodleStore.active?.processSharedInbox() }
+                    Task { await deliver() }
                 } catch { model.error = error.localizedDescription }
             }, cancel: { [weak panel] in panel?.close() }))
             panels[panel] = model

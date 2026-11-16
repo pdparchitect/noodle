@@ -130,12 +130,19 @@ struct PionApp: App {
     }
 
     private var harnessUpdates: Task<Void, Never>?
+    /// Services › Send to Agent…, as in Noodle.
+    private lazy var services = NoodleServices(publish: { [weak self] in self?.model.publishShareDestinations() },
+                                               deliver: { [weak self] in await self?.model.deliverShared() })
     /// Noodle's error alert, over whichever window is in front, sheets included.
     private var errorAlert: StoreErrorAlert?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
         _ = calls
+        if !model.isScripted {
+            NSApp.servicesProvider = services
+            NSUpdateDynamicServices()
+        }
         errorAlert = StoreErrorAlert(title: pionAppName, message: { [weak self] in self?.model.problem },
                                      clear: { [weak self] in self?.model.problem = nil })
         // Noodle's floating conversations, showing Pion's conversation view.
