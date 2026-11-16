@@ -490,6 +490,12 @@ import UniformTypeIdentifiers
         return ComposerAvailability.unavailableReason(for: conversation, members: members, member: "agent")
     }
 
+    /// Whether a message can go there now, from Forward…, Share or Shortcuts: its message field is on and it isn't
+    /// a closed Investigation.
+    func takesMessages(_ conversation: BotConversation) -> Bool {
+        composerUnavailableReason(for: conversation) == nil && investigation(conversation.id)?.isClosed != true
+    }
+
     func members(of conversation: BotConversation) -> [AgentRecord] {
         let lead = conversation.lead
         return agents.filter { conversation.participantIDs.contains($0.id) }
@@ -792,7 +798,14 @@ import UniformTypeIdentifiers
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
+        wakeMembersAfterEdit(from: before, to: updated)
         return updated
+    }
+
+    /// As in Noodle: the members hear the group's notice when who is in it or what it is for changed.
+    private func wakeMembersAfterEdit(from before: BotConversation, to after: BotConversation) {
+        guard !isScripted, BotConversation.editWakesMembers(from: before, to: after) else { return }
+        runtime.notify(members(of: after), repository: repository)
     }
 
     private func validated(_ resources: AgentResources, provider: HarnessProvider?) throws -> AgentResources {
@@ -870,11 +883,17 @@ import UniformTypeIdentifiers
     func send(_ text: String, in id: UUID) throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty, let conversation = conversation(id) else { return }
-        _ = try repository.sendUserMessage(conversationID: id, body: body, now: now)
-        readTranscript(id)
-        markRead(id)
+        try personMessage(body, to: conversation)
         onSent?(id, body, [])
-        deliver(body, in: conversation)
+    }
+
+    /// Noodle's sending, then the transcript is read again and the conversation read.
+    private func personMessage(_ text: String, files: [ConversationAttachment] = [], voice: VoiceMessage? = nil,
+                               to conversation: BotConversation) throws {
+        try PersonMessage.send(text, files: files, voice: voice, to: conversation, members: members(of: conversation),
+                               runtime: isScripted ? nil : runtime, repository: repository, now: now)
+        readTranscript(conversation.id)
+        markRead(conversation.id)
     }
 
     /// Wakes a conversation's agents for the champion's message as Noodle does: in a team with a lead, the lead and
@@ -882,7 +901,7 @@ import UniformTypeIdentifiers
     /// Send to Pion, as Noodle's Send to Noodle: the conversations something can be sent to, for its picker.
     func publishShareDestinations(to inbox: SharedInbox? = try? SharedInbox.configured()) {
         guard let inbox else { return }
-        SharedInboxDelivery.publish(conversations.filter { investigation($0.id)?.isClosed != true && composerUnavailableReason(for: $0) == nil },
+        SharedInboxDelivery.publish(conversations.filter(takesMessages),
                                     to: inbox) { title(of: $0) }
     }
 
@@ -905,12 +924,8 @@ import UniformTypeIdentifiers
         guard let conversation = conversation(id) else { throw WorkspaceError.missingConversation(id) }
         let attachment = try repository.importAttachment(from: url, into: id, mediaType: "audio/x-caf", voice: voice)
         let staged = drafts[id].attachments
-        _ = try repository.sendUserMessage(conversationID: id, body: VoiceMessage.messageBody,
-                                           attachmentIDs: staged.map(\.id) + [attachment.id], now: now)
+        try personMessage("", files: staged + [attachment], voice: voice, to: conversation)
         drafts[id].attachments = []
-        readTranscript(id)
-        markRead(id)
-        deliver(voice.transcript ?? "", in: conversation)
         onSent?(id, voice.transcript ?? VoiceMessage.messageBody, staged.map(\.originalFilename))
     }
 
@@ -1008,28 +1023,18 @@ import UniformTypeIdentifiers
         let text = drafts[id].text, files = drafts[id].attachments
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty, let conversation = conversation(id) else { return }
         do {
-            let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? files.map(\.originalFilename).joined(separator: ", ") : body,
-                                               attachmentIDs: files.map(\.id), now: now)
-            onSent?(id, body, files.map(\.originalFilename))
+            try personMessage(text, files: files, to: conversation)
+            onSent?(id, text.trimmingCharacters(in: .whitespacesAndNewlines), files.map(\.originalFilename))
             drafts.clear(id)
-            readTranscript(id)
-            markRead(id)
-            deliver(body, in: conversation)
         } catch { problem = error.localizedDescription }
     }
 
     /// Shortcuts' Send to Agent: the message and its files go at once, beside whatever waits in the message field.
     func sendFromShortcut(_ text: String, files: [AttachmentTransferPayload], to id: UUID) throws {
-        guard let conversation = conversation(id), composerUnavailableReason(for: conversation) == nil,
-              investigation(id)?.isClosed != true else { throw WorkspaceError.missingConversation(id) }
+        guard let conversation = conversation(id), takesMessages(conversation) else { throw WorkspaceError.missingConversation(id) }
         let attached = try files.map { try repository.importAttachment($0, into: id, now: now) }
-        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        _ = try repository.sendUserMessage(conversationID: id, body: body.isEmpty ? attached.map(\.originalFilename).joined(separator: ", ") : body,
-                                           attachmentIDs: attached.map(\.id), now: now)
-        onSent?(id, body, attached.map(\.originalFilename))
-        readTranscript(id)
-        deliver(body, in: conversation)
+        try personMessage(text, files: attached, to: conversation)
+        onSent?(id, text.trimmingCharacters(in: .whitespacesAndNewlines), attached.map(\.originalFilename))
     }
 
     /// Copies files into the conversation, ready to go with the next message.
@@ -1096,10 +1101,11 @@ import UniformTypeIdentifiers
 
     // MARK: Forward…, as Noodle forwards
 
-    /// The other conversations a file can go to, by name, newest first; closed Investigations take no messages.
+    /// The other conversations a file can go to, by name, newest first. As in Noodle, only those that take a
+    /// message now: not an archived agent's, nor a closed Investigation.
     func forwardTargets(from id: UUID, search: String) -> [BotConversation] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return conversations.filter { $0.id != id && investigation($0.id)?.isClosed != true }
+        return conversations.filter { $0.id != id && takesMessages($0) }
             .filter { term.isEmpty || title(of: $0).localizedStandardContains(term) }
             .sorted { lastActivity(of: $0) > lastActivity(of: $1) }
     }
@@ -1214,6 +1220,7 @@ import UniformTypeIdentifiers
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
+        wakeMembersAfterEdit(from: before, to: group)
         if group.lead != draft.lead { setLead(draft.lead, of: group) }
         return updated
     }

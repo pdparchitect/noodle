@@ -1,4 +1,3 @@
-import PhotosUI
 import HubLink
 import NoodleCore
 import NoodleRuntimeSettings
@@ -77,9 +76,7 @@ struct ConversationView: View {
     @State private var attachmentPreview = AttachmentPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
     @State private var conversationAnnotations = ConversationAnnotationController()
-    @State private var choosingFiles = false
-    @State private var choosingPhotos = false
-    @State private var photoSelection: [PhotosPickerItem] = []
+    @State private var pickers = AttachmentPickers()
     @State private var selectedAttachmentID: UUID?
     /// The file Forward… was chosen for, held here rather than by its message.
     @State private var forwarding: ConversationAttachment?
@@ -100,8 +97,8 @@ struct ConversationView: View {
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .bottom) {
             Composer(model: model, window: window, conversation: conversation, investigation: investigation,
-                     actions: ComposerActions(attachFile: { choosingFiles = true },
-                                              choosePhoto: { photoSelection = []; choosingPhotos = true },
+                     actions: ComposerActions(attachFile: { pickers.attachFile(to: conversation.id) },
+                                              choosePhoto: { pickers.choosePhoto(for: conversation.id) },
                                               capture: showCapture,
                                               preview: { showPreview($0) }))
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
@@ -125,22 +122,8 @@ struct ConversationView: View {
                 try model.saveConversationAnnotation(note, content: content, source: source, sourceData: raw)
             }, focusComposer: { window.composerFocusRequest = UUID() }).frame(width: 0, height: 0))
         .background(CaptureShortcut(capture: showCapture).frame(width: 0, height: 0))
-        .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): model.attach(urls, to: conversation.id)
-            case .failure(let error): model.problem = error.localizedDescription
-            }
-        }
-        .photosPicker(isPresented: $choosingPhotos, selection: $photoSelection, matching: .images, preferredItemEncoding: .current)
-        .onChange(of: photoSelection) { _, items in
-            guard !items.isEmpty else { return }
-            photoSelection = []
-            Task {
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self) { model.importPhoto(data: data, into: conversation.id) }
-                }
-            }
-        }
+        .attachmentPickers($pickers, importFiles: { model.attach($0, to: $1) },
+                           importPhoto: { try model.importPhoto(data: $0, into: $1) }, report: { model.problem = $0 })
         // Links open in Noodle's preview, where they can be annotated, unless the person turned that off.
         .environment(\.openURL, OpenURLAction { url in
             guard let link = WebLinkPreview.previewed(url, enabled: WebLinkPreview.opensInPreview()) else { return .systemAction }

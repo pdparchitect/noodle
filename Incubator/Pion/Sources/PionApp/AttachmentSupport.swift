@@ -23,12 +23,10 @@ struct NoodletAttachmentCard: View {
 // The same attachments as Noodle's: photos, captures, annotations on a file, a link or the conversation
 // itself, each saved by the shared repository into the draft of the conversation it came from.
 extension PionModel {
-    func importPhoto(data: Data, into id: UUID) {
-        do {
-            if case .data(let data, let filename, let mediaType) = try AttachmentTransfer.photoPayload(data) {
-                remember([], pending: try repository.importAttachment(data: data, originalFilename: filename, into: id, mediaType: mediaType))
-            }
-        } catch { problem = error.localizedDescription }
+    func importPhoto(data: Data, into id: UUID) throws {
+        if case .data(let data, let filename, let mediaType) = try AttachmentTransfer.photoPayload(data) {
+            remember([], pending: try repository.importAttachment(data: data, originalFilename: filename, into: id, mediaType: mediaType))
+        }
     }
 
     func importCapture(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String, into id: UUID) throws {

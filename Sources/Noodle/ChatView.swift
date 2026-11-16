@@ -1,7 +1,6 @@
 import AppKit
 import AppletBridge
 import HubLink
-import PhotosUI
 import SwiftUI
 import NoodleCore
 import NoodleRuntimeSettings
@@ -34,11 +33,8 @@ struct ChatView: View {
     var editAgent: ((AgentRecord) -> Void)? = nil
     var editGroup: ((BotConversation) -> Void)? = nil
     @State private var composerFocused = false
-    @State private var choosingAttachments = false
+    @State private var pickers = AttachmentPickers()
     @State private var showingAttachmentMenu = false
-    @State private var choosingPhotos = false
-    @State private var photoSelection: [PhotosPickerItem] = []
-    @State private var attachmentDestinationID: UUID?
     @State private var selectedAttachmentID: UUID?
     @State private var attachmentOpenTask: Task<Void, Never>?
     @State private var screenCapturePreview = ScreenCapturePreviewController()
@@ -85,39 +81,10 @@ struct ChatView: View {
                 ConversationEffectsView(conversationID: conversation.id)
                     .id(conversation.id)
             }
-            .fileImporter(
-                isPresented: $choosingAttachments,
-                allowedContentTypes: [.data],
-                allowsMultipleSelection: true
-            ) { result in
-                let destination = attachmentDestinationID
-                attachmentDestinationID = nil
-                switch result {
-                case .success(let urls):
-                    if let destination { urls.forEach { store.importAttachment(from: $0, into: destination) } }
-                case .failure(let error):
-                    store.errorMessage = error.localizedDescription
-                }
-            }
-            .photosPicker(isPresented: $choosingPhotos, selection: $photoSelection,
-                          matching: .images, preferredItemEncoding: .current)
-            .onChange(of: photoSelection) { _, items in
-                guard !items.isEmpty, let destination = attachmentDestinationID else { return }
-                attachmentDestinationID = nil
-                photoSelection = []
-                Task {
-                    var firstError: Error?
-                    for item in items {
-                        do {
-                            guard let data = try await item.loadTransferable(type: Data.self) else {
-                                throw AttachmentTransferError.unsupportedItem
-                            }
-                            try store.importPhoto(data: data, into: destination)
-                        } catch { firstError = firstError ?? error }
-                    }
-                    if let firstError { store.errorMessage = firstError.localizedDescription }
-                }
-            }
+            .attachmentPickers($pickers,
+                importFiles: { urls, destination in urls.forEach { store.importAttachment(from: $0, into: destination) } },
+                importPhoto: { data, destination in try store.importPhoto(data: data, into: destination) },
+                report: { store.errorMessage = $0 })
             .sheet(item: $profileAgent, onDismiss: finishProfileAction) { agent in
                 let direct = store.conversations.first {
                     $0.kind == .direct && $0.participantIDs == [agent.id]
@@ -274,15 +241,8 @@ struct ChatView: View {
             attachmentButton
                 .background {
                     ComposerAttachmentMenu(isPresented: $showingAttachmentMenu,
-                        attachFile: {
-                            attachmentDestinationID = conversation.id
-                            choosingAttachments = true
-                        },
-                        choosePhoto: {
-                            attachmentDestinationID = conversation.id
-                            photoSelection = []
-                            choosingPhotos = true
-                        },
+                        attachFile: { pickers.attachFile(to: conversation.id) },
+                        choosePhoto: { pickers.choosePhoto(for: conversation.id) },
                         capture: { showCapture(.window) })
                 }
             VoiceMessageComposer(

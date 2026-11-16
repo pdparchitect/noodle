@@ -1785,9 +1785,6 @@ final class NoodleStore {
             return true
         }
         do {
-            let membershipChanged = participantIDs != Set(conversation.participantIDs)
-            let normalizedDescription = publicDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            let descriptionChanged = (conversation.publicDescription ?? "") != normalizedDescription
             let updated = try repository.updateGroup(
                 conversationID: conversation.id,
                 named: name,
@@ -1802,7 +1799,7 @@ final class NoodleStore {
                 conversations.sort { $0.updatedAt > $1.updatedAt }
             }
             restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
-            if membershipChanged || descriptionChanged {
+            if BotConversation.editWakesMembers(from: before, to: updated) {
                 messagesByConversation[conversation.id] = try repository.loadMessages(
                     conversationID: conversation.id
                 )
@@ -2102,8 +2099,8 @@ final class NoodleStore {
         attachmentsByConversation[conversationID, default: []].append(attachment)
         // Staged files usually relate to what was said, so they travel with the recording.
         let staged = pendingAttachments(for: conversationID)
-        let message = try repository.sendUserMessage(conversationID: conversationID,
-            body: VoiceMessage.messageBody, attachmentIDs: staged.map(\.id) + [attachment.id])
+        let message = try PersonMessage.send("", files: staged + [attachment], voice: voice, to: conversation,
+                                             members: participants(for: conversation), runtime: runtime, repository: repository)
         drafts[conversationID].attachments = []
         markConversationRead(conversationID)
         messagesByConversation[conversationID, default: []].append(message)
@@ -2112,7 +2109,6 @@ final class NoodleStore {
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
         // The text draft is independent and remains untouched.
-        runtime.notify(participants(for: conversation), in: conversation, body: voice.transcript ?? "", repository: repository)
         voiceCalls.shared(in: conversationID, body: voice.transcript ?? VoiceMessage.messageBody,
                           attachmentNames: staged.map(\.originalFilename))
         sendToHub(conversationID)
@@ -2128,14 +2124,10 @@ final class NoodleStore {
         let body = draft(for: conversationID).trimmingCharacters(in: .whitespacesAndNewlines)
         let pendingAttachments = pendingAttachments(for: conversationID)
         guard !body.isEmpty || !pendingAttachments.isEmpty else { return }
-        let messageBody = body.isEmpty ? "Sent \(pendingAttachments.count) attachment\(pendingAttachments.count == 1 ? "" : "s")" : body
 
         do {
-            let message = try repository.sendUserMessage(
-                conversationID: conversation.id,
-                body: messageBody,
-                attachmentIDs: pendingAttachments.map(\.id)
-            )
+            let message = try PersonMessage.send(body, files: pendingAttachments, to: conversation,
+                                                 members: participants(for: conversation), runtime: runtime, repository: repository)
             markConversationRead(conversation.id)
             messagesByConversation[conversation.id, default: []].append(message)
 
@@ -2145,7 +2137,6 @@ final class NoodleStore {
             }
 
             drafts.clear(conversation.id)
-            runtime.notify(participants(for: conversation), in: conversation, body: body, repository: repository)
             voiceCalls.shared(in: conversation.id, body: body, attachmentNames: pendingAttachments.map(\.originalFilename))
             sendToHub(conversation.id)
         } catch {
@@ -2184,20 +2175,14 @@ final class NoodleStore {
             throw WorkspaceError.missingConversation(conversationID)
         }
         let attachments = try files.map { try storeAttachment($0, in: conversationID) }
-        let worded = !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let message = try repository.sendUserMessage(
-            conversationID: conversation.id,
-            body: worded || attachments.isEmpty ? command
-                : "Sent \(attachments.count) attachment\(attachments.count == 1 ? "" : "s")",
-            attachmentIDs: attachments.map(\.id)
-        )
+        let message = try PersonMessage.send(command, files: attachments, to: conversation,
+                                             members: participants(for: conversation), runtime: runtime, repository: repository)
         markConversationRead(conversation.id)
         messagesByConversation[conversation.id, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
             conversations[index].updatedAt = message.createdAt
             conversations.sort { $0.updatedAt > $1.updatedAt }
         }
-        runtime.notify(participants(for: conversation), in: conversation, body: command, repository: repository)
         sendToHub(conversation.id)
         return message
     }

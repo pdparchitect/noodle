@@ -23,7 +23,7 @@ import NoodleCore
         let wanted = identifiers.map { Set($0.compactMap(UUID.init(uuidString:))) }
         let term = string.trimmingCharacters(in: .whitespacesAndNewlines)
         return model.conversations
-            .filter { model.investigation($0.id)?.isClosed != true && model.composerUnavailableReason(for: $0) == nil }
+            .filter(model.takesMessages)
             .filter { wanted?.contains($0.id) ?? true }
             .filter { term.isEmpty || model.title(of: $0).localizedCaseInsensitiveContains(term) }
             .sorted { model.lastActivity(of: $0) > model.lastActivity(of: $1) }

@@ -1,4 +1,6 @@
 import AppKit
+import NoodleCore
+import PhotosUI
 import SwiftUI
 
 /// Opens a native menu anchored to the composer’s existing + button.
@@ -69,6 +71,67 @@ struct ComposerAttachmentMenu: NSViewRepresentable {
                    !KeyboardBindings.shared.matches(.capture, event: event) { return }
             }
             selectedAction = actions[item.tag]
+        }
+    }
+}
+
+/// Attach File… and Choose Photo…, in every app: what is picked goes to the conversation the picker was opened
+/// for, even when another is showing by the time it closes.
+struct AttachmentPickers {
+    var choosingFiles = false
+    var choosingPhotos = false
+    var photos: [PhotosPickerItem] = []
+    private(set) var destination: UUID?
+
+    mutating func attachFile(to conversationID: UUID) {
+        destination = conversationID
+        choosingFiles = true
+    }
+
+    mutating func choosePhoto(for conversationID: UUID) {
+        destination = conversationID
+        photos = []
+        choosingPhotos = true
+    }
+
+    /// Where what was picked goes, once.
+    mutating func takeDestination() -> UUID? {
+        defer { destination = nil }
+        return destination
+    }
+}
+
+extension View {
+    /// The pickers, importing what is picked into its conversation; a photo that can't be read is reported, the
+    /// first such problem once.
+    func attachmentPickers(_ pickers: Binding<AttachmentPickers>,
+                           importFiles: @escaping @MainActor ([URL], UUID) -> Void,
+                           importPhoto: @escaping @MainActor (Data, UUID) throws -> Void,
+                           report: @escaping @MainActor (String) -> Void) -> some View {
+        fileImporter(isPresented: pickers.choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+            let destination = pickers.wrappedValue.takeDestination()
+            switch result {
+            case .success(let urls): if let destination { importFiles(urls, destination) }
+            case .failure(let error): report(error.localizedDescription)
+            }
+        }
+        .photosPicker(isPresented: pickers.choosingPhotos, selection: pickers.photos, matching: .images,
+                      preferredItemEncoding: .current)
+        .onChange(of: pickers.wrappedValue.photos) { _, items in
+            guard !items.isEmpty, let destination = pickers.wrappedValue.takeDestination() else { return }
+            pickers.wrappedValue.photos = []
+            Task { @MainActor in
+                var firstError: Error?
+                for item in items {
+                    do {
+                        guard let data = try await item.loadTransferable(type: Data.self) else {
+                            throw AttachmentTransferError.unsupportedItem
+                        }
+                        try importPhoto(data, destination)
+                    } catch { firstError = firstError ?? error }
+                }
+                if let firstError { report(firstError.localizedDescription) }
+            }
         }
     }
 }

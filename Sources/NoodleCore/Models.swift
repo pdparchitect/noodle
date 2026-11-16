@@ -144,6 +144,14 @@ public struct BotConversation: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+extension BotConversation {
+    /// Whether editing a group wakes its bots, in every app: who is in it or what it is for changed, which the
+    /// group's notice tells them. A new name alone does not.
+    public static func editWakesMembers(from before: BotConversation, to after: BotConversation) -> Bool {
+        Set(before.participantIDs) != Set(after.participantIDs) || (before.publicDescription ?? "") != (after.publicDescription ?? "")
+    }
+}
+
 /// Someone other than a bot's owner who talks with it, as its bot knows them.
 public struct ConversationGuest: Codable, Hashable, Sendable {
     public var id: UUID

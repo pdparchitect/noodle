@@ -56,6 +56,40 @@ import XCTest
         XCTAssertEqual(try Data(contentsOf: model.fileURL(copy)), Data("Quarterly numbers".utf8))
         XCTAssertEqual(model.drafts[to.id].text, "Half a thought")
     }
+
+    /// As in Noodle: a file goes only where a message can, so not to an archived agent's conversation.
+    func testForwardingOffersOnlyConversationsThatTakeMessages() throws {
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let blake = try model.createAgent(name: "Blake", description: nil, instructions: "", provider: .codex, model: nil)
+        let averyChat = try XCTUnwrap(model.directConversation(of: avery))
+        let blakeChat = try XCTUnwrap(model.directConversation(of: blake))
+        _ = try model.repository.setAgentArchived(true, agentID: blake.id)
+        model.reload()
+        XCTAssertFalse(model.forwardTargets(from: averyChat.id, search: "").map(\.id).contains(blakeChat.id))
+    }
+
+    /// As in Noodle: files sent without words say how many there are, and sending reads the conversation.
+    func testFilesSentAloneSayHowManyAndReadTheConversation() throws {
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let chat = try XCTUnwrap(model.directConversation(of: avery))
+        let file = root.appendingPathComponent("capture.txt")
+        try Data("Beacon".utf8).write(to: file)
+        model.attach([file, file], to: chat.id)
+        model.sendDraft(to: chat.id)
+        XCTAssertEqual(model.messages(in: chat.id).last?.body, "Sent 2 attachments")
+
+        model.selection = nil
+        _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: chat.id, body: "Contained.")
+        model.refresh()
+        XCTAssertTrue(model.isUnread(chat.id))
+        try model.sendFromShortcut("", files: [.file(file)], to: chat.id)
+        XCTAssertEqual(model.messages(in: chat.id).last?.body, "Sent 1 attachment")
+        XCTAssertFalse(model.isUnread(chat.id), "Sent from Shortcuts, as from the message field")
+    }
 }
 
 /// Noodle's patch review in Pion: the files ticked off stay ticked across launches, kept where Noodle keeps them,
