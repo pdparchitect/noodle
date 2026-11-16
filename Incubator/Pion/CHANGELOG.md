@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Each conversation opens where you left it, after Pion quits too, and a message opened from a search or a notification is where its conversation opens, even in a window not open yet, as in Noodle.
 - Searching the sidebar no longer slows typing: what was said is searched once typing pauses, in the background, as in Noodle. Messages in a conversation found only by its description no longer fold under Show All.
 - A call still ringing when Pion quit rings again when Pion opens, or is left as missed and the agent told, as in Noodle.
 - Conversation › Open in New Window stops a floating conversation floating, as the sidebar's does, and both bring forward a window already showing it instead of opening another, as in Noodle. Holding the Call shortcut no longer starts a call and then ends it.

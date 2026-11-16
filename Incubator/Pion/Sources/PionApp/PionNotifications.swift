@@ -52,8 +52,8 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             }
             if let conversationID, model.conversation(conversationID) != nil {
+                if let messageID { model.revealMessage(messageID, in: conversationID) }
                 showConversation(conversationID)
-                if let messageID { NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID) }
             }
             NSApp.activate(ignoringOtherApps: true)
             completionHandler()

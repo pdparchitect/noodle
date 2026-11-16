@@ -79,7 +79,32 @@ import XCTest
         XCTAssertEqual(mention.snippet, "Saw a beacon to 10.0.0.9.", "Without its markdown")
         XCTAssertNil(model.sidebarSearch("  ", showingAll: false, mentions: finder))
     }
+
+    /// As in Noodle: a message opened from search or a notification is where its transcript opens, even one not on
+    /// screen yet, and the latest message is the bottom, which keeps following new replies. Places outlast a launch.
+    func testAnOpenedMessageIsWhereTheTranscriptOpensAndPlacesAreKept() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionReveal-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let chat = try XCTUnwrap(model.directConversation(of: avery))
+        let first = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: chat.id, body: "First.")
+        let latest = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: chat.id, body: "Latest.")
+        model.refresh()
+
+        model.revealMessage(first.id, in: chat.id)
+        XCTAssertEqual(model.transcriptViewport(for: chat.id), TranscriptViewport(isAtBottom: false, messageID: first.id))
+        model.revealMessage(latest.id, in: chat.id)
+        XCTAssertEqual(model.transcriptViewport(for: chat.id), TranscriptViewport())
+
+        model.saveTranscriptViewport(TranscriptViewport(offset: 40, isAtBottom: false, messageID: first.id), for: chat.id)
+        let reopened = PionModel(root: root, messenger: nil, isScripted: true)
+        reopened.start()
+        XCTAssertEqual(reopened.transcriptViewport(for: chat.id).messageID, first.id)
+    }
 }
+
 
 extension PionModel {
     /// The sidebar's search once what was said has been found.

@@ -24,10 +24,8 @@ extension NoodleStore {
     /// screen scrolls to it. The latest message is the bottom, which keeps following new replies.
     func revealMessage(_ messageID: UUID, in conversationID: UUID) {
         guard let conversation = conversations.first(where: { $0.id == conversationID }),
-              messages(for: conversation).contains(where: { $0.id == messageID }) else { return }
-        let isLatest = messages(for: conversation).last?.id == messageID
-        saveTranscriptViewport(isLatest ? TranscriptViewport()
-            : TranscriptViewport(isAtBottom: false, messageID: messageID), for: conversationID)
+              let viewport = TranscriptViewport.revealing(messageID, in: messages(for: conversation)) else { return }
+        saveTranscriptViewport(viewport, for: conversationID)
         NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID)
     }
 

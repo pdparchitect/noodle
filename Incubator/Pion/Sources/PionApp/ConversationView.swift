@@ -80,8 +80,6 @@ struct ConversationView: View {
     @State private var selectedAttachmentID: UUID?
     /// The file Forward… was chosen for, held here rather than by its message.
     @State private var forwarding: ConversationAttachment?
-    /// Where the reader was in each conversation, kept while Pion runs.
-    @State private static var viewports: [UUID: TranscriptViewport] = [:]
 
     private var investigation: Investigation? { model.investigation(conversation.id) }
 
@@ -171,8 +169,8 @@ struct ConversationView: View {
 
     private var transcript: some View {
         Transcript(model: model, window: window, conversation: conversation, investigation: investigation,
-                   initialViewport: Self.viewports[conversation.id] ?? TranscriptViewport(), bottomOverlayHeight: composerHeight,
-                   selectedAttachmentID: $selectedAttachmentID, saveViewport: { Self.viewports[conversation.id] = $0 },
+                   initialViewport: model.transcriptViewport(for: conversation.id), bottomOverlayHeight: composerHeight,
+                   selectedAttachmentID: $selectedAttachmentID, saveViewport: { model.saveTranscriptViewport($0, for: conversation.id) },
                    preview: { showPreview($0, among: $1) })
             // A conversation of its own starts from its newest page.
             .id(conversation.id)

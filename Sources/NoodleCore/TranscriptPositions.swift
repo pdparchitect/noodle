@@ -19,6 +19,18 @@ public struct TranscriptViewport: Codable, Equatable, Sendable {
         if let messageID, !availableMessageIDs.contains(messageID) { return Self() }
         return self
     }
+
+    /// Where a transcript opens to show a message, in every app: at the message, or the bottom for the latest one,
+    /// which keeps following new replies. Nil when the conversation does not hold it.
+    public static func revealing(_ messageID: UUID, in messages: [ChatMessage]) -> Self? {
+        guard messages.contains(where: { $0.id == messageID }) else { return nil }
+        return messages.last?.id == messageID ? Self() : Self(isAtBottom: false, messageID: messageID)
+    }
+}
+
+extension Notification.Name {
+    /// Asks the transcript showing a message to scroll to it, as after a click on its notification.
+    public static let revealTranscriptMessage = Notification.Name("revealTranscriptMessage")
 }
 
 /// Kept with the repository so development/test and production workspaces stay

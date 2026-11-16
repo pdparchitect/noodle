@@ -258,11 +258,6 @@ struct TranscriptScrollView<Content: View>: View {
     }
 }
 
-extension Notification.Name {
-    /// Asks the transcript showing a message to scroll to it, as after a click on its notification.
-    static let revealTranscriptMessage = Notification.Name("revealTranscriptMessage")
-}
-
 /// Which messages a transcript holds, in every app: the newest page, or from where the reader last was, and a page
 /// more each time the top is reached. Layout work for every update grows with the rows a transcript holds, not with
 /// what is on screen. Later replies add to what shows rather than pushing the oldest rows out from under the reader.

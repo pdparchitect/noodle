@@ -109,8 +109,7 @@ struct Sidebar: View {
                     selection: model.selection, select: { model.selection = $0 },
                     pickMessage: { match in
                         model.selection = match.conversationID
-                        // After the transcript for the selection is on screen.
-                        DispatchQueue.main.async { NotificationCenter.default.post(name: .revealTranscriptMessage, object: match.messageID) }
+                        model.revealMessage(match.messageID, in: match.conversationID)
                     },
                     showAll: { showsAllMentions = true },
                     conversation: { model.conversation($0) },

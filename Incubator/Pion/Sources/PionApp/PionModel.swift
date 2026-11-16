@@ -95,12 +95,15 @@ import UniformTypeIdentifiers
     /// Whether the transcripts there at launch were read, so later messages count as new.
     private var launchRead = false
     private var running = false
+    /// Where the champion was reading in each conversation, kept across launches as in Noodle.
+    @ObservationIgnored private let transcriptPositions: TranscriptPositionStore
 
     /// `hidesInstalledHarnesses` leaves out harnesses installed outside Pion's own storage, as on a Mac that never had any.
     init(root: URL, messenger launcher: URL?, isScripted: Bool = false, hidesInstalledHarnesses: Bool = false,
          harnessDefaults: UserDefaults = .standard) {
         repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: launcher)
         connectionsController = ToolConnectionsController(repository: repository)
+        transcriptPositions = TranscriptPositionStore(fileURL: root.appendingPathComponent("scroll-positions.json"))
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
@@ -300,7 +303,10 @@ import UniformTypeIdentifiers
         let allConversations = (try? repository.loadConversations()) ?? []
         let changedSet = allConversations.map(\.id) != everyConversation.map(\.id)
         if allConversations != everyConversation { everyConversation = allConversations }
-        if changedSet { onConversationsChanged?() }
+        if changedSet {
+            onConversationsChanged?()
+            try? transcriptPositions.retainConversations(Set(allConversations.map(\.id)))
+        }
         let loadedConversations = allConversations.filter { $0.archivedAt == nil }
         if loadedConversations != conversations { conversations = loadedConversations }
     }
@@ -347,6 +353,25 @@ import UniformTypeIdentifiers
     }
 
     func messages(in id: UUID) -> [ChatMessage] { transcripts[id] ?? [] }
+
+    /// Where a conversation's transcript opens: where the champion left it, unless that message has gone.
+    func transcriptViewport(for id: UUID) -> TranscriptViewport {
+        transcriptPositions.viewport(for: id).restored(availableMessageIDs: Set(messages(in: id).map(\.id)))
+    }
+
+    func saveTranscriptViewport(_ viewport: TranscriptViewport, for id: UUID) {
+        guard conversation(id) != nil else { return }
+        do { try transcriptPositions.save(viewport, for: id) }
+        catch { problem = "Could not save the conversation’s reading position: \(error.localizedDescription)" }
+    }
+
+    /// Shows a message in its conversation, as Noodle does: a transcript opened later starts there, and one already
+    /// on screen scrolls to it.
+    func revealMessage(_ messageID: UUID, in id: UUID) {
+        guard let viewport = TranscriptViewport.revealing(messageID, in: messages(in: id)) else { return }
+        saveTranscriptViewport(viewport, for: id)
+        NotificationCenter.default.post(name: .revealTranscriptMessage, object: messageID)
+    }
 
     /// What the sidebar shows while searching, as Noodle searches: Investigations, groups and agents by name,
     /// then each message that says the term.
