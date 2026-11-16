@@ -32,6 +32,7 @@
 
 ### Changed
 
+- A conversation's menu in the sidebar is in Noodle's order: where it opens, Pin and Notifications, editing, Show items, the agent's housekeeping, then Stop, Suspend and Archive or Close. Stop shows only while the agent works, and Open in New Window brings a floating conversation back into a window.
 - Float on Top is Noodle's: the conversation moves to a small panel that stays above other apps, on every Space and beside full-screen apps, and floats again where it was after Pion reopens. It's also in each conversation's menu in the sidebar. Before, it only raised the window it was chosen in, until Pion quit.
 - The agent editor names a harness's default login by its account, as Noodle does, instead of Default.
 - Groups and agents in the sidebar come newest message first, as in Noodle, instead of by name; open Investigations still come most severe first.

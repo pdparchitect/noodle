@@ -216,23 +216,19 @@ struct ConversationRowMenu: View {
         let investigation = model.investigation(conversation.id)
         let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
         let closed = investigation?.isClosed == true
-        Button("Open in New Window") { openWindow(id: "conversation", value: conversation.id) }
+        // As in Noodle: where it opens, then pinning and notifications, editing, looking at it elsewhere, the
+        // agent's housekeeping, and last stopping, suspending and closing or archiving.
+        Button("Open in New Window") {
+            // Opened in a window, a floating conversation stops floating, as Noodle docks it.
+            PionFloating.panels?.close(conversation.id)
+            openWindow(id: "conversation", value: conversation.id)
+        }
         Button("Float on Top") { PionFloating.float(conversation.id) }
+        Divider()
         Button(model.isPinned(conversation.id) ? "Unpin" : "Pin") {
             model.setPinned(!model.isPinned(conversation.id), conversationID: conversation.id)
         }
         .disabled(closed)
-        Divider()
-        Button(investigation != nil ? "Edit Investigation…" : agent != nil ? "Edit Agent…" : "Edit Group…") {
-            window.edit(conversation, in: model)
-        }
-        .disabled(closed)
-        if let investigation {
-            Picker("Status", selection: Binding(get: { investigation.status }, set: { model.setStatus($0, of: investigation) })) {
-                ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { Text($0.title).tag($0) }
-            }
-            .disabled(closed)
-        }
         if agent == nil {
             Picker("Notifications", selection: Binding(
                 get: { model.chosenNotifications(of: conversation.id) ?? .default },
@@ -245,6 +241,17 @@ struct ConversationRowMenu: View {
             }
         }
         Divider()
+        Button(investigation != nil ? "Edit Investigation…" : agent != nil ? "Edit Agent…" : "Edit Group…") {
+            window.edit(conversation, in: model)
+        }
+        .disabled(closed)
+        if let investigation {
+            Picker("Status", selection: Binding(get: { investigation.status }, set: { model.setStatus($0, of: investigation) })) {
+                ForEach([Investigation.Status.open, .triaging, .contained], id: \.self) { Text($0.title).tag($0) }
+            }
+            .disabled(closed)
+        }
+        Divider()
         if let agent {
             Button("Show Activity") { model.showActivity(for: agent) }
             Button("Show Usage") {
@@ -252,10 +259,11 @@ struct ConversationRowMenu: View {
                 openWindow(id: UsageView.windowID)
             }
             Button("Show Workspace in Finder") { model.reveal(conversation) }
-            // As Noodle's: tidy its memory while idle; Kick, also back from a fallback harness; a fresh session.
             Divider()
             Button("Organize") { model.runtime.organize(agent.id) }
                 .disabled(!model.runtime.canOrganize(agent.id))
+            Divider()
+            // Kick also takes an agent on a fallback harness back to its own.
             if model.runtime.snapshot(for: agent.id).phase == .failed || model.runtime.runningHarness(for: agent.id) != nil {
                 Button("Kick") { window.kickRequest = model.runtime.kick(agent: agent, repository: model.repository) }
                     .disabled(model.runtime.changingAccess.contains(agent.id))
@@ -264,24 +272,21 @@ struct ConversationRowMenu: View {
                 .disabled(model.runtime.changingAccess.contains(agent.id))
         } else {
             Button("Show in Finder") { model.reveal(conversation) }
-        }
-        if let investigation {
-            Button("Export Investigation…") { model.exportInvestigation(investigation) }
+            if let investigation {
+                Button("Export Investigation…") { model.exportInvestigation(investigation) }
+            }
         }
         Divider()
-        if agent != nil {
-            Button("Stop") { model.stop(in: conversation.id) }
-                .disabled(model.stoppableAgent(in: conversation.id) == nil)
-        }
-        if let agent { SuspendAgentMenu(model: model, agent: agent) }
-        if let investigation {
+        if let agent {
+            if model.stoppableAgent(in: conversation.id) != nil { Button("Stop") { model.stop(in: conversation.id) } }
+            SuspendAgentMenu(model: model, agent: agent)
+            Button("Archive Agent") { model.archive(agent) }
+        } else if let investigation {
             if closed {
                 Button("Reopen") { model.setStatus(.open, of: investigation) }
             } else {
                 Button("Close Investigation…") { window.sheet = .close(investigation) }
             }
-        } else if let agent {
-            Button("Archive Agent") { model.archive(agent) }
         } else {
             Button("Archive Group") { model.archive(conversation) }
         }
