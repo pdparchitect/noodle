@@ -896,8 +896,6 @@ import UniformTypeIdentifiers
         markRead(conversation.id)
     }
 
-    /// Wakes a conversation's agents for the champion's message as Noodle does: in a team with a lead, the lead and
-    /// anyone the message names at once, the others after the lead's head start.
     /// Send to Pion, as Noodle's Send to Noodle: the conversations something can be sent to, for its picker.
     func publishShareDestinations(to inbox: SharedInbox? = try? SharedInbox.configured()) {
         guard let inbox else { return }
