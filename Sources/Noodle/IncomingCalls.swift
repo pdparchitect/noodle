@@ -44,10 +44,7 @@ extension NoodleStore {
 
     /// Ends quietly the calls of bots deleted or archived while they rang: there is nobody left to answer.
     func dropCallsOfGoneBots() {
-        for request in ringingCalls where !isCallable(request.agentID) {
-            _ = takeRingingCall(request.id)
-            _ = try? repository.endCall(agentID: request.agentID, id: request.id)
-        }
+        for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
     }
 
     func isCallable(_ agentID: UUID) -> Bool { agents.contains { $0.id == agentID && $0.archivedAt == nil } }
@@ -93,22 +90,15 @@ extension NoodleStore {
     /// Leaves the card in the conversation, which shows it unread, and tells the bot, once per call.
     private func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date) {
         _ = takeRingingCall(request.id)
-        guard isCallable(request.agentID) else {
-            _ = try? repository.endCall(agentID: request.agentID, id: request.id)
-            return
-        }
-        guard (try? repository.endCall(agentID: request.agentID, id: request.id)) != nil else { return }
+        let agent = agents.first { $0.id == request.agentID }
+        let personName = agent.flatMap { try? repository.loadAgentOwner($0) }?.name ?? "Your person"
         do {
-            try repository.recordUnansweredCall(request, outcome, at: now)
+            guard try runtime.endUnansweredCall(request, outcome, at: now, personName: personName,
+                                                callerIsHere: isCallable(request.agentID), repository: repository) else { return }
         } catch {
             errorMessage = "Could not add the missed call to the conversation: \(error.localizedDescription)"
         }
         refreshTranscripts()
-        guard let agent = agents.first(where: { $0.id == request.agentID }) else { return }
-        let personName = (try? repository.loadAgentOwner(agent))?.name ?? "Your person"
-        runtime.wake(agent.id, note: AgentCallDocumentation.unansweredNote(outcome, personName: personName, reason: request.reason,
-                                                                          conversationID: request.conversationID),
-                     repository: repository)
     }
 
     private func takeRingingCall(_ id: UUID) -> AgentCallRequest? {

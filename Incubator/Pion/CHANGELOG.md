@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- A call from an agent stops ringing as soon as the agent is archived or deleted, as in Noodle, instead of ringing on until it was missed.
 - An agent waiting for sign-in while it runs on a fallback login comes back by itself once that login works again, as in Noodle; Pion checked the agent's own login instead.
 - Apple Intelligence is no longer Unavailable in the welcome on a Mac that has it: Pion adds Apple's on-device model once for a new install, where before it waited to be added in Settings › Harness. Removed there, it stays removed.
 - In Settings > Agents, an archived agent's picture no longer opens its profile; bring the agent back with its Archived switch first.

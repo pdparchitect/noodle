@@ -26,6 +26,7 @@ import SwiftUI
         // The agent reads chat messages through its inbox; the voice hears about them here.
         model.onSent = { [weak self] id, body, files in self?.voiceCalls.shared(in: id, body: body, attachmentNames: files) }
         model.handleCallRequests { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
+        model.onAgentsChanged = { [weak self] in self?.dropCallsOfGoneAgents() }
     }
 
     // MARK: Calling
@@ -144,19 +145,21 @@ import SwiftUI
         endUnansweredCall(request, .declined, at: Date())
     }
 
-    /// Leaves the card in the conversation and tells the agent, once per call.
+    /// Leaves the card in the conversation and tells the agent, once per call, as Noodle does.
     private func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date) {
         _ = takeRingingCall(request.id)
-        guard (try? model.repository.endCall(agentID: request.agentID, id: request.id)) != nil, isCallable(request.agentID) else { return }
         do {
-            _ = try model.repository.recordUnansweredCall(request, outcome, at: now)
+            guard try model.runtime.endUnansweredCall(request, outcome, at: now, personName: model.champion,
+                                                      callerIsHere: isCallable(request.agentID), repository: model.repository) else { return }
         } catch {
             model.problem = "Could not add the missed call to the conversation: \(error.localizedDescription)"
         }
         model.refresh()
-        model.runtime.wake(request.agentID, note: AgentCallDocumentation.unansweredNote(outcome, personName: model.champion,
-                                                                                       reason: request.reason, conversationID: request.conversationID),
-                           repository: model.repository)
+    }
+
+    /// As in Noodle, a call rings no longer once its agent is archived or deleted: nobody is left to answer.
+    private func dropCallsOfGoneAgents() {
+        for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
     }
 
     private func takeRingingCall(_ id: UUID) -> AgentCallRequest? {

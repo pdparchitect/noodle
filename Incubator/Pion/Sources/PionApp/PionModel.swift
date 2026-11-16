@@ -71,6 +71,8 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onNotificationsNarrowed: ((UUID) -> Void)?
     /// What the champion sent, with the files' names, for a call in that conversation to hear about.
     @ObservationIgnored var onSent: ((UUID, String, [String]) -> Void)?
+    /// Agents were added, archived, brought back or deleted.
+    @ObservationIgnored var onAgentsChanged: (() -> Void)?
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
@@ -284,7 +286,10 @@ import UniformTypeIdentifiers
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
         if allAgents != everyAgent { everyAgent = allAgents }
         let loadedAgents = allAgents.filter { $0.archivedAt == nil }
-        if loadedAgents != agents { agents = loadedAgents }
+        if loadedAgents != agents {
+            agents = loadedAgents
+            onAgentsChanged?()
+        }
         applySuspensions()
         let allConversations = (try? repository.loadConversations()) ?? []
         if allConversations != everyConversation { everyConversation = allConversations }

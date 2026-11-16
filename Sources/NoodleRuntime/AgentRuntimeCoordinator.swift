@@ -1861,6 +1861,28 @@ extension AgentRuntimeCoordinator {
     }
 }
 
+extension AgentRuntimeCoordinator {
+    /// Ends a call nobody answered: its card is left in the conversation, which shows it unread, and the agent is
+    /// told, once per call. The call of an agent deleted or archived meanwhile ends quietly, as nobody is left to
+    /// answer. True when the card was added; throws when it could not be, after the agent was told.
+    @discardableResult
+    public func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date, personName: String,
+                                  callerIsHere: Bool, repository: WorkspaceRepository) throws -> Bool {
+        guard callerIsHere else {
+            _ = try? repository.endCall(agentID: request.agentID, id: request.id)
+            return false
+        }
+        guard (try? repository.endCall(agentID: request.agentID, id: request.id)) != nil else { return false }
+        var failure: Error?
+        do { _ = try repository.recordUnansweredCall(request, outcome, at: now) } catch { failure = error }
+        wake(request.agentID, note: AgentCallDocumentation.unansweredNote(outcome, personName: personName, reason: request.reason,
+                                                                         conversationID: request.conversationID),
+             repository: repository)
+        if let failure { throw failure }
+        return true
+    }
+}
+
 #if canImport(AppKit)
 extension AgentRuntimeCoordinator {
     /// Starts again, as soon as the Mac wakes, the agents that sleep stopped, rather than waiting out their backoff.
