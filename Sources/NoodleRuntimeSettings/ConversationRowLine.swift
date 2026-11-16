@@ -39,3 +39,16 @@ extension ConversationSearch {
         }
     }
 }
+
+/// Why nothing can be sent in a conversation, as its message field says in every app, or nil when something can.
+public enum ComposerAvailability {
+    /// `members` are the conversation's participants, archived ones included; `member` is what the app calls them.
+    public static func unavailableReason(for conversation: BotConversation, members: [AgentRecord], member: String) -> String? {
+        if conversation.kind == .group {
+            if conversation.archivedAt != nil { return "This group is archived" }
+            return !members.isEmpty && members.allSatisfy({ $0.archivedAt != nil }) ? "Every \(member) in this group is archived" : nil
+        }
+        guard let agent = members.first, agent.archivedAt != nil else { return nil }
+        return "\(agent.displayName) is archived"
+    }
+}

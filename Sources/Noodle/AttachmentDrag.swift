@@ -246,9 +246,40 @@ private struct ConversationDropTarget: ViewModifier {
     }
 }
 
+/// Files dropped anywhere on a conversation wait in its message field, the whole pane outlined while they are over it.
+private struct ConversationFileDrop: ViewModifier {
+    /// Read here rather than by the view it modifies, so only the outline redraws as it changes.
+    let isEnabled: () -> Bool
+    let drop: ([NSItemProvider]) -> Void
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isTargeted) { providers in
+                guard isEnabled(), !providers.isEmpty else { return false }
+                drop(providers)
+                return true
+            }
+            .overlay {
+                if isTargeted, isEnabled() {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color.accentColor, lineWidth: 2)
+                        .padding(5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
 extension View {
     func conversationDropTarget(_ drop: @escaping ([NSItemProvider]) -> Bool) -> some View {
         modifier(ConversationDropTarget(drop: drop))
+    }
+
+    /// Takes files dropped anywhere on the conversation shown, while `isEnabled`.
+    func conversationFileDrop(isEnabled: @escaping () -> Bool, _ drop: @escaping ([NSItemProvider]) -> Void) -> some View {
+        modifier(ConversationFileDrop(isEnabled: isEnabled, drop: drop))
     }
 }
 

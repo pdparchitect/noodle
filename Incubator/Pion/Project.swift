@@ -122,6 +122,7 @@ let project = Project(
                 // They depend on nothing else in Noodle's app; Pion's build fails if one ever does.
                 "../../Sources/Noodle/ScrollableChatComposer.swift",
                 "../../Sources/Noodle/ComposerFocusSurface.swift",
+                "../../Sources/Noodle/ConversationListKeyboardNavigation.swift",
                 "../../Sources/Noodle/ComposerAttachmentMenu.swift",
                 "../../Sources/Noodle/ComposerNameCompletion.swift",
                 "../../Sources/Noodle/KeyboardBindings.swift",

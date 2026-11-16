@@ -347,7 +347,6 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @State private var columnVisibility = NavigationSplitViewVisibility.all
-    @State private var isFileDropTargeted = false
     @State private var composerFocusRequest = UUID()
     @State private var sidebarFocusRequest = UUID()
     /// The Kick alert of the selected conversation's paused bot, asked for from the toolbar.
@@ -452,25 +451,9 @@ struct RootView: View {
         .background(SelectedConversationWindowHost())
         .background(MainToolbarStateUpdater(state: toolbarState, hidden: showsColumns))
         .background { SelectedConversationWallpaper(followsSelection: !showsColumns).ignoresSafeArea() }
-        .onDrop(
-            of: AttachmentTransfer.dropContentTypes,
-            isTargeted: $isFileDropTargeted
-        ) { providers in
-            guard store.selectedConversation != nil, !providers.isEmpty else { return false }
+        .conversationFileDrop(isEnabled: { store.selectedConversation != nil }) { providers in
             store.markConversationRead(store.selectedConversationID)
             store.importAttachments(from: providers)
-            return true
-        }
-        .overlay {
-            if isFileDropTargeted {
-                WithSelectedConversation { _ in
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(Color.accentColor, lineWidth: 2)
-                        .padding(5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
@@ -539,17 +522,6 @@ struct RootView: View {
             columnVisibility = .all
             sidebarFocusRequest = UUID()
         }
-    }
-}
-
-/// Reads the selected conversation in a body of its own. The window around it, its toolbar included,
-/// is then not rebuilt each time a message changes that conversation.
-private struct WithSelectedConversation<Content: View>: View {
-    @Environment(NoodleStore.self) private var store
-    @ViewBuilder let content: (BotConversation) -> Content
-
-    var body: some View {
-        if let conversation = store.selectedConversation { content(conversation) }
     }
 }
 

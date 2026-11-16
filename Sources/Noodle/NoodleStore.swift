@@ -1094,13 +1094,7 @@ final class NoodleStore {
     /// Why nothing can be sent here, shown in place of the composer's prompt.
     func composerUnavailableReason(for conversation: BotConversation) -> String? {
         let conversation = current(conversation)
-        if conversation.kind == .group {
-            if conversation.archivedAt != nil { return "This group is archived" }
-            let members = participants(for: conversation)
-            return !members.isEmpty && members.allSatisfy({ $0.archivedAt != nil }) ? "Every bot in this group is archived" : nil
-        }
-        guard let agent = participants(for: conversation).first, agent.archivedAt != nil else { return nil }
-        return "\(agent.displayName) is archived"
+        return ComposerAvailability.unavailableReason(for: conversation, members: participants(for: conversation), member: "bot")
     }
 
     /// A joined Hub's archived bots, by their conversations, and its archived groups.

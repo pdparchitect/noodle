@@ -60,15 +60,21 @@ extension PionModel {
             await AttachmentDrag.drop(providers, on: id, forward: { try self.forward($0, to: id, comment: "") },
                                       stage: { others in
                                           self.selection = id
-                                          Task {
-                                              for provider in others {
-                                                  do { self.attach([try await AttachmentTransfer.load(provider, context: .drop)], to: id) }
-                                                  catch { self.problem = error.localizedDescription }
-                                              }
-                                          }
+                                          self.attachDropped(others, to: id)
                                       }, failed: { self.problem = $0 })
         }
         return true
+    }
+
+    /// Files dropped on the conversation itself, as in Noodle: they wait in its message field.
+    func attachDropped(_ providers: [NSItemProvider], to id: UUID) {
+        markRead(id)
+        Task {
+            for provider in providers {
+                do { attach([try await AttachmentTransfer.load(provider, context: .drop)], to: id) }
+                catch { problem = error.localizedDescription }
+            }
+        }
     }
 }
 

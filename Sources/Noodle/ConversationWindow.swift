@@ -16,7 +16,6 @@ struct ConversationWindowView: View {
     @State private var agentBeingEdited: AgentRecord?
     @State private var groupBeingEdited: BotConversation?
     @State private var backgroundBeingEdited: BotConversation?
-    @State private var isFileDropTargeted = false
     @State private var composerFocusRequest: UUID?
     /// The Kick alert of this conversation's paused bot, asked for from the toolbar.
     @State private var kickRequest: AgentKickRequest?
@@ -56,18 +55,9 @@ struct ConversationWindowView: View {
         .background(ConversationWindowHost(registry: store.conversationWindows,
             conversationID: conversation?.id, title: conversation.map { store.title(for: $0) } ?? "Conversation",
             markRead: store.markConversationRead))
-        .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isFileDropTargeted) { providers in
-            guard conversation != nil, !providers.isEmpty else { return false }
+        .conversationFileDrop(isEnabled: { conversation != nil }) { providers in
             store.markConversationRead(conversationID)
             store.importAttachments(from: providers, into: conversationID)
-            return true
-        }
-        .overlay {
-            if isFileDropTargeted, conversation != nil {
-                RoundedRectangle(cornerRadius: 15)
-                    .stroke(Color.accentColor, lineWidth: 2).padding(5)
-                    .allowsHitTesting(false).accessibilityHidden(true)
-            }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {

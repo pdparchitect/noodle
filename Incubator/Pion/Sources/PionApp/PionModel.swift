@@ -476,6 +476,12 @@ import UniformTypeIdentifiers
         conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }
     }
 
+    /// Noodle's reason the message field is off, or nil when something can be sent.
+    func composerUnavailableReason(for conversation: BotConversation) -> String? {
+        let members = conversation.participantIDs.compactMap { id in everyAgent.first { $0.id == id } }
+        return ComposerAvailability.unavailableReason(for: conversation, members: members, member: "agent")
+    }
+
     func members(of conversation: BotConversation) -> [AgentRecord] {
         let lead = conversation.lead
         return agents.filter { conversation.participantIDs.contains($0.id) }

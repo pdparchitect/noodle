@@ -41,6 +41,9 @@ import SwiftUI
     /// Set when the sidebar's selection moved with the arrow keys, which leaves the keyboard in the list, as in Noodle.
     @ObservationIgnored var selectedFromKeyboard = false
     var searchText = ""
+    /// The main window's; Shift-Tab in the message field goes back to its sidebar, as in Noodle.
+    var hasSidebar = false
+    var sidebarFocusRequest: UUID?
     var searchFocusRequest = UUID()
     /// Kick's question, and the agent whose New Session is being confirmed, as in Noodle.
     var kickRequest: AgentKickRequest?

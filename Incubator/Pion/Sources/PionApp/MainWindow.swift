@@ -119,6 +119,10 @@ struct Sidebar: View {
                 list(line: line)
             }
         }
+        // As in Noodle: Tab in the list goes to the message field, and Shift-Tab there comes back.
+        .modifier(ConversationListKeyboardNavigation(hasSelection: model.selection != nil, searchIsFocused: searchFocused,
+            focusComposer: { window.composerFocusRequest = UUID() }, focusRequest: window.sidebarFocusRequest))
+        .onAppear { window.hasSidebar = true }
         .onChange(of: window.searchText) { showsAllMentions = false }
         .searchable(text: $window.searchText, placement: .sidebar, prompt: "Search Conversations")
         .searchFocused($searchFocused)

@@ -23,6 +23,9 @@
 - Settings › Conversation has Noodle's Message received sound, played when a reply arrives while Pion is in front and by the notification otherwise, and Noodle's Keep one floating conversation.
 - As in Noodle, the harnesses Pion installed update by themselves while it runs (unless turned off in Settings › Harnesses), and agents stopped by sleep start again as soon as the Mac wakes.
 - A conversation in a window of its own has Show in Main Window, as in Noodle; its window opens again where it was when Pion opens, and closes when the conversation is deleted.
+- As in Noodle, files dropped anywhere on a conversation wait in its message field, the conversation outlined while they are over it.
+- Tab in the sidebar goes to the message field and Shift-Tab there goes back, as in Noodle.
+- The message field says when nothing can be sent because the agent, or every agent of a group, is archived, as in Noodle.
 
 ### Fixed
 

@@ -106,6 +106,8 @@ struct ConversationView: View {
                                               preview: { showPreview($0) }))
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
         }
+        // As in Noodle: files dropped anywhere on the conversation wait in its message field.
+        .conversationFileDrop(isEnabled: { investigation?.isClosed != true }) { model.attachDropped($0, to: conversation.id) }
         .environment(\.conversationAnnotations, conversationAnnotations)
         .environment(\.forwardAttachment) { forwarding = $0 }
         .sheet(item: $forwarding) { attachment in

@@ -17,9 +17,11 @@ struct Composer: View {
     @State private var showingAttachmentMenu = false
 
     private var closed: Bool { investigation?.isClosed == true }
+    /// Closed, or nothing can be sent, as when the agent is archived.
+    private var isOff: Bool { closed || model.composerUnavailableReason(for: conversation) != nil }
     private var text: String { model.drafts[conversation.id].text }
     private var canSend: Bool {
-        !closed && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.drafts[conversation.id].attachments.isEmpty)
+        !isOff && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.drafts[conversation.id].attachments.isEmpty)
     }
 
     var body: some View {
@@ -30,7 +32,7 @@ struct Composer: View {
         ) { record in
             field(record: record)
         }
-        .disabled(closed)
+        .disabled(isOff)
         .frame(maxWidth: MessageRow.column + 20)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
@@ -72,12 +74,14 @@ struct Composer: View {
                     text: Binding(get: { text }, set: { model.drafts[conversation.id].text = $0 }),
                     isFocused: $focused,
                     conversationID: conversation.id,
-                    placeholder: closed ? "\(investigation?.reference ?? "This Investigation") is closed" : placeholder,
+                    placeholder: closed ? "\(investigation?.reference ?? "This Investigation") is closed"
+                        : model.composerUnavailableReason(for: conversation) ?? placeholder,
                     agents: model.agents,
                     preferredIDs: Set(conversation.participantIDs),
                     separatesPreferredAgents: conversation.kind == .group,
                     completion: completion,
                     submit: { model.sendDraft(to: conversation.id) },
+                    focusSidebar: window.hasSidebar ? { window.sidebarFocusRequest = UUID() } : nil,
                     // As Noodle's: a pasted picture or file attaches, and so does long text, or any with Paste as Attachment.
                     pasteAttachments: { pasteboard in
                         AttachmentTransfer.pastedPayloads(from: pasteboard).map { model.attach($0, to: conversation.id) } ?? false
@@ -91,7 +95,7 @@ struct Composer: View {
                 // It measures its own text; a flexible frame would stretch it to whatever height is offered.
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 24)
-                .disabled(closed)
+                .disabled(isOff)
                 .padding(.horizontal, 4)
                 HStack(spacing: 10) {
                     // Noodle's menu: a file, a photo, or a capture of a window or the screen.
@@ -100,7 +104,7 @@ struct Composer: View {
                     }
                     .buttonStyle(ComposerIconButtonStyle())
                     .help("Add Attachment")
-                    .disabled(closed)
+                    .disabled(isOff)
                     .background {
                         ComposerAttachmentMenu(isPresented: $showingAttachmentMenu, attachFile: actions.attachFile,
                                                choosePhoto: actions.choosePhoto, capture: actions.capture)
@@ -111,7 +115,7 @@ struct Composer: View {
                     }
                     .buttonStyle(ComposerIconButtonStyle())
                     .help(KeyboardBindings.shared.help("Record Voice Message", for: .recordVoice))
-                    .disabled(closed)
+                    .disabled(isOff)
                     Button { model.sendDraft(to: conversation.id) } label: {
                         Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 30, height: 30)
                             .foregroundStyle(canSend ? Color(nsColor: .textBackgroundColor) : Color.secondary)
