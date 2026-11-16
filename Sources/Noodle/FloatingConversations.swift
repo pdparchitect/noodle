@@ -45,21 +45,12 @@ import Observation
     /// Calls or hangs up in a conversation, for the call shortcut typed in a panel.
     private let toggleCall: (UUID?) -> Void
     private let content: (UUID, FloatingPanelCommands) -> NSView
-    /// Whether each panel keeps its own frame, for an app without a window registry that keeps it.
-    private let savesFrames: Bool
     private var panels: [UUID: FloatingConversationPanel] = [:]
 
     init(floating: FloatingConversations, isTerminating: @escaping () -> Bool, toggleCall: @escaping (UUID?) -> Void = { _ in },
-         savesFrames: Bool = false, content: @escaping (UUID, FloatingPanelCommands) -> NSView) {
+         content: @escaping (UUID, FloatingPanelCommands) -> NSView) {
         self.floating = floating; self.isTerminating = isTerminating; self.toggleCall = toggleCall
-        self.savesFrames = savesFrames; self.content = content
-    }
-
-    private static func frameName(_ id: UUID) -> String { "FloatingConversation-\(id.uuidString)" }
-
-    /// Whether the panel kept a frame of its own from an earlier float.
-    func hasSavedFrame(_ id: UUID) -> Bool {
-        savesFrames && UserDefaults.standard.string(forKey: "NSWindow Frame \(Self.frameName(id))") != nil
+        self.content = content
     }
 
     /// Floats the conversation: shrunk from the window it replaces, or else where it last floated, or else
@@ -105,8 +96,6 @@ import Observation
     private func open(_ id: UUID, frame: NSRect?, present: (NSPanel) -> Void) -> NSPanel {
         let panel = FloatingConversationPanel.make(frame: frame ?? NSRect(origin: .zero, size: FloatingConversationPanel.compactSize))
         if frame == nil { panel.center() }
-        // Restored from where it last floated, unless asked to land somewhere.
-        if savesFrames { _ = panel.setFrameAutosaveName(Self.frameName(id)); if let frame { panel.setFrame(frame, display: false) } }
         panel.conversationID = id
         panel.toggleCall = toggleCall
         panel.delegate = self

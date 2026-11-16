@@ -149,7 +149,7 @@ struct PionApp: App {
         PionWindows.conversations = windows
         model.isViewing = { windows.isViewing($0) }
         PionWindows.panels = FloatingConversationPanels(floating: .shared, isTerminating: { windows.isTerminating },
-            toggleCall: { [weak self] in self?.calls.toggleCall(in: $0) }, savesFrames: true) { [weak self] id, commands in
+            toggleCall: { [weak self] in self?.calls.toggleCall(in: $0) }) { [weak self] id, commands in
             guard let self else { return NSView() }
             let view = NSHostingView(rootView: ConversationWindow(model: self.model, selection: .constant(id))
                 .environment(self.calls).environment(self.settings).environment(\.floatingPanelCommands, commands)
