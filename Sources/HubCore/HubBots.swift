@@ -159,7 +159,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         // Suspended before the Hub last quit, so they stay held from the start.
         applySuspensions(agents)
         let now = Date()
-        agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
+        // As on a Mac: a bot's first heartbeat counts from what was last said to it, or else from when it was made.
+        runtime.seedHeartbeatActivity(for: agents, conversations: (try? repository.loadConversations()) ?? []) { id in
+            (try? self.repository.loadMessages(conversationID: id))?.map(\.createdAt).max()
+        }
         runtime.startAll(agents: agents, repository: repository)
         ringPendingCalls(now: now)
         // Devices are offered the models the Hub finds.
@@ -1849,8 +1852,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     }
 
     private func validVoice(_ voice: String?, on provider: HarnessProvider) -> String? {
-        guard let voice, provider.voices.contains(where: { $0.id == voice }) else { return nil }
-        return voice
+        HarnessProvider.validVoice(voice, harnessIdentifier: provider.rawValue)
     }
 
     /// One of the user's bots that runs here, rather than on one of their devices.

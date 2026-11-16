@@ -531,10 +531,10 @@ public final class AgentRuntimeCoordinator {
     }
 
     /// Each bot's heartbeat counts from the last message in any of its conversations, or else from when it was made.
-    /// Only bots with no saved activity take it.
+    /// Only bots with no saved activity take it, so `lastMessage` is asked only for theirs.
     public func seedHeartbeatActivity(for agents: [AgentRecord], conversations: [BotConversation],
                                       lastMessage: (UUID) -> Date?) {
-        for agent in agents {
+        for agent in agents where heartbeatScheduler.lastActivity[agent.id] == nil {
             let latest = conversations.filter { $0.participantIDs.contains(agent.id) }.compactMap { lastMessage($0.id) }.max()
             seedHeartbeatActivity(for: agent.id, at: latest ?? agent.createdAt)
         }

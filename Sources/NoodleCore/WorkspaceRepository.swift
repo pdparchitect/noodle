@@ -1882,7 +1882,7 @@ private struct PinnedConversations: Codable {
     let conversationIDs: [UUID]
 }
 
-/// How this Mac's own groups notify the person: each group's own level, and the one for groups that keep the default.
+/// The pins and groups' own notification levels left once those of deleted conversations are dropped.
 public struct KeptConversationSettings: Sendable {
     public let pins: [UUID]
     public let notifications: GroupNotificationSettings
@@ -1890,6 +1890,7 @@ public struct KeptConversationSettings: Sendable {
     public let notificationsChanged: Bool
 }
 
+/// How this Mac's own groups notify the person: each group's own level, and the one for groups that keep the default.
 public struct GroupNotificationSettings: Codable, Equatable, Sendable {
     public var version = 1
     /// "all", "mentions" or "muted", for each group with a level of its own.

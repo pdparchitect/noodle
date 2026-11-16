@@ -129,20 +129,6 @@ struct HubSettingsView: View {
     @ObservedObject private var updater = HubUpdater.shared
     private let companionUpdates = CompanionUpdateChecker.shared
 
-    private var harnessesNeedingAttention: Int {
-        HarnessProvider.allCases.filter { id in
-            host.runtime.harnesses.isOn(id) && (host.setup.needsAttention(id) || host.agents.contains {
-                let snapshot = host.runtime.snapshot(for: $0.id)
-                return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
-            })
-        }.count
-    }
-
-    /// Tools whose row shows Needs attention.
-    private var toolsNeedingAttention: Int {
-        host.connectionsController.registry.connections.filter { host.connectionsController.errors[$0.id] != nil }.count
-    }
-
     private var networkNeedsAttention: Bool {
         if case .failed = host.hub.link.state { return true }
         return false
@@ -204,8 +190,8 @@ struct HubSettingsView: View {
         } message: {
             Text(host.problem?.message ?? "")
         }
-        .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
-                                              "Tools": Self.showsAgentSettings ? toolsNeedingAttention : 0,
+        .background(SettingsTabBadge(counts: ["Harness": host.harnessesNeedingAttention(host.setup),
+                                              "Tools": Self.showsAgentSettings ? host.toolsNeedingAttention : 0,
                                               "Network": networkNeedsAttention ? 1 : 0,
                                               "Companions": companionUpdates.updates.count,
                                               "Update": updater.availableVersion == nil ? 0 : 1]))
