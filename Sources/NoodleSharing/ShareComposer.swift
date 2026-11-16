@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import ProductIdentity
 import UniformTypeIdentifiers
 
 public enum ShareInput {
@@ -185,6 +186,11 @@ public struct ShareComposer: View {
     private let send: () -> Void
     private let cancel: () -> Void
 
+    /// What the app calls those it sends to, from the extension's NoodleShareMember: "a bot" unless it says otherwise.
+    private static var member: String {
+        "a " + (Bundle.main.object(forInfoDictionaryKey: "NoodleShareMember") as? String ?? "bot")
+    }
+
     public init(model: ShareComposerModel, send: @escaping () -> Void, cancel: @escaping () -> Void) {
         self.model = model
         self.send = send
@@ -199,7 +205,7 @@ public struct ShareComposer: View {
                 Spacer()
             }
             if model.destinations.isEmpty && !model.isLoading {
-                Text("Open Noodle and create a bot or group, then share again.").foregroundStyle(.secondary)
+                Text("Open \(ProductIdentity.current.name) and create \(Self.member) or group, then share again.").foregroundStyle(.secondary)
             } else {
                 Picker("Send to", selection: $model.destinationID) {
                     ForEach(model.destinations) { destination in

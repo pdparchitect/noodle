@@ -34,6 +34,9 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Send to Pion leaves what it sends here, as Noodle's Send to Noodle does. -->
+	<key>NoodleSharedGroup</key>
+	<string>$(DEVELOPMENT_TEAM).$(PION_APP_BUNDLE_ID).sharing</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>LSMultipleInstancesProhibited</key>

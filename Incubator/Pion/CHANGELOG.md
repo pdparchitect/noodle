@@ -30,6 +30,7 @@
 - A group's name at the top of its conversation opens its profile, as in Noodle: what it is for, who is in it, and Edit.
 - A voice message's menu has Show Transcript, as in Noodle.
 - View › Conversation › Attachments lays out a message's files as Noodle can: side by side, one below another, or stacked; and View › Hide Sidebar (⌃⌘S), as in Noodle.
+- Send to Pion, Noodle's Share extension: share text, links, pictures or files from any app's Share menu into an Investigation, group or agent, with an instruction; Pion picks them up as your message, opening if it isn't.
 
 ### Fixed
 

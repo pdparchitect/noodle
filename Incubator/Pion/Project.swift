@@ -205,6 +205,7 @@ let project = Project(
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
+                .target(name: "PionShareExtension"),
             ],
             settings: .settings(
                 base: signing.merging([
@@ -247,6 +248,23 @@ let project = Project(
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "PionCore"),
                            .package(product: "HubLink"), .package(product: "NoodleBrand"), .package(product: "NoodleRuntimeSettings")],
             settings: .settings(base: ["CODE_SIGNING_ALLOWED": "NO"])
+        ),
+        // Send to Pion: Noodle's Share extension, sharing only the app group it hands items over in.
+        .target(
+            name: "PionShareExtension",
+            destinations: .macOS,
+            product: .appExtension,
+            bundleId: "com.pdparchitect.pion.share",
+            deploymentTargets: .macOS("26.0"),
+            infoPlist: .file(path: "Support/ShareExtension-Info.plist"),
+            sources: ["../../Sources/NoodleShareExtension/**"],
+            entitlements: .file(path: "Support/ShareExtension.entitlements"),
+            dependencies: [.package(product: "NoodleSharing")],
+            settings: .settings(base: signing.merging([
+                "PRODUCT_BUNDLE_IDENTIFIER": "$(PION_APP_BUNDLE_ID).share",
+                "PRODUCT_NAME": "PionShare",
+                "EXECUTABLE_NAME": "PionShareExtension",
+            ]) { $1 })
         ),
         // Launches harnesses under their sandbox. It accepts Pion alone, and Pion accepts it alone.
         .target(

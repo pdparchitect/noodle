@@ -65,12 +65,13 @@ rm -rf -- "$app"
 ditto "$source_app" "$app"
 contents="$app/Contents"
 plist="$contents/Info.plist"
-# Nothing that runs a harness: no Agent Host and no helpers. Scenario agents are scripted.
-rm -rf -- "$contents/XPCServices" "$contents/Helpers"
+# Nothing that runs a harness: no Agent Host and no helpers. Scenario agents are scripted. No Send to Pion either,
+# which would offer the scenarios bundle in every Share menu.
+rm -rf -- "$contents/XPCServices" "$contents/Helpers" "$contents/PlugIns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName Pion" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Pion" "$plist"
-for key in CFBundleURLTypes NoodleAgentHostService NoodleApplicationIdentifier; do
+for key in CFBundleURLTypes NoodleAgentHostService NoodleApplicationIdentifier NoodleSharedGroup; do
     /usr/libexec/PlistBuddy -c "Delete :$key" "$plist" >/dev/null 2>&1 || true
 done
 /usr/libexec/PlistBuddy -c "Add :PionScenariosRoot string $scenarios" "$plist"

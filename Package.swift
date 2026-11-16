@@ -120,7 +120,7 @@ let package = Package(
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
-        .target(name: "NoodleSharing", dependencies: ["NoodleCore"]),
+        .target(name: "NoodleSharing", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product")]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.
         .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "ProductIdentity", package: "Product"), .product(name: "AppletBridge", package: "Protocol")],

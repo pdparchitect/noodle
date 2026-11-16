@@ -78,6 +78,7 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onAgentsChanged: (() -> Void)?
     /// Conversations were added or deleted.
     @ObservationIgnored var onConversationsChanged: (() -> Void)?
+    @ObservationIgnored private let sharedInbox = SharedInboxDelivery()
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
@@ -876,6 +877,22 @@ import UniformTypeIdentifiers
 
     /// Wakes a conversation's agents for the champion's message as Noodle does: in a team with a lead, the lead and
     /// anyone the message names at once, the others after the lead's head start.
+    /// Send to Pion, as Noodle's Send to Noodle: the conversations something can be sent to, for its picker.
+    func publishShareDestinations(to inbox: SharedInbox? = try? SharedInbox.configured()) {
+        guard let inbox else { return }
+        SharedInboxDelivery.publish(conversations.filter { investigation($0.id)?.isClosed != true && composerUnavailableReason(for: $0) == nil },
+                                    to: inbox) { title(of: $0) }
+    }
+
+    /// What was sent with Send to Pion, as your messages, which the agents hear as they hear the message field.
+    func deliverShared(from inbox: SharedInbox? = try? SharedInbox.configured()) async {
+        guard let inbox else { return }
+        await sharedInbox.deliver(from: inbox, repository: repository, delivered: { message in
+            refresh()
+            if let conversation = conversation(message.conversationID) { deliver(message.body, in: conversation) }
+        }, problem: { problem = $0 })
+    }
+
     private func deliver(_ body: String, in conversation: BotConversation) {
         if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: body, repository: repository) }
     }

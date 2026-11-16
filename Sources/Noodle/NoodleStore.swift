@@ -265,8 +265,7 @@ final class NoodleStore {
     @ObservationIgnored private var transcriptGeneration: UInt = 0
     private var attachmentLookupByConversation: [UUID: [UUID: ConversationAttachment]] = [:]
     @ObservationIgnored private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
-    private var isProcessingShares = false
-    private var failedShareIDs: Set<UUID> = []
+    private let sharedInbox = SharedInboxDelivery()
 
     init(repository: WorkspaceRepository? = nil, runtime: AgentRuntimeCoordinator? = nil, connectsServices: Bool = true) {
         self.connectsServices = connectsServices
@@ -2795,34 +2794,17 @@ final class NoodleStore {
 
     func publishShareDestinations() {
         guard let inbox = try? SharedInbox.configured() else { return }
-        try? inbox.saveDestinations(conversations.filter { composerUnavailableReason(for: $0) == nil }.map {
-            ShareDestination(id: $0.id, name: title(for: $0), isGroup: $0.kind == .group)
-        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
+        SharedInboxDelivery.publish(conversations.filter { composerUnavailableReason(for: $0) == nil }, to: inbox) { title(for: $0) }
     }
 
     func processSharedInbox() async {
-        guard !isProcessingShares, let inbox = try? SharedInbox.configured() else { return }
-        isProcessingShares = true
-        defer { isProcessingShares = false }
-        let repository = repository
-        do {
-            let pending = try await Task.detached { try inbox.pending() }.value
-            for request in pending where !failedShareIDs.contains(request.id) {
-                do {
-                    let message = try await Task.detached {
-                        try repository.sendSharedMessage(request, files: inbox.files(for: request))
-                    }.value
-                    refreshTranscripts()
-                    if let conversation = conversations.first(where: { $0.id == message.conversationID }) {
-                        runtime.notify(participants(for: conversation), in: conversation, body: message.body, repository: repository)
-                    }
-                    try await Task.detached { try inbox.acknowledge(request.id) }.value
-                } catch {
-                    failedShareIDs.insert(request.id)
-                    errorMessage = "Could not deliver a shared item: \(error.localizedDescription) The item is retained for retry when Noodle restarts."
-                }
+        guard let inbox = try? SharedInbox.configured() else { return }
+        await sharedInbox.deliver(from: inbox, repository: repository, delivered: { message in
+            refreshTranscripts()
+            if let conversation = conversations.first(where: { $0.id == message.conversationID }) {
+                runtime.notify(participants(for: conversation), in: conversation, body: message.body, repository: repository)
             }
-        } catch { errorMessage = "Could not read shared items: \(error.localizedDescription)" }
+        }, problem: { errorMessage = $0 })
     }
 
     private func notifyGroupParticipants(for messages: [ChatMessage]) {

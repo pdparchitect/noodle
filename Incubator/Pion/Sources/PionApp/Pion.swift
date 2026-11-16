@@ -161,6 +161,7 @@ struct PionApp: App {
         let retain = { [weak self] in
             guard let self else { return }
             windows.retainConversations(Set(self.model.everyConversation.map(\.id)))
+            if !self.model.isScripted { self.model.publishShareDestinations() }
         }
         model.onConversationsChanged = retain
         retain()
@@ -173,6 +174,13 @@ struct PionApp: App {
         #if PION_DEV_HOOKS
         ScenarioSession.active?.begin()
         #endif
+    }
+
+    /// Send to Pion wakes Pion with pion://shared, but what it sent is also picked up whenever Pion comes forward.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard !model.isScripted else { return }
+        model.publishShareDestinations()
+        Task { await model.deliverShared() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

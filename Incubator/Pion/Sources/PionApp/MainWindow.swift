@@ -55,7 +55,11 @@ struct MainWindow: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))
         .modifier(RecoveryConfirmations(window: window))
-        .onOpenURL { _ = model.connectionsController.receiveAuthorizationCallback($0) }
+        .onOpenURL { url in
+            // Send to Pion's wake-up carries nothing; what it sent waits in the app group.
+            if url.host == "shared" { Task { await model.deliverShared() } }
+            else { _ = model.connectionsController.receiveAuthorizationCallback(url) }
+        }
         .onAppear {
             window.openMain = { openWindow(id: "main") }
             // As in Noodle: the conversations left in windows of their own open again, unless they float.
