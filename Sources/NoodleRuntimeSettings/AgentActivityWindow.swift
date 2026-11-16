@@ -327,6 +327,9 @@ final class ActivityLogTextView: NSTextView {
 /// updates of their own and show the arrow.
 @MainActor
 private final class ArrowCursorScroller: NSScroller {
+    /// Without this AppKit treats the subclass as legacy-only and keeps the scroller shown.
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         addTrackingArea(.arrowCursor(owner: self))

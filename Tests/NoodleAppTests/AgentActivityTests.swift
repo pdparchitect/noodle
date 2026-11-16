@@ -299,6 +299,16 @@ import XCTest
     }
 
     /// The log's I-beam covers the whole area, so the scroller and Follow Latest above it set the arrow themselves.
+    /// A scroller subclass that doesn't say it can overlay forces the legacy, always-shown scroller.
+    func testScrollerStillOverlaysAndHides() throws {
+        _ = NSApplication.shared
+        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Overlay"), log: AgentActivityLog())
+        defer { controller.close() }
+        let scroller = try XCTUnwrap(controller.output.verticalScroller)
+        XCTAssertTrue(type(of: scroller).isCompatibleWithOverlayScrollers)
+        XCTAssertTrue(controller.output.autohidesScrollers)
+    }
+
     func testScrollerAndFollowLatestShowTheArrowCursor() throws {
         _ = NSApplication.shared
         let log = AgentActivityLog(entryLimit: 200)
