@@ -102,7 +102,7 @@ struct Sidebar: View {
     var body: some View {
         let line = ConversationRowDetail(rawValue: rowDetail) ?? .standard
         Group {
-            if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions) {
+            if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions, mentions: window.mentions) {
                 SidebarSearchResults(
                     sections: [("Investigations", search.investigations), ("Groups", search.groups), ("Agents", search.agents)],
                     mentions: search.mentions, hiddenMentions: search.hiddenMentions, term: ConversationSearch(window.searchText),
@@ -127,7 +127,10 @@ struct Sidebar: View {
         .modifier(ConversationListKeyboardNavigation(hasSelection: model.selection != nil, searchIsFocused: searchFocused,
             focusComposer: { window.composerFocusRequest = UUID() }, focusRequest: window.sidebarFocusRequest))
         .onAppear { window.hasSidebar = true }
-        .onChange(of: window.searchText) { showsAllMentions = false }
+        .onChange(of: window.searchText) {
+            showsAllMentions = false
+            model.findMentions(window.searchText, with: window.mentions)
+        }
         .searchable(text: $window.searchText, placement: .sidebar, prompt: "Search Conversations")
         .searchFocused($searchFocused)
         .onChange(of: window.searchFocusRequest) { searchFocused = true }

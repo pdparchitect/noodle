@@ -248,7 +248,7 @@ import XCTest
     func testSearchListsBotsAndGroupsByNameAndEachMentionWithItsText() async throws {
         let f = try fixture(), group = try f.group(name: "Launch team", description: "Quarterly planning")
         f.store.setPinned(true, conversationID: group.id)
-        f.store.mentionSearchDelay = .zero
+        f.store.mentions.delay = .zero
         _ = try f.repository.sendUserMessage(conversationID: f.directB.id, body: "A **violet** notebook")
         _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Ask Grace first")
         f.store.refreshTranscripts()
@@ -268,14 +268,14 @@ import XCTest
         // What was said is found off the main thread, with the words around it.
         f.store.searchText = "violet"
         XCTAssertEqual(f.store.sidebarSearch?.isFindingMentions, true)
-        await f.store.mentionSearch?.value
+        await f.store.mentions.task?.value
         XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.snippet), ["A violet notebook"])
         XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.conversationID), [f.directB.id])
         XCTAssertEqual(f.store.sidebarSearch?.isFindingMentions, false)
 
         // Grace is a bot, so her mentions wait below her.
         f.store.searchText = "Grace"
-        await f.store.mentionSearch?.value
+        await f.store.mentions.task?.value
         XCTAssertEqual(f.store.sidebarSearch?.bots.map(\.id), [f.directB.id])
         XCTAssertEqual(f.store.sidebarSearch?.mentions.map(\.conversationID), [f.directA.id])
 
@@ -287,11 +287,11 @@ import XCTest
 
     func testOnlyTheNewestMentionsShowBesideAMatchingNameUntilAllAreAsked() async throws {
         let f = try fixture()
-        f.store.mentionSearchDelay = .zero
+        f.store.mentions.delay = .zero
         for index in 1...5 { _ = try f.repository.sendUserMessage(conversationID: f.directA.id, body: "Grace \(index)") }
         f.store.refreshTranscripts()
         f.store.searchText = "Grace"
-        await f.store.mentionSearch?.value
+        await f.store.mentions.task?.value
         XCTAssertEqual(f.store.sidebarSearch?.mentions.count, 3)
         XCTAssertEqual(f.store.sidebarSearch?.hiddenMentions, 2)
         f.store.showsAllMentions = true

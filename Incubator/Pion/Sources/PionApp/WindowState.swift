@@ -1,5 +1,6 @@
 import NoodleCore
 import NoodleRuntime
+import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
 
@@ -52,6 +53,8 @@ import SwiftUI
     /// Set when the sidebar's selection moved with the arrow keys, which leaves the keyboard in the list, as in Noodle.
     @ObservationIgnored var selectedFromKeyboard = false
     var searchText = ""
+    /// What was said that the sidebar's search is for, found as in Noodle.
+    let mentions = MentionFinder()
     /// The main window's; Shift-Tab in the message field goes back to its sidebar, as in Noodle.
     var hasSidebar = false
     var sidebarFocusRequest: UUID?

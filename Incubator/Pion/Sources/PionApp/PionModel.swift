@@ -355,16 +355,18 @@ import UniformTypeIdentifiers
         var mentions: [LinkMessageMatch] = []
         /// How many more mentions Show All would list.
         var hiddenMentions = 0
+        var isFindingMentions = false
 
-        var isEmpty: Bool { investigations.isEmpty && groups.isEmpty && agents.isEmpty && mentions.isEmpty }
+        var isEmpty: Bool { investigations.isEmpty && groups.isEmpty && agents.isEmpty && mentions.isEmpty && !isFindingMentions }
     }
 
-    /// Nil while nothing is searched for. Closed Investigations are found too.
-    func sidebarSearch(_ text: String, showingAll: Bool) -> SidebarSearch? {
+    /// Nil while nothing is searched for. Closed Investigations are found too. What was said comes from `mentions`,
+    /// which `findMentions` set searching.
+    func sidebarSearch(_ text: String, showingAll: Bool, mentions finder: MentionFinder) -> SidebarSearch? {
         guard let search = ConversationSearch(text) else { return nil }
         let listed = conversations.sorted { lastActivity(of: $0) > lastActivity(of: $1) }
         let byID = Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0) })
-        let sections = search.sections(listed.map { conversation in
+        let candidates = listed.map { conversation in
             let investigation = investigation(conversation.id)
             let agent = conversation.kind == .direct ? agent(conversation.participantIDs.first) : nil
             return ConversationSearch.Candidate(
@@ -372,14 +374,25 @@ import UniformTypeIdentifiers
                 name: investigation.map { "\($0.reference) \($0.title)" } ?? agent?.displayName ?? conversation.displayName,
                 about: investigation?.objective ?? agent?.publicDescription ?? conversation.publicDescription ?? "",
                 members: conversation.kind == .group ? members(of: conversation).map(\.displayName) : [])
-        })
+        }
+        let sections = search.sections(candidates)
         let groups = sections.groups.compactMap { byID[$0] }
         var result = SidebarSearch(investigations: groups.filter { investigation($0.id) != nil },
                                    groups: groups.filter { investigation($0.id) == nil },
                                    agents: sections.bots.compactMap { byID[$0] })
-        let mentions = search.messageMatches(in: listed.map { (id: $0.id, messages: messages(in: $0.id)) })
-        (result.mentions, result.hiddenMentions) = search.shown(mentions, besideNames: !sections.isEmpty, showingAll: showingAll)
+        guard let found = finder.matches(for: search) else {
+            result.isFindingMentions = true
+            return result
+        }
+        let mentions = found.filter { byID[$0.conversationID] != nil }
+        let besideNames = candidates.contains { search.matches($0.name) }
+        (result.mentions, result.hiddenMentions) = search.shown(mentions, besideNames: besideNames, showingAll: showingAll)
         return result
+    }
+
+    /// Searches what was said in every conversation, as Noodle does: once typing pauses, off the main thread.
+    func findMentions(_ text: String, with finder: MentionFinder) {
+        finder.find(ConversationSearch(text), in: conversations.map { (id: $0.id, messages: messages(in: $0.id)) })
     }
 
     /// When anything was last said, by anyone.

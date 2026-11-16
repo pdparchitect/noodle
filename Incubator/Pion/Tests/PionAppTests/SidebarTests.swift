@@ -1,5 +1,6 @@
 import HubLink
 import NoodleCore
+import NoodleRuntimeSettings
 import XCTest
 
 /// Noodle's sidebar order in Pion: pins on top in the order pinned and kept across launches, an Unread section
@@ -50,7 +51,7 @@ import XCTest
         XCTAssertFalse(reopened.isPinned(team.id))
     }
 
-    func testSearchFindsNamesFirstThenMessages() throws {
+    func testSearchFindsNamesFirstThenMessages() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionSearch-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
         let model = PionModel(root: root, messenger: nil, isScripted: true)
@@ -62,11 +63,31 @@ import XCTest
         _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: chat.id, body: "Saw a **beacon** to 10.0.0.9.")
         model.refresh()
 
-        let search = try XCTUnwrap(model.sidebarSearch("beacon", showingAll: true))
+        let finder = MentionFinder()
+        finder.delay = .zero
+        model.findMentions("beacon", with: finder)
+        let names = try XCTUnwrap(model.sidebarSearch("beacon", showingAll: true, mentions: finder))
+        XCTAssertTrue(names.isFindingMentions, "As in Noodle, what was said is found off the main thread")
+        XCTAssertEqual(names.investigations.map(\.id), [investigation.id], "Names at once")
+        XCTAssertFalse(names.isEmpty)
+        await finder.task?.value
+        let search = try XCTUnwrap(model.sidebarSearch("beacon", showingAll: true, mentions: finder))
+        XCTAssertFalse(search.isFindingMentions)
         XCTAssertEqual(search.investigations.map(\.id), [investigation.id], "By title")
         XCTAssertEqual(search.agents.map(\.id), [try XCTUnwrap(model.directConversation(of: blake)).id], "By description")
         let mention = try XCTUnwrap(search.mentions.first { $0.conversationID == chat.id })
         XCTAssertEqual(mention.snippet, "Saw a beacon to 10.0.0.9.", "Without its markdown")
-        XCTAssertNil(model.sidebarSearch("  ", showingAll: false))
+        XCTAssertNil(model.sidebarSearch("  ", showingAll: false, mentions: finder))
+    }
+}
+
+extension PionModel {
+    /// The sidebar's search once what was said has been found.
+    func searched(_ text: String) async -> SidebarSearch? {
+        let finder = MentionFinder()
+        finder.delay = .zero
+        findMentions(text, with: finder)
+        await finder.task?.value
+        return sidebarSearch(text, showingAll: true, mentions: finder)
     }
 }

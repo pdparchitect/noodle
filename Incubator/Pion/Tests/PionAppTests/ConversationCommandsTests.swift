@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleRuntimeSettings
 import PionCore
 import XCTest
 
@@ -21,19 +22,20 @@ import XCTest
         try? FileManager.default.removeItem(at: root)
     }
 
-    func testSearchFindsAgentsGroupsAndMessageTextWithoutChangingSelection() throws {
+    func testSearchFindsAgentsGroupsAndMessageTextWithoutChangingSelection() async throws {
         let group = try model.createGroup(name: "Response Team", description: "Triage", members: [agent.id])
         try model.send("Unusual beacon from the laptop", in: direct.id)
         model.selection = group.id
 
         func found(_ text: String) -> [UUID]? {
-            model.sidebarSearch(text, showingAll: true).map { ($0.investigations + $0.groups + $0.agents).map(\.id) }
+            model.sidebarSearch(text, showingAll: true, mentions: MentionFinder()).map { ($0.investigations + $0.groups + $0.agents).map(\.id) }
         }
         XCTAssertEqual(found("avery"), [group.id, direct.id], "As in Noodle, a group is found by an agent in it")
         XCTAssertEqual(found("network analyst"), [direct.id])
         XCTAssertEqual(found("RESPONSE"), [group.id])
         XCTAssertEqual(found("beacon"), [])
-        XCTAssertEqual(model.sidebarSearch("beacon", showingAll: true)?.mentions.map(\.conversationID), [direct.id])
+        let mentions = await model.searched("beacon")?.mentions
+        XCTAssertEqual(mentions?.map(\.conversationID), [direct.id])
         XCTAssertNil(found("  "))
         XCTAssertEqual(found("missing"), [])
         XCTAssertEqual(model.selection, group.id)
@@ -62,8 +64,8 @@ import XCTest
         let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: agent.id))
         model.setStatus(.closed, of: investigation, outcome: .resolved)
 
-        XCTAssertEqual(model.sidebarSearch(investigation.reference, showingAll: true)?.investigations.map(\.id), [investigation.id])
-        XCTAssertEqual(model.sidebarSearch("beaconing", showingAll: true)?.investigations.map(\.id), [investigation.id])
+        XCTAssertEqual(model.sidebarSearch(investigation.reference, showingAll: true, mentions: MentionFinder())?.investigations.map(\.id), [investigation.id])
+        XCTAssertEqual(model.sidebarSearch("beaconing", showingAll: true, mentions: MentionFinder())?.investigations.map(\.id), [investigation.id])
     }
 
     func testStopTargetsTheRequestedDirectConversationAndRecordsItOnce() throws {
