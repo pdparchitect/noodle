@@ -2328,19 +2328,15 @@ final class NoodleStore {
                                          textAsAttachment: Bool = false) -> Bool {
         guard conversations.contains(where: { $0.id == conversationID }) else { return false }
 
-        guard let payloads = AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: textAsAttachment) else { return false }
-        var imported = false
-        for payload in payloads {
+        return AttachmentTransfer.paste(AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: textAsAttachment)) { payload in
             do {
                 drafts[conversationID].attachments.append(try storeAttachment(payload, in: conversationID))
-                imported = true
+                return true
             } catch {
                 errorMessage = error.localizedDescription
+                return false
             }
         }
-        // Pasted text that could not be attached stays on the clipboard and out of the draft, for a retry.
-        if case .data(_, _, "text/plain")? = payloads.first { return true }
-        return imported
     }
 
     func importPhoto(data: Data, into conversationID: UUID) throws {

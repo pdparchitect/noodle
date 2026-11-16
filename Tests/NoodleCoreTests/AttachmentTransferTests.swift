@@ -180,4 +180,18 @@ final class AttachmentTransferTests: XCTestCase {
             XCTFail("Unexpected error: \(error)", file: file, line: line)
         }
     }
+
+    /// Pasted text that could not be attached is still handled, so it stays on the clipboard and out of the
+    /// message field for a retry; a picture or file that fails leaves the paste to the field.
+    func testAFailedPasteOfTextIsStillHandled() {
+        let text = AttachmentTransferPayload.data(Data("long".utf8), originalFilename: "Pasted Text.txt", mediaType: "text/plain")
+        let picture = AttachmentTransferPayload.data(Data([1]), originalFilename: "Pasted Image.png", mediaType: "image/png")
+        XCTAssertTrue(AttachmentTransfer.paste([text]) { _ in false })
+        XCTAssertFalse(AttachmentTransfer.paste([picture]) { _ in false })
+        XCTAssertTrue(AttachmentTransfer.paste([picture]) { _ in true })
+        XCTAssertFalse(AttachmentTransfer.paste(nil) { _ in true })
+        var stored = 0
+        XCTAssertTrue(AttachmentTransfer.paste([picture, text]) { _ in stored += 1; return stored == 1 })
+        XCTAssertEqual(stored, 2, "Every payload is tried")
+    }
 }

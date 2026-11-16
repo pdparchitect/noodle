@@ -2,6 +2,7 @@ import NoodleHubClient
 import HubLink
 import NoodleBrand
 import NoodleCore
+import NoodleRuntime
 import NoodleRuntimeSettings
 import NoodleSettingsUI
 import PionCore
@@ -296,6 +297,8 @@ struct AgentEditorSheet: View {
     @State private var resources = PionModel.AgentResources()
     /// Empty leaves the voice to the harness.
     @State private var voice = ""
+    /// Once a voice is picked it stays; until then it follows the name, as in Noodle.
+    @State private var hasChosenVoice = false
     @State private var confirmingDeletion = false
     @Environment(PionSettingsHost.self) private var host
     @State private var selectedTab = AgentEditorTab.general
@@ -311,7 +314,10 @@ struct AgentEditorSheet: View {
     }
 
     private var selectedNameStyle: BotNameStyle { BotNameStyle(rawValue: nameStyle) ?? PionModel.defaultAgentNameStyle }
-    private var canSave: Bool { loaded && ConversationName.error(for: name) == nil }
+    /// As in Noodle, a new agent needs an installed harness.
+    private var canSave: Bool {
+        loaded && ConversationName.error(for: name) == nil && (agent != nil || provider.map(model.installedProviders.contains) == true)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -400,17 +406,23 @@ struct AgentEditorSheet: View {
                     effort = agent.reasoningEffort ?? ""
                     resources = try model.resources(for: agent)
                     voice = model.voice(of: agent)
+                    hasChosenVoice = !voice.isEmpty
                 } else {
                     name = model.suggestedAgentName(style: selectedNameStyle)
-                    provider = model.installedProviders.first { $0 == .claudeCode } ?? model.installedProviders.first
-                    modelID = defaultModel(provider)
+                    selectInstalledHarnessIfNeeded()
                 }
                 loaded = true
                 nameFocused = true
+                model.runtime.refreshCapabilities()
             } catch { self.error = error.localizedDescription }
         }
+        // As in Noodle: a harness installed while the sheet is open becomes a new agent's harness.
+        .onChange(of: model.installedProviders) { if agent == nil { selectInstalledHarnessIfNeeded() } }
         .frame(width: 540)
         .noodleSheetSizing()
+        .followsNameForVoice($voice, chosen: $hasChosenVoice, name: name, harnessIdentifier: provider?.rawValue ?? "") {
+            await BotVoice.fitting(name: $0, harnessIdentifier: $1, guesser: AppleVoicePresentationGuesser())
+        }
         // As Noodle's Delete Bot: it asks first, saying what goes with the agent.
         .confirmationDialog("Delete Agent?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
             Button("Delete Agent", role: .destructive) {
@@ -422,16 +434,23 @@ struct AgentEditorSheet: View {
         }
     }
 
+    /// Keeps a new agent's harness one that is installed, Claude Code first.
+    private func selectInstalledHarnessIfNeeded() {
+        let installed = model.installedProviders
+        if let provider, installed.contains(provider) { return }
+        provider = installed.first { $0 == .claudeCode } ?? installed.first
+        modelID = defaultModel(provider)
+    }
+
     /// Noodle's harness rows and choosers, as its bot editor shows them.
     private var harnessFields: some View {
         VStack(alignment: .leading, spacing: 10) {
             AgentConfigurationFields(store: model, setup: host.setup,
                 selectedHarnessIdentifier: Binding(get: { provider?.rawValue ?? "" }, set: { provider = HarnessProvider(rawValue: $0) }),
                 selectedModelIdentifier: Binding(get: { modelID ?? "" }, set: { modelID = $0.isEmpty ? nil : $0 }),
-                selectedEffort: $effort, selectedProfileID: $resources.profile, selectedVoice: $voice, agent: agent,
+                selectedEffort: $effort, selectedProfileID: $resources.profile,
+                selectedVoice: Binding(get: { voice }, set: { voice = $0; hasChosenVoice = true }), agent: agent,
                 workspace: agent.map { model.repository.directory(for: $0) })
-                // Another harness has other voices.
-                .onChange(of: provider) { voice = "" }
             if model.installedProviders.isEmpty {
                 HStack {
                     Text("No harness is installed yet.").font(.caption).foregroundStyle(.secondary)

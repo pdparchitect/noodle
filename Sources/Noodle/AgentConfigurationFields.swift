@@ -228,3 +228,19 @@ struct AgentConfigurationFields: View {
         }
     }
 }
+
+extension View {
+    /// Until a voice is picked, the bot's voice follows its name as it is typed; `fitting` guesses one from the name
+    /// and harness.
+    func followsNameForVoice(_ voice: Binding<String>, chosen: Binding<Bool>, name: String, harnessIdentifier: String,
+                             fitting: @escaping (_ name: String, _ harnessIdentifier: String) async -> String?) -> some View {
+        task(id: name + "\n" + harnessIdentifier) {
+            guard !chosen.wrappedValue else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            let guess = await fitting(name, harnessIdentifier) ?? ""
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            voice.wrappedValue = guess
+        }
+    }
+}

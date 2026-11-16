@@ -37,6 +37,7 @@
 
 ### Fixed
 
+- As in Noodle: long text that can't be attached when pasted stays on the clipboard instead of filling the message field; an agent's voice follows its name until you pick one, and opening Edit Runtime no longer clears the voice; New Agent picks up a harness installed while it is open and needs one to create the agent.
 - As in Noodle, a name with several lines or past the length limit, kept from earlier versions, shows its first line, shortened; an agent's first heartbeat counts from what was last said, not from when Pion opened; and a stop that can't be noted in the conversation says so.
 - The activity window's scroller hides again when not scrolling, instead of always showing.
 - When an agent moves to another harness because its own ran out of usage, or moves back, its conversation says so, as in Noodle.

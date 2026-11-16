@@ -209,6 +209,16 @@ public enum LongTextPolicy {
 }
 
 extension AttachmentTransfer {
+    /// Stores each payload a paste attaches with `store`; true when the paste is handled. Pasted text counts as
+    /// handled even when storing it failed, so it stays on the clipboard and out of the message field, for a retry.
+    public static func paste(_ payloads: [AttachmentTransferPayload]?, store: (AttachmentTransferPayload) -> Bool) -> Bool {
+        guard let payloads else { return false }
+        var stored = false
+        for payload in payloads where store(payload) { stored = true }
+        if case .data(_, _, "text/plain")? = payloads.first { return true }
+        return stored
+    }
+
     /// What a paste into the composer attaches: the files copied, else a picture, else text long enough to take over
     /// the conversation (any text when `textAsAttachment`). Nil leaves the paste to the text field.
     public static func pastedPayloads(fileURLs: [URL], png: Data?, tiff: Data?, text: String?,
