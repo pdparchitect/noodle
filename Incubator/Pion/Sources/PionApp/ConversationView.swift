@@ -431,6 +431,10 @@ struct MessageRow: View {
     let preview: (ConversationAttachment) -> Void
     let continues: Bool
     @State private var hovering = false
+    /// The voice message showing its transcript, opened by its button or its menu, as in Noodle.
+    @State private var transcriptAttachmentID: UUID?
+    /// View › Conversation › Attachments, as in Noodle.
+    @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
     @Environment(\.forwardAttachment) private var forwardAttachment
 
     var body: some View {
@@ -502,6 +506,7 @@ struct MessageRow: View {
             save: attachment.isSavable ? {
                 AttachmentDrag.presentSavePanel(for: attachment, fileURL: model.fileURL(attachment)) { model.problem = $0 }
             } : nil,
+            showTranscript: attachment.voice == nil ? nil : { transcriptAttachmentID = attachment.id },
             forward: attachment.isForwardable ? { forwardAttachment?(attachment) } : nil)
     }
 
@@ -535,11 +540,13 @@ struct MessageRow: View {
     @ViewBuilder private var files: some View {
         let attached = model.files(of: message)
         if !attached.isEmpty {
-            AttachmentGroup(attachments: attached, mode: .wrap, alignment: message.author == .user ? .trailing : .leading) { attachment in
+            AttachmentGroup(attachments: attached, mode: ChatAttachmentLayout(rawValue: attachmentLayout) ?? .defaultValue, alignment: message.author == .user ? .trailing : .leading) { attachment in
                 AttachmentInlinePreview(attachment: attachment, fileURL: model.fileURL(attachment), shouldLoad: true,
                                         isSelected: selectedAttachmentID == attachment.id,
                                         select: { selectedAttachmentID = attachment.id },
-                                        preview: { preview(attachment) })
+                                        preview: { preview(attachment) },
+                                        showsTranscript: attachment.voice == nil ? nil
+                                            : .showsTranscript(of: attachment.id, in: $transcriptAttachmentID))
                     // As in Noodle: dragged out as a copy of its file, and Noodle's menu for it.
                     .onDrag { AttachmentDrag.dragProvider(for: attachment, fileURL: model.fileURL(attachment)) { model.problem = $0 } }
                     .overlay { attachmentMenu(attachment) }

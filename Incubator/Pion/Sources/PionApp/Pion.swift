@@ -37,6 +37,8 @@ struct PionApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             PionCommands(model: delegate.model, window: delegate.window, calls: delegate.calls)
+            // As in Noodle: View › Hide Sidebar (⌃⌘S).
+            SidebarCommands()
             #if PION_DEV_HOOKS
             ScenarioCommands()
             #endif
@@ -357,6 +359,8 @@ struct ViewOptions: View {
             }
         }
         Divider()
+        // Noodle's, without its choices for long messages: Pion keeps its own reading style.
+        Menu("Conversation") { AttachmentLayoutChoices() }
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
             Divider()

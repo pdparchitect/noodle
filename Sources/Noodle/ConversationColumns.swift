@@ -591,18 +591,13 @@ struct SidebarCommands: View {
 
 /// View › Conversation: how a conversation lays out attachments and long messages.
 struct ConversationLayoutCommands: View {
-    @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
     @AppStorage(MessageTextLayout.defaultsKey) private var textLayout = MessageTextLayout.defaultValue.rawValue
 
     var body: some View {
         Menu("Conversation") {
             // Toggles, not inline pickers: a picker brings its own separators, which put a line
             // between each section's header and its items.
-            Section("Attachments") {
-                ForEach(ChatAttachmentLayout.allCases) { layout in
-                    Toggle(layout.displayName, isOn: choice(layout.rawValue, in: $attachmentLayout)).help(layout.explanation)
-                }
-            }
+            AttachmentLayoutChoices()
             Section("Long Messages") {
                 ForEach(MessageTextLayout.allCases) { layout in
                     Toggle(layout.displayName, isOn: choice(layout.rawValue, in: $textLayout)).help(layout.explanation)

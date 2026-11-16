@@ -25,6 +25,22 @@ enum ChatAttachmentLayout: String, CaseIterable, Identifiable {
     }
 }
 
+/// View › Conversation › Attachments in every app: how a message lays out its files, kept per person.
+struct AttachmentLayoutChoices: View {
+    @AppStorage(ChatAttachmentLayout.defaultsKey) private var layout = ChatAttachmentLayout.defaultValue.rawValue
+
+    var body: some View {
+        // Toggles, not an inline picker, which puts a line between the header and its items.
+        Section("Attachments") {
+            ForEach(ChatAttachmentLayout.allCases) { choice in
+                Toggle(choice.displayName, isOn: Binding(get: { layout == choice.rawValue },
+                                                         set: { if $0 { layout = choice.rawValue } }))
+                    .help(choice.explanation)
+            }
+        }
+    }
+}
+
 /// Lay out every attachment in a message in its original order.
 struct AttachmentGroup<Content: View>: View {
     let attachments: [ConversationAttachment]

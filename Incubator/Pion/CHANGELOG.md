@@ -28,6 +28,8 @@
 - The message field says when nothing can be sent because the agent, or every agent of a group, is archived, as in Noodle.
 - In a group, an agent's profile has Reply, which addresses the agent at the start of your message, as in Noodle.
 - A group's name at the top of its conversation opens its profile, as in Noodle: what it is for, who is in it, and Edit.
+- A voice message's menu has Show Transcript, as in Noodle.
+- View › Conversation › Attachments lays out a message's files as Noodle can: side by side, one below another, or stacked; and View › Hide Sidebar (⌃⌘S), as in Noodle.
 
 ### Fixed
 

@@ -172,6 +172,15 @@ extension AVAudioPlayer: VoicePlaybackPlayer {}
     }
 }
 
+extension Binding where Value == Bool {
+    /// Whether the voice message `id` shows its transcript, where a message shows one at a time and its menu can open it.
+    @MainActor static func showsTranscript(of id: UUID, in shown: Binding<UUID?>) -> Binding<Bool> {
+        Binding(get: { shown.wrappedValue == id }, set: { show in
+            if show { shown.wrappedValue = id } else if shown.wrappedValue == id { shown.wrappedValue = nil }
+        })
+    }
+}
+
 struct VoiceMessagePlayer: View {
     let url: URL
     let voice: VoiceMessage

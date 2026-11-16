@@ -450,12 +450,7 @@ struct MessageBubble: View {
             isSelected: selectedAttachmentID == attachment.id,
             select: { selectedAttachmentID = attachment.id },
             preview: { previewAttachment(attachment, store.attachments(for: message)) },
-            showsTranscript: attachment.voice == nil ? nil : Binding(
-                get: { transcriptAttachmentID == attachment.id },
-                set: { shown in
-                    if shown { transcriptAttachmentID = attachment.id }
-                    else if transcriptAttachmentID == attachment.id { transcriptAttachmentID = nil }
-                })
+            showsTranscript: attachment.voice == nil ? nil : .showsTranscript(of: attachment.id, in: $transcriptAttachmentID)
         )
         .onDrag { store.attachmentDragProvider(attachment) }
         .overlay { reactionContextMenu(attachment: attachment) }
