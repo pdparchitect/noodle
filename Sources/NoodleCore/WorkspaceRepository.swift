@@ -1404,12 +1404,18 @@ public struct WorkspaceRepository: Sendable {
     /// next checks Messenger, at the start of its next turn. Nil for a bot without that conversation.
     @discardableResult
     public func appendStopNotice(agentID: UUID) throws -> ChatMessage? {
-        guard let agent = try loadAgents().first(where: { $0.id == agentID }),
-              let conversation = try loadConversations().first(where: {
+        guard let agent = try loadAgents().first(where: { $0.id == agentID }) else { return nil }
+        return try appendNotice("You stopped \(agent.displayName).", toAgent: agentID)
+    }
+
+    /// Adds the app's own line to the bot's conversation with its owner, such as a move to another harness.
+    /// Nil for a bot without that conversation.
+    @discardableResult
+    public func appendNotice(_ line: String, toAgent agentID: UUID) throws -> ChatMessage? {
+        guard let conversation = try loadConversations().first(where: {
                   $0.kind == .direct && $0.participantIDs == [agentID] && $0.guest == nil
               }) else { return nil }
-        let message = ChatMessage(conversationID: conversation.id, author: .system,
-                                  body: "You stopped \(agent.displayName).", delivery: .delivered)
+        let message = ChatMessage(conversationID: conversation.id, author: .system, body: line, delivery: .delivered)
         try append(message)
         return message
     }

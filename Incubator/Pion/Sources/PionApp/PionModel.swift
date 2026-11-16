@@ -147,6 +147,8 @@ import UniformTypeIdentifiers
 
     func start() {
         do { try repository.prepare() } catch { problem = error.localizedDescription }
+        // As in Noodle: a move to another harness, or back, is said in the agent's conversation.
+        runtime.onHarnessSwitch = { [weak self] id, line in self?.notice(line, toAgent: id) }
         // Before the first capability check, so Apple Intelligence is offered as ready where the Mac has it.
         if !isScripted { offerAppleModel() }
         reload()
@@ -436,6 +438,12 @@ import UniformTypeIdentifiers
               let agent = agent(conversation.participantIDs.first),
               isScripted ? phase(of: agent) == .working : runtime.canStopTurn(agent.id) else { return nil }
         return agent
+    }
+
+    private func notice(_ line: String, toAgent id: UUID) {
+        do {
+            if let message = try repository.appendNotice(line, toAgent: id) { readTranscript(message.conversationID) }
+        } catch { problem = "Could not add the harness change to the conversation: \(error.localizedDescription)" }
     }
 
     func stop(in conversationID: UUID?) {

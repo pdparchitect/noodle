@@ -1871,12 +1871,10 @@ final class NoodleStore {
 
     /// Says in the bot's own conversation which harness it continues on.
     private func postHarnessSwitch(_ line: String, agentID: UUID) {
-        guard let conversation = conversations.first(where: { $0.kind == .direct && $0.participantIDs == [agentID] }) else { return }
-        let message = ChatMessage(conversationID: conversation.id, author: .system, body: line, delivery: .delivered)
         do {
-            try repository.append(message)
-            messagesByConversation[conversation.id, default: []].append(message)
-            sendToHub(conversation.id)
+            guard let message = try repository.appendNotice(line, toAgent: agentID) else { return }
+            messagesByConversation[message.conversationID, default: []].append(message)
+            sendToHub(message.conversationID)
         } catch {
             errorMessage = "Could not add the harness change to the conversation: \(error.localizedDescription)"
         }
