@@ -462,11 +462,7 @@ final class ChatsCacheFile: @unchecked Sendable {
 
     /// Whether a conversation counts on the app's icon, as it is set to notify.
     func countsOnIcon(_ conversation: some HubConversation) -> Bool {
-        switch notifications(of: conversation) {
-        case .muted: false
-        case .mentions: hasUnreadMention(conversation)
-        default: isUnread(conversation)
-        }
+        isUnread(conversation) && notifications(of: conversation).countsUnread(mentioned: hasUnreadMention(conversation))
     }
 
     /// Whether a bot named the user since the conversation was last opened here.
@@ -4345,7 +4341,7 @@ struct AgentEditor: View {
                         TextField("Name", text: $draft.name)
                         if agent == nil {
                             Button {
-                                draft.name = BotNameGenerator.random(style: .real, excluding: draft.name)
+                                draft.name = BotNameGenerator.random(style: .real, excluding: draft.name, avoiding: chats.agents.map(\.draft.name))
                                 face.follow(&draft, others: chats.agents, fresh: true)
                             } label: {
                                 Image(systemName: "arrow.triangle.2.circlepath")
@@ -4509,7 +4505,7 @@ struct AgentEditor: View {
             .onAppear {
                 if agent == nil, !named {
                     named = true
-                    if draft.name.isEmpty { draft.name = BotNameGenerator.random(style: .real) }
+                    if draft.name.isEmpty { draft.name = BotNameGenerator.random(style: .real, avoiding: chats.agents.map(\.draft.name)) }
                     face.follow(&draft, others: chats.agents)
                 }
                 guard let agent else { return }

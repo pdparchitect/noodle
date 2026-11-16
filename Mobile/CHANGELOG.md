@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- New Bot no longer suggests the name of a bot you already have.
+
 ## [0.57.1] - 2026-11-15
 
 ### Added
