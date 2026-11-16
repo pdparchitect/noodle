@@ -197,3 +197,17 @@ extension VoiceCallPeering {
         }
     }
 }
+
+extension VoiceCallLine {
+    /// The last few things said in a conversation, which a call's voice hears first; calls and notices are left out.
+    public static func recent(_ messages: [ChatMessage], count: Int = 12) -> [VoiceCallLine] {
+        messages.suffix(count).compactMap { message in
+            guard message.call == nil else { return nil }
+            switch message.author {
+            case .user: return .init(.person, message.body)
+            case .agent: return .init(.bot, message.body)
+            case .system: return nil
+            }
+        }
+    }
+}

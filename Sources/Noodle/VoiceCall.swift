@@ -180,26 +180,12 @@ struct VoiceCallSetup: Equatable {
     func announceConnected()
 }
 
-/// One call at a time across the app: starting another hangs up the current one.
-extension VoiceCallLine {
-    /// The last few things said in a conversation, which a call's voice hears first; calls and notices are left out.
-    static func recent(_ messages: [ChatMessage], count: Int = 12) -> [VoiceCallLine] {
-        messages.suffix(count).compactMap { message in
-            guard message.call == nil else { return nil }
-            switch message.author {
-            case .user: return .init(.person, message.body)
-            case .agent: return .init(.bot, message.body)
-            case .system: return nil
-            }
-        }
-    }
-}
-
 extension AgentRecord {
     /// Whether its harness speaks, which a call needs.
     var hasCallVoices: Bool { HarnessProvider(rawValue: harnessIdentifier ?? "")?.voices.isEmpty == false }
 }
 
+/// One call at a time across the app: starting another hangs up the current one.
 @MainActor @Observable final class VoiceCallController {
     struct Call: Equatable {
         let id = UUID()

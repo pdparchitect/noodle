@@ -33,8 +33,7 @@ import UniformTypeIdentifiers
         do {
             let note = AttachmentAnnotation(source: source, comment: comment, region: region)
             let marked = try AnnotationContent.data(for: note, snapshot: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
-            let attachment = try repository.importAttachment(data: marked, originalFilename: "Annotation — \(filename)",
-                into: conversationID, mediaType: "image/png", annotation: note)
+            let attachment = try repository.importAnnotation(note, content: marked, on: source)
             return Saved(attachment: attachment, source: source)
         } catch {
             try? repository.removeAttachment(source)

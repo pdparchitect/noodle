@@ -1626,7 +1626,6 @@ public struct WorkspaceRepository: Sendable {
         return MessengerRoster(me: me, conversation: conversation, participants: participants)
     }
 
-    @discardableResult
     /// The person's reaction, picked again, comes off; otherwise it goes on.
     public func togglePersonReaction(_ emoji: String, on message: ChatMessage) throws {
         let latest = try loadMessages(conversationID: message.conversationID).first { $0.id == message.id }
@@ -1645,6 +1644,7 @@ public struct WorkspaceRepository: Sendable {
         try setReaction(conversationID: message.conversationID, messageID: message.id, author: .user, emoji: emoji, present: false)
     }
 
+    @discardableResult
     public func setReaction(
         conversationID: UUID, messageID: UUID, author: MessageAuthor,
         emoji: String, present: Bool, now: Date = Date()

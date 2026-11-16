@@ -1,4 +1,4 @@
-#if NOODLE_DEV_HOOKS || PION_DEV_HOOKS
+#if NOODLE_DEV_HOOKS
 import AppKit
 import SwiftUI
 

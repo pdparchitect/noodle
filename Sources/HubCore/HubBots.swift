@@ -1193,13 +1193,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             try requireLends(agent, to: user)
         }
         try requireTokens(for: [agent], from: user)
-        let recentLines = try repository.loadMessages(conversationID: conversation.id).suffix(12).compactMap { message -> VoiceCallLine? in
-            switch message.author {
-            case .user: .init(.person, message.body)
-            case .agent: .init(.bot, message.body)
-            case .system: nil
-            }
-        }
+        let recentLines = VoiceCallLine.recent(try repository.loadMessages(conversationID: conversation.id))
         let voice = await BotVoice.forCall(agent, repository: repository, guesser: voiceGuesser)
         let identity = (try? repository.loadAgentBackstory(agent)).map {
             VoiceCallIdentity(name: agent.displayName, description: agent.publicDescription, backstory: $0)

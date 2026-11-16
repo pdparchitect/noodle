@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A call on the Hub starts from the same recent messages as one on a Mac, without earlier calls.
 - A bot's first heartbeat counts from what was last said to it, as in Noodle, not from when the Hub started.
 - The activity window's scroller hides again when not scrolling, instead of always showing.
 - A bot waiting for sign-in while it runs on a fallback login comes back by itself once that login works again, as in Noodle; the Hub checked the bot's own login instead.

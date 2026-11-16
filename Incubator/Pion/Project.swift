@@ -227,7 +227,7 @@ let project = Project(
                 ]) { $1 },
                 configurations: [
                     .debug(name: "Debug", settings: [
-                        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) DEBUG PION_DEV_HOOKS",
+                        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) DEBUG PION_DEV_HOOKS NOODLE_DEV_HOOKS",
                         "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "YES",
                         "ENABLE_DEBUG_DYLIB": "NO",
                     ]),

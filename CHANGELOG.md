@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- A call no longer hears earlier calls in its conversation as things said; it starts from what was written.
 - New Bot no longer suggests the name of a bot you already have.
 - The activity window's scroller hides again when not scrolling, instead of always showing.
 - In Settings > Groups, an archived group's picture no longer opens its profile; bring the group back with its Archived switch first.
