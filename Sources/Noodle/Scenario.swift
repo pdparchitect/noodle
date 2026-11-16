@@ -327,18 +327,6 @@ struct Scenario: Codable {
     }
 }
 
-struct ScenarioError: LocalizedError {
-    let errorDescription: String?
-    /// The scenario is sound but names media that scripts/scenario.sh has not fetched yet. A
-    /// fresh checkout has none of it, so this is a scenario waiting for the script rather than a
-    /// mistake in it.
-    let needsFetch: Bool
-    init(_ description: String, needsFetch: Bool = false) {
-        errorDescription = description
-        self.needsFetch = needsFetch
-    }
-}
-
 // MARK: - Load and validate
 
 extension Scenario {
@@ -480,7 +468,7 @@ extension Scenario {
         }
         try require(version == 1, "Scenario version \(version) is not supported.")
         try require(appearance == nil || appearance == "dark", "Noodle is dark only: appearance must be \"dark\" or left out.")
-        _ = try ScenarioSupport.start(clock, now: Date())
+        _ = try ScenarioTime.start(clock, now: Date())
         if let film {
             if let backdrop = film.media { _ = try media(backdrop) }
             for (label, text) in [("intro.kicker", film.intro?.kicker), ("intro.title", film.intro?.title),
@@ -566,7 +554,7 @@ extension Scenario {
                 // A bot fetches a queued message as it starts, which would deliver it; `say` in the timeline sends one live.
                 let allowed: [MessageDelivery] = message.from == "user" ? [.saved, .delivered, .failed] : [.delivered]
                 try require(message.delivery.map(allowed.contains) ?? true, "\(conversation.key): a seeded message from \(message.from) cannot be \(message.delivery?.rawValue ?? "").")
-                let date = try ScenarioSupport.date(message.at, clock: Date())
+                let date = try ScenarioTime.date(message.at, clock: Date())
                 try require(date >= previous, "Messages in \(conversation.key) must be in time order (\(message.at)).")
                 previous = date
                 try check(message.attachments)
@@ -771,7 +759,7 @@ extension Scenario {
     @MainActor func seed(into repository: WorkspaceRepository, defaults: UserDefaults, harnessHome: URL, now: Date = Date()) throws -> Seeded {
         let files = FileManager.default
         let managed = ManagedHarnessStore(root: harnessHome)
-        var seeded = Seeded(clock: try ScenarioSupport.start(clock, now: now),
+        var seeded = Seeded(clock: try ScenarioTime.start(clock, now: now),
             discovery: HarnessDiscovery(homeDirectory: harnessHome, applicationsDirectory: harnessHome,
                 executableSearchDirectories: [], applicationBundleURL: harnessHome, managedHarnesses: managed, environment: [:]))
         for (key, value) in settings ?? [:] { defaults.set(value.propertyListValue, forKey: key) }
@@ -817,7 +805,7 @@ extension Scenario {
                 conversation = seeded.directs[entry.direct ?? ""]!
             }
             for message in entry.messages ?? [] {
-                let date = try ScenarioSupport.date(message.at, clock: seeded.clock)
+                let date = try ScenarioTime.date(message.at, clock: seeded.clock)
                 let author = message.from == "user" ? MessageAuthor.user : .agent(seeded.agents[message.from]!.id)
                 let saved = ChatMessage(conversationID: conversation.id, author: author, body: message.text, createdAt: date,
                     delivery: message.delivery ?? .delivered,
@@ -846,7 +834,7 @@ extension Scenario {
         for agent in agents {
             for task in agent.tasks ?? [] {
                 try apply(task, of: agent.key, seeded: seeded, taskIDs: &seeded.tasks, repository: repository,
-                          now: try task.at.map { try ScenarioSupport.date($0, clock: seeded.clock) } ?? seeded.clock)
+                          now: try task.at.map { try ScenarioTime.date($0, clock: seeded.clock) } ?? seeded.clock)
             }
         }
         if let columns = present?.columns {
@@ -1006,7 +994,6 @@ extension Scenario {
     private var shotWaiters: [CheckedContinuation<Void, Never>] = []
     private var terminalEnded = true
     private var liveMessages: [String: ChatMessage] = [:]
-    private var pickerWindow: NSWindow?
     /// What opened this scenario, a name or a path, which Reload opens again; nil while only the picker is open.
     private(set) var selection: String?
     private let launchedAt = Date()
@@ -1466,60 +1453,17 @@ extension Scenario {
 // MARK: - Launch, picker and menu
 
 extension ScenarioSession {
-    /// A folder under the scenarios root, as the picker and the menu list it. A scenario that does not load keeps its place and says why.
-    struct Listing: Identifiable {
-        let name: String
-        let folder: URL
-        let title: String
-        let error: String?
-        /// Its media has not been fetched yet; the scenario itself is sound.
-        var needsFetch: Bool = false
-        var id: String { name }
-    }
-
     /// Where `scripts/scenario.sh` said the scenarios are.
-    static var scenariosRoot: URL? {
-        (Bundle.main.object(forInfoDictionaryKey: "NoodleScenariosRoot") as? String).map { URL(fileURLWithPath: $0, isDirectory: true) }
-    }
+    static var scenariosRoot: URL? { ScenarioLauncher.scenariosRoot(key: "NoodleScenariosRoot") }
 
-    /// Holds the name chosen in the app, in the container beside the run root. It stays until another choice replaces it,
-    /// so Reload and opening the bundle again both return to the same scenario.
-    static var pointerURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("scenario-selection.txt")
-    }
-
-    static func listings(in root: URL?) -> [Listing] {
-        guard let root, let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
-        return names.sorted().compactMap { name in
-            let folder = root.appendingPathComponent(name, isDirectory: true)
-            guard let data = try? Data(contentsOf: folder.appendingPathComponent("scenario.json")) else { return nil }
-            do { return Listing(name: name, folder: folder.standardizedFileURL, title: try Scenario.load(from: folder).title, error: nil) }
-            catch {
-                let title = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["title"] as? String
-                return Listing(
-                    name: name, folder: folder.standardizedFileURL, title: title ?? name,
-                    error: error.localizedDescription,
-                    needsFetch: (error as? ScenarioError)?.needsFetch == true)
-            }
-        }
+    static func listings(in root: URL?) -> [ScenarioListing] {
+        ScenarioLauncher.listings(in: root) { (try Scenario.load(from: $0).title, nil) }
     }
 
     /// The launch argument first, then the choice made in the app, unless the launch asks for the picker.
     static func selection(_ checks: LaunchChecks, pointer: URL) -> String? {
-        if let argument = checks.value(after: DevelopmentHook.scenario) { return argument }
-        if checks.contains(DevelopmentHook.scenarioPicker) { return nil }
-        let chosen = (try? String(contentsOf: pointer, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return chosen?.isEmpty == false ? chosen : nil
-    }
-
-    static func select(_ name: String?, pointer: URL) throws {
-        guard let name else { try? FileManager.default.removeItem(at: pointer); return }
-        try FileManager.default.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(name.utf8).write(to: pointer, options: .atomic)
-    }
-
-    static func folder(for selection: String, root: URL?) -> URL? {
-        selection.contains("/") ? URL(fileURLWithPath: selection, isDirectory: true) : root?.appendingPathComponent(selection, isDirectory: true)
+        ScenarioLauncher.selection(argument: checks.value(after: DevelopmentHook.scenario),
+                                   picker: checks.contains(DevelopmentHook.scenarioPicker), pointer: pointer)
     }
 
     /// The store for this launch, or nil outside the scenarios bundle, where the app opens as usual.
@@ -1549,14 +1493,14 @@ extension ScenarioSession {
             return session
         }
 
-        if let selection = selection(checks, pointer: pointerURL) {
+        if let selection = selection(checks, pointer: ScenarioLauncher.pointerURL) {
             do {
-                guard let folder = folder(for: selection, root: scenariosRoot) else { throw ScenarioError("The bundle does not say where the scenarios are.") }
+                guard let folder = ScenarioLauncher.folder(for: selection, root: scenariosRoot) else { throw ScenarioError("The bundle does not say where the scenarios are.") }
                 var scenario = try Scenario.load(from: folder)
                 try scenario.resize(checks)
                 let session = try open(scenario)
                 session.selection = selection
-                try? select(selection, pointer: pointerURL)
+                try? ScenarioLauncher.select(selection, pointer: ScenarioLauncher.pointerURL)
                 session.takesShots = checks.contains(DevelopmentHook.scenarioShots)
                 session.readTerminal()
                 session.store.startMonitoring()
@@ -1579,7 +1523,7 @@ extension ScenarioSession {
             } catch {
                 // The script is told. A choice made in the app goes back to the picker, which says what is wrong.
                 if argument != nil { fail(error.localizedDescription) }
-                try? select(nil, pointer: pointerURL)
+                try? ScenarioLauncher.select(nil, pointer: ScenarioLauncher.pointerURL)
             }
         }
 
@@ -1597,47 +1541,12 @@ extension ScenarioSession {
         } catch { fail(error.localizedDescription) }
     }
 
-    /// A sandboxed app cannot pass itself launch arguments, so the choice travels in the pointer file.
-    /// Launch Services will not open a second instance of it either, so the bundle reopens once this one has quit.
     static func relaunch(into name: String?) {
         guard isIsolated(bundleIdentifier: Bundle.main.bundleIdentifier) else { return }
-        do {
-            try select(name, pointer: pointerURL)
-            let reopener = try reopener(of: Bundle.main.bundleURL, with: "/usr/bin/open")
-            try reopener.process.run()
-            whileRunning = reopener.whileRunning
-            NSApp.terminate(nil)
-        } catch { NSSound.beep() }
+        ScenarioLauncher.relaunch(into: name)
     }
 
-    /// Held open until the app quits, which is what tells the reopener to go ahead.
-    private static var whileRunning: FileHandle?
-
-    /// A shell job in a process group of its own, so it outlives the app, that waits for `whileRunning` to close.
-    static func reopener(of bundle: URL, with opener: String) throws -> (process: Process, whileRunning: FileHandle) {
-        let pipe = Pipe(), process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "exec 3<&0; set -m; (cat <&3 > /dev/null; sleep 0.3; exec \"$0\" \"$1\") > /dev/null 2>&1 &", opener, bundle.path]
-        process.standardInput = pipe
-        return (process, pipe.fileHandleForWriting)
-    }
-
-
-    func showPicker() {
-        if pickerWindow == nil {
-            let controller = NSHostingController(rootView: ScenarioPicker(listings: Self.listings(in: Self.scenariosRoot)))
-            // A window takes its title from its content view controller.
-            controller.title = "Scenarios"
-            let window = NSWindow(contentViewController: controller)
-            window.styleMask = [.titled, .closable, .resizable]
-            window.isReleasedWhenClosed = false
-            window.setContentSize(NSSize(width: 460, height: 380))
-            window.center()
-            pickerWindow = window
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        pickerWindow?.makeKeyAndOrderFront(nil)
-    }
+    func showPicker() { ScenarioLauncher.showPicker(Self.listings(in: Self.scenariosRoot)) }
 
     func revealInFinder() {
         guard let folder = selection == nil ? Self.scenariosRoot : scenario.folder else { return }
@@ -1645,62 +1554,13 @@ extension ScenarioSession {
     }
 }
 
-private struct ScenarioPicker: View {
-    let listings: [ScenarioSession.Listing]
-    @State private var selection: String?
-
-    private var canLoad: Bool { listings.contains { $0.name == selection && $0.error == nil } }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            List(listings, selection: $selection) { listing in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(listing.title)
-                    Text(listing.error ?? listing.name)
-                        .font(.caption)
-                        .foregroundStyle(listing.error == nil ? Color.secondary : Color.red)
-                }
-                .padding(.vertical, 2)
-            }
-            .contextMenu(forSelectionType: String.self) { _ in } primaryAction: { names in
-                if let name = names.first, listings.contains(where: { $0.name == name && $0.error == nil }) { ScenarioSession.relaunch(into: name) }
-            }
-            .overlay {
-                if listings.isEmpty { Text("No scenarios found").foregroundStyle(.secondary) }
-            }
-            Divider()
-            HStack {
-                Spacer()
-                Button("Load") { ScenarioSession.relaunch(into: selection) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canLoad)
-            }
-            .padding(12)
-        }
-        .frame(minWidth: 380, minHeight: 260)
-        .preferredColorScheme(.dark)
-    }
-}
-
 /// The Scenarios menu, which only the scenarios bundle shows.
 struct ScenarioCommands: Commands {
     var body: some Commands {
         if let session = ScenarioSession.active {
-            CommandMenu("Scenarios") {
-                ForEach(ScenarioSession.listings(in: ScenarioSession.scenariosRoot)) { listing in
-                    Toggle(listing.title, isOn: Binding(get: { listing.folder.path == session.scenario.folder.path }, set: { _ in ScenarioSession.relaunch(into: listing.name) }))
-                        .disabled(listing.error != nil)
-                }
-                Divider()
-                Button("Reload") { ScenarioSession.relaunch(into: session.selection) }
-                    .keyboardShortcut("r", modifiers: [.command, .option])
-                    .disabled(session.selection == nil)
-                Button("Next Step") { session.nextStep() }
-                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                Divider()
-                Button("Show Picker") { session.showPicker() }
-                Button("Reveal in Finder") { session.revealInFinder() }
-            }
+            ScenarioMenu(listings: ScenarioSession.listings(in: ScenarioSession.scenariosRoot),
+                         loaded: session.selection == nil ? nil : session.scenario.folder, selection: session.selection,
+                         nextStep: session.nextStep, showPicker: session.showPicker, reveal: session.revealInFinder)
         }
     }
 }
@@ -1709,35 +1569,6 @@ struct ScenarioCommands: Commands {
 // Nothing below knows about Noodle's store or repository, so a companion app's loader can take it as it is.
 
 enum ScenarioSupport {
-    /// The clock a scenario opens at: `HH:mm` today, or the wall clock.
-    static func start(_ clock: String?, now: Date, calendar: Calendar = .current) throws -> Date {
-        guard let clock else { return now }
-        guard !clock.contains(" "), !clock.hasPrefix("-") else { throw ScenarioError("clock is a time such as \"09:41\".") }
-        return try date(clock, clock: now, calendar: calendar)
-    }
-
-    /// `HH:mm` on the scenario's day, `-Nd HH:mm` on an earlier day, or `-Nm` and `-Nh` before the clock.
-    static func date(_ text: String, clock: Date, calendar: Calendar = .current) throws -> Date {
-        func time(_ value: Substring, daysAgo: Int) -> Date? {
-            let fields = value.split(separator: ":", omittingEmptySubsequences: false).compactMap { Int($0) }
-            guard value.count == 5, fields.count == 2, (0..<24).contains(fields[0]), (0..<60).contains(fields[1]),
-                  let day = calendar.date(byAdding: .day, value: -daysAgo, to: clock) else { return nil }
-            return calendar.date(bySettingHour: fields[0], minute: fields[1], second: 0, of: day)
-        }
-        func ago(_ value: Substring, _ unit: Character) -> Int? {
-            value.first == "-" && value.last == unit ? Int(value.dropFirst().dropLast()).flatMap { $0 >= 0 ? $0 : nil } : nil
-        }
-        let parts = text.split(separator: " ")
-        if parts.count == 1 {
-            if let date = time(parts[0], daysAgo: 0) { return date }
-            if let minutes = ago(parts[0], "m") { return clock.addingTimeInterval(-60 * Double(minutes)) }
-            if let hours = ago(parts[0], "h") { return clock.addingTimeInterval(-3600 * Double(hours)) }
-        } else if parts.count == 2, let days = ago(parts[0], "d"), let date = time(parts[1], daysAgo: days) {
-            return date
-        }
-        throw ScenarioError("\"\(text)\" is not a time: use \"HH:mm\", \"-2d HH:mm\", \"-15m\" or \"-3h\".")
-    }
-
     /// Keys of `original` that did not survive decoding and encoding again. Null values are skipped, as encoding omits them.
     static func unknownKeys(in original: Any, comparedTo encoded: Any?, path: String = "") -> [String] {
         if let original = original as? [String: Any] {

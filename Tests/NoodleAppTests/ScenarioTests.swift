@@ -502,13 +502,13 @@ import XCTest
         let none = LaunchChecks(arguments: ["Noodle"])
         XCTAssertNil(ScenarioSession.selection(none, pointer: pointer))
 
-        try ScenarioSession.select("group-review", pointer: pointer)
+        try ScenarioLauncher.select("group-review", pointer: pointer)
         XCTAssertEqual(ScenarioSession.selection(none, pointer: pointer), "group-review")
         XCTAssertEqual(ScenarioSession.selection(none, pointer: pointer), "group-review", "Reading the choice keeps it, so Reload returns to it")
-        try ScenarioSession.select("direct-chat", pointer: pointer)
+        try ScenarioLauncher.select("direct-chat", pointer: pointer)
         XCTAssertEqual(ScenarioSession.selection(none, pointer: pointer), "direct-chat")
 
-        try ScenarioSession.select(nil, pointer: pointer)
+        try ScenarioLauncher.select(nil, pointer: pointer)
         XCTAssertNil(ScenarioSession.selection(none, pointer: pointer))
         try Data(" \n".utf8).write(to: pointer)
         XCTAssertNil(ScenarioSession.selection(none, pointer: pointer))
@@ -516,7 +516,7 @@ import XCTest
 
     func testTheLaunchArgumentBeatsTheChoiceMadeInTheApp() throws {
         let pointer = try directory().appendingPathComponent("scenario-selection.txt")
-        try ScenarioSession.select("group-review", pointer: pointer)
+        try ScenarioLauncher.select("group-review", pointer: pointer)
         let checks = LaunchChecks(arguments: ["Noodle", "--scenario", "/tmp/Scenarios/direct-chat", "-AppleLocale", "en_US"])
         XCTAssertEqual(ScenarioSession.selection(checks, pointer: pointer), "/tmp/Scenarios/direct-chat")
         XCTAssertEqual(ScenarioSession.selection(LaunchChecks(arguments: ["Noodle", "--scenario"]), pointer: pointer), "group-review")
@@ -524,15 +524,15 @@ import XCTest
         XCTAssertEqual(ScenarioSession.selection(LaunchChecks(arguments: ["Noodle"]), pointer: pointer), "group-review", "Asking for the picker does not forget the choice")
 
         let root = URL(fileURLWithPath: "/tmp/Scenarios", isDirectory: true)
-        XCTAssertEqual(ScenarioSession.folder(for: "direct-chat", root: root)?.path, "/tmp/Scenarios/direct-chat")
-        XCTAssertEqual(ScenarioSession.folder(for: "/elsewhere/demo", root: root)?.path, "/elsewhere/demo")
-        XCTAssertNil(ScenarioSession.folder(for: "direct-chat", root: nil))
+        XCTAssertEqual(ScenarioLauncher.folder(for: "direct-chat", root: root)?.path, "/tmp/Scenarios/direct-chat")
+        XCTAssertEqual(ScenarioLauncher.folder(for: "/elsewhere/demo", root: root)?.path, "/elsewhere/demo")
+        XCTAssertNil(ScenarioLauncher.folder(for: "direct-chat", root: nil))
     }
 
     /// Launch Services will not open a second instance of a sandboxed app, so the bundle reopens once this one is gone.
     func testTheBundleReopensOnlyAfterTheAppHasQuit() throws {
         let reopened = try directory().appendingPathComponent("reopened")
-        let reopener = try ScenarioSession.reopener(of: reopened, with: "/usr/bin/touch")
+        let reopener = try ScenarioLauncher.reopener(of: reopened, with: "/usr/bin/touch")
         try reopener.process.run()
         Thread.sleep(forTimeInterval: 0.6)
         XCTAssertFalse(FileManager.default.fileExists(atPath: reopened.path), "The app is still running")

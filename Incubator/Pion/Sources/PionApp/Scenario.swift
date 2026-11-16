@@ -175,25 +175,6 @@ struct PionScenario: Decodable {
 }
 
 /// Times in scenario files: HH:MM today, or -2d HH:MM some days before.
-enum ScenarioTime {
-    static func date(_ text: String, clock: Date, calendar: Calendar = .current) throws -> Date {
-        var days = 0
-        var time = Substring(text.trimmingCharacters(in: .whitespaces))
-        if time.hasPrefix("-"), let space = time.firstIndex(of: " "), time[time.index(before: space)] == "d",
-           let value = Int(time[time.index(after: time.startIndex)..<time.index(before: space)]) {
-            days = value
-            time = time[time.index(after: space)...]
-        }
-        let parts = time.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]), (0..<24).contains(hour), (0..<60).contains(minute),
-              let day = calendar.date(byAdding: .day, value: -days, to: clock),
-              let date = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) else {
-            throw CaseError("\(text) is not a time like 03:25 or -1d 17:40.")
-        }
-        return date
-    }
-}
-
 // MARK: - Session
 
 @MainActor final class ScenarioSession {
@@ -208,7 +189,6 @@ enum ScenarioTime {
     private var conversationIDs: [String: UUID] = [:]
     private var keyWaiters: [CheckedContinuation<Void, Never>] = []
     private var lineWaiters: [CheckedContinuation<Void, Never>] = []
-    private var pickerWindow: NSWindow?
     private var takesShots = false
 
     private init(scenario: PionScenario?, selection: String?, root: URL) throws {
@@ -221,13 +201,7 @@ enum ScenarioTime {
 
     // MARK: Launch
 
-    static var scenariosRoot: URL? {
-        (Bundle.main.object(forInfoDictionaryKey: "PionScenariosRoot") as? String).map { URL(fileURLWithPath: $0, isDirectory: true) }
-    }
-
-    static var pointerURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("scenario-selection.txt")
-    }
+    static var scenariosRoot: URL? { ScenarioLauncher.scenariosRoot(key: "PionScenariosRoot") }
 
     private static func argument(after flag: String) -> String? {
         let arguments = CommandLine.arguments
@@ -251,21 +225,21 @@ enum ScenarioTime {
         let runs = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Scenario", isDirectory: true)
         try? FileManager.default.removeItem(at: runs)
         let root = runs.appendingPathComponent(UUID().uuidString, isDirectory: true).appendingPathComponent("Pion", isDirectory: true)
-        let chosen = (try? String(contentsOf: pointerURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let selection = argument ?? (CommandLine.arguments.contains("--scenario-picker") ? nil : chosen.flatMap { $0.isEmpty ? nil : $0 })
-        if let selection {
+        let pointer = ScenarioLauncher.pointerURL
+        if let selection = ScenarioLauncher.selection(argument: argument, picker: CommandLine.arguments.contains("--scenario-picker"),
+                                                      pointer: pointer) {
             do {
-                let folder = selection.contains("/") ? URL(fileURLWithPath: selection, isDirectory: true)
-                    : scenariosRoot?.appendingPathComponent(selection, isDirectory: true)
-                guard let folder else { throw CaseError("The bundle does not say where the scenarios are.") }
+                guard let folder = ScenarioLauncher.folder(for: selection, root: scenariosRoot) else {
+                    throw ScenarioError("The bundle does not say where the scenarios are.")
+                }
                 let session = try ScenarioSession(scenario: try PionScenario.load(from: folder), selection: selection, root: root)
                 session.takesShots = CommandLine.arguments.contains("--scenario-shots")
                 active = session
-                try? select(selection)
+                try? ScenarioLauncher.select(selection, pointer: pointer)
                 return session
             } catch {
                 if argument != nil { fail(error.localizedDescription) }
-                try? select(nil)
+                try? ScenarioLauncher.select(nil, pointer: pointer)
             }
         }
         do {
@@ -275,29 +249,7 @@ enum ScenarioTime {
         } catch { fail(error.localizedDescription) }
     }
 
-    static func select(_ name: String?) throws {
-        guard let name else { try? FileManager.default.removeItem(at: pointerURL); return }
-        try FileManager.default.createDirectory(at: pointerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(name.utf8).write(to: pointerURL, options: .atomic)
-    }
-
-    /// A sandboxed app cannot pass itself arguments, so the choice travels in the pointer file, and the
-    /// bundle reopens once this copy has quit.
-    static func relaunch(into name: String?) {
-        do {
-            try select(name)
-            let pipe = Pipe(), process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", "exec 3<&0; set -m; (cat <&3 > /dev/null; sleep 0.3; exec \"$0\" \"$1\") > /dev/null 2>&1 &",
-                                 "/usr/bin/open", Bundle.main.bundleURL.path]
-            process.standardInput = pipe
-            try process.run()
-            whileRunning = pipe.fileHandleForWriting
-            NSApp.terminate(nil)
-        } catch { NSSound.beep() }
-    }
-
-    private static var whileRunning: FileHandle?
+    static func relaunch(into name: String?) { ScenarioLauncher.relaunch(into: name) }
 
     // MARK: Seed
 
@@ -435,8 +387,8 @@ enum ScenarioTime {
     }
 
     var mainWindow: NSWindow? {
-        NSApp.windows.first { $0.canBecomeMain && $0 !== pickerWindow && $0.isVisible }
-            ?? NSApp.windows.first { $0.canBecomeMain && $0 !== pickerWindow }
+        NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) && $0.isVisible }
+            ?? NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) }
     }
 
     /// The main window in screen coordinates with the origin at the top left, as screencapture takes it.
@@ -542,43 +494,14 @@ enum ScenarioTime {
 
     // MARK: Picker
 
-    struct Listing: Identifiable {
-        let name: String
-        let folder: URL
-        let title: String
-        let summary: String?
-        let error: String?
-        var id: String { name }
-    }
-
-    static func listings() -> [Listing] {
-        guard let root = scenariosRoot, let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
-        return names.sorted().compactMap { name in
-            let folder = root.appendingPathComponent(name, isDirectory: true)
-            guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("scenario.json").path) else { return nil }
-            do {
-                let scenario = try PionScenario.load(from: folder)
-                return Listing(name: name, folder: folder, title: scenario.title, summary: scenario.summary, error: nil)
-            } catch {
-                return Listing(name: name, folder: folder, title: name, summary: nil, error: error.localizedDescription)
-            }
+    static func listings() -> [ScenarioListing] {
+        ScenarioLauncher.listings(in: scenariosRoot) { folder in
+            let scenario = try PionScenario.load(from: folder)
+            return (scenario.title, scenario.summary)
         }
     }
 
-    func showPicker() {
-        if pickerWindow == nil {
-            let controller = NSHostingController(rootView: ScenarioPicker(listings: Self.listings()))
-            controller.title = "Scenarios"
-            let window = NSWindow(contentViewController: controller)
-            window.styleMask = [.titled, .closable, .resizable]
-            window.isReleasedWhenClosed = false
-            window.setContentSize(NSSize(width: 520, height: 420))
-            window.center()
-            pickerWindow = window
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        pickerWindow?.makeKeyAndOrderFront(nil)
-    }
+    func showPicker() { ScenarioLauncher.showPicker(Self.listings()) }
 
     func revealInFinder() {
         guard let folder = scenario?.folder ?? Self.scenariosRoot else { return }
@@ -586,60 +509,12 @@ enum ScenarioTime {
     }
 }
 
-private struct ScenarioPicker: View {
-    let listings: [ScenarioSession.Listing]
-    @State private var selection: String?
-    private var canLoad: Bool { listings.contains { $0.name == selection && $0.error == nil } }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            List(listings, selection: $selection) { listing in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(listing.title)
-                    Text(listing.error ?? listing.summary ?? listing.name)
-                        .font(.caption)
-                        .foregroundStyle(listing.error == nil ? Color.secondary : Color.red)
-                        .lineLimit(2)
-                }
-                .padding(.vertical, 2)
-            }
-            .contextMenu(forSelectionType: String.self) { _ in } primaryAction: { names in
-                if let name = names.first, listings.contains(where: { $0.name == name && $0.error == nil }) { ScenarioSession.relaunch(into: name) }
-            }
-            .overlay { if listings.isEmpty { Text("No scenarios found").foregroundStyle(.secondary) } }
-            Divider()
-            HStack {
-                Spacer()
-                Button("Load") { ScenarioSession.relaunch(into: selection) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canLoad)
-            }
-            .padding(12)
-        }
-        .frame(minWidth: 400, minHeight: 280)
-    }
-}
-
 /// The Scenarios menu, which only the scenarios bundle shows.
 struct ScenarioCommands: Commands {
     var body: some Commands {
         if let session = ScenarioSession.active {
-            CommandMenu("Scenarios") {
-                ForEach(ScenarioSession.listings()) { listing in
-                    Toggle(listing.title, isOn: Binding(get: { listing.folder.standardizedFileURL.path == session.scenario?.folder.standardizedFileURL.path },
-                                                        set: { _ in ScenarioSession.relaunch(into: listing.name) }))
-                        .disabled(listing.error != nil)
-                }
-                Divider()
-                Button("Reload") { ScenarioSession.relaunch(into: session.selection) }
-                    .keyboardShortcut("r", modifiers: [.command, .option])
-                    .disabled(session.selection == nil)
-                Button("Next Step") { session.nextStep() }
-                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                Divider()
-                Button("Show Picker") { session.showPicker() }
-                Button("Reveal in Finder") { session.revealInFinder() }
-            }
+            ScenarioMenu(listings: ScenarioSession.listings(), loaded: session.scenario?.folder, selection: session.selection,
+                         nextStep: session.nextStep, showPicker: session.showPicker, reveal: session.revealInFinder)
         }
     }
 }
