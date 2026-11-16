@@ -383,7 +383,9 @@ struct ConversationStart: View {
                 }
                 .font(.callout).foregroundStyle(.secondary)
             } else if conversation.kind == .group {
-                Text(conversation.displayName).font(.title2.weight(.semibold))
+                GroupProfileButton(model: model, group: conversation, edit: { window.edit(conversation, in: model) }) {
+                    Text(conversation.displayName).font(.title2.weight(.semibold))
+                }
                 if let description = conversation.publicDescription { Text(description).foregroundStyle(.secondary) }
             } else if let agent = model.agent(conversation.participantIDs.first) {
                 HStack(spacing: 12) {
@@ -397,9 +399,9 @@ struct ConversationStart: View {
             if conversation.kind == .group {
                 HStack(spacing: 6) {
                     ForEach(model.members(of: conversation)) { agent in
-                        AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent), showsName: true) {
-                            window.sheet = .editAgent(agent)
-                        }
+                        AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent), showsName: true,
+                                           edit: { window.sheet = .editAgent(agent) },
+                                           reply: window.reply(to: agent, in: conversation, model: model))
                         .padding(.trailing, 4)
                     }
                 }
@@ -550,7 +552,8 @@ struct MessageRow: View {
         let role = agent?.publicDescription
         return HStack(spacing: 8) {
             if let agent {
-                AgentProfileButton(model: model, agent: agent, size: 22) { window.sheet = .editAgent(agent) }
+                AgentProfileButton(model: model, agent: agent, size: 22, edit: { window.sheet = .editAgent(agent) },
+                                   reply: window.reply(to: agent, in: model.conversation(message.conversationID), model: model))
             } else {
                 AgentMark(agent: nil, size: 22)
             }

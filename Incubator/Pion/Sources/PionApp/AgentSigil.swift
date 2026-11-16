@@ -150,6 +150,8 @@ struct AgentProfileButton: View {
     /// Shows the name beside the mark, clickable with it.
     var showsName = false
     var edit: (() -> Void)?
+    /// In a group, as in Noodle: Reply addresses the agent in the message field.
+    var reply: (() -> Void)?
     @Environment(\.openWindow) private var openWindow
     @State private var showsProfile = false
     @State private var pending: (() -> Void)?
@@ -171,6 +173,7 @@ struct AgentProfileButton: View {
         .accessibilityLabel("Show profile for \(agent.displayName)")
         .popover(isPresented: $showsProfile, arrowEdge: .leading) {
             AgentProfile(model: model, agent: model.agent(agent.id) ?? agent,
+                         reply: reply.map { reply in { finish(reply) } },
                          message: model.directConversation(of: agent).map { direct in { finish {
                              if inSheet || opensMessageInWindow { openWindow(id: "conversation", value: direct.id) } else { model.selection = direct.id }
                          } } },
@@ -197,6 +200,7 @@ struct AgentProfileButton: View {
 private struct AgentProfile: View {
     let model: PionModel
     let agent: AgentRecord
+    let reply: (() -> Void)?
     let message: (() -> Void)?
     let edit: (() -> Void)?
     let usage: () -> Void
@@ -215,6 +219,7 @@ private struct AgentProfile: View {
 
     private var actions: [ProfileCardAction] {
         var actions: [ProfileCardAction] = []
+        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
         if let message { actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", action: message)) }
         if let callable {
             actions.append(.button("Call", systemImage: "phone", help: "Call \(agent.displayName)") {
@@ -239,3 +244,32 @@ private struct AgentProfile: View {
     }
 }
 
+/// A group's profile, as in Noodle: its picture, what it is for, who is in it, and Edit.
+struct GroupProfileButton<Label: View>: View {
+    let model: PionModel
+    let group: BotConversation
+    let edit: () -> Void
+    @ViewBuilder let label: () -> Label
+    @State private var showsProfile = false
+    @State private var pending: (() -> Void)?
+
+    var body: some View {
+        Button { showsProfile = true } label: { label().contentShape(Rectangle()) }
+            .buttonStyle(.plain)
+            .help("Show \(group.displayName)’s profile")
+            .accessibilityLabel("Show profile for \(group.displayName)")
+            .popover(isPresented: $showsProfile, arrowEdge: .bottom) {
+                ProfileCard(picture: AnyView(ConversationPicture(model: model, conversation: group, size: 88)),
+                            name: model.title(of: group),
+                            status: group.archivedAt != nil ? AnyView(ProfileStatusBadge(text: "Archived", faded: true)) : nil,
+                            description: ProfileCard.description(group.publicDescription),
+                            detail: model.members(of: group).map(\.displayName).joined(separator: ", "),
+                            actions: [.button("Edit", systemImage: "pencil", help: "Edit Group") { pending = edit; showsProfile = false }],
+                            closeLabel: "Close group profile") { showsProfile = false }
+                    .onDisappear {
+                        // The popover detaches first, then the editor opens.
+                        if let pending { self.pending = nil; DispatchQueue.main.async(execute: pending) }
+                    }
+            }
+    }
+}

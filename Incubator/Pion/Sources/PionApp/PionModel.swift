@@ -476,6 +476,11 @@ import UniformTypeIdentifiers
         conversations.first { $0.kind == .direct && $0.participantIDs == [agent.id] }
     }
 
+    /// Reply, from an agent's profile in a group: the message starts by addressing the agent, as in Noodle.
+    func reply(to agent: AgentRecord, in id: UUID) {
+        drafts[id].text = ComposerReply.addressing(agent.displayName, draft: drafts[id].text)
+    }
+
     /// Noodle's reason the message field is off, or nil when something can be sent.
     func composerUnavailableReason(for conversation: BotConversation) -> String? {
         let members = conversation.participantIDs.compactMap { id in everyAgent.first { $0.id == id } }

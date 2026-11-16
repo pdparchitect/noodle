@@ -26,6 +26,8 @@
 - As in Noodle, files dropped anywhere on a conversation wait in its message field, the conversation outlined while they are over it.
 - Tab in the sidebar goes to the message field and Shift-Tab there goes back, as in Noodle.
 - The message field says when nothing can be sent because the agent, or every agent of a group, is archived, as in Noodle.
+- In a group, an agent's profile has Reply, which addresses the agent at the start of your message, as in Noodle.
+- A group's name at the top of its conversation opens its profile, as in Noodle: what it is for, who is in it, and Edit.
 
 ### Fixed
 

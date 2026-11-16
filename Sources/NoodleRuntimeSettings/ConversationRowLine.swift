@@ -52,3 +52,8 @@ public enum ComposerAvailability {
         return "\(agent.displayName) is archived"
     }
 }
+
+/// Reply, from a member's profile in a group, in every app: the message starts by addressing them.
+public enum ComposerReply {
+    public static func addressing(_ name: String, draft: String) -> String { "\(name), " + draft }
+}

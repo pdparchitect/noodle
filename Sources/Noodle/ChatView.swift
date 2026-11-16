@@ -4,6 +4,7 @@ import HubLink
 import PhotosUI
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 import UniformTypeIdentifiers
 import NoodleWallpaper
 
@@ -355,7 +356,7 @@ struct ChatView: View {
         switch action {
         case .reply(let name, let conversationID):
             guard conversation.id == conversationID else { return }
-            store.setDraft("\(name), " + store.draft(for: conversationID), for: conversationID)
+            store.setDraft(ComposerReply.addressing(name, draft: store.draft(for: conversationID)), for: conversationID)
         case .directMessage(let id):
             if let openDirectMessage { openDirectMessage(id) }
             else { store.selectedConversationID = id }

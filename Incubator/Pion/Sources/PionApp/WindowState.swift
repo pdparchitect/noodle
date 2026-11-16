@@ -33,6 +33,17 @@ import SwiftUI
         }
     }
 
+    /// Reply, from an agent's profile in a group, as in Noodle: addresses it in the message field, which takes the
+    /// keyboard. Nil outside a group, or where nothing can be sent.
+    func reply(to agent: AgentRecord, in conversation: BotConversation?, model: PionModel) -> (() -> Void)? {
+        guard let conversation, conversation.kind == .group, model.investigation(conversation.id)?.isClosed != true,
+              model.composerUnavailableReason(for: conversation) == nil else { return nil }
+        return { [weak self] in
+            model.reply(to: agent, in: conversation.id)
+            self?.composerFocusRequest = UUID()
+        }
+    }
+
     var sheet: Sheet?
     var showsInspector = true
     var inspectorTab: InspectorTab = .caseRecord

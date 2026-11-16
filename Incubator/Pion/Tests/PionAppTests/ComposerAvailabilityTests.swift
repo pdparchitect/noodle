@@ -20,4 +20,17 @@ import XCTest
         XCTAssertEqual(model.composerUnavailableReason(for: try XCTUnwrap(model.conversation(group.id))),
                        "Every agent in this group is archived")
     }
+
+    /// Reply, from an agent's profile in a group, addresses the agent at the start of the message, as in Noodle.
+    func testReplyAddressesTheAgentInTheDraft() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionReply-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let group = try model.createGroup(name: "Triage", description: nil, members: [avery.id])
+        model.drafts[group.id].text = "check the logs"
+        model.reply(to: avery, in: group.id)
+        XCTAssertEqual(model.drafts[group.id].text, "Avery, check the logs")
+    }
 }
