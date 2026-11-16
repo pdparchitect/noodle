@@ -251,3 +251,68 @@ extension View {
         modifier(ConversationDropTarget(drop: drop))
     }
 }
+
+/// A file waiting in the composer, in every app: an annotation by its note, anything else by its name. It opens
+/// in Quick Look, where it can be annotated, copies, and drags out as a copy of its file.
+struct PendingAttachmentChip: View {
+    let attachment: ConversationAttachment
+    let preview: () -> Void
+    let remove: () -> Void
+    let copy: () -> Void
+    let drag: () -> NSItemProvider
+
+    private var title: String {
+        attachment.annotation.map { $0.comment.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+            ?? attachment.originalFilename
+    }
+
+    private var previewDescription: String {
+        guard let note = attachment.annotation else { return attachment.originalFilename }
+        return "Annotation on \(note.sourceFilename)\n\n\(note.comment)"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: preview) {
+                HStack(spacing: 6) {
+                    Image(systemName: attachment.previewSymbolName)
+                        .foregroundStyle(.blue)
+                        .frame(width: 14)
+                    Text(title)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(previewDescription)
+            .accessibilityLabel("Preview \(previewDescription)")
+            .onDrag(drag)
+
+            Button(action: remove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove Attachment")
+        }
+        .font(.caption)
+        .padding(.leading, 9)
+        .padding(.trailing, 5)
+        .frame(height: 28)
+        .modifier(PendingAttachmentSurface())
+        .frame(maxWidth: 260)
+        .contextMenu {
+            Button("Copy", systemImage: "doc.on.doc", action: copy)
+            Divider()
+            Button("Quick Look", systemImage: "eye", action: preview)
+            Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
+        }
+    }
+}
+
+private struct PendingAttachmentSurface: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        content.glassEffect(.regular, in: Capsule())
+    }
+}

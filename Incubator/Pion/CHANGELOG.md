@@ -33,6 +33,9 @@
 
 ### Changed
 
+- A file waiting in the message field is Noodle's chip: it copies, drags out to Finder and other apps, and has Noodle's look.
+- An agent's and a team's Tools are Noodle's list: each tool has Edit and Remove beside it, and removing one asks first.
+- The agent editor's Harness rows are Noodle's: they also say when a harness always has unrestricted access or could not list its models, and choosing another harness starts on its default model.
 - An agent's profile is Noodle's card: a close button, Archived for an archived agent, and clicking outside or leaving Pion closes it.
 - A conversation's menu in the sidebar is in Noodle's order: where it opens, Pin and Notifications, editing, Show items, the agent's housekeeping, then Stop, Suspend and Archive or Close. Stop shows only while the agent works, and Open in New Window brings a floating conversation back into a window.
 - Float on Top is Noodle's: the conversation moves to a small panel that stays above other apps, on every Space and beside full-screen apps, and floats again where it was after Pion reopens. It's also in each conversation's menu in the sidebar. Before, it only raised the window it was chosen in, until Pion quit.

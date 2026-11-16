@@ -5,8 +5,19 @@ import NoodleHubClient
 import NoodleRuntime
 import NoodleRuntimeSettings
 
+/// What the harness rows need from the app: its harnesses, logins and models, and what a joined Hub lends.
+@MainActor protocol AgentConfigurationHost: AnyObject {
+    var runtime: AgentRuntimeCoordinator { get }
+    var harnessProfiles: HarnessProfilesController { get }
+    func harnessChoices(for agent: AgentRecord?) -> (installations: [HarnessInstallation], hubs: [HubHarnessSection])
+    /// What a joined Hub lends on a harness, as its last status said, and the Hub's name.
+    func lentHarness(_ choice: HubHarnessChoice) -> (harness: LinkHarness?, hubName: String?)
+}
+
+/// A bot's or agent's harness, login, model, effort and voice, in every app's editor.
 struct AgentConfigurationFields: View {
-    @Environment(NoodleStore.self) private var store
+    let store: any AgentConfigurationHost
+    let setup: HarnessSetupController
     @Binding var selectedHarnessIdentifier: String
     @Binding var selectedModelIdentifier: String
     @Binding var selectedEffort: String
@@ -26,20 +37,14 @@ struct AgentConfigurationFields: View {
 
 
     /// What the chosen Hub lends on the chosen harness, as its last status said.
-    private var lentHarness: LinkHarness? {
-        guard let hubChoice else { return nil }
-        return store.hubs.hubs.first { $0.hub?.key == hubChoice.hub }?.status?.harnesses.first {
-            $0.provider == hubChoice.provider && $0.profile == hubChoice.profile
-        }
-    }
+    private var lentHarness: LinkHarness? { hubChoice.flatMap { store.lentHarness($0).harness } }
 
     private var harnessName: String {
         guard let hubChoice else { return selectedProvider?.displayName ?? "Choose a harness" }
-        let hub = store.hubs.hubs.first { $0.hub?.key == hubChoice.hub }
-        let lent = lentHarness
-        let name = lent.map { harness in harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName }
+        let lent = store.lentHarness(hubChoice)
+        let name = lent.harness.map { harness in harness.profileName.map { "\(harness.providerName) (\($0))" } ?? harness.providerName }
             ?? selectedProvider?.displayName ?? hubChoice.provider
-        return "\(name) · \(hub?.hub?.name ?? "Noodle Hub")"
+        return "\(name) · \(lent.hubName ?? "Noodle Hub")"
     }
 
     private var profiles: [HarnessProfile] {
@@ -49,7 +54,7 @@ struct AgentConfigurationFields: View {
 
     /// The harness's Default login, named by the account it is signed in to.
     private var defaultProfileName: String {
-        selectedProvider.map { store.harnessSetup.defaultLoginName($0) } ?? "Default"
+        selectedProvider.map { setup.defaultLoginName($0) } ?? "Default"
     }
 
     private var models: [HarnessModel] {
@@ -127,10 +132,10 @@ struct AgentConfigurationFields: View {
                     }
                     .task(id: selectedProvider) {
                         // The Default login names its account only once its sign-in has been checked.
-                        guard let selectedProvider, store.harnessSetup.accounts[selectedProvider] == nil,
+                        guard let selectedProvider, setup.accounts[selectedProvider] == nil,
                               let installation = store.runtime.installations.first(where: { $0.provider == selectedProvider }),
                               installation.isAvailable else { return }
-                        await store.harnessSetup.refresh([installation])
+                        await setup.refresh([installation])
                     }
                 }
 
@@ -223,19 +228,3 @@ struct AgentConfigurationFields: View {
         }
     }
 }
-
-extension View {
-    /// Until a voice is picked, the bot's voice follows its name as it is typed.
-    func followsNameForVoice(_ voice: Binding<String>, chosen: Binding<Bool>, name: String,
-                             harnessIdentifier: String, store: NoodleStore) -> some View {
-        task(id: name + "\n" + harnessIdentifier) {
-            guard !chosen.wrappedValue else { return }
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, !chosen.wrappedValue else { return }
-            let fitting = await store.defaultVoice(forBotNamed: name, harnessIdentifier: harnessIdentifier) ?? ""
-            guard !Task.isCancelled, !chosen.wrappedValue else { return }
-            voice.wrappedValue = fitting
-        }
-    }
-}
-

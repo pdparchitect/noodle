@@ -1,3 +1,4 @@
+import NoodleHubClient
 import HubLink
 import NoodleBrand
 import NoodleCore
@@ -395,9 +396,6 @@ struct AgentEditorSheet: View {
     @Environment(PionSettingsHost.self) private var host
     @State private var selectedTab = AgentEditorTab.general
     @State private var newID = UUID()
-    @State private var choosingHarness = false
-    @State private var choosingProfile = false
-    @State private var choosingModel = false
     @State private var error: String?
     @FocusState private var nameFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -480,7 +478,7 @@ struct AgentEditorSheet: View {
                 case .runtime:
                     harnessFields
                 case .tools:
-                    PionToolAssignmentPicker(controller: model.connectionsController, selectedIDs: $resources.connections)
+                    ToolAssignmentList(controller: model.connectionsController, selectedIDs: $resources.connections, member: "agent")
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
@@ -522,73 +520,14 @@ struct AgentEditorSheet: View {
 
     /// Noodle's harness rows and choosers, as its bot editor shows them.
     private var harnessFields: some View {
-        let profiles = provider.map { model.harnessProfiles.profiles(for: $0) } ?? []
-        let models = provider.map { model.models(for: $0, profile: resources.profile) } ?? []
-        let selectedModel = models.first { $0.id == modelID }
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Harness").font(.caption.weight(.semibold))
-            VStack(spacing: 0) {
-                Button { choosingHarness = true } label: {
-                    RuntimeSelectionRow(title: "Harness", value: provider?.displayName ?? "Choose a harness",
-                                        icon: AnyView(Group {
-                                            if let provider { HarnessProviderIcon(provider: provider) } else { Image(systemName: "terminal") }
-                                        }))
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $choosingHarness, arrowEdge: .leading) {
-                    HarnessChooser(installations: model.runtime.availableInstallations, selection: Binding(
-                        get: { provider?.rawValue ?? "" },
-                        set: { identifier in
-                            provider = HarnessProvider(rawValue: identifier)
-                            resources.profile = nil
-                            modelID = defaultModel(provider)
-                            effort = ""
-                            voice = ""
-                        }))
-                }
-                if !profiles.isEmpty {
-                    Divider().padding(.leading, 44)
-                    Button { choosingProfile = true } label: {
-                        RuntimeSelectionRow(title: "Profile", value: model.harnessProfiles.profile(resources.profile)?.displayName
-                                                ?? provider.map(host.setup.defaultLoginName) ?? "Default",
-                                            icon: AnyView(Image(systemName: "person.crop.circle")))
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $choosingProfile, arrowEdge: .leading) {
-                        HarnessProfileChooser(profiles: profiles, selection: Binding(
-                            get: { resources.profile },
-                            set: { resources.profile = $0; modelID = defaultModel(provider) }))
-                    }
-                }
-                Divider().padding(.leading, 44)
-                Button { choosingModel = true } label: {
-                    RuntimeSelectionRow(title: "Model", value: selectedModel?.displayName ?? modelID ?? "Default",
-                                        icon: AnyView(Image(systemName: "cube.transparent")), tag: selectedModel?.tag,
-                                        isLoading: model.runtime.isLoadingCapabilities)
-                }
-                .buttonStyle(.plain)
-                .disabled(models.isEmpty)
-                .popover(isPresented: $choosingModel, arrowEdge: .leading) {
-                    ModelChooser(providerName: provider?.displayName ?? "Harness", usesCatalogueDefault: provider == .apple, models: models,
-                                 selection: Binding(get: { modelID ?? "" }, set: { id in
-                                     modelID = id.isEmpty ? nil : id
-                                     if let chosen = models.first(where: { $0.id == id }),
-                                        !chosen.supportedEfforts.contains(where: { $0.id == effort }) { effort = chosen.defaultEffort }
-                                 }))
-                }
-                if provider != .apple || selectedModel?.supportedEfforts.isEmpty == false {
-                    Divider().padding(.leading, 44)
-                    EffortControl(model: selectedModel, selection: $effort)
-                }
-                // As Noodle's: only a harness with voices offers one, for calls.
-                if let provider, !provider.voices.isEmpty {
-                    Divider().padding(.leading, 44)
-                    VoiceSelectionRow(provider: provider, selection: $voice)
-                }
-            }
-            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.secondary.opacity(0.11)) }
-            HarnessExperimentalWarning(provider: provider)
+        VStack(alignment: .leading, spacing: 10) {
+            AgentConfigurationFields(store: model, setup: host.setup,
+                selectedHarnessIdentifier: Binding(get: { provider?.rawValue ?? "" }, set: { provider = HarnessProvider(rawValue: $0) }),
+                selectedModelIdentifier: Binding(get: { modelID ?? "" }, set: { modelID = $0.isEmpty ? nil : $0 }),
+                selectedEffort: $effort, selectedProfileID: $resources.profile, selectedVoice: $voice, agent: agent,
+                workspace: agent.map { model.repository.directory(for: $0) })
+                // Another harness has other voices.
+                .onChange(of: provider) { voice = "" }
             if model.installedProviders.isEmpty {
                 HStack {
                     Text("No harness is installed yet.").font(.caption).foregroundStyle(.secondary)
@@ -676,9 +615,9 @@ private struct TeamToolsPicker: View {
             ForEach(model.agents.filter { members.contains($0.id) }) { agent in
                 let count = (assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent)).count
                 DisclosureGroup(isExpanded: Binding(get: { expanded == agent.id }, set: { expanded = $0 ? agent.id : nil })) {
-                    PionToolAssignmentPicker(controller: model.connectionsController, selectedIDs: Binding(
+                    ToolAssignmentList(controller: model.connectionsController, selectedIDs: Binding(
                         get: { assignments[agent.id] ?? model.connectionsController.selectedIDs(for: agent) },
-                        set: { assignments[agent.id] = $0 }))
+                        set: { assignments[agent.id] = $0 }), member: "agent")
                         .padding(.top, 8)
                 } label: {
                     HStack {
@@ -697,108 +636,12 @@ private struct TeamToolsPicker: View {
     }
 }
 
-/// Saved connections, their setup and sign-in are shared with Settings; this editor only drafts grants.
-private struct PionToolAssignmentPicker: View {
-    let controller: ToolConnectionsController
-    @Binding var selectedIDs: Set<UUID>
-    @State private var showingAdd = false
-    @State private var wantsNew = false
-    @State private var creating = false
-    @State private var editing: ToolConnection?
-    @State private var search = ""
 
-    private var known: Set<UUID> { Set(controller.registry.connections.map(\.id)) }
-    private var selected: [ToolConnection] { controller.registry.connections.filter { selectedIDs.contains($0.id) } }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Tools").font(.headline)
-                Spacer()
-                Button { search = ""; showingAdd = true } label: { Label("Add Tools…", systemImage: "plus") }
-                    .buttonStyle(.link)
-                    .popover(isPresented: $showingAdd, arrowEdge: .bottom) { chooser }
-            }
-            ScrollView {
-                if selectedIDs.isEmpty {
-                    Button { search = ""; showingAdd = true } label: {
-                        VStack(spacing: 10) {
-                            Image(systemName: "puzzlepiece.extension").font(.largeTitle)
-                            Text("Add Tools…")
-                        }
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 190)
-                        .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                } else {
-                    VStack(spacing: 6) {
-                        ForEach(selected) { connection in
-                            HStack(spacing: 10) {
-                                ToolConnectionIcon(connection: connection, size: 26)
-                                Text(connection.name).lineLimit(1)
-                                ToolConnectionMaturityBadge(connection: connection)
-                                Spacer()
-                                Menu {
-                                    Button("Edit Connection…") { editing = connection }
-                                    Divider()
-                                    Button("Remove", role: .destructive) { selectedIDs.remove(connection.id) }
-                                } label: { Image(systemName: "ellipsis") }
-                                    .menuStyle(.borderlessButton)
-                                    .fixedSize()
-                            }.padding(8)
-                        }
-                        ForEach(selectedIDs.subtracting(known).sorted(by: { $0.uuidString < $1.uuidString }), id: \.self) { id in
-                            HStack {
-                                Label("Unavailable Tool", systemImage: "exclamationmark.triangle")
-                                Spacer()
-                                Button("Remove") { selectedIDs.remove(id) }.buttonStyle(.link)
-                            }.padding(8)
-                        }
-                    }
-                }
-            }
-            .frame(height: 220)
-            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
-        }
-        .sheet(isPresented: $creating) {
-            ToolCreationSheet(controller: controller, onAdded: { selectedIDs.insert($0) }).noodleSheetSizing()
-        }
-        .sheet(item: $editing) { connection in
-            ToolConnectionEditor(controller: controller, existing: connection).noodleSheetSizing()
-        }
+/// Pion runs its agents on this Mac alone, so nothing is lent by a Hub.
+extension PionModel: AgentConfigurationHost {
+    func harnessChoices(for agent: AgentRecord?) -> (installations: [HarnessInstallation], hubs: [HubHarnessSection]) {
+        (runtime.availableInstallations, [])
     }
 
-    private var chooser: some View {
-        VStack(spacing: 12) {
-            TextField("Search connections", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(controller.registry.connections.filter {
-                        !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedStandardContains(search))
-                    }) { connection in
-                        Button { selectedIDs.insert(connection.id) } label: {
-                            HStack(spacing: 10) {
-                                ToolConnectionIcon(connection: connection, size: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(connection.name).foregroundStyle(.primary)
-                                    Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                                Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
-                            }.padding(8).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
-                }
-            }
-            HStack {
-                Button("New Tool") { wantsNew = true; showingAdd = false }.buttonStyle(.link)
-                Spacer()
-            }
-        }
-        .padding(16)
-        .frame(width: 330, height: 280)
-        .onDisappear {
-            if wantsNew { wantsNew = false; creating = true }
-        }
-    }
+    func lentHarness(_ choice: HubHarnessChoice) -> (harness: LinkHarness?, hubName: String?) { (nil, nil) }
 }

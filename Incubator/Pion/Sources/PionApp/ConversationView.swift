@@ -210,43 +210,20 @@ struct ConversationView: View {
     }
 
     private func showCapture() {
-        if screenCapturePreview.focusIfOpen() { return }
-        guard let host = attachmentPreview.resolveHostWindow() else { return }
         let destination = conversation.id
-        attachmentPreview.close()
-        screenCapturePreview.show(kind: .window, relativeTo: host) { image, title, region, comment in
+        opening.showCapture(.window) { image, title, region, comment in
             try model.importCapture(image: image, title: title, region: region, comment: comment, into: destination)
         }
     }
 
-    /// Opens a file in Noodle's Quick Look, paging through the message's other files, where it can be annotated.
+    /// Noodle's way of opening an attachment and the screen capture.
+    private var opening: AttachmentOpening {
+        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, patchReviews: patchReviews)
+    }
+
     private func showPreview(_ attachment: ConversationAttachment, among group: [ConversationAttachment] = []) {
         selectedAttachmentID = attachment.id
-        if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil, !WebLinkPreview.opensInPreview() {
-            attachmentPreview.close()
-            NSWorkspace.shared.open(link)
-            return
-        }
-        if attachment.url == nil, attachment.annotation == nil, QuickLookBypass.isHeld() {
-            attachmentPreview.close()
-            NSWorkspace.shared.open(model.fileURL(attachment))
-            return
-        }
-        // As in Noodle, a patch opens in Noodle's review; a file that only has the name of one opens as any other.
-        if attachment.isPatchFile, let patch = PatchCache.patchNow(at: model.fileURL(attachment)) {
-            attachmentPreview.close()
-            screenCapturePreview.close()
-            patchReviews.open(attachment, patch: patch, store: model)
-            return
-        }
-        screenCapturePreview.close()
-        let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = model.canEditAnnotation(attachment)
-            ? { attachment, comment in try model.reviseAnnotationComment(attachment, comment: comment) } : nil
-        let gallery = ConversationAttachment.previewGallery(opening: attachment, among: group).items
-        attachmentPreview.show(attachment, url: model.fileURL(attachment), gallery: gallery.map { ($0, model.fileURL($0)) },
-                               edit: edit, canEdit: { model.canEditAnnotation($0) }) { note, content, source in
-            try model.saveAnnotation(note, content: content, source: source)
-        }
+        opening.open(attachment, among: group, host: model)
     }
 
     private var subtitle: String {

@@ -148,6 +148,8 @@ let project = Project(
                 "../../Sources/Noodle/ScenarioLauncher.swift",
                 "../../Sources/Noodle/ProfileCard.swift",
                 "../../Sources/Noodle/GroupsSettingsView.swift",
+                "../../Sources/Noodle/AgentConfigurationFields.swift",
+                "../../Sources/Noodle/ToolAssignmentList.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
                 "../../Sources/Noodle/AnnotationContent.swift",

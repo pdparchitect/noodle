@@ -258,13 +258,14 @@ struct ChatView: View {
 
     private func showCapture(_ kind: ScreenCaptureKind) {
         attachmentOpenTask?.cancel()
-        if screenCapturePreview.focusIfOpen() { return }
-        guard let host = attachmentPreview.resolveHostWindow() else { return }
         let destination = conversation.id
-        attachmentPreview.close()
-        screenCapturePreview.show(kind: kind, relativeTo: host) { image, title, region, comment in
+        opening.showCapture(kind) { image, title, region, comment in
             try store.importCapture(image: image, title: title, region: region, comment: comment, into: destination)
         }
+    }
+
+    private var opening: AttachmentOpening {
+        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, patchReviews: store.patchReviews)
     }
 
     private var composerControlRow: some View {
@@ -336,12 +337,6 @@ struct ChatView: View {
             }
             return
         }
-        if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil,
-           !WebLinkPreview.opensInPreview() {
-            attachmentPreview.close()
-            NSWorkspace.shared.open(link)
-            return
-        }
         // A file only its Hub has opens once it has come down.
         if store.hubKeeping(attachment) != nil {
             attachmentOpenTask = Task { @MainActor in
@@ -350,32 +345,8 @@ struct ChatView: View {
             }
             return
         }
-        // Annotations stay in Quick Look, where their note is shown and edited.
-        if attachment.url == nil, attachment.annotation == nil, QuickLookBypass.isHeld() {
-            attachmentPreview.close()
-            NSWorkspace.shared.open(store.attachmentFileURL(attachment))
-            return
-        }
-        // A patch opens in a review; a file that only has the name of one opens as any other document.
-        if attachment.isPatchFile, let patch = PatchCache.patchNow(at: store.attachmentFileURL(attachment)) {
-            attachmentPreview.close()
-            screenCapturePreview.close()
-            store.patchReviews.open(attachment, patch: patch, store: store)
-            return
-        }
-        let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = store.canEditAnnotation(attachment) ? { [weak store] attachment, comment in
-            guard let store else { throw WorkspaceError.missingConversation(attachment.conversationID) }
-            return try store.reviseAnnotationComment(attachment, comment: comment)
-        } : nil
         // Files only their Hub has stay out of the gallery; each comes down when opened.
-        let gallery = ConversationAttachment.previewGallery(opening: attachment,
-                                                            among: group.filter { store.hubKeeping($0) == nil }).items
-        attachmentPreview.show(attachment, url: store.attachmentFileURL(attachment),
-            gallery: gallery.map { ($0, store.attachmentFileURL($0)) }, edit: edit,
-            canEdit: { [weak store] in store?.canEditAnnotation($0) == true }) { [weak store] note, content, source in
-            guard let store else { throw WorkspaceError.missingConversation(source.conversationID) }
-            try store.saveAnnotation(note, content: content, source: source)
-        }
+        opening.open(attachment, among: group.filter { store.hubKeeping($0) == nil }, host: store)
     }
 
     private func finishProfileAction() {
@@ -431,7 +402,9 @@ private struct PendingAttachmentStrip: View {
                         PendingAttachmentChip(
                             attachment: attachment,
                             preview: { preview(attachment) },
-                            remove: { store.removePendingAttachment(attachment) }
+                            remove: { store.removePendingAttachment(attachment) },
+                            copy: { store.copyAttachment(attachment) },
+                            drag: { store.attachmentDragProvider(attachment) }
                         )
                     }
                 }
@@ -675,66 +648,3 @@ private struct ConversationStartView: View {
     }
 }
 
-private struct PendingAttachmentChip: View {
-    @Environment(NoodleStore.self) private var store
-    let attachment: ConversationAttachment
-    let preview: () -> Void
-    let remove: () -> Void
-
-    private var title: String {
-        attachment.annotation.map { $0.comment.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
-            ?? attachment.originalFilename
-    }
-
-    private var previewDescription: String {
-        guard let note = attachment.annotation else { return attachment.originalFilename }
-        return "Annotation on \(note.sourceFilename)\n\n\(note.comment)"
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button(action: preview) {
-                HStack(spacing: 6) {
-                    Image(systemName: attachment.previewSymbolName)
-                        .foregroundStyle(.blue)
-                        .frame(width: 14)
-                    Text(title)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(previewDescription)
-            .accessibilityLabel("Preview \(previewDescription)")
-            .onDrag { store.attachmentDragProvider(attachment) }
-
-            Button(action: remove) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Remove Attachment")
-        }
-        .font(.caption)
-        .padding(.leading, 9)
-        .padding(.trailing, 5)
-        .frame(height: 28)
-        .modifier(PendingAttachmentSurface())
-        .frame(maxWidth: 260)
-        .contextMenu {
-            Button("Copy", systemImage: "doc.on.doc") {
-                store.copyAttachment(attachment)
-            }
-            Divider()
-            Button("Quick Look", systemImage: "eye", action: preview)
-            Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
-        }
-    }
-}
-
-private struct PendingAttachmentSurface: ViewModifier {
-    @ViewBuilder func body(content: Content) -> some View {
-        content.glassEffect(.regular, in: Capsule())
-    }
-}

@@ -57,7 +57,10 @@ struct Composer: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(pending) { file in
-                                AttachmentChip(attachment: file, preview: { actions.preview(file) }) { model.removePending(file, from: conversation.id) }
+                                PendingAttachmentChip(attachment: file, preview: { actions.preview(file) },
+                                                      remove: { model.removePending(file, from: conversation.id) },
+                                                      copy: { AttachmentDrag.copy(file, fileURL: model.fileURL(file)) },
+                                                      drag: { AttachmentDrag.dragProvider(for: file, fileURL: model.fileURL(file)) { model.problem = $0 } })
                             }
                         }
                     }
@@ -129,44 +132,6 @@ struct Composer: View {
 
     private var placeholder: String {
         conversation.kind == .group ? "Message the team" : "Message \(model.agent(conversation.participantIDs.first)?.displayName ?? "the agent")"
-    }
-}
-
-/// A file waiting to be sent, as Noodle's composer shows it: an annotation by its note, anything else by
-/// its name. It opens in Quick Look, where it can be annotated.
-private struct AttachmentChip: View {
-    let attachment: ConversationAttachment
-    let preview: () -> Void
-    let remove: () -> Void
-
-    private var title: String {
-        attachment.annotation.map { $0.comment.split(whereSeparator: \.isWhitespace).joined(separator: " ") } ?? attachment.originalFilename
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button(action: preview) {
-                HStack(spacing: 6) {
-                    Image(systemName: attachment.previewSymbolName).foregroundStyle(.secondary).frame(width: 14)
-                    Text(title).lineLimit(1).truncationMode(.tail)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(attachment.annotation.map { "Annotation on \($0.sourceFilename)\n\n\($0.comment)" } ?? attachment.originalFilename)
-            Button(action: remove) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.plain).help("Remove Attachment")
-        }
-        .font(.callout)
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
-        .frame(height: 30)
-        .frame(maxWidth: 260)
-        .background(Color.secondary.opacity(0.1), in: Capsule())
-        .contextMenu {
-            Button("Quick Look", systemImage: "eye", action: preview)
-            Button("Remove Attachment", systemImage: "xmark", role: .destructive, action: remove)
-        }
     }
 }
 

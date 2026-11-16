@@ -421,7 +421,7 @@ struct AgentRow: View {
 
 extension PionModel: BotBudgetHost {}
 
-extension PionModel: PatchReviewHost {}
+extension PionModel: AttachmentOpeningHost {}
 
 /// Noodle's patch review windows, one per patch, kept for the whole app.
 @MainActor let patchReviews = PatchReviewWindows()

@@ -15,6 +15,64 @@ import SwiftUI
     func patchAnnotations(on attachment: ConversationAttachment) -> [AttachmentAnnotation]
 }
 
+/// What opening an attachment needs from the app: its files, and changing an annotation not sent yet.
+@MainActor protocol AttachmentOpeningHost: PatchReviewHost {
+    func canEditAnnotation(_ attachment: ConversationAttachment) -> Bool
+    func reviseAnnotationComment(_ attachment: ConversationAttachment, comment: String) throws -> ConversationAttachment
+}
+
+/// Opening an attachment, and the screen capture, the same in every app.
+@MainActor struct AttachmentOpening {
+    let preview: AttachmentPreviewController
+    let capture: ScreenCapturePreviewController
+    let patchReviews: PatchReviewWindows
+
+    /// A web link opens in the browser unless previews are on; a file opens in its own app while the bypass key is
+    /// held, though an annotation stays in Quick Look, where its note is shown and edited; a patch opens in a review,
+    /// though a file that only has the name of one opens as any other; anything else opens in Quick Look among the
+    /// others shown with it, where it can be annotated.
+    func open(_ attachment: ConversationAttachment, among group: [ConversationAttachment], host: any AttachmentOpeningHost) {
+        if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil,
+           !WebLinkPreview.opensInPreview() {
+            preview.close()
+            NSWorkspace.shared.open(link)
+            return
+        }
+        if attachment.url == nil, attachment.annotation == nil, QuickLookBypass.isHeld() {
+            preview.close()
+            NSWorkspace.shared.open(host.attachmentFileURL(attachment))
+            return
+        }
+        if attachment.isPatchFile, let patch = PatchCache.patchNow(at: host.attachmentFileURL(attachment)) {
+            preview.close()
+            capture.close()
+            patchReviews.open(attachment, patch: patch, store: host)
+            return
+        }
+        let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = host.canEditAnnotation(attachment)
+            ? { [weak host] attachment, comment in
+                guard let host else { throw WorkspaceError.missingConversation(attachment.conversationID) }
+                return try host.reviseAnnotationComment(attachment, comment: comment)
+            } : nil
+        let gallery = ConversationAttachment.previewGallery(opening: attachment, among: group).items
+        preview.show(attachment, url: host.attachmentFileURL(attachment),
+                     gallery: gallery.map { ($0, host.attachmentFileURL($0)) }, edit: edit,
+                     canEdit: { [weak host] in host?.canEditAnnotation($0) == true }) { [weak host] note, content, source in
+            guard let host else { throw WorkspaceError.missingConversation(source.conversationID) }
+            try host.saveAnnotation(note, content: content, source: source)
+        }
+    }
+
+    /// The screen capture, beside the conversation's window, or the one already open brought forward.
+    func showCapture(_ kind: ScreenCaptureKind,
+                     save: @escaping (CGImage, String, AttachmentAnnotation.Region?, String) throws -> Void) {
+        if capture.focusIfOpen() { return }
+        guard let window = preview.resolveHostWindow() else { return }
+        preview.close()
+        capture.show(kind: kind, relativeTo: window, save: save)
+    }
+}
+
 @MainActor final class PatchReviewWindows: NSObject, NSWindowDelegate {
     @MainActor private final class Review {
         let panel: PatchReviewPanel

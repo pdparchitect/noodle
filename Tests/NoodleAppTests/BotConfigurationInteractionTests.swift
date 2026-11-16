@@ -17,7 +17,8 @@ import NoodleCore
 
 @MainActor final class BotConfigurationInteractionTests: HiddenViewTests {
     private func fields(_ selection: ConfigurationSelection, fixture: StoreFixture) -> some View {
-        AgentConfigurationFields(selectedHarnessIdentifier: selection.binding(\.harness),
+        AgentConfigurationFields(store: fixture.store, setup: fixture.store.harnessSetup,
+            selectedHarnessIdentifier: selection.binding(\.harness),
             selectedModelIdentifier: selection.binding(\.model), selectedEffort: selection.binding(\.effort),
             selectedProfileID: Binding(get: { selection.profile }, set: { selection.profile = $0 }), selectedVoice: .constant(""))
             .environment(fixture.store)

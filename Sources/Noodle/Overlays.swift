@@ -152,7 +152,7 @@ struct NewBotSheet: View {
                         FoldersSettingsRow(folders: $folders, owner: .bot)
                     }
                 case .runtime:
-                    AgentConfigurationFields(
+                    AgentConfigurationFields(store: store, setup: store.harnessSetup,
                         selectedHarnessIdentifier: Binding(
                             get: { selectedHarnessIdentifier },
                             set: { selectedHarnessIdentifier = $0; hasChosenHarness = true }
@@ -415,7 +415,7 @@ struct EditBotSheet: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .runtime:
-                    AgentConfigurationFields(
+                    AgentConfigurationFields(store: store, setup: store.harnessSetup,
                         selectedHarnessIdentifier: $selectedHarnessIdentifier,
                         selectedModelIdentifier: $selectedModelIdentifier,
                         selectedEffort: $selectedEffort,
@@ -1225,3 +1225,27 @@ struct GroupsSettingsView: View {
             })
     }
 }
+
+extension NoodleStore: AgentConfigurationHost {
+    func lentHarness(_ choice: HubHarnessChoice) -> (harness: LinkHarness?, hubName: String?) {
+        let hub = hubs.hubs.first { $0.hub?.key == choice.hub }
+        return (hub?.status?.harnesses.first { $0.provider == choice.provider && $0.profile == choice.profile }, hub?.hub?.name)
+    }
+}
+
+extension View {
+    /// Until a voice is picked, the bot's voice follows its name as it is typed.
+    func followsNameForVoice(_ voice: Binding<String>, chosen: Binding<Bool>, name: String,
+                             harnessIdentifier: String, store: NoodleStore) -> some View {
+        task(id: name + "\n" + harnessIdentifier) {
+            guard !chosen.wrappedValue else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            let fitting = await store.defaultVoice(forBotNamed: name, harnessIdentifier: harnessIdentifier) ?? ""
+            guard !Task.isCancelled, !chosen.wrappedValue else { return }
+            voice.wrappedValue = fitting
+        }
+    }
+}
+
+extension NoodleStore: AttachmentOpeningHost {}

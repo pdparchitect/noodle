@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 - In Settings > Bots, an archived bot's picture no longer opens its profile; bring the bot back with its Archived switch first.
 - Forward… stays open and says so when a file kept on a Noodle Hub can't be downloaded, instead of doing nothing.
 - Picking a message in the sidebar's search results now scrolls to that message, rather than only opening its conversation.
+- A bot's Tools list shows a tool connection deleted since it was given, as Unavailable Tool with a Remove button, instead of hiding it.
 
 ### Changed
 
