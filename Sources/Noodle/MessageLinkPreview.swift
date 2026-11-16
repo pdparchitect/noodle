@@ -289,6 +289,10 @@ final class LinkPreviewMetadataCache {
         cache.setObject(result, forKey: url as NSURL)
         return result
     }
+    /// Keeps a page's card for this launch as if it had been fetched, for scripted runs without the network.
+    func remember(_ url: URL, title: String?, image: NSImage?) {
+        cache.setObject(Result(metadata: Self.titled(url, title), image: image.map(Self.cardPicture), savedAt: now()), forKey: url as NSURL)
+    }
     func load(_ url: URL, timeout: TimeInterval = LinkPreviewMetadataCache.timeout, completion: @escaping (Result) -> Void) {
         if let result = cachedResult(for: url) {
             completion(result)

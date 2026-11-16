@@ -17,8 +17,23 @@ struct PionScenario: Decodable {
         var backstory: String?
         var avatar: Avatar?
         var status: Status?
+        /// The agent's tasks as the scenario starts, oldest first.
+        var tasks: [TaskEntry]?
         struct Avatar: Decodable { var symbol: String?; var color: Int? }
     }
+
+    /// An agent's task, as in Noodle's scenarios. `in` is a conversation key, the agent's own conversation
+    /// when left out; `on` is "user" or an agent key, for a waiting task.
+    struct TaskEntry: Decodable {
+        let title: String
+        var `in`: String?
+        var state: AgentTask.State?
+        var on: String?
+        var note: String?
+    }
+
+    /// A web page's card as it shows without the network: its title, and a picture in the scenario's folder.
+    struct LinkPreview: Decodable { let url: URL; var title: String?; var image: String? }
 
     struct Status: Decodable {
         var phase: AgentRuntimePhase
@@ -52,6 +67,8 @@ struct PionScenario: Decodable {
         var direct: String?
         var messages: [Message]?
         var investigation: InvestigationRecord?
+        /// Pinned in the order the conversations are listed.
+        var pinned: Bool?
         struct Group: Decodable { let name: String; var description: String?; let members: [String] }
     }
 
@@ -121,10 +138,11 @@ struct PionScenario: Decodable {
     var conversations: [Conversation]?
     var present: Present?
     var timeline: [Step]?
+    var linkPreviews: [LinkPreview]?
 
     var folder = URL(fileURLWithPath: "/")
     private enum CodingKeys: String, CodingKey {
-        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline
+        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline, linkPreviews
     }
 
     static func load(from folder: URL) throws -> PionScenario {
@@ -165,6 +183,26 @@ struct PionScenario: Decodable {
             if let investigation = conversation.investigation {
                 try require(conversation.group != nil, "\(conversation.key): only a group is an Investigation.")
                 if let lead = investigation.lead { try author(lead, conversation.key) }
+            }
+        }
+        for agent in agents {
+            for task in agent.tasks ?? [] {
+                let name = "\(agent.key)'s task \(task.title)"
+                try require(!task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(agent.key) has a task without a title.")
+                if let key = task.in {
+                    let members = (conversations ?? []).first { $0.key == key }.map { ($0.group?.members ?? []) + [$0.direct, $0.investigation?.lead].compactMap { $0 } }
+                    try require(members != nil, "\(name) names an unknown conversation \(key).")
+                    try require(members?.contains(agent.key) == true, "\(name) is in \(key), which \(agent.key) is not in.")
+                }
+                if let on = task.on {
+                    try require(on == "user" || agentKeys.contains(on), "\(name) waits on an unknown agent \(on).")
+                    try require((task.state ?? .waiting) == .waiting, "\(name): only a waiting task waits on someone.")
+                }
+            }
+        }
+        for preview in linkPreviews ?? [] {
+            if let image = preview.image {
+                try require(FileManager.default.fileExists(atPath: folder.appendingPathComponent(image).path), "No picture \(image) for \(preview.url).")
             }
         }
         for (index, step) in (timeline ?? []).enumerated() {
@@ -310,6 +348,22 @@ struct PionScenario: Decodable {
                     }
                 }
             }
+        }
+        try model.repository.savePinnedConversationIDs((scenario.conversations ?? []).filter { $0.pinned == true }.compactMap { conversationIDs[$0.key] })
+        for agent in scenario.agents {
+            guard let agentID = agentIDs[agent.key] else { continue }
+            for task in agent.tasks ?? [] {
+                let conversation = task.in.flatMap { conversationIDs[$0] }
+                    ?? model.agents.first { $0.id == agentID }.flatMap { model.directConversation(of: $0) }?.id
+                let id = try model.repository.addTask(agentID: agentID, title: task.title, conversationID: conversation, note: task.note, now: clock).id
+                let waitingOn = task.on.map { $0 == "user" ? MessageAuthor.user : agentIDs[$0].map(MessageAuthor.agent) ?? .user }
+                guard task.state != nil || waitingOn != nil else { continue }
+                _ = try model.repository.updateTask(agentID: agentID, id: id, state: task.state ?? .waiting, waitingOn: waitingOn, now: clock)
+            }
+        }
+        for preview in scenario.linkPreviews ?? [] {
+            LinkPreviewMetadataCache.shared.remember(preview.url, title: preview.title,
+                                                     image: preview.image.flatMap { NSImage(contentsOf: scenario.folder.appendingPathComponent($0)) })
         }
         model.refresh()
         // Everything seeded counts as read, so the scenario opens as its author left it.

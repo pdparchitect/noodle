@@ -32,6 +32,7 @@
 - View › Conversation › Attachments lays out a message's files as Noodle can: side by side, one below another, or stacked; and View › Hide Sidebar (⌃⌘S), as in Noodle.
 - Send to Pion, Noodle's Share extension: share text, links, pictures or files from any app's Share menu into an Investigation, group or agent, with an instruction; Pion picks them up as your message, opening if it isn't.
 - Services › Send to Pion…, Noodle's Send to Agent…: selected text, a link or files from any app, sent with the same window.
+- Scenarios can give agents tasks, pin conversations and show link cards without the network; a new PHP2Shell scenario shows all three.
 - Shortcuts actions, as Noodle's: Send to Agent (a message and files to an Investigation, group or agent), Open Conversation and Call Agent, also by voice with Siri.
 
 ### Fixed

