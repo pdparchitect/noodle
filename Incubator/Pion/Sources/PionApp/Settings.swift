@@ -93,7 +93,7 @@ struct PionSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(PionSettingsHost.Tab.general)
-            ConversationSettingsView()
+            ChatSettingsView(member: "agent")
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }
                 .tag(PionSettingsHost.Tab.conversation)
@@ -219,30 +219,6 @@ private struct GroupArchiveInfo: View {
         .fixedSize(horizontal: false, vertical: true)
         .padding(20)
         .frame(width: 360, alignment: .leading)
-    }
-}
-
-/// Noodle's Conversation settings, but for the received-message sound and floating conversations, which Pion
-/// does not have.
-private struct ConversationSettingsView: View {
-    @AppStorage(ComposerNameCompletion.descriptionsDefaultsKey) private var showsDescriptions = true
-    @AppStorage(WebLinkPreview.defaultsKey) private var previewsWebLinks = true
-
-    var body: some View {
-        Form {
-            ConversationRuntimeSettingsSections()
-            MicrophoneSettingsSection()
-            Section {
-                Toggle("Show descriptions in the @ name menu", isOn: $showsDescriptions)
-            } footer: {
-                Text("Show each agent's public description beside its name. Private backstories are never shown.")
-            }
-            Section {
-                Toggle("Preview web links", isOn: $previewsWebLinks)
-                    .help("Open web links in Quick Look first, with a button to continue in your browser. When off, links open in your browser.")
-            }
-        }
-        .formStyle(.grouped)
     }
 }
 

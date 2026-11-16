@@ -143,6 +143,8 @@ let project = Project(
                 "../../Sources/Noodle/ForwardAttachmentSheet.swift",
                 "../../Sources/Noodle/PatchReview.swift",
                 "../../Sources/Noodle/FloatingConversations.swift",
+                "../../Sources/Noodle/ChatSettingsView.swift",
+                "../../Sources/Noodle/MessageReceivedSound.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
                 "../../Sources/Noodle/AnnotationContent.swift",

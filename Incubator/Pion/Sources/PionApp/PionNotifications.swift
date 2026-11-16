@@ -11,9 +11,11 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
         AgentNotifications.picture = { AnyView(AgentMark(agent: $0, size: 128)) }
         AgentNotifications.onAuthorized = { [weak self] in self?.model.refreshBadge() }
         AgentNotifications.picturesFolder = ["NotificationMarks"]
+        // Noodle's reply sound, as chosen in Settings › Conversation.
+        AgentNotifications.replySound = { MessageReceivedSound.notificationSound() }
         AgentNotifications.configure(delegate: self)
         model.onMessagesArrived = { [weak self] messages in
-            guard let model = self?.model else { return }
+            guard let model = self?.model, MessageReceivedSound.announce(newMessages: messages.count) else { return }
             for message in messages {
                 guard case .agent(let id) = message.author, let agent = model.agent(id),
                       let conversation = model.conversation(message.conversationID) else { continue }

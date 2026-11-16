@@ -21,6 +21,14 @@ enum MessageReceivedSound {
         newMessages > 0 && !presentsNotifications
     }
 
+    /// New replies arrived: the sound plays here when no notification will play it. True when notifications show.
+    @MainActor
+    static func announce(newMessages: Int) -> Bool {
+        let presents = AgentNotifications.shouldPresentActivity
+        if playsInApp(newMessages: newMessages, presentsNotifications: presents) { play() }
+        return presents
+    }
+
     @MainActor
     static func play(in defaults: UserDefaults = .standard) {
         guard let name = selected(in: defaults) else { return }

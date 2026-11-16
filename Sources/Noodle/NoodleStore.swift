@@ -2881,12 +2881,7 @@ final class NoodleStore {
         // A muted group is silent, and one in Mentions only speaks up only for the person's name.
         let messages = messages.filter(notifies)
         guard !messages.isEmpty else { return }
-        let presentsNotifications = AgentNotifications.shouldPresentActivity
-        if MessageReceivedSound.playsInApp(newMessages: messages.count,
-                                           presentsNotifications: presentsNotifications) {
-            MessageReceivedSound.play()
-        }
-        guard presentsNotifications else { return }
+        guard MessageReceivedSound.announce(newMessages: messages.count) else { return }
 
         for message in messages {
             guard case .agent(let agentID) = message.author,

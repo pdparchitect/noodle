@@ -20,6 +20,7 @@
 - A file in a message has Noodle's menu: react, Copy, Quick Look, Save…, Show in Finder and Forward…, which sends it on to another conversation with a comment. Files drag out to Finder and other apps, and a file dropped on a sidebar row is forwarded there, or waits in that conversation if it came from elsewhere.
 - As in Noodle, an annotation you haven't sent yet waits in its conversation after Pion quits.
 - A patch or diff an agent sends opens in Noodle's review: each file's changes, ticking files off as viewed, and commenting on selected lines or marking a region, which waits in the message field as any annotation does.
+- Settings › Conversation has Noodle's Message received sound, played when a reply arrives while Pion is in front and by the notification otherwise, and Noodle's Keep one floating conversation.
 
 ### Fixed
 
