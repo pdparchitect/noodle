@@ -20,20 +20,6 @@ struct NoodleSettingsView: View {
     // Owned by the store so the Harness tab is badged before it is selected.
     private var harnessSetup: HarnessSetupController { store.harnessSetup }
 
-    private var harnessesNeedingAttention: Int {
-        HarnessProvider.allCases.filter { id in
-            store.runtime.harnesses.isOn(id) && (harnessSetup.needsAttention(id) || store.agents.contains {
-                let snapshot = store.runtime.snapshot(for: $0.id)
-                return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
-            })
-        }.count
-    }
-
-    /// Tools whose row shows Needs attention.
-    private var toolsNeedingAttention: Int {
-        store.connectionsController.registry.connections.filter { store.connectionsController.errors[$0.id] != nil }.count
-    }
-
     /// Wide enough for every tab in the toolbar, none left in its overflow menu.
     private static let width: CGFloat = 740
 
@@ -92,8 +78,8 @@ struct NoodleSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(NoodleSettingsTab.updates)
         }
-        .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
-                                              "Tools": toolsNeedingAttention,
+        .background(SettingsTabBadge(counts: ["Harness": store.harnessesNeedingAttention(harnessSetup),
+                                              "Tools": store.toolsNeedingAttention,
                                               "Permissions": permissions.needingAttention,
                                               "Companions": companionUpdates.updates.count,
                                               "Update": appUpdater.availableVersion == nil ? 0 : 1]))
@@ -109,38 +95,11 @@ struct NoodleSettingsView: View {
 
 struct GeneralSettingsView: View {
     @Environment(NoodleStore.self) private var store
-    @AppStorage(BotNameStyle.defaultsKey) private var botNameStyle = BotNameStyle.real.rawValue
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Generated bot names", selection: $botNameStyle) {
-                    ForEach(BotNameStyle.allCases) { style in
-                        Text(style.displayName).tag(style.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-            Section {
-                Picker("In groups, notify me for", selection: Binding(get: { store.groupNotifications },
-                                                                      set: { store.groupNotifications = $0 })) {
-                    Text("All messages").tag(LinkNotifications.all)
-                    Text("Only when my name is mentioned").tag(LinkNotifications.mentions)
-                }
-                .help("Your name is your full name, or your first name alone. One-to-one chats always notify, and a group can have its own setting in its menu in the sidebar.")
-            }
-            Section {
-                Toggle("Keep Mac awake while agents work", isOn: Binding(
-                    get: { store.runtime.preventIdleSleepWhileWorking },
-                    set: { store.runtime.configurePreventIdleSleepWhileWorking($0) }
-                ))
-            } footer: {
-                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
-            }
-            // Only on a Mac whose organisation set policies with a configuration profile.
-            OrganisationPoliciesSection()
-        }
-        .formStyle(.grouped)
+        @Bindable var store = store
+        RuntimeGeneralSettings(member: "bot", nameStyleKey: BotNameStyle.defaultsKey, defaultNameStyle: .real,
+                               groupNotifications: $store.groupNotifications, runtime: store.runtime)
     }
 }
 

@@ -72,24 +72,12 @@ struct PionSettingsView: View {
     /// As Noodle's: wide enough for every tab in the toolbar, none left in its overflow menu.
     private static let width: CGFloat = 740
 
-    /// Harnesses whose row asks for attention, or whose agents failed and can be kicked, as Noodle counts them.
-    private var harnessesNeedingAttention: Int {
-        HarnessProvider.allCases.filter { id in
-            host.runtime.harnesses.isOn(id) && (host.setup.needsAttention(id) || host.agents.contains {
-                let snapshot = host.runtime.snapshot(for: $0.id)
-                return $0.harnessIdentifier == id.rawValue && snapshot.canKick && snapshot.phase == .failed
-            })
-        }.count
-    }
-
-    /// Tools whose row shows Needs attention.
-    private var toolsNeedingAttention: Int {
-        host.connectionsController.registry.connections.filter { host.connectionsController.errors[$0.id] != nil }.count
-    }
-
     var body: some View {
         SettingsTabView(selection: $host.selectedTab) {
-            GeneralSettingsView(model: host.model)
+            RuntimeGeneralSettings(member: "agent", nameStyleKey: PionModel.agentNameStyleKey,
+                                   defaultNameStyle: PionModel.defaultAgentNameStyle,
+                                   groupNotifications: Binding(get: { host.model.groupNotifications },
+                                                                 set: { host.model.groupNotifications = $0 }), runtime: host.model.runtime)
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(PionSettingsHost.Tab.general)
@@ -136,8 +124,8 @@ struct PionSettingsView: View {
                 .tabItem { Label("Update", systemImage: "arrow.triangle.2.circlepath") }
                 .tag(PionSettingsHost.Tab.updates)
         }
-        .background(SettingsTabBadge(counts: ["Harness": harnessesNeedingAttention,
-                                              "Tools": toolsNeedingAttention,
+        .background(SettingsTabBadge(counts: ["Harness": host.harnessesNeedingAttention(host.setup),
+                                              "Tools": host.toolsNeedingAttention,
                                               "Permissions": permissions.needingAttention,
                                               "Update": appUpdater.availableVersion == nil ? 0 : 1]))
         // Check on opening Settings so the tabs are badged before they are selected.
@@ -164,41 +152,5 @@ private struct GroupsSettingsView: View {
                 group.participantIDs.compactMap { id in model.everyAgent.first { $0.id == id }?.displayName }.joined(separator: ", ")
             },
             archived: { group in Binding(get: { group.archivedAt != nil }, set: { model.setGroupArchived($0, id: group.id) }) })
-    }
-}
-
-/// Names for new agents, how groups notify and sleep while agents work. What the main window shows lives in the View menu.
-private struct GeneralSettingsView: View {
-    let model: PionModel
-    private var runtime: AgentRuntimeCoordinator { model.runtime }
-    @AppStorage(PionModel.agentNameStyleKey) private var nameStyle = PionModel.defaultAgentNameStyle.rawValue
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Generated agent names", selection: $nameStyle) {
-                    Text("Generated").tag(BotNameStyle.playful.rawValue)
-                    Text("Human").tag(BotNameStyle.real.rawValue)
-                }
-                .pickerStyle(.segmented)
-            }
-            Section {
-                Picker("In groups, notify me for", selection: Binding(get: { model.groupNotifications },
-                                                                      set: { model.groupNotifications = $0 })) {
-                    Text("All messages").tag(LinkNotifications.all)
-                    Text("Only when my name is mentioned").tag(LinkNotifications.mentions)
-                }
-                .help("Your name is your full name, or your first name alone. An agent's own conversation always notifies, and a group can have its own setting in its menu in the sidebar.")
-            }
-            Section {
-                Toggle("Keep Mac awake while agents work", isOn: Binding(
-                    get: { runtime.preventIdleSleepWhileWorking },
-                    set: { runtime.configurePreventIdleSleepWhileWorking($0) }
-                ))
-            } footer: {
-                Text("Prevents automatic idle sleep only while an agent is working. Closing the lid or choosing Sleep still suspends the Mac.")
-            }
-        }
-        .formStyle(.grouped)
     }
 }

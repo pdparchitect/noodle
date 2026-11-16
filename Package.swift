@@ -143,7 +143,8 @@ let package = Package(
                 dependencies: ["NoodleCore", "NoodleRuntime", "HubCore", "HubMac", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
                                .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleMCP",
                                .product(name: "ComputerBridge", package: "Bridge"), .product(name: "AppletBridge", package: "Protocol"),
-                               .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle")],
+                               .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle"),
+                               .product(name: "NoodleBrand", package: "Brand")],
                 swiftSettings: developmentHooks),
         .executableTarget(
             name: "NoodleShareExtension",

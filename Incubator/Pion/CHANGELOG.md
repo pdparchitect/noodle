@@ -56,6 +56,7 @@
 
 ### Changed
 
+- Settings › General is Noodle's, so generated agent names are Real or Playful, as there.
 - Tables in messages sort by a click on a column heading, and the menu in their corner copies a table as CSV or saves it, as in Noodle.
 - A long conversation opens quickly, as in Noodle: it shows its newest 100 messages and the 100 before each time you reach the top.
 - A file waiting in the message field is Noodle's chip: it copies, drags out to Finder and other apps, and has Noodle's look.
