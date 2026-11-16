@@ -260,12 +260,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let root = NoodleStore.active?.repository.rootURL {
             Task.detached(priority: .utility) { AppleLocalModelStore(repository: root).removeAbandonedStaging() }
         }
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(workspaceDidWake),
-            name: NSWorkspace.didWakeNotification,
-            object: nil
-        )
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -274,16 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
         NoodleStore.active?.stopMonitoring()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         NoodleStore.active?.applets.refreshSkills()
-    }
-
-    @objc private func workspaceDidWake(_ notification: Notification) {
-        NoodleStore.active?.recoverAgentsAfterWake()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

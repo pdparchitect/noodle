@@ -10,6 +10,9 @@ import OSLog
 #endif
 import NoodleCore
 import ProductIdentity
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// What the Agent Host reports about a harness the sandboxed app cannot inspect itself.
 public struct HarnessHostInspection {
@@ -1857,3 +1860,17 @@ extension AgentRuntimeCoordinator {
         }
     }
 }
+
+#if canImport(AppKit)
+extension AgentRuntimeCoordinator {
+    /// Starts again, as soon as the Mac wakes, the agents that sleep stopped, rather than waiting out their backoff.
+    /// Keep the observer for as long as it should watch.
+    public func reconcileOnWake(agents: @escaping @MainActor () -> [AgentRecord],
+                                repository: WorkspaceRepository) -> NSObjectProtocol {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil,
+                                                          queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reconcile(agents: agents(), repository: repository, immediately: true) }
+        }
+    }
+}
+#endif

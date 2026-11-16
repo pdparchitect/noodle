@@ -259,6 +259,7 @@ final class NoodleStore {
     /// Whether startAgents ran, so bots let go of their budget hold start again by themselves.
     private var agentsStarted = false
     private var harnessUpdateTask: Task<Void, Never>?
+    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     private var hubCheckInTask: Task<Void, Never>?
     @ObservationIgnored private var organisationObserver: NSObjectProtocol?
     @ObservationIgnored private var transcriptGeneration: UInt = 0
@@ -2971,20 +2972,10 @@ final class NoodleStore {
                 if self.connectsServices { self.botWidgets.publish(self.widgetBots) }
             }
         }
-        // Harnesses Noodle installed have no updater of their own. Settings need not be open.
-        harnessUpdateTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(90))
-            while !Task.isCancelled {
-                if let store = self { await store.harnessSetup.updateManagedHarnesses(store.runtime) }
-                try? await Task.sleep(for: .seconds(6 * 60 * 60))
-            }
-        }
+        harnessUpdateTask = harnessSetup.keepUpdated(runtime)
+        wakeObserver = runtime.reconcileOnWake(agents: { [weak self] in self?.agents ?? [] }, repository: repository)
         hubCheckInTask = Task { [hubs] in await hubs.stayConnected() }
         refreshHubMirrors()
-    }
-
-    func recoverAgentsAfterWake() {
-        runtime.reconcile(agents: agents, repository: repository, immediately: true)
     }
 
     func stopMonitoring() {
@@ -2992,6 +2983,8 @@ final class NoodleStore {
         transcriptRefreshTask = nil
         harnessUpdateTask?.cancel()
         harnessUpdateTask = nil
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        wakeObserver = nil
         hubCheckInTask?.cancel()
         hubCheckInTask = nil
         hubMirrorTasks.values.forEach { $0.cancel() }

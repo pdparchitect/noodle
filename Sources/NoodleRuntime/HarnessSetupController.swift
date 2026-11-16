@@ -293,6 +293,19 @@ public final class HarnessSetupController {
         set { defaults.set(newValue, forKey: Self.rejectedVersionsKey) }
     }
 
+    /// Keeps the harnesses the app installed current while it runs, shortly after launch and then every six hours,
+    /// since they have no updater of their own. Settings need not be open. Cancel the task to stop.
+    public func keepUpdated(_ runtime: AgentRuntimeCoordinator) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(90))
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.updateManagedHarnesses(runtime)
+                try? await Task.sleep(for: .seconds(6 * 60 * 60))
+            }
+        }
+    }
+
     /// Checks the harnesses Noodle installed, and only those, for a newer release and installs it.
     public func updateManagedHarnesses(_ runtime: AgentRuntimeCoordinator) async {
         guard automaticUpdates, installer != nil else { return }

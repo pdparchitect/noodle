@@ -21,6 +21,7 @@
 - As in Noodle, an annotation you haven't sent yet waits in its conversation after Pion quits.
 - A patch or diff an agent sends opens in Noodle's review: each file's changes, ticking files off as viewed, and commenting on selected lines or marking a region, which waits in the message field as any annotation does.
 - Settings › Conversation has Noodle's Message received sound, played when a reply arrives while Pion is in front and by the notification otherwise, and Noodle's Keep one floating conversation.
+- As in Noodle, the harnesses Pion installed update by themselves while it runs (unless turned off in Settings › Harnesses), and agents stopped by sleep start again as soon as the Mac wakes.
 
 ### Fixed
 

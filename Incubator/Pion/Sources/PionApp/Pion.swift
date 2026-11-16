@@ -125,6 +125,7 @@ struct PionApp: App {
 
     /// Set once Pion is quitting, so the floating conversations it closes float again next time.
     private var isTerminating = false
+    private var harnessUpdates: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
@@ -148,6 +149,8 @@ struct PionApp: App {
         model.offerWelcome()
         // Noodle's updater, on Pion's own channel; it stays off in development builds.
         if !model.isScripted { AppUpdater.shared.start() }
+        // As in Noodle, the harnesses Pion installed are kept current while it runs.
+        if !model.isScripted { harnessUpdates = settings.setup.keepUpdated(model.runtime) }
         #if PION_DEV_HOOKS
         ScenarioSession.active?.begin()
         #endif
@@ -166,7 +169,10 @@ struct PionApp: App {
         return .terminateNow
     }
 
-    func applicationWillTerminate(_ notification: Notification) { model.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        harnessUpdates?.cancel()
+        model.stop()
+    }
 }
 
 /// Scene focus keeps menu actions on the key conversation, rather than the main sidebar's selection.

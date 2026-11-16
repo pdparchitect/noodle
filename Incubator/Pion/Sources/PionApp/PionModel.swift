@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import HubLink
 import HubWire
@@ -82,6 +83,7 @@ import UniformTypeIdentifiers
     private var transcriptDates: [UUID: Date] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
     private(set) var pinnedIDs: [UUID] = []
+    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     /// Whether the transcripts there at launch were read, so later messages count as new.
     private var launchRead = false
     private var running = false
@@ -162,6 +164,8 @@ import UniformTypeIdentifiers
             problem = "Pion could not start its agents: \(error.localizedDescription)"
         }
         running = true
+        // As in Noodle: agents that sleep stopped start again as the Mac wakes.
+        wakeObserver = runtime.reconcileOnWake(agents: { [weak self] in self?.agents ?? [] }, repository: repository)
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -177,6 +181,8 @@ import UniformTypeIdentifiers
     func stop() {
         loop?.cancel()
         loop = nil
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        wakeObserver = nil
         toolBroker?.stop()
         toolBroker = nil
         messenger.stop()
