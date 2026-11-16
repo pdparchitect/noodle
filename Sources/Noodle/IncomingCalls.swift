@@ -1,5 +1,6 @@
 import AppKit
 import NoodleCore
+import NoodleRuntime
 import NoodleRuntimeSettings
 import SwiftUI
 
@@ -8,18 +9,9 @@ import SwiftUI
 /// rings here, and on the owner's devices while this Mac serves them as a Hub; a Hub holds its own
 /// bots' calls and rings them on every device of their owner.
 extension NoodleStore {
-    /// Rings the call a bot on this Mac placed, or leaves it as missed when it can no longer ring.
+    /// Rings the call a bot on this Mac placed, on the owner's devices too while this Mac serves them as a Hub.
     func ringCall(of agentID: UUID, now: Date = Date()) {
-        guard let request = repository.pendingCall(agentID: agentID),
-              !ringingCalls.contains(where: { $0.id == request.id }) else { return }
-        // Someone on a call is not rung; the call is left as missed and the bot writes instead.
-        guard request.expiresAt > now, voiceCalls.call == nil, runsHere(agentID),
-              let conversation = conversations.first(where: { $0.id == request.conversationID }),
-              voiceCallTarget(for: conversation)?.id == agentID else {
-            return endUnansweredCall(request, .missed, at: now)
-        }
-        startRinging(request)
-        thisMac.ringCall(of: agentID, now: now)
+        if ringLocalCall(of: agentID, now: now) { thisMac.ringCall(of: agentID, now: now) }
     }
 
     /// Rings a call a bot on a Hub placed, with the bot and conversation here. The Hub says when it stops.
@@ -31,11 +23,6 @@ extension NoodleStore {
 
     /// Stops ringing a call answered or declined elsewhere, or that the Hub left as missed.
     func stopRinging(_ id: UUID) { _ = takeRingingCall(id) }
-
-    /// Ends quietly the calls of bots deleted or archived while they rang: there is nobody left to answer.
-    func dropCallsOfGoneBots() {
-        for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
-    }
 
     func isCallable(_ agentID: UUID) -> Bool { agents.contains { $0.id == agentID && $0.archivedAt == nil } }
 
@@ -77,27 +64,32 @@ extension NoodleStore {
         }
     }
 
-    /// Leaves the card in the conversation, which shows it unread, and tells the bot, once per call.
-    private func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date) {
-        _ = takeRingingCall(request.id)
-        let agent = agents.first { $0.id == request.agentID }
-        let personName = agent.flatMap { try? repository.loadAgentOwner($0) }?.name ?? "Your person"
-        do {
-            guard try runtime.endUnansweredCall(request, outcome, at: now, personName: personName,
-                                                callerIsHere: isCallable(request.agentID), repository: repository) else { return }
-        } catch {
-            errorMessage = "Could not add the missed call to the conversation: \(error.localizedDescription)"
-        }
-        refreshTranscripts()
-    }
-
     var showsIncomingCalls: Bool { connectsServices }
 
     /// Answered, declined or missed here, or ended before it rang here: the owner's devices stop too.
     func stoppedRinging(_ id: UUID) { thisMac.stopRinging(id) }
 }
 
-extension NoodleStore: VoiceCallHost, IncomingCallHost, AgentTaskHost, BotBudgetHost {
+extension NoodleStore: VoiceCallHost, LocalCallHost, AgentTaskHost, BotBudgetHost {
+    var callRepository: WorkspaceRepository { repository }
+    var callRuntime: AgentRuntimeCoordinator { runtime }
+    var isOnCall: Bool { voiceCalls.call != nil }
+
+    func ringingConversation(for request: AgentCallRequest) -> BotConversation? {
+        guard runsHere(request.agentID), let conversation = conversations.first(where: { $0.id == request.conversationID }),
+              voiceCallTarget(for: conversation)?.id == request.agentID else { return nil }
+        return conversation
+    }
+
+    func callPersonName(for request: AgentCallRequest) -> String {
+        agents.first { $0.id == request.agentID }.flatMap { try? repository.loadAgentOwner($0) }?.name ?? "Your person"
+    }
+
+    func unansweredCallRecorded(problem: String?) {
+        if let problem { errorMessage = problem }
+        refreshTranscripts()
+    }
+
     func startCall(in conversation: BotConversation) { startVoiceCall(in: conversation) }
     func callerName(_ agentID: UUID) -> String? { agents.first { $0.id == agentID }?.displayName }
     func caller(_ agentID: UUID) -> AgentRecord? { agents.first { $0.id == agentID } }

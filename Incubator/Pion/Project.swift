@@ -130,7 +130,6 @@ let project = Project(
                 "../../Sources/Noodle/KeybindingsSettingsView.swift",
                 "../../Sources/Noodle/VoiceCall.swift",
                 "../../Sources/Noodle/VoiceCallToolbar.swift",
-                "../../Sources/Noodle/IncomingCallPanel.swift",
                 "../../Sources/Noodle/VoiceRecorder.swift",
                 "../../Sources/Noodle/VoiceCaptureRecovery.swift",
                 "../../Sources/Noodle/VoiceInputDevice.swift",

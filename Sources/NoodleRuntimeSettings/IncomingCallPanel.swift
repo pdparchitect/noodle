@@ -1,9 +1,10 @@
 import AppKit
 import NoodleCore
+import NoodleRuntime
 import SwiftUI
 
 /// What the ringing panel needs from the app whose bots place calls.
-@MainActor protocol IncomingCallHost: AnyObject {
+@MainActor public protocol IncomingCallHost: AnyObject {
     var ringingCalls: [AgentCallRequest] { get set }
     /// False where nothing is shown, as in tests: calls are kept and no panel rings.
     var showsIncomingCalls: Bool { get }
@@ -22,7 +23,7 @@ import SwiftUI
     func stopRingingNotification()
 }
 
-extension IncomingCallHost {
+public extension IncomingCallHost {
     /// Rings a call: it joins those ringing, the panel shows it, and it expires when its time is up.
     func startRinging(_ request: AgentCallRequest) {
         ringingCalls.append(request)
@@ -44,15 +45,62 @@ extension IncomingCallHost {
     }
 }
 
+/// Calls placed by bots running in this app, in every app: a call rings while nobody is on one and its bot can be
+/// called in its conversation, and otherwise is left as missed. A call nobody answers leaves its card in the
+/// conversation, which shows it unread, and the bot is told, once per call.
+@MainActor public protocol LocalCallHost: IncomingCallHost {
+    var callRepository: WorkspaceRepository { get }
+    var callRuntime: AgentRuntimeCoordinator { get }
+    var isOnCall: Bool { get }
+    /// The conversation a bot's call rings for, while the bot can be called there.
+    func ringingConversation(for request: AgentCallRequest) -> BotConversation?
+    /// Who the bot is told missed or declined its call.
+    func callPersonName(for request: AgentCallRequest) -> String
+    /// A call's card was left in its conversation, or could not be, saying why.
+    func unansweredCallRecorded(problem: String?)
+}
+
+public extension LocalCallHost {
+    /// Rings the call a bot placed, or leaves it as missed when it can no longer ring. True when it started ringing.
+    @discardableResult
+    func ringLocalCall(of agentID: UUID, now: Date = Date()) -> Bool {
+        guard let request = callRepository.pendingCall(agentID: agentID),
+              !ringingCalls.contains(where: { $0.id == request.id }) else { return false }
+        // Someone on a call is not rung; the call is left as missed and the bot writes instead.
+        guard request.expiresAt > now, !isOnCall, ringingConversation(for: request) != nil else {
+            endUnansweredCall(request, .missed, at: now)
+            return false
+        }
+        startRinging(request)
+        return true
+    }
+
+    func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date) {
+        _ = takeRingingCall(request.id)
+        do {
+            guard try callRuntime.endUnansweredCall(request, outcome, at: now, personName: callPersonName(for: request),
+                                                    callerIsHere: isCallable(request.agentID), repository: callRepository) else { return }
+            unansweredCallRecorded(problem: nil)
+        } catch {
+            unansweredCallRecorded(problem: "Could not add the missed call to the conversation: \(error.localizedDescription)")
+        }
+    }
+
+    /// Ends quietly the calls of bots deleted or archived while they rang: there is nobody left to answer.
+    func dropCallsOfGoneBots() {
+        for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
+    }
+}
+
 /// Floats in the top right corner over every app and Space while a call rings. It rings with a
 /// time-sensitive notification, so Focus and Do Not Disturb silence it as they choose.
-@MainActor final class IncomingCallPanel {
-    static let shared = IncomingCallPanel()
+@MainActor public final class IncomingCallPanel {
+    public static let shared = IncomingCallPanel()
     static let size = NSSize(width: 360, height: 76)
     private var panel: NSPanel?
     private var ringer: Task<Void, Never>?
 
-    func update(_ store: any IncomingCallHost) {
+    public func update(_ store: any IncomingCallHost) {
         guard !store.ringingCalls.isEmpty else {
             panel?.orderOut(nil)
             ringer?.cancel(); ringer = nil

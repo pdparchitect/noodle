@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- A call still ringing when Pion quit rings again when Pion opens, or is left as missed and the agent told, as in Noodle.
 - Conversation › Open in New Window stops a floating conversation floating, as the sidebar's does, and both bring forward a window already showing it instead of opening another, as in Noodle. Holding the Call shortcut no longer starts a call and then ends it.
 - Sending works as in Noodle: files sent without words say how many there are instead of listing their names, a message sent from Shortcuts marks its conversation read, and Forward… offers only conversations that can take a message, not an archived agent's.
 - Files and photos you pick go to the conversation you picked them for, even if you switched to another while choosing, and a photo that can't be read is reported instead of dropped, as in Noodle.

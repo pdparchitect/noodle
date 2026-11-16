@@ -2,12 +2,13 @@ import AppKit
 import HubLink
 import NoodleCore
 import NoodleRuntime
+import NoodleRuntimeSettings
 import SwiftUI
 
 /// Voice calls with agents, as in Noodle: the champion calls an agent whose harness has voices, and an agent
 /// places a call with `messenger --call`, which rings until it is answered, declined or missed. One call at a
 /// time; its card and what was said go into the agent's conversation.
-@MainActor @Observable final class PionCalls: VoiceCallHost, IncomingCallHost {
+@MainActor @Observable final class PionCalls: VoiceCallHost, LocalCallHost {
     private let model: PionModel
     /// Shows a conversation, for a call answered from the ringing panel.
     @ObservationIgnored var open: (UUID) -> Void = { _ in }
@@ -26,7 +27,7 @@ import SwiftUI
         // The agent reads chat messages through its inbox; the voice hears about them here.
         model.onSent = { [weak self] id, body, files in self?.voiceCalls.shared(in: id, body: body, attachmentNames: files) }
         model.handleCallRequests { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
-        model.onAgentsChanged = { [weak self] in self?.dropCallsOfGoneAgents() }
+        model.onAgentsChanged = { [weak self] in self?.dropCallsOfGoneBots() }
     }
 
     // MARK: Calling
@@ -94,15 +95,28 @@ import SwiftUI
     func stopRingingNotification() { AgentNotifications.stopRinging() }
 
     /// Rings a call an agent placed, or leaves it as missed when it can no longer ring.
-    func ringCall(of agentID: UUID, now: Date = Date()) {
-        guard let request = model.repository.pendingCall(agentID: agentID),
-              !ringingCalls.contains(where: { $0.id == request.id }) else { return }
-        // Someone on a call is not rung; the call is left as missed and the agent writes instead.
-        guard request.expiresAt > now, voiceCalls.call == nil, let conversation = model.conversation(request.conversationID),
-              voiceCallTarget(for: conversation)?.id == agentID else {
-            return endUnansweredCall(request, .missed, at: now)
-        }
-        startRinging(request)
+    func ringCall(of agentID: UUID, now: Date = Date()) { ringLocalCall(of: agentID, now: now) }
+
+    /// As in Noodle, a call that rang when Pion quit rings on as it opens, or is left as missed.
+    func ringPendingCalls() {
+        for agent in model.agents { ringLocalCall(of: agent.id) }
+    }
+
+    var callRepository: WorkspaceRepository { model.repository }
+    var callRuntime: AgentRuntimeCoordinator { model.runtime }
+    var isOnCall: Bool { voiceCalls.call != nil }
+
+    func ringingConversation(for request: AgentCallRequest) -> BotConversation? {
+        guard let conversation = model.conversation(request.conversationID),
+              voiceCallTarget(for: conversation)?.id == request.agentID else { return nil }
+        return conversation
+    }
+
+    func callPersonName(for request: AgentCallRequest) -> String { model.champion }
+
+    func unansweredCallRecorded(problem: String?) {
+        if let problem { model.problem = problem }
+        model.refresh()
     }
 
     var showsIncomingCalls: Bool { true }
@@ -127,22 +141,4 @@ import SwiftUI
         guard let request = ringingCalls.first(where: { $0.id == id }) else { return }
         endUnansweredCall(request, .declined, at: Date())
     }
-
-    /// Leaves the card in the conversation and tells the agent, once per call, as Noodle does.
-    private func endUnansweredCall(_ request: AgentCallRequest, _ outcome: UnansweredCall, at now: Date) {
-        _ = takeRingingCall(request.id)
-        do {
-            guard try model.runtime.endUnansweredCall(request, outcome, at: now, personName: model.champion,
-                                                      callerIsHere: isCallable(request.agentID), repository: model.repository) else { return }
-        } catch {
-            model.problem = "Could not add the missed call to the conversation: \(error.localizedDescription)"
-        }
-        model.refresh()
-    }
-
-    /// As in Noodle, a call rings no longer once its agent is archived or deleted: nobody is left to answer.
-    private func dropCallsOfGoneAgents() {
-        for request in ringingCalls where !isCallable(request.agentID) { endUnansweredCall(request, .missed, at: Date()) }
-    }
-
 }

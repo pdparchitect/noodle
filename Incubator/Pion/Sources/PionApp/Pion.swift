@@ -160,6 +160,7 @@ struct PionApp: App {
         }
         if !model.isScripted { connectNotifications() }
         model.start()
+        if !model.isScripted { calls.ringPendingCalls() }
         // As in Noodle, what floated when Pion quit floats again.
         FloatingConversations.shared.retain(Set(model.conversations.map(\.id)))
         // Every conversation, an archived one too, which can still be open in a window of its own.
