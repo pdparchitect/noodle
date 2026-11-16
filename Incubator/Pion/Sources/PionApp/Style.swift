@@ -1,5 +1,6 @@
 import AppKit
 import NoodleCore
+import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
 
@@ -102,7 +103,7 @@ struct AgentMark: View {
         disc
             .opacity(phase == .offline ? 0.45 : 1)
             .overlay {
-                if phase == .working { WorkingRing(lineWidth: ring).padding(-(ring / 2 + max(1, size * 0.06))) }
+                if phase == .working { WorkingRing(lineWidth: ring, color: .workingRing).padding(-(ring / 2 + max(1, size * 0.06))) }
             }
             .overlay(alignment: .bottomTrailing) {
                 if phase == .failed {
@@ -119,63 +120,10 @@ struct AgentMark: View {
     }
 }
 
-/// An arc that turns around a working agent's mark. Core Animation turns it in the render server, so
-/// any number of working agents cost the main thread nothing per frame.
-private struct WorkingRing: NSViewRepresentable {
-    let lineWidth: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeNSView(context: Context) -> RingView { RingView() }
-
-    func updateNSView(_ view: RingView, context: Context) {
-        view.configure(lineWidth: lineWidth, color: (colorScheme == .dark ? NSColor.white : .black).withAlphaComponent(0.85),
-                       turning: !reduceMotion)
-    }
-
-    final class RingView: NSView {
-        private let arc = CAShapeLayer()
-
-        override init(frame: NSRect) {
-            super.init(frame: frame)
-            wantsLayer = true
-            arc.fillColor = nil
-            arc.lineCap = .round
-            arc.strokeEnd = 0.28
-            layer?.addSublayer(arc)
-        }
-
-        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        func configure(lineWidth: CGFloat, color: NSColor, turning: Bool) {
-            arc.lineWidth = lineWidth
-            arc.strokeColor = color.cgColor
-            if turning, arc.animation(forKey: "turn") == nil {
-                let turn = CABasicAnimation(keyPath: "transform.rotation.z")
-                // Clockwise, as the SwiftUI ring turned: negative in a layer's flipped-up coordinates.
-                turn.fromValue = 0
-                turn.toValue = -2 * Double.pi
-                turn.duration = 1.1
-                turn.repeatCount = .infinity
-                turn.isRemovedOnCompletion = false
-                arc.add(turn, forKey: "turn")
-            } else if !turning {
-                arc.removeAnimation(forKey: "turn")
-            }
-            needsLayout = true
-        }
-
-        override func layout() {
-            super.layout()
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            arc.frame = bounds
-            let inset = arc.lineWidth / 2
-            arc.path = CGPath(ellipseIn: bounds.insetBy(dx: inset, dy: inset), transform: nil)
-            CATransaction.commit()
-        }
+extension NSColor {
+    /// Pion's working ring: black on light, white on dark.
+    static let workingRing = NSColor(name: nil) { appearance in
+        (appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor.white : .black).withAlphaComponent(0.85)
     }
 }
 

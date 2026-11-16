@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- The ring around a working bot's picture now costs the app nothing per frame, however many bots work at once, and holds still when Reduce Motion is on.
 - In the Usage window's Disk measure, Sign-ins is now Logins: each login's folder holds what its harness keeps there, such as Codex's plugins, not only the sign-in itself.
 
 ## [0.87.0] - 2026-11-15

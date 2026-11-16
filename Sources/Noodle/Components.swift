@@ -119,24 +119,6 @@ struct RuntimeStatusMark: View {
     }
 }
 
-/// An arc that circles a working bot's picture.
-/// The turn is read from the clock: a repeating animation would also repeat any move
-/// made as the ring appears, and a toolbar places its items just then.
-private struct WorkingRing: View {
-    let lineWidth: CGFloat
-
-    var body: some View {
-        TimelineView(.animation) { context in
-            Circle()
-                .trim(from: 0, to: 0.28)
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 1.1) / 1.1 * 360))
-        }
-        .accessibilityHidden(true)
-    }
-}
-
 extension View {
     /// A ready bot's picture is shown as it is; a working one is circled, and an idle one, stopped or starting, greyed out.
     /// The ring scales with the picture's `size`, sitting just outside its edge.
