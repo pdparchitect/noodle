@@ -168,8 +168,10 @@ import UniformTypeIdentifiers
                 runtime.wake(id, note: AgentWake.skillsUpdatedNote, repository: repository)
             }
             try messenger.start(agents: agents)
-            let now = Date()
-            agents.forEach { runtime.seedHeartbeatActivity(for: $0.id, at: now) }
+            // As in Noodle: from what was last said, so a quiet agent checks in on its first heartbeat.
+            runtime.seedHeartbeatActivity(for: agents, conversations: conversations) { id in
+                self.messages(in: id).map(\.createdAt).max()
+            }
             runtime.startAll(agents: agents, repository: repository)
             runtime.refreshCapabilities()
             try startTools()
@@ -454,7 +456,7 @@ import UniformTypeIdentifiers
             if let message = try repository.appendStopNotice(agentID: agent.id) {
                 readTranscript(message.conversationID)
             }
-        } catch { problem = error.localizedDescription }
+        } catch { problem = "Could not add the stop to the conversation: \(error.localizedDescription)" }
     }
 
     func conversation(_ id: UUID?) -> BotConversation? { id.flatMap { id in conversations.first { $0.id == id } } }
@@ -519,11 +521,11 @@ import UniformTypeIdentifiers
             agents: rest.filter { $0.kind == .direct })
     }
 
-    /// An Investigation's title, an agent's name or a group's.
+    /// An Investigation's title, an agent's name or a group's, as Noodle shows a name: its first line, shortened when long.
     func title(of conversation: BotConversation) -> String {
         investigation(conversation.id)?.title
-            ?? (conversation.kind == .direct ? agent(conversation.participantIDs.first)?.displayName : nil)
-            ?? conversation.displayName
+            ?? ConversationName.display((conversation.kind == .direct ? agent(conversation.participantIDs.first)?.displayName : nil)
+                                        ?? conversation.displayName)
     }
 
     func isPinned(_ id: UUID) -> Bool { pinnedIDs.contains(id) }

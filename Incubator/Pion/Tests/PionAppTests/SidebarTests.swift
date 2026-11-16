@@ -103,6 +103,25 @@ import XCTest
         reopened.start()
         XCTAssertEqual(reopened.transcriptViewport(for: chat.id).messageID, first.id)
     }
+
+    /// As in Noodle: a name kept from before names had a limit shows its first line, shortened when long.
+    func testTitlesShowANamesFirstLineShortened() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionSidebar-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        var group = try model.createGroup(name: "Team", description: nil, members: [avery.id])
+        group.displayName = "Night shift\nsecond line"
+        try model.repository.updateConversation(group)
+        model.refresh()
+        XCTAssertEqual(model.title(of: try XCTUnwrap(model.conversation(group.id))), "Night shift")
+        group.displayName = String(repeating: "a", count: 300)
+        try model.repository.updateConversation(group)
+        model.refresh()
+        XCTAssertEqual(model.title(of: try XCTUnwrap(model.conversation(group.id))), ConversationName.display(group.displayName))
+        XCTAssertLessThan(model.title(of: group).count, 300)
+    }
 }
 
 

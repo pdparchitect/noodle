@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- As in Noodle, a name with several lines or past the length limit, kept from earlier versions, shows its first line, shortened; an agent's first heartbeat counts from what was last said, not from when Pion opened; and a stop that can't be noted in the conversation says so.
 - The activity window's scroller hides again when not scrolling, instead of always showing.
 - When an agent moves to another harness because its own ran out of usage, or moves back, its conversation says so, as in Noodle.
 - As in Noodle, saving an agent with a login profile of another harness uses that harness's default login instead of refusing, and a voice its harness doesn't have leaves the choice to the harness.

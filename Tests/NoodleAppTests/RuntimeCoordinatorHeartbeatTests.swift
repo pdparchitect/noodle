@@ -30,6 +30,24 @@ import XCTest
         XCTAssertEqual(process.heartbeats, 2)
     }
 
+    /// Every app counts a bot's first heartbeat from the last message in any of its conversations, else from when it was made.
+    func testHeartbeatsCountFromTheLastMessageInABotsConversations() throws {
+        let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
+        process.canReceiveHeartbeat = true
+        f.runtime.configureHeartbeats(intervalMinutes: 1)
+        let conversations = try f.repository.loadConversations().filter { $0.participantIDs.contains(agent.id) }
+        XCTAssertFalse(conversations.isEmpty)
+        let said = f.clock.date.addingTimeInterval(-30)
+        f.runtime.seedHeartbeatActivity(for: [agent], conversations: conversations) { id in
+            conversations.contains { $0.id == id } ? said : nil
+        }
+        f.runtime.checkHeartbeats()
+        XCTAssertEqual(process.heartbeats, 0, "Half an interval since it last spoke")
+        f.clock.date.addTimeInterval(30)
+        f.runtime.checkHeartbeats()
+        XCTAssertEqual(process.heartbeats, 1)
+    }
+
     func testOverdueBusyBotsKeepTheirHeartbeatUntilTheyCanReceiveIt() throws {
         let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
         f.runtime.configureHeartbeats(intervalMinutes: 1)

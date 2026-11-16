@@ -356,7 +356,7 @@ struct GroupRow: View {
         HStack(spacing: 8) {
             SymbolMark(symbol: "person.3.fill", size: 22)
             VStack(alignment: .leading, spacing: 1) {
-                Text(group.displayName).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
+                Text(model.title(of: group)).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
                 Text(model.rowDetail(for: group, showing: line))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }

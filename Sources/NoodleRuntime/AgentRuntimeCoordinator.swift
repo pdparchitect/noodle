@@ -530,6 +530,16 @@ public final class AgentRuntimeCoordinator {
         saveHeartbeatActivityDates()
     }
 
+    /// Each bot's heartbeat counts from the last message in any of its conversations, or else from when it was made.
+    /// Only bots with no saved activity take it.
+    public func seedHeartbeatActivity(for agents: [AgentRecord], conversations: [BotConversation],
+                                      lastMessage: (UUID) -> Date?) {
+        for agent in agents {
+            let latest = conversations.filter { $0.participantIDs.contains(agent.id) }.compactMap { lastMessage($0.id) }.max()
+            seedHeartbeatActivity(for: agent.id, at: latest ?? agent.createdAt)
+        }
+    }
+
     public func seedHeartbeatActivity(for agentID: UUID, at date: Date) {
         if heartbeatScheduler.register(agentID, at: date) {
             saveHeartbeatActivityDates()
