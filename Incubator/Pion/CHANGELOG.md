@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Something going wrong is said over whichever Pion window is in front, a sheet or a floating conversation included, as in Noodle; before, it waited for the main window and went unseen while that was closed.
 - Picking a message in search results or in a notification scrolls to it, and a conversation you come back to opens where you left it while Pion runs; before, Pion lost its place in the transcript.
 - In a team with a lead, the lead hears your message first, as the team editor says and as in Noodle, also when you send from the message field or with Forward…; before, only an Investigation's opening message did that, and the rest woke everyone at once.
 - A call from an agent stops ringing as soon as the agent is archived or deleted, as in Noodle, instead of ringing on until it was missed.
@@ -34,6 +35,7 @@
 
 ### Changed
 
+- Tables in messages sort by a click on a column heading, and the menu in their corner copies a table as CSV or saves it, as in Noodle.
 - A long conversation opens quickly, as in Noodle: it shows its newest 100 messages and the 100 before each time you reach the top.
 - A file waiting in the message field is Noodle's chip: it copies, drags out to Finder and other apps, and has Noodle's look.
 - An agent's and a team's Tools are Noodle's list: each tool has Edit and Remove beside it, and removing one asks first.

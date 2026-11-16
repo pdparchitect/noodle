@@ -150,6 +150,7 @@ let project = Project(
                 "../../Sources/Noodle/GroupsSettingsView.swift",
                 "../../Sources/Noodle/AgentConfigurationFields.swift",
                 "../../Sources/Noodle/ToolAssignmentList.swift",
+                "../../Sources/Noodle/StoreErrorAlert.swift",
                 "../../Sources/Noodle/AnnotationPopover.swift",
                 "../../Sources/Noodle/AnnotationPreview.swift",
                 "../../Sources/Noodle/AnnotationContent.swift",

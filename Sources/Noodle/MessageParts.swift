@@ -1,6 +1,8 @@
 import AppKit
+import HubLink
 import NoodleCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A notice the app adds to a conversation, between the messages: who joined or left a group, or which harness a
 /// bot continues on in its own conversation.
@@ -210,5 +212,50 @@ struct MessageTaskLabel: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
+    }
+}
+
+/// A table's Copy as CSV and Save as CSV…, in its corner while the pointer is over it, in every app.
+struct MessageTableActions: View {
+    let table: MessageTable
+    let failed: (String) -> Void
+
+    var body: some View {
+        Menu {
+            Button("Copy as CSV") { MessageTableActions.copy(table) }
+            Button("Save as CSV…") { MessageTableActions.save(table, failed: failed) }
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: 14))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Table actions")
+        .accessibilityLabel("Table actions")
+    }
+
+    static func copy(_ table: MessageTable) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(table.csv, forType: .string)
+    }
+
+    /// Asks where, on the key window, then writes the table there as CSV.
+    static func save(_ table: MessageTable, failed: @escaping (String) -> Void) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Table.csv"
+        let save = { (response: NSApplication.ModalResponse) in
+            guard response == .OK, let destination = panel.url else { return }
+            do {
+                try Data(table.csv.utf8).write(to: destination, options: .atomic)
+            } catch {
+                failed("The table could not be saved: \(error.localizedDescription)")
+            }
+        }
+        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) }
+        else { panel.begin(completionHandler: save) }
     }
 }

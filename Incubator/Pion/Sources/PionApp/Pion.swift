@@ -128,10 +128,14 @@ struct PionApp: App {
     /// Set once Pion is quitting, so the floating conversations it closes float again next time.
     private var isTerminating = false
     private var harnessUpdates: Task<Void, Never>?
+    /// Noodle's error alert, over whichever window is in front, sheets included.
+    private var errorAlert: StoreErrorAlert?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = settings
         _ = calls
+        errorAlert = StoreErrorAlert(title: pionAppName, message: { [weak self] in self?.model.problem },
+                                     clear: { [weak self] in self?.model.problem = nil })
         // Noodle's floating conversations, showing Pion's conversation view.
         PionFloating.panels = FloatingConversationPanels(floating: .shared, isTerminating: { [weak self] in self?.isTerminating == true },
             toggleCall: { [weak self] in self?.calls.toggleCall(in: $0) }, savesFrames: true) { [weak self] id, commands in

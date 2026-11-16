@@ -23,7 +23,7 @@ struct MessageTableView<Menu: View>: View {
             .frame(maxWidth: gridWidth, alignment: .leading)
             .overlay { menu(shown) }
         .overlay(alignment: .topTrailing) {
-            if hovering { MessageTableActions(table: shown).padding(4) }
+            if hovering { MessageTableActions(table: shown) { store.errorMessage = $0 }.padding(4) }
         }
         .onHover { hovering = $0 }
     }
@@ -138,34 +138,8 @@ struct MessageTableGrid: View {
     }
 }
 
-struct MessageTableActions: View {
-    @Environment(NoodleStore.self) private var store
-    let table: MessageTable
-
-    var body: some View {
-        Menu {
-            Button("Copy as CSV") { MessageTableActions.copy(table) }
-            Button("Save as CSV…") { store.saveTable(table) }
-        } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 14))
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Table actions")
-        .accessibilityLabel("Table actions")
-    }
-
-    static func copy(_ table: MessageTable) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(table.csv, forType: .string)
-    }
-}
-
 struct MessageTableReader: View {
+    @Environment(NoodleStore.self) private var store
     let message: ChatMessage
     let table: MessageTable
     @Binding var sort: MessageTableSort?
@@ -177,7 +151,7 @@ struct MessageTableReader: View {
                 Text("Table").font(.headline)
                 Text("\(table.rows.count) rows").foregroundStyle(.secondary)
                 Spacer()
-                MessageTableActions(table: table.sorted(by: sort))
+                MessageTableActions(table: table.sorted(by: sort)) { store.errorMessage = $0 }
                 Button(action: close) { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
                     .help("Close")

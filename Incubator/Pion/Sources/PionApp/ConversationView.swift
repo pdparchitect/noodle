@@ -418,7 +418,7 @@ struct MessageRow: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         // Written from a task in the sidebar.
                         if let task = message.task { MessageTaskLabel(task: task) }
-                        MessageBody(text: message.body, message: message, fills: false)
+                        MessageBody(text: message.body, message: message, fills: false) { model.problem = $0 }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
@@ -438,7 +438,7 @@ struct MessageRow: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     if !continues { header }
-                    MessageBody(text: message.body, message: message)
+                    MessageBody(text: message.body, message: message) { model.problem = $0 }
                         .padding(.leading, 30)
                         .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
                     linkPreview.padding(.leading, 30)
@@ -549,13 +549,15 @@ struct MessageBody: View {
     var message: ChatMessage?
     /// An agent's message fills the column; the champion's hugs its text.
     var fills = true
+    /// Says why a table could not be saved.
+    var failed: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(MessageBodyRenderer.shared.render(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .prose(let blocks): Prose(blocks: blocks, message: message)
-                case .table(let table): MarkdownTable(table: table)
+                case .table(let table): MarkdownTable(table: table, failed: failed)
                 }
             }
         }
@@ -592,27 +594,57 @@ private struct Prose: View {
     }
 }
 
+/// A table in Pion's reading style, sorted by a click on a column as Noodle sorts, with Noodle's Copy and Save as CSV.
 private struct MarkdownTable: View {
     let table: MessageTable
+    let failed: (String) -> Void
+    @State private var sort: MessageTableSort?
+    @State private var hovering = false
 
     var body: some View {
+        // Rows keep their identity while sorting, or selectable cells would hold stale text.
+        let order = table.rowOrder(by: sort)
         ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
                 GridRow {
-                    ForEach(Array(table.header.enumerated()), id: \.offset) { _, cell in
-                        Text(cell).font(.callout.weight(.semibold))
-                    }
+                    ForEach(table.header.indices, id: \.self) { column in header(column) }
                 }
                 Divider()
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                ForEach(order, id: \.self) { row in
                     GridRow {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in Text(cell).font(.callout) }
+                        ForEach(table.header.indices, id: \.self) { column in Text(table.rows[row][column]).font(.callout) }
                     }
                 }
             }
             .padding(12)
         }
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.secondary.opacity(0.2)))
+        .overlay(alignment: .topTrailing) {
+            if hovering { MessageTableActions(table: table.sorted(by: sort), failed: failed).padding(4) }
+        }
+        .onHover { hovering = $0 }
+    }
+
+    private func header(_ column: Int) -> some View {
+        let active = sort?.column == column
+        let name = MessageTable.plainText(table.header[column])
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) { sort = MessageTableSort.next(after: sort, column: column) }
+        } label: {
+            HStack(spacing: 3) {
+                Text(table.header[column]).font(.callout.weight(.semibold))
+                // Always laid out, so a column keeps its width when it becomes the sorted one.
+                Image(systemName: sort?.ascending == false ? "chevron.down" : "chevron.up")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(active ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Sort by \(name)")
+        .accessibilityLabel("Sort by \(name)")
+        .accessibilityValue(active ? (sort?.ascending == true ? "Ascending" : "Descending") : "")
     }
 }
 

@@ -59,11 +59,6 @@ struct MainWindow: View {
         .onAppear { window.openMain = { openWindow(id: "main") } }
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
-        .alert("Something Went Wrong", isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } })) {
-            Button("OK") { model.problem = nil }
-        } message: {
-            Text(model.problem ?? "")
-        }
         .onChange(of: model.selection) { _, id in
             if let id { model.markRead(id) }
             guard !window.selectedFromKeyboard else { window.selectedFromKeyboard = false; return }

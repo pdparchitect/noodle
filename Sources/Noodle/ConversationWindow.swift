@@ -152,61 +152,14 @@ struct ConversationWindowView: View {
     }
 }
 
-/// Shows the store's error over the window in front, on top of any sheet it has, until OK.
-/// A SwiftUI alert cannot: the window under a sheet is never key, and showing an alert
-/// takes key from its own window, which dismissed it before anyone saw it.
-@MainActor final class StoreErrorAlert {
-    private let store: NoodleStore
-    private let window: () -> NSWindow?
-    private let open: (URL) -> Void
-    private var alert: NSAlert?
-    private var keyObserver: NSObjectProtocol?
-
-    /// The window in front, even while Noodle is in the background. None yet while the app
-    /// itself is being made: NSApp is still nil then, and an error from the first load waits.
-    init(store: NoodleStore, window: @escaping () -> NSWindow? = {
-        guard let app = NSApp else { return nil }
-        return app.keyWindow ?? app.mainWindow ?? app.orderedWindows.first { $0.isVisible && $0.canBecomeMain }
-    }, open: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
-        self.store = store
-        self.window = window
-        self.open = open
-        // An error that arrived with no window open is shown once one is.
-        keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.show(self?.store.errorMessage) }
-        }
-        observe()
-    }
-
-    private func observe() {
-        let message = withObservationTracking { store.errorMessage } onChange: { [weak self] in
-            Task { @MainActor in self?.observe() }
-        }
-        show(message)
-    }
-
-    private func show(_ message: String?) {
-        guard let message else {
-            if let sheet = alert?.window, let parent = sheet.sheetParent { parent.endSheet(sheet) }
-            return
-        }
-        if let alert { alert.informativeText = message; return }
-        guard var parent = window() else { return }
-        while let sheet = parent.attachedSheet { parent = sheet }
-        let alert = NSAlert()
-        alert.messageText = "Noodle"
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        let link = store.errorLink.flatMap { $0.message == message ? $0 : nil }
-        if let link { alert.addButton(withTitle: link.title) }
-        self.alert = alert
-        alert.beginSheetModal(for: parent) { [weak self] response in
-            guard let self else { return }
-            self.alert = nil
-            if let link, response == .alertSecondButtonReturn { self.open(link.url) }
-            if store.errorLink?.message == alert.informativeText { store.errorLink = nil }
-            if store.errorMessage == alert.informativeText { store.errorMessage = nil } else { show(store.errorMessage) }
-        }
+extension StoreErrorAlert {
+    /// Noodle's store error, with the button that fixes it when there is one.
+    convenience init(store: NoodleStore, window: @escaping () -> NSWindow? = StoreErrorAlert.frontWindow,
+                     open: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        self.init(title: "Noodle", message: { store.errorMessage }, clear: { store.errorMessage = nil },
+                  link: { message in store.errorLink.flatMap { $0.message == message ? ($0.title, $0.url) : nil } },
+                  linkUsed: { message in if store.errorLink?.message == message { store.errorLink = nil } },
+                  window: window, open: open)
     }
 }
 
