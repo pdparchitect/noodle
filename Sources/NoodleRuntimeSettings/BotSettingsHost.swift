@@ -30,4 +30,13 @@ import SwiftUI
 
 public extension BotSettingsHost {
     func botProblem(_ agent: AgentRecord) -> AnyView? { nil }
+
+    /// Deletes the login profile after moving its bots back to their harness's default login, never to another
+    /// account, then restarts them. Stops at the first failure, before the profile is gone.
+    func removeHarnessProfile(_ profile: HarnessProfile) throws {
+        let affected = agents.filter { (try? repository.loadAgentHarnessProfile($0)) == profile.id }
+        for agent in affected { try repository.updateAgentHarnessProfile(agent, profile: nil) }
+        try harnessProfiles.delete(profile)
+        for agent in affected { runtime.restart(agent: agent, repository: repository) }
+    }
 }

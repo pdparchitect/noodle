@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Deleting a login in Settings › Harness says so when it can't move its bots back to the default login, and then keeps the login, as in Noodle.
 - A call on the Hub starts from the same recent messages as one on a Mac, without earlier calls.
 - A bot's first heartbeat counts from what was last said to it, as in Noodle, not from when the Hub started.
 - The activity window's scroller hides again when not scrolling, instead of always showing.

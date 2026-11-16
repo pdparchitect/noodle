@@ -1636,10 +1636,7 @@ final class NoodleStore {
     /// Bots on a deleted profile return to the default profile, never to another account.
     func deleteHarnessProfile(_ profile: HarnessProfile) {
         do {
-            let affected = agents.filter { (try? repository.loadAgentHarnessProfile($0)) == profile.id }
-            for agent in affected { try repository.updateAgentHarnessProfile(agent, profile: nil) }
-            try harnessProfiles.delete(profile)
-            for agent in affected { runtime.restart(agent: agent, repository: repository) }
+            try removeHarnessProfile(profile)
         } catch {
             errorMessage = error.localizedDescription
         }

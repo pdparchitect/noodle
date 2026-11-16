@@ -47,11 +47,12 @@ struct HubSettingsProblem: Equatable {
     var agents: [AgentRecord] { (try? hub.repository.loadAgents()) ?? [] }
 
     func deleteHarnessProfile(_ profile: HarnessProfile) {
-        let affected = agents.filter { (try? repository.loadAgentHarnessProfile($0)) == profile.id }
-        for agent in affected { try? repository.updateAgentHarnessProfile(agent, profile: nil) }
-        try? harnessProfiles.delete(profile)
-        hub.access.removeProfile(profile.id)
-        for agent in affected { runtime.restart(agent: agent, repository: repository) }
+        do {
+            try removeHarnessProfile(profile)
+            hub.access.removeProfile(profile.id)
+        } catch {
+            problem = HubSettingsProblem(title: "Could Not Delete Login", message: error.localizedDescription)
+        }
     }
 
     func showHarnessSettings() { selectedTab = .harnesses }
