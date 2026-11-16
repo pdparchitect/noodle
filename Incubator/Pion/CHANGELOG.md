@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- In a team with a lead, the lead hears your message first, as the team editor says and as in Noodle, also when you send from the message field or with Forward…; before, only an Investigation's opening message did that, and the rest woke everyone at once.
 - A call from an agent stops ringing as soon as the agent is archived or deleted, as in Noodle, instead of ringing on until it was missed.
 - An agent waiting for sign-in while it runs on a fallback login comes back by itself once that login works again, as in Noodle; Pion checked the agent's own login instead.
 - Apple Intelligence is no longer Unavailable in the welcome on a Mac that has it: Pion adds Apple's on-device model once for a new install, where before it waited to be added in Settings › Harness. Removed there, it stays removed.
@@ -32,6 +33,7 @@
 
 ### Changed
 
+- An agent's profile is Noodle's card: a close button, Archived for an archived agent, and clicking outside or leaving Pion closes it.
 - A conversation's menu in the sidebar is in Noodle's order: where it opens, Pin and Notifications, editing, Show items, the agent's housekeeping, then Stop, Suspend and Archive or Close. Stop shows only while the agent works, and Open in New Window brings a floating conversation back into a window.
 - Float on Top is Noodle's: the conversation moves to a small panel that stays above other apps, on every Space and beside full-screen apps, and floats again where it was after Pion reopens. It's also in each conversation's menu in the sidebar. Before, it only raised the window it was chosen in, until Pion quit.
 - The agent editor names a harness's default login by its account, as Noodle does, instead of Default.

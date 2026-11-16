@@ -18,72 +18,20 @@ struct AgentProfileSheet: View {
     var directMessage: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close bot profile")
-            }
-            BotAvatar(agent: agent, size: 88)
-            Text(agent.displayName)
-                .font(.title2.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-            if store.agents.first(where: { $0.id == agent.id })?.archivedAt != nil {
-                Text("Archived")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
-            } else if let status = agent.status {
-                // Older than a heartbeat, the bot has had its chance to update it, so it may no longer hold.
-                let current = store.agents.first { $0.id == agent.id } ?? agent
-                let stale = current.isStatusStale(after: TimeInterval(store.runtime.heartbeatConfiguration.intervalMinutes * 60))
-                VStack(spacing: 4) {
-                    Text(status)
-                        .font(.callout)
-                        .foregroundStyle(stale ? .secondary : .primary)
-                        .multilineTextAlignment(.center)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.quaternary, in: Capsule())
-                    if let setAt = current.statusSetAt {
-                        Text(setAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Status: \(status)")
-            }
-            ScrollView {
-                Text(description)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(maxHeight: 120)
-            VStack(spacing: 8) {
-                ForEach(ProfileActionRows.split(actions), id: \.self) { row in
-                    HStack(spacing: 8) {
-                        ForEach(row, id: \.self) { action in
-                            if action != row.first { Divider().frame(height: 32).accessibilityHidden(true) }
-                            button(for: action)
-                        }
-                    }
-                }
-            }
-            .buttonStyle(.plain)
+        ProfileCard(picture: AnyView(BotAvatar(agent: agent, size: 88)), name: agent.displayName, status: status,
+                    description: ProfileCard.description(agent.publicDescription), actions: actions,
+                    closeLabel: "Close bot profile") { dismiss() }
+    }
+
+    @MainActor private var status: AnyView? {
+        if store.agents.first(where: { $0.id == agent.id })?.archivedAt != nil {
+            return AnyView(ProfileStatusBadge(text: "Archived", faded: true))
         }
-        .padding(20)
-        .frame(width: 320)
-        .background(ProfileOutsideClickDismissal { dismiss() })
+        guard let status = agent.status else { return nil }
+        // Older than a heartbeat, the bot has had its chance to update it, so it may no longer hold.
+        let stale = current.isStatusStale(after: TimeInterval(store.runtime.heartbeatConfiguration.intervalMinutes * 60))
+        return AnyView(ProfileStatusBadge(text: status, faded: stale, setAt: current.statusSetAt)
+            .accessibilityLabel("Status: \(status)"))
     }
 
     private var isShared: Bool { store.isShared(agent.id) }
@@ -99,134 +47,66 @@ struct AgentProfileSheet: View {
         return direct
     }
 
-    private enum Action: Hashable {
-        case reply, message, call, computer, browser, edit, usage, suspend
-    }
-
-    private var actions: [Action] {
-        var actions: [Action] = []
-        if reply != nil { actions.append(.reply) }
-        if directMessage != nil { actions.append(.message) }
-        if callableConversation != nil { actions.append(.call) }
-        if !store.computers.assigned(to: agent).isEmpty { actions.append(.computer) }
-        if !store.browsers.assigned(to: agent).isEmpty { actions.append(.browser) }
-        // A bot someone shared is only talked with.
-        if !isShared { actions += [.edit, .usage] }
-        if current.archivedAt == nil, store.canSuspend(agent.id) { actions.append(.suspend) }
-        return actions
-    }
-
-
-    @ViewBuilder private func button(for action: Action) -> some View {
-        switch action {
-        case .reply:
-            if let reply {
-                Button(action: reply) {
-                    actionLabel("Reply", systemImage: "arrowshape.turn.up.left")
-                }
-                .help("Reply in Group")
-                .accessibilityLabel("Reply in Group")
-            }
-        case .message:
-            if let directMessage {
-                Button(action: directMessage) {
-                    actionLabel("Message", systemImage: "bubble.left")
-                }
-                .disabled(!canOpenDirectMessage)
-                .help("Direct Message")
-                .accessibilityLabel("Direct Message")
-            }
-        case .call:
-            if let callable = callableConversation {
-                Button {
-                    store.startVoiceCall(in: callable)
-                    // The call's controls are in its conversation, so show it.
-                    if let directMessage { directMessage() } else { dismiss() }
-                } label: {
-                    actionLabel("Call", systemImage: "phone")
-                }
-                .help("Call \(agent.displayName)")
-                .accessibilityLabel("Call \(agent.displayName)")
-            }
-        case .computer:
-            CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
-                items: store.computers.assigned(to: agent).map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state,
-                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
-                label: actionLabel) { id in
+    private var actions: [ProfileCardAction] {
+        var actions: [ProfileCardAction] = []
+        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
+        if let directMessage {
+            actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", disabled: !canOpenDirectMessage,
+                                   action: directMessage))
+        }
+        if let callable = callableConversation {
+            actions.append(.button("Call", systemImage: "phone", help: "Call \(agent.displayName)") {
+                store.startVoiceCall(in: callable)
+                // The call's controls are in its conversation, so show it.
+                if let directMessage { directMessage() } else { dismiss() }
+            })
+        }
+        let computers = store.computers.assigned(to: agent)
+        if !computers.isEmpty {
+            actions.append(.custom("computer", CompanionOpenButton(title: "Computer", systemImage: "desktopcomputer",
+                items: computers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.state,
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) }) { id in
                 try await store.computers.open(ComputerLink.url(computer: id, terminal: nil, view: nil))
-            }
-        case .browser:
-            CompanionOpenButton(title: "Browser", systemImage: "globe",
-                items: store.browsers.assigned(to: agent).map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready",
-                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) },
-                label: actionLabel) { id in
+            }))
+        }
+        let browsers = store.browsers.assigned(to: agent)
+        if !browsers.isEmpty {
+            actions.append(.custom("browser", CompanionOpenButton(title: "Browser", systemImage: "globe",
+                items: browsers.map { CompanionAssignmentItem(id: $0.id, name: $0.name, state: $0.paused ? "Paused" : "Ready",
+                    symbol: $0.symbol, colour: $0.colour, icon: $0.icon) }) { id in
                 try await store.browsers.open(BrowserLink.url(browser: id, tab: nil))
-            }
-        case .edit:
-            Button(action: edit) {
-                actionLabel("Edit", systemImage: "pencil")
-            }
-            .help("Edit Bot")
-            .accessibilityLabel("Edit Bot")
-        case .usage:
-            Button {
+            }))
+        }
+        // A bot someone shared is only talked with.
+        if !isShared {
+            actions.append(.button("Edit", systemImage: "pencil", help: "Edit Bot", action: edit))
+            actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage") {
                 store.usage.agentFilter = agent.id
                 openWindow(id: UsageView.windowID)
                 dismiss()
-            } label: {
-                actionLabel("Usage", systemImage: "chart.bar")
-            }
-            .help("Show Usage")
-            .accessibilityLabel("Show Usage")
-        case .suspend:
-            if current.isSuspended() {
-                Button { store.setSuspended(until: nil, agentID: agent.id) } label: {
-                    actionLabel("Unsuspend", systemImage: "play.circle")
-                }
-                .help("Unsuspend Bot")
-                .accessibilityLabel("Unsuspend Bot")
-            } else {
-                // Looks like the buttons beside it; a click offers how long.
-                Menu {
-                    ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                        Button(choice.title) { store.setSuspended(until: choice.until(), agentID: agent.id) }
-                    }
-                } label: {
-                    actionLabel("Suspend", systemImage: "pause.circle")
-                }
-                .menuStyle(.button)
-                .menuIndicator(.hidden)
-                .help("Suspend Bot")
-                .accessibilityLabel("Suspend Bot")
-            }
+            })
         }
-    }
-
-    private func actionLabel(_ title: String, systemImage: String) -> some View {
-        ProfileActionLabel(title: title, systemImage: systemImage)
-    }
-
-    private var description: String {
-        let value = agent.publicDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? "No description yet." : value
+        if current.archivedAt == nil, store.canSuspend(agent.id) {
+            actions.append(.suspend(isSuspended: current.isSuspended(), noun: "Bot") { store.setSuspended(until: $0, agentID: agent.id) })
+        }
+        return actions
     }
 }
 
 /// Opens the bot's one computer or browser, or offers a choice when it has several.
-private struct CompanionOpenButton<Label: View>: View {
+private struct CompanionOpenButton: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(NoodleStore.self) private var store
     let title: String
     let systemImage: String
     let items: [CompanionAssignmentItem]
-    let label: (String, String) -> Label
     let open: (UUID) async throws -> Void
     @State private var choosing = false
 
     var body: some View {
         Button {
             if items.count == 1 { launch(items[0].id) } else { choosing.toggle() }
-        } label: { label(title, systemImage) }
+        } label: { ProfileActionLabel(title: title, systemImage: systemImage) }
         .help(items.count == 1 ? "Open \(items[0].name)" : "Open \(title)")
         .accessibilityLabel(items.count == 1 ? "Open \(items[0].name)" : "Open \(title)")
         .popover(isPresented: $choosing, arrowEdge: .bottom) {
@@ -269,135 +149,16 @@ struct GroupProfileSheet: View {
     var message: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close group profile")
-            }
-            ConversationAvatar(participants: store.shownParticipants(for: group), isGroup: true, size: 88)
-            Text(store.title(for: group))
-                .font(.title2.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-            if store.isArchived(group) {
-                Text("Archived")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
-            }
-            ScrollView {
-                VStack(spacing: 8) {
-                    Text(description)
-                        .foregroundStyle(.secondary)
-                    Text(store.participants(for: group).map(\.displayName).joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity)
-            }
-            .frame(maxHeight: 120)
-            HStack(spacing: 8) {
-                if let message {
-                    Button(action: message) { ProfileActionLabel(title: "Message", systemImage: "bubble.left.and.bubble.right") }
-                        .help("Open Conversation")
-                        .accessibilityLabel("Open Conversation")
-                    Divider().frame(height: 32).accessibilityHidden(true)
-                }
-                Button(action: edit) { ProfileActionLabel(title: "Edit", systemImage: "pencil") }
-                    .help("Edit Group")
-                    .accessibilityLabel("Edit Group")
-            }
-            .buttonStyle(.plain)
+        var actions: [ProfileCardAction] = []
+        if let message {
+            actions.append(.button("Message", systemImage: "bubble.left.and.bubble.right", help: "Open Conversation", action: message))
         }
-        .padding(20)
-        .frame(width: 320)
-        .background(ProfileOutsideClickDismissal { dismiss() })
-    }
-
-    private var description: String {
-        let value = store.conversations.first { $0.id == group.id }?.publicDescription?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? "No description yet." : value
-    }
-}
-
-/// One of the actions along the bottom of a bot's or group's profile.
-struct ProfileActionLabel: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18))
-                .frame(height: 20)
-            Text(title)
-                .font(.caption)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-    }
-}
-
-/// Informational profiles can be dismissed without a decision. Keep this local
-/// to the profile: clicking outside an editor must not discard unsaved changes.
-struct ProfileOutsideClickDismissal: NSViewRepresentable {
-    let dismiss: () -> Void
-
-    func makeNSView(context: Context) -> DismissalView { DismissalView() }
-
-    func updateNSView(_ view: DismissalView, context: Context) {
-        view.dismiss = dismiss
-    }
-
-    static func dismantleNSView(_ view: DismissalView, coordinator: ()) {
-        view.stopMonitoring()
-    }
-
-    final class DismissalView: NSView {
-        var dismiss: (() -> Void)?
-        private var mouseMonitor: Any?
-        private var deactivationObserver: NSObjectProtocol?
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            stopMonitoring()
-            guard window != nil else { return }
-            mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-                let outside = MainActor.assumeIsolated {
-                    guard let self, let sheet = self.window, let parent = sheet.sheetParent,
-                          event.window === parent else { return false }
-                    let point = parent.convertPoint(toScreen: event.locationInWindow)
-                    guard !sheet.frame.contains(point) else { return false }
-                    self.dismiss?()
-                    return true
-                }
-                // Dismiss only; don't activate whatever was behind the sheet.
-                return outside ? nil : event
-            }
-            deactivationObserver = NotificationCenter.default.addObserver(
-                forName: NSApplication.didResignActiveNotification, object: NSApp, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.dismiss?() }
-            }
-        }
-
-        func stopMonitoring() {
-            if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
-            if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
-            mouseMonitor = nil
-            deactivationObserver = nil
-        }
+        actions.append(.button("Edit", systemImage: "pencil", help: "Edit Group", action: edit))
+        return ProfileCard(picture: AnyView(ConversationAvatar(participants: store.shownParticipants(for: group), isGroup: true, size: 88)),
+                           name: store.title(for: group),
+                           status: store.isArchived(group) ? AnyView(ProfileStatusBadge(text: "Archived", faded: true)) : nil,
+                           description: ProfileCard.description(store.conversations.first { $0.id == group.id }?.publicDescription),
+                           detail: store.participants(for: group).map(\.displayName).joined(separator: ", "),
+                           actions: actions, closeLabel: "Close group profile") { dismiss() }
     }
 }

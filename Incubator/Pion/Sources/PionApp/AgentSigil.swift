@@ -178,7 +178,8 @@ struct AgentProfileButton: View {
                          usage: { finish {
                              model.usage.agentFilter = agent.id
                              openWindow(id: UsageView.windowID)
-                         } })
+                         } },
+                         close: { showsProfile = false })
                 .onDisappear {
                     // The popover detaches first, then the editor or conversation opens.
                     if let pending { self.pending = nil; DispatchQueue.main.async(execute: pending) }
@@ -192,47 +193,42 @@ struct AgentProfileButton: View {
     }
 }
 
+/// Noodle's profile card, with Pion's mark and what the agent is doing.
 private struct AgentProfile: View {
     let model: PionModel
     let agent: AgentRecord
     let message: (() -> Void)?
     let edit: (() -> Void)?
     let usage: () -> Void
+    let close: () -> Void
     @Environment(PionCalls.self) private var calls
 
-    private enum Action: Hashable { case message, call, edit, usage, suspend }
-
-    private var actions: [Action] {
-        var actions: [Action] = []
-        if message != nil { actions.append(.message) }
-        if callable != nil { actions.append(.call) }
-        if edit != nil { actions.append(.edit) }
-        actions.append(.usage)
-        if agent.archivedAt == nil { actions.append(.suspend) }
-        return actions
+    var body: some View {
+        let phase = model.phase(of: agent)
+        ProfileCard(picture: AnyView(AgentMark(agent: agent, size: 88, phase: phase)), name: agent.displayName,
+                    status: AnyView(agent.archivedAt != nil ? ProfileStatusBadge(text: "Archived", faded: true)
+                        : ProfileStatusBadge(text: model.phaseDetail(of: agent) ?? phase.title, dot: phase.color,
+                                             faded: true, isProblem: phase == .failed)),
+                    description: ProfileCard.description(agent.publicDescription), actions: actions,
+                    closeLabel: "Close agent profile", close: close)
     }
 
-
-    @ViewBuilder private func button(for item: Action) -> some View {
-        switch item {
-        case .message:
-            if let message { Button(action: message) { action("Message", "bubble.left") }.help("Direct Message") }
-        case .call:
-            if let callable {
-                Button {
-                    calls.startCall(in: callable)
-                    // The call's controls are in its conversation, so show it.
-                    message?()
-                } label: { action("Call", "phone") }
-                    .help("Call \(agent.displayName)")
-            }
-        case .edit:
-            if let edit { Button(action: edit) { action("Edit", "pencil") }.help("Edit Agent") }
-        case .usage:
-            Button(action: usage) { action("Usage", "chart.bar") }.help("Show Usage")
-        case .suspend:
-            suspend
+    private var actions: [ProfileCardAction] {
+        var actions: [ProfileCardAction] = []
+        if let message { actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", action: message)) }
+        if let callable {
+            actions.append(.button("Call", systemImage: "phone", help: "Call \(agent.displayName)") {
+                calls.startCall(in: callable)
+                // The call's controls are in its conversation, so show it.
+                if let message { message() } else { close() }
+            })
         }
+        if let edit { actions.append(.button("Edit", systemImage: "pencil", help: "Edit Agent", action: edit)) }
+        actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage", action: usage))
+        if agent.archivedAt == nil {
+            actions.append(.suspend(isSuspended: agent.isSuspended(), noun: "Agent") { model.setSuspended(until: $0, agent: agent) })
+        }
+        return actions
     }
 
     /// The agent's own conversation, while it can take a call and is not already on one, as in Noodle.
@@ -241,75 +237,5 @@ private struct AgentProfile: View {
               calls.voiceCalls.call?.conversationID != direct.id else { return nil }
         return direct
     }
-
-    var body: some View {
-        let phase = model.phase(of: agent)
-        VStack(spacing: 14) {
-            AgentMark(agent: agent, size: 84, phase: phase)
-                .padding(.top, 6)
-            VStack(spacing: 6) {
-                Text(agent.displayName).font(.title2.weight(.semibold)).textSelection(.enabled)
-                HStack(spacing: 6) {
-                    Circle().fill(phase.color).frame(width: 6, height: 6)
-                    Text(model.phaseDetail(of: agent) ?? phase.title).lineLimit(2)
-                }
-                .font(.callout)
-                .foregroundStyle(phase == .failed ? Color.red : Color.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(.quaternary, in: Capsule())
-            }
-            Text(agent.publicDescription?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "No description yet.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity)
-            VStack(spacing: 8) {
-                // Up to four a row, as evenly as they split, as Noodle's profile.
-                ForEach(ProfileActionRows.split(actions), id: \.self) { row in
-                    HStack(spacing: 8) {
-                        ForEach(row, id: \.self) { item in
-                            if item != row.first { Divider().frame(height: 32).accessibilityHidden(true) }
-                            button(for: item)
-                        }
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(20)
-        .frame(width: 300)
-    }
-
-    /// Unsuspend for one already suspended; otherwise Suspend, which looks like the buttons beside it and
-    /// offers how long, as Noodle's does.
-    @ViewBuilder private var suspend: some View {
-        if agent.isSuspended() {
-            Button { model.setSuspended(until: nil, agent: agent) } label: { action("Unsuspend", "play.circle") }
-                .help("Unsuspend Agent")
-        } else {
-            Menu {
-                ForEach(LinkSuspensionChoice.allCases, id: \.self) { choice in
-                    Button(choice.title) { model.setSuspended(until: choice.until(), agent: agent) }
-                }
-            } label: { action("Suspend", "pause.circle") }
-                .menuStyle(.button)
-                .menuIndicator(.hidden)
-                .help("Suspend Agent")
-        }
-    }
-
-    private func action(_ title: String, _ symbol: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 18)).frame(height: 20)
-            Text(title).font(.caption)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-    }
 }
 
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
-}

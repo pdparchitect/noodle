@@ -853,6 +853,12 @@ import UniformTypeIdentifiers
         readTranscript(id, notifying: false)
         markRead(id)
         onSent?(id, body, [])
+        deliver(body, in: conversation)
+    }
+
+    /// Wakes a conversation's agents for the champion's message as Noodle does: in a team with a lead, the lead and
+    /// anyone the message names at once, the others after the lead's head start.
+    private func deliver(_ body: String, in conversation: BotConversation) {
         if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: body, repository: repository) }
     }
 
@@ -867,7 +873,7 @@ import UniformTypeIdentifiers
         drafts[id].attachments = []
         readTranscript(id, notifying: false)
         markRead(id)
-        if !isScripted { runtime.notify(members(of: conversation), in: conversation, body: voice.transcript ?? "", repository: repository) }
+        deliver(voice.transcript ?? "", in: conversation)
         onSent?(id, voice.transcript ?? VoiceMessage.messageBody, staged.map(\.originalFilename))
     }
 
@@ -972,7 +978,7 @@ import UniformTypeIdentifiers
             drafts.clear(id)
             readTranscript(id, notifying: false)
             markRead(id)
-            if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+            deliver(body, in: conversation)
         } catch { problem = error.localizedDescription }
     }
 
@@ -1055,7 +1061,7 @@ import UniformTypeIdentifiers
         let (copy, _) = try repository.forward(attachment, to: id, comment: comment, now: now)
         remember([copy])
         readTranscript(id, notifying: false)
-        if !isScripted { runtime.notify(members(of: conversation), repository: repository) }
+        deliver(comment.trimmingCharacters(in: .whitespacesAndNewlines), in: conversation)
         onSent?(id, comment.trimmingCharacters(in: .whitespacesAndNewlines), [copy.originalFilename])
     }
 

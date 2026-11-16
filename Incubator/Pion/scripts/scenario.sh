@@ -75,9 +75,11 @@ for key in CFBundleURLTypes NoodleAgentHostService NoodleApplicationIdentifier; 
 done
 /usr/libexec/PlistBuddy -c "Add :PionScenariosRoot string $scenarios" "$plist"
 
-# The sandbox and read access to the scenarios. No network, account or group entitlement.
+# The sandbox, read access to the scenarios, and the files the person picks in an open or save panel, as Pion
+# has, so Export as Zip… and Save… work. No network, account or group entitlement.
 rm -f -- "$entitlements"
 /usr/libexec/PlistBuddy -c "Add :com.apple.security.app-sandbox bool true" "$entitlements" >/dev/null
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.files.user-selected.read-write bool true" "$entitlements"
 readable="com.apple.security.temporary-exception.files.absolute-path.read-only"
 /usr/libexec/PlistBuddy -c "Add :$readable array" "$entitlements"
 /usr/libexec/PlistBuddy -c "Add :$readable:0 string $scenarios/" "$entitlements"
