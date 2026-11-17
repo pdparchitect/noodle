@@ -227,6 +227,36 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
     }
 
+    func testAnAdapterMayReachAServiceThePersonRunsOnThisMacOrTheLocalNetwork() throws {
+        let address = ToolField(key: "address", title: "Address", placeholder: "http://localhost:3000", kind: .address)
+        for kept in ["http://localhost:3000", "http://192.168.1.20:3000/grafana", "http://grafana:3000", "http://grafana.local",
+                     "http://100.101.102.103", "http://[::1]:3000", "https://grafana.example.com", "https://10.0.0.5:8443"] {
+            XCTAssertNoThrow(try address.validated(kept), kept)
+        }
+        XCTAssertEqual(try address.validated(" http://LOCALHOST:3000/ "), "http://localhost:3000")
+        for refused in ["http://grafana.example.com", "http://8.8.8.8", "http://172.32.0.1", "ftp://localhost",
+                        "https://user:pw@grafana.example.com", "https://grafana.example.com/?a=b", "localhost:3000", "grafana.example.com", ""] {
+            XCTAssertThrowsError(try address.validated(refused), refused)
+        }
+
+        let dashboards = ToolDefinition(id: "dashboards", name: "Dashboards", summary: "Dashboards.", defaultInstructions: "Look.",
+            iconName: "dashboards", configuration: .connection(.init(endpointTemplate: "{address}/api", fields: [address],
+                                                                     tokenHeader: "Authorization", adapter: "dashboards")))
+        let local = try dashboards.makeConnection(name: "Dashboards", values: ["address": "http://localhost:3000"])
+        XCTAssertEqual(local.endpoint.absoluteString, "http://localhost:3000/api")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var registry = ToolConnectionRegistry()
+        registry.connections = [local]
+        try registry.save(root: root)
+        XCTAssertEqual(try ToolConnectionRegistry.load(root: root).connections.map(\.endpoint), [local.endpoint])
+
+        // Only an adapter's: an MCP server stays at a public HTTPS address, and HTTP never leaves the local network.
+        XCTAssertThrowsError(try ToolConnection(name: "Local MCP", endpoint: URL(string: "http://localhost:3000/mcp")!))
+        XCTAssertThrowsError(try ToolConnection(name: "Local MCP", endpoint: URL(string: "https://localhost:3000/mcp")!))
+        XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: URL(string: "http://grafana.example.com/api")!, adapter: "dashboards"))
+    }
+
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })

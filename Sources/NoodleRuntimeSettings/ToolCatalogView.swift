@@ -261,7 +261,7 @@ private struct PresetSetUpForm: View {
                                 ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
                             }
                             .labelsHidden()
-                        case .host, .text, .identifier:
+                        case .host, .text, .identifier, .address:
                             TextField(item.placeholder, text: value, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
                         }
                     }

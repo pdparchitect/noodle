@@ -476,5 +476,5 @@ public enum PionAdapters {
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
                                                                   "google-cloud": GoogleCloud.adapter, "google-workspace": GoogleWorkspace.adapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
-                                                                  "tenable": Tenable.adapter, "censys": Censys.adapter]
+                                                                  "tenable": Tenable.adapter, "censys": Censys.adapter, "grafana": Grafana.adapter]
 }

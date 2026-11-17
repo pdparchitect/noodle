@@ -8,13 +8,13 @@ final class PionCatalogueTests: XCTestCase {
         XCTAssertEqual(Set(ids).count, ids.count, "an entry is listed twice")
         for security in ["virustotal", "shodan", "okta", "entra", "defender", "crowdstrike", "sentinelone", "splunk", "elastic", "sentinel",
                          "cloudflare-security", "wiz", "github-security", "abuseipdb", "urlscan", "greynoise", "otx", "haveibeenpwned",
-                         "aws", "google-cloud", "google-workspace"] {
+                         "aws", "google-cloud", "google-workspace", "grafana-cloud", "grafana-server"] {
             XCTAssertTrue(ids.contains(security), security)
         }
         for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "sentry", "semgrep", "perplexity"] {
             XCTAssertTrue(ids.contains(kept), kept)
         }
-        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter"] {
+        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter", "grafana"] {
             XCTAssertFalse(ids.contains(dropped), dropped)
         }
         let noodle = Set(ToolCatalog.noodle.map(\.id))

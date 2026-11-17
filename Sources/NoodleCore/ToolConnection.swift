@@ -99,7 +99,7 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
             throw ToolConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
         }
         self.name = try ConversationName.validated(name)
-        self.endpoint = try Self.validatedEndpoint(endpoint)
+        self.endpoint = try Self.validatedEndpoint(endpoint, adapter: self.adapter)
         self.description = String(description.prefix(1_000))
         self.instructions = String(instructions.prefix(20_000))
         let slug = name.lowercased().unicodeScalars.map {
@@ -194,6 +194,39 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         }
         return result
     }
+
+    /// A connection's address. One an app's adapter answers for may also be a service the person runs on this Mac
+    /// or the local network, and only there over plain HTTP, where its credentials never cross the internet.
+    /// Every other connection, an MCP server's above all, stays at a public HTTPS address.
+    public static func validatedEndpoint(_ url: URL, adapter: String?) throws -> URL {
+        guard adapter != nil else { return try validatedEndpoint(url) }
+        guard url.fragment == nil, let result = MessageLink.webURL(from: url), let host = result.host,
+              result.scheme == "https" || isLocalHost(host) else {
+            throw ToolConnectionError.message("Enter an HTTPS address, or an HTTP one on this Mac or the local network, without credentials.")
+        }
+        return result
+    }
+
+    /// Whether `host` names this Mac or a machine on the local network: localhost, a .local name, a name alone
+    /// such as grafana, or a loopback, private, link-local or carrier-grade NAT address, as Tailscale's are.
+    public static func isLocalHost(_ host: String) -> Bool {
+        let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        guard !host.isEmpty else { return false }
+        if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") { return true }
+        if host.contains(":") {
+            return host == "::1" || host.hasPrefix("fc") || host.hasPrefix("fd")
+                || ["fe8", "fe9", "fea", "feb"].contains(where: host.hasPrefix)
+        }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        let octets = labels.compactMap { UInt8($0) }
+        guard octets.count == 4, labels.count == 4 else {
+            return labels.count == 1 && octets.isEmpty
+        }
+        switch (octets[0], octets[1]) {
+        case (127, _), (10, _), (192, 168), (169, 254), (172, 16...31), (100, 64...127): return true
+        default: return false
+        }
+    }
 }
 
 public enum ToolConnectionError: LocalizedError {
@@ -266,7 +299,7 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
         }
         for connection in connections {
             _ = try ConversationName.validated(connection.name)
-            _ = try ToolConnection.validatedEndpoint(connection.endpoint)
+            _ = try ToolConnection.validatedEndpoint(connection.endpoint, adapter: connection.adapter)
             if let header = connection.tokenHeader, try ToolConnection.validatedTokenHeader(header) != header {
                 throw ToolConnectionError.message("Invalid saved MCP connection.")
             }

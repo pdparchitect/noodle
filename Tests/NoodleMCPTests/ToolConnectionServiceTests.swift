@@ -518,6 +518,20 @@ final class ToolConnectionServiceTests: XCTestCase {
         do { try await client.signIn(open, redirectURI: redirect, browser: Self.callback); XCTFail("an adapter connection signed in") } catch {}
     }
 
+    func testAnAdapterReachesAServiceOnThisMacOverItsOwnScheme() async throws {
+        let record = try ToolConnection(name: "Local", endpoint: URL(string: "http://localhost:3000/v3")!, tokenHeader: "x-apikey",
+                                        adapter: "lookup")
+        let adapter = LookupAdapter()
+        let client = service(vault: TestVault())
+        await client.useAdapters(["lookup": adapter])
+        try await client.saveToken("local-key", for: record)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "file", arguments: Data("{}".utf8)),
+                                     connection: record)
+        XCTAssertEqual(adapter.reached, [#"{"verdict":"harmless"}"#])
+        XCTAssertEqual(FixtureProtocol.state.adapterHeaders.first?["x-apikey"], "local-key")
+        XCTAssertTrue(adapter.refusedElsewhere, "the connection's key could be sent to another host")
+    }
+
     func testATokenGoesAfterItsConnectionsSchemeWhenItHasOne() async throws {
         let record = try ToolConnection(name: "Directory", endpoint: endpoint, tokenHeader: "Authorization", tokenScheme: "SSWS")
         let client = service(vault: TestVault())

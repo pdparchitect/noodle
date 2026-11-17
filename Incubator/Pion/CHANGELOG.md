@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Grafana in Settings › Tools is now Pion's own, read-only, in place of Grafana's MCP server; an account added before keeps working as a custom MCP connection.
+
 ### Added
 
+- Grafana Cloud and Grafana, for one you run, in Settings › Tools: agents find dashboards and the queries behind their panels, run PromQL, LogQL or other queries over a data source, and read firing alerts and annotations, only ever reading. A Grafana on this Mac or the local network can be reached over plain http.
 - Each service in Settings › Tools has Setup Steps in its form: where in the service's console to make the key, token or account it asks for, and the least access to give it.
 
 ## [0.3.0] - 2026-11-17

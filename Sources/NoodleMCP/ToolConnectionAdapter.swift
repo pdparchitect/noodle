@@ -14,8 +14,8 @@ public protocol ToolConnectionAdapter: Sendable {
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data
 }
 
-/// How an adapter reaches its service: only the connection's own host, over HTTPS, with the connection's
-/// credentials added and never shown to it. Redirects are not followed, so they cannot carry the credentials away.
+/// How an adapter reaches its service: only the connection's own host, over its own scheme (HTTPS, or HTTP for a
+/// service on this Mac or the local network), with the connection's credentials added and never shown to it. Redirects are not followed, so they cannot carry the credentials away.
 public struct ToolConnectionAccess: Sendable {
     let endpoint: URL
     let authorization: ConnectionAuthorization?
@@ -27,7 +27,7 @@ public struct ToolConnectionAccess: Sendable {
         // Only the connection's host; an AWS connection, any AWS service below it, since each request is signed for one.
         let host = url(request)?.host?.lowercased() ?? "", home = endpoint.host?.lowercased() ?? ""
         let reachable = host == home || (authorization?.coversSubdomains == true && host.hasSuffix("." + home))
-        guard let url = request.url, url.scheme?.lowercased() == "https", reachable, url.port == endpoint.port, url.user == nil else {
+        guard let url = request.url, url.scheme?.lowercased() == endpoint.scheme?.lowercased(), reachable, url.port == endpoint.port, url.user == nil else {
             throw ToolConnectionError.message("A tool adapter may only reach its own service.")
         }
         var request = request

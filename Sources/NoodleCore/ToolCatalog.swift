@@ -30,6 +30,9 @@ public struct ToolField: Equatable, Sendable {
         case text
         /// An ID such as a tenant or account: letters, digits, dots, hyphens and underscores.
         case identifier
+        /// The address of a service the person runs, such as https://grafana.example.com or http://localhost:3000,
+        /// with its port and path if it has them. Plain http only reaches this Mac or the local network.
+        case address
     }
     public struct Option: Equatable, Sendable {
         public let value: String
@@ -75,13 +78,22 @@ public struct ToolField: Equatable, Sendable {
                 throw ToolConnectionError.message("Enter \(title) on one line.")
             }
             return value
+        case .address:
+            let refusal = ToolConnectionError.message(
+                "Enter \(title) with https://, or http:// for this Mac or the local network, such as \(placeholder).")
+            guard value.count <= 500, let url = URL(string: value), let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  components.query == nil, components.fragment == nil, let address = MessageLink.webURL(from: url),
+                  let host = address.host, address.scheme == "https" || ToolConnection.isLocalHost(host) else { throw refusal }
+            var kept = address.absoluteString
+            while kept.hasSuffix("/") { kept.removeLast() }
+            return kept
         }
     }
 
     /// How the value goes into an address.
     func inAddress(_ value: String) -> String {
         switch kind {
-        case .host, .choice, .identifier: value
+        case .host, .choice, .identifier, .address: value
         case .text: value.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn:
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? value
         }
@@ -223,10 +235,11 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
             guard let url = URL(string: Self.fill(template, fields: fields, values: settings)) else {
                 throw ToolConnectionError.message("These details make no valid address.")
             }
-            return try ToolConnection.validatedEndpoint(url)
+            return try ToolConnection.validatedEndpoint(url, adapter: adapter)
         }
         let client = try clientCredentials.map {
-            ConnectionClientCredentials(tokenEndpoint: try address($0.tokenEndpointTemplate), scope: $0.scope, parameters: $0.parameters)
+            ConnectionClientCredentials(tokenEndpoint: try ToolConnection.validatedEndpoint(address($0.tokenEndpointTemplate)),
+                                        scope: $0.scope, parameters: $0.parameters)
         }
         return (try endpointTemplate.map(address) ?? endpoint, fields.isEmpty ? nil : settings, client)
     }
