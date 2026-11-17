@@ -53,7 +53,8 @@ extension PionModel {
     /// A drop on a sidebar row, as in Noodle: a file dragged out of another conversation is forwarded there, and
     /// anything else waits in that conversation's draft, which opens.
     func drop(_ providers: [NSItemProvider], onConversation id: UUID) -> Bool {
-        guard !providers.isEmpty, conversation(id) != nil, investigation(id)?.isClosed != true else { return false }
+        // Only where a message could be sent, as in Noodle.
+        guard !providers.isEmpty, let conversation = conversation(id), takesMessages(conversation) else { return false }
         Task {
             await AttachmentDrag.drop(providers, on: id, forward: { try self.forward($0, to: id, comment: "") },
                                       stage: { others in

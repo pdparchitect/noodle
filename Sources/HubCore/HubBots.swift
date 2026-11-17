@@ -536,8 +536,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         let updated = try repository.updateGroup(conversationID: id, named: draft.name, publicDescription: draft.publicDescription,
                                                  participantIDs: bots.map(\.id), existingAgents: try repository.loadAgents())
         // As Group Info does in Noodle: the bots hear who joined or left, and of a new description.
-        if running || watching,
-           Set(before.participantIDs) != Set(updated.participantIDs) || before.publicDescription != updated.publicDescription {
+        if running || watching, BotConversation.editWakesMembers(from: before, to: updated) {
             runtime.notify(bots, repository: repository)
         }
         try restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
@@ -926,7 +925,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         }
         let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
                                                      attachmentIDs: attachmentIDs, task: task, id: id)
-        if running || watching { runtime.notify(reached, repository: repository) }
+        // As on a Mac: a group's lead, and anyone named, hears it first.
+        if running || watching { runtime.notify(reached, in: conversation, body: body, repository: repository) }
         // The bot reads it from its inbox; the call hears about it here.
         if let call = calls[conversationID] {
             runtime.sendToVoiceCall(agentID: call.agentID, VoiceCallDocumentation.typedMessage(

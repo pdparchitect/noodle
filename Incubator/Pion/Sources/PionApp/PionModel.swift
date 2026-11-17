@@ -302,7 +302,11 @@ import UniformTypeIdentifiers
     private func reloadWorkspace() {
         let allAgents = ((try? repository.loadAgents()) ?? [])
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
-        if allAgents != everyAgent { everyAgent = allAgents }
+        if allAgents != everyAgent {
+            everyAgent = allAgents
+            // As in Noodle: the runtime forgets what it kept for agents that are gone.
+            if !isScripted { runtime.refresh(agents: allAgents) }
+        }
         let loadedAgents = allAgents.filter { $0.archivedAt == nil }
         if loadedAgents != agents {
             agents = loadedAgents
@@ -314,7 +318,10 @@ import UniformTypeIdentifiers
         if allConversations != everyConversation { everyConversation = allConversations }
         if changedSet {
             onConversationsChanged?()
-            try? transcriptPositions.retainConversations(Set(allConversations.map(\.id)))
+            let known = Set(allConversations.map(\.id))
+            drafts.retainConversations(known)
+            try? transcriptPositions.retainConversations(known)
+            try? patchReviewState.retainConversations(known)
         }
         runtime.archivedAgentIDs = Set(allAgents.filter { $0.archivedAt != nil }.map(\.id))
         let loadedConversations = allConversations.filter { !$0.isArchived(among: allAgents) }
@@ -605,7 +612,8 @@ import UniformTypeIdentifiers
         return snapshot.pauseSummary ?? agent.status
     }
 
-    func isUnread(_ id: UUID) -> Bool { selection != id && unread.unread.contains(id) }
+    /// As in Noodle, what is on screen is read as messages arrive; a selected conversation behind other apps is not.
+    func isUnread(_ id: UUID) -> Bool { unread.unread.contains(id) }
 
     /// Unread and not a muted group, as Noodle shows it: a muted group's row is not marked.
     func countsAsUnread(_ id: UUID) -> Bool { isUnread(id) && notifications(of: id) != .muted }
@@ -700,7 +708,7 @@ import UniformTypeIdentifiers
     /// The unread conversations the Dock counts, as Noodle counts them: a muted group never, a group in Mentions only
     /// once an unread reply names the champion.
     var badgedConversationIDs: Set<UUID> {
-        unread.badged(notifications(of:)).subtracting([selection].compactMap { $0 })
+        unread.badged(notifications(of:))
     }
 
     /// Tells the Dock again, as once notifications are allowed and the badge can show.
@@ -1113,9 +1121,13 @@ import UniformTypeIdentifiers
         return attached
     }
 
+    /// As in Noodle: the file goes first, so one that can't be removed stays in the draft and says why.
     func removePending(_ attachment: ConversationAttachment, from id: UUID) {
-        drafts[id].attachments.removeAll { $0.id == attachment.id }
-        try? repository.removeAttachment(attachment)
+        do {
+            try repository.removeAttachment(attachment)
+            drafts[id].attachments.removeAll { $0.id == attachment.id }
+            attachments[id]?[attachment.id] = nil
+        } catch { problem = error.localizedDescription }
     }
 
     func attachment(_ id: UUID, in conversation: UUID) -> ConversationAttachment? { attachments[conversation]?[id] }

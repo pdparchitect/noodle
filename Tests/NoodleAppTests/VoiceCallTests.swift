@@ -464,6 +464,9 @@ private struct FixtureError: LocalizedError {
         f.store.setDraft("Typed during the call", for: f.directA.id)
         f.store.sendDraft(to: f.directA.id)
         XCTAssertEqual(process.voiceCallTexts, [VoiceCallDocumentation.typedMessage(body: "Typed during the call", attachmentNames: [])])
+        // Sent from a Shortcut, as Pion's do, it reaches the call too.
+        _ = try f.store.sendCommand("From a Shortcut", to: f.directA.id)
+        XCTAssertEqual(process.voiceCallTexts.last, VoiceCallDocumentation.typedMessage(body: "From a Shortcut", attachmentNames: []))
         f.store.voiceCalls.hangUp()
         XCTAssertEqual(process.voiceCallEnds, 1)
     }

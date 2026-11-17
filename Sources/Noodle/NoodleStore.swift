@@ -2136,6 +2136,8 @@ final class NoodleStore {
         let attachments = try files.map { try storeAttachment($0, in: conversationID) }
         let message = try PersonMessage.send(command, files: attachments, to: conversation,
                                              members: participants(for: conversation), runtime: runtime, repository: repository)
+        // As a typed message: a call in this conversation hears it.
+        voiceCalls.shared(in: conversation.id, body: message.body, attachmentNames: attachments.map(\.originalFilename))
         markConversationRead(conversation.id)
         messagesByConversation[conversation.id, default: []].append(message)
         if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {

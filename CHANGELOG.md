@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- A message sent with a Shortcut reaches a call under way in that conversation, as a typed one does. A message sent from your iPhone through This Mac lets a group's lead hear it first, as one sent on the Mac does.
 - A group's lead is marked with a star on its picture in the members grid, so making a bot the lead no longer shifts the other members.
 - A call no longer hears earlier calls in its conversation as things said; it starts from what was written.
 - New Bot no longer suggests the name of a bot you already have.

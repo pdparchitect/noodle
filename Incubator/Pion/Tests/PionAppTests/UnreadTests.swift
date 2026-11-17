@@ -72,6 +72,8 @@ import XCTest
         }
         model.refresh()
         XCTAssertTrue(model.unread.unread.contains(direct.id), "Selected but not on screen")
+        XCTAssertTrue(model.isUnread(direct.id), "Its row is marked, as in Noodle")
+        XCTAssertEqual(model.badgedConversationIDs, [direct.id], "and the Dock counts it")
         XCTAssertFalse(model.isUnread(group.id), "On screen in its own window")
     }
 
