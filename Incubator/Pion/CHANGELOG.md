@@ -37,6 +37,7 @@
 
 ### Fixed
 
+- An archived agent can be deleted from its editor in Settings › Agents; Delete Agent did nothing for one. A group or Investigation with an archived member can be edited again, and shows that member greyed out until removed, as in Noodle; saving any change failed.
 - A picture or file pasted in a conversation while the message field is out of focus waits in the field, as in Noodle.
 - A group's lead is marked with a star on its picture in the members grid, as in Noodle, so making an agent the lead no longer shifts the others.
 - Closing the welcome asks first, as in Noodle, and leaving counts as Not Now instead of bringing the welcome back.

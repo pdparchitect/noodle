@@ -1807,7 +1807,11 @@ final class NoodleStore {
         }
 
         do {
-            try runtime.delete(conversation, agent: agent, agents: agents.filter { runsHere($0.id) }, repository: repository)
+            if let agent {
+                try runtime.deleteAgent(agent, repository: repository)
+            } else {
+                try runtime.deleteGroup(conversation, members: agents.filter { runsHere($0.id) }, repository: repository)
+            }
 
             drafts.clear(conversation.id)
             if selectedConversationID == conversation.id {

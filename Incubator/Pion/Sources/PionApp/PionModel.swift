@@ -854,8 +854,9 @@ import UniformTypeIdentifiers
         _ = try ConversationName.validated(name)
         let folders = try folders.map { try AgentFolder.validated($0, protecting: AgentFolder.protectedLocations(root: repository.rootURL)) }
         let before = conversation(group.id) ?? group
+        // Archived agents too: as in Noodle, they stay members until removed.
         let updated = try repository.updateGroup(conversationID: group.id, named: name, publicDescription: description,
-                                                 participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+                                                 participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: updated))
@@ -1009,11 +1010,28 @@ import UniformTypeIdentifiers
     /// close rather than go.
     @discardableResult
     func delete(_ conversation: BotConversation) -> Bool {
-        let agent = conversation.kind == .direct ? self.agent(conversation.participantIDs.first) : nil
+        // Archived agents too, which Settings still lists.
+        if conversation.kind == .direct {
+            guard let agent = everyAgent.first(where: { $0.id == conversation.participantIDs.first }) else { return false }
+            return delete(agent: agent)
+        }
+        return removing(conversation.id) { try runtime.deleteGroup(conversation, members: agents, repository: repository) }
+    }
+
+    /// Deletes an agent, archived or not, with its workspace and its own conversation.
+    @discardableResult
+    func delete(agent: AgentRecord) -> Bool {
+        let direct = everyConversation.first { $0.kind == .direct && $0.participantIDs == [agent.id] }
+        return removing(direct?.id) { try runtime.deleteAgent(agent, repository: repository) }
+    }
+
+    private func removing(_ conversationID: UUID?, _ delete: () throws -> Void) -> Bool {
         do {
-            try runtime.delete(conversation, agent: agent, agents: agents, repository: repository)
-            drafts.clear(conversation.id)
-            if selection == conversation.id { selection = nil }
+            try delete()
+            if let conversationID {
+                drafts.clear(conversationID)
+                if selection == conversationID { selection = nil }
+            }
             reload()
             return true
         } catch {
@@ -1049,7 +1067,7 @@ import UniformTypeIdentifiers
         guard investigation?.isClosed != true else { problem = "Reopen this investigation before changing its lead."; return }
         guard (self.conversation(conversation.id) ?? conversation).lead != agentID else { return }
         do {
-            let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: agents, now: now)
+            let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: everyAgent, now: now)
             if investigation != nil {
                 try store.append(AuditEntry(at: now, actor: .champion(champion), event: "lead",
                                             detail: agentID.flatMap { agent($0)?.displayName } ?? "No lead"), to: conversation.id)
@@ -1195,7 +1213,7 @@ import UniformTypeIdentifiers
         let before = Set(previous.participantIDs)
         guard members != before, !members.isEmpty else { return }
         do {
-            let updated = try repository.updateGroupParticipants(conversationID: conversation.id, participantIDs: Array(members), existingAgents: agents, now: now)
+            let updated = try repository.updateGroupParticipants(conversationID: conversation.id, participantIDs: Array(members), existingAgents: everyAgent, now: now)
             reload()
             synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: previous, to: updated))
             let added = agents.filter { members.subtracting(before).contains($0.id) }.map(\.displayName)
@@ -1233,7 +1251,7 @@ import UniformTypeIdentifiers
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
         let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
-            publicDescription: draft.objective, participantIDs: Array(members), existingAgents: agents, folders: folders, now: now)
+            publicDescription: draft.objective, participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
         let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
             var events: [(event: String, detail: String)] = []
             if value.title != title { events.append(("title", title)); value.title = title }

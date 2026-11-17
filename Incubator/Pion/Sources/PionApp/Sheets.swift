@@ -48,7 +48,8 @@ struct ConversationChoiceRow: View {
 /// Noodle's member picker, with Pion's words and agent marks.
 extension GroupMemberPicker {
     init(model: PionModel, selection: Binding<Set<UUID>>, lead: Binding<UUID?>) {
-        self.init(agents: model.agents, selectedIDs: selection, lead: lead,
+        // Every agent, as in Noodle: an archived member shows greyed until removed, and is never offered to add.
+        self.init(agents: model.everyAgent, selectedIDs: selection, lead: lead,
                   words: GroupMemberWords(bot: "agent", bots: "agents", group: "team"),
                   member: { AnyView(AgentProfileButton(model: model, agent: $0, size: 48, inSheet: true)) },
                   chooserPicture: { AnyView(AgentMark(agent: $0, size: 32)) })
@@ -426,7 +427,7 @@ struct AgentEditorSheet: View {
         // As Noodle's Delete Bot: it asks first, saying what goes with the agent.
         .confirmationDialog("Delete Agent?", isPresented: $confirmingDeletion, titleVisibility: .visible) {
             Button("Delete Agent", role: .destructive) {
-                if let agent, let direct = model.directConversation(of: agent), model.delete(direct) { dismiss() }
+                if let agent, model.delete(agent: agent) { dismiss() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {

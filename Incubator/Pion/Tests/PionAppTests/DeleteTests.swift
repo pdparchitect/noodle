@@ -25,6 +25,21 @@ import XCTest
         XCTAssertNotNil(model.agent(morgan.id))
     }
 
+    /// As in Noodle: an archived agent, which Settings still lists, can be deleted with its workspace and conversation.
+    func testAnArchivedAgentCanBeDeleted() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionDelete-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let direct = try XCTUnwrap(model.directConversation(of: avery))
+        model.setArchived(true, agentID: avery.id)
+        XCTAssertTrue(model.delete(agent: avery))
+        XCTAssertFalse(model.everyAgent.contains { $0.id == avery.id })
+        XCTAssertFalse(model.everyConversation.contains { $0.id == direct.id })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: model.repository.directory(for: avery).path))
+    }
+
     /// As in Noodle: a deleted group's own notification level and pin go with it, kept only while it was there;
     /// an archived group keeps both, since it can come back.
     func testADeletedGroupLeavesNoLevelOrPinBehind() throws {

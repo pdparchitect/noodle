@@ -188,6 +188,22 @@ import XCTest
         XCTAssertFalse(model.isUnread(direct.id))
     }
 
+    /// As in Noodle: an archived agent stays a member of its groups until removed, so a group with one can still
+    /// be edited, and an Investigation too.
+    func testAGroupWithAnArchivedMemberCanStillBeEdited() throws {
+        let avery = try agent("Avery"), morgan = try agent("Morgan")
+        let group = try model.createGroup(name: "Triage", description: nil, members: [avery.id, morgan.id])
+        let investigation = try model.open(.init(title: "Beacon", lead: avery.id, staff: [morgan.id]))
+        model.setArchived(true, agentID: morgan.id)
+        let renamed = try model.updateGroup(group, name: "Response", description: nil, members: [avery.id, morgan.id])
+        XCTAssertEqual(renamed.displayName, "Response")
+        XCTAssertEqual(Set(renamed.participantIDs), [avery.id, morgan.id])
+        let edited = try model.updateInvestigation(investigation, draft: .init(title: "Beacon on LT-0423", lead: avery.id, staff: [morgan.id]))
+        XCTAssertEqual(edited.title, "Beacon on LT-0423")
+        let removed = try model.updateGroup(renamed, name: "Response", description: nil, members: [avery.id])
+        XCTAssertEqual(removed.participantIDs, [avery.id], "An archived member can be removed")
+    }
+
     /// Settings > Groups lists archived groups, but not Investigations, which close instead, and brings one back.
     func testArchivedGroupsLeaveTheSidebarButStayInSettings() throws {
         let avery = try agent("Avery")

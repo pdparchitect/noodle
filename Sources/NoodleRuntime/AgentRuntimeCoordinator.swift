@@ -1850,24 +1850,24 @@ public final class AgentRuntimeCoordinator {
 }
 
 extension AgentRuntimeCoordinator {
-    /// Deletes a bot this app runs, with its workspace and its own conversation, or a group with its messages,
-    /// as every app does. A group's members whose folders change start again; a bot that could not be deleted
-    /// starts again too.
-    public func delete(_ conversation: BotConversation, agent: AgentRecord?, agents: [AgentRecord], repository: WorkspaceRepository) throws {
-        if let agent {
-            stop(agentID: agent.id, revokeAccess: false)
-            do {
-                try repository.deleteAgent(agent)
-                stop(agentID: agent.id)
-            } catch {
-                start(agent: agent, repository: repository)
-                throw error
-            }
-        } else {
-            try repository.deleteConversation(id: conversation.id)
-            let changed = BotConversation.botsWithChangedFolders(from: conversation, to: nil)
-            for member in agents where changed.contains(member.id) { restart(agent: member, repository: repository) }
+    /// Deletes a bot this app runs, with its workspace and its own conversation. A bot that could not be deleted
+    /// starts again.
+    public func deleteAgent(_ agent: AgentRecord, repository: WorkspaceRepository) throws {
+        stop(agentID: agent.id, revokeAccess: false)
+        do {
+            try repository.deleteAgent(agent)
+            stop(agentID: agent.id)
+        } catch {
+            start(agent: agent, repository: repository)
+            throw error
         }
+    }
+
+    /// Deletes a group with its messages. Those of `members` whose folders change start again.
+    public func deleteGroup(_ group: BotConversation, members: [AgentRecord], repository: WorkspaceRepository) throws {
+        try repository.deleteConversation(id: group.id)
+        let changed = BotConversation.botsWithChangedFolders(from: group, to: nil)
+        for member in members where changed.contains(member.id) { restart(agent: member, repository: repository) }
     }
 }
 
