@@ -103,6 +103,11 @@ struct ConversationView: View {
         }
         // As in Noodle: files dropped anywhere on the conversation wait in its message field.
         .conversationFileDrop(isEnabled: { investigation?.isClosed != true }) { model.attachDropped($0, to: conversation.id) }
+        // As in Noodle: a picture or file pasted with the message field out of focus waits there too.
+        .onPasteCommand(of: AttachmentTransfer.pasteContentTypes) { providers in
+            guard investigation?.isClosed != true else { return }
+            model.attachDropped(providers, to: conversation.id, context: .paste)
+        }
         .environment(\.conversationAnnotations, conversationAnnotations)
         .environment(\.forwardAttachment) { forwarding = $0 }
         .sheet(item: $forwarding) { attachment in

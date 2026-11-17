@@ -64,12 +64,12 @@ extension PionModel {
         return true
     }
 
-    /// Files dropped on the conversation itself, as in Noodle: they wait in its message field.
-    func attachDropped(_ providers: [NSItemProvider], to id: UUID) {
+    /// Files dropped or pasted on the conversation itself, as in Noodle: they wait in its message field.
+    func attachDropped(_ providers: [NSItemProvider], to id: UUID, context: AttachmentTransfer.Context = .drop) {
         markRead(id)
         Task {
             for provider in providers {
-                do { attach([try await AttachmentTransfer.load(provider, context: .drop)], to: id) }
+                do { attach([try await AttachmentTransfer.load(provider, context: context)], to: id) }
                 catch { problem = error.localizedDescription }
             }
         }
