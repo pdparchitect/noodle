@@ -448,7 +448,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             avatarImageData: draft.avatarImageData, backstory: draft.backstory)
         do {
             if let profile = draft.profile { try repository.updateAgentHarnessProfile(created.agent, profile: profile) }
-            if let voice = validVoice(draft.voice, on: provider) { try repository.updateAgentVoice(created.agent, voice: voice) }
+            if let voice = provider.validVoice(draft.voice) { try repository.updateAgentVoice(created.agent, voice: voice) }
             if draft.imageGeneration { try imageGeneration?.assign(true, to: created.agent.id) }
             access.setOwner(user, ofBot: created.agent.id)
         } catch {
@@ -486,7 +486,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         try repository.updateAgentBackstory(updated, backstory: draft.backstory)
         try repository.updateAgentHarnessProfile(updated, profile: draft.profile)
         // A device from before voices sends none, which keeps the one the bot has.
-        if draft.voice != nil { try repository.updateAgentVoice(updated, voice: validVoice(draft.voice, on: provider)) }
+        if draft.voice != nil { try repository.updateAgentVoice(updated, voice: provider.validVoice(draft.voice)) }
         try imageGeneration?.assign(draft.imageGeneration, to: updated.id)
         // As Edit Bot does in Noodle, whose runtime runs the bot when this only watches.
         if running || watching { runtime.restart(agent: updated, repository: repository) }
@@ -1811,7 +1811,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         try repository.updateAgentHarnessProfile(updated, profile: harness.profile)
         // A voice belongs to its harness; on another, the Hub picks one for its name.
         if agent.harnessIdentifier != harness.provider.rawValue {
-            try repository.updateAgentVoice(updated, voice: validVoice(try repository.loadAgentVoice(agent), on: harness.provider))
+            try repository.updateAgentVoice(updated, voice: harness.provider.validVoice(try repository.loadAgentVoice(agent)))
         }
         if running || watching { runtime.restart(agent: updated, repository: repository) }
         onChange?(owner.id, .botsChanged)
@@ -1843,10 +1843,6 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             throw LinkError("Your plan \(verb) \(model) on \(provider.displayName).")
         }
         return provider
-    }
-
-    private func validVoice(_ voice: String?, on provider: HarnessProvider) -> String? {
-        HarnessProvider.validVoice(voice, harnessIdentifier: provider.rawValue)
     }
 
     /// One of the user's bots that runs here, rather than on one of their devices.

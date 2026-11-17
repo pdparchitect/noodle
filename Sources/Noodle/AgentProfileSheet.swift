@@ -60,20 +60,30 @@ struct AgentProfileSheet: View {
                 try await store.browsers.open(BrowserLink.url(browser: id, tab: nil))
             }))
         }
-        let dismiss = dismiss
-        return ProfileCardAction.botActions(
-            noun: "Bot", name: agent.displayName, reply: reply, message: directMessage, canMessage: canOpenDirectMessage,
-            call: callableConversation.map { conversation in { store.startVoiceCall(in: conversation) } }, close: { dismiss() },
-            extra: companions,
-            // A bot someone shared is only talked with.
-            edit: isShared ? nil : edit,
-            usage: isShared ? nil : {
+        var actions: [ProfileCardAction] = []
+        if let reply { actions.append(.reply(reply)) }
+        if let directMessage { actions.append(.message(canOpen: canOpenDirectMessage, directMessage)) }
+        if let conversation = callableConversation {
+            actions.append(.call(agent.displayName) {
+                store.startVoiceCall(in: conversation)
+                // The call's controls are in its conversation, so show it.
+                if let directMessage { directMessage() } else { dismiss() }
+            })
+        }
+        actions += companions
+        // A bot someone shared is only talked with.
+        if !isShared {
+            actions.append(.edit("Bot", edit))
+            actions.append(.usage {
                 store.usage.agentFilter = agent.id
                 openWindow(id: UsageView.windowID)
                 dismiss()
-            },
-            suspension: current.archivedAt == nil && store.canSuspend(agent.id)
-                ? (current.isSuspended(), { store.setSuspended(until: $0, agentID: agent.id) }) : nil)
+            })
+        }
+        if current.archivedAt == nil, store.canSuspend(agent.id) {
+            actions.append(.suspend(isSuspended: current.isSuspended(), noun: "Bot") { store.setSuspended(until: $0, agentID: agent.id) })
+        }
+        return actions
     }
 }
 

@@ -152,10 +152,9 @@ extension HarnessProvider {
         }
     }
 
-    /// `voice` when the harness named by `harnessIdentifier` has it; nil otherwise, which leaves the choice to the harness.
-    public static func validVoice(_ voice: String?, harnessIdentifier: String?) -> String? {
-        guard let voice, let provider = harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
-              provider.voices.contains(where: { $0.id == voice }) else { return nil }
+    /// `voice` when this harness has it; nil otherwise, which leaves the choice to the harness.
+    public func validVoice(_ voice: String?) -> String? {
+        guard let voice, voices.contains(where: { $0.id == voice }) else { return nil }
         return voice
     }
 

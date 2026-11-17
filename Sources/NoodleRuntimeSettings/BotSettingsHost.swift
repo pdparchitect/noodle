@@ -2,8 +2,7 @@ import NoodleCore
 import NoodleRuntime
 import SwiftUI
 
-/// What the Harness and Bots settings need from the app that runs bots.
-/// Noodle and Noodle Hub each provide it.
+/// What the Harness and Bots settings need from the app that runs bots, which each such app provides.
 @MainActor public protocol BotSettingsHost: AnyObject {
     var runtime: AgentRuntimeCoordinator { get }
     var agents: [AgentRecord] { get }

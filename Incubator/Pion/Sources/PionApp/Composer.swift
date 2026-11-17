@@ -84,10 +84,10 @@ struct Composer: View {
                     focusSidebar: window.hasSidebar ? { window.sidebarFocusRequest = UUID() } : nil,
                     // As Noodle's: a pasted picture or file attaches, and so does long text, or any with Paste as Attachment.
                     pasteAttachments: { pasteboard in
-                        AttachmentTransfer.paste(AttachmentTransfer.pastedPayloads(from: pasteboard)) { model.attach([$0], to: conversation.id) }
+                        AttachmentTransfer.paste(from: pasteboard) { model.attach([$0], to: conversation.id) }
                     },
                     forcePasteAttachments: { pasteboard in
-                        AttachmentTransfer.paste(AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: true)) {
+                        AttachmentTransfer.paste(from: pasteboard, textAsAttachment: true) {
                             model.attach([$0], to: conversation.id)
                         }
                     },

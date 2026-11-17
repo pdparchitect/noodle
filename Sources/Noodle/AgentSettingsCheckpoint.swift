@@ -53,15 +53,10 @@ import NoodleCore
     func undoing<T>(_ change: () throws -> T, undo: () throws -> Void = {}) throws -> T {
         do { return try change() } catch {
             do { try restore(); try undo() } catch let failure {
-                throw RollbackError(message: Self.detail(error, rollback: failure))
+                throw RollbackError(message: "\(error.localizedDescription) Previous settings could not be fully restored: \(failure.localizedDescription)")
             }
             throw error
         }
-    }
-
-    /// A failed change's message, with why it could not be fully undone.
-    static func detail(_ error: Error, rollback: Error) -> String {
-        "\(error.localizedDescription) Previous settings could not be fully restored: \(rollback.localizedDescription)"
     }
 
     private struct RollbackError: LocalizedError {

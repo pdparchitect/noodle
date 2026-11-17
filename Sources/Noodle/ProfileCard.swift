@@ -30,30 +30,29 @@ struct ProfileCardAction: Identifiable {
 }
 
 extension ProfileCardAction {
-    /// A bot's actions, in the same order in every app: Reply in a group, Message, Call, the app's own such as
-    /// Computer and Browser, Edit, Usage, then Suspend. Calling shows the call's conversation, or else closes.
-    /// A nil action is left out; Message without a conversation to open is dimmed.
-    @MainActor static func botActions(noun: String, name: String, reply: (() -> Void)?, message: (() -> Void)?,
-                                      canMessage: Bool = true, call: (() -> Void)?, close: @escaping () -> Void,
-                                      extra: [ProfileCardAction] = [], edit: (() -> Void)?, usage: (() -> Void)?,
-                                      suspension: (isSuspended: Bool, set: (Date?) -> Void)?) -> [Self] {
-        var actions: [Self] = []
-        if let reply { actions.append(.button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: reply)) }
-        if let message {
-            actions.append(.button("Message", systemImage: "bubble.left", help: "Direct Message", disabled: !canMessage, action: message))
-        }
-        if let call {
-            actions.append(.button("Call", systemImage: "phone", help: "Call \(name)") {
-                call()
-                // The call's controls are in its conversation, so show it.
-                (message ?? close)()
-            })
-        }
-        actions += extra
-        if let edit { actions.append(.button("Edit", systemImage: "pencil", help: "Edit \(noun)", action: edit)) }
-        if let usage { actions.append(.button("Usage", systemImage: "chart.bar", help: "Show Usage", action: usage)) }
-        if let suspension { actions.append(.suspend(isSuspended: suspension.isSuspended, noun: noun, set: suspension.set)) }
-        return actions
+    // A bot's profile lists them in this order: Reply, Message, Call, the app's own such as Computer, Edit, Usage,
+    // then Suspend.
+
+    static func reply(_ action: @escaping () -> Void) -> Self {
+        .button("Reply", systemImage: "arrowshape.turn.up.left", help: "Reply in Group", action: action)
+    }
+
+    /// Dimmed when there is no conversation to open.
+    static func message(canOpen: Bool = true, _ action: @escaping () -> Void) -> Self {
+        .button("Message", systemImage: "bubble.left", help: "Direct Message", disabled: !canOpen, action: action)
+    }
+
+    static func call(_ name: String, _ action: @escaping () -> Void) -> Self {
+        .button("Call", systemImage: "phone", help: "Call \(name)", action: action)
+    }
+
+    /// `noun` is what the app calls a bot.
+    static func edit(_ noun: String, _ action: @escaping () -> Void) -> Self {
+        .button("Edit", systemImage: "pencil", help: "Edit \(noun)", action: action)
+    }
+
+    static func usage(_ action: @escaping () -> Void) -> Self {
+        .button("Usage", systemImage: "chart.bar", help: "Show Usage", action: action)
     }
 }
 

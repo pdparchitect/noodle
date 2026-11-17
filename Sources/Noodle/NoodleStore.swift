@@ -1400,46 +1400,43 @@ final class NoodleStore {
             return false
         }
         var created: CreatedAgentWorkspace?
-        var checkpoint: AgentSettingsCheckpoint?
         do {
             try connectionsController.validateAssignment(mcpConnectionIDs)
             try computers.validate(computerIDs)
             try browsers.validate(browserIDs)
             try calendars.validate(calendarIDs)
             try reminders.validate(reminderListIDs)
-            checkpoint = try AgentSettingsCheckpoint(repository: repository)
-            let result = try repository.createAgent(
-                named: name, harnessIdentifier: harnessIdentifier,
-                modelIdentifier: modelIdentifier, reasoningEffort: reasoningEffort,
-                publicDescription: publicDescription, avatarSymbolName: avatarSymbolName,
-                avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData, backstory: backstory
-            )
-            created = result
-            if !folders.isEmpty { try repository.updateAgentFolders(result.agent, folders: folders) }
-            if let profile = validHarnessProfile(harnessProfile, harnessIdentifier: harnessIdentifier) {
-                try repository.updateAgentHarnessProfile(result.agent, profile: profile)
-            }
-            if let voice = validVoice(voice, harnessIdentifier: harnessIdentifier) {
-                try repository.updateAgentVoice(result.agent, voice: voice)
-            }
-            try connectionsController.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
-            try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
-            try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
-            try calendars.assign(calendarIDs, to: result.agent, synchronizeWorkspace: false)
-            try reminders.assign(reminderListIDs, to: result.agent, synchronizeWorkspace: false)
-            try self.imageGeneration.assign(imageGeneration, to: result.agent)
-            try repository.synchronizeAgentWorkspace(result.agent)
-        } catch let failure {
-            var detail = failure.localizedDescription
-            do {
-                try checkpoint?.restore()
-                try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+            try AgentSettingsCheckpoint(repository: repository).undoing({
+                let result = try repository.createAgent(
+                    named: name, harnessIdentifier: harnessIdentifier,
+                    modelIdentifier: modelIdentifier, reasoningEffort: reasoningEffort,
+                    publicDescription: publicDescription, avatarSymbolName: avatarSymbolName,
+                    avatarColorIndex: avatarColorIndex, avatarImageData: avatarImageData, backstory: backstory
+                )
+                created = result
+                if !folders.isEmpty { try repository.updateAgentFolders(result.agent, folders: folders) }
+                if let profile = validHarnessProfile(harnessProfile, harnessIdentifier: harnessIdentifier) {
+                    try repository.updateAgentHarnessProfile(result.agent, profile: profile)
+                }
+                if let voice = validVoice(voice, harnessIdentifier: harnessIdentifier) {
+                    try repository.updateAgentVoice(result.agent, voice: voice)
+                }
+                try connectionsController.assign(mcpConnectionIDs, to: result.agent, synchronizeWorkspace: false)
+                try computers.assign(computerIDs, to: result.agent, synchronizeWorkspace: false)
+                try browsers.assign(browserIDs, to: result.agent, synchronizeWorkspace: false)
+                try calendars.assign(calendarIDs, to: result.agent, synchronizeWorkspace: false)
+                try reminders.assign(reminderListIDs, to: result.agent, synchronizeWorkspace: false)
+                try self.imageGeneration.assign(imageGeneration, to: result.agent)
+                try repository.synchronizeAgentWorkspace(result.agent)
+            }, undo: {
+                try reloadAssignments()
                 if let created {
                     try repository.deleteConversation(id: created.conversation.id)
                     try FileManager.default.removeItem(at: repository.storage(for: created.agent.id).package)
                 }
-            } catch { detail = AgentSettingsCheckpoint.detail(failure, rollback: error) }
-            errorMessage = detail
+            })
+        } catch {
+            errorMessage = error.localizedDescription
             return false
         }
         guard let created else { return false }
@@ -1564,7 +1561,7 @@ final class NoodleStore {
             if let checkpoint {
                 do {
                     try checkpoint.restore()
-                    try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments(); try calendars.reloadAssignments(); try reminders.reloadAssignments(); try self.imageGeneration.reloadAssignments()
+                    try reloadAssignments()
                     // Generated skills derive from the restored settings. A damaged
                     // workspace may still need repair before it can be synchronized.
                     try repository.synchronizeAgentWorkspace(agent)
@@ -1590,6 +1587,12 @@ final class NoodleStore {
             }
         }
         return true
+    }
+
+    /// Every kind of assignment read again from disk, after a checkpoint put the files back.
+    private func reloadAssignments() throws {
+        try connectionsController.reloadAssignments(); try computers.reloadAssignments(); try browsers.reloadAssignments()
+        try calendars.reloadAssignments(); try reminders.reloadAssignments(); try imageGeneration.reloadAssignments()
     }
 
     private func startAgentServicesAfterSave() {
@@ -1889,7 +1892,7 @@ final class NoodleStore {
 
     /// A voice from another harness is dropped rather than kept for a harness that cannot use it.
     private func validVoice(_ voice: String?, harnessIdentifier: String) -> String? {
-        HarnessProvider.validVoice(voice, harnessIdentifier: harnessIdentifier)
+        HarnessProvider(rawValue: harnessIdentifier)?.validVoice(voice)
     }
 
     @ObservationIgnored var voiceGuesser: any VoicePresentationGuessing = AppleVoicePresentationGuesser()
@@ -2322,7 +2325,7 @@ final class NoodleStore {
                                          textAsAttachment: Bool = false) -> Bool {
         guard conversations.contains(where: { $0.id == conversationID }) else { return false }
 
-        return AttachmentTransfer.paste(AttachmentTransfer.pastedPayloads(from: pasteboard, textAsAttachment: textAsAttachment)) { payload in
+        return AttachmentTransfer.paste(from: pasteboard, textAsAttachment: textAsAttachment) { payload in
             do {
                 drafts[conversationID].attachments.append(try storeAttachment(payload, in: conversationID))
                 return true

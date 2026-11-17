@@ -1008,7 +1008,7 @@ import UniformTypeIdentifiers
     /// As in Noodle, a voice the agent's harness doesn't have leaves the choice to the harness.
     func setVoice(_ voice: String, for agent: AgentRecord) {
         let current = everyAgent.first { $0.id == agent.id } ?? agent
-        do { try repository.updateAgentVoice(current, voice: HarnessProvider.validVoice(voice, harnessIdentifier: current.harnessIdentifier)) }
+        do { try repository.updateAgentVoice(current, voice: current.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.validVoice(voice)) }
         catch { problem = error.localizedDescription }
     }
 
@@ -1215,29 +1215,6 @@ import UniformTypeIdentifiers
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: nil, to: group))
         return group
-    }
-
-    func setMembers(_ ids: Set<UUID>, of conversation: BotConversation) {
-        let investigation = store.investigation(conversation.id)
-        guard investigation?.isClosed != true else { problem = "Reopen this investigation before changing its team."; return }
-        let previous = self.conversation(conversation.id) ?? conversation
-        let members = ids
-        let before = Set(previous.participantIDs)
-        guard members != before, !members.isEmpty else { return }
-        do {
-            let updated = try repository.updateGroupParticipants(conversationID: conversation.id, participantIDs: Array(members), existingAgents: everyAgent, now: now)
-            reload()
-            synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: previous, to: updated))
-            let added = agents.filter { members.subtracting(before).contains($0.id) }.map(\.displayName)
-            let removed = agents.filter { before.subtracting(members).contains($0.id) }.map(\.displayName)
-            var parts: [String] = []
-            if !added.isEmpty { parts.append("added " + added.formatted(.list(type: .and))) }
-            if !removed.isEmpty { parts.append("removed " + removed.formatted(.list(type: .and))) }
-            if investigation != nil {
-                try store.append(AuditEntry(at: now, actor: .champion(champion), event: "staff", detail: parts.joined(separator: "; ")), to: conversation.id)
-            }
-            try send("I have \(parts.joined(separator: " and ")).", in: conversation.id)
-        } catch { problem = error.localizedDescription }
     }
 
     // MARK: Investigations

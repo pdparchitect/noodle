@@ -116,17 +116,16 @@ import XCTest
         XCTAssertThrowsError(try model.updateInvestigation(closed, draft: .init(title: "Changed", lead: lead.id, folders: [folder])))
         XCTAssertTrue(try granted(lead).isEmpty)
         let conversation = try XCTUnwrap(model.conversation(closed.id))
-        model.setMembers([lead.id, other.id], of: conversation)
+        XCTAssertThrowsError(try model.updateInvestigation(closed, draft: .init(title: "Beacon", lead: lead.id, staff: [other.id])))
         XCTAssertEqual(model.conversation(closed.id)?.participantIDs, conversation.participantIDs)
     }
 
-    func testQuickTeamEditsRefreshFolderGrantsAndKeepTheInvestigationsLead() throws {
+    func testTeamEditsRefreshFolderGrantsAndKeepTheInvestigationsLead() throws {
         let lead = try agent(), previous = try agent("Brisk Otter"), next = try agent("Quiet Lynx")
         let investigation = try model.open(.init(title: "Beacon", lead: lead.id, staff: [previous.id], folders: [folder]))
         XCTAssertEqual(model.conversation(investigation.id)?.lead, lead.id)
         XCTAssertEqual(try granted(previous), [folder])
-        let conversation = try XCTUnwrap(model.conversation(investigation.id))
-        model.setMembers([lead.id, next.id], of: conversation)
+        try model.updateInvestigation(investigation, draft: .init(title: "Beacon", lead: lead.id, staff: [next.id], folders: [folder]))
         XCTAssertEqual(Set(model.conversation(investigation.id)?.participantIDs ?? []), [lead.id, next.id])
         XCTAssertEqual(model.conversation(investigation.id)?.lead, lead.id)
         XCTAssertTrue(try granted(previous).isEmpty)

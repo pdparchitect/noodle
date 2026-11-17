@@ -217,14 +217,26 @@ private struct AgentProfile: View {
                         ?? ProfileStatusBadge(text: model.phaseDetail(of: agent) ?? phase.title, dot: phase.color,
                                               faded: true, isProblem: phase == .failed)),
                     description: ProfileCard.description(agent.publicDescription),
-                    actions: ProfileCardAction.botActions(
-                        noun: "Agent", name: agent.displayName, reply: reply, message: message,
-                        canMessage: model.directConversation(of: agent) != nil,
-                        call: callable.map { conversation in { calls.startCall(in: conversation) } }, close: close,
-                        edit: edit, usage: usage,
-                        suspension: agent.archivedAt == nil
-                            ? (agent.isSuspended(), { model.setSuspended(until: $0, agent: agent) }) : nil),
-                    closeLabel: "Close agent profile", close: close)
+                    actions: actions, closeLabel: "Close agent profile", close: close)
+    }
+
+    private var actions: [ProfileCardAction] {
+        var actions: [ProfileCardAction] = []
+        if let reply { actions.append(.reply(reply)) }
+        actions.append(.message(canOpen: model.directConversation(of: agent) != nil, message))
+        if let callable {
+            actions.append(.call(agent.displayName) {
+                calls.startCall(in: callable)
+                // The call's controls are in its conversation, so show it.
+                message()
+            })
+        }
+        if let edit { actions.append(.edit("Agent", edit)) }
+        actions.append(.usage(usage))
+        if agent.archivedAt == nil {
+            actions.append(.suspend(isSuspended: agent.isSuspended(), noun: "Agent") { model.setSuspended(until: $0, agent: agent) })
+        }
+        return actions
     }
 
     /// The agent's own conversation, while it can take a call and is not already on one, as in Noodle.
