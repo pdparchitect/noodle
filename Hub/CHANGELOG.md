@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.53.1] - 2026-11-17
+
 ### Fixed
 
 - Deleting a login in Settings › Harness says so when it can't move its bots back to the default login, and then keeps the login, as in Noodle.

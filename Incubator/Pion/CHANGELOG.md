@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
 ### Added
 
 - The agent editor has Noodle's Spending Budget: a token limit over a period, after which the agent finishes its turn and waits until older usage leaves the period or you reset it.

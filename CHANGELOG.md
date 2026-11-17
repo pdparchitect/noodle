@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.87.1] - 2026-11-17
+
 ### Fixed
 
 - A message sent with a Shortcut reaches a call under way in that conversation, as a typed one does. A message sent from your iPhone through This Mac lets a group's lead hear it first, as one sent on the Mac does.
