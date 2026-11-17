@@ -1,4 +1,6 @@
 #!/bin/zsh
+# Run by sh or bash, it starts again under zsh, which the rest is written for.
+[ -n "${ZSH_VERSION:-}" ] || exec zsh "$0" "$@"
 # Tests, packages and uploads the phone app, from the Xcode project Tuist generates from Mobile/Project.swift.
 #   run                        builds Noodle Dev and opens it on this Mac as an iPad app
 #   test [ARGUMENT ...]        runs its tests on this Mac as an iPad app, and on CI on an iPhone simulator;

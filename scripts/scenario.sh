@@ -1,4 +1,6 @@
 #!/bin/zsh
+# Run by sh or bash, it starts again under zsh, which the rest is written for.
+[ -n "${ZSH_VERSION:-}" ] || exec zsh "$0" "$@"
 # Opens Noodle in a scenario from Scenarios/, in a bundle of its own that cannot reach the network,
 # an account or any other Noodle's data, and can photograph or record it.
 set -euo pipefail

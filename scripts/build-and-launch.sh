@@ -1,4 +1,6 @@
 #!/bin/zsh
+# Run by sh or bash, it starts again under zsh, which the rest is written for.
+[ -n "${ZSH_VERSION:-}" ] || exec zsh "$0" "$@"
 # Builds an app's development identity and opens it: Noodle by default, or Computer, Applet, Browser or
 # Hub. Development only; launchers never accept production-data overrides, including inherited ones.
 # Computer Dev is installed first, where its Local Mac accounts can read it.
