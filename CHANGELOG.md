@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- A group's lead is marked with a star on its picture in the members grid, so making a bot the lead no longer shifts the other members.
 - A call no longer hears earlier calls in its conversation as things said; it starts from what was written.
 - New Bot no longer suggests the name of a bot you already have.
 - The activity window's scroller hides again when not scrolling, instead of always showing.

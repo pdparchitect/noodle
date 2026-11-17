@@ -63,33 +63,8 @@ struct GroupMemberPicker: View {
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
                         ForEach(selected) { agent in
-                            VStack(spacing: 8) {
-                                member(agent)
-                                    .grayscale(agent.archivedAt == nil ? 0 : 1)
-                                    .accessibilityValue(agent.archivedAt == nil ? "" : "Archived")
-                                    .overlay(alignment: .topTrailing) {
-                                        Button { memberPendingRemoval = agent } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 17))
-                                                .symbolRenderingMode(.palette)
-                                                .foregroundStyle(.white, Color(nsColor: .darkGray))
-                                                .padding(4)
-                                                .contentShape(Circle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        .offset(x: 10, y: -8)
-                                        .help("Remove \(agent.displayName) from \(words.group)")
-                                        .accessibilityLabel("Remove \(agent.displayName) from \(words.group)")
-                                    }
-                                Text(agent.displayName)
-                                    .font(.caption)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                                if lead?.wrappedValue == agent.id {
-                                    Text("Lead")
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
+                            GroupMemberCell(agent: agent, isLead: lead?.wrappedValue == agent.id, words: words, member: member) {
+                                memberPendingRemoval = agent
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                             .contextMenu {
@@ -125,6 +100,54 @@ struct GroupMemberPicker: View {
                 if lead?.wrappedValue == agent.id { lead?.wrappedValue = nil }
             }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+}
+
+/// One member in the grid: its picture with a button to remove it, and its name. The lead wears a star on its
+/// picture, which takes no room, so marking one moves nothing around it.
+struct GroupMemberCell: View {
+    let agent: AgentRecord
+    let isLead: Bool
+    var words = GroupMemberWords()
+    let member: (AgentRecord) -> AnyView
+    let remove: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            member(agent)
+                .grayscale(agent.archivedAt == nil ? 0 : 1)
+                .accessibilityValue([isLead ? "Lead" : nil, agent.archivedAt == nil ? nil : "Archived"].compactMap { $0 }.joined(separator: ", "))
+                .overlay(alignment: .bottomTrailing) {
+                    if isLead {
+                        Image(systemName: "star.circle.fill")
+                            .font(.system(size: 17))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.accentColor)
+                            .padding(4)
+                            .offset(x: 10, y: 8)
+                            .help("Lead: hears your messages first")
+                            .accessibilityHidden(true)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    Button(action: remove) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color(nsColor: .darkGray))
+                            .padding(4)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 10, y: -8)
+                    .help("Remove \(agent.displayName) from \(words.group)")
+                    .accessibilityLabel("Remove \(agent.displayName) from \(words.group)")
+                }
+            Text(agent.displayName)
+                .font(.caption)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
         }
     }
 }
