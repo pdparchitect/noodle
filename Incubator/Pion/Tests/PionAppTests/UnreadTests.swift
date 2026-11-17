@@ -35,6 +35,26 @@ import XCTest
         XCTAssertFalse(model.isUnread(group.id), "An open conversation is read as messages arrive")
     }
 
+    /// As in Noodle: a conversation deleted elsewhere leaves nothing unread behind, on disk too.
+    func testADeletedConversationLeavesNoUnreadBehind() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionUnread-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true)
+        model.start()
+        let avery = try model.createAgent(name: "Avery", description: nil, instructions: "", provider: .codex, model: nil)
+        let direct = try XCTUnwrap(model.directConversation(of: avery))
+        let group = try model.createGroup(name: "Gone", description: nil, members: [avery.id])
+        model.selection = nil
+        for id in [direct.id, group.id] {
+            _ = try model.repository.sendAgentMessage(agentID: avery.id, conversationID: id, body: "Avery Lin, look.")
+        }
+        model.refresh()
+        try model.repository.deleteConversation(id: group.id)
+        model.refresh()
+        XCTAssertEqual(try model.repository.loadUnreadConversationIDs(), [direct.id])
+        XCTAssertTrue(try model.repository.loadMentionedConversationIDs().isSubset(of: [direct.id]))
+    }
+
     /// As in Noodle: what is on screen counts, a separate window included, not the main window's selection.
     func testArrivalsAreReadWhereTheyAreOnScreen() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionUnread-\(UUID())")

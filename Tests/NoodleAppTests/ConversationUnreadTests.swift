@@ -38,8 +38,9 @@ final class ConversationUnreadTests: XCTestCase {
         var unread = ConversationUnread()
         _ = unread.register([message(a, "Hi Avery"), message(b, "Hi")], isViewing: { _ in false }, mentionName: { _ in "Avery" })
         try unread.save(to: repository)
-        let loaded = ConversationUnread(repository: repository, known: [a])
+        let loaded = try ConversationUnread.load(from: repository, keeping: [a])
         XCTAssertEqual(loaded.unread, [a], "Conversations that no longer exist are dropped")
         XCTAssertEqual(loaded.mentioned, [a])
+        XCTAssertEqual(try repository.loadUnreadConversationIDs(), [a], "and the rest is saved")
     }
 }

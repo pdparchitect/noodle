@@ -292,7 +292,8 @@ import UniformTypeIdentifiers
             groupNotificationSettings = kept.notifications
             if kept.pins != pinnedIDs { pinnedIDs = kept.pins }
         } catch { problem = error.localizedDescription }
-        unread = ConversationUnread(repository: repository, known: known)
+        do { unread = try ConversationUnread.load(from: repository, keeping: known) }
+        catch { problem = error.localizedDescription }
         budgets.onChange = { [weak self] in self?.applyBudgets() }
         budgets.load(everyAgent, repository: repository)
         tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
@@ -610,15 +611,19 @@ import UniformTypeIdentifiers
     func countsAsUnread(_ id: UUID) -> Bool { isUnread(id) && notifications(of: id) != .muted }
 
     func markRead(_ id: UUID) {
-        guard unread.markRead(id) else { return }
+        // Checked first, as in Noodle: marking a read one again must not redraw everything watching unread.
+        guard unread.unread.contains(id) else { return }
+        unread.markRead(id)
         saveUnread()
     }
 
     private func registerUnread(_ messages: [ChatMessage]) {
         guard !messages.isEmpty else { return }
-        let before = unread
-        unread.register(messages, isViewing: viewing, mentionName: { _ in champion })
-        if unread != before { saveUnread() }
+        var state = unread
+        state.register(messages, isViewing: viewing, mentionName: { _ in champion })
+        guard state != unread else { return }
+        unread = state
+        saveUnread()
     }
 
     private func saveUnread() {

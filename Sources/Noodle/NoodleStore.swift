@@ -100,10 +100,6 @@ final class NoodleStore {
     private(set) var groupNotificationSettings = GroupNotificationSettings() {
         didSet { updateDockBadge() }
     }
-    /// Unread groups with a reply that names the person, which a group set to Mentions only counts on the Dock.
-    private(set) var mentionedConversationIDs: Set<UUID> = [] {
-        didSet { updateDockBadge() }
-    }
     /// The name that mentions the person in this Mac's own groups: the Mac account's full name.
     @ObservationIgnored var ownerName: () -> String = { NSFullUserName() }
     /// The space the sidebar shows: a joined Hub's by its key, so it is kept when the Hub is left and joined again,
@@ -120,9 +116,11 @@ final class NoodleStore {
     struct SpaceNaming: Equatable {
         var adding: UUID?
     }
-    private(set) var unreadConversationIDs: Set<UUID> = [] {
-        didSet { updateDockBadge() }
+    /// Which conversations are unread, and which of them have a reply that names the person, as in every app.
+    private(set) var unread = ConversationUnread() {
+        didSet { if unread != oldValue { updateDockBadge() } }
     }
+    var unreadConversationIDs: Set<UUID> { unread.unread }
     var selectedConversationID: UUID?
     var searchText = "" {
         didSet { if searchText != oldValue { findMentions() } }
@@ -994,12 +992,7 @@ final class NoodleStore {
             if kept.notificationsChanged { thisMac.hub?.notificationsChanged() }
             // Members out of reach stay stored, so a space is never pruned here.
             spaceList.reload()
-            let storedUnreadIDs = try repository.loadUnreadConversationIDs()
-            unreadConversationIDs = storedUnreadIDs.intersection(knownConversationIDs)
-            mentionedConversationIDs = try repository.loadMentionedConversationIDs().intersection(unreadConversationIDs)
-            if unreadConversationIDs != storedUnreadIDs {
-                try repository.saveUnreadConversationIDs(unreadConversationIDs, mentioned: mentionedConversationIDs)
-            }
+            unread = try ConversationUnread.load(from: repository, keeping: knownConversationIDs)
             runtime.refresh(agents: agents)
             refreshAppShortcuts()
             storageReady = true
@@ -2204,7 +2197,7 @@ final class NoodleStore {
     /// The unread conversations the Dock counts: muted groups are left out, and a group in Mentions only counts once
     /// a reply names the person.
     var badgedConversationIDs: Set<UUID> {
-        ConversationUnread(unread: unreadConversationIDs, mentioned: mentionedConversationIDs).badged(notifications(of:))
+        unread.badged(notifications(of:))
     }
 
     func updateDockBadge() {
@@ -2213,10 +2206,9 @@ final class NoodleStore {
     }
 
     func markConversationRead(_ conversationID: UUID?) {
-        guard let conversationID,
-              unreadConversationIDs.contains(conversationID) else { return }
-        unreadConversationIDs.remove(conversationID)
-        mentionedConversationIDs.remove(conversationID)
+        // Checked first: marking a read one again must not tell everyone watching unread that it changed.
+        guard let conversationID, unreadConversationIDs.contains(conversationID) else { return }
+        unread.markRead(conversationID)
         persistUnreadConversationIDs()
         shareRead(conversationID)
     }
@@ -2258,8 +2250,7 @@ final class NoodleStore {
         guard unreadConversationIDs.contains(conversationID),
               let messages = try? repository.loadMessages(conversationID: conversationID),
               !messages.contains(where: { if case .agent = $0.author { $0.createdAt > upTo } else { false } }) else { return }
-        unreadConversationIDs.remove(conversationID)
-        mentionedConversationIDs.remove(conversationID)
+        unread.markRead(conversationID)
         persistUnreadConversationIDs()
     }
 
@@ -2700,21 +2691,18 @@ final class NoodleStore {
     private func registerUnreadMessages(_ messages: [ChatMessage]) {
         guard !messages.isEmpty else { return }
 
-        var state = ConversationUnread(unread: unreadConversationIDs, mentioned: mentionedConversationIDs)
+        var state = unread
         let viewed = state.register(messages, isViewing: conversationWindows.isViewing, mentionName: mentionName(in:))
         // Read as it arrived, so the person's other devices show it read too.
         viewed.forEach(shareRead)
-        let updated = state.unread, mentioned = state.mentioned
-
-        guard updated != unreadConversationIDs || mentioned != mentionedConversationIDs else { return }
-        if mentioned != mentionedConversationIDs { mentionedConversationIDs = mentioned }
-        if updated != unreadConversationIDs { unreadConversationIDs = updated }
+        guard state != unread else { return }
+        unread = state
         persistUnreadConversationIDs()
     }
 
     private func persistUnreadConversationIDs() {
         do {
-            try repository.saveUnreadConversationIDs(unreadConversationIDs, mentioned: mentionedConversationIDs)
+            try unread.save(to: repository)
         } catch {
             errorMessage = error.localizedDescription
         }

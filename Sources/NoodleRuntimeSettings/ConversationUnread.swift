@@ -12,10 +12,12 @@ public struct ConversationUnread: Equatable, Sendable {
         self.mentioned = mentioned.intersection(unread)
     }
 
-    /// As the repository keeps them, leaving out conversations that are gone.
-    public init(repository: WorkspaceRepository, known: Set<UUID>) {
-        unread = ((try? repository.loadUnreadConversationIDs()) ?? []).intersection(known)
-        mentioned = ((try? repository.loadMentionedConversationIDs()) ?? []).intersection(unread)
+    /// As the repository keeps them, leaving out conversations that are gone; when any were, the rest is saved.
+    public static func load(from repository: WorkspaceRepository, keeping known: Set<UUID>) throws -> ConversationUnread {
+        let stored = try repository.loadUnreadConversationIDs()
+        let state = ConversationUnread(unread: stored.intersection(known), mentioned: try repository.loadMentionedConversationIDs())
+        if state.unread != stored { try state.save(to: repository) }
+        return state
     }
 
     public func save(to repository: WorkspaceRepository) throws {
