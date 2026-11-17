@@ -13,7 +13,13 @@ public enum HaveIBeenPwned {
         """,
         iconName: "haveibeenpwned",
         configuration: .connection(.init(endpoint: URL(string: "https://haveibeenpwned.com/api/v3")!, tokenHeader: "hibp-api-key",
-                                  adapter: "haveibeenpwned")))
+                                  adapter: "haveibeenpwned")),
+        setup: setup)
+
+    static let setup = [
+        "Buy an API key at [haveibeenpwned.com/API/Key](https://haveibeenpwned.com/API/Key); searching breaches and pastes by email needs one.",
+        "Copy the key from your Have I Been Pwned dashboard and paste it here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Breaches(), Pastes()])
 }

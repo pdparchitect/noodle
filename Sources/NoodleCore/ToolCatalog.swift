@@ -253,6 +253,9 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public let iconName: String
     public let configuration: ToolConfiguration
     public let maturity: ToolMaturity
+    /// How to get the key or account it asks for, one step per item, in Markdown: where to click in the
+    /// service's console and the least access to give. Empty for one that signs in through the browser.
+    public let setup: [String]
     public var kind: ToolKind { configuration.kind }
 
     /// A new account of this service, named `name`, from what was filled in for its fields.
@@ -296,11 +299,13 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
         }
     }
 
-    public init(id: String, name: String, summary: String, defaultInstructions: String, iconName: String, configuration: ToolConfiguration, maturity: ToolMaturity = .stable) {
+    public init(id: String, name: String, summary: String, defaultInstructions: String, iconName: String, configuration: ToolConfiguration,
+                maturity: ToolMaturity = .stable, setup: [String] = []) {
         self.id = id; self.name = name; self.summary = summary
         self.defaultInstructions = defaultInstructions
         self.iconName = iconName; self.configuration = configuration
         self.maturity = maturity
+        self.setup = setup
     }
 }
 

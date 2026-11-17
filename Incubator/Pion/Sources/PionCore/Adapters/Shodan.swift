@@ -13,7 +13,13 @@ public enum Shodan {
         scanners last saw, which may be days old: say when. Record each lookup as evidence. These lookups never scan anything.
         """,
         iconName: "shodan",
-        configuration: .connection(.init(endpoint: URL(string: "https://api.shodan.io")!, tokenParameter: "key", adapter: "shodan")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.shodan.io")!, tokenParameter: "key", adapter: "shodan")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [account.shodan.io](https://account.shodan.io), or create an account.",
+        "Copy the **API Key** shown on the account page and paste it here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [HostReport(), Resolve(), Reverse()])
 }

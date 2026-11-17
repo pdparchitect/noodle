@@ -17,7 +17,16 @@ public enum Okta {
         iconName: "okta",
         configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1",
                                   fields: [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)],
-                                  tokenHeader: "Authorization", tokenScheme: "SSWS", adapter: "okta")))
+                                  tokenHeader: "Authorization", tokenScheme: "SSWS", adapter: "okta")),
+        setup: setup)
+
+    static let setup = [
+        "In the Okta Admin Console, create a user for Pion, such as pion@example.com, so the token does not belong to a person.",
+        "Under **Security › Administrators**, give that user the **Read-Only Administrator** role.",
+        "Sign in to the Admin Console as that user, open **Security › API › Tokens** and choose **Create Token**. A token has its creator's access, so this one can only read.",
+        "Copy the token and paste it here. Okta revokes tokens left unused for 30 days.",
+        "For the domain, give your org's address, such as `acme.okta.com`, not its `-admin` address.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents()])
 

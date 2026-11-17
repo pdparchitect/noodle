@@ -15,7 +15,15 @@ public enum Splunk {
         iconName: "splunk",
         configuration: .connection(.init(endpointTemplate: "https://{host}:8089/services",
             fields: [ToolField(key: "host", title: "Splunk address", placeholder: "acme.splunkcloud.com", kind: .host)],
-            tokenHeader: "Authorization", adapter: "splunk")))
+            tokenHeader: "Authorization", adapter: "splunk")),
+        setup: setup)
+
+    static let setup = [
+        "On Splunk Cloud, let this Mac reach the REST API on port 8089: add its public IP address to the `search-api` allow list with the Admin Config Service, or ask Splunk Support. Free trials have no REST access.",
+        "Under **Settings › Roles**, make a role that can search only the indexes agents should read, and a user for Pion with that role.",
+        "Under **Settings › Tokens**, turn on token authentication if it is off, then choose **New Token** for that user, with an expiry date.",
+        "Copy the token and paste it here. For the address, give the host only, such as `acme.splunkcloud.com`.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Search()])
 

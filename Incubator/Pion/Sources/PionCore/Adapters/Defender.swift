@@ -12,7 +12,17 @@ public enum Defender {
         EmailEvents and IdentityLogonEvents. Keep hunting queries narrow, with a time filter and a row limit. Record each \
         query and what it returned as evidence, with the query itself as the method. These tools only read: recommend \
         isolating a device or other responses to the champion.
-        """)
+        """,
+        setup: setup)
+
+    static let setup = [
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion, keep **Single tenant** and leave the redirect URI empty.",
+        "Under **API permissions**, choose **Add a permission › Microsoft Graph › Application permissions** and add `SecurityAlert.Read.All`, `SecurityIncident.Read.All` and `ThreatHunting.Read.All`.",
+        "Choose **Grant admin consent** for your tenant.",
+        "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
+        "From the app's **Overview**, copy the **Directory (tenant) ID** and the **Application (client) ID** into the fields here.",
+        "One app can serve both Defender XDR and Entra ID when it has both sets of permissions.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Alerts(), Incidents(), Hunt()])
 }

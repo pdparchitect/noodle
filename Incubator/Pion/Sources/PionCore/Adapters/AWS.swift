@@ -25,7 +25,16 @@ public enum AWS {
         configuration: .connection(.init(endpointTemplate: "https://amazonaws.com",
             fields: [ToolField(key: "region", title: "Default region", placeholder: "us-east-1",
                                kind: .choice(regions.map { .init(value: $0, title: $0) }))],
-            signsForAWS: true, adapter: "aws")))
+            signsForAWS: true, adapter: "aws")),
+        setup: setup)
+
+    static let setup = [
+        "In the AWS console, open **IAM › Users** and choose **Create user**. Name it, such as `pion-readonly`, and leave console access off.",
+        "Choose **Attach policies directly** and pick **SecurityAudit**, AWS's read-only policy for security reviews.",
+        "On the new user, choose **Add permissions › Create inline policy** and allow `logs:StartQuery` and `logs:GetQueryResults` on all resources, for Logs Insights.",
+        "Under **Security credentials**, choose **Create access key**, pick **Third-party service**, and copy the access key ID and secret access key here. Leave Session Token empty.",
+        "For the default region, choose the one most activity is in; agents can name others. Each AWS account needs its own user.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(),
                                                               CredentialReport(), AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(),

@@ -13,7 +13,13 @@ public enum AbuseIPDB {
         report anything.
         """,
         iconName: "abuseipdb",
-        configuration: .connection(.init(endpoint: URL(string: "https://api.abuseipdb.com/api/v2")!, tokenHeader: "Key", adapter: "abuseipdb")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.abuseipdb.com/api/v2")!, tokenHeader: "Key", adapter: "abuseipdb")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [abuseipdb.com](https://www.abuseipdb.com), or create a free account.",
+        "Open [Account › API](https://www.abuseipdb.com/account/api), choose **Create Key**, and paste the key here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Check()])
 }

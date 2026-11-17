@@ -12,7 +12,13 @@ public enum OTX {
         quality: cite them as leads, not proof. Record each lookup as evidence.
         """,
         iconName: "otx",
-        configuration: .connection(.init(endpoint: URL(string: "https://otx.alienvault.com/api/v1")!, tokenHeader: "X-OTX-API-KEY", adapter: "otx")))
+        configuration: .connection(.init(endpoint: URL(string: "https://otx.alienvault.com/api/v1")!, tokenHeader: "X-OTX-API-KEY", adapter: "otx")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [otx.alienvault.com](https://otx.alienvault.com), or create a free account.",
+        "Open the [API page](https://otx.alienvault.com/api), copy **Your OTX Key** and paste it here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Indicator()])
 }

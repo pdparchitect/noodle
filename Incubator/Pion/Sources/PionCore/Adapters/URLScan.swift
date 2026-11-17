@@ -14,7 +14,13 @@ public enum URLScan {
         looking at.
         """,
         iconName: "urlscan",
-        configuration: .connection(.init(endpoint: URL(string: "https://urlscan.io/api/v1")!, tokenHeader: "API-Key", adapter: "urlscan")))
+        configuration: .connection(.init(endpoint: URL(string: "https://urlscan.io/api/v1")!, tokenHeader: "API-Key", adapter: "urlscan")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [urlscan.io](https://urlscan.io), or create a free account.",
+        "Open **Settings & API › API Keys**, choose **New API key**, and paste the key here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Search()])
 }

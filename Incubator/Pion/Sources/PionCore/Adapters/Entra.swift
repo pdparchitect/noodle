@@ -12,7 +12,17 @@ public enum Entra {
         whether Identity Protection rates them at risk. Sign-in logs need Entra ID P1 and risky users P2; say so when the \
         service refuses. Record what you find as evidence, citing the tenant, user and time window. These tools only read: \
         recommend disabling an account, revoking sessions or resetting methods to the champion, with how to undo it.
-        """)
+        """,
+        setup: setup)
+
+    static let setup = [
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion, keep **Single tenant** and leave the redirect URI empty.",
+        "Under **API permissions**, choose **Add a permission › Microsoft Graph › Application permissions** and add `Directory.Read.All`, `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` and `IdentityRiskyUser.Read.All`.",
+        "Choose **Grant admin consent** for your tenant.",
+        "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
+        "From the app's **Overview**, copy the **Directory (tenant) ID** and the **Application (client) ID** into the fields here.",
+        "Sign-in logs need Entra ID P1, and risky users P2. One app can serve both Entra ID and Defender XDR when it has both sets of permissions.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers()])
 }

@@ -14,7 +14,15 @@ public enum Elastic {
         iconName: "elastic",
         configuration: .connection(.init(endpointTemplate: "https://{host}",
             fields: [ToolField(key: "host", title: "Elasticsearch address", placeholder: "acme.es.eu-west-1.aws.elastic.cloud", kind: .host)],
-            tokenHeader: "Authorization", tokenScheme: "ApiKey", adapter: "elastic")))
+            tokenHeader: "Authorization", tokenScheme: "ApiKey", adapter: "elastic")),
+        setup: setup)
+
+    static let setup = [
+        "In Kibana, open **Stack Management › API keys** and choose **Create API key**.",
+        "Turn on **Control security privileges** and let it only read the indices agents should search, such as `{\"pion\": {\"indices\": [{\"names\": [\"logs-*\"], \"privileges\": [\"read\", \"view_index_metadata\"]}]}}`.",
+        "Copy the **Encoded** key and paste it here.",
+        "For the address, give the Elasticsearch endpoint's host, not Kibana's; on Elastic Cloud it is on the deployment's page.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [ESQL()])
 }

@@ -23,4 +23,18 @@ final class PionCatalogueTests: XCTestCase {
         XCTAssertTrue(PionCatalogue.entries.allSatisfy { $0.adapter == nil || PionAdapters.all[$0.adapter!] != nil },
                       "an entry names an adapter Pion does not have")
     }
+
+    /// Each of Pion's own services asks for a key or account, so each says how to get one, as Markdown the form can show.
+    func testEveryPionServiceSaysHowToSetItUp() {
+        let own = PionCatalogue.entries.filter { $0.adapter != nil }
+        XCTAssertFalse(own.isEmpty)
+        for tool in own {
+            XCTAssertTrue(tool.needsSetUp, tool.id)
+            XCTAssertGreaterThanOrEqual(tool.setup.count, 2, "\(tool.id) has no setup steps")
+            for step in tool.setup {
+                XCTAssertNoThrow(try AttributedString(markdown: step, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)), tool.id)
+                XCTAssertFalse(step.contains("  "), "\(tool.id): \(step)")
+            }
+        }
+    }
 }

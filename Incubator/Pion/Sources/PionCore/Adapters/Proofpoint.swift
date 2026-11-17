@@ -15,7 +15,13 @@ public enum Proofpoint {
         """,
         iconName: "proofpoint",
         configuration: .connection(.init(endpoint: URL(string: "https://tap-api-v2.proofpoint.com/v2")!, tokenHeader: "Authorization", tokenScheme: "Basic",
-                                  composedToken: ComposedToken(first: "Service Principal", second: "Secret", format: .basic), adapter: "proofpoint")))
+                                  composedToken: ComposedToken(first: "Service Principal", second: "Secret", format: .basic), adapter: "proofpoint")),
+        setup: setup)
+
+    static let setup = [
+        "In the TAP Dashboard, open **Settings › Connected Applications** and choose **Create New Credential**.",
+        "Name it, such as Pion, and copy the **Service Principal** and **Secret** here; the secret is shown only once.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [SIEMEvents()])
 }

@@ -13,7 +13,13 @@ public enum GreyNoise {
         evidence.
         """,
         iconName: "greynoise",
-        configuration: .connection(.init(endpoint: URL(string: "https://api.greynoise.io/v3")!, tokenHeader: "key", adapter: "greynoise")))
+        configuration: .connection(.init(endpoint: URL(string: "https://api.greynoise.io/v3")!, tokenHeader: "key", adapter: "greynoise")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [viz.greynoise.io](https://viz.greynoise.io), or create a free Community account.",
+        "Open **Account › API Key**, copy the key and paste it here.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Context()])
 }

@@ -248,6 +248,7 @@ private struct PresetSetUpForm: View {
                     ToolCatalogIcon(tool: tool, size: 32)
                     Text(tool.summary).font(.callout).foregroundStyle(.secondary)
                 }
+                if !tool.setup.isEmpty { ToolSetupSteps(steps: tool.setup) }
                 field("Name") {
                     TextField("e.g. \(tool.name) — Work", text: $name, axis: .horizontal).lineLimit(1)
                 }
@@ -296,6 +297,33 @@ private struct PresetSetUpForm: View {
             Text(title).font(.caption.weight(.semibold))
             content()
         }
+    }
+}
+
+/// A preset's steps for getting the key or account it asks for, folded until opened. They stay in the form, so
+/// they can be followed in the service's console while it is filled in.
+struct ToolSetupSteps: View {
+    let steps: [String]
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup("Setup Steps", isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                        Text(Self.markdown(step)).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .font(.callout)
+            .textSelection(.enabled)
+            .padding(.top, 6)
+        }
+    }
+
+    static func markdown(_ step: String) -> AttributedString {
+        (try? AttributedString(markdown: step, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(step)
     }
 }
 

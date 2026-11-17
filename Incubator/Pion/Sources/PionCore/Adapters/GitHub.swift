@@ -16,7 +16,15 @@ public enum GitHub {
         iconName: "github",
         configuration: .connection(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
             fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier)],
-            tokenHeader: "Authorization", adapter: "github")))
+            tokenHeader: "Authorization", adapter: "github")),
+        setup: setup)
+
+    static let setup = [
+        "On GitHub, open **Settings › Developer settings › Personal access tokens › Tokens (classic)** and choose **Generate new token (classic)**.",
+        "Give it only `read:org`, `read:audit_log` and `security_events`, and an expiry date.",
+        "If the organisation uses SAML single sign-on, choose **Configure SSO** beside the token and authorise it for the organisation.",
+        "Paste the token here. The audit log needs GitHub Enterprise Cloud, and secret scanning alerts need the token's owner to be an owner or security manager of the organisation.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [AuditLog(), People(), SecretAlerts()])
 }

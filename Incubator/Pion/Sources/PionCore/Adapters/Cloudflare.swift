@@ -16,7 +16,15 @@ public enum Cloudflare {
         iconName: "cloudflare",
         configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4",
             fields: [ToolField(key: "account", title: "Account ID", placeholder: "023e105f4ecef8ad9ca31a8372d0c353", kind: .identifier)],
-            tokenHeader: "Authorization", adapter: "cloudflare")))
+            tokenHeader: "Authorization", adapter: "cloudflare")),
+        setup: setup)
+
+    static let setup = [
+        "In the Cloudflare dashboard, open **My Profile › API Tokens** and choose **Create Token › Create Custom Token**.",
+        "Add the permissions **Account › Audit Logs › Read**, **Zone › Zone › Read**, **Zone › DNS › Read** and **Zone › Analytics › Read**.",
+        "Limit **Account Resources** to your account and **Zone Resources** to its zones, then create the token, copy it and paste it here.",
+        "The Account ID is in the **API** section of any zone's **Overview** page.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [ZoneDNS(), AuditLog(), FirewallEvents()])
 

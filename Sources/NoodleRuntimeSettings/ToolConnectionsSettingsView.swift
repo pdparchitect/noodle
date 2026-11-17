@@ -243,6 +243,9 @@ public struct ToolConnectionEditor: View {
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
                 if onSecret != nil {
+                    if let steps = existing.flatMap(ToolCatalog.definition(for:))?.setup, !steps.isEmpty {
+                        ToolSetupSteps(steps: steps)
+                    }
                     // An adapter connection proves itself the way its adapter expects; only its values change here.
                     if existing?.adapter == nil {
                         Picker("Sign-in", selection: $signIn) {

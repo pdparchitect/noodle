@@ -18,7 +18,15 @@ public enum Wiz {
             fields: [ToolField(key: "region", title: "Data center", placeholder: "us17", kind: .identifier)],
             clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://auth.app.wiz.io/oauth/token",
                                                        parameters: ["audience": "wiz-api"]),
-            adapter: "wiz")))
+            adapter: "wiz")),
+        setup: setup)
+
+    static let setup = [
+        "In Wiz, open **Settings › Access Management › Service Accounts** and choose **Add Service Account**.",
+        "Choose the type **Custom Integration (GraphQL API)**, leave **Projects** empty for the whole tenant, and give it only `read:issues` and `read:resources`.",
+        "Copy the **Client ID** and **Client Secret** here; the secret is shown only once.",
+        "For the data center, open **User Settings › Tenant** and take the part of the API endpoint after `api.`: `https://api.us17.app.wiz.io/graphql` is `us17`.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Issues(), Query()])
 }

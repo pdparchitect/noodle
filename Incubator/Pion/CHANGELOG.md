@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Each service in Settings › Tools has Setup Steps in its form: where in the service's console to make the key, token or account it asks for, and the least access to give it.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added

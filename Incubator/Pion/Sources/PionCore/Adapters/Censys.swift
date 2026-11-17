@@ -12,7 +12,13 @@ public enum Censys {
         """,
         iconName: "censys",
         configuration: .connection(.init(endpoint: URL(string: "https://api.platform.censys.io/v3/global")!, tokenHeader: "Authorization",
-                                  adapter: "censys")))
+                                  adapter: "censys")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [platform.censys.io](https://platform.censys.io), or create an account.",
+        "In your account settings, open **Personal Access Tokens**, create a token and paste it here. Host lookups spend your account's credits.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Host()])
 }

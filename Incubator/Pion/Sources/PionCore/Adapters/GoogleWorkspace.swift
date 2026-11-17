@@ -19,7 +19,17 @@ public enum GoogleWorkspace {
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://googleapis.com",
             fields: [ToolField(key: "subject", title: "Admin to act as", placeholder: "admin@example.com", kind: .text)],
-            googleScopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], adapter: "google-workspace")))
+            googleScopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], adapter: "google-workspace")),
+        setup: setup)
+
+    static let setup = [
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project, and under **APIs & Services › Library** enable the **Admin SDK API**.",
+        "Under **IAM & Admin › Service Accounts**, create a service account. It needs no roles.",
+        "On its **Keys** tab, choose **Add Key › Create new key › JSON**, and choose that file here. If creating a key is refused, an organisation policy blocks service account keys.",
+        "On its **Details** tab, copy the **Unique ID**.",
+        "In the [Google Admin console](https://admin.google.com), open **Security › Access and data control › API controls › Manage Domain Wide Delegation**, choose **Add new**, and enter that ID with the scope `https://www.googleapis.com/auth/admin.reports.audit.readonly`.",
+        "For the admin to act as, give a super admin, or an admin whose role includes Reports. Delegation can take a few minutes to start working.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Activity()])
 }

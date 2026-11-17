@@ -14,7 +14,14 @@ public enum VirusTotal {
         """,
         iconName: "virustotal",
         configuration: .connection(.init(endpoint: URL(string: "https://www.virustotal.com/api/v3")!, tokenHeader: "x-apikey",
-                                  adapter: "virustotal")))
+                                  adapter: "virustotal")),
+        setup: setup)
+
+    static let setup = [
+        "Sign in at [virustotal.com](https://www.virustotal.com), or create a free account.",
+        "Open your profile menu at the top right and choose **API key**.",
+        "Copy the key and paste it here. The free public API allows 4 lookups a minute and 500 a day, and is not for commercial use.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [FileReport(), DomainReport(), AddressReport(), URLReport()])
 

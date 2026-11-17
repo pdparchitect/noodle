@@ -38,27 +38,14 @@ Agents never change a system themselves: they recommend changes to you in the co
 ## Settings
 
 Harness signs in to the harnesses agents run on, Agents changes their models and archives them, and
-Tools connects them to services, over MCP or through Pion's own lookups. Add VirusTotal there with
-your API key, then assign it to the agents that should check file hashes, domains, IP addresses and
-URLs. Add Okta with an org's domain and an API token for agents to look up users, their groups, apps
-and sign-in factors, and the org's System Log. Shodan shows what an address exposes. Microsoft Entra ID
-and Microsoft Defender XDR take a tenant ID and an app registration's client ID and secret; give the
-app read permissions such as User.Read.All, AuditLog.Read.All, SecurityAlert.Read.All and
-ThreatHunting.Read.All. CrowdStrike Falcon takes its cloud and an API client's ID and secret with read
-scopes for hosts and alerts; SentinelOne takes its console address and an API token. Splunk, Elastic and Microsoft Sentinel let
-agents search logs in SPL, ES|QL and KQL: Splunk takes its address and an authentication token, Elastic
-its address and an API key, and Sentinel its tenant and workspace IDs with an app registration given the
-Log Analytics Reader role. Cloudflare Security takes an account ID and an API token, Wiz its data
-center and a service account's client ID and secret, and GitHub an organisation and a token with
-read:org and read:audit_log. AbuseIPDB, urlscan.io, GreyNoise, AlienVault OTX and Have I Been Pwned
-each take an API key. AWS takes a default region and the access key of an IAM user given the SecurityAudit
-policy, plus logs:StartQuery and logs:GetQueryResults for Logs Insights. Google Cloud takes an
-organization, folder or project and a service account's JSON key; give the account Logs Viewer, Security
-Center Findings Viewer and Cloud Asset Viewer there. Google Workspace takes a service account's key with
-domain-wide delegation for the admin.reports.audit.readonly scope, and the admin it acts as. Proofpoint TAP
-takes a service principal and secret, Sumo Logic an access ID and key, Tenable an access key and secret
-key, and Censys a personal access token. Each service you add is a separate account, so two accounts of the same service can sit side by
-side.
+Tools connects them to services, over MCP or through Pion's own lookups: reputation services such as
+VirusTotal, Shodan and GreyNoise; identity providers such as Okta, Microsoft Entra ID and Google
+Workspace; endpoint and XDR consoles such as CrowdStrike Falcon and Microsoft Defender XDR; log
+searches in Splunk, Elastic, Microsoft Sentinel and Sumo Logic; and cloud accounts in AWS, Google Cloud,
+Cloudflare and Wiz. Add a service, then assign it to the agents that should use it. Each service's
+form has Setup Steps, saying where in the service's console to make its key or account and the least
+access to give it: Pion's lookups only read. Each service you add is a separate account, so two
+accounts of the same service can sit side by side.
 
 ## Scenarios
 

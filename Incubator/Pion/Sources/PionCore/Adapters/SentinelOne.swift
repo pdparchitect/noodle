@@ -15,7 +15,15 @@ public enum SentinelOne {
         iconName: "sentinelone",
         configuration: .connection(.init(endpointTemplate: "https://{console}/web/api/v2.1",
             fields: [ToolField(key: "console", title: "Console address", placeholder: "acme.sentinelone.net", kind: .host)],
-            tokenHeader: "Authorization", tokenScheme: "ApiToken", adapter: "sentinelone")))
+            tokenHeader: "Authorization", tokenScheme: "ApiToken", adapter: "sentinelone")),
+        setup: setup)
+
+    static let setup = [
+        "In the SentinelOne console, open **Settings › Users › Service Users** and choose **Create New Service User**.",
+        "Give it the **Viewer** role, scoped to the account or site to investigate, and an expiry date.",
+        "Copy the API token it shows and paste it here; it is shown only once.",
+        "For the console address, give your console's host, such as `acme.sentinelone.net`.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [FindAgent(), Threats()])
 

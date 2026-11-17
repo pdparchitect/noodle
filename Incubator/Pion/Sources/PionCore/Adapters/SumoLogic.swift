@@ -20,7 +20,14 @@ public enum SumoLogic {
             fields: [ToolField(key: "deployment", title: "Deployment", placeholder: "api.sumologic.com",
                                kind: .choice(deployments.map { .init(value: $0.0, title: $0.1) }))],
             tokenHeader: "Authorization", tokenScheme: "Basic",
-            composedToken: ComposedToken(first: "Access ID", second: "Access Key", format: .basic), adapter: "sumologic")))
+            composedToken: ComposedToken(first: "Access ID", second: "Access Key", format: .basic), adapter: "sumologic")),
+        setup: setup)
+
+    static let setup = [
+        "Use a Sumo Logic user for Pion whose role has the **Download Search Results** and **View Collectors** capabilities. Searching through the API needs an Enterprise account.",
+        "Signed in as that user, open **Preferences › My Access Keys** and choose **Add Access Key**. Copy its **Access ID** and **Access Key** here; the key is shown only once.",
+        "For the deployment, choose the one your Sumo Logic address names: `service.eu.sumologic.com` is EU, and `service.sumologic.com` is US1.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Search()])
 }

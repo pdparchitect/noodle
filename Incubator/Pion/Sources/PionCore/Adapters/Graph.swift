@@ -5,13 +5,14 @@ import NoodleMCP
 /// What Entra and Defender share: Microsoft Graph, reached as an app registered in the person's tenant, with
 /// its client ID and secret exchanged for tokens at Microsoft's sign-in service. Each account is one tenant.
 enum Graph {
-    static func preset(id: String, name: String, summary: String, instructions: String) -> ToolDefinition {
+    static func preset(id: String, name: String, summary: String, instructions: String, setup: [String]) -> ToolDefinition {
         ToolDefinition(id: id, name: name, summary: summary, defaultInstructions: instructions, iconName: id,
             configuration: .connection(.init(endpointTemplate: "https://graph.microsoft.com/v1.0",
                 fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier)],
                 clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
                                                            scope: "https://graph.microsoft.com/.default"),
-                adapter: id)))
+                adapter: id)),
+            setup: setup)
     }
 
     /// Graph wraps every list.

@@ -20,7 +20,15 @@ public enum GoogleCloud {
                          .init(value: "organizations", title: "Organization"), .init(value: "folders", title: "Folder"),
                          .init(value: "projects", title: "Project")])),
                      ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier)],
-            googleScopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"], adapter: "google-cloud")))
+            googleScopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"], adapter: "google-cloud")),
+        setup: setup)
+
+    static let setup = [
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project for Pion and enable the **Cloud Logging**, **Security Command Center** and **Cloud Asset** APIs in it.",
+        "Under **IAM & Admin › Service Accounts**, create a service account. On its **Keys** tab, choose **Add Key › Create new key › JSON**, and choose that file here.",
+        "In IAM for the organisation, folder or project to investigate, grant the service account **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer**. Add **Private Logs Viewer** for Data Access logs too.",
+        "Set Scope and its ID to where you granted them: the organisation's or folder's number, or the project's ID.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [AuditLogs(), Findings(), IAMPolicies(), FindResources()])
 

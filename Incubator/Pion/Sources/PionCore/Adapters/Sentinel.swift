@@ -19,7 +19,15 @@ public enum Sentinel {
                      ToolField(key: "workspace", title: "Workspace ID", placeholder: "8a7f3c2e-0000-4000-8000-000000000002", kind: .identifier)],
             clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
                                                        scope: "https://api.loganalytics.io/.default"),
-            adapter: "sentinel")))
+            adapter: "sentinel")),
+        setup: setup)
+
+    static let setup = [
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion, keep **Single tenant** and leave the redirect URI empty. It needs no API permissions.",
+        "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
+        "In the [Azure portal](https://portal.azure.com), open the Log Analytics workspace behind Microsoft Sentinel, choose **Access control (IAM) › Add role assignment**, and give the app the **Log Analytics Reader** role.",
+        "Copy the **Workspace ID** from the workspace's **Overview**, and the **Directory (tenant) ID** and **Application (client) ID** from the app's **Overview**.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [Query()])
 }

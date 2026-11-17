@@ -19,7 +19,15 @@ public enum CrowdStrike {
                 .init(value: "api.crowdstrike.com", title: "US-1"), .init(value: "api.us-2.crowdstrike.com", title: "US-2"),
                 .init(value: "api.eu-1.crowdstrike.com", title: "EU-1"), .init(value: "api.laggar.gcw.crowdstrike.com", title: "US-GOV-1"),
             ]))],
-            clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://{region}/oauth2/token"), adapter: "crowdstrike")))
+            clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://{region}/oauth2/token"), adapter: "crowdstrike")),
+        setup: setup)
+
+    static let setup = [
+        "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**.",
+        "Name it, such as Pion, and give it only **Hosts: Read** and **Alerts: Read**.",
+        "Copy the **Client ID** and **Secret** here; the secret is shown only once.",
+        "For the Falcon cloud, choose the one your console's address names: `falcon.us-2.crowdstrike.com` is US-2, and `falcon.crowdstrike.com` is US-1.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [FindHost(), Alerts()])
 

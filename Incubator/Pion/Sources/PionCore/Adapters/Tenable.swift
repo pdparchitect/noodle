@@ -15,7 +15,13 @@ public enum Tenable {
         iconName: "tenable",
         configuration: .connection(.init(endpoint: URL(string: "https://cloud.tenable.com")!, tokenHeader: "X-ApiKeys",
             composedToken: ComposedToken(first: "Access Key", second: "Secret Key", format: .template("accessKey={first};secretKey={second}")),
-            adapter: "tenable")))
+            adapter: "tenable")),
+        setup: setup)
+
+    static let setup = [
+        "In Tenable Vulnerability Management, open **Settings › Access Control › Users** and create a user for Pion with the **Basic** role and **Can View** on the assets to investigate, through an access group.",
+        "Open that user, choose **API Keys › Generate**, and copy the **Access Key** and **Secret Key** here. Generating replaces any keys it had.",
+    ]
 
     public static let adapter = OperationAdapter(operations: [AssetVulnerabilities()])
 }
