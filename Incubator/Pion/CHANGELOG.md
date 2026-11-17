@@ -37,6 +37,7 @@
 
 ### Fixed
 
+- The window resizes more smoothly: Solid is now a normal window background and Frosted the system's own frosted glass, which take about a third less work at each step of a resize.
 - As in Noodle, Pion opens its main window even when it last quit with it closed, so its other windows come back and a click on a notification has somewhere to open; a sign-in finishing or Send to Pion no longer opens an empty conversation window.
 - A reply in the selected conversation while Pion is in the background marks its row and counts on the Dock, as in Noodle. Files dropped on a sidebar row go only where a message could be sent, and a pending file that can't be removed stays and says why.
 - An archived agent can be deleted from its editor in Settings › Agents; Delete Agent did nothing for one. A group or Investigation with an archived member can be edited again, and shows that member greyed out until removed, as in Noodle; saving any change failed.

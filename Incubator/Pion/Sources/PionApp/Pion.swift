@@ -359,14 +359,30 @@ enum WindowSurface: String {
     static let key = "PionWindowSurface"
 }
 
-/// The window's background for the chosen surface: frosted glass over the desktop, or the plain window colour.
+/// The window's background for the chosen surface: Solid is a normal window's own background, Frosted the system's
+/// frosted glass over the desktop behind the content. Not a SwiftUI container background for the window, which
+/// made every step of a resize several times slower.
 struct WindowSurfaceBackground: ViewModifier {
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
     func body(content: Content) -> some View {
-        content.containerBackground(surface == .solid ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
-                                                      : AnyShapeStyle(.thickMaterial), for: .window)
+        content.background {
+            if surface == .frosted { FrostedWindowBackground().ignoresSafeArea() }
+        }
     }
+}
+
+/// The desktop behind the window, blurred, as macOS draws translucent window backgrounds.
+private struct FrostedWindowBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .underWindowBackground
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 /// View › Background (Frosted or Solid, and the effect) and View › Sidebar, kept per person as Noodle keeps its view options.
