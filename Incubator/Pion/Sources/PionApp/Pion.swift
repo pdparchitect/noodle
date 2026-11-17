@@ -22,7 +22,8 @@ struct PionApp: App {
     @NSApplicationDelegateAdaptor(PionDelegate.self) private var delegate
 
     var body: some Scene {
-        Window(pionAppName, id: "main") {
+        // Noodle's main window scene: links that open Pion go to it, welcome or not, never to a new window.
+        MainWindowScene {
             MainWindow(model: delegate.model, window: delegate.window, setup: delegate.settings.setup)
                 .environment(delegate.calls)
                 .environment(delegate.settings)
@@ -30,8 +31,13 @@ struct PionApp: App {
                 // Pion's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
                 .modifier(WindowSurfaceBackground())
+        } onOpenURL: { [model = delegate.model] url in
+            // pion://shared is the delegate's, as in Noodle; the rest finish a sign-in.
+            if url.host != "shared" { _ = model.connectionsController.receiveAuthorizationCallback(url) }
         }
         .defaultSize(width: 1320, height: 840)
+        // As in Noodle: even when Pion last quit with it closed, so its windows and notifications have it to open into.
+        .defaultLaunchBehavior(.presented)
         // With the toolbar drawing no background, the window is moved by any empty part of it.
         .windowBackgroundDragBehavior(.enabled)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -191,6 +197,13 @@ struct PionApp: App {
             model.selection = id
             window.openMain?()
         }
+    }
+
+    /// Send to Pion's wake-up, pion://shared, which carries nothing: what it sent waits in the app group. Handled here,
+    /// as Noodle handles noodle://shared, so it arrives with no window open to take it.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard urls.contains(where: { $0.host == "shared" }) else { return }
+        Task { await model.deliverShared() }
     }
 
     /// Send to Pion wakes Pion with pion://shared, but what it sent is also picked up whenever Pion comes forward.

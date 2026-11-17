@@ -121,6 +121,9 @@ let project = Project(
                 // choosers, the Permissions pane, and attachments with their previews, capture and annotation.
                 // They depend on nothing else in Noodle's app; Pion's build fails if one ever does.
                 "../../Sources/Noodle/ScrollableChatComposer.swift",
+                "../../Sources/Noodle/ExternalEventPresentation.swift",
+                "../../Sources/Noodle/IncomingCallPanel.swift",
+                "../../Sources/Noodle/AppIdentity.swift",
                 "../../Sources/Noodle/ComposerFocusSurface.swift",
                 "../../Sources/Noodle/ConversationListKeyboardNavigation.swift",
                 "../../Sources/Noodle/ComposerAttachmentMenu.swift",

@@ -97,6 +97,4 @@ extension NoodleStore: VoiceCallHost, LocalCallHost, AgentTaskHost, BotBudgetHos
     func decline(_ id: UUID) { declineCall(id) }
     func callerPicture(_ agent: AgentRecord) -> AnyView { AnyView(ConversationAvatar(participants: [agent], isGroup: false, size: 44)) }
     func taskAvatar(_ agent: AgentRecord) -> AnyView { AnyView(BotAvatar(agent: agent, size: 22)) }
-    func ring(_ call: AgentCallRequest, from agent: AgentRecord) { AgentNotifications.ring(call, from: agent) }
-    func stopRingingNotification() { AgentNotifications.stopRinging() }
 }

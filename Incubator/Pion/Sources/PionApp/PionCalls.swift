@@ -91,8 +91,6 @@ import SwiftUI
     func isCallable(_ agentID: UUID) -> Bool { model.agent(agentID) != nil }
     func caller(_ agentID: UUID) -> AgentRecord? { model.everyAgent.first { $0.id == agentID } }
     func callerPicture(_ agent: AgentRecord) -> AnyView { AnyView(AgentMark(agent: agent, size: 44)) }
-    func ring(_ call: AgentCallRequest, from agent: AgentRecord) { AgentNotifications.ring(call, from: agent) }
-    func stopRingingNotification() { AgentNotifications.stopRinging() }
 
     /// Rings a call an agent placed, or leaves it as missed when it can no longer ring.
     func ringCall(of agentID: UUID, now: Date = Date()) { ringLocalCall(of: agentID, now: now) }
