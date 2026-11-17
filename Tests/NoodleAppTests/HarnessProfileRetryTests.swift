@@ -114,9 +114,11 @@ import XCTest
 
     func testEveryOptedInProfileOnTheSameHarnessIsUsedBeforeTheFallbackList() throws {
         let f = try fixture()
-        let first = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "First")
-        _ = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Unticked")
-        let second = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Second")
+        // A second apart, as profiles are kept in the order made to the second.
+        let made = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "First", now: made)
+        _ = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Unticked", now: made + 1)
+        let second = try f.repository.harnessProfiles.create(provider: .claudeCode, named: "Second", now: made + 2)
         let runtime = runtime(f, eligible: [first, second])
         runtime.harnesses.setFallbacks([.codex])
         runtime.harnesses.setFallback(on: true)
