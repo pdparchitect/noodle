@@ -326,9 +326,10 @@ public struct ServiceClient: Sendable {
 
     /// `path`'s parts each go in as one segment; a part that would leave it is refused.
     /// `trailingSlash` ends the path with a slash, for services whose addresses do and redirect otherwise.
-    public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:], trailingSlash: Bool = false,
-                                       as answer: Answer.Type = Answer.self) async throws -> Answer {
-        try decode(Answer.self, try await data(path, query: query, trailingSlash: trailingSlash))
+    /// `repeated` gives a parameter once for each of its values, for services that take a list that way.
+    public func get<Answer: Decodable>(_ path: [String], query: [String: String?] = [:], repeated: [String: [String]] = [:],
+                                       trailingSlash: Bool = false, as answer: Answer.Type = Answer.self) async throws -> Answer {
+        try decode(Answer.self, try await exchange(path, query: query, repeated: repeated, trailingSlash: trailingSlash).data)
     }
 
     /// Sends `body` as JSON, for services that take a query or search that way. `headers` add to the request's
@@ -385,7 +386,7 @@ public struct ServiceClient: Sendable {
 
     /// A request and its answer with the response, for an operation that needs its headers, such as a cookie that
     /// later requests of the same job must carry.
-    public func exchange(_ path: [String], query: [String: String?] = [:], method: String = "GET", body: Data? = nil,
+    public func exchange(_ path: [String], query: [String: String?] = [:], repeated: [String: [String]] = [:], method: String = "GET", body: Data? = nil,
                          contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false,
                          headers: [String: String] = [:]) async throws -> (data: Data, response: HTTPURLResponse) {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
@@ -394,7 +395,9 @@ public struct ServiceClient: Sendable {
         let address = path.reduce(base) { $0.appendingPathComponent($1) }
         var components = URLComponents(url: trailingSlash ? address.appendingPathComponent("", isDirectory: true) : address,
                                        resolvingAgainstBaseURL: false)
-        let items = query.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }.sorted { $0.name < $1.name }
+        let items = (query.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }
+            + repeated.flatMap { name, values in values.map { URLQueryItem(name: name, value: $0) } })
+            .enumerated().sorted { ($0.element.name, $0.offset) < ($1.element.name, $1.offset) }.map(\.element)
         components?.queryItems = items.isEmpty ? nil : items
         // A plus sign in a value stays one: some services read a bare + in a query as a space.
         let encoded = components?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")

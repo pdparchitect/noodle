@@ -85,7 +85,9 @@ final class GoogleTests: XCTestCase {
         {"assets":[{"name":"//compute.googleapis.com/projects/kestrel-prod/zones/europe-west1-b/instances/web-01","assetType":"compute.googleapis.com/Instance",
                     "resource":{"location":"europe-west1-b","data":{"status":"RUNNING"}}},
                    {"name":"//compute.googleapis.com/projects/kestrel-prod/zones/europe-west1-b/instances/db-01","assetType":"compute.googleapis.com/Instance",
-                    "resource":{"location":"europe-west1-b"}}]}
+                    "resource":{"location":"europe-west1-b"}},
+                   {"name":"//cloudresourcemanager.googleapis.com/projects/604757830675","assetType":"cloudresourcemanager.googleapis.com/Project",
+                    "resource":{"data":{"projectId":"kestrel-web","name":"Kestrel Web","lifecycleState":"ACTIVE","labels":{"env":"prod"}}}}]}
         """#)
         let access = try await callTool(GoogleCloud.adapter, "iam-policies", #"{"member":"mallory@kestrel.example"}"#, on: service, in: project)
         XCTAssertFalse(access.isError, access.text)
@@ -103,13 +105,16 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(neither.isError)
 
         let resources = try await callTool(GoogleCloud.adapter, "find-resources",
-            #"{"assetTypes":["compute.googleapis.com/Instance"],"name":"web"}"#, on: service, in: project)
+            #"{"assetTypes":["compute.googleapis.com/Instance","cloudresourcemanager.googleapis.com/Project"],"name":"web"}"#, on: service, in: project)
         XCTAssertFalse(resources.isError, resources.text)
         XCTAssertTrue(resources.text.contains("web-01 (compute.googleapis.com/Instance) in europe-west1-b, RUNNING"), resources.text)
+        // A project by its ID and its own name, not the number in its address, matched by either.
+        XCTAssertTrue(resources.text.contains("kestrel-web, Kestrel Web (cloudresourcemanager.googleapis.com/Project), ACTIVE"), resources.text)
         XCTAssertFalse(resources.text.contains("db-01"), "a resource whose name does not match was shown")
-        let listed = queryItems(service.requests.last)
-        XCTAssertEqual(listed["assetTypes"], "compute.googleapis.com/Instance")
-        XCTAssertEqual(listed["contentType"], "RESOURCE")
+        // Cloud Asset takes each type as a parameter of its own.
+        let sent = service.requests.last?.url?.query ?? ""
+        XCTAssertTrue(sent.contains("assetTypes=compute.googleapis.com/Instance&assetTypes=cloudresourcemanager.googleapis.com/Project"), sent)
+        XCTAssertEqual(queryItems(service.requests.last)["contentType"], "RESOURCE")
         XCTAssertEqual(service.requests.last?.url?.host, "cloudasset.googleapis.com")
     }
 

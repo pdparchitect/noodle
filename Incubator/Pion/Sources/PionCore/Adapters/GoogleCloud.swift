@@ -196,26 +196,42 @@ extension GoogleCloud {
             guard !input.assetTypes.isEmpty else { throw ServiceError.input("Give at least one asset type, such as compute.googleapis.com/Instance.") }
             let types = try ServiceInput.list(input.assetTypes, limit: 20) { try ServiceInput.quoted($0, "the asset type") }
             let word = input.name?.trimmingCharacters(in: .whitespaces).lowercased()
-            /// A resource's state, under whichever of the two names its type uses, read leniently since types differ.
+            /// A resource's own name and state, under whichever names its type uses, read leniently since types differ:
+            /// a project gives its ID, name and lifecycle state; an instance its name and status.
             struct State: Codable {
-                let status: String?, state: String?
+                let projectId: String?, name: String?, displayName: String?, status: String?, state: String?, lifecycleState: String?
                 init(from decoder: Decoder) throws {
                     let fields = try? decoder.container(keyedBy: CodingKeys.self)
-                    status = try? fields?.decode(String.self, forKey: .status)
-                    state = try? fields?.decode(String.self, forKey: .state)
+                    func text(_ key: CodingKeys) -> String? { try? fields?.decode(String.self, forKey: key) }
+                    projectId = text(.projectId); name = text(.name); displayName = text(.displayName)
+                    status = text(.status); state = text(.state); lifecycleState = text(.lifecycleState)
+                }
+                /// What it is called, without repeating the end of its address.
+                func called(_ short: String) -> String {
+                    let names = [projectId, name, displayName].compactMap { $0 }.filter { $0 != short }
+                    var seen = Set<String>()
+                    return names.filter { seen.insert($0).inserted }.joined(separator: ", ")
                 }
             }
             struct Details: Codable { let location: String?; let data: State? }
             struct Asset: Codable { let name: String?; let assetType: String?; let resource: Details? }
             struct Answer: Codable { let assets: [Asset]? }
             let assets = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, scope.id, "assets"], query: [
-                "assetTypes": types.joined(separator: ","), "contentType": "RESOURCE", "pageSize": "500",
-            ], as: Answer.self).assets ?? []
-            let matching = assets.filter { asset in word.map { !$0.isEmpty && (asset.name ?? "").lowercased().contains($0) } ?? true }
+                "contentType": "RESOURCE", "pageSize": "500",
+            ], repeated: ["assetTypes": types], as: Answer.self).assets ?? []
+            func short(_ asset: Asset) -> String { (asset.name ?? "?").split(separator: "/").last.map(String.init) ?? "?" }
+            func label(_ asset: Asset) -> String {
+                let called = asset.resource?.data?.called(short(asset)) ?? ""
+                // A project's address ends in its number, which says less than its ID and name.
+                return called.isEmpty ? short(asset) : asset.assetType == "cloudresourcemanager.googleapis.com/Project" ? called : "\(short(asset)), \(called)"
+            }
+            let matching = assets.filter { asset in
+                word.map { !$0.isEmpty && ((asset.name ?? "") + " " + label(asset)).lowercased().contains($0) } ?? true
+            }
             let text = matching.isEmpty ? "No resource matches." : matching.prefix(30).map { asset in
-                let short = (asset.name ?? "?").split(separator: "/").last.map(String.init) ?? "?"
-                let state = asset.resource?.data?.status ?? asset.resource?.data?.state
-                return "\(short) (\(asset.assetType ?? "?"))\(asset.resource?.location.map { " in \($0)" } ?? "")\(state.map { ", \($0)" } ?? "")"
+                let data = asset.resource?.data
+                let state = data?.status ?? data?.state ?? data?.lifecycleState
+                return "\(label(asset)) (\(asset.assetType ?? "?"))\(asset.resource?.location.map { " in \($0)" } ?? "")\(state.map { ", \($0)" } ?? "")"
             }.joined(separator: "\n")
             struct Kept: Encodable { let resources: [Asset] }
             return try ServiceResult(text: text, structured: Kept(resources: Array(matching.prefix(100))))
