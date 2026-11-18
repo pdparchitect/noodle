@@ -51,8 +51,10 @@ struct WelcomeView: View {
     }
 }
 
-/// Pion's mark, drawn in the text colour.
-private struct PionSymbol: View {
+/// Pion's mark, drawn in the text colour, or in `ink` where it is set on a card of its own.
+struct PionSymbol: View {
+    var ink: Color = .primary
+
     private static let image: NSImage? = Bundle.main.url(forResource: "AppSymbol", withExtension: "svg").flatMap {
         let image = NSImage(contentsOf: $0)
         image?.isTemplate = true
@@ -61,7 +63,7 @@ private struct PionSymbol: View {
 
     var body: some View {
         if let image = Self.image {
-            Image(nsImage: image).resizable().scaledToFit().foregroundStyle(.primary).accessibilityHidden(true)
+            Image(nsImage: image).resizable().scaledToFit().foregroundStyle(ink).accessibilityHidden(true)
         } else {
             Image(nsImage: NSApp.applicationIconImage).resizable().scaledToFit().accessibilityHidden(true)
         }

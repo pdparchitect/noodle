@@ -442,7 +442,7 @@ struct PionScenario: Decodable {
             mainWindow?.makeKeyAndOrderFront(nil)
             // The backdrop and titles are for the camera; someone watching keeps the app on the desktop.
             if takesShots, let film = scenario.film, let window = mainWindow {
-                let stage = ScenarioFilmStage(film: film, title: scenario.title, media: scenario.media)
+                let stage = ScenarioFilmStage(film: film, title: scenario.title, media: scenario.media, mark: Self.filmMark)
                 stage.open(on: window)
                 filmStage = stage
             }
@@ -464,6 +464,15 @@ struct PionScenario: Decodable {
     var mainWindow: NSWindow? {
         NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) && $0.isVisible }
             ?? NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) }
+    }
+
+    /// Pion's mark on a film's closing card, as the welcome shows it, coming up as the card is written.
+    private static let filmMark: ScenarioFilmModel.Mark = { written, ink, size in
+        AnyView(PionSymbol(ink: ink)
+            .frame(width: size.height * 1.2, height: size.height * 1.2)
+            .scaleEffect(written ? 1 : 0.7)
+            .opacity(written ? 1 : 0)
+            .animation(.spring(response: 0.6, dampingFraction: 0.62).delay(0.55), value: written))
     }
 
     /// `--scenario-size WIDTHxHEIGHT` opens the window at that size instead of the scenario's own,
