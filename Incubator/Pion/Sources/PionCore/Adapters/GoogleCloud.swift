@@ -46,16 +46,46 @@ public enum GoogleCloud {
         return (level, try service.setting("id"))
     }
 
-    /// The IDs of the live projects under an organisation or folder, from Cloud Asset's read-only listing.
-    static func liveProjects(_ service: ServiceClient, _ scope: (level: String, id: String)) async throws -> [String] {
+    /// The projects under an organisation or folder, from Cloud Asset's read-only listing: each one's ID, number
+    /// and lifecycle state. A deleted project stays listed, with its resources, for 30 days.
+    static func projects(_ service: ServiceClient, _ scope: (level: String, id: String)) async throws -> [(id: String, number: String, state: String)] {
         struct Data: Codable { let projectId: String?; let lifecycleState: String? }
         struct Details: Codable { let data: Data? }
-        struct Asset: Codable { let resource: Details? }
+        struct Asset: Codable { let name: String?; let resource: Details? }
         struct Answer: Codable { let assets: [Asset]? }
         let assets = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, scope.id, "assets"], query: [
             "contentType": "RESOURCE", "pageSize": "500",
         ], repeated: ["assetTypes": ["cloudresourcemanager.googleapis.com/Project"]], as: Answer.self).assets ?? []
-        return assets.compactMap { $0.resource?.data }.filter { $0.lifecycleState == "ACTIVE" }.compactMap(\.projectId)
+        return assets.compactMap { asset in
+            guard let data = asset.resource?.data, let id = data.projectId, let number = asset.name?.split(separator: "/").last else { return nil }
+            return (id, String(number), data.lifecycleState ?? "ACTIVE")
+        }
+    }
+
+    /// The IDs of the live projects under an organisation or folder.
+    static func liveProjects(_ service: ServiceClient, _ scope: (level: String, id: String)) async throws -> [String] {
+        try await projects(service, scope).filter { $0.state == "ACTIVE" }.map(\.id)
+    }
+
+    /// For an organisation or folder, how each of its projects not in use is described, by its ID and by its number,
+    /// so what sits in a project pending deletion is not taken for live; empty for a project's own account.
+    static func retiredProjects(_ service: ServiceClient, _ scope: (level: String, id: String)) async throws -> [String: String] {
+        guard scope.level != "projects" else { return [:] }
+        var retired: [String: String] = [:]
+        for project in try await projects(service, scope) where project.state != "ACTIVE" {
+            let said = project.state == "DELETE_REQUESTED" ? "pending deletion" : project.state.lowercased().replacingOccurrences(of: "_", with: " ")
+            retired[project.id] = said
+            retired[project.number] = said
+        }
+        return retired
+    }
+
+    /// The project a resource's full name or ancestor names, such as kestrel-prod in
+    /// //iam.googleapis.com/projects/kestrel-prod/serviceAccounts/ci@…, or 1001 in projects/1001.
+    static func project(in name: String) -> String? {
+        let parts = name.split(separator: "/")
+        guard let index = parts.firstIndex(of: "projects"), index + 1 < parts.count else { return nil }
+        return String(parts[index + 1])
     }
 
     /// A value inside a Google filter's double quotes.
@@ -202,9 +232,11 @@ extension GoogleCloud {
             let analysis = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, "\(scope.id):analyzeIamPolicy"],
                                                                                         query: query, as: Answer.self).mainAnalysis
             let results = analysis?.analysisResults ?? []
+            let retired = results.isEmpty ? [:] : try await GoogleCloud.retiredProjects(service, scope)
             var text = results.isEmpty ? "No access matches." : results.prefix(30).map { result in
                 let who = (result.identityList?.identities ?? []).compactMap(\.name)
-                return "\(result.attachedResourceFullName ?? "?"): \(result.iamBinding?.role ?? "?") to "
+                let state = result.attachedResourceFullName.flatMap(GoogleCloud.project(in:)).flatMap { retired[$0] }
+                return "\(result.attachedResourceFullName ?? "?")\(state.map { " (project \($0))" } ?? ""): \(result.iamBinding?.role ?? "?") to "
                     + ((result.iamBinding?.members ?? []).prefix(5).joined(separator: ", "))
                     + (who.isEmpty ? "" : " (reaching \(who.prefix(5).joined(separator: ", ")))")
             }.joined(separator: "\n")
@@ -246,7 +278,7 @@ extension GoogleCloud {
                 }
             }
             struct Details: Codable { let location: String?; let data: State? }
-            struct Asset: Codable { let name: String?; let assetType: String?; let resource: Details? }
+            struct Asset: Codable { let name: String?; let assetType: String?; let resource: Details?; var ancestors: [String]? = nil }
             struct Answer: Codable { let assets: [Asset]? }
             let assets = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, scope.id, "assets"], query: [
                 "contentType": "RESOURCE", "pageSize": "500",
@@ -260,10 +292,15 @@ extension GoogleCloud {
             let matching = assets.filter { asset in
                 word.map { !$0.isEmpty && ((asset.name ?? "") + " " + label(asset)).lowercased().contains($0) } ?? true
             }
+            let retired = matching.isEmpty ? [:] : try await GoogleCloud.retiredProjects(service, scope)
             let text = matching.isEmpty ? "No resource matches." : matching.prefix(30).map { asset in
                 let data = asset.resource?.data
                 let state = data?.status ?? data?.state ?? data?.lifecycleState
+                // A project's own state says it already; what sits in one pending deletion says so too.
+                let home = asset.assetType == "cloudresourcemanager.googleapis.com/Project" ? nil
+                    : (asset.ancestors?.first.flatMap(GoogleCloud.project(in:)) ?? asset.name.flatMap(GoogleCloud.project(in:))).flatMap { retired[$0] }
                 return "\(label(asset)) (\(asset.assetType ?? "?"))\(asset.resource?.location.map { " in \($0)" } ?? "")\(state.map { ", \($0)" } ?? "")"
+                    + (home.map { ", in a project \($0)" } ?? "")
             }.joined(separator: "\n")
             struct Kept: Encodable { let resources: [Asset] }
             return try ServiceResult(text: text, structured: Kept(resources: Array(matching.prefix(100))))

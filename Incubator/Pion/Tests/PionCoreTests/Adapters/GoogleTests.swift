@@ -140,6 +140,32 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(service.requests.last?.url?.host, "cloudasset.googleapis.com")
     }
 
+    func testWhatSitsInAProjectPendingDeletionIsMarkedSoItIsNotTakenForLive() async throws {
+        let service = FakeService()
+        service.answers["/v1/organizations/123456789/assets?assetTypes=cloudresourcemanager.googleapis.com/Project&contentType=RESOURCE&pageSize=500"] = (200, #"""
+        {"assets":[{"name":"//cloudresourcemanager.googleapis.com/projects/1001","resource":{"data":{"projectId":"kestrel-prod","lifecycleState":"ACTIVE"}}},
+                   {"name":"//cloudresourcemanager.googleapis.com/projects/1002","resource":{"data":{"projectId":"kestrel-old","lifecycleState":"DELETE_REQUESTED"}}}]}
+        """#)
+        service.answers["/v1/organizations/123456789:analyzeIamPolicy"] = (200, #"""
+        {"mainAnalysis":{"analysisResults":[
+          {"attachedResourceFullName":"//cloudresourcemanager.googleapis.com/projects/kestrel-old","iamBinding":{"role":"roles/owner","members":["user:nick@kestrel.example"]}},
+          {"attachedResourceFullName":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod","iamBinding":{"role":"roles/owner","members":["user:nick@kestrel.example"]}}]}}
+        """#)
+        let access = try await callTool(GoogleCloud.adapter, "iam-policies", #"{"member":"nick@kestrel.example"}"#, on: service, in: cloud)
+        XCTAssertTrue(access.text.contains("projects/kestrel-old (project pending deletion): roles/owner"), access.text)
+        XCTAssertTrue(access.text.contains("projects/kestrel-prod: roles/owner"), access.text)
+
+        service.answers["/v1/organizations/123456789/assets"] = (200, #"""
+        {"assets":[{"name":"//iam.googleapis.com/projects/kestrel-old/serviceAccounts/ci@kestrel-old.iam.gserviceaccount.com/keys/k1",
+                    "assetType":"iam.googleapis.com/ServiceAccountKey","ancestors":["projects/1002","organizations/123456789"]},
+                   {"name":"//iam.googleapis.com/projects/kestrel-prod/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com/keys/k2",
+                    "assetType":"iam.googleapis.com/ServiceAccountKey","ancestors":["projects/1001","organizations/123456789"]}]}
+        """#)
+        let keys = try await callTool(GoogleCloud.adapter, "find-resources", #"{"assetTypes":["iam.googleapis.com/ServiceAccountKey"]}"#, on: service, in: cloud)
+        XCTAssertTrue(keys.text.contains("k1 (iam.googleapis.com/ServiceAccountKey), in a project pending deletion"), keys.text)
+        XCTAssertTrue(keys.text.contains("k2 (iam.googleapis.com/ServiceAccountKey)\n") || keys.text.hasSuffix("k2 (iam.googleapis.com/ServiceAccountKey)"), keys.text)
+    }
+
     func testWorkspaceActivityByApplicationUserAndTime() async throws {
         let service = FakeService()
         service.answers["/admin/reports/v1/activity/users/m.okafor@kestrel.example/applications/login"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:03:00.000Z","applicationName":"login"},"actor":{"email":"m.okafor@kestrel.example"},"ipAddress":"203.0.113.77","events":[{"type":"login","name":"login_success","parameters":[{"name":"login_type","value":"google_password"},{"name":"is_suspicious","boolValue":true}]}]}]}"#)
