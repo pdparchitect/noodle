@@ -8,6 +8,7 @@
 
 ### Changed
 
+- Grafana's description in Settings › Tools says it is a self-hosted Grafana, without guessing where it runs.
 - Pion's own services show their own icons in Settings › Tools, instead of a letter.
 - Settings › Tools no longer shows the fixed address of Pion's own tools under their names, and adding a tool no longer notes under its key that it is kept in Keychain.
 

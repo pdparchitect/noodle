@@ -23,7 +23,7 @@ public enum Grafana {
         setup: cloudSetup)
 
     public static let server = ToolDefinition(
-        id: "ff724613-f97d-48f6-aeb0-165ad72e8f98", formerID: "grafana-server", name: "Grafana", summary: "A Grafana you run, on this Mac, your network or anywhere: dashboards, queries and alerts.",
+        id: "ff724613-f97d-48f6-aeb0-165ad72e8f98", formerID: "grafana-server", name: "Grafana", summary: "A self-hosted Grafana: dashboards, queries over data sources, firing alerts and annotations.",
         defaultInstructions: instructions, iconName: "grafana",
         configuration: .connection(.init(endpointTemplate: "{address}/api",
             fields: [ToolField(key: "address", title: "Grafana address", placeholder: "http://localhost:3000", kind: .address)],
