@@ -400,12 +400,11 @@ struct ViewOptions: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
-            // Checkmark items rather than an inline picker, which draws a separator of its own under the header.
-            Section("Animation") {
+            // Checkmark items rather than an inline picker, which draws a separator of its own.
+            Section {
                 ForEach(BackdropEffect.offered) { offered in
                     Toggle(offered.title, isOn: Binding(get: { effect == offered.rawValue },
                                                         set: { if $0 { effect = offered.rawValue } }))
-                    if offered == .none { Divider() }
                 }
             }
         }
