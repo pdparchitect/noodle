@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- A tool that cannot reach its service says why, in the system's words, such as a refused connection or an untrusted certificate, instead of only asking to reconnect.
 - The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.
 
 ## [0.54.0] - 2026-11-18

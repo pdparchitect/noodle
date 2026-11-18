@@ -643,6 +643,16 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertEqual(missing.statusCode, 404, "the service's status was not handed back")
     }
 
+    func testANetworkFailureSaysWhatWentWrongAndOtherErrorsStayHidden() {
+        let refused = ToolConnectionProviders.safeError(URLError(.cannotConnectToHost))
+        XCTAssertTrue(refused.hasPrefix("The service could not be reached: "), refused)
+        XCTAssertTrue(refused.hasSuffix("(\(URLError.Code.cannotConnectToHost.rawValue))"), refused)
+        struct ServiceSaid: LocalizedError { var errorDescription: String? { "secret response body" } }
+        let hidden = ToolConnectionProviders.safeError(ServiceSaid())
+        XCTAssertFalse(hidden.contains("secret"), hidden)
+        XCTAssertTrue(hidden.contains("ServiceSaid"), "the kind of error is not shown: \(hidden)")
+    }
+
     func testSigningOutRevokesAGoogleSignInAtGoogleAndForgetsIt() async throws {
         let reports = ToolDefinition(id: "reports", name: "Reports", summary: "Audit reports.", defaultInstructions: "Read.", iconName: "reports",
             configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",

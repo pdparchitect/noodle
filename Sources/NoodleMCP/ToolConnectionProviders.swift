@@ -47,6 +47,13 @@ import NoodleCore
     /// Only Noodle's own errors are shown; anything else may carry a provider's private response.
     public nonisolated static func safeError(_ error: Error) -> String {
         if error is ToolConnectionServiceError || error is ToolConnectionError { return error.localizedDescription }
-        return "The tool connection could not complete the request. Try reconnecting in Settings → Tools."
+        // The system's own words for a network failure, such as a refused connection or an untrusted certificate,
+        // carry nothing from the service, and say what to fix.
+        if let failure = error as? URLError {
+            return "The service could not be reached: \(failure.localizedDescription) (\(failure.code.rawValue))"
+        }
+        // Only the kind of error, never its text, which may carry what the service said.
+        let kind = error as NSError
+        return "The tool connection could not complete the request (\(kind.domain) \(kind.code)). Try reconnecting in Settings → Tools."
     }
 }
