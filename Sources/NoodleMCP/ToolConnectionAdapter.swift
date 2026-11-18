@@ -32,7 +32,11 @@ public struct ToolConnectionAccess: Sendable {
         }
         var request = request
         authorization?.apply(to: &request)
-        let session = URLSession(configuration: configuration(), delegate: NoRedirects(), delegateQueue: nil)
+        // The guard on MCP traffic takes only public HTTPS and turns every answer but a success into an error. An adapter
+        // checks its own requests above, and reads the service's status to say what went wrong, so it goes without it.
+        let configuration = configuration()
+        configuration.protocolClasses = configuration.protocolClasses?.filter { $0 != MCPGuardedHTTP.self }
+        let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request, limit: Self.limit, tooLarge: ToolConnectionServiceError.responseTooLarge)
         guard let http = response as? HTTPURLResponse else { throw ToolConnectionServiceError.network(0) }

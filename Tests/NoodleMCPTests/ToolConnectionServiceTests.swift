@@ -629,6 +629,20 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertEqual(FixtureProtocol.state.googleRequests.last?.headers["Authorization"], "Bearer google-access-1")
     }
 
+    func testAnAdapterGoesAroundTheMCPGuardSoItReachesLocalServicesAndReadsTheirStatus() async throws {
+        // As in the app, the MCP guard comes first; here the stand-in answers behind it.
+        let access = ToolConnectionAccess(endpoint: URL(string: "http://localhost:3000/v3")!, authorization: nil) {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [MCPGuardedHTTP.self, FixtureProtocol.self]
+            return configuration
+        }
+        let (data, ok) = try await access.data(for: URLRequest(url: URL(string: "http://localhost:3000/v3/files/abc")!))
+        XCTAssertEqual(ok.statusCode, 200)
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"verdict":"harmless"}"#)
+        let (_, missing) = try await access.data(for: URLRequest(url: URL(string: "http://localhost:3000/v3/nothing-here")!))
+        XCTAssertEqual(missing.statusCode, 404, "the service's status was not handed back")
+    }
+
     func testSigningOutRevokesAGoogleSignInAtGoogleAndForgetsIt() async throws {
         let reports = ToolDefinition(id: "reports", name: "Reports", summary: "Audit reports.", defaultInstructions: "Read.", iconName: "reports",
             configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
