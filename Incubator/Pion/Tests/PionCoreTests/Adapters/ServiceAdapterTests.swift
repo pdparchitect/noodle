@@ -58,6 +58,7 @@ final class ServiceAdapterTests: XCTestCase {
         service.answers["/api/v3/files/bad"] = (401, #"{"error":"WrongCredentials"}"#)
         service.answers["/api/v3/files/busy"] = (429, "{}")
         service.answers["/api/v3/files/denied"] = (403, #"{"detail":"You do not have permission\nto perform this action."}"#)
+        service.answers["/api/v3/files/disabled"] = (403, #"{"error":{"code":403,"message":"Cloud Asset API has not been used in project 1234 before or it is disabled.","status":"PERMISSION_DENIED"}}"#)
         func message(_ arguments: String) async throws -> String {
             let result = try await call(arguments, on: service)
             XCTAssertEqual(result["isError"] as? Bool, true, arguments)
@@ -72,6 +73,9 @@ final class ServiceAdapterTests: XCTestCase {
         let denied = try await message(#"{"hash":"denied"}"#)
         XCTAssertTrue(denied.contains("accepted this connection's credentials, but they may not do this"), denied)
         XCTAssertTrue(denied.contains("(it said: You do not have permission to perform this action.)"), denied)
+        // Google and Microsoft put it one level down.
+        let disabled = try await message(#"{"hash":"disabled"}"#)
+        XCTAssertTrue(disabled.contains("(it said: Cloud Asset API has not been used in project 1234 before or it is disabled.)"), disabled)
         let limited = try await message(#"{"hash":"busy"}"#)
         XCTAssertTrue(limited.contains("rate"), limited)
         let malformed = try await message(#"{"relationships":true}"#)

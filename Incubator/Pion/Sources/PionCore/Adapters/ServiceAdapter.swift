@@ -365,9 +365,11 @@ public struct ServiceClient: Sendable {
     /// What a service said when it refused, from the fields services put it in, on one short line.
     static func reason(_ data: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        // Google and Microsoft put it one level down, in error.message.
         let said = ["detail", "message", "error_description", "error"].lazy.compactMap { object[$0] as? String }.first
+            ?? (object["error"] as? [String: Any])?["message"] as? String
         let line = said?.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        return line.flatMap { $0.isEmpty ? nil : String($0.prefix(200)) }
+        return line.flatMap { $0.isEmpty ? nil : String($0.prefix(300)) }
     }
 
     private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
