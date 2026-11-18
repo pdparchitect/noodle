@@ -120,7 +120,7 @@ extension GoogleCloud {
             struct Resource: Codable { let displayName: String?; let type: String? }
             struct Result: Codable { let finding: Finding?; let resource: Resource? }
             struct Answer: Codable { let listFindingsResults: [Result]? }
-            let results = try await service.at(host: "securitycenter.googleapis.com").get(["v1", scope.level, scope.id, "sources", "-", "findings"],
+            let results = try await service.at(host: "securitycenter.googleapis.com").get(["v2", scope.level, scope.id, "sources", "-", "findings"],
                 query: ["filter": filter.joined(separator: " AND "), "orderBy": "event_time desc", "pageSize": String(limit)],
                 as: Answer.self).listFindingsResults ?? []
             let text = results.isEmpty ? "No active findings match." : results.map { result in
