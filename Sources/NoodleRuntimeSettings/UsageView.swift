@@ -312,7 +312,10 @@ public struct UsageView: View {
         .task(id: LedgerQuery(revision: history.revision, span: span, agentID: history.agentFilter, visible: visible)) {
             guard visible else { return }
             let range = UsageReport.range(span, now: Date())
-            days = history.days(from: range.lowerBound, to: range.upperBound, agentID: history.agentFilter)
+            let loaded = await history.loadDays(from: range.lowerBound, to: range.upperBound, agentID: history.agentFilter)
+            // A newer period or record started another read; this one's answer is already out of date.
+            guard !Task.isCancelled else { return }
+            days = loaded
         }
         .navigationSubtitle(rangeText(range))
     }

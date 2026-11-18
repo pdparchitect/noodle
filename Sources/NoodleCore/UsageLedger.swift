@@ -157,16 +157,20 @@ public final class UsageLedger: @unchecked Sendable {
 
     /// Days are local calendar days. `to` is exclusive.
     public func days(from start: Date, to end: Date, agentID: UUID? = nil) throws -> [UsageDay] {
-        // The newest name per agent labels its whole history, so a rename does not split it.
+        // The newest name per agent labels its whole history, so a rename does not split it. The period is totalled
+        // first, then each agent's newest name is found through its index, so the cost follows the period, not the
+        // whole history.
         try withStatement("""
-            SELECT date(u.time, 'unixepoch', 'localtime') AS day, u.agent_id, n.agent_name, u.harness, u.model,
-                   SUM(u.input), SUM(u.output), SUM(u.cache_read), SUM(u.cache_write), SUM(u.reasoning),
-                   SUM(u.cost_usd), u.owner
-            FROM usage u
-            JOIN (SELECT agent_id, agent_name, MAX(time) FROM usage GROUP BY agent_id) n ON n.agent_id = u.agent_id
-            WHERE u.time >= ? AND u.time < ? AND (? IS NULL OR u.agent_id = ?)
-            GROUP BY day, u.agent_id, u.harness, u.model, u.owner
-            ORDER BY day
+            SELECT g.day, g.agent_id,
+                   (SELECT x.agent_name FROM usage x WHERE x.agent_id = g.agent_id ORDER BY x.time DESC LIMIT 1),
+                   g.harness, g.model, g.input, g.output, g.cache_read, g.cache_write, g.reasoning, g.cost, g.owner
+            FROM (SELECT date(time, 'unixepoch', 'localtime') AS day, agent_id, harness, model,
+                         SUM(input) AS input, SUM(output) AS output, SUM(cache_read) AS cache_read,
+                         SUM(cache_write) AS cache_write, SUM(reasoning) AS reasoning, SUM(cost_usd) AS cost, owner
+                  FROM usage
+                  WHERE time >= ? AND time < ? AND (? IS NULL OR agent_id = ?)
+                  GROUP BY day, agent_id, harness, model, owner) g
+            ORDER BY g.day
             """) { statement in
             sqlite3_bind_double(statement, 1, start.timeIntervalSince1970)
             sqlite3_bind_double(statement, 2, end.timeIntervalSince1970)

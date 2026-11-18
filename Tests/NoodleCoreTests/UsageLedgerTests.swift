@@ -35,6 +35,7 @@ final class UsageLedgerTests: XCTestCase {
         XCTAssertEqual(aliceToday.model, "claude-haiku-4-5")
         // Renames show the newest name for the whole history.
         XCTAssertEqual(days.first { $0.agentID == alice && $0.day == yesterday }?.agentName, "Alice")
+        XCTAssertEqual(try ledger.days(from: yesterday, to: today).map(\.agentName), ["Alice"], "a name newer than the period is still its name")
         let bobToday = try XCTUnwrap(days.first { $0.agentID == bob })
         XCTAssertNil(bobToday.costUSD)
         XCTAssertEqual(bobToday.tokens.total, 161)

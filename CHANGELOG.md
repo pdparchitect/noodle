@@ -10,6 +10,10 @@ All notable changes to Noodle are documented here, following
 
 - Adding a tool no longer notes under its key that it is kept in Keychain.
 
+### Fixed
+
+- The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.
+
 ## [0.88.0] - 2026-11-18
 
 ### Changed

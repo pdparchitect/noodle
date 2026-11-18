@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.
+
 ## [0.54.0] - 2026-11-18
 
 ### Changed
