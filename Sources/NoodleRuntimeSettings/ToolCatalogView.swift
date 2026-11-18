@@ -248,7 +248,6 @@ private struct PresetSetUpForm: View {
                     ToolCatalogIcon(tool: tool, size: 32)
                     Text(tool.summary).font(.callout).foregroundStyle(.secondary)
                 }
-                if !tool.setup.isEmpty { ToolSetupSteps(steps: tool.setup) }
                 field("Name") {
                     TextField("e.g. \(tool.name) — Work", text: $name, axis: .horizontal).lineLimit(1)
                 }
@@ -288,6 +287,7 @@ private struct PresetSetUpForm: View {
                     Text("Kept in Keychain and used for every request.").font(.caption).foregroundStyle(.secondary)
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
+                if !tool.setup.isEmpty { ToolSetupSteps(steps: tool.setup) }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
@@ -300,30 +300,58 @@ private struct PresetSetUpForm: View {
     }
 }
 
-/// A preset's steps for getting the key or account it asks for, folded until opened. They stay in the form, so
-/// they can be followed in the service's console while it is filled in.
+/// A preset's steps for getting the key or account it asks for, at the foot of its form below a divider: a button
+/// that opens them in a popover, where they can be read, selected or copied to send to whoever sets the service up.
 struct ToolSetupSteps: View {
     let steps: [String]
-    @State private var expanded = false
+    @State private var shown = false
 
     var body: some View {
-        DisclosureGroup("Setup Steps", isExpanded: $expanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
-                        Text(Self.markdown(step)).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Button { shown = true } label: { Label("Setup Steps", systemImage: "list.number") }
+                .buttonStyle(.link)
+                .popover(isPresented: $shown, arrowEdge: .top) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                                    Text(Self.markdown(step)).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        HStack {
+                            Spacer()
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(Self.plainText(steps), forType: .string)
+                            }
+                        }
                     }
+                    .padding(16)
+                    .frame(width: 400)
                 }
-            }
-            .font(.callout)
-            .textSelection(.enabled)
-            .padding(.top, 6)
         }
     }
 
     static func markdown(_ step: String) -> AttributedString {
         (try? AttributedString(markdown: step, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(step)
+    }
+
+    /// The steps numbered as plain text, each link written out after its words, to paste into a message.
+    static func plainText(_ steps: [String]) -> String {
+        steps.enumerated().map { index, step in
+            let text = markdown(step)
+            let line = text.runs.map { run in
+                let words = String(text[run.range].characters)
+                guard let link = run.link?.absoluteString, link != words else { return words }
+                return "\(words) (\(link))"
+            }.joined()
+            return "\(index + 1). \(line)"
+        }.joined(separator: "\n")
     }
 }
 
