@@ -23,6 +23,7 @@
 
 ### Fixed
 
+- Google Cloud's audit logs for an organisation or folder include what happened inside each of its projects, which keep their own logs, read past Google's first page up to the limit asked for, and look back 30 days unless told otherwise.
 - Google Cloud's Security Command Center findings come from Google's current API; the one Pion used no longer answers.
 - When a service turns a tool away, Pion's own tools tell a wrong or expired key from one that may not do what was asked, and pass on the service's reason, including Google's and Microsoft's, such as an API not enabled, also when it turns down the request itself.
 - Pion's own tools reach a service on this Mac or the local network, such as a Grafana at http://cbk-ops:3000, and say when a service refuses their credentials, finds nothing or limits them, instead of a generic error.

@@ -44,20 +44,41 @@ final class GoogleTests: XCTestCase {
         }
     }
 
-    func testAuditLogsAreFilteredForTheScope() async throws {
+    func testAuditLogsAreFilteredForTheScopeAndReachEachOfItsProjectsLogs() async throws {
         let service = FakeService()
-        service.answers["/v2/entries:list"] = (200, #"{"entries":[{"timestamp":"2026-11-14T09:00:00Z","logName":"organizations/123456789/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"methodName":"SetIamPolicy","serviceName":"cloudresourcemanager.googleapis.com","resourceName":"projects/kestrel-prod","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"requestMetadata":{"callerIp":"203.0.113.77"},"status":{}}}]}"#)
+        // A project keeps its own audit logs, so an organisation's search names its live projects too.
+        service.answers["/v1/organizations/123456789/assets"] = (200, #"""
+        {"assets":[{"name":"//cloudresourcemanager.googleapis.com/projects/1001","assetType":"cloudresourcemanager.googleapis.com/Project",
+                    "resource":{"data":{"projectId":"kestrel-prod","lifecycleState":"ACTIVE"}}},
+                   {"name":"//cloudresourcemanager.googleapis.com/projects/1002","assetType":"cloudresourcemanager.googleapis.com/Project",
+                    "resource":{"data":{"projectId":"kestrel-old","lifecycleState":"DELETE_REQUESTED"}}}]}
+        """#)
+        // Logging answers in pages, however many entries were asked for.
+        service.sequences["/v2/entries:list"] = [
+            (200, #"{"entries":[{"timestamp":"2026-11-14T09:00:00Z","logName":"organizations/123456789/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"methodName":"SetIamPolicy","serviceName":"cloudresourcemanager.googleapis.com","resourceName":"projects/kestrel-prod","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"requestMetadata":{"callerIp":"203.0.113.77"},"status":{}}}],"nextPageToken":"page-2"}"#),
+            (200, #"{"entries":[{"timestamp":"2026-11-14T08:00:00Z","logName":"projects/kestrel-prod/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"methodName":"google.iam.admin.v1.CreateServiceAccountKey","resourceName":"projects/-/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"requestMetadata":{"callerIp":"203.0.113.77"},"status":{}}}]}"#),
+        ]
         let logs = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"principal":"mallory@kestrel.example","since":"2026-11-13T00:00:00Z","limit":20}"#, on: service, in: cloud)
         XCTAssertFalse(logs.isError, logs.text)
         XCTAssertTrue(logs.text.contains("SetIamPolicy by mallory@kestrel.example from 203.0.113.77"), logs.text)
-        let request = try XCTUnwrap(service.requests.first)
-        XCTAssertEqual(request.url?.host, "logging.googleapis.com")
-        let body = try json(request)
-        XCTAssertEqual(body["resourceNames"] as? [String], ["organizations/123456789"])
+        XCTAssertTrue(logs.text.contains("CreateServiceAccountKey by mallory@kestrel.example from 203.0.113.77 on projects/-/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com in projects/kestrel-prod"), logs.text)
+        let searches = service.requests.filter { $0.url?.host == "logging.googleapis.com" }
+        XCTAssertEqual(searches.count, 2, "the second page was not read")
+        let body = try json(searches.first)
+        XCTAssertEqual(body["resourceNames"] as? [String], ["organizations/123456789", "projects/kestrel-prod"], "a live project's logs were left out, or a deleted one's put in")
         XCTAssertEqual(body["filter"] as? String,
             #"logName:"cloudaudit.googleapis.com" AND protoPayload.authenticationInfo.principalEmail="mallory@kestrel.example" AND timestamp>="2026-11-13T00:00:00Z""#)
         XCTAssertEqual(body["orderBy"] as? String, "timestamp desc")
         XCTAssertEqual(body["pageSize"] as? Int, 20)
+        XCTAssertEqual(try json(searches.dropFirst().first)["pageToken"] as? String, "page-2")
+
+        // A project's account searches only that project's logs.
+        let one = FakeService()
+        one.answers["/v2/entries:list"] = (200, #"{"entries":[]}"#)
+        _ = try await callTool(GoogleCloud.adapter, "audit-logs", "{}", on: one, in: project)
+        XCTAssertEqual(try json(one.requests.first)["resourceNames"] as? [String], ["projects/kestrel-prod"])
+        XCTAssertEqual(one.requests.count, 1)
+
         let bad = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"principal":"x\" OR \"y"}"#, on: service, in: cloud)
         XCTAssertTrue(bad.isError)
     }

@@ -46,6 +46,18 @@ public enum GoogleCloud {
         return (level, try service.setting("id"))
     }
 
+    /// The IDs of the live projects under an organisation or folder, from Cloud Asset's read-only listing.
+    static func liveProjects(_ service: ServiceClient, _ scope: (level: String, id: String)) async throws -> [String] {
+        struct Data: Codable { let projectId: String?; let lifecycleState: String? }
+        struct Details: Codable { let data: Data? }
+        struct Asset: Codable { let resource: Details? }
+        struct Answer: Codable { let assets: [Asset]? }
+        let assets = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, scope.id, "assets"], query: [
+            "contentType": "RESOURCE", "pageSize": "500",
+        ], repeated: ["assetTypes": ["cloudresourcemanager.googleapis.com/Project"]], as: Answer.self).assets ?? []
+        return assets.compactMap { $0.resource?.data }.filter { $0.lifecycleState == "ACTIVE" }.compactMap(\.projectId)
+    }
+
     /// A value inside a Google filter's double quotes.
     static func quoted(_ value: String, _ name: String) throws -> String { "\"" + (try ServiceInput.quoted(value, name)) + "\"" }
 }
@@ -54,12 +66,12 @@ extension GoogleCloud {
     struct AuditLogs: ServiceOperation {
         struct Input: Decodable, Sendable { let principal: String?, method: String?, resource: String?, since: String?, until: String?, limit: Int? }
         static let name = "audit-logs"
-        static let summary = "Cloud Audit Log entries, newest first, by principal, method and resource, with caller IP and status."
+        static let summary = "Cloud Audit Log entries across the scope and each of its live projects, newest first, by principal, method and resource, with caller IP and status."
         static let input = JSONSchema.object([
             "principal": .string("The email of who acted, such as mallory@example.com or a service account."),
             "method": .string("The API method, such as SetIamPolicy or google.iam.admin.v1.CreateServiceAccountKey."),
             "resource": .string("The resource name, such as projects/my-project."),
-            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "since": .string("The earliest time, in ISO 8601. The last 30 days when left out."),
             "until": .string("The latest time, in ISO 8601."), "limit": .integer("How many entries, at most.", minimum: 1, maximum: 200),
         ])
 
@@ -69,11 +81,11 @@ extension GoogleCloud {
             if let principal = input.principal { filter.append("protoPayload.authenticationInfo.principalEmail=" + (try GoogleCloud.quoted(principal, "the principal"))) }
             if let method = input.method { filter.append("protoPayload.methodName:" + (try GoogleCloud.quoted(method, "the method"))) }
             if let resource = input.resource { filter.append("protoPayload.resourceName:" + (try GoogleCloud.quoted(resource, "the resource"))) }
-            filter.append("timestamp>=\"\(try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7))\"")
+            filter.append("timestamp>=\"\(try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(30))\"")
             if let until = input.until { filter.append("timestamp<=\"\(try ServiceInput.time(until))\"") }
             let limit = input.limit ?? 50
             guard (1...200).contains(limit) else { throw ServiceError.input("Ask for between 1 and 200 entries.") }
-            struct Body: Encodable { let resourceNames: [String], filter: String, orderBy: String, pageSize: Int }
+            struct Body: Encodable { let resourceNames: [String], filter: String, orderBy: String, pageSize: Int, pageToken: String? }
             struct Authentication: Codable { let principalEmail: String? }
             struct Metadata: Codable { let callerIp: String?; let callerSuppliedUserAgent: String? }
             struct Status: Codable { let code: Int?; let message: String? }
@@ -82,20 +94,40 @@ extension GoogleCloud {
                 let requestMetadata: Metadata?, status: Status?
             }
             struct Entry: Codable { let timestamp: String?, logName: String?, severity: String?, protoPayload: Payload? }
-            struct Entries: Codable { let entries: [Entry]? }
-            let entries = try await service.at(host: "logging.googleapis.com").post(["v2", "entries:list"], body: Body(
-                resourceNames: ["\(scope.level)/\(scope.id)"], filter: filter.joined(separator: " AND "), orderBy: "timestamp desc", pageSize: limit),
-                as: Entries.self).entries ?? []
+            struct Entries: Codable { let entries: [Entry]?; var nextPageToken: String? = nil }
+            // Each project keeps its own audit logs, so an organisation's or folder's search names its live projects too,
+            // as many as Logging takes at once.
+            var names = ["\(scope.level)/\(scope.id)"]
+            var note = ""
+            if scope.level != "projects" {
+                let projects = try await GoogleCloud.liveProjects(service, scope)
+                names += projects.prefix(99).map { "projects/" + $0 }
+                if projects.count > 99 { note = "\nOnly the first 99 of \(projects.count) projects' logs were searched; narrow the account to a folder for the rest." }
+            }
+            // Logging may hand back empty pages that still lead on, so it reads ten at most.
+            var entries: [Entry] = [], page: String?, pages = 0
+            repeat {
+                pages += 1
+                let answer = try await service.at(host: "logging.googleapis.com").post(["v2", "entries:list"], body: Body(
+                    resourceNames: names, filter: filter.joined(separator: " AND "), orderBy: "timestamp desc", pageSize: limit - entries.count,
+                    pageToken: page), as: Entries.self)
+                entries += answer.entries ?? []
+                page = answer.nextPageToken
+            } while page != nil && entries.count < limit && pages < 10
             let text = entries.isEmpty ? "No audit log entries match." : entries.prefix(30).map { entry in
                 let payload = entry.protoPayload
                 var line = "\(entry.timestamp ?? "?") \(payload?.methodName ?? "?")"
                 if let who = payload?.authenticationInfo?.principalEmail { line += " by \(who)" }
                 if let ip = payload?.requestMetadata?.callerIp { line += " from \(ip)" }
                 if let resource = payload?.resourceName { line += " on \(resource)" }
+                // Where it was logged, when that is a project rather than the scope itself.
+                if let log = entry.logName, log.hasPrefix("projects/"), let project = log.split(separator: "/").dropFirst().first {
+                    line += " in projects/\(project)"
+                }
                 if let code = payload?.status?.code, code != 0 { line += " — failed (\(payload?.status?.message ?? String(code)))" }
                 return line
-            }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Entries(entries: entries))
+            }.joined(separator: "\n") + note
+            return try ServiceResult(text: text, structured: Entries(entries: Array(entries.prefix(limit))))
         }
     }
 

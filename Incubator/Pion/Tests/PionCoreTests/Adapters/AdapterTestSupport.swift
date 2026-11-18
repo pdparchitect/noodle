@@ -8,6 +8,8 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     let lock = NSLock()
     var requests: [URLRequest] = []
     var answers: [String: (Int, String)] = [:]
+    /// Answers given in turn for one address, as pages of one search come, before `answers` is asked.
+    var sequences: [String: [(Int, String)]] = [:]
     /// Headers every answer carries, such as a cookie the service sets.
     var responseHeaders: [String: String] = [:]
 
@@ -18,8 +20,12 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
         // An answer for the request's target or action first, as AWS names its calls, then an exact one, then one for
         // the path whatever the query.
         let candidates = [request.value(forHTTPHeaderField: "X-Amz-Target"), action.map { "action:" + $0 }, key, request.url!.path]
-        let (status, body) = lock.withLock { candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first }
-            ?? (404, #"{"error":"NotFound"}"#)
+        let (status, body) = lock.withLock {
+            if let path = candidates.compactMap({ $0 }).first(where: { self.sequences[$0]?.isEmpty == false }) {
+                return self.sequences[path]!.removeFirst()
+            }
+            return candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first ?? (404, #"{"error":"NotFound"}"#)
+        }
         return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: responseHeaders)!)
     }
 }
