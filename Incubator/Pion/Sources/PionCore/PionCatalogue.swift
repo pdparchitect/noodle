@@ -3,8 +3,8 @@ import NoodleCore
 /// The services Pion offers in Settings › Tools › Add Tools: its own security services, which its adapters answer,
 /// and the few of Noodle's presets that help an investigation.
 public enum PionCatalogue {
-    /// Noodle's presets kept: tickets and notes, observability, code security and search, and web research. Grafana is
-    /// Pion's own, read-only, for Grafana Cloud and one the person runs.
+    /// Noodle's presets kept: tickets and notes, observability, code security and search, and web research. Grafana and
+    /// Sentry are Pion's own, read-only, for their own services and self-hosted ones.
     static let keptFromNoodle: Set<String> = [
         "e1cce3a2-3e55-4949-ad25-950a70fe3599", // atlassian
         "ec956078-71a2-4599-83d6-b9e5ef43ad9c", // linear
@@ -12,7 +12,6 @@ public enum PionCatalogue {
         "e0a407a2-a551-490a-a1b2-eed96f1190a7", // axiom
         "7f412e92-4f67-44ff-87c1-3831ebd975bb", // datadog
         "c70b0318-fb98-4d9e-9c20-1708555045e1", // honeycomb
-        "2a6427cb-2fc5-4774-b077-2b2a4abc6308", // sentry
         "2d121438-4335-4ac7-9705-b9a87b3c2312", // semgrep
         "c0a4eff4-ac47-4b92-8fa2-209f9f304812", // socket
         "c754d63b-ae5d-4ef5-933e-a9ceae0a5465", // sourcegraph
@@ -27,6 +26,6 @@ public enum PionCatalogue {
         VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset, CrowdStrike.preset, SentinelOne.preset,
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
         URLScan.preset, GreyNoise.preset, OTX.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset,
-        Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server,
+        Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

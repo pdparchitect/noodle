@@ -4,10 +4,12 @@
 
 ### Added
 
+- Sentry and Self-Hosted Sentry, for one you run, even on this Mac or your network, in Settings › Tools: agents list projects, search issues and read an issue's latest event, with its exception, the frames in the service's own code, the request, the user and its tags, only ever reading.
 - Clicking a tool's Connected status offers Sign Out, which revokes its sign-in or key at the service where the service allows it, as Google, Okta and GitHub do, and forgets it here; Remove revokes it the same way before deleting the tool.
 
 ### Changed
 
+- Sentry in Settings › Tools is now Pion's own, read-only, in place of Sentry's MCP server; an account added before keeps working as a custom MCP connection.
 - Retire the upgrade step that moved saved tools to their catalogue entries' new IDs. Updates already pass through Pion 0.4.0.
 - Grafana's description in Settings › Tools says it is a self-hosted Grafana, without guessing where it runs.
 - Pion's own services show their own icons in Settings › Tools, instead of a letter.

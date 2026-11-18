@@ -10,15 +10,15 @@ final class PionCatalogueTests: XCTestCase {
         let names = Set(PionCatalogue.entries.map(\.name))
         for security in ["VirusTotal", "Shodan", "Okta", "Microsoft Entra ID", "Microsoft Defender XDR", "CrowdStrike Falcon", "SentinelOne",
                          "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Wiz", "AbuseIPDB", "GreyNoise", "AWS",
-                         "Google Cloud", "Google Workspace", "Grafana Cloud", "Grafana"] {
+                         "Google Cloud", "Google Workspace", "Grafana Cloud", "Grafana", "Sentry", "Self-Hosted Sentry"] {
             XCTAssertTrue(names.contains(security), security)
         }
         // Noodle's own entries, by their icons' names.
         let fromNoodle = Set(PionCatalogue.entries.filter { entry in ToolCatalog.noodle.contains { $0.id == entry.id } }.map(\.iconName))
-        for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "sentry", "semgrep", "perplexity"] {
+        for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "semgrep", "perplexity"] {
             XCTAssertTrue(fromNoodle.contains(kept), kept)
         }
-        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter", "grafana"] {
+        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter", "grafana", "sentry"] {
             XCTAssertFalse(fromNoodle.contains(dropped), dropped)
         }
         let noodle = Set(ToolCatalog.noodle.map(\.id))

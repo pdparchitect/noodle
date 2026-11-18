@@ -42,7 +42,7 @@ Tools connects them to services, over MCP or through Pion's own lookups: reputat
 VirusTotal, Shodan and GreyNoise; identity providers such as Okta, Microsoft Entra ID and Google
 Workspace; endpoint and XDR consoles such as CrowdStrike Falcon and Microsoft Defender XDR; log
 searches in Splunk, Elastic, Microsoft Sentinel and Sumo Logic; metrics, logs and alerts in Grafana
-Cloud or a Grafana you run, even one on this Mac or your network; and cloud accounts in AWS, Google
+Cloud or a Grafana you run, and errors in Sentry or a Sentry you run, even on this Mac or your network; and cloud accounts in AWS, Google
 Cloud, Cloudflare and Wiz. Add a service, then assign it to the agents that should use it. Each service's
 form has Setup Steps, saying where in the service's console to make its key or account and the least
 access to give it: Pion's lookups only read. Each service you add is a separate account, so two
