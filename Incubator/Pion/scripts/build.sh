@@ -7,6 +7,12 @@
 set -euo pipefail
 pion_root="${0:A:h:h}"
 project_root="${pion_root:h:h}"
+# Every build shares one project, build folder and app, so one started while another runs waits for it rather than
+# failing on the build's locked database.
+if [[ -z "${PION_BUILD_LOCKED:-}" ]]; then
+    mkdir -p "$project_root/.build"
+    PION_BUILD_LOCKED=1 exec lockf -k "$project_root/.build/pion-build.lock" zsh "$0" "$@"
+fi
 case "${PION_DATA_CONTAINER:-development}" in
     development) configuration=Debug; app_name="Pion Dev" ;;
     production) configuration=Release; app_name="Pion" ;;
