@@ -278,7 +278,7 @@ private struct PresetSetUpForm: View {
                     field("Client Secret") { SecureField("Client secret", text: $clientSecret) }
                 }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
-                if !tool.setup.isEmpty { ToolSetupSteps(steps: tool.setup) }
+                if !tool.setup.isEmpty { ToolSetupSteps(title: tool.name, steps: tool.setup) }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
@@ -292,8 +292,10 @@ private struct PresetSetUpForm: View {
 }
 
 /// A preset's steps for getting the key or account it asks for, at the foot of its form below a divider: a button
-/// that opens them in a popover, where they can be read, selected or copied to send to whoever sets the service up.
+/// that opens them in a popover, where they can be read, selected or copied to send to whoever sets the service up,
+/// or opened in a window that stays in front while the person follows them elsewhere.
 struct ToolSetupSteps: View {
+    let title: String
     let steps: [String]
     @State private var shown = false
 
@@ -303,27 +305,10 @@ struct ToolSetupSteps: View {
             Button { shown = true } label: { Label("Setup Steps", systemImage: "list.number") }
                 .buttonStyle(.link)
                 .popover(isPresented: $shown, arrowEdge: .top) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
-                                    Text(Self.markdown(step)).fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                        .font(.callout)
-                        .textSelection(.enabled)
-                        HStack {
-                            Spacer()
-                            Button("Copy") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(Self.plainText(steps), forType: .string)
-                            }
-                        }
+                    ToolSetupStepsList(steps: steps) {
+                        shown = false
+                        ToolSetupStepsWindow.show(title: title, steps: steps)
                     }
-                    .padding(16)
-                    .frame(width: 400)
                 }
         }
     }
@@ -343,6 +328,65 @@ struct ToolSetupSteps: View {
             }.joined()
             return "\(index + 1). \(line)"
         }.joined(separator: "\n")
+    }
+}
+
+/// The numbered steps with Copy, and in the popover Open in Window.
+private struct ToolSetupStepsList: View {
+    let steps: [String]
+    var openInWindow: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                        Text(ToolSetupSteps.markdown(step)).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .font(.callout)
+            .textSelection(.enabled)
+            HStack {
+                if let openInWindow { Button("Open in Window", action: openInWindow) }
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(ToolSetupSteps.plainText(steps), forType: .string)
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 400)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A service's setup steps in a small window that floats in front of every app's windows until closed, so they stay
+/// in view while the person works through them in the service's console. One window for each service.
+@MainActor
+enum ToolSetupStepsWindow {
+    private static var open: [String: NSPanel] = [:]
+
+    static func show(title: String, steps: [String]) {
+        if let panel = open[title] { panel.orderFrontRegardless(); return }
+        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        panel.title = "\(title) Setup Steps"
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+        let hosting = NSHostingController(rootView: ToolSetupStepsList(steps: steps))
+        hosting.sizingOptions = [.preferredContentSize]
+        panel.contentViewController = hosting
+        panel.center()
+        open[title] = panel
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: .main) { _ in
+            MainActor.assumeIsolated { open[title] = nil }
+        }
+        panel.orderFrontRegardless()
     }
 }
 

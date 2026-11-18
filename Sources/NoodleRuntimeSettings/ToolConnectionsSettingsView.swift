@@ -355,8 +355,8 @@ public struct ToolConnectionEditor: View {
                 if onBack != nil { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
                 // Only where a key or token can be replaced; one that signs in through the browser asks for nothing here.
-                if onSecret != nil, signIn != .browser, let steps = existing.flatMap(ToolCatalog.definition(for:))?.setup, !steps.isEmpty {
-                    ToolSetupSteps(steps: steps)
+                if onSecret != nil, signIn != .browser, let preset, !preset.setup.isEmpty {
+                    ToolSetupSteps(title: preset.name, steps: preset.setup)
                 }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)

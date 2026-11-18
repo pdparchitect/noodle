@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Setup Steps have Open in Window, which keeps them in a small window in front of every app while you follow them in the service's console.
 - Google Cloud signs in with Google through your organisation's own client, as Google Workspace does, and reads with the access of whoever signs in, instead of a service account's key file; add a Google Cloud account again to use it.
 - Editing a catalogue tool lets you change the details you gave when adding it, such as its address or organisation, and no longer shows the header, token address or scope its entry sets; details that move where it points ask for its key again.
 - Grafana's and Sentry's MCP servers are offered again in Settings › Tools, marked MCP, beside Pion's own read-only Grafana and Sentry.
