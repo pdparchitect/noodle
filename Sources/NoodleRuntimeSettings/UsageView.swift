@@ -346,67 +346,69 @@ public struct UsageView: View {
         .navigationSubtitle(storage.isMeasuring ? "Measuring" : storage.snapshot.map { "Measured \($0.date.formatted(date: .omitted, time: .shortened))" } ?? "")
     }
 
+    // The same items for every measure: adding and removing them on each switch to or from Disk held the
+    // window for a fifth of a second, and the rest came in late. Those that do not apply to Disk are disabled.
     @ToolbarContentBuilder
     private func toolbar() -> some ToolbarContent {
         let filter = Binding(get: { history.agentFilter }, set: { history.agentFilter = $0 })
-        if metric != .disk {
-            ToolbarItem(placement: .principal) {
-                Picker("Period", selection: $span) {
-                    ForEach(UsageReport.Span.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .help("Period")
+        let ledger = metric != .disk
+        ToolbarItem(placement: .principal) {
+            Picker("Period", selection: $span) {
+                ForEach(UsageReport.Span.allCases) { Text($0.rawValue).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .help("Period")
+            .disabled(!ledger)
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Picker("Bot", selection: filter) {
+                Text("All Bots").tag(UUID?.none)
+                Divider()
+                ForEach(agents) { agent in
+                    Label {
+                        Text(agent.displayName)
+                    } icon: {
+                        if let image = BotAvatar.menuImage(for: agent) { Image(nsImage: image) }
+                    }
+                    .tag(Optional(agent.id))
+                }
+            }
+            .pickerStyle(.menu)
+            // Toolbars show only a label's icon unless told otherwise.
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 6)
+            .help("Bot")
+            .disabled(!ledger)
+        }
+        if !people.isEmpty {
             ToolbarItem(placement: .primaryAction) {
-                Picker("Bot", selection: filter) {
-                    Text("All Bots").tag(UUID?.none)
+                Picker("User", selection: $user) {
+                    Text("All Users").tag(UsageReport.UserFilter?.none)
                     Divider()
-                    ForEach(agents) { agent in
-                        Label {
-                            Text(agent.displayName)
-                        } icon: {
-                            if let image = BotAvatar.menuImage(for: agent) { Image(nsImage: image) }
-                        }
-                        .tag(Optional(agent.id))
-                    }
-                }
-                .pickerStyle(.menu)
-                // Toolbars show only a label's icon unless told otherwise.
-                .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 6)
-                .help("Bot")
-            }
-            if !people.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Picker("User", selection: $user) {
-                        Text("All Users").tag(UsageReport.UserFilter?.none)
-                        Divider()
-                        ForEach(people.users) { Text($0.name).tag(Optional(UsageReport.UserFilter.user($0.id))) }
-                        Text(UsagePeople.unknown).tag(Optional(UsageReport.UserFilter.unknown))
-                    }
-                    .pickerStyle(.menu)
-                    .padding(.horizontal, 6)
-                    .help("User")
-                }
-            }
-            ToolbarSpacer(.fixed)
-            ToolbarItem(placement: .primaryAction) {
-                Picker("Group By", selection: $grouping) {
-                    ForEach(UsageReport.Grouping.allCases.filter { $0 != .user || !people.isEmpty }) { Text("By \($0.rawValue)").tag($0) }
+                    ForEach(people.users) { Text($0.name).tag(Optional(UsageReport.UserFilter.user($0.id))) }
+                    Text(UsagePeople.unknown).tag(Optional(UsageReport.UserFilter.unknown))
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, 6)
-                .help("Group By")
+                .help("User")
+                .disabled(!ledger)
             }
-        } else {
-            ToolbarItem(placement: .primaryAction) {
-                Picker("Group By", selection: $storageGrouping) {
-                    ForEach(StorageReport.Grouping.allCases) { Text("By \($0.rawValue)").tag($0) }
-                }
-                .pickerStyle(.menu)
-                .padding(.horizontal, 6)
-                .help("Group By")
+        }
+        ToolbarSpacer(.fixed)
+        // One picker whose choices follow the measure: a picker of its own for Disk would be a new control.
+        ToolbarItem(placement: .primaryAction) {
+            Picker("Group By", selection: Binding(
+                get: { ledger ? grouping.rawValue : storageGrouping.rawValue },
+                set: { value in
+                    if ledger { grouping = UsageReport.Grouping(rawValue: value) ?? grouping }
+                    else { storageGrouping = StorageReport.Grouping(rawValue: value) ?? storageGrouping }
+                })) {
+                ForEach(ledger ? UsageReport.Grouping.allCases.filter { $0 != .user || !people.isEmpty }.map(\.rawValue)
+                               : StorageReport.Grouping.allCases.map(\.rawValue), id: \.self) { Text("By \($0)").tag($0) }
             }
+            .pickerStyle(.menu)
+            .padding(.horizontal, 6)
+            .help("Group By")
         }
         ToolbarSpacer(.fixed)
         ToolbarItem(placement: .primaryAction) {
