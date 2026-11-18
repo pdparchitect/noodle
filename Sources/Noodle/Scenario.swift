@@ -1,7 +1,6 @@
 #if NOODLE_DEV_HOOKS
 import HubLink
 import AppKit
-import CryptoKit
 import Darwin
 import NoodleBrand
 import NoodleCore
@@ -226,44 +225,7 @@ struct Scenario: Codable {
         }
     }
 
-    /// Titles around the scenario, so a recording opens and closes the same way every time.
-    struct Film: Codable {
-        /// What is behind the app and under the titles: "black", "white", or a picture
-        /// or video, named as an asset in the scenario folder or as a web address.
-        var background: String?
-        var intro: Intro?
-        var outro: Outro?
-
-        struct Intro: Codable {
-            /// A picture to bring up under the title, shown in a circle. Any asset in the
-            /// scenario folder, so it can be a bot's own avatar or anything else.
-            var icon: String?
-            /// "white" or "black", for a mark that is drawn in the wrong one.
-            var iconTint: String?
-            /// The small line above the title, for what this is a scenario of.
-            var kicker: String?
-            /// Defaults to the scenario's own title.
-            var title: String?
-            var subtitle: String?
-            /// Seconds to stay on the finished card. Default 1.4.
-            var hold: Double?
-        }
-
-        struct Outro: Codable {
-            var tagline: String?
-            /// Seconds to stay on the finished wordmark. Default 1.6.
-            var hold: Double?
-        }
-
-        enum Stage { case intro, outro }
-
-        var isLight: Bool { background == "white" }
-        /// The picture or video behind everything, if the background is not just a colour.
-        var media: String? {
-            let value = background ?? "black"
-            return ["black", "white"].contains(value) ? nil : value
-        }
-    }
+    typealias Film = ScenarioFilm
 
     struct Step: Codable {
         var wait: Double?
@@ -343,10 +305,8 @@ extension Scenario {
         self.present = present
     }
 
-    static let tints: Set<String> = ["white", "black", "none"]
-
-    /// What a recording can move in on.
-    static let focusRegions: Set<String> = ["composer", "transcript", "none"]
+    static let tints = ScenarioFilm.tints
+    static let focusRegions = ScenarioFilm.focusRegions
 
     static let settingsTabs: [String: NoodleSettingsTab] = [
         "general": .general, "chat": .chat, "harnesses": .harnesses, "bots": .bots, "groups": .groups, "mcps": .mcps,
@@ -399,36 +359,13 @@ extension Scenario {
             }
             return url
         }
-        guard Self.isRemote(value) else { return try asset(value) }
-        // One cache for all of them: the name is the address, so two scenarios naming the
-        // same thing share the one copy. Found by name rather than by extension, because a
-        // web address need not end in one and the script works out what it is.
-        let stem = Self.cacheStem(for: value)
-        let cache = folder.deletingLastPathComponent().appendingPathComponent(".cache", isDirectory: true)
-        let found = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil))?
-            .first { $0.lastPathComponent.hasPrefix(stem) }
-        guard let found else {
-            throw ScenarioError(
-                "\(value) has not been fetched yet. scripts/scenario.sh downloads it beside the scenarios.",
-                needsFetch: true)
-        }
-        return found
-    }
-
-    static func isRemote(_ value: String) -> Bool {
-        value.hasPrefix("https://") || value.hasPrefix("http://")
-    }
-
-    /// What a fetched address is called on disk, before its extension. The script names
-    /// downloads the same way, so changing this strands every cache.
-    static func cacheStem(for address: String) -> String {
-        String(SHA256.hash(data: Data(address.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16))
+        return try ScenarioSupport.media(value, in: folder)
     }
 
     /// What names one of the app's built-in faces, as in "face:feminine-03".
     static let facePrefix = "face:"
 
-    func asset(_ path: String) throws -> URL { try file(path, under: folder) }
+    func asset(_ path: String) throws -> URL { try ScenarioSupport.file(path, under: folder) }
 
     /// The attachments of the message a scenario calls `key`, seeded or sent in its timeline.
     func attachments(ofMessage key: String) -> [Attachment] {
@@ -438,16 +375,6 @@ extension Scenario {
             if let typed = step.type, typed.key == key { return typed.attachments ?? [] }
         }
         return []
-    }
-
-    /// A file named by a scenario, kept inside `root` however the name is written.
-    private func file(_ path: String, under root: URL) throws -> URL {
-        let url = root.appendingPathComponent(path).standardizedFileURL
-        guard url.path.hasPrefix(root.standardizedFileURL.path + "/"),
-              FileManager.default.fileExists(atPath: url.path) else {
-            throw ScenarioError("Missing asset: \(path)")
-        }
-        return url
     }
 
     func models(for provider: HarnessProvider) -> [HarnessModel] {
@@ -469,16 +396,7 @@ extension Scenario {
         try require(version == 1, "Scenario version \(version) is not supported.")
         try require(appearance == nil || appearance == "dark", "Noodle is dark only: appearance must be \"dark\" or left out.")
         _ = try ScenarioTime.start(clock, now: Date())
-        if let film {
-            if let backdrop = film.media { _ = try media(backdrop) }
-            for (label, text) in [("intro.kicker", film.intro?.kicker), ("intro.title", film.intro?.title),
-                                  ("intro.subtitle", film.intro?.subtitle), ("outro.tagline", film.outro?.tagline)] {
-                try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
-            }
-            try require((film.intro?.hold ?? 0) >= 0 && (film.outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
-            if let icon = film.intro?.icon { _ = try media(icon) }
-            try require(Self.tints.contains(film.intro?.iconTint ?? "none"), "film.intro.iconTint is white or black.")
-        }
+        try film?.validate(media: media)
         for key in (settings ?? [:]).keys {
             try require(Self.preferenceKeys.contains(key), "\"\(key)\" is not a preference a scenario can set.")
         }
@@ -1068,62 +986,11 @@ extension Scenario {
         try await play(.outro)
     }
 
-    /// The titles. Their timings are fixed so every film opens and closes alike; a
-    /// scenario chooses only the words and how long the finished card stays up.
     private func play(_ stage: Scenario.Film.Stage) async throws {
         // The titles are for the camera; someone watching gets straight to the timeline.
-        guard takesShots, let film = scenario.film else { return }
+        guard takesShots, scenario.film != nil else { return }
         if let playFilm { try await playFilm(stage); return }
-        let card: ScenarioFilmModel.Card?, written: Double
-        switch stage {
-        case .intro:
-            card = film.intro.map { .intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon(film.intro)) }
-            written = 1.6 + (film.intro?.hold ?? 1.4)
-        case .outro:
-            card = film.outro.map { .outro(tagline: $0.tagline) }
-            written = 3.3 + (film.outro?.hold ?? 1.6)
-        }
-        guard let card else {
-            if stage == .outro { filmStage?.finish() }
-            return
-        }
-        // The opening card is already up, from before the recorder started; presenting it
-        // again only makes sure it is in front of the window it covers.
-        filmStage?.present(card)
-        // A frame with the card in its starting state, so its animations have something to run from.
-        try await sleep(.milliseconds(60))
-        filmStage?.model.written = true
-        var remaining = written
-        if stage == .outro, filmStage?.model.hasMedia == true {
-            // Let the veil settle over the app, then take the app away and leave the
-            // background playing behind the wordmark.
-            try await sleep(.seconds(0.85))
-            filmStage?.conceal()
-            remaining -= 0.85
-        }
-        try await sleep(.seconds(max(0, remaining)))
-        // A recording ends on the wordmark; someone watching in the app gets their window back.
-        if stage == .outro, takesShots { return }
-        guard stage == .intro else {
-            filmStage?.model.leaving = true
-            try await sleep(.seconds(0.9))
-            filmStage?.finish()
-            return
-        }
-        // The words go, the card holds on nothing, and only then does the app come up.
-        // Never a dissolve of one into the other.
-        filmStage?.model.emptying = true
-        try await sleep(.seconds(0.6))
-        if filmStage?.model.hasMedia == true {
-            // The veil lifts and the background plays alone before the app arrives.
-            filmStage?.model.leaving = true
-            try await sleep(.seconds(0.7))
-        }
-        filmStage?.conceal()
-        filmStage?.dismissCard()
-        try await sleep(.seconds(0.35))
-        filmStage?.reveal(over: 0.55)
-        try await sleep(.seconds(0.6))
+        try await filmStage?.play(stage, sleep: sleep)
     }
 
     /// False when the timeline cannot go on.
@@ -1236,54 +1103,11 @@ extension Scenario {
         return true
     }
 
-    /// The picture an opening card brings up, if it names one.
-    private func icon(_ intro: Scenario.Film.Intro?) -> NSImage? {
-        guard let path = intro?.icon, let url = try? scenario.media(path),
-              var image = NSImage(contentsOf: url) else { return nil }
-        if let tint = intro?.iconTint { image = ScenarioSupport.tinted(image, tint) }
-        return ScenarioSupport.roomAround(image)
-    }
-
-    /// Tells whoever is recording what to move in on, as a box inside the recorded area
-    /// with its origin at the top left. The move itself is made afterwards, on the film.
+    /// Tells whoever is recording what to move in on. The move itself is made afterwards, on the film.
     private func cueFocus(_ region: String, over move: Double, steady: Bool) {
-        guard takesShots, let window = mainWindow else { return }
-        let area = filmStage.map(\.frame) ?? window.frame
-        guard !area.isEmpty else { return }
-        var box = area
-        if region != "none" {
-            guard let wanted = focusBox(region, in: window) else { return }
-            // Kept inside the window: the margin around it belongs to the stage, and
-            // moving in on that would show black.
-            box = ScenarioSupport.fit(wanted, shapedLike: area, inside: window.frame)
-        }
-        let line = [box.minX - area.minX, area.maxY - box.maxY, box.width, box.height]
-            .map { String(Int($0.rounded())) }.joined(separator: ",")
-        write("SCENARIO FOCUS \(line) \(move) \(steady ? "steady" : "eased") \(Date().timeIntervalSince1970)")
-    }
-
-    /// The conversation column, taken from the split view rather than by hunting for a
-    /// view: the sidebar holds a scroller of its own and is easily mistaken for it.
-    private func focusBox(_ region: String, in window: NSWindow) -> NSRect? {
-        let item = ScenarioSupport.splitController(in: window.contentView)?.splitViewItems.first
-        let sidebar = item?.isCollapsed == true ? 0 : (item?.viewController.view.frame.width ?? 0)
-        let column = NSRect(x: window.frame.minX + sidebar, y: window.frame.minY,
-                            width: window.frame.width - sidebar, height: window.frame.height)
-        switch region {
-        case "composer":
-            // The composer and the last of the conversation above it, held around
-            // whatever is being written so the picture follows the words.
-            let band = NSRect(x: column.minX, y: column.minY, width: column.width, height: column.height * 0.52)
-            let width = column.width * 0.78
-            guard let text = ScenarioSupport.firstView(in: window.contentView, matching: { $0 is ComposerTextView }) as? NSTextView else {
-                return band
-            }
-            let caret = text.firstRect(forCharacterRange: NSRange(location: text.string.utf16.count, length: 0), actualRange: nil)
-            guard caret.midX > 0 else { return band }
-            return NSRect(x: caret.midX - width / 2, y: band.minY, width: width, height: band.height)
-        case "transcript": return column
-        default: return nil
-        }
+        guard takesShots, let window = mainWindow,
+              let line = ScenarioCue.focus(region, in: window, stage: filmStage, over: move, steady: steady) else { return }
+        write(line)
     }
 
     /// Tells whoever is recording that something just made a noise, and when. Only a
@@ -1291,7 +1115,7 @@ extension Scenario {
     private func cue(_ name: String) {
         guard takesShots else { return }
         if let soundCue { soundCue(name); return }
-        write("SCENARIO SOUND \(name) \(Date().timeIntervalSince1970)")
+        write(ScenarioCue.sound(name))
     }
 
     private var messages: [String: ChatMessage] { seeded.messages.merging(liveMessages) { $1 } }
@@ -1323,12 +1147,7 @@ extension Scenario {
         return true
     }
 
-    /// What `screencapture -R` should take: the film's stage if there is one, otherwise the
-    /// main window. As x, y from the top left, width, height.
-    private var mainWindowRegion: String? {
-        guard let frame = filmStage.map(\.frame) ?? mainWindow?.frame, !frame.isEmpty else { return nil }
-        return "\(Int(frame.minX)),\(Int(ScenarioSupport.screen.maxY - frame.maxY)),\(Int(frame.width)),\(Int(frame.height))"
-    }
+    private var mainWindowRegion: String? { ScenarioCue.region(stage: filmStage, window: mainWindow) }
 
     /// Ends a capture run. The script answers once its recorder has stopped, so the window is still up on the last frame.
     func announceDone() async {
@@ -1402,18 +1221,9 @@ extension Scenario {
         // put the opening card back and leave the app concealed behind it for the rest of the film.
         // The backdrop and the cards are staged for a recording only; watched, the app stays on the desktop.
         if initial, takesShots, let film = scenario.film {
-            let opening = film.intro.map { ScenarioFilmModel.Card.intro(kicker: $0.kicker, title: $0.title ?? scenario.title, subtitle: $0.subtitle, icon: icon($0)) }
-            let stage = filmStage ?? ScenarioFilmStage(film: film, opening: opening,
-                                                       media: film.media.flatMap { try? scenario.media($0) })
+            let stage = filmStage ?? ScenarioFilmStage(film: film, title: scenario.title, media: scenario.media, mark: NoodleWordmark.filmMark)
             filmStage = stage
-            stage.attach(to: window)
-            if let opening {
-                stage.present(opening)
-                // The card owns the screen from the first frame, so the app never shows
-                // through a background that the titles only veil.
-                stage.conceal()
-            }
-            if takesShots { stage.hidePointer() }
+            stage.open(on: window)
         }
     }
 
@@ -1540,110 +1350,4 @@ struct ScenarioCommands: Commands {
     }
 }
 
-// MARK: - Shared pieces
-// Nothing below knows about Noodle's store or repository, so a companion app's loader can take it as it is.
-
-enum ScenarioSupport {
-    /// Keys of `original` that did not survive decoding and encoding again. Null values are skipped, as encoding omits them.
-    static func unknownKeys(in original: Any, comparedTo encoded: Any?, path: String = "") -> [String] {
-        if let original = original as? [String: Any] {
-            let encoded = encoded as? [String: Any] ?? [:]
-            return original.keys.sorted().flatMap { key -> [String] in
-                guard !(original[key] is NSNull) else { return [] }
-                let here = path.isEmpty ? key : "\(path).\(key)"
-                return encoded[key] == nil ? [here] : unknownKeys(in: original[key]!, comparedTo: encoded[key], path: here)
-            }
-        }
-        if let original = original as? [Any] {
-            let encoded = encoded as? [Any] ?? []
-            return original.enumerated().flatMap { index, value in
-                unknownKeys(in: value, comparedTo: encoded.indices.contains(index) ? encoded[index] : nil, path: "\(path)[\(index)]")
-            }
-        }
-        return []
-    }
-
-    static var screen: NSRect { NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080) }
-
-    /// Scenario frames are `[x, y, width, height]` from the top left of the main screen.
-    static func rect(_ frame: [Double]) -> NSRect {
-        NSRect(x: screen.minX + frame[0], y: screen.maxY - frame[1] - frame[3], width: frame[2], height: frame[3])
-    }
-
-    /// The text form AppKit saves a window frame in, which is what conversation windows are restored from.
-    static func frameDescriptor(_ frame: [Double]) -> String {
-        let rect = rect(frame), screen = screen
-        return [rect.minX, rect.minY, rect.width, rect.height, screen.minX, screen.minY, screen.width, screen.height]
-            .map { String(Int($0)) }.joined(separator: " ") + " "
-    }
-
-    /// Grows `box` to the shape of `like` and keeps it within `bounds`, so a move in on
-    /// it never stretches the picture and never reaches past what it is allowed to show.
-    static func fit(_ box: NSRect, shapedLike like: NSRect, inside bounds: NSRect) -> NSRect {
-        let shape = like.width / like.height
-        var width = box.width, height = box.height
-        if width / height > shape { height = width / shape } else { width = height * shape }
-        if width > bounds.width { width = bounds.width; height = width / shape }
-        if height > bounds.height { height = bounds.height; width = height * shape }
-        let x = min(max(box.midX - width / 2, bounds.minX), bounds.maxX - width)
-        let y = min(max(box.midY - height / 2, bounds.minY), bounds.maxY - height)
-        return NSRect(x: x, y: y, width: width, height: height)
-    }
-
-    /// A mark drawn in one colour, redrawn in another. Only its shape is kept, so a
-    /// black logo can be shown on a dark card without disappearing into it.
-    static func tinted(_ image: NSImage, _ colour: String) -> NSImage {
-        let ink: NSColor = colour == "black" ? .black : .white
-        let box = NSRect(origin: .zero, size: image.size)
-        let result = NSImage(size: image.size)
-        result.lockFocus()
-        ink.set()
-        box.fill()
-        image.draw(in: box, from: .zero, operation: .destinationIn, fraction: 1)
-        result.unlockFocus()
-        return result
-    }
-
-    /// A mark drawn to its own edges is sliced by the circle it is shown in, so one is
-    /// given room around it. A photograph is left alone: it is meant to fill the circle.
-    static func roomAround(_ image: NSImage) -> NSImage {
-        guard let data = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: data),
-              bitmap.hasAlpha, bitmap.pixelsWide > 8, bitmap.pixelsHigh > 8 else { return image }
-        var clear = 0, counted = 0
-        for step in 0..<64 {
-            let alongX = bitmap.pixelsWide * step / 64, alongY = bitmap.pixelsHigh * step / 64
-            for point in [(alongX, 0), (alongX, bitmap.pixelsHigh - 1), (0, alongY), (bitmap.pixelsWide - 1, alongY)] {
-                counted += 1
-                if (bitmap.colorAt(x: point.0, y: point.1)?.alphaComponent ?? 1) < 0.1 { clear += 1 }
-            }
-        }
-        guard counted > 0, Double(clear) / Double(counted) > 0.8 else { return image }
-
-        let side = max(image.size.width, image.size.height) / 0.66
-        let canvas = NSImage(size: NSSize(width: side, height: side))
-        canvas.lockFocus()
-        image.draw(in: NSRect(x: (side - image.size.width) / 2, y: (side - image.size.height) / 2,
-                              width: image.size.width, height: image.size.height))
-        canvas.unlockFocus()
-        return canvas
-    }
-
-    /// The first view anywhere under `view` that matches, breadth first.
-    static func firstView(in view: NSView?, matching: (NSView) -> Bool) -> NSView? {
-        guard let view else { return nil }
-        var pending = [view]
-        while !pending.isEmpty {
-            let next = pending.removeFirst()
-            if matching(next) { return next }
-            pending.append(contentsOf: next.subviews)
-        }
-        return nil
-    }
-
-    static func splitController(in view: NSView?) -> NSSplitViewController? {
-        guard let view else { return nil }
-        if let controller = (view as? NSSplitView)?.delegate as? NSSplitViewController { return controller }
-        return view.subviews.lazy.compactMap { splitController(in: $0) }.first
-    }
-}
 #endif

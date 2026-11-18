@@ -345,11 +345,11 @@ import XCTest
 
     func testTheScriptAndTheAppAgreeOnWhereAFetchedFileLands() {
         let address = "https://example.com/clips/earth-spinning.mp4"
-        XCTAssertEqual(Scenario.cacheStem(for: address), "78773c13121f0e4b",
+        XCTAssertEqual(ScenarioSupport.cacheStem(for: address), "78773c13121f0e4b",
                        "The script names downloads the same way; changing this strands every cache")
-        XCTAssertEqual(Scenario.cacheStem(for: "https://www.pexels.com/download/video/854261/"), "1b4292543e292d4e")
-        XCTAssertTrue(Scenario.isRemote(address))
-        XCTAssertFalse(Scenario.isRemote("assets/earth.mp4"))
+        XCTAssertEqual(ScenarioSupport.cacheStem(for: "https://www.pexels.com/download/video/854261/"), "1b4292543e292d4e")
+        XCTAssertTrue(ScenarioSupport.isRemote(address))
+        XCTAssertFalse(ScenarioSupport.isRemote("assets/earth.mp4"))
     }
 
     func testFetchedFilesAreSharedBetweenScenarios() throws {
@@ -357,7 +357,7 @@ import XCTest
         let cache = root.appendingPathComponent(".cache", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         let address = "https://example.com/earth.mp4"
-        let fetched = cache.appendingPathComponent(Scenario.cacheStem(for: address) + ".mp4")
+        let fetched = cache.appendingPathComponent(ScenarioSupport.cacheStem(for: address) + ".mp4")
         try Data("not really a movie".utf8).write(to: fetched)
 
         // Two scenarios side by side, both naming the same address.

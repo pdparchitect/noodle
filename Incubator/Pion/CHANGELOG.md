@@ -4,6 +4,7 @@
 
 ### Added
 
+- Scenarios record as films with `scripts/scenario.sh --video`, as Noodle's do: titles and a backdrop around the recording, the camera moving in on the composer or transcript, and sounds for replies.
 - crt.sh in Settings › Tools, with nothing to set up: agents discover the hosts under a domain, including forgotten and staging ones, and the other domains they share certificates with, from every certificate issued for its names in the public Certificate Transparency logs, newest first.
 
 ### Fixed

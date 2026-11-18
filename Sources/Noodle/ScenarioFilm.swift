@@ -3,145 +3,72 @@ import AVFoundation
 import AppKit
 import SwiftUI
 
-// MARK: - Wordmark
+// MARK: - Film
 
-/// The Noodle wordmark drawn as one pen stroke: the app's own `n`, then `oodle` in the
-/// same weight and on the same baseline, so a film can write the name on screen.
-///
-/// The geometry is the icon's own 1254 grid. The `n` is the centre line of the shape in
-/// `Support/AppSymbol.svg`, which is a single round-capped stroke; `ScenarioFilmTests`
-/// renders both and fails if they drift apart.
-struct NoodleWordmark: Shape {
-    /// How much of the stroke has been written, from nothing to the whole word.
-    var progress: Double = 1
+/// Titles around a scenario, so a recording opens and closes the same way every time. The apps that play
+/// scenarios share it, with their own closing mark.
+struct ScenarioFilm: Codable {
+    /// What is behind the app and under the titles: "black", "white", or a picture
+    /// or video, named as an asset in the scenario folder or as a web address.
+    var background: String?
+    var intro: Intro?
+    var outro: Outro?
 
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+    struct Intro: Codable {
+        /// A picture to bring up under the title, shown in a circle. Any asset in the
+        /// scenario folder, so it can be a bot's own avatar or anything else.
+        var icon: String?
+        /// "white" or "black", for a mark that is drawn in the wrong one.
+        var iconTint: String?
+        /// The small line above the title, for what this is a scenario of.
+        var kicker: String?
+        /// Defaults to the scenario's own title.
+        var title: String?
+        var subtitle: String?
+        /// Seconds to stay on the finished card. Default 1.4.
+        var hold: Double?
     }
 
-    /// The pen, and the lines it is written between, in design units.
-    static let pen: CGFloat = 128
-    static let baseline: CGFloat = 906
-    static let xHeightTop: CGFloat = 343
-    static let ascenderTop: CGFloat = 183
-    /// The box the stroked word occupies, pen included.
-    static let bounds = CGRect(x: 0, y: 119, width: 3819, height: 851)
+    struct Outro: Codable {
+        var tagline: String?
+        /// Seconds to stay on the finished mark. Default 1.6.
+        var hold: Double?
+    }
 
-    private static let kappa: CGFloat = 0.5523
-    private static let xHeight = baseline - xHeightTop
-    private static let bowlRadius = xHeight / 2
-    private static let bowlCentre = (baseline + xHeightTop) / 2
-    private static let letterGap: CGFloat = 44
-    /// What the `n` occupies, tail included.
-    private static let nWidth: CGFloat = 707
+    enum Stage { case intro, outro }
 
-    /// The whole word, in design units, in the order a hand would write it.
-    static let skeleton: CGPath = {
-        let path = CGMutablePath()
-        var x: CGFloat = 0
-        appendN(to: path, at: x)
-        x += nWidth + letterGap
-        for letter in "oodle" {
-            switch letter {
-            case "o":
-                appendBowl(to: path, at: x)
-                x += xHeight + pen + letterGap
-            case "d":
-                appendBowl(to: path, at: x)
-                appendStem(to: path, x: x + pen / 2 + bowlRadius * 2)
-                x += xHeight + pen + letterGap
-            case "l":
-                appendStem(to: path, x: x + pen / 2)
-                x += pen + letterGap
-            case "e":
-                appendE(to: path, at: x)
-                x += xHeight + pen + letterGap
-            default: break
-            }
+    static let tints: Set<String> = ["white", "black", "none"]
+
+    /// What a recording can move in on.
+    static let focusRegions: Set<String> = ["composer", "transcript", "none"]
+
+    var isLight: Bool { background == "white" }
+    /// The picture or video behind everything, if the background is not just a colour.
+    var media: String? {
+        let value = background ?? "black"
+        return ["black", "white"].contains(value) ? nil : value
+    }
+
+    /// `media` finds a picture or video the film names, and throws when it is missing.
+    func validate(media: (String) throws -> URL) throws {
+        func require(_ condition: Bool, _ message: String) throws {
+            if !condition { throw ScenarioError(message) }
         }
-        return path
-    }()
-
-    /// Up the left stem, over the arch, down the right stem and out along the tail.
-    private static func appendN(to path: CGMutablePath, at x: CGFloat) {
-        let left = x + pen / 2, right = left + 452, middle = (left + right) / 2
-        let springY: CGFloat = 569, radius: CGFloat = 226, pull = radius * kappa
-        path.move(to: CGPoint(x: left, y: baseline))
-        path.addLine(to: CGPoint(x: left, y: springY))
-        path.addCurve(to: CGPoint(x: middle, y: springY - radius),
-                      control1: CGPoint(x: left, y: springY - pull),
-                      control2: CGPoint(x: middle - pull, y: springY - radius))
-        path.addCurve(to: CGPoint(x: right, y: springY),
-                      control1: CGPoint(x: middle + pull, y: springY - radius),
-                      control2: CGPoint(x: right, y: springY - pull))
-        path.addLine(to: CGPoint(x: right, y: 818))
-        path.addCurve(to: CGPoint(x: right + 127, y: 899),
-                      control1: CGPoint(x: right, y: 913),
-                      control2: CGPoint(x: right + 67, y: 910))
+        if let backdrop = self.media { _ = try media(backdrop) }
+        for (label, text) in [("intro.kicker", intro?.kicker), ("intro.title", intro?.title),
+                              ("intro.subtitle", intro?.subtitle), ("outro.tagline", outro?.tagline)] {
+            try require(text.map { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? true, "film.\(label) has no text.")
+        }
+        try require((intro?.hold ?? 0) >= 0 && (outro?.hold ?? 0) >= 0, "A film holds for a negative time.")
+        if let icon = intro?.icon { _ = try media(icon) }
+        try require(Self.tints.contains(intro?.iconTint ?? "none"), "film.intro.iconTint is white or black.")
     }
 
-    /// A circle, written anticlockwise from the top, for `o` and the bowl of `d`.
-    private static func appendBowl(to path: CGMutablePath, at x: CGFloat) {
-        let centreX = x + pen / 2 + bowlRadius, centreY = bowlCentre
-        let radius = bowlRadius, pull = radius * kappa
-        path.move(to: CGPoint(x: centreX, y: centreY - radius))
-        path.addCurve(to: CGPoint(x: centreX - radius, y: centreY),
-                      control1: CGPoint(x: centreX - pull, y: centreY - radius),
-                      control2: CGPoint(x: centreX - radius, y: centreY - pull))
-        path.addCurve(to: CGPoint(x: centreX, y: centreY + radius),
-                      control1: CGPoint(x: centreX - radius, y: centreY + pull),
-                      control2: CGPoint(x: centreX - pull, y: centreY + radius))
-        path.addCurve(to: CGPoint(x: centreX + radius, y: centreY),
-                      control1: CGPoint(x: centreX + pull, y: centreY + radius),
-                      control2: CGPoint(x: centreX + radius, y: centreY + pull))
-        path.addCurve(to: CGPoint(x: centreX, y: centreY - radius),
-                      control1: CGPoint(x: centreX + radius, y: centreY - pull),
-                      control2: CGPoint(x: centreX + pull, y: centreY - radius))
-    }
-
-    private static func appendStem(to path: CGMutablePath, x: CGFloat) {
-        path.move(to: CGPoint(x: x, y: ascenderTop))
-        path.addLine(to: CGPoint(x: x, y: baseline))
-    }
-
-    /// The bar left to right, then up over the top, round the left and along the
-    /// bottom, ending open at the lower right.
-    private static func appendE(to path: CGMutablePath, at x: CGFloat) {
-        let centreX = x + pen / 2 + bowlRadius, centreY = bowlCentre
-        let radius = bowlRadius, pull = radius * kappa
-        path.move(to: CGPoint(x: centreX - radius, y: centreY))
-        path.addLine(to: CGPoint(x: centreX + radius, y: centreY))
-        path.addCurve(to: CGPoint(x: centreX, y: centreY - radius),
-                      control1: CGPoint(x: centreX + radius, y: centreY - pull),
-                      control2: CGPoint(x: centreX + pull, y: centreY - radius))
-        path.addCurve(to: CGPoint(x: centreX - radius, y: centreY),
-                      control1: CGPoint(x: centreX - pull, y: centreY - radius),
-                      control2: CGPoint(x: centreX - radius, y: centreY - pull))
-        path.addCurve(to: CGPoint(x: centreX, y: centreY + radius),
-                      control1: CGPoint(x: centreX - radius, y: centreY + pull),
-                      control2: CGPoint(x: centreX - pull, y: centreY + radius))
-        path.addCurve(to: CGPoint(x: centreX + radius * 0.74, y: centreY + radius * 0.70),
-                      control1: CGPoint(x: centreX + pull * 0.62, y: centreY + radius),
-                      control2: CGPoint(x: centreX + radius * 0.50, y: centreY + radius * 0.90))
-    }
-
-    /// The word scaled into `rect`, written as far as `progress`.
-    func path(in rect: CGRect) -> Path {
-        let scale = min(rect.width / Self.bounds.width, rect.height / Self.bounds.height)
-        guard scale > 0 else { return Path() }
-        let width = Self.bounds.width * scale, height = Self.bounds.height * scale
-        var transform = CGAffineTransform(translationX: rect.midX - width / 2, y: rect.midY - height / 2)
-            .scaledBy(x: scale, y: scale)
-            .translatedBy(x: -Self.bounds.minX, y: -Self.bounds.minY)
-        guard let scaled = Self.skeleton.copy(using: &transform) else { return Path() }
-        let full = Path(scaled)
-        return progress >= 1 ? full : full.trimmedPath(from: 0, to: max(0, progress))
-    }
-
-    /// The pen width for a word drawn into `rect`.
-    static func lineWidth(in rect: CGRect) -> CGFloat {
-        pen * min(rect.width / bounds.width, rect.height / bounds.height)
+    /// The picture the opening card brings up, if it names one.
+    @MainActor func icon(media: (String) throws -> URL) -> NSImage? {
+        guard let path = intro?.icon, let url = try? media(path), var image = NSImage(contentsOf: url) else { return nil }
+        if let tint = intro?.iconTint { image = ScenarioSupport.tinted(image, tint) }
+        return ScenarioSupport.roomAround(image)
     }
 }
 
@@ -165,10 +92,15 @@ struct NoodleWordmark: Shape {
     let onLight: Bool
     /// Whether a picture or video is playing behind everything, titles included.
     let hasMedia: Bool
+    /// The app's mark on the closing card, drawn in `ink` as the card is written; without one, the app's icon comes up.
+    @ObservationIgnored let mark: Mark?
 
-    init(onLight: Bool, hasMedia: Bool = false) {
+    typealias Mark = @MainActor (_ written: Bool, _ ink: Color, _ size: CGSize) -> AnyView
+
+    init(onLight: Bool, hasMedia: Bool = false, mark: Mark? = nil) {
         self.onLight = onLight
         self.hasMedia = hasMedia
+        self.mark = mark
     }
 
     /// How solid a card is. Over a moving background it thins to a veil, so the
@@ -289,12 +221,16 @@ struct ScenarioFilmView: View {
     private func outro(_ tagline: String?, size: CGSize) -> some View {
         VStack(spacing: size.height * 0.07) {
             let markSize = CGSize(width: size.width * 0.62, height: size.height * 0.2)
-            NoodleWordmark(progress: model.written ? 1 : 0)
-                .stroke(model.ink, style: StrokeStyle(
-                    lineWidth: NoodleWordmark.lineWidth(in: CGRect(origin: .zero, size: markSize)),
-                    lineCap: .round, lineJoin: .round))
-                .frame(width: markSize.width, height: markSize.height)
-                .animation(.easeInOut(duration: 2.1).delay(0.55), value: model.written)
+            if let mark = model.mark {
+                mark(model.written, model.ink, markSize)
+            } else {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: markSize.height * 1.2, height: markSize.height * 1.2)
+                    .scaleEffect(model.written ? 1 : 0.7)
+                    .opacity(model.written ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.62).delay(0.55), value: model.written)
+            }
             if let tagline {
                 let size = size.height * 0.036
                 Text(tagline)
@@ -344,10 +280,80 @@ private struct RisesIn: ViewModifier {
     private var looper: AVPlayerLooper?
     private var playerLayer: AVPlayerLayer?
 
-    init(film: Scenario.Film, opening: ScenarioFilmModel.Card?, media: URL?) {
-        model = ScenarioFilmModel(onLight: film.isLight, hasMedia: media != nil)
+    private let film: ScenarioFilm
+    private let title: String
+    private let opening: ScenarioFilmModel.Card?
+
+    /// `media` finds the pictures and videos the film names; `title` is the scenario's, for an intro without its own.
+    init(film: ScenarioFilm, title: String, media: (String) throws -> URL, mark: ScenarioFilmModel.Mark? = nil) {
+        let backdrop = film.media.flatMap { try? media($0) }
+        self.film = film
+        self.title = title
+        opening = film.intro.map { .intro(kicker: $0.kicker, title: $0.title ?? title, subtitle: $0.subtitle, icon: film.icon(media: media)) }
+        model = ScenarioFilmModel(onLight: film.isLight, hasMedia: backdrop != nil, mark: mark)
         model.card = opening
-        backdropMedia = media
+        backdropMedia = backdrop
+    }
+
+    /// Stages `window` for a recording, with the opening card covering it from the first frame.
+    func open(on window: NSWindow) {
+        attach(to: window)
+        if let opening {
+            present(opening)
+            // The card owns the screen from the first frame, so the app never shows
+            // through a background that the titles only veil.
+            conceal()
+        }
+        hidePointer()
+    }
+
+    /// The titles. Their timings are fixed so every film opens and closes alike; a
+    /// scenario chooses only the words and how long the finished card stays up.
+    func play(_ stage: ScenarioFilm.Stage, sleep: @MainActor (Duration) async throws -> Void) async throws {
+        let card: ScenarioFilmModel.Card?, written: Double
+        switch stage {
+        case .intro:
+            card = opening
+            written = 1.6 + (film.intro?.hold ?? 1.4)
+        case .outro:
+            card = film.outro.map { .outro(tagline: $0.tagline) }
+            written = 3.3 + (film.outro?.hold ?? 1.6)
+        }
+        guard let card else {
+            if stage == .outro { finish() }
+            return
+        }
+        // The opening card is already up, from before the recorder started; presenting it
+        // again only makes sure it is in front of the window it covers.
+        present(card)
+        // A frame with the card in its starting state, so its animations have something to run from.
+        try await sleep(.milliseconds(60))
+        model.written = true
+        var remaining = written
+        if stage == .outro, model.hasMedia {
+            // Let the veil settle over the app, then take the app away and leave the
+            // background playing behind the mark.
+            try await sleep(.seconds(0.85))
+            conceal()
+            remaining -= 0.85
+        }
+        try await sleep(.seconds(max(0, remaining)))
+        // A recording ends on the closing mark.
+        guard stage == .intro else { return }
+        // The words go, the card holds on nothing, and only then does the app come up.
+        // Never a dissolve of one into the other.
+        model.emptying = true
+        try await sleep(.seconds(0.6))
+        if model.hasMedia {
+            // The veil lifts and the background plays alone before the app arrives.
+            model.leaving = true
+            try await sleep(.seconds(0.7))
+        }
+        conceal()
+        dismissCard()
+        try await sleep(.seconds(0.35))
+        reveal(over: 0.55)
+        try await sleep(.seconds(0.6))
     }
 
     /// The margin around a window of this size, as a share of its shorter side.
@@ -479,6 +485,61 @@ private struct RisesIn: ViewModifier {
         // which would leave the card behind the very thing it is meant to cover.
         window.level = opaque ? .normal : .floating
         return window
+    }
+}
+// MARK: - Cues
+
+/// The lines a capture run tells scripts/scenario.sh, which records the screen and makes the film's moves afterwards.
+@MainActor enum ScenarioCue {
+    /// What `screencapture -R` should take: the film's stage if there is one, otherwise the
+    /// window. As x, y from the top left, width, height.
+    static func region(stage: ScenarioFilmStage?, window: NSWindow?) -> String? {
+        guard let frame = stage.map(\.frame) ?? window?.frame, !frame.isEmpty else { return nil }
+        return "\(Int(frame.minX)),\(Int(ScenarioSupport.screen.maxY - frame.maxY)),\(Int(frame.width)),\(Int(frame.height))"
+    }
+
+    /// Something just made a noise, and when.
+    static func sound(_ name: String) -> String { "SCENARIO SOUND \(name) \(Date().timeIntervalSince1970)" }
+
+    /// What the recording should move in on, as a box inside the recorded area with its
+    /// origin at the top left: "composer", "transcript", or "none" for the whole area.
+    static func focus(_ region: String, in window: NSWindow, stage: ScenarioFilmStage?, over move: Double, steady: Bool) -> String? {
+        let area = stage.map(\.frame) ?? window.frame
+        guard !area.isEmpty else { return nil }
+        var box = area
+        if region != "none" {
+            guard let wanted = wantedBox(region, in: window) else { return nil }
+            // Kept inside the window: the margin around it belongs to the stage, and
+            // moving in on that would show black.
+            box = ScenarioSupport.fit(wanted, shapedLike: area, inside: window.frame)
+        }
+        let line = [box.minX - area.minX, area.maxY - box.maxY, box.width, box.height]
+            .map { String(Int($0.rounded())) }.joined(separator: ",")
+        return "SCENARIO FOCUS \(line) \(move) \(steady ? "steady" : "eased") \(Date().timeIntervalSince1970)"
+    }
+
+    /// The conversation column, taken from the split view rather than by hunting for a
+    /// view: the sidebar holds a scroller of its own and is easily mistaken for it.
+    private static func wantedBox(_ region: String, in window: NSWindow) -> NSRect? {
+        let item = ScenarioSupport.splitController(in: window.contentView)?.splitViewItems.first
+        let sidebar = item?.isCollapsed == true ? 0 : (item?.viewController.view.frame.width ?? 0)
+        let column = NSRect(x: window.frame.minX + sidebar, y: window.frame.minY,
+                            width: window.frame.width - sidebar, height: window.frame.height)
+        switch region {
+        case "composer":
+            // The composer and the last of the conversation above it, held around
+            // whatever is being written so the picture follows the words.
+            let band = NSRect(x: column.minX, y: column.minY, width: column.width, height: column.height * 0.52)
+            let width = column.width * 0.78
+            guard let text = ScenarioSupport.firstView(in: window.contentView, matching: { $0 is ComposerTextView }) as? NSTextView else {
+                return band
+            }
+            let caret = text.firstRect(forCharacterRange: NSRange(location: text.string.utf16.count, length: 0), actualRange: nil)
+            guard caret.midX > 0 else { return band }
+            return NSRect(x: caret.midX - width / 2, y: band.minY, width: width, height: band.height)
+        case "transcript": return column
+        default: return nil
+        }
     }
 }
 #endif

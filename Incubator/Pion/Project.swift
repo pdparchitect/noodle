@@ -150,6 +150,7 @@ let project = Project(
                 "../../Sources/Noodle/ChatSettingsView.swift",
                 "../../Sources/Noodle/MessageReceivedSound.swift",
                 "../../Sources/Noodle/ScenarioLauncher.swift",
+                "../../Sources/Noodle/ScenarioFilm.swift",
                 "../../Sources/Noodle/ProfileCard.swift",
                 "../../Sources/Noodle/GroupsSettingsView.swift",
                 "../../Sources/Noodle/AgentConfigurationFields.swift",

@@ -123,6 +123,8 @@ struct PionScenario: Decodable {
         var investigationStatus: Investigation.Status?
         var present: Present?
         var settings: [String: Setting]?
+        /// What a recording moves in on: "composer", "transcript" or "none".
+        var focus: String?
         var capture: String?
         struct Content: Decodable { let text: String }
     }
@@ -139,10 +141,12 @@ struct PionScenario: Decodable {
     var present: Present?
     var timeline: [Step]?
     var linkPreviews: [LinkPreview]?
+    /// Titles and a backdrop around a recording, as Noodle's films have.
+    var film: ScenarioFilm?
 
     var folder = URL(fileURLWithPath: "/")
     private enum CodingKeys: String, CodingKey {
-        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline, linkPreviews
+        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline, linkPreviews, film
     }
 
     static func load(from folder: URL) throws -> PionScenario {
@@ -208,11 +212,16 @@ struct PionScenario: Decodable {
         for (index, step) in (timeline ?? []).enumerated() {
             if let key = step.in { try require(conversationKeys.contains(key), "Step \(index + 1) names an unknown conversation \(key).") }
             try author(step.agent, "Step \(index + 1)")
+            try require(step.focus.map(ScenarioFilm.focusRegions.contains) ?? true,
+                        "Step \(index + 1): focus is \(ScenarioFilm.focusRegions.sorted().joined(separator: ", ")).")
         }
+        try film?.validate(media: media)
     }
+
+    /// A picture or video the scenario names: an asset in its folder, or a web address scripts/scenario.sh has fetched.
+    func media(_ value: String) throws -> URL { try ScenarioSupport.media(value, in: folder) }
 }
 
-/// Times in scenario files: HH:MM today, or -2d HH:MM some days before.
 // MARK: - Session
 
 @MainActor final class ScenarioSession {
@@ -227,7 +236,10 @@ struct PionScenario: Decodable {
     private var conversationIDs: [String: UUID] = [:]
     /// Noodle's line protocol with scripts/scenario.sh.
     private let terminal = ScenarioTerminal()
+    /// A capture run: scripts/scenario.sh photographs or records it, so the timeline plays as it would be watched.
     private var takesShots = false
+    /// The titles and backdrop of a recorded film.
+    private var filmStage: ScenarioFilmStage?
 
     private init(scenario: PionScenario?, selection: String?, root: URL) throws {
         self.scenario = scenario
@@ -422,19 +434,28 @@ struct PionScenario: Decodable {
         readTerminal()
         Task { @MainActor in
             for _ in 0..<150 where mainWindow == nil { try? await Task.sleep(for: .milliseconds(20)) }
-            if let size = scenario.present?.window?.size, size.count == 2, let window = mainWindow {
+            if let size = Self.size ?? scenario.present?.window?.size, size.count == 2, let window = mainWindow {
                 window.setContentSize(NSSize(width: size[0], height: size[1]))
                 window.center()
             }
             NSApp.activate(ignoringOtherApps: true)
             mainWindow?.makeKeyAndOrderFront(nil)
+            // The backdrop and titles are for the camera; someone watching keeps the app on the desktop.
+            if takesShots, let film = scenario.film, let window = mainWindow {
+                let stage = ScenarioFilmStage(film: film, title: scenario.title, media: scenario.media)
+                stage.open(on: window)
+                filmStage = stage
+            }
             try? await Task.sleep(for: .milliseconds(500))
-            await announce("SCENARIO READY \(frame) \(scenario.title)")
+            await announce("SCENARIO READY rect=\(ScenarioCue.region(stage: filmStage, window: mainWindow) ?? "none") \(scenario.title)")
+            let sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+            try? await filmStage?.play(.intro, sleep: sleep)
             for (index, step) in (scenario.timeline ?? []).enumerated() {
                 do { try await perform(step) }
                 catch { FileHandle.standardError.write(Data("SCENARIO STEP \(index + 1) FAILED \(error.localizedDescription)\n".utf8)) }
                 model.refresh()
             }
+            try? await filmStage?.play(.outro, sleep: sleep)
             await announce("SCENARIO DONE")
             if takesShots { NSApp.terminate(nil) }
         }
@@ -445,15 +466,16 @@ struct PionScenario: Decodable {
             ?? NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) }
     }
 
-    /// The main window in screen coordinates with the origin at the top left, as screencapture takes it.
-    private var frame: String {
-        guard let window = mainWindow, let screen = window.screen ?? NSScreen.main else { return "rect=none" }
-        let top = screen.frame.maxY - window.frame.maxY
-        return "rect=\(Int(window.frame.minX)),\(Int(top)),\(Int(window.frame.width)),\(Int(window.frame.height))"
+    /// `--scenario-size WIDTHxHEIGHT` opens the window at that size instead of the scenario's own,
+    /// so one scenario can be recorded in another shape without editing it.
+    private static var size: [Double]? {
+        guard let value = argument(after: "--scenario-size") else { return nil }
+        let parts = value.split(separator: "x").compactMap { Double($0) }
+        return parts.count == 2 ? parts : nil
     }
 
     private func perform(_ step: PionScenario.Step) async throws {
-        if let wait = step.wait { try await Task.sleep(for: .seconds(takesShots ? min(wait, 0.3) : wait)) }
+        if let wait = step.wait { try await Task.sleep(for: .seconds(wait)) }
         if step.waitFor == "key", !takesShots { await terminal.awaitKey() }
         let now = ScenarioClock.now
         let agent = step.agent.flatMap { agentIDs[$0] }
@@ -466,9 +488,10 @@ struct PionScenario: Decodable {
             let before = model.scriptedPhases[agent]
             model.scriptedPhases[agent] = .working
             model.refresh()
-            try await Task.sleep(for: .seconds(takesShots ? 0.15 : 1.2))
+            try await Task.sleep(for: .seconds(1.2))
             model.scriptedPhases[agent] = before == .working ? .working : .ready
             _ = try model.repository.sendAgentMessage(agentID: agent, conversationID: conversation, body: reply.text, now: ScenarioClock.now)
+            if takesShots { terminal.write(ScenarioCue.sound("reply")) }
         }
         if let say = step.say, let conversation { try model.send(say.text, in: conversation) }
         if let conversation, model.investigation(conversation) != nil {
@@ -479,11 +502,15 @@ struct PionScenario: Decodable {
             if let status = step.investigationStatus { try model.store.setStatus(status, of: conversation, by: by(actor, conversation), now: now) }
         }
         if let present = step.present { apply(present) }
+        if let region = step.focus, takesShots, let window = mainWindow,
+           let line = ScenarioCue.focus(region, in: window, stage: filmStage, over: 0.9, steady: false) {
+            terminal.write(line)
+        }
         for (key, setting) in step.settings ?? [:] { UserDefaults.standard.set(setting.value, forKey: key) }
         if let name = step.capture {
             model.refresh()
             try await Task.sleep(for: .milliseconds(450))
-            await announce("SCENARIO SHOT \(name) id=\(mainWindow?.windowNumber ?? 0) \(frame) drawn=\(drawn(name)?.path ?? "none")")
+            await announce("SCENARIO SHOT \(name) id=\(mainWindow?.windowNumber ?? 0) rect=\(ScenarioCue.region(stage: filmStage, window: mainWindow) ?? "none") drawn=\(drawn(name)?.path ?? "none")")
         }
     }
 

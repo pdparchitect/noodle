@@ -56,7 +56,9 @@ accounts of the same service can sit side by side.
 `scripts/scenario.sh` opens Pion in a scenario from `Scenarios/`: a scripted team and
 Investigations in a separate copy of Pion Dev with no network and no access to your data. Without a
 name it opens the picker. With a name the scenario plays; Return in the terminal, or Scenarios > Next
-Step, goes on when it waits. `--shots` saves each captured step to the scenario's `shots` folder.
+Step, goes on when it waits. `--shots` saves each captured step to the scenario's `shots` folder, and
+`--video` records the scenario to its `recordings` folder, with `--ratio 16:9` and other shapes as MP4s and
+the film's titles, camera moves and sounds, as Noodle's scenarios have.
 
 ## License
 
