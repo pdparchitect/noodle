@@ -7,7 +7,7 @@ import NoodleMCP
 /// service account with read-only access.
 public enum GoogleCloud {
     public static let preset = ToolDefinition(
-        id: "google-cloud", name: "Google Cloud", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
+        id: "371912f8-7145-4096-a763-2c3ce3af0e55", formerID: "google-cloud", name: "Google Cloud", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
         defaultInstructions: """
         Use Google Cloud to investigate an organisation, folder or project: search the Cloud Audit Logs by principal, \
         method, resource and time; list Security Command Center findings by severity and category; find who has access \

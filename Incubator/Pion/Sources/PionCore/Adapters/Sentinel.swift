@@ -6,7 +6,7 @@ import NoodleMCP
 /// Each account is one workspace.
 public enum Sentinel {
     public static let preset = ToolDefinition(
-        id: "sentinel", name: "Microsoft Sentinel", summary: "Query a Sentinel workspace's logs with KQL.",
+        id: "812bf7c3-d2a3-4121-9026-a2e503ad1182", formerID: "sentinel", name: "Microsoft Sentinel", summary: "Query a Sentinel workspace's logs with KQL.",
         defaultInstructions: """
         Use Microsoft Sentinel to query the logs in its Log Analytics workspace with KQL, such as SigninLogs, \
         SecurityEvent, AzureActivity, CommonSecurityLog or SecurityAlert. Filter by time and end with take or summarize \

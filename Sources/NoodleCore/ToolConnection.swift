@@ -258,9 +258,22 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
         let file = root.appendingPathComponent("MCP/connections.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return Self() }
         var registry = try JSONDecoder().decode(Self.self, from: MCPBridgeFiles.read(file, limit: 32 * 1_048_576))
+        // TODO(0.89.0): remove with adoptEntryIDs. Milestone: 0.88.0. Not before TODO(Pion 0.5.0), milestone Pion 0.4.0.
+        registry.adoptEntryIDs(ToolCatalog.entries)
         try registry.validate()
         registry.normalizeSkillNames()
         return registry
+    }
+    /// Accounts saved before catalogue entries were identified by UUID name their entry by its former ID; they move
+    /// to its UUID. It runs on every load, so a file restored from a checkpoint is moved too, and is kept on the next save.
+    // TODO(0.89.0): remove with its call in load(root:), ToolDefinition.formerID and
+    // ToolCatalogTests.testAccountsSavedBeforeEntriesHadUUIDsMoveToThem. Milestone: 0.88.0.
+    // TODO(Pion 0.5.0): Pion runs it too; remove it no earlier. Milestone: Pion 0.4.0.
+    mutating func adoptEntryIDs(_ entries: [ToolDefinition]) {
+        let current = Dictionary(entries.compactMap { entry in entry.formerID.map { ($0, entry.id) } }, uniquingKeysWith: { first, _ in first })
+        for index in connections.indices {
+            if let former = connections[index].catalogueID, let id = current[former] { connections[index].catalogueID = id }
+        }
     }
     public mutating func save(root: URL) throws {
         try validate()

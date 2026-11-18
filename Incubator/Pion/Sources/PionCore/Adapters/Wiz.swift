@@ -6,7 +6,7 @@ import NoodleMCP
 /// account. Each account is one tenant, in its region.
 public enum Wiz {
     public static let preset = ToolDefinition(
-        id: "wiz", name: "Wiz", summary: "Cloud security issues and queries over the Wiz security graph.",
+        id: "6351153d-b484-4629-8a9b-37ed096300a8", formerID: "wiz", name: "Wiz", summary: "Cloud security issues and queries over the Wiz security graph.",
         defaultInstructions: """
         Use Wiz to see the cloud as its security graph does: list issues by severity and status, with the resource each \
         concerns, its cloud and subscription; and run read-only GraphQL queries for anything else, such as cloud \

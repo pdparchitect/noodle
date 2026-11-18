@@ -6,7 +6,7 @@ import NoodleMCP
 /// Each account is one organisation.
 public enum GitHub {
     public static let preset = ToolDefinition(
-        id: "github-security", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning alerts.",
+        id: "07d106a4-0e2c-47b1-a743-3c71161e56e4", formerID: "github-security", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning alerts.",
         defaultInstructions: """
         Use GitHub to see what happened in an organisation: search its audit log for who did what and when, such as \
         repo.destroy, org.add_member or protected_branch changes; list its members and outside collaborators; and list \

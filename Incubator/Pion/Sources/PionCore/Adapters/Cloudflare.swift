@@ -6,7 +6,7 @@ import NoodleMCP
 /// read with an API token. Each account is one Cloudflare account.
 public enum Cloudflare {
     public static let preset = ToolDefinition(
-        id: "cloudflare-security", name: "Cloudflare Security", summary: "DNS records, the account audit log, and firewall events at the edge.",
+        id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", formerID: "cloudflare-security", name: "Cloudflare Security", summary: "DNS records, the account audit log, and firewall events at the edge.",
         defaultInstructions: """
         Use Cloudflare to see a domain from the edge: its DNS records, who changed what in the account and from where, \
         and the firewall events for a zone, such as blocked requests by IP address, country, path and rule source. \

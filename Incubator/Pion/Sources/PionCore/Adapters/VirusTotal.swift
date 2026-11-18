@@ -5,7 +5,7 @@ import NoodleMCP
 /// VirusTotal's reputation lookups for files, domains, IP addresses and URLs, with the person's API key.
 public enum VirusTotal {
     public static let preset = ToolDefinition(
-        id: "virustotal", name: "VirusTotal", summary: "Reputation of files, domains, IP addresses and URLs.",
+        id: "8a5c79c3-25c7-4aec-b6fb-2b3b3b6865fc", formerID: "virustotal", name: "VirusTotal", summary: "Reputation of files, domains, IP addresses and URLs.",
         defaultInstructions: """
         Use VirusTotal to check the reputation of a file hash, domain, IP address or URL you met in the evidence. \
         A verdict is how many security engines flag something, not proof: say how many, and weigh it with what else you found. \

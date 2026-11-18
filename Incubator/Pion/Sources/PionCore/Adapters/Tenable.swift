@@ -6,7 +6,7 @@ import NoodleMCP
 /// secret key.
 public enum Tenable {
     public static let preset = ToolDefinition(
-        id: "tenable", name: "Tenable", summary: "An asset's details and known vulnerabilities, by IP address.",
+        id: "6b90d060-bfa0-4f10-9aa1-a326505d7957", formerID: "tenable", name: "Tenable", summary: "An asset's details and known vulnerabilities, by IP address.",
         defaultInstructions: """
         Use Tenable to see how exposed an asset is: find it by IP address, with its hostnames, operating system and when \
         last seen, and its vulnerabilities by severity. Record each finding as evidence, citing the asset and plugin. These \

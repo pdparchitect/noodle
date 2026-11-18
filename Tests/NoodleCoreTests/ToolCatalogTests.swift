@@ -9,7 +9,7 @@ final class ToolCatalogTests: XCTestCase {
             XCTAssertFalse(tool.summary.isEmpty)
             XCTAssertFalse(tool.defaultInstructions.isEmpty)
             XCTAssertLessThanOrEqual(tool.defaultInstructions.count, 20_000)
-            XCTAssertEqual(tool.iconName, tool.id)
+            XCTAssertNotNil(UUID(uuidString: tool.id), "\(tool.name) is not identified by a UUID")
             XCTAssertFalse(tool.iconName.contains("/"))
             switch tool.configuration {
             case .connection(let configuration):
@@ -31,11 +31,11 @@ final class ToolCatalogTests: XCTestCase {
 
     func testSearchAndCustomMCPStaySeparate() {
         XCTAssertEqual(ToolCatalog.matching("   "), ToolCatalog.entries)
-        XCTAssertEqual(ToolCatalog.matching("nOtIoN MCP").map(\.id), ["notion"])
+        XCTAssertEqual(ToolCatalog.matching("nOtIoN MCP").map(\.iconName), ["notion"])
         XCTAssertTrue(ToolCatalog.matching("nothing-matches-this").isEmpty)
         XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://example.com/mcp")!))
         let excluded = ["github", "betterstack", "zapier", "workato", "hubspot"]
-        XCTAssertTrue(Set(excluded).isDisjoint(with: ToolCatalog.entries.map(\.id)))
+        XCTAssertTrue(Set(excluded).isDisjoint(with: ToolCatalog.entries.map(\.iconName)))
         let notion = ToolCatalog.matching("Notion")[0]
         XCTAssertEqual(ToolCatalog.availableName(for: notion, existingNames: []), "Notion")
         XCTAssertEqual(ToolCatalog.availableName(for: notion, existingNames: ["notion", "Notion 2"]), "Notion 3")
@@ -50,9 +50,9 @@ final class ToolCatalogTests: XCTestCase {
     }
 
     func testSelfRegisteringServicesAreListed() {
-        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.klaviyo.com/mcp")!)?.id, "klaviyo")
-        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.evernote.com/mcp")!)?.id, "evernote")
-        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.id, "agentmail")
+        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.klaviyo.com/mcp")!)?.iconName, "klaviyo")
+        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.evernote.com/mcp")!)?.iconName, "evernote")
+        XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.agentmail.to/mcp")!)?.iconName, "agentmail")
         for (id, endpoint) in ["asana": "https://mcp.asana.com/mcp", "calendly": "https://mcp.calendly.com",
                                "datadog": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
                                "socket": "https://mcp.socket.dev/", "semgrep": "https://mcp.semgrep.ai/mcp",
@@ -60,7 +60,7 @@ final class ToolCatalogTests: XCTestCase {
                                "kling": "https://kling.ai/mcp", "inkbox": "https://inkbox.ai/mcp",
                                "krea": "https://api.krea.ai/mcp", "basecamp": "https://mcp.basecamp.com/mcp",
                                "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
-            XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.id, id)
+            XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.iconName, id)
         }
     }
 
@@ -95,11 +95,11 @@ final class ToolCatalogTests: XCTestCase {
 
     func testExperimentalPresetsSortLastAndAreSearchable() throws {
         let gmail = try XCTUnwrap(ToolCatalog.matching("experimental").first)
-        XCTAssertEqual(gmail.id, "gmail")
+        XCTAssertEqual(gmail.iconName, "gmail")
         XCTAssertEqual(gmail.maturity, .experimental)
         XCTAssertEqual(gmail.maturity.badge, "Experimental")
         let experimental = ToolCatalog.matching("experimental")
-        XCTAssertEqual(experimental.map(\.id), ["gmail", "google-calendar", "google-docs", "google-drive"])
+        XCTAssertEqual(experimental.map(\.iconName), ["gmail", "google-calendar", "google-docs", "google-drive"])
         XCTAssertEqual(Array(ToolCatalog.matching("").suffix(experimental.count)), experimental)
         XCTAssertEqual(ToolCatalog.matching("Gmail MCP experimental"), [gmail])
         XCTAssertTrue(ToolCatalog.matching("").dropLast(experimental.count).allSatisfy { $0.maturity == .stable })
@@ -115,7 +115,7 @@ final class ToolCatalogTests: XCTestCase {
         ]
         var sharedClients: [MCPOAuthClientConfiguration]?
         for (id, service, scopes) in services {
-            let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.id == id })
+            let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.iconName == id })
             guard case .connection(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
             XCTAssertEqual(configuration.endpoint.absoluteString, "https://\(service)mcp.googleapis.com/mcp/v1")
             let oauth = try XCTUnwrap(configuration.oauth)
@@ -147,11 +147,11 @@ final class ToolCatalogTests: XCTestCase {
     func testAnAppMayOfferItsOwnListReusingNoodlesEntries() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         XCTAssertEqual(ToolCatalog.entries, ToolCatalog.noodle)
-        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
         let own = ToolDefinition(id: "keys", name: "Keys", summary: "Lookups with a key.", defaultInstructions: "Look things up.",
                                  iconName: "keys", configuration: .connection(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
         ToolCatalog.use([notion, own])
-        XCTAssertEqual(ToolCatalog.matching("").map(\.id), ["keys", "notion"])
+        XCTAssertEqual(ToolCatalog.matching("").map(\.iconName), ["keys", "notion"])
         XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://keys.example/mcp")!), own)
         XCTAssertNil(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.airtable.com/mcp")!))
     }
@@ -184,9 +184,9 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": "acme.okta.com", "region": "mars"]))
         XCTAssertThrowsError(try directory.makeConnection(name: "Bad", values: ["domain": "acme.okta.com"]))
 
-        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
         let signedIn = try notion.makeConnection(name: "Notion")
-        XCTAssertEqual(signedIn.catalogueID, "notion")
+        XCTAssertEqual(signedIn.catalogueID, notion.id)
         XCTAssertNil(signedIn.settings)
         let earlier = try ToolConnection(name: "Notion", endpoint: signedIn.endpoint)
         XCTAssertEqual(ToolCatalog.definition(for: earlier), notion, "connections made before entries were remembered match by address")
@@ -221,7 +221,7 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(account.adapter, "lookup")
         XCTAssertTrue(tool.staysOnThisMac)
         XCTAssertEqual(try JSONDecoder().decode(ToolConnection.self, from: JSONEncoder().encode(account)), account)
-        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
         XCTAssertFalse(notion.staysOnThisMac)
         XCTAssertNil(try notion.makeConnection(name: "Notion").adapter)
         XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: account.endpoint, adapter: "has spaces"))
@@ -257,9 +257,32 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: URL(string: "http://grafana.example.com/api")!, adapter: "dashboards"))
     }
 
+    // TODO(0.89.0): remove with ToolConnectionRegistry.adoptEntryIDs. Milestone: 0.88.0.
+    func testAccountsSavedBeforeEntriesHadUUIDsMoveToThem() throws {
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
+        XCTAssertEqual(notion.formerID, "notion")
+        var earlier = try notion.makeConnection(name: "Notion")
+        earlier.catalogueID = "notion"
+        var custom = try ToolConnection(name: "Own", endpoint: URL(string: "https://own.example/mcp")!)
+        custom.catalogueID = "no-such-entry"
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var saved = ToolConnectionRegistry()
+        saved.connections = [earlier, custom]
+        try saved.save(root: root)
+
+        let loaded = try ToolConnectionRegistry.load(root: root)
+        XCTAssertEqual(loaded.connections.map(\.catalogueID), [notion.id, "no-such-entry"])
+        XCTAssertEqual(ToolCatalog.definition(for: loaded.connections[0]), notion)
+        var kept = loaded
+        try kept.save(root: root)
+        let file = try String(contentsOf: root.appendingPathComponent("MCP/connections.json"), encoding: .utf8)
+        XCTAssertTrue(file.contains(notion.id), "the moved ID was not kept on the next save")
+    }
+
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
-        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.id == "notion" })
+        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
         var disguised = try ToolConnection(name: "Notion", endpoint: URL(string: "https://attacker.example/mcp")!)
         disguised.catalogueID = "notion"
         XCTAssertNil(ToolCatalog.definition(for: disguised), "a connection elsewhere passed as a preset the organisation allows")

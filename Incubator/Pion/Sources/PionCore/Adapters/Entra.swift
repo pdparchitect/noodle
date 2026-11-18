@@ -4,7 +4,7 @@ import NoodleMCP
 
 /// Microsoft Entra ID: who an identity is, what it belongs to, how it signs in, its sign-in log and risk.
 public enum Entra {
-    public static let preset = Graph.preset(id: "entra", name: "Microsoft Entra ID",
+    public static let preset = Graph.preset(id: "7b419894-4d22-4624-a699-5df62b3ab680", formerID: "entra", key: "entra", name: "Microsoft Entra ID",
         summary: "Users, groups and roles, sign-in methods, sign-in logs and risky users of a Microsoft tenant.",
         instructions: """
         Use Microsoft Entra ID to learn who an identity is and what happened to it: find the user, then their groups and \

@@ -5,7 +5,7 @@ import NoodleMCP
 /// Elasticsearch: queries in ES|QL over the indices an API key can read. Each account is one deployment.
 public enum Elastic {
     public static let preset = ToolDefinition(
-        id: "elastic", name: "Elastic", summary: "Query logs and security events in Elasticsearch with ES|QL.",
+        id: "4909bc20-0c1d-4302-8c33-0fa24c127abf", formerID: "elastic", name: "Elastic", summary: "Query logs and security events in Elasticsearch with ES|QL.",
         defaultInstructions: """
         Use Elastic to query logs and security events with ES|QL, such as FROM logs-* | WHERE source.ip == "203.0.113.77" \
         | SORT @timestamp DESC | LIMIT 50. Filter by time and end with LIMIT to keep results small. Record each query and \

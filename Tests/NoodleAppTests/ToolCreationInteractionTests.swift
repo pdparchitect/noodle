@@ -22,7 +22,7 @@ import NoodleCore
         let search = try await textField("Search tools", in: view)
         edit(search, text: "  PIPELINES  ")
         press(try await control("Add Buildkite and sign in", in: view))
-        XCTAssertEqual(selected.map(\.id), ["buildkite"])
+        XCTAssertEqual(selected.map(\.iconName), ["buildkite"])
         edit(search, text: "no-such-fixture-service")
         _ = try await control("No matching tools. You can add a custom MCP below.", in: view)
         edit(search, text: "")
@@ -47,7 +47,7 @@ import NoodleCore
         XCTAssertEqual(added.count, 1); XCTAssertTrue(connected.isEmpty)
         try await wait { connected.count == 1 }
         let saved = try XCTUnwrap(f.controller.registry.connections.first)
-        let definition = try XCTUnwrap(ToolCatalog.entries.first { $0.id == "notion" })
+        let definition = try XCTUnwrap(ToolCatalog.entries.first { $0.iconName == "notion" })
         XCTAssertEqual(saved.name, definition.name); XCTAssertEqual(saved.description, definition.summary)
         XCTAssertEqual(saved.instructions, definition.defaultInstructions)
         XCTAssertEqual(added, [saved.id]); XCTAssertEqual(connected, [saved])

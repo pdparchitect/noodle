@@ -6,7 +6,7 @@ import NoodleCore
 
 private enum GmailPreset {
     static let configuration: ToolConnectionConfiguration = {
-        guard case .connection(let configuration) = ToolCatalog.entries.first(where: { $0.id == "gmail" })!.configuration else {
+        guard case .connection(let configuration) = ToolCatalog.entries.first(where: { $0.iconName == "gmail" })!.configuration else {
             fatalError("Missing Gmail preset")
         }
         return configuration
@@ -217,7 +217,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
         var accounts: [ToolConnection] = []
         var refreshTokens: [String] = []
         for id in ["google-docs", "google-drive", "google-calendar"] {
-            let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.id == id })
+            let tool = try XCTUnwrap(ToolCatalog.entries.first { $0.iconName == id })
             guard case .connection(let configuration) = tool.configuration else { return XCTFail("Expected MCP") }
             let oauth = try XCTUnwrap(configuration.oauth)
             let scope = oauth.scopes.joined(separator: " ")

@@ -13,10 +13,10 @@ struct ForcedValues: ManagedPreferenceSource, @unchecked Sendable {
 final class ManagedPolicyTests: XCTestCase {
     private func policy(_ values: [String: Any]) -> ManagedPolicy { ManagedPolicy(reading: ForcedValues(values: values)) }
     private let custom = URL(string: "https://mcp.example.com/mcp")!
-    private func catalogue(_ id: String) -> OrganisationAction {
-        let tool = ToolCatalog.entries.first { $0.id == id }!
+    private func catalogue(_ icon: String) -> OrganisationAction {
+        let tool = ToolCatalog.entries.first { $0.iconName == icon }!
         guard case .connection(let configuration) = tool.configuration else { fatalError() }
-        return .toolConnection(catalogueID: id, endpoint: configuration.endpoint)
+        return .toolConnection(catalogueID: tool.id, endpoint: configuration.endpoint)
     }
 
     /// A valid value for each key that differs from what Noodle does without it.
@@ -100,19 +100,19 @@ final class ManagedPolicyTests: XCTestCase {
     }
 
     func testToolConnectionsOffBlocksCatalogueAndCustomOnes() {
-        let off = policy([ManagedKeys.allowMCP: false, ManagedKeys.mcpAllowList: ["linear"]])
+        let off = policy([ManagedKeys.allowMCP: false, ManagedKeys.mcpAllowList: [entryID("linear")]])
         XCTAssertFalse(off.allows(.toolConnections))
         XCTAssertFalse(off.allows(catalogue("linear")))
         XCTAssertFalse(off.allows(.toolConnection(catalogueID: nil, endpoint: custom)))
     }
 
     func testCatalogueListsMatchByIDAndDenyWins() {
-        let lists = policy([ManagedKeys.mcpAllowList: ["linear", "asana"], ManagedKeys.mcpDenyList: ["asana"]])
+        let lists = policy([ManagedKeys.mcpAllowList: [entryID("linear"), entryID("asana")], ManagedKeys.mcpDenyList: [entryID("asana")]])
         XCTAssertTrue(lists.allows(catalogue("linear")))
         XCTAssertFalse(lists.allows(catalogue("asana")), "Deny wins over allow")
         XCTAssertFalse(lists.allows(catalogue("airtable")), "An allow list means only these")
         XCTAssertTrue(lists.allows(.toolConnection(catalogueID: nil, endpoint: custom)), "Catalogue lists leave custom servers alone")
-        let denied = policy([ManagedKeys.mcpDenyList: ["airtable"]])
+        let denied = policy([ManagedKeys.mcpDenyList: [entryID("airtable")]])
         XCTAssertTrue(denied.allows(catalogue("linear")))
         XCTAssertFalse(denied.allows(catalogue("airtable")))
     }

@@ -9,7 +9,7 @@ public enum GoogleWorkspace {
     static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules"]
 
     public static let preset = ToolDefinition(
-        id: "google-workspace", name: "Google Workspace", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
+        id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", formerID: "google-workspace", name: "Google Workspace", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
         defaultInstructions: """
         Use Google Workspace to see what happened in the domain: sign-ins, including suspicious ones and their IP \
         addresses; admin actions; OAuth tokens granted to apps; Drive sharing and downloads; SAML sign-ins; account changes. \

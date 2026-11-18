@@ -6,7 +6,7 @@ import NoodleMCP
 /// Shodan takes only in the address.
 public enum Shodan {
     public static let preset = ToolDefinition(
-        id: "shodan", name: "Shodan", summary: "What an internet-facing address exposes: open ports, services and known vulnerabilities.",
+        id: "6ca1686e-ba46-4e5c-90ad-e78c5ad4e171", formerID: "shodan", name: "Shodan", summary: "What an internet-facing address exposes: open ports, services and known vulnerabilities.",
         defaultInstructions: """
         Use Shodan to see what an IP address exposes to the internet: its open ports, the software on them, known \
         vulnerabilities, its hostnames and owner; and to resolve hostnames and addresses both ways. Shodan reports what its \

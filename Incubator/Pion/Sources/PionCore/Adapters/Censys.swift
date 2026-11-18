@@ -5,7 +5,7 @@ import NoodleMCP
 /// Censys: what an internet host exposes, from its Platform API, with a personal access token.
 public enum Censys {
     public static let preset = ToolDefinition(
-        id: "censys", name: "Censys", summary: "What an internet-facing host exposes: services, software, network and location.",
+        id: "13aabe41-172d-44ff-b8aa-58fa152dc0f9", formerID: "censys", name: "Censys", summary: "What an internet-facing host exposes: services, software, network and location.",
         defaultInstructions: """
         Use Censys to see what an IP address exposes to the internet: its services and ports, network and owner, \
         location and DNS names, as Censys last scanned it. Record each lookup as evidence. Lookups never scan anything.

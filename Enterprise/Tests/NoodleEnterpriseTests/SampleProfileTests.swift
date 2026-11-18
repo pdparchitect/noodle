@@ -6,6 +6,9 @@ import XCTest
 
 /// The committed sample profile's settings, made restrictive wherever the sample allows, with a few
 /// entries an administrator could get wrong.
+/// A catalogue entry's ID, found by its icon's name, which stays readable while IDs are UUIDs.
+func entryID(_ icon: String) -> String { ToolCatalog.entries.first { $0.iconName == icon }!.id }
+
 enum RestrictiveProfile {
     static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -33,8 +36,8 @@ enum RestrictiveProfile {
         try sampleSettings().merging([
             ManagedKeys.allowedHarnesses: [HarnessProvider.codex.rawValue, unknownHarness],
             ManagedKeys.allowUnrestrictedAccess: false,
-            ManagedKeys.mcpAllowList: ["linear", "asana"],
-            ManagedKeys.mcpDenyList: ["asana"],
+            ManagedKeys.mcpAllowList: [entryID("linear"), entryID("asana")],
+            ManagedKeys.mcpDenyList: [entryID("asana")],
             ManagedKeys.customMCPAllowList: ["*.corp.test", notAString],
             ManagedKeys.customMCPDenyList: ["bad.corp.test"],
             ManagedKeys.allowBrowser: false,
@@ -177,10 +180,10 @@ enum RestrictiveProfile {
         XCTAssertFalse(OrganisationStatus.shared.isManaged)
     }
 
-    private func catalogueConnection(_ id: String) -> OrganisationAction {
-        let tool = ToolCatalog.entries.first { $0.id == id }!
-        guard case .connection(let configuration) = tool.configuration else { fatalError("\(id) is not an MCP connection") }
-        return .toolConnection(catalogueID: id, endpoint: configuration.endpoint)
+    private func catalogueConnection(_ icon: String) -> OrganisationAction {
+        let tool = ToolCatalog.entries.first { $0.iconName == icon }!
+        guard case .connection(let configuration) = tool.configuration else { fatalError("\(icon) is not an MCP connection") }
+        return .toolConnection(catalogueID: tool.id, endpoint: configuration.endpoint)
     }
 
     private func customConnection(_ url: String) -> OrganisationAction {

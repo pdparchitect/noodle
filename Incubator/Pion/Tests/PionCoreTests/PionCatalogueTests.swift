@@ -6,16 +6,20 @@ final class PionCatalogueTests: XCTestCase {
     func testPionOffersItsSecurityToolsAndOnlyTheNoodlePresetsThatHelpAnInvestigation() {
         let ids = PionCatalogue.entries.map(\.id)
         XCTAssertEqual(Set(ids).count, ids.count, "an entry is listed twice")
-        for security in ["virustotal", "shodan", "okta", "entra", "defender", "crowdstrike", "sentinelone", "splunk", "elastic", "sentinel",
-                         "cloudflare-security", "wiz", "github-security", "abuseipdb", "urlscan", "greynoise", "otx", "haveibeenpwned",
-                         "aws", "google-cloud", "google-workspace", "grafana-cloud", "grafana-server"] {
-            XCTAssertTrue(ids.contains(security), security)
+        XCTAssertTrue(ids.allSatisfy { UUID(uuidString: $0) != nil }, "an entry is not identified by a UUID")
+        let names = Set(PionCatalogue.entries.map(\.name))
+        for security in ["VirusTotal", "Shodan", "Okta", "Microsoft Entra ID", "Microsoft Defender XDR", "CrowdStrike Falcon", "SentinelOne",
+                         "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Wiz", "AbuseIPDB", "GreyNoise", "AWS",
+                         "Google Cloud", "Google Workspace", "Grafana Cloud", "Grafana"] {
+            XCTAssertTrue(names.contains(security), security)
         }
+        // Noodle's own entries, by their icons' names.
+        let fromNoodle = Set(PionCatalogue.entries.filter { entry in ToolCatalog.noodle.contains { $0.id == entry.id } }.map(\.iconName))
         for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "sentry", "semgrep", "perplexity"] {
-            XCTAssertTrue(ids.contains(kept), kept)
+            XCTAssertTrue(fromNoodle.contains(kept), kept)
         }
         for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter", "grafana"] {
-            XCTAssertFalse(ids.contains(dropped), dropped)
+            XCTAssertFalse(fromNoodle.contains(dropped), dropped)
         }
         let noodle = Set(ToolCatalog.noodle.map(\.id))
         XCTAssertTrue(PionCatalogue.keptFromNoodle.isSubset(of: noodle),

@@ -6,7 +6,7 @@ import NoodleMCP
 /// read with a service principal and its secret.
 public enum Proofpoint {
     public static let preset = ToolDefinition(
-        id: "proofpoint", name: "Proofpoint TAP", summary: "Malicious messages delivered and blocked, and who clicked their links.",
+        id: "4dc2d401-b944-4add-b211-1ce69fdd48b5", formerID: "proofpoint", name: "Proofpoint TAP", summary: "Malicious messages delivered and blocked, and who clicked their links.",
         defaultInstructions: """
         Use Proofpoint TAP to see the email threats of the last hour: messages with threats that were delivered or \
         blocked, with sender, recipients, subject and the threat; and clicks on threat links that were permitted or \
