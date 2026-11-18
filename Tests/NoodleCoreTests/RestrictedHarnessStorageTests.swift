@@ -414,26 +414,6 @@ final class RestrictedHarnessStorageTests: XCTestCase {
         XCTAssertFalse(copy.contains("auth.json"))
     }
 
-    // TODO(0.77.0): remove with RestrictedHarnessStorage.removeSharedLogins, its call in NoodleStore.reload
-    // and in Hub.init (TODO(Hub 0.44.0)). Milestones: 0.76.0, Hub 0.43.0.
-    func testSharedCopiesOfTheCLIsOwnLoginsAreRemoved() throws {
-        let (root, first, _) = try fixture()
-        let cli = root.appendingPathComponent("cli"), own = root.appendingPathComponent("own")
-        for home in [cli, own] {
-            try WorkspaceMailbox(workspace: try made(home), path: ".claude", create: true)
-                .writeData(Data(#"{"claudeAiOauth":{"accessToken":"a","refreshToken":"r"}}"#.utf8), named: ".credentials.json")
-        }
-        let storage = first.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let logins = storage.appendingPathComponent("HarnessLogins")
-        try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: first, loginHome: cli) { _, _ in nil }
-        let cliCopies = try FileManager.default.contentsOfDirectory(atPath: logins.path)
-        try RestrictedHarnessStorage.prepare(provider: .claudeCode, workspace: first, loginHome: own) { _, _ in nil }
-        RestrictedHarnessStorage.removeSharedLogins(root: storage, loginHome: cli)
-        let left = try FileManager.default.contentsOfDirectory(atPath: logins.path)
-        XCTAssertEqual(left.count, 1)
-        XCTAssertFalse(cliCopies.contains(left[0]), "Only the CLI's copy goes")
-    }
-
     private func made(_ url: URL) throws -> URL {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url

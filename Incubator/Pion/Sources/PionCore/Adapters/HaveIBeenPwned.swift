@@ -5,7 +5,7 @@ import NoodleMCP
 /// Have I Been Pwned: the data breaches and pastes an email address appears in, with the person's API key.
 public enum HaveIBeenPwned {
     public static let preset = ToolDefinition(
-        id: "d9a6dd05-60ea-4301-ba6c-bf3f1d3e8799", formerID: "haveibeenpwned", name: "Have I Been Pwned", summary: "The data breaches and pastes an email address appears in.",
+        id: "d9a6dd05-60ea-4301-ba6c-bf3f1d3e8799", name: "Have I Been Pwned", summary: "The data breaches and pastes an email address appears in.",
         defaultInstructions: """
         Use Have I Been Pwned to see whether an email address appears in known data breaches or pastes, which breaches, \
         when, and what was exposed, such as passwords. A breach explains how credentials may have leaked; it does not show \

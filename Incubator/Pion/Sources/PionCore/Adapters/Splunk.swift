@@ -5,7 +5,7 @@ import NoodleMCP
 /// Splunk: searches in SPL, run once and returned, with an authentication token. Each account is one deployment.
 public enum Splunk {
     public static let preset = ToolDefinition(
-        id: "dd7f89a9-d5ac-4f3c-9895-86725cd21c1b", formerID: "splunk", name: "Splunk", summary: "Search logs and events with SPL.",
+        id: "dd7f89a9-d5ac-4f3c-9895-86725cd21c1b", name: "Splunk", summary: "Search logs and events with SPL.",
         defaultInstructions: """
         Use Splunk to search the logs and events it holds with SPL. Name the index, keep a time range and end with a \
         head, stats or table to keep results small. Record each search and what it returned as evidence, with the search \

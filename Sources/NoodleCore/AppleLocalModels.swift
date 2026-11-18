@@ -40,20 +40,6 @@ public struct AppleLocalModelStore: Sendable {
         FileManager.default.fileExists(atPath: directory.appendingPathComponent(Self.systemModelMarker).path)
     }
 
-    // TODO(0.62.0): remove with its call in NoodleStore.reload and
-    // AppleLocalModelsTests.testExistingAppleBotsKeepTheOnDeviceModelOnce. Milestone: 0.61.0.
-    /// Earlier releases offered Apple's model to every bot. Add it once for
-    /// people whose bots already use it; it starts removed for everyone else.
-    public func keepSystemModelForExistingBots(_ agents: [AgentRecord]) throws {
-        let migrated = directory.appendingPathComponent(".apple-on-device-migrated")
-        guard !FileManager.default.fileExists(atPath: migrated.path) else { return }
-        if agents.contains(where: { $0.harnessIdentifier == "apple" && ($0.modelIdentifier ?? "default") == "default" }) {
-            try setSystemModelAdded(true)
-        }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data().write(to: migrated)
-    }
-
     public func setSystemModelAdded(_ added: Bool) throws {
         let marker = directory.appendingPathComponent(Self.systemModelMarker)
         if added {

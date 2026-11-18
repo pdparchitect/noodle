@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Retire upgrade steps for data from before the 0.61.0, 0.76.0 and 0.88.0 milestones: adding Apple's on-device model for bots that already used it, removing bots' copies of the harness command-line tools' own logins, and moving saved tools to their catalogue entries' new IDs. Updates already pass through those releases.
 - Adding a tool no longer notes under its key that it is kept in Keychain.
 
 ### Fixed

@@ -5,7 +5,7 @@ import NoodleMCP
 /// GreyNoise: whether an IP address is background noise scanning the internet, or a known benign service.
 public enum GreyNoise {
     public static let preset = ToolDefinition(
-        id: "ea3b6b23-668e-4811-8bb6-a467ed70295f", formerID: "greynoise", name: "GreyNoise", summary: "Whether an IP address is mass-scanning the internet, or a known benign service.",
+        id: "ea3b6b23-668e-4811-8bb6-a467ed70295f", name: "GreyNoise", summary: "Whether an IP address is mass-scanning the internet, or a known benign service.",
         defaultInstructions: """
         Use GreyNoise to tell targeted activity from background noise: whether an IP address has been scanning the whole \
         internet, whether it belongs to a known benign service such as a search engine or DNS resolver, and how GreyNoise \

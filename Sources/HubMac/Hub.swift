@@ -53,9 +53,6 @@ import NoodleVoicePeer
         self.runtime.remoteModels = RemoteModelAccountStore(repository: root)
         self.runtime.harnessProfiles = repository.harnessProfiles
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
-        // TODO(Hub 0.44.0): remove with RestrictedHarnessStorage.removeSharedLogins and
-        // RestrictedHarnessStorageTests.testSharedCopiesOfTheCLIsOwnLoginsAreRemoved. Milestone: Hub 0.43.0.
-        RestrictedHarnessStorage.removeSharedLogins(root: root, loginHome: HarnessStorage.userHome)
         harnessProfiles.subscriptionUsage = self.runtime.subscriptionUsage
         usage = UsageHistory(url: root.appendingPathComponent("usage.sqlite"))
         let applicationSupport = root.deletingLastPathComponent()

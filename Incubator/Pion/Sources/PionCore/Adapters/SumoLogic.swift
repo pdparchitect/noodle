@@ -9,7 +9,7 @@ public enum SumoLogic {
                               ("api.ca.sumologic.com", "CA"), ("api.in.sumologic.com", "IN"), ("api.fed.sumologic.com", "FED")]
 
     public static let preset = ToolDefinition(
-        id: "14cc897d-ee46-4b5e-9664-955fdc5cf702", formerID: "sumologic", name: "Sumo Logic", summary: "Search logs with Sumo Logic queries.",
+        id: "14cc897d-ee46-4b5e-9664-955fdc5cf702", name: "Sumo Logic", summary: "Search logs with Sumo Logic queries.",
         defaultInstructions: """
         Use Sumo Logic to search logs, such as _sourceCategory=auth | where src_ip="203.0.113.77" | count by user. Keep a \
         time range and end aggregate queries with a count or limit. Record each search and what it returned as evidence, \

@@ -149,28 +149,6 @@ final class AppleLocalModelsTests: XCTestCase {
         }
     }
 
-    // TODO(0.62.0): remove with AppleLocalModelStore.keepSystemModelForExistingBots
-    // and its call in NoodleStore.reload. Milestone: 0.61.0.
-    func testExistingAppleBotsKeepTheOnDeviceModelOnce() throws {
-        try fixture { _, store in
-            let others = [AgentRecord(displayName: "Codex", harnessIdentifier: "codex"),
-                          AgentRecord(displayName: "Local", harnessIdentifier: "apple", modelIdentifier: "mlx-\(UUID())".lowercased())]
-            try store.keepSystemModelForExistingBots(others)
-            XCTAssertFalse(store.systemModelAdded, "Only bots on Apple's model keep it")
-            try store.keepSystemModelForExistingBots(others + [AgentRecord(displayName: "Apple", harnessIdentifier: "apple")])
-            XCTAssertFalse(store.systemModelAdded, "The check runs once; later bots start without it")
-        }
-        for model in [nil, "default"] {
-            try fixture { _, store in
-                try store.keepSystemModelForExistingBots([AgentRecord(displayName: "Apple", harnessIdentifier: "apple", modelIdentifier: model)])
-                XCTAssertTrue(store.systemModelAdded)
-                try store.setSystemModelAdded(false)
-                try store.keepSystemModelForExistingBots([AgentRecord(displayName: "Apple", harnessIdentifier: "apple", modelIdentifier: model)])
-                XCTAssertFalse(store.systemModelAdded, "A later removal sticks")
-            }
-        }
-    }
-
     func testLegacyInspectionDecodesWithoutLocalModelFlag() throws {
         let inspection = try JSONDecoder().decode(AppleHarnessInspection.self, from: Data(#"{"models":[],"version":"old"}"#.utf8))
         XCTAssertNil(inspection.localModelsSupported)

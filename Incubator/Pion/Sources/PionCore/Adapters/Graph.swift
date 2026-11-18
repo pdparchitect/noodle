@@ -6,9 +6,9 @@ import NoodleMCP
 /// its client ID and secret exchanged for tokens at Microsoft's sign-in service. Each account is one tenant.
 enum Graph {
     /// `key` names both the entry's icon and the adapter that answers it.
-    static func preset(id: String, formerID: String, key: String, name: String, summary: String, instructions: String,
+    static func preset(id: String, key: String, name: String, summary: String, instructions: String,
                        setup: [String]) -> ToolDefinition {
-        ToolDefinition(id: id, formerID: formerID, name: name, summary: summary, defaultInstructions: instructions, iconName: key,
+        ToolDefinition(id: id, name: name, summary: summary, defaultInstructions: instructions, iconName: key,
             configuration: .connection(.init(endpointTemplate: "https://graph.microsoft.com/v1.0",
                 fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier)],
                 clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",

@@ -257,29 +257,6 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: URL(string: "http://grafana.example.com/api")!, adapter: "dashboards"))
     }
 
-    // TODO(0.89.0): remove with ToolConnectionRegistry.adoptEntryIDs. Milestone: 0.88.0. Not before TODO(Pion 0.5.0) or TODO(Hub 0.55.0).
-    func testAccountsSavedBeforeEntriesHadUUIDsMoveToThem() throws {
-        let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
-        XCTAssertEqual(notion.formerID, "notion")
-        var earlier = try notion.makeConnection(name: "Notion")
-        earlier.catalogueID = "notion"
-        var custom = try ToolConnection(name: "Own", endpoint: URL(string: "https://own.example/mcp")!)
-        custom.catalogueID = "no-such-entry"
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        var saved = ToolConnectionRegistry()
-        saved.connections = [earlier, custom]
-        try saved.save(root: root)
-
-        let loaded = try ToolConnectionRegistry.load(root: root)
-        XCTAssertEqual(loaded.connections.map(\.catalogueID), [notion.id, "no-such-entry"])
-        XCTAssertEqual(ToolCatalog.definition(for: loaded.connections[0]), notion)
-        var kept = loaded
-        try kept.save(root: root)
-        let file = try String(contentsOf: root.appendingPathComponent("MCP/connections.json"), encoding: .utf8)
-        XCTAssertTrue(file.contains(notion.id), "the moved ID was not kept on the next save")
-    }
-
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })

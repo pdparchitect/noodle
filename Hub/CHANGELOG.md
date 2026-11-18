@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Retire upgrade steps for data from before the 0.43.0 and 0.54.0 milestones: removing bots' copies of the harness command-line tools' own logins, and moving saved tools to their catalogue entries' new IDs. Updates already pass through those releases.
+
 ### Added
 
 - Clicking a tool's Connected status in Settings › Tools offers Sign Out, which revokes its sign-in at the service where the service allows it and forgets it here; Remove revokes it the same way before deleting the tool.

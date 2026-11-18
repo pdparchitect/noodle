@@ -6,7 +6,7 @@ import NoodleMCP
 /// Nothing is submitted for scanning.
 public enum URLScan {
     public static let preset = ToolDefinition(
-        id: "1c56a13d-c7fe-4905-ab05-732e0351c0a5", formerID: "urlscan", name: "urlscan.io", summary: "Search earlier scans of web pages: what a URL showed, where it was hosted, and its verdict.",
+        id: "1c56a13d-c7fe-4905-ab05-732e0351c0a5", name: "urlscan.io", summary: "Search earlier scans of web pages: what a URL showed, where it was hosted, and its verdict.",
         defaultInstructions: """
         Use urlscan.io to search scans other people already made of web pages, by domain, IP address, URL or hash, such \
         as domain:example.com or page.ip:203.0.113.77: what each page showed, where it was hosted, and urlscan's verdict. \

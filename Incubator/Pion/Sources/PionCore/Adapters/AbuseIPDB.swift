@@ -5,7 +5,7 @@ import NoodleMCP
 /// AbuseIPDB: how often an IP address has been reported for abuse, with the person's API key.
 public enum AbuseIPDB {
     public static let preset = ToolDefinition(
-        id: "a1d168df-eb3c-4c66-927b-e552f7bb62c0", formerID: "abuseipdb", name: "AbuseIPDB", summary: "How often an IP address has been reported for abuse, and by how many.",
+        id: "a1d168df-eb3c-4c66-927b-e552f7bb62c0", name: "AbuseIPDB", summary: "How often an IP address has been reported for abuse, and by how many.",
         defaultInstructions: """
         Use AbuseIPDB to see whether an IP address has been reported for abuse: its confidence score, how many reports \
         and reporters, when last reported, and its ISP, usage type and whether it is a Tor exit. A score reflects other \

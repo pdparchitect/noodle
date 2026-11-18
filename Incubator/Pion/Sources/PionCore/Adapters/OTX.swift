@@ -5,7 +5,7 @@ import NoodleMCP
 /// AlienVault OTX: the community threat reports, called pulses, that mention an indicator.
 public enum OTX {
     public static let preset = ToolDefinition(
-        id: "2e9c0952-23e1-469c-8b2a-a4b29b67635b", formerID: "otx", name: "AlienVault OTX", summary: "Community threat reports that mention an IP address, domain, hostname or file hash.",
+        id: "2e9c0952-23e1-469c-8b2a-a4b29b67635b", name: "AlienVault OTX", summary: "Community threat reports that mention an IP address, domain, hostname or file hash.",
         defaultInstructions: """
         Use AlienVault OTX to see which community threat reports, called pulses, mention an IP address, domain, hostname \
         or file hash, with their names, tags, adversaries and malware families. Pulses are shared by anyone and vary in \

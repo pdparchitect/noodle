@@ -15,7 +15,7 @@ public enum Grafana {
         """
 
     public static let cloud = ToolDefinition(
-        id: "db2c8cc2-7773-433d-bf4b-539abc948e8d", formerID: "grafana-cloud", name: "Grafana Cloud", summary: "Dashboards, queries over data sources, firing alerts and annotations.",
+        id: "db2c8cc2-7773-433d-bf4b-539abc948e8d", name: "Grafana Cloud", summary: "Dashboards, queries over data sources, firing alerts and annotations.",
         defaultInstructions: instructions, iconName: "grafana",
         configuration: .connection(.init(endpointTemplate: "https://{host}/api",
             fields: [ToolField(key: "host", title: "Stack address", placeholder: "acme.grafana.net", kind: .host)],
@@ -23,7 +23,7 @@ public enum Grafana {
         setup: cloudSetup)
 
     public static let server = ToolDefinition(
-        id: "ff724613-f97d-48f6-aeb0-165ad72e8f98", formerID: "grafana-server", name: "Grafana", summary: "A self-hosted Grafana: dashboards, queries over data sources, firing alerts and annotations.",
+        id: "ff724613-f97d-48f6-aeb0-165ad72e8f98", name: "Grafana", summary: "A self-hosted Grafana: dashboards, queries over data sources, firing alerts and annotations.",
         defaultInstructions: instructions, iconName: "grafana",
         configuration: .connection(.init(endpointTemplate: "{address}/api",
             fields: [ToolField(key: "address", title: "Grafana address", placeholder: "http://localhost:3000", kind: .address)],

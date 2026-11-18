@@ -5,7 +5,7 @@ import NoodleMCP
 /// SentinelOne: its agents and the threats they found, read with an API token. Each account is one console.
 public enum SentinelOne {
     public static let preset = ToolDefinition(
-        id: "9d1c01e9-bb44-4a66-876a-e60b48337ca3", formerID: "sentinelone", name: "SentinelOne", summary: "Agents and the threats they detected, with how each was mitigated.",
+        id: "9d1c01e9-bb44-4a66-876a-e60b48337ca3", name: "SentinelOne", summary: "Agents and the threats they detected, with how each was mitigated.",
         defaultInstructions: """
         Use SentinelOne to see endpoints as its agents do: find an agent by computer name, with whether it is connected, \
         infected and when it was last active, and list threats by computer and time, with their classification, confidence, \

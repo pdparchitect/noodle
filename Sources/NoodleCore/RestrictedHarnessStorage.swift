@@ -175,14 +175,6 @@ public enum RestrictedHarnessStorage {
         return replaced
     }
 
-    /// Deletes the copy bots shared of the login in `loginHome`, for every harness: bots
-    /// used to share the logins of the harnesses' CLIs, which they no longer use.
-    // TODO(0.77.0): remove with its calls in NoodleStore.reload and Hub.init (TODO(Hub 0.44.0)) and
-    // RestrictedHarnessStorageTests.testSharedCopiesOfTheCLIsOwnLoginsAreRemoved. Milestones: 0.76.0, Hub 0.43.0.
-    public static func removeSharedLogins(root: URL, loginHome: URL) {
-        for provider in HarnessProvider.allCases { removeSharedLogin(provider: provider, root: root, loginHome: loginHome) }
-    }
-
     /// Deletes the copy bots shared of one harness's login in `loginHome`. `root` is Noodle's storage.
     public static func removeSharedLogin(provider: HarnessProvider, root: URL, loginHome: URL) {
         guard let accountPath = accountPath(provider) else { return }

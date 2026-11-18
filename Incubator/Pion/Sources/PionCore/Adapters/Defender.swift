@@ -4,7 +4,7 @@ import NoodleMCP
 
 /// Microsoft Defender XDR: its alerts and incidents, and advanced hunting across devices, email, identities and apps.
 public enum Defender {
-    public static let preset = Graph.preset(id: "eef1f5bd-b131-448f-9f37-0a3ba0beb217", formerID: "defender", key: "defender", name: "Microsoft Defender XDR",
+    public static let preset = Graph.preset(id: "eef1f5bd-b131-448f-9f37-0a3ba0beb217", key: "defender", name: "Microsoft Defender XDR",
         summary: "Alerts, incidents and advanced hunting across devices, email, identities and apps.",
         instructions: """
         Use Microsoft Defender XDR to see what Microsoft's detections found: list alerts and incidents by severity, status \

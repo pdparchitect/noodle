@@ -6,7 +6,7 @@ import NoodleMCP
 /// Each account is its own org, named by its domain. Nothing here changes the org.
 public enum Okta {
     public static let preset = ToolDefinition(
-        id: "bdc65def-9c77-4503-9d57-eac000822cce", formerID: "okta", name: "Okta", summary: "Users, groups, sign-in factors and the System Log of an Okta org.",
+        id: "bdc65def-9c77-4503-9d57-eac000822cce", name: "Okta", summary: "Users, groups, sign-in factors and the System Log of an Okta org.",
         defaultInstructions: """
         Use Okta to learn who an identity is and what happened to it: find the user, then their groups, assigned apps and \
         enrolled sign-in factors, and the System Log's sign-in events by user, IP address, event type or time. \

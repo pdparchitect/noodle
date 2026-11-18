@@ -6,7 +6,7 @@ import NoodleMCP
 /// Each account is one Falcon cloud and customer.
 public enum CrowdStrike {
     public static let preset = ToolDefinition(
-        id: "fc56ba9d-c4aa-4ff9-80cf-507f21273249", formerID: "crowdstrike", name: "CrowdStrike Falcon", summary: "Hosts and the alerts Falcon raised on them, with what ran and how.",
+        id: "fc56ba9d-c4aa-4ff9-80cf-507f21273249", name: "CrowdStrike Falcon", summary: "Hosts and the alerts Falcon raised on them, with what ran and how.",
         defaultInstructions: """
         Use CrowdStrike Falcon to see an endpoint as its sensor does: find a host by name or IP address, with its status, \
         whether it is contained and when it was last seen, and list alerts by host, severity and time, with the process, \

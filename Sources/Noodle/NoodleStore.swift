@@ -927,12 +927,7 @@ final class NoodleStore {
         storageReady = false
         do {
             try repository.prepare()
-            // TODO(0.77.0): remove with RestrictedHarnessStorage.removeSharedLogins and
-            // RestrictedHarnessStorageTests.testSharedCopiesOfTheCLIsOwnLoginsAreRemoved. Milestone: 0.76.0.
-            RestrictedHarnessStorage.removeSharedLogins(root: repository.rootURL, loginHome: HarnessStorage.userHome)
             (agents, setAsideAgents) = try repository.loadAgentsSettingAside()
-            // TODO(0.62.0): remove with AppleLocalModelStore.keepSystemModelForExistingBots. Milestone: 0.61.0.
-            try AppleLocalModelStore(repository: repository.rootURL).keepSystemModelForExistingBots(agents)
             runtime.archivedAgentIDs = Set(agents.filter { $0.archivedAt != nil }.map(\.id))
             reloadBudgets()
             applySuspensions()
