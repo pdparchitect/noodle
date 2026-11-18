@@ -577,6 +577,51 @@ final class ToolConnectionServiceTests: XCTestCase {
         }
     }
 
+    func testAnAppsOwnLookupSignsInWithGoogleThroughTheOrganisationsOwnClientAsGmailDoes() async throws {
+        let reports = ToolDefinition(id: "reports", name: "Reports", summary: "Audit reports.", defaultInstructions: "Read.", iconName: "reports",
+            configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
+                fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+                oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], clients: []),
+                oauthClientField: "clientID", adapter: "reports")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [reports])
+        let record = try reports.makeConnection(name: "Reports", values: ["clientID": "1234-abc.apps.googleusercontent.com"])
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(record))
+        // Whatever the client, it returns to the app's bundle ID, which the app's Info.plist lists.
+        let redirect = try XCTUnwrap(ToolConnectionService.configuredRedirectURI(for: record.endpoint, bundleIdentifier: Bundle.main.bundleIdentifier))
+        XCTAssertEqual(redirect.absoluteString, (Bundle.main.bundleIdentifier ?? "") + ":/oauth2callback")
+        let keyed = try ToolConnection(name: "Lookup", endpoint: URL(string: "https://service.example/v3")!, tokenHeader: "x-apikey", adapter: "lookup")
+        XCTAssertFalse(ToolConnectionService.signsInThroughBrowser(keyed))
+
+        final class ReportsAdapter: ToolConnectionAdapter, @unchecked Sendable {
+            func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+            func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+                _ = try await access.data(for: URLRequest(url: URL(string: "https://admin.googleapis.com/google")!))
+                return Data(#"{"content":[],"isError":false}"#.utf8)
+            }
+        }
+        let service = service(vault: TestVault())
+        await service.useAdapters(["reports": ReportsAdapter()])
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "x", arguments: Data("{}".utf8))
+        do { _ = try await service.perform(call, connection: record); XCTFail("answered before signing in") }
+        catch ToolConnectionServiceError.signInRequired {}
+
+        try await service.signIn(record, redirectURI: redirect) { url in
+            let page = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(page?.host, "accounts.google.com")
+            XCTAssertEqual(page?.queryItems?.first { $0.name == "client_id" }?.value, "1234-abc.apps.googleusercontent.com")
+            XCTAssertEqual(page?.queryItems?.first { $0.name == "redirect_uri" }?.value, redirect.absoluteString)
+            let state = page?.queryItems?.first { $0.name == "state" }?.value ?? ""
+            return URL(string: redirect.absoluteString + "?state=\(state)&code=granted")!
+        }
+        XCTAssertTrue(FixtureProtocol.state.googleExchanges[0].contains("grant_type=authorization_code"))
+        XCTAssertFalse(FixtureProtocol.state.googleExchanges[0].contains("client_secret"))
+        let signedIn = await service.hasCredentials(record.id)
+        XCTAssertTrue(signedIn)
+        _ = try await service.perform(call, connection: record)
+        XCTAssertEqual(FixtureProtocol.state.googleRequests.last?.headers["Authorization"], "Bearer google-access-1")
+    }
+
     func testAGoogleServiceAccountSignsAnAssertionThatGoogleAloneReceives() async throws {
         let key = try TestGoogleKey()
         let signing = ConnectionGoogleServiceAccount(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"],

@@ -61,7 +61,7 @@ public actor ToolConnectionService {
         if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil
             || (try? googleKeys.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
-        return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint))) != nil
+        return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint, clientID: stored.clientID))) != nil
     }
     public func disconnect(_ id: UUID) throws {
         epochs[id, default: 0] += 1
@@ -151,11 +151,35 @@ public actor ToolConnectionService {
     }
     public nonisolated static func configuredRedirectURI(for endpoint: URL,
                                                          bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL? {
-        oauthConfiguration(for: endpoint)?.clients.first { $0.bundleIdentifier == bundleIdentifier }?.redirectURI
+        guard let configuration = connectionConfiguration(for: endpoint), let oauth = configuration.oauth else { return nil }
+        if configuration.oauthClientField != nil { return bundleIdentifier.flatMap(accountClientRedirect) }
+        return oauth.clients.first { $0.bundleIdentifier == bundleIdentifier }?.redirectURI
     }
-    private nonisolated static func oauthConfiguration(for endpoint: URL) -> MCPOAuthConfiguration? {
+    /// Where an organisation's own client returns: the app's bundle ID as a URL scheme.
+    private nonisolated static func accountClientRedirect(_ bundleIdentifier: String) -> URL? {
+        URL(string: bundleIdentifier + ":/oauth2callback")
+    }
+    /// Whether the connection signs in through the browser: an MCP server's that keeps no key, or one the app's
+    /// adapter answers whose catalogue entry names how to sign in, as Google's do.
+    public nonisolated static func signsInThroughBrowser(_ connection: ToolConnection) -> Bool {
+        !connection.keepsSecret && (connection.adapter == nil || oauthConfiguration(for: connection.endpoint) != nil)
+    }
+    private nonisolated static func connectionConfiguration(for endpoint: URL) -> ToolConnectionConfiguration? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
-        return configuration.oauth
+        return configuration
+    }
+    /// How a connection at `endpoint` signs in. For an entry whose accounts bring their organisation's own client,
+    /// it is that client, `clientID`, returning to this app's bundle ID.
+    private nonisolated static func oauthConfiguration(for endpoint: URL, clientID: String? = nil,
+                                                       bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
+        guard let configuration = connectionConfiguration(for: endpoint), let oauth = configuration.oauth else { return nil }
+        guard configuration.oauthClientField != nil else { return oauth }
+        guard let clientID, let bundleIdentifier, let redirect = accountClientRedirect(bundleIdentifier) else { return oauth.with(clients: []) }
+        return oauth.with(clients: [MCPOAuthClientConfiguration(id: clientID, bundleIdentifier: bundleIdentifier, redirectURI: redirect)])
+    }
+    private nonisolated static func oauthConfiguration(for connection: ToolConnection) -> MCPOAuthConfiguration? {
+        let field = connectionConfiguration(for: connection.endpoint)?.oauthClientField
+        return oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] })
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
@@ -168,7 +192,7 @@ public actor ToolConnectionService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
-        guard !connection.keepsSecret, connection.adapter == nil else {
+        guard Self.signsInThroughBrowser(connection) else {
             throw ToolConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
@@ -198,7 +222,7 @@ public actor ToolConnectionService {
             try checkActive(connection.id, epoch: epoch)
             await progress("Checking saved sign-in…")
             try checkActive(connection.id, epoch: epoch)
-            let configuration = Self.oauthConfiguration(for: connection.endpoint)
+            let configuration = Self.oauthConfiguration(for: connection)
             var stored = try MCPOAuth.preconfiguredCredentials(endpoint: connection.endpoint, redirect: redirectURI, configuration: configuration)
                 ?? credentials.load(connection.id)
             if stored?.endpoint != connection.endpoint || stored?.redirectURI != redirectURI {
@@ -337,7 +361,7 @@ public actor ToolConnectionService {
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw ToolConnectionServiceError.signInRequired }
-        let oauthConfiguration = Self.oauthConfiguration(for: connection.endpoint)
+        let oauthConfiguration = Self.oauthConfiguration(for: connection)
         try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
             do {
@@ -364,7 +388,7 @@ public actor ToolConnectionService {
         guard let adapter = adapters[name] else {
             throw ToolConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
-        let credentials = connection.keepsSecret
+        let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         switch request.action {

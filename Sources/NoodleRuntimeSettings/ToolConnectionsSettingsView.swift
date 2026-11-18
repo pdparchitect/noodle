@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import NoodleCore
+import NoodleMCP
 
 public struct ToolConnectionsSettingsView: View {
     let store: any BotSettingsHost
@@ -116,7 +117,7 @@ public struct ToolConnectionsSettingsView: View {
         if !allows(connection) {
             SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
         } else if store.connectionsController.signingIn == connection.id {
-            Text(store.connectionsController.signInStage.isEmpty ? (!connection.keepsSecret && connection.adapter == nil ? "Signing in…" : "Checking access…") : store.connectionsController.signInStage)
+            Text(store.connectionsController.signInStage.isEmpty ? (ToolConnectionService.signsInThroughBrowser(connection) ? "Signing in…" : "Checking access…") : store.connectionsController.signInStage)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(store.connectionsController.signInStage)
         } else if store.connectionsController.errors[connection.id] != nil {

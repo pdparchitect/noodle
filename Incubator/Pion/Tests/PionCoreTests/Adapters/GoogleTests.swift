@@ -1,12 +1,13 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
 final class GoogleTests: XCTestCase {
     private let cloud = try! GoogleCloud.preset.makeConnection(name: "Google Cloud — Kestrel", values: ["level": "organizations", "id": "123456789"])
     private let project = try! GoogleCloud.preset.makeConnection(name: "Google Cloud — Prod", values: ["level": "projects", "id": "kestrel-prod"])
-    private let workspace = try! GoogleWorkspace.preset.makeConnection(name: "Workspace", values: ["subject": "admin@kestrel.example"])
+    private let workspace = try! GoogleWorkspace.preset.makeConnection(name: "Workspace", values: ["clientID": "1234-abc.apps.googleusercontent.com"])
 
     private func json(_ request: URLRequest?) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: request?.httpBody ?? Data()) as? [String: Any])
@@ -16,10 +17,24 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(cloud.endpoint.absoluteString, "https://googleapis.com")
         XCTAssertEqual(cloud.googleServiceAccount?.scopes, ["https://www.googleapis.com/auth/cloud-platform.read-only"])
         XCTAssertNil(cloud.googleServiceAccount?.subject)
-        XCTAssertEqual(workspace.googleServiceAccount?.scopes, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"])
-        XCTAssertEqual(workspace.googleServiceAccount?.subject, "admin@kestrel.example")
+        XCTAssertNil(workspace.googleServiceAccount, "Workspace acts as a service account through delegation")
+        XCTAssertEqual(workspace.endpoint.absoluteString, "https://admin.googleapis.com")
         XCTAssertNotNil(PionAdapters.all["google-cloud"])
         XCTAssertNotNil(PionAdapters.all["google-workspace"])
+    }
+
+    func testAWorkspaceAdminSignsInWithGoogleThroughTheirOrganisationsOwnClient() throws {
+        guard case .connection(let configuration) = GoogleWorkspace.preset.configuration, let oauth = configuration.oauth else { return XCTFail() }
+        XCTAssertEqual(oauth.scopes, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"])
+        XCTAssertTrue(oauth.clients.isEmpty, "Pion ships a Google client of its own")
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        XCTAssertEqual(workspace.settings?["clientID"], "1234-abc.apps.googleusercontent.com")
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(PionCatalogue.entries)
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(workspace))
+        XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: workspace.endpoint, bundleIdentifier: "com.pdparchitect.pion")?.absoluteString,
+                       "com.pdparchitect.pion:/oauth2callback")
+        XCTAssertFalse(ToolConnectionService.signsInThroughBrowser(cloud), "Google Cloud keeps its service account's key")
     }
 
     func testAuditLogsAreFilteredForTheScope() async throws {

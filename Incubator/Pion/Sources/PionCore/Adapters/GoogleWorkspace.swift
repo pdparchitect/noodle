@@ -2,8 +2,9 @@ import Foundation
 import NoodleCore
 import NoodleMCP
 
-/// Google Workspace's audit reports: sign-ins, admin actions, OAuth grants to apps, Drive and more, read as a
-/// service account acting for an admin through domain-wide delegation. Each account is one Workspace.
+/// Google Workspace's audit reports: sign-ins, admin actions, OAuth grants to apps, Drive and more, read as the admin
+/// who signs in with Google, the way Noodle signs in to Gmail, through an iOS OAuth client their organisation made for
+/// Pion's bundle ID. Each account is one admin's Workspace.
 public enum GoogleWorkspace {
     static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules"]
 
@@ -17,18 +18,17 @@ public enum GoogleWorkspace {
         champion.
         """,
         iconName: "google-workspace",
-        configuration: .connection(.init(endpointTemplate: "https://googleapis.com",
-            fields: [ToolField(key: "subject", title: "Admin to act as", placeholder: "admin@example.com", kind: .text)],
-            googleScopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], adapter: "google-workspace")),
+        configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
+            fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], clients: []),
+            oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project, and under **APIs & Services › Library** enable the **Admin SDK API**.",
-        "Under **IAM & Admin › Service Accounts**, create a service account. It needs no roles.",
-        "On its **Keys** tab, choose **Add Key › Create new key › JSON**, and choose that file here. If creating a key is refused, an organisation policy blocks service account keys.",
-        "On its **Details** tab, copy the **Unique ID**.",
-        "In the [Google Admin console](https://admin.google.com), open **Security › Access and data control › API controls › Manage Domain Wide Delegation**, choose **Add new**, and enter that ID with the scope `https://www.googleapis.com/auth/admin.reports.audit.readonly`.",
-        "For the admin to act as, give a super admin, or an admin whose role includes Reports. Delegation can take a few minutes to start working.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API**.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/admin.reports.audit.readonly`.",
+        "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
+        "Choose **Add & Connect** and sign in as a super admin, or an admin whose role includes Reports.",
     ]
 
     public static let adapter = OperationAdapter(operations: [Activity()])

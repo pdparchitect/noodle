@@ -23,6 +23,15 @@ public struct MCPOAuthConfiguration: Equatable, Sendable {
     }
 }
 
+public extension MCPOAuthConfiguration {
+    /// The same sign-in through other clients.
+    func with(clients: [MCPOAuthClientConfiguration]) -> MCPOAuthConfiguration {
+        MCPOAuthConfiguration(issuer: issuer, authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndpoint,
+                              clients: clients, scopes: scopes, authorizationParameters: authorizationParameters,
+                              usesResourceIndicator: usesResourceIndicator)
+    }
+}
+
 public struct MCPOAuthClientConfiguration: Equatable, Sendable {
     public let id: String
     public let bundleIdentifier: String

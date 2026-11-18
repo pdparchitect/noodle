@@ -179,6 +179,10 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     /// For Google: accounts act as a service account with these scopes, on behalf of the user their subject field
     /// names, when they have one.
     public let googleScopes: [String]?
+    /// For a service whose accounts sign in through an OAuth client their own organisation made, rather than one
+    /// in `oauth`: the field its client ID is entered in. The client returns to the app's bundle ID as a URL scheme,
+    /// which the app's Info.plist lists.
+    public let oauthClientField: String?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
                 tokenScheme: String? = nil, tokenParameter: String? = nil, composedToken: ComposedToken? = nil,
@@ -189,6 +193,7 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         self.adapter = adapter
         signsForAWS = false
         googleScopes = nil
+        oauthClientField = nil
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
@@ -202,7 +207,8 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                signsForAWS: Bool = false, googleScopes: [String]? = nil, adapter: String? = nil) {
+                signsForAWS: Bool = false, googleScopes: [String]? = nil, oauthClientField: String? = nil, adapter: String? = nil) {
+        self.oauthClientField = oauthClientField
         self.composedToken = composedToken
         self.signsForAWS = signsForAWS
         self.googleScopes = googleScopes

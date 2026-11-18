@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Google Workspace signs in with Google in your browser, as Noodle signs in to Gmail, through an iOS OAuth client your organisation makes for Pion; its service account with domain-wide delegation is gone. Agents see what the admin who signs in may see.
 - Grafana in Settings › Tools is now Pion's own, read-only, in place of Grafana's MCP server; an account added before keeps working as a custom MCP connection.
 
 ### Added

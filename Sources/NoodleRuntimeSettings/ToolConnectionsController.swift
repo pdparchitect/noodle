@@ -168,7 +168,7 @@ public final class ToolConnectionsController {
     /// `secret` when one is given; either way it then lists the connection's tools to show it works.
     func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
-        let signsIn = !record.keepsSecret && record.adapter == nil
+        let signsIn = ToolConnectionService.signsInThroughBrowser(record)
         if signsIn { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil
