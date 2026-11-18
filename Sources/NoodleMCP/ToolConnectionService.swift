@@ -63,6 +63,74 @@ public actor ToolConnectionService {
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint, clientID: stored.clientID))) != nil
     }
+    /// What asking the service to revoke a connection's sign-in or key came to.
+    public enum Revocation: Equatable, Sendable {
+        /// The service revoked it, or no longer knew it.
+        case revoked
+        /// The service offers no way to revoke it through its API; it is only forgotten here.
+        case notOffered
+        /// The service could not be asked, or refused; it is still forgotten here.
+        case failed(String)
+    }
+
+    /// Asks the service to revoke what this connection signed in with or was given: an OAuth sign-in at its
+    /// revocation endpoint, or a key its catalogue entry says how to revoke. Nothing is forgotten here.
+    public func revoke(_ connection: ToolConnection) async -> Revocation {
+        if let stored = try? credentials.load(connection.id), stored.endpoint == connection.endpoint,
+           stored.refreshToken != nil || stored.accessToken != nil {
+            let field = Self.connectionConfiguration(for: connection.endpoint)?.oauthClientField
+            let configured = Self.oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] })
+            guard let endpoint = stored.revocationEndpoint ?? configured?.revocationEndpoint else { return .notOffered }
+            do { try await oauth.revoke(stored, at: endpoint); return .revoked }
+            catch { return .failed(Self.revocationFailure(error)) }
+        }
+        guard let revocation = ToolCatalog.definition(for: connection).flatMap({ tool -> TokenRevocation? in
+            if case .connection(let configuration) = tool.configuration { return configuration.tokenRevocation }
+            return nil
+        }), connection.usesToken, let token = try? tokens.load(connection.id), token.endpoint == connection.endpoint else {
+            return .notOffered
+        }
+        do {
+            var address = connection.endpoint
+            if revocation.path.hasPrefix("/") {
+                var root = URLComponents(url: connection.endpoint, resolvingAgainstBaseURL: false)
+                root?.path = revocation.path; root?.query = nil
+                guard let url = root?.url else { return .notOffered }
+                address = url
+            } else {
+                address = revocation.path.split(separator: "/").reduce(address) { $0.appendingPathComponent(String($1)) }
+            }
+            var request = URLRequest(url: address)
+            request.httpMethod = revocation.method
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            if let body = revocation.body {
+                // The key goes in as a JSON string, so whatever it holds stays inside its quotes.
+                let quoted = String(decoding: try JSONEncoder().encode(token.value), as: UTF8.self)
+                request.httpBody = Data(body.replacingOccurrences(of: "\"{token}\"", with: quoted).utf8)
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            let authorization: ConnectionAuthorization? = revocation.authorized
+                ? try await self.authorization(for: connection, epoch: epochs[connection.id, default: 0], deadline: Date().addingTimeInterval(30))
+                : nil
+            let access = ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+            let (_, response) = try await access.data(for: request)
+            // A key the service no longer accepts is as good as revoked.
+            return (200..<300).contains(response.statusCode) || response.statusCode == 401 ? .revoked
+                : .failed("The service answered \(response.statusCode).")
+        } catch { return .failed(Self.revocationFailure(error)) }
+    }
+
+    /// Revokes what the connection holds at the service where it can, then forgets it here whatever the service said.
+    public func signOut(_ connection: ToolConnection) async -> Revocation {
+        let result = await revoke(connection)
+        try? disconnect(connection.id)
+        return result
+    }
+
+    private nonisolated static func revocationFailure(_ error: Error) -> String {
+        error is ToolConnectionServiceError || error is ToolConnectionError ? error.localizedDescription : "The service could not be reached."
+    }
+
     public func disconnect(_ id: UUID) throws {
         epochs[id, default: 0] += 1
         let pending = requests.removeValue(forKey: id) ?? [:]

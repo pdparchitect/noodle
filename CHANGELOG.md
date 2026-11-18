@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Clicking a tool's Connected status offers Sign Out, which revokes its sign-in at the service where the service allows it and forgets it here; Remove revokes it the same way before deleting the tool.
+
 ### Changed
 
 - Adding a tool no longer notes under its key that it is kept in Keychain.

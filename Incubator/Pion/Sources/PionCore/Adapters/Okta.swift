@@ -17,7 +17,10 @@ public enum Okta {
         iconName: "okta",
         configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1",
                                   fields: [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)],
-                                  tokenHeader: "Authorization", tokenScheme: "SSWS", adapter: "okta")),
+                                  tokenHeader: "Authorization", tokenScheme: "SSWS",
+                                  // Okta revokes the token a request is made with.
+                                  tokenRevocation: TokenRevocation(method: "DELETE", path: "api-tokens/current", authorized: true),
+                                  adapter: "okta")),
         setup: setup)
 
     static let setup = [

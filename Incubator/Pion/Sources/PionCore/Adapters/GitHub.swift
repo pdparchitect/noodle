@@ -16,7 +16,10 @@ public enum GitHub {
         iconName: "github",
         configuration: .connection(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
             fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier)],
-            tokenHeader: "Authorization", adapter: "github")),
+            tokenHeader: "Authorization",
+            // GitHub revokes any token it is handed, without signing in, and emails its owner that it did.
+            tokenRevocation: TokenRevocation(method: "POST", path: "/credentials/revoke", body: #"{"credentials":["{token}"]}"#, authorized: false),
+            adapter: "github")),
         setup: setup)
 
     static let setup = [

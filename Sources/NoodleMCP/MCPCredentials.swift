@@ -15,6 +15,8 @@ struct MCPCredentials: Codable, Sendable {
     /// The address registered with the service when it differs from `redirectURI`:
     /// a usenoodle.app page that hands the result to the app.
     var relayURI: URL? = nil
+    /// Where the service revokes this sign-in, when it says so; nil for one signed in before it was kept.
+    var revocationEndpoint: URL? = nil
     let resource: URL
     let scope: String?
     var accessToken: String?

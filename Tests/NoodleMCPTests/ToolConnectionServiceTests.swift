@@ -113,6 +113,9 @@ private struct TestGoogleKey {
 
 private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
+    /// Revocation requests the stand-ins received: method, path, headers and body; and how they answer.
+    var revocations: [(method: String, path: String, headers: [String: String], body: String)] = []
+    var revocationStatus = 200
     /// The forms posted to Google's token endpoint, and every request to a googleapis.com stand-in.
     var googleExchanges: [String] = []
     var googleRequests: [(host: String, headers: [String: String])] = []
@@ -165,6 +168,10 @@ private final class FixtureState: @unchecked Sendable {
                 queries[request.url!.path, default: []].append(request.url!.query ?? "")
                 adapterHeaders.append(request.allHTTPHeaderFields ?? [:])
                 return (200, ["verdict": "harmless"])
+            case "/revoke", "/credentials/revoke", "/v3/api-tokens/current":
+                revocations.append((request.httpMethod ?? "", request.url!.path, request.allHTTPHeaderFields ?? [:],
+                                    String(data: Self.body(request), encoding: .utf8) ?? ""))
+                return (revocationStatus, revocationStatus == 200 ? [:] : ["error": "server_error"])
             case "/token" where request.url!.host == "oauth2.googleapis.com":
                 googleExchanges.append(String(data: Self.body(request), encoding: .utf8) ?? "")
                 return (200, ["access_token": "google-access-\(googleExchanges.count)", "token_type": "Bearer", "expires_in": 3599])
@@ -620,6 +627,80 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertTrue(signedIn)
         _ = try await service.perform(call, connection: record)
         XCTAssertEqual(FixtureProtocol.state.googleRequests.last?.headers["Authorization"], "Bearer google-access-1")
+    }
+
+    func testSigningOutRevokesAGoogleSignInAtGoogleAndForgetsIt() async throws {
+        let reports = ToolDefinition(id: "reports", name: "Reports", summary: "Audit reports.", defaultInstructions: "Read.", iconName: "reports",
+            configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
+                fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+                oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], clients: []),
+                oauthClientField: "clientID", adapter: "reports")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [reports])
+        let record = try reports.makeConnection(name: "Reports", values: ["clientID": "1234-abc.apps.googleusercontent.com"])
+        let redirect = try XCTUnwrap(ToolConnectionService.configuredRedirectURI(for: record.endpoint, bundleIdentifier: Bundle.main.bundleIdentifier))
+        let client = service(vault: TestVault())
+        try await client.signIn(record, redirectURI: redirect) { url in
+            let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value ?? ""
+            return URL(string: redirect.absoluteString + "?state=\(state)&code=granted")!
+        }
+        let result = await client.signOut(record)
+        XCTAssertEqual(result, .revoked)
+        let revocation = try XCTUnwrap(FixtureProtocol.state.revocations.first)
+        XCTAssertEqual(revocation.method, "POST")
+        XCTAssertEqual(revocation.path, "/revoke")
+        XCTAssertTrue(revocation.body.contains("token=google-access-1"), revocation.body)
+        XCTAssertTrue(revocation.body.contains("client_id=1234-abc.apps.googleusercontent.com"), revocation.body)
+        let forgotten = await client.hasCredentials(record.id)
+        XCTAssertFalse(forgotten)
+    }
+
+    func testAKeyIsRevokedTheWayItsEntrySaysAndForgottenEvenWhenTheServiceFails() async throws {
+        let byBody = ToolDefinition(id: "code", name: "Code", summary: "Code.", defaultInstructions: "Read.", iconName: "code",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/v3", fields: [], tokenHeader: "Authorization",
+                tokenRevocation: TokenRevocation(method: "POST", path: "/credentials/revoke", body: #"{"credentials":["{token}"]}"#, authorized: false),
+                adapter: "lookup")))
+        let byHeader = ToolDefinition(id: "directory", name: "Directory", summary: "People.", defaultInstructions: "Read.", iconName: "directory",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/v3", fields: [], tokenHeader: "Authorization", tokenScheme: "SSWS",
+                tokenRevocation: TokenRevocation(method: "DELETE", path: "api-tokens/current", authorized: true), adapter: "lookup")))
+        let plain = ToolDefinition(id: "plain", name: "Plain", summary: "Lookups.", defaultInstructions: "Read.", iconName: "plain",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/v3", fields: [], tokenHeader: "x-apikey", adapter: "lookup")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use([byBody, byHeader, plain])
+        let client = service(vault: TestVault())
+
+        let code = try byBody.makeConnection(name: "Code")
+        try await client.saveToken(#"ghp_"quoted"key"#, for: code)
+        let codeResult = await client.signOut(code)
+        XCTAssertEqual(codeResult, .revoked)
+        let posted = try XCTUnwrap(FixtureProtocol.state.revocations.last)
+        XCTAssertEqual(posted.method, "POST")
+        XCTAssertEqual(posted.path, "/credentials/revoke")
+        XCTAssertNil(posted.headers["Authorization"], "a key revoked by naming it was also sent to sign in")
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(posted.body.utf8)) as? [String: [String]], ["credentials": [#"ghp_"quoted"key"#]])
+
+        let directory = try byHeader.makeConnection(name: "Directory")
+        try await client.saveToken("okta-token", for: directory)
+        let directoryResult = await client.signOut(directory)
+        XCTAssertEqual(directoryResult, .revoked)
+        let deleted = try XCTUnwrap(FixtureProtocol.state.revocations.last)
+        XCTAssertEqual(deleted.method, "DELETE")
+        XCTAssertEqual(deleted.path, "/v3/api-tokens/current")
+        XCTAssertEqual(deleted.headers["Authorization"], "SSWS okta-token")
+
+        let lookup = try plain.makeConnection(name: "Plain")
+        try await client.saveToken("lookup-key", for: lookup)
+        let plainResult = await client.signOut(lookup)
+        XCTAssertEqual(plainResult, .notOffered)
+
+        let failing = try byHeader.makeConnection(name: "Failing")
+        try await client.saveToken("okta-token-2", for: failing)
+        FixtureProtocol.state.revocationStatus = 500
+        guard case .failed = await client.signOut(failing) else { return XCTFail("a refused revocation counted as done") }
+        for connection in [code, directory, lookup, failing] {
+            let kept = await client.hasCredentials(connection.id)
+            XCTAssertFalse(kept, "\(connection.name) was not forgotten")
+        }
     }
 
     func testAGoogleServiceAccountSignsAnAssertionThatGoogleAloneReceives() async throws {

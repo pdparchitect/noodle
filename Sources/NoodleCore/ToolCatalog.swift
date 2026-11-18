@@ -137,6 +137,22 @@ public struct ComposedToken: Equatable, Sendable {
     }
 }
 
+/// How a service lets a connection's own key or token be revoked through its API, for one that does, such as Okta or
+/// GitHub. The app sends the request itself, so the key never reaches an adapter.
+public struct TokenRevocation: Equatable, Sendable {
+    public let method: String
+    /// Below the connection's address, or from its host's root when it starts with a slash.
+    public let path: String
+    /// A JSON body with {token} where the key goes, for a service that takes the key there.
+    public let body: String?
+    /// Whether the request proves itself as the connection usually does; one that names the key in its body need not.
+    public let authorized: Bool
+
+    public init(method: String, path: String, body: String? = nil, authorized: Bool) {
+        self.method = method; self.path = path; self.body = body; self.authorized = authorized
+    }
+}
+
 /// How a preset whose accounts use a client ID and secret gets its access tokens.
 public struct ClientCredentialsPreset: Equatable, Sendable {
     /// The token address, with a {key} for each field it needs.
@@ -179,6 +195,8 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     /// For Google: accounts act as a service account with these scopes, on behalf of the user their subject field
     /// names, when they have one.
     public let googleScopes: [String]?
+    /// How the service revokes an account's key, for one whose API can.
+    public let tokenRevocation: TokenRevocation?
     /// For a service whose accounts sign in through an OAuth client their own organisation made, rather than one
     /// in `oauth`: the field its client ID is entered in. The client returns to the app's bundle ID as a URL scheme,
     /// which the app's Info.plist lists.
@@ -193,6 +211,7 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         self.adapter = adapter
         signsForAWS = false
         googleScopes = nil
+        tokenRevocation = nil
         oauthClientField = nil
         self.endpoint = endpoint
         self.oauth = oauth
@@ -207,7 +226,9 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                signsForAWS: Bool = false, googleScopes: [String]? = nil, oauthClientField: String? = nil, adapter: String? = nil) {
+                signsForAWS: Bool = false, googleScopes: [String]? = nil, oauthClientField: String? = nil,
+                tokenRevocation: TokenRevocation? = nil, adapter: String? = nil) {
+        self.tokenRevocation = tokenRevocation
         self.oauthClientField = oauthClientField
         self.composedToken = composedToken
         self.signsForAWS = signsForAWS

@@ -40,10 +40,12 @@ struct MCPOAuth {
         guard let client = configuration.clients.first(where: { $0.redirectURI == redirect }) else {
             throw ToolConnectionServiceError.invalidCallback
         }
-        return MCPCredentials(endpoint: endpoint, issuer: configuration.issuer,
+        var credentials = MCPCredentials(endpoint: endpoint, issuer: configuration.issuer,
             authorizationEndpoint: configuration.authorizationEndpoint,
             tokenEndpoint: configuration.tokenEndpoint, clientID: client.id,
             redirectURI: redirect, resource: endpoint, scope: configuration.scopes.joined(separator: " "))
+        credentials.revocationEndpoint = configuration.revocationEndpoint
+        return credentials
     }
 
     func validateConfiguration(_ credentials: MCPCredentials, configuration: MCPOAuthConfiguration?) throws {
@@ -130,6 +132,8 @@ struct MCPOAuth {
         _ = try ToolConnection.validatedEndpoint(authorization)
         _ = try ToolConnection.validatedEndpoint(token)
         let scope = (protectedResource?["scopes_supported"] as? [String])?.joined(separator: " ")
+        let revocation = (metadata["revocation_endpoint"] as? String).flatMap(URL.init(string:))
+            .flatMap { try? ToolConnection.validatedEndpoint($0) }
         guard let registrationString = metadata["registration_endpoint"] as? String,
               let registration = URL(string: registrationString) else {
             // Without registration, a service may instead read Noodle's published client
@@ -139,7 +143,7 @@ struct MCPOAuth {
                   let relay = Self.relays[redirect.absoluteString] else { throw ToolConnectionServiceError.registrationUnsupported }
             return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                                   tokenEndpoint: token, clientID: Self.metadataDocument.absoluteString, redirectURI: redirect,
-                                  relayURI: relay, resource: resource, scope: scope)
+                                  relayURI: relay, revocationEndpoint: revocation, resource: resource, scope: scope)
         }
         // Public desktop clients use PKCE, never embedded client secrets.
         await progress("Registering this connection…")
@@ -154,7 +158,27 @@ struct MCPOAuth {
         }
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
-                              resource: resource, scope: scope)
+                              revocationEndpoint: revocation, resource: resource, scope: scope)
+    }
+
+    /// Revokes a sign-in at the service, as RFC 7009 has it: its refresh token, which takes its access tokens with it.
+    /// A token the service no longer knows counts as revoked.
+    func revoke(_ credentials: MCPCredentials, at endpoint: URL) async throws {
+        guard let token = credentials.refreshToken ?? credentials.accessToken else { return }
+        _ = try ToolConnection.validatedEndpoint(endpoint)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let form = ["token": token, "token_type_hint": credentials.refreshToken != nil ? "refresh_token" : "access_token",
+                    "client_id": credentials.clientID]
+        request.httpBody = form.sorted { $0.key < $1.key }.map {
+            "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
+        }.joined(separator: "&").data(using: .utf8)
+        let (data, response) = try await session.data(for: request, limit: 65_536, tooLarge: ToolConnectionServiceError.responseTooLarge)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let error = ((try? JSONSerialization.jsonObject(with: data)) as? Object)?["error"] as? String
+        guard (200..<300).contains(status) || error == "invalid_token" else { throw ToolConnectionServiceError.network(status) }
     }
 
     /// Published from website/oauth; its redirect_uris must list every relay below.

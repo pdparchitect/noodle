@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import NoodleCore
 import NoodleMCP
+import ProductIdentity
 
 /// What a connection that does not sign in through the browser is given to prove who it is.
 public enum ToolConnectionSecret: Sendable {
@@ -151,9 +152,35 @@ public final class ToolConnectionsController {
             synchronizeProviders()
             connected.remove(record.id)
             errors[record.id] = nil
-            Task { if let error = await deleteRemovedSignIns() { errorMessage = error.localizedDescription } }
+            Task {
+                // Revoked at the service first, while what it signed in with is still here; deleted whatever the service said.
+                let revocation = await service.revoke(record)
+                if let error = await deleteRemovedSignIns() { errorMessage = error.localizedDescription }
+                else if case .failed(let reason) = revocation {
+                    errorMessage = "\(record.name) was removed, but the service could not revoke its sign-in: \(reason) Revoke it in the service's account settings."
+                }
+            }
             try synchronize()
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    /// Revokes what the connection signed in with or was given at the service, where it can, and forgets it here;
+    /// the connection stays, to connect again.
+    func signOut(_ record: ToolConnection) {
+        if signingIn == record.id { loginTask?.cancel() }
+        Task {
+            let revocation = await service.signOut(record)
+            connected.remove(record.id)
+            errors[record.id] = nil
+            let app = ProductIdentity.current.name
+            switch revocation {
+            case .revoked: break
+            case .notOffered:
+                errorMessage = "\(record.name) is signed out of \(app), but the service offers no way to revoke its key from here. Revoke it in the service's account settings."
+            case .failed(let reason):
+                errorMessage = "\(record.name) is signed out of \(app), but the service could not revoke it: \(reason) Revoke it in the service's account settings."
+            }
+        }
     }
     /// Deletes removed connections' sign-ins; one that fails is tried again on the next removal or start.
     @discardableResult private func deleteRemovedSignIns() async -> Error? {

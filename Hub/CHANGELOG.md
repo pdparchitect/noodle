@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Clicking a tool's Connected status in Settings › Tools offers Sign Out, which revokes its sign-in at the service where the service allows it and forgets it here; Remove revokes it the same way before deleting the tool.
+
 ### Fixed
 
 - The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.

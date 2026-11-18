@@ -26,7 +26,7 @@ public extension MCPOAuthConfiguration {
             tokenEndpoint: URL(string: "https://oauth2.googleapis.com/token")!,
             clients: clients, scopes: scopes,
             authorizationParameters: ["access_type": "offline", "prompt": "consent select_account"],
-            usesResourceIndicator: false)
+            usesResourceIndicator: false, revocationEndpoint: URL(string: "https://oauth2.googleapis.com/revoke")!)
     }
 }
 

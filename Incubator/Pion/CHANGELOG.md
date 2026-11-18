@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Clicking a tool's Connected status offers Sign Out, which revokes its sign-in or key at the service where the service allows it, as Google, Okta and GitHub do, and forgets it here; Remove revokes it the same way before deleting the tool.
+
 ### Changed
 
 - Settings › Tools no longer shows the fixed address of Pion's own tools under their names, and adding a tool no longer notes under its key that it is kept in Keychain.

@@ -106,7 +106,7 @@ public struct ToolConnectionsSettingsView: View {
             }
             Button("Cancel", role: .cancel) { removing = nil }
         } message: {
-            Text("This removes this connection from everywhere it is assigned, and deletes its saved sign-in from \(ProductIdentity.current.name). Other connections to the same service are unchanged. To revoke the provider's grant too, use its account settings.")
+            Text("This removes this connection from everywhere it is assigned, revokes its sign-in or key with the service where the service allows it, and deletes it from \(ProductIdentity.current.name). Where the service doesn't, revoke it in its account settings. Other connections to the same service are unchanged.")
         }
         .alert("Tools", isPresented: Binding(get: { store.connectionsController.errorMessage != nil }, set: { if !$0 { store.connectionsController.errorMessage = nil } })) {
             Button("OK") { store.connectionsController.errorMessage = nil }
@@ -127,7 +127,7 @@ public struct ToolConnectionsSettingsView: View {
         } else if store.connectionsController.errors[connection.id] != nil {
             SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
         } else if store.connectionsController.connected.contains(connection.id) {
-            SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+            ConnectedStatus { store.connectionsController.signOut(connection) }
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
         } else if connection.clientCredentials != nil || connection.awsSigning != nil || connection.googleServiceAccount != nil {
@@ -441,6 +441,24 @@ public struct ToolConnectionEditor: View {
                 try? await Task.sleep(for: .milliseconds(250))
                 if let secret, let onSecret { onSecret(record, secret) } else { onConnect(record) }
             }
+        }
+    }
+}
+
+/// A connected connection's status, which opens Sign Out: revoke what it signed in with at the service, where the
+/// service allows it, and forget it here.
+private struct ConnectedStatus: View {
+    let onSignOut: () -> Void
+    @State private var shown = false
+
+    var body: some View {
+        Button { shown = true } label: {
+            SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            Button("Sign Out", role: .destructive) { shown = false; onSignOut() }
+                .padding(12)
         }
     }
 }

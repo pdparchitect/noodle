@@ -9,10 +9,13 @@ public struct MCPOAuthConfiguration: Equatable, Sendable {
     public let scopes: [String]
     public let authorizationParameters: [String: String]
     public let usesResourceIndicator: Bool
+    /// Where a sign-in is revoked at the service, for one that offers it.
+    public let revocationEndpoint: URL?
 
     public init(issuer: URL, authorizationEndpoint: URL, tokenEndpoint: URL,
                 clients: [MCPOAuthClientConfiguration], scopes: [String],
-                authorizationParameters: [String: String] = [:], usesResourceIndicator: Bool = true) {
+                authorizationParameters: [String: String] = [:], usesResourceIndicator: Bool = true, revocationEndpoint: URL? = nil) {
+        self.revocationEndpoint = revocationEndpoint
         self.issuer = issuer
         self.authorizationEndpoint = authorizationEndpoint
         self.tokenEndpoint = tokenEndpoint
@@ -28,7 +31,7 @@ public extension MCPOAuthConfiguration {
     func with(clients: [MCPOAuthClientConfiguration]) -> MCPOAuthConfiguration {
         MCPOAuthConfiguration(issuer: issuer, authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndpoint,
                               clients: clients, scopes: scopes, authorizationParameters: authorizationParameters,
-                              usesResourceIndicator: usesResourceIndicator)
+                              usesResourceIndicator: usesResourceIndicator, revocationEndpoint: revocationEndpoint)
     }
 }
 
