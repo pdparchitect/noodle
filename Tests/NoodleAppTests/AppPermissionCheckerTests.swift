@@ -5,7 +5,7 @@ import XCTest
 @MainActor final class AppPermissionCheckerTests: XCTestCase {
     func testRefreshReportsEveryPermissionAndCountsOnlyRefusals() async {
         let system: [AppPermission: AppPermissionStatus] = [
-            .microphone: .denied, .screenRecording: .notRequested, .notifications: .allowed
+            .microphone: .denied, .screenRecording: .notRequested, .accessibility: .notRequested, .notifications: .allowed
         ]
         let checker = AppPermissionChecker(status: { system[$0] ?? .denied }, ask: { _ in })
         XCTAssertTrue(checker.statuses.isEmpty)

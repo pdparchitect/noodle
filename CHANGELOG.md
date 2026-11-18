@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Choose Conversation with Context: tap ⌘ twice in any app to pick a bot or group with the field you are typing in and a picture of its window waiting in the message field, ready for your request. It reads the field through Device Control and Data Access (Accessibility before macOS 27), which Settings › Permissions and Keybindings offer to turn on; without it, or without Screen Recording, the rest still comes along. Either Choose Conversation shortcut can also be a double tap of ⌘, ⌥, ⌃ or ⇧.
+
 ### Fixed
 
 - The Usage window switches back from Disk in less than half the time, with its toolbar in place from the start: on Disk, the period and bot filters stay where they are, dimmed, instead of leaving and coming back late.

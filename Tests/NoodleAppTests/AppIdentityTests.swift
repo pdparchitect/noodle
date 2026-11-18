@@ -27,6 +27,16 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertTrue(info.contains("<key>NSCameraUsageDescription</key>"))
     }
 
+    /// Choose Conversation with Context reads the focused field in another app. Accessibility, once the
+    /// person allows it, is still out of the sandbox's reach without this one service, so every read fails.
+    func testSandboxPolicyReachesAccessibilityForTheFocusedField() throws {
+        let policy = try Self.sandboxPolicy()
+        XCTAssertEqual(policy["com.apple.security.temporary-exception.mach-lookup.local-name"] as? [String], ["com.apple.axserver"])
+        let script = try String(contentsOf: Self.repository.appendingPathComponent("scripts/verify-noodle-release.sh"),
+                                encoding: .utf8)
+        XCTAssertTrue(script.contains("<key>com.apple.security.temporary-exception.mach-lookup.local-name</key><array><string>com.apple.axserver</string></array>"))
+    }
+
     /// Saving an attachment writes only where the person chooses in the save panel; no folder is open otherwise.
     func testSandboxPolicyWritesOnlyWhereThePersonSaves() throws {
         let policy = try Self.sandboxPolicy()

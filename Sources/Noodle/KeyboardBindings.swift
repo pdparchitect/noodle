@@ -64,15 +64,10 @@ import NoodleCore
                   characters.count == 1 else { return nil }
             key = characters
         }
-        var modifiers: KeyBinding.Modifiers = []
-        if event.modifierFlags.contains(.command) { modifiers.insert(.command) }
-        if event.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
-        if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
-        if event.modifierFlags.contains(.control) { modifiers.insert(.control) }
-        return KeyBinding(key, modifiers: modifiers)
+        return KeyBinding(key, modifiers: KeyBinding.Modifiers(event.modifierFlags))
     }
     func shortcut(for action: ShortcutDefinition) -> KeyboardShortcut? {
-        guard recordingAction == nil, let binding = binding(for: action) else { return nil }
+        guard recordingAction == nil, let binding = binding(for: action), !binding.isDoubleTap else { return nil }
         var modifiers: EventModifiers = []
         if binding.modifiers.contains(.command) { modifiers.insert(.command) }
         if binding.modifiers.contains(.shift) { modifiers.insert(.shift) }
@@ -91,4 +86,15 @@ private struct AppShortcutModifier: ViewModifier {
 
 extension View {
     func appShortcut(_ action: ShortcutDefinition) -> some View { modifier(AppShortcutModifier(action: action)) }
+}
+
+extension KeyBinding.Modifiers {
+    /// The four a binding uses; Caps Lock and Fn are left out.
+    init(_ flags: NSEvent.ModifierFlags) {
+        self = []
+        if flags.contains(.command) { insert(.command) }
+        if flags.contains(.shift) { insert(.shift) }
+        if flags.contains(.option) { insert(.option) }
+        if flags.contains(.control) { insert(.control) }
+    }
 }

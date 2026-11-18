@@ -17,7 +17,16 @@ public struct KeyBinding: Codable, Hashable, Sendable {
         self.key = key.lowercased(); self.modifiers = modifiers
     }
 
+    /// A quick double tap of one modifier on its own, such as ⌘⌘. It has no key.
+    public static func doubleTap(_ modifier: Modifiers) -> Self { Self("", modifiers: modifier) }
+    public var isDoubleTap: Bool { key.isEmpty }
+
     public var displayName: String {
+        if isDoubleTap {
+            let symbol = [(Modifiers.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+                .first { modifiers == $0.0 }?.1 ?? "?"
+            return symbol + symbol
+        }
         var prefix = ""
         for (modifier, symbol): (Modifiers, String) in [(.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")] {
             if modifiers.contains(modifier) { prefix += symbol }
@@ -32,6 +41,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
     }
 
     public var isValid: Bool {
+        if isDoubleTap { return [.command, .shift, .option, .control].contains(modifiers) }
         // Shift alone, or no modifier, would take ordinary typing.
         guard key.count == 1, key == key.lowercased(), modifiers.rawValue & ~15 == 0,
               !modifiers.intersection([.command, .control, .option]).isEmpty else { return false }
@@ -59,7 +69,7 @@ public struct KeyBinding: Codable, Hashable, Sendable {
 
 public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiable {
     case newBot, newGroup, searchConversations, recordVoice, call, capture, annotateSelection, annotateRegion, saveAnnotation
-    case chooseConversation, showUsage, stopBot
+    case chooseConversation, chooseConversationWithContext, showUsage, stopBot
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -73,6 +83,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: "Annotate Region"
         case .saveAnnotation: "Save Annotation Comment"
         case .chooseConversation: "Choose Conversation"
+        case .chooseConversationWithContext: "Choose Conversation with Context"
         case .showUsage: "Usage"
         case .stopBot: "Stop Bot"
         }
@@ -89,6 +100,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: "Mark a region of the \(ProductIdentity.current.name) window, an attachment preview, or a live capture."
         case .saveAnnotation: "Save a new annotation or an unsent comment edit."
         case .chooseConversation: "From any app, pick a bot or group to float over your work."
+        case .chooseConversationWithContext: "Pick a bot or group with the field you are typing in and its window attached."
         case .showUsage: "Show token usage, cost and disk space for every bot."
         case .stopBot: "End the turn the bot in the current chat is working on."
         }
@@ -105,6 +117,7 @@ public enum NoodleShortcut: String, CaseIterable, Codable, Sendable, Identifiabl
         case .annotateRegion: KeyBinding("r", modifiers: [.command, .shift])
         case .saveAnnotation: KeyBinding("\r")
         case .chooseConversation: KeyBinding(" ", modifiers: [.control, .option])
+        case .chooseConversationWithContext: .doubleTap(.command)
         case .showUsage: KeyBinding("u", modifiers: [.command, .shift])
         case .stopBot: KeyBinding(".")
         }
@@ -118,12 +131,20 @@ public struct ShortcutDefinition: Hashable, Sendable, Identifiable {
     public let title: String
     public let summary: String
     public let defaultBinding: KeyBinding
+    /// Works from any app, so it may be a double tap of a modifier, which no menu can show.
+    public let allowsDoubleTap: Bool
 
-    public init(id: String, title: String, summary: String, defaultBinding: KeyBinding) {
+    public init(id: String, title: String, summary: String, defaultBinding: KeyBinding, allowsDoubleTap: Bool = false) {
         self.id = id
         self.title = title
         self.summary = summary
         self.defaultBinding = defaultBinding
+        self.allowsDoubleTap = allowsDoubleTap
+    }
+
+    /// Reading another app's field, and hearing a modifier tapped there, both need Accessibility.
+    public func needsAccessibility(with binding: KeyBinding?) -> Bool {
+        id == NoodleShortcut.chooseConversationWithContext.rawValue || binding?.isDoubleTap == true
     }
 
     public static func == (a: Self, b: Self) -> Bool { a.id == b.id }
@@ -132,7 +153,8 @@ public struct ShortcutDefinition: Hashable, Sendable, Identifiable {
 
 extension NoodleShortcut {
     public var definition: ShortcutDefinition {
-        ShortcutDefinition(id: rawValue, title: title, summary: summary, defaultBinding: defaultBinding)
+        ShortcutDefinition(id: rawValue, title: title, summary: summary, defaultBinding: defaultBinding,
+                           allowsDoubleTap: self == .chooseConversation || self == .chooseConversationWithContext)
     }
 
     /// Noodle's shortcuts.
@@ -151,6 +173,7 @@ extension ShortcutDefinition {
     public static var annotateRegion: Self { NoodleShortcut.annotateRegion.definition }
     public static var saveAnnotation: Self { NoodleShortcut.saveAnnotation.definition }
     public static var chooseConversation: Self { NoodleShortcut.chooseConversation.definition }
+    public static var chooseConversationWithContext: Self { NoodleShortcut.chooseConversationWithContext.definition }
     public static var showUsage: Self { NoodleShortcut.showUsage.definition }
     public static var stopBot: Self { NoodleShortcut.stopBot.definition }
 }
@@ -175,7 +198,8 @@ public struct KeyboardShortcutPreferences: Codable, Equatable, Sendable {
         var seen = Set<KeyBinding>()
         for action in catalog {
             if let binding = stored.binding(for: action) {
-                guard binding.isValid, binding.reservedAction == nil, seen.insert(binding).inserted else { return }
+                guard binding.isValid, !binding.isDoubleTap || action.allowsDoubleTap, binding.reservedAction == nil,
+                      seen.insert(binding).inserted else { return }
             }
         }
         self = stored
@@ -196,7 +220,7 @@ public struct KeyboardShortcutPreferences: Codable, Equatable, Sendable {
     public mutating func set(_ binding: KeyBinding?, for action: ShortcutDefinition) throws {
         guard let action = own(action) else { return }
         if let binding {
-            guard binding.isValid else { throw ShortcutError.invalid }
+            guard binding.isValid, !binding.isDoubleTap || action.allowsDoubleTap else { throw ShortcutError.invalid }
             if let reserved = binding.reservedAction { throw ShortcutError.reserved(reserved) }
             if let other = catalog.first(where: { $0 != action && self.binding(for: $0) == binding }) {
                 throw ShortcutError.conflict(other.title)
@@ -221,5 +245,42 @@ public enum ShortcutError: LocalizedError {
         case .reserved(let action): "That shortcut is used by \(action)."
         case .conflict(let title): "Already assigned to \(title). Change or clear that shortcut first."
         }
+    }
+}
+
+/// Tells a quick double tap of one modifier on its own from the same modifier used in a shortcut. Fed every
+/// change of the held modifiers with a running count of key presses, it answers the modifier on the second tap.
+public struct ModifierDoubleTap: Sendable {
+    /// Longest press that still counts as a tap, and longest time between the two releases.
+    public static let tapLimit: TimeInterval = 0.35
+    public static let pairLimit: TimeInterval = 0.5
+    private var pressed: (modifier: KeyBinding.Modifiers, at: TimeInterval, keyPresses: Int)?
+    private var lastTap: (modifier: KeyBinding.Modifiers, at: TimeInterval, keyPresses: Int)?
+    /// After a combination of modifiers, nothing counts until all are let go.
+    private var waitsForRelease = false
+
+    public init() {}
+
+    public mutating func update(held: KeyBinding.Modifiers, keyPresses: Int, at time: TimeInterval) -> KeyBinding.Modifiers? {
+        if held.isEmpty {
+            defer { pressed = nil; waitsForRelease = false }
+            guard !waitsForRelease, let press = pressed, time - press.at <= Self.tapLimit, keyPresses == press.keyPresses else {
+                lastTap = nil
+                return nil
+            }
+            if let last = lastTap, last.modifier == press.modifier, time - last.at <= Self.pairLimit,
+               last.keyPresses == press.keyPresses {
+                lastTap = nil
+                return press.modifier
+            }
+            lastTap = (press.modifier, time, keyPresses)
+            return nil
+        }
+        if KeyBinding.doubleTap(held).isValid, pressed == nil, !waitsForRelease {
+            pressed = (held, time, keyPresses)
+        } else if pressed?.modifier != held {
+            pressed = nil; lastTap = nil; waitsForRelease = true
+        }
+        return nil
     }
 }

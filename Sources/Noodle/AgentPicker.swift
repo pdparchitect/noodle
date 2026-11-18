@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import SwiftUI
 import Observation
@@ -76,8 +77,11 @@ enum AgentPickerLayout {
 }
 
 @MainActor @Observable final class AgentPickerModel {
+    /// The app Choose Conversation with Context caught, shown beside the search field.
+    struct ContextSource { let name: String; let icon: NSImage? }
     static let columns = AgentPickerLayout.columns
     private(set) var items: [AgentPickerItem] = []
+    private(set) var context: ContextSource?
     var filter = "" { didSet { selection = 0 } }
     var selection = 0
     var visible: [AgentPickerItem] { AgentPickerItem.visible(items, filter: filter) }
@@ -86,8 +90,9 @@ enum AgentPickerLayout {
     var height: CGFloat { AgentPickerLayout.height(items: items.count) }
     var gridHeight: CGFloat { AgentPickerLayout.gridHeight(items: items.count) }
 
-    func present(_ items: [AgentPickerItem]) {
+    func present(_ items: [AgentPickerItem], context: ContextSource? = nil) {
         self.items = items
+        self.context = context
         filter = ""
         selection = 0
     }
@@ -161,13 +166,66 @@ enum AgentPickerLayout {
     }
 }
 
+/// Hears one modifier tapped twice in any app. Another app's modifier keys reach Noodle only with
+/// Accessibility; until then only Noodle's own windows are heard, and allowing it takes effect without a relaunch.
+@MainActor final class ModifierDoubleTapMonitor {
+    private var detector = ModifierDoubleTap()
+    private var monitors: [Any] = []
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private let actions: [KeyBinding.Modifiers: @MainActor () -> Void]
+
+    init(actions: [KeyBinding.Modifiers: @MainActor () -> Void]) {
+        self.actions = actions
+        install()
+        let reinstall: @Sendable (Notification) -> Void = { [weak self] _ in
+            // A new grant takes a moment to apply.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { MainActor.assumeIsolated { self?.install() } }
+        }
+        observers = [
+            (DistributedNotificationCenter.default(), DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.apple.accessibility.api"), object: nil, queue: .main, using: reinstall)),
+            (NotificationCenter.default, NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: reinstall)),
+        ]
+    }
+
+    private func install() {
+        monitors.forEach(NSEvent.removeMonitor); monitors = []
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: { [weak self] in self?.handle($0) }) {
+            monitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged, handler: { [weak self] in self?.handle($0); return $0 }) {
+            monitors.append(local)
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        let keyPresses = Int(CGEventSource.counterForEventType(.combinedSessionState, eventType: .keyDown))
+        guard let modifier = detector.update(held: KeyBinding.Modifiers(event.modifierFlags), keyPresses: keyPresses,
+                                             at: event.timestamp) else { return }
+        actions[modifier]?()
+    }
+
+    func stop() {
+        monitors.forEach(NSEvent.removeMonitor); monitors = []
+        for (center, observer) in observers { center.removeObserver(observer) }
+        observers = []
+    }
+}
+
 /// The grid of conversations summoned over any app. Picking one lands it as a
-/// floating conversation window.
+/// floating conversation window; with context, the field and window it was summoned from wait in its message field.
 @MainActor final class AgentPickerController: NSObject, NSWindowDelegate {
     static let shared = AgentPickerController()
     private let model = AgentPickerModel()
     private var panel: AgentPickerPanel?
-    private var hotKey: GlobalHotKey?
+    private var hotKeys: [GlobalHotKey] = []
+    private var doubleTaps: ModifierDoubleTapMonitor?
+    /// Being read while the grid is open, so it opens at once.
+    private var pending: (context: Task<FocusedContext, Never>, screenshot: Task<CGImage?, Never>)?
+    private var activationObserver: NSObjectProtocol?
+    /// Chromium apps asked to keep their pages ready for reading; handed back when no longer needed.
+    private var preparedApps: Set<pid_t> = []
 
     private var started = false
 
@@ -175,22 +233,71 @@ enum AgentPickerLayout {
         guard !started else { return }
         started = true
         NotificationCenter.default.addObserver(self, selector: #selector(showRequested), name: .floatConversation, object: nil)
-        registerHotKey()
+        NotificationCenter.default.addObserver(self, selector: #selector(releasePreparedApps), name: NSApplication.willTerminateNotification, object: nil)
+        registerHotKeys()
     }
 
-    /// Follows Settings > Keybindings. The hot key is released while a shortcut is
-    /// being recorded, or the recorder would never see the current combination.
-    private func registerHotKey() {
-        hotKey?.unregister(); hotKey = nil
+    /// Follows Settings > Keybindings. The shortcuts are released while one is being
+    /// recorded, or the recorder would never see the current combination.
+    private func registerHotKeys() {
+        hotKeys.forEach { $0.unregister() }; hotKeys = []
+        doubleTaps?.stop(); doubleTaps = nil
         let bindings = KeyboardBindings.shared
-        let binding = withObservationTracking {
-            bindings.recordingAction == nil ? bindings.binding(for: .chooseConversation) : nil
+        let chosen = withObservationTracking {
+            bindings.recordingAction == nil
+                ? (plain: bindings.binding(for: .chooseConversation), context: bindings.binding(for: .chooseConversationWithContext))
+                : (plain: nil, context: nil)
         } onChange: { [weak self] in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.registerHotKey() } }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.registerHotKeys() } }
         }
-        guard let binding, let keyCode = GlobalHotKey.keyCode(for: binding.key) else { return }
-        hotKey = GlobalHotKey(keyCode: keyCode, modifiers: GlobalHotKey.modifiers(for: binding.modifiers), id: 1) { [weak self] in self?.toggle() }
-        if hotKey == nil { NSLog("Could not register the agent picker shortcut %@", binding.displayName) }
+        var taps: [KeyBinding.Modifiers: @MainActor () -> Void] = [:]
+        let shortcuts: [(KeyBinding?, UInt32, @MainActor () -> Void)] = [
+            (chosen.plain, 1, { [weak self] in self?.toggle() }),
+            (chosen.context, 2, { [weak self] in self?.toggleWithContext() }),
+        ]
+        for (binding, id, action) in shortcuts {
+            guard let binding else { continue }
+            if binding.isDoubleTap { taps[binding.modifiers] = action; continue }
+            guard let keyCode = GlobalHotKey.keyCode(for: binding.key),
+                  let hotKey = GlobalHotKey(keyCode: keyCode, modifiers: GlobalHotKey.modifiers(for: binding.modifiers), id: id, action: action) else {
+                NSLog("Could not register the agent picker shortcut %@", binding.displayName)
+                continue
+            }
+            hotKeys.append(hotKey)
+        }
+        if !taps.isEmpty { doubleTaps = ModifierDoubleTapMonitor(actions: taps) }
+        prepareApps(chosen.context != nil)
+    }
+
+    /// Chromium pages take two seconds to become readable, so they are asked for when the app comes to the front.
+    private func prepareApps(_ wanted: Bool) {
+        if !wanted {
+            if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+            activationObserver = nil
+            releasePreparedApps()
+            return
+        }
+        guard activationObserver == nil else { return }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            MainActor.assumeIsolated { self?.prepare(app) }
+        }
+        if let front = NSWorkspace.shared.frontmostApplication { prepare(front) }
+    }
+
+    private func prepare(_ app: NSRunningApplication) {
+        let pid = app.processIdentifier, bundle = app.bundleIdentifier
+        guard pid != getpid() else { return }
+        Task.detached {
+            guard FocusedContextReader.prepare(pid: pid, bundleIdentifier: bundle) else { return }
+            await MainActor.run { _ = AgentPickerController.shared.preparedApps.insert(pid) }
+        }
+    }
+
+    @objc private func releasePreparedApps() {
+        for pid in preparedApps { FocusedContextReader.release(pid: pid) }
+        preparedApps = []
     }
 
     @objc private func showRequested() { show() }
@@ -199,10 +306,23 @@ enum AgentPickerLayout {
         if panel?.isVisible == true { close() } else { show() }
     }
 
-    func show() {
+    /// The grid opens at once over the app in front. It does not take that app's focus, so the field and window
+    /// are read while the grid is open. Noodle's own windows carry no context.
+    func toggleWithContext() {
+        if panel?.isVisible == true { close(); return }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() else { show(); return }
+        let pid = app.processIdentifier, name = app.localizedName ?? "App", bundle = app.bundleIdentifier
+        show(context: .init(name: name, icon: app.icon))
+        guard panel?.isVisible == true else { return }
+        pending = (Task.detached { FocusedContextReader.read(pid: pid, appName: name, bundleIdentifier: bundle) },
+                   Task { await WindowSnapshot.capture(pid: pid) })
+    }
+
+    func show(context: AgentPickerModel.ContextSource? = nil) {
+        pending = nil
         guard let store = NoodleStore.active, store.storageReady else { return }
         FloatingConversations.shared.retain(Set(store.conversations.map(\.id)))
-        model.present(AgentPickerItem.items(in: store, floating: FloatingConversationPanels.shared.openIDs))
+        model.present(AgentPickerItem.items(in: store, floating: FloatingConversationPanels.shared.openIDs), context: context)
         let panel = self.panel ?? makePanel()
         self.panel = panel
         // A fresh view is laid out for these items before it is shown, so no frame of the previous grid appears.
@@ -222,11 +342,25 @@ enum AgentPickerLayout {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    func close() { panel?.orderOut(nil) }
+    func close() {
+        pending = nil
+        panel?.orderOut(nil)
+    }
 
     private func pick(_ id: UUID) {
+        let pending = self.pending
         close()
-        NoodleStore.active?.floatConversation(id)
+        guard let store = NoodleStore.active else { return }
+        store.floatConversation(id)
+        guard let pending else { return }
+        Task {
+            let context = await pending.context.value, screenshot = await pending.screenshot.value
+            do { try store.stageContext(context, screenshot: screenshot, into: id) }
+            catch { store.errorMessage = error.localizedDescription }
+            // Each permission is asked for once, by the feature that needs it.
+            if screenshot == nil, ScreenRecordingAccess.status == .notRequested { ScreenRecordingAccess.request() }
+            if AccessibilityAccess.status == .notRequested { AccessibilityAccess.request() }
+        }
     }
 
     private enum Then { case nothing, call, record }
@@ -319,12 +453,30 @@ private struct AgentPickerView: View {
 
     var body: some View {
         VStack(spacing: AgentPickerLayout.sectionSpacing) {
-            TextField("Search", text: $model.filter)
-                .textFieldStyle(.plain)
-                .font(.system(size: 18))
-                .focused($filterFocused)
-                .padding(.horizontal, 6)
-                .frame(height: AgentPickerLayout.searchHeight)
+            HStack(spacing: 8) {
+                TextField("Search", text: $model.filter)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18))
+                    .focused($filterFocused)
+                if let context = model.context {
+                    HStack(spacing: 5) {
+                        if let icon = context.icon {
+                            Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                        }
+                        Text(context.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: AgentPickerLayout.searchHeight)
+                    .background(Color.primary.opacity(0.07), in: Capsule())
+                    .help("The field and window from \(context.name) are attached to the conversation you pick.")
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Context from \(context.name)")
+                }
+            }
+            .padding(.horizontal, 6)
+            .frame(height: AgentPickerLayout.searchHeight)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {

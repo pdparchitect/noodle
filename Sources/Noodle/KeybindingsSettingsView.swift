@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import NoodleCore
 
@@ -12,7 +13,7 @@ struct KeybindingsSection: Identifiable {
     /// Noodle's own.
     static let noodle: [KeybindingsSection] = [
         KeybindingsSection(title: "Conversations", actions: [.newBot, .newGroup, .searchConversations, .capture, .recordVoice, .call, .stopBot]),
-        KeybindingsSection(title: "Any App", actions: [.chooseConversation]),
+        KeybindingsSection(title: "Any App", actions: [.chooseConversation, .chooseConversationWithContext]),
         KeybindingsSection(title: "Annotations", actions: [.annotateSelection, .annotateRegion, .saveAnnotation],
                            footer: "Select conversation text to add an annotation, or annotate a region of the Noodle window. The same shortcuts work in attachment previews. Escape cancels an annotation."),
     ]
@@ -22,6 +23,7 @@ struct KeybindingsSettingsView: View {
     var bindings = KeyboardBindings.shared
     var sections = KeybindingsSection.noodle
     @State private var errors: [ShortcutDefinition: String] = [:]
+    @State private var accessibilityAllowed = AXIsProcessTrusted()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +43,8 @@ struct KeybindingsSettingsView: View {
             HStack {
                 Text(bindings.recordingAction == nil
                     ? "Use ⌘, ⌃ or ⌥ with a key."
+                    : bindings.recordingAction?.allowsDoubleTap == true
+                    ? "Press a shortcut, or tap a modifier twice. Escape cancels; Delete clears."
                     : "Press a shortcut. Escape cancels; Delete clears.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -50,6 +54,10 @@ struct KeybindingsSettingsView: View {
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
         .onDisappear { bindings.recordingAction = nil }
+        // Returning from System Settings is when Accessibility most likely changed.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            accessibilityAllowed = AXIsProcessTrusted()
+        }
     }
 
     private func reset(_ action: ShortcutDefinition) {
@@ -64,6 +72,17 @@ struct KeybindingsSettingsView: View {
                 Text(action.title)
                 Text(action.summary).font(.caption).foregroundStyle(.secondary)
                 if let error = errors[action] { Text(error).font(.caption).foregroundStyle(.red) }
+                if !accessibilityAllowed, bindings.binding(for: action) != nil,
+                   action.needsAccessibility(with: bindings.binding(for: action)) {
+                    HStack(spacing: 4) {
+                        Text("Needs \(AppPermission.accessibility.name).").foregroundStyle(.orange)
+                        Button("Open System Settings") {
+                            if let url = AppPermission.accessibility.settingsURL { NSWorkspace.shared.open(url) }
+                        }
+                        .buttonStyle(.link)
+                    }
+                    .font(.caption)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             // Shown only for a changed shortcut; the width is kept so the recorders stay aligned.
@@ -112,6 +131,8 @@ private struct ShortcutRecorder: NSViewRepresentable {
     var onError: (String?) -> Void
     private var monitor: Any?
     private weak var previousResponder: NSResponder?
+    private var doubleTap = ModifierDoubleTap()
+    private var keyPresses = 0
 
     init(action: ShortcutDefinition, bindings: KeyboardBindings, onError: @escaping (String?) -> Void) {
         shortcutAction = action; self.bindings = bindings; self.onError = onError
@@ -139,7 +160,8 @@ private struct ShortcutRecorder: NSViewRepresentable {
         guard window.makeFirstResponder(self) else { return }
         bindings.recordingAction = shortcutAction; onError(nil)
         title = "Press keys…"
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .rightMouseDown],
+        doubleTap = ModifierDoubleTap()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .rightMouseDown],
             handler: eventMonitorHandler())
         NotificationCenter.default.addObserver(self, selector: #selector(windowResignedKey),
             name: NSWindow.didResignKeyNotification, object: window)
@@ -164,8 +186,20 @@ private struct ShortcutRecorder: NSViewRepresentable {
     /// Key processing is separate from window scoping so it can be verified
     /// without activating Settings or posting input to the user's desktop.
     func captureKey(_ event: NSEvent) -> NSEvent? {
-        guard monitor != nil, event.type == .keyDown || event.type == .keyUp else { return event }
+        guard monitor != nil else { return event }
+        if event.type == .flagsChanged {
+            guard shortcutAction.allowsDoubleTap,
+                  let modifier = doubleTap.update(held: KeyBinding.Modifiers(event.modifierFlags), keyPresses: keyPresses,
+                                                  at: event.timestamp) else { return nil }
+            do {
+                try bindings.set(.doubleTap(modifier), for: shortcutAction)
+                onError(nil); stopRecording()
+            } catch { onError(error.localizedDescription) }
+            return nil
+        }
+        guard event.type == .keyDown || event.type == .keyUp else { return event }
         if event.type == .keyUp || event.isARepeat { return nil }
+        keyPresses += 1
         if event.keyCode == 53 { stopRecording(); return nil }
         let modifiers = event.modifierFlags.intersection([.command, .control, .shift, .option])
         if event.keyCode == 48 && modifiers.isEmpty { stopRecording(); return event }

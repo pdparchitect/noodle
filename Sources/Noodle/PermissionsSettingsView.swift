@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AVFoundation
 import CoreGraphics
 import Observation
@@ -8,7 +9,7 @@ import NoodleRuntimeSettings
 
 /// A macOS privacy permission a Noodle feature depends on.
 enum AppPermission: String, CaseIterable, Identifiable {
-    case microphone, screenRecording, notifications
+    case microphone, screenRecording, accessibility, notifications
 
     var id: String { rawValue }
 
@@ -16,6 +17,10 @@ enum AppPermission: String, CaseIterable, Identifiable {
         switch self {
         case .microphone: return "Microphone"
         case .screenRecording: return "Screen Recording"
+        // System Settings renamed the list in macOS 27.
+        case .accessibility:
+            return ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+                ? "Device Control and Data Access" : "Accessibility"
         case .notifications: return "Notifications"
         }
     }
@@ -24,6 +29,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         switch self {
         case .microphone: return "Record voice messages."
         case .screenRecording: return "Preview and capture screens and windows for a message."
+        case .accessibility: return "Attach the field you are typing in from another app, and hear a modifier tapped twice."
         case .notifications: return "Announce bot replies and show the unread count on the Dock icon."
         }
     }
@@ -32,6 +38,7 @@ enum AppPermission: String, CaseIterable, Identifiable {
         switch self {
         case .microphone: return "mic"
         case .screenRecording: return "rectangle.dashed.badge.record"
+        case .accessibility: return "accessibility"
         case .notifications: return "bell.badge"
         }
     }
@@ -43,6 +50,8 @@ enum AppPermission: String, CaseIterable, Identifiable {
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
         case .screenRecording:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        case .accessibility:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
         case .notifications:
             let app = Bundle.main.bundleIdentifier.map { "?id=\($0)" } ?? ""
             return URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension\(app)")
@@ -71,6 +80,21 @@ enum ScreenRecordingAccess {
     static func request() {
         UserDefaults.standard.set(true, forKey: requestedDefaultsKey)
         CGRequestScreenCaptureAccess()
+    }
+}
+
+/// macOS reports Accessibility only as allowed or not, so Noodle remembers asking, as for Screen Recording.
+enum AccessibilityAccess {
+    static let requestedDefaultsKey = "accessibilityAccessRequested"
+
+    static var status: AppPermissionStatus {
+        if AXIsProcessTrusted() { return .allowed }
+        return UserDefaults.standard.bool(forKey: requestedDefaultsKey) ? .denied : .notRequested
+    }
+
+    static func request() {
+        UserDefaults.standard.set(true, forKey: requestedDefaultsKey)
+        _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
     }
 }
 
@@ -122,6 +146,8 @@ enum ScreenRecordingAccess {
             }
         case .screenRecording:
             return ScreenRecordingAccess.status
+        case .accessibility:
+            return AccessibilityAccess.status
         case .notifications:
             switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
             case .authorized, .provisional: return .allowed
@@ -137,6 +163,8 @@ enum ScreenRecordingAccess {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         case .screenRecording:
             ScreenRecordingAccess.request()
+        case .accessibility:
+            AccessibilityAccess.request()
         case .notifications:
             _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
         }

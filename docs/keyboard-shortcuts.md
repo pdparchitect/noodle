@@ -14,15 +14,16 @@ Open **Noodle → Settings → Keybindings** to discover commands and change the
 | Annotate Region | ⇧⌘R | The current conversation window or attachment preview |
 | Save Annotation Comment | ⌘Return | The annotation popup or an unsent annotation's comment editor |
 | Choose Conversation | ⌃⌥Space | Any app, while Noodle is open. Opens the grid described in [Float a conversation over other apps](usage.md#float-a-conversation-over-other-apps) |
+| Choose Conversation with Context | ⌘⌘ (tap ⌘ twice) | Any app, while Noodle is open. Opens the same grid, and the conversation you pick has the field you were typing in and a picture of its window waiting in its message field |
 | Usage | ⇧⌘U | Noodle. Opens the window described in [See what your bots spend](usage.md#see-what-your-bots-spend) |
 
-Click a binding, then press the new combination using Command (⌘), Control (⌃) or Option (⌥). A shortcut that uses Option alone, such as ⌥Space, stops typing its usual character: in Noodle for most commands, and in every app for Choose Conversation while Noodle is open. Escape cancels; Delete clears the binding. A changed shortcut shows a reset button beside it. Right-click a binding to reset or clear it. **Restore Defaults** resets all commands. Shortcuts that conflict with another command or a common system or editing shortcut are rejected with an explanation, and the existing binding stays.
+Click a binding, then press the new combination using Command (⌘), Control (⌃) or Option (⌥). The two shortcuts that work in any app can instead be a double tap of one modifier: tap it twice while recording. A shortcut that uses Option alone, such as ⌥Space, stops typing its usual character: in Noodle for most commands, and in every app for Choose Conversation while Noodle is open. Escape cancels; Delete clears the binding. A changed shortcut shows a reset button beside it. Right-click a binding to reset or clear it. **Restore Defaults** resets all commands. Shortcuts that conflict with another command or a common system or editing shortcut are rejected with an explanation, and the existing binding stays.
 
 Changes apply immediately to menus and shortcut hints and are kept after relaunch. A command with no shortcut is still available from its menu or button.
 
 ⌘1 shows All and ⌘2 onwards a joined Hub's space, as listed in the **Spaces** menu. These cannot be changed or used for other commands.
 
-Apart from Choose Conversation, these shortcuts work only in Noodle. Standard keys keep working: Return sends a chat message, Shift-Return adds a line, Escape cancels an annotation or closes a preview, and Space opens a selected attachment.
+Apart from the two Choose Conversation shortcuts, these work only in Noodle. Standard keys keep working: Return sends a chat message, Shift-Return adds a line, Escape cancels an annotation or closes a preview, and Space opens a selected attachment.
 
 In the screen and window capture picker, use Left/Right to move across a row and Up/Down to move between rows. Press Return to open a live preview of the highlighted source, Delete to choose another source, or Escape to close the preview.
 

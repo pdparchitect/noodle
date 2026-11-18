@@ -71,6 +71,19 @@ by the pointer, or where you last left it, ready for typing. Capture and
 annotations work there as in any chat window, so you can share what is on screen
 without going back to Noodle. Change the shortcut in **Settings → Keybindings**.
 
+To ask about what you are working on, tap ⌘ twice instead. The same grid opens
+with the app's name beside the search field, and the conversation you pick opens
+with two attachments waiting in its message field: a picture of the window, and
+a note of the app, window, page address, the field you were typing in, its text
+and any selection. Type your request and send it; nothing goes until you do, and
+Escape discards both. Reading the field needs **Device Control and Data Access**
+(called **Accessibility** before macOS 27) in **System Settings → Privacy &
+Security**, and the picture needs **Screen Recording**; **Settings → Permissions**
+offers both. Without them, whatever is allowed still comes along. Password
+fields are never read. Hearing ⌘ tapped twice in another app also needs Device
+Control and Data Access; a key combination set in **Settings → Keybindings**
+works without it.
+
 Several conversations can float at once. To keep a single float, turn on
 **Settings → Conversation → Keep one floating conversation**: floating another
 conversation then closes the open one and takes its exact place and size.

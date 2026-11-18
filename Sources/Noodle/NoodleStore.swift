@@ -2347,6 +2347,15 @@ final class NoodleStore {
         drafts[conversationID].attachments.append(saved.attachment)
     }
 
+    /// Choose Conversation with Context: a picture of the window and a note of the field wait in the
+    /// conversation's message field, sent only with the person's message.
+    func stageContext(_ context: FocusedContext, screenshot: CGImage?, into conversationID: UUID) throws {
+        guard conversations.contains(where: { $0.id == conversationID }) else { throw WorkspaceError.missingConversation(conversationID) }
+        if let screenshot { try importCapture(image: screenshot, title: context.title, region: nil, comment: "", into: conversationID) }
+        try importAttachment(data: Data(context.note.utf8), originalFilename: "Context — \(CaptureAttachment.filenameTitle(context.title)).md",
+                             mediaType: "text/markdown", into: conversationID)
+    }
+
     private func importAttachmentFile(from url: URL, into conversationID: UUID) throws {
         drafts[conversationID].attachments.append(try storeAttachment(.file(url), in: conversationID))
     }

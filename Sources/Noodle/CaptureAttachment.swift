@@ -17,9 +17,13 @@ import UniformTypeIdentifiers
         guard CGImageDestinationFinalize(destination) else { throw WorkspaceError.invalidAttachment }
         return data as Data
     }
+    /// A window title made safe to name a file with.
+    static func filenameTitle(_ title: String) -> String {
+        String(title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-").prefix(100))
+    }
     static func save(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String,
                      into conversationID: UUID, repository: WorkspaceRepository) throws -> Saved {
-        let safeTitle = String(title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-").prefix(100))
+        let safeTitle = filenameTitle(title)
         let filename = "Capture — \(safeTitle.isEmpty ? "Screen" : safeTitle).png"
         let raw = try png(image)
         // Validate before persisting the original so invalid comments cannot leave orphan captures.

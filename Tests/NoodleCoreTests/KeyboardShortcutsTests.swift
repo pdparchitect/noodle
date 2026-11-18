@@ -112,4 +112,54 @@ final class KeyboardShortcutsTests: XCTestCase {
         XCTAssertEqual(restored.binding(for: open), KeyBinding("k", modifiers: [.command, .option]))
         XCTAssertTrue(restored.isModified(open))
     }
+
+    /// Choose Conversation with Context starts on a double tap of ⌘. Only the shortcuts that work from any
+    /// app take a double tap, of one modifier, and it survives a relaunch.
+    func testOnlyAnyAppShortcutsTakeADoubleTapOfOneModifier() throws {
+        var preferences = KeyboardShortcutPreferences()
+        let command = KeyBinding.doubleTap(.command)
+        XCTAssertEqual(preferences.binding(for: .chooseConversationWithContext), command)
+        XCTAssertEqual(command.displayName, "⌘⌘")
+        XCTAssertTrue(command.isDoubleTap)
+        XCTAssertFalse(KeyBinding(" ", modifiers: [.control, .option]).isDoubleTap)
+        XCTAssertFalse(KeyBinding.doubleTap([.command, .shift]).isValid, "One modifier at a time")
+        XCTAssertThrowsError(try preferences.set(KeyBinding.doubleTap(.option), for: .newBot), "Menus cannot show a double tap")
+        XCTAssertThrowsError(try preferences.set(command, for: .chooseConversation)) { error in
+            XCTAssertEqual(error.localizedDescription,
+                "Already assigned to Choose Conversation with Context. Change or clear that shortcut first.")
+        }
+        try preferences.set(KeyBinding.doubleTap(.option), for: .chooseConversation)
+        try preferences.set(KeyBinding("k", modifiers: [.control, .option]), for: .chooseConversationWithContext)
+        let restored = KeyboardShortcutPreferences(data: try JSONEncoder().encode(preferences))
+        XCTAssertEqual(restored.binding(for: .chooseConversation), KeyBinding.doubleTap(.option))
+        XCTAssertEqual(restored.binding(for: .chooseConversationWithContext), KeyBinding("k", modifiers: [.control, .option]))
+        // A double tap saved for a menu command, outside the validated setter, falls back to the defaults.
+        let saved = #"{"overrides":{"newBot":{"binding":{"key":"","modifiers":4}}}}"#
+        XCTAssertTrue(KeyboardShortcutPreferences(data: Data(saved.utf8)).isDefault)
+    }
+
+    /// Two quick taps of one modifier on its own, with no key pressed in between, and nothing else.
+    func testADoubleTapIsTwoQuickTapsOfOneModifierAlone() {
+        func taps(_ steps: [(KeyBinding.Modifiers, Int, TimeInterval)]) -> [KeyBinding.Modifiers] {
+            var detector = ModifierDoubleTap()
+            return steps.compactMap { detector.update(held: $0.0, keyPresses: $0.1, at: $0.2) }
+        }
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.1), (.command, 0, 0.2), ([], 0, 0.3)]), [.command])
+        XCTAssertEqual(taps([(.option, 0, 0), ([], 0, 0.1), (.option, 0, 0.2), ([], 0, 0.3)]), [.option])
+        // ⌘C then ⌘V.
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 1, 0.1), (.command, 1, 0.2), ([], 2, 0.3)]), [])
+        // A key between the taps.
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.1), (.command, 1, 0.2), ([], 1, 0.3)]), [])
+        // Too slow, or held too long.
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.1), (.command, 0, 1.0), ([], 0, 1.1)]), [])
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.8), (.command, 0, 0.9), ([], 0, 1.0)]), [])
+        // Two different modifiers.
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.1), (.option, 0, 0.2), ([], 0, 0.3)]), [])
+        // Letting go of ⌘ while ⌥ stays down after ⌘⌥ is not a tap of ⌥.
+        XCTAssertEqual(taps([(.command, 0, 0), ([.command, .option], 0, 0.05), (.option, 0, 0.1), ([], 0, 0.15),
+                             (.option, 0, 0.2), ([], 0, 0.25)]), [])
+        // A third tap starts over instead of firing again.
+        XCTAssertEqual(taps([(.command, 0, 0), ([], 0, 0.1), (.command, 0, 0.2), ([], 0, 0.3),
+                             (.command, 0, 0.4), ([], 0, 0.5)]), [.command])
+    }
 }

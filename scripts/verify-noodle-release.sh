@@ -16,9 +16,9 @@ app_entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null | tr -d '[:
 entitlement_count="$(print -r -- "$app_entitlements" | grep -o '<key>' | wc -l | tr -d '[:space:]')"
 # The reviewed policy. A public release also carries Support/Noodle-Release.entitlements' iCloud
 # container, and the two keys its provisioning profile adds, and must embed that profile.
-expected_count=12
+expected_count=13
 if [[ -f "$app/Contents/embedded.provisionprofile" ]]; then
-    expected_count=17
+    expected_count=18
     team="$(codesign -dv --verbose=4 "$app" 2>&1 | awk -F= '/^TeamIdentifier=/ { print $2 }')"
     if ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.developer.icloud-container-environment</key><string>Production</string>' \
         || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.developer.icloud-container-identifiers</key><array><string>iCloud.com.pdparchitect.noodle</string></array>' \
@@ -42,6 +42,7 @@ if [[ "$entitlement_count" != "$expected_count" ]] \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.personal-information.calendars</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.personal-information.reminders</key><true/>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key><array><string>/.codex/</string></array>' \
+    || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.mach-lookup.local-name</key><array><string>com.apple.axserver</string></array>' \
     || ! print -r -- "$app_entitlements" | grep -q '<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key><array><string>/.local/bin/claude</string><string>/.local/share/claude/versions/</string><string>/.local/bin/fx</string><string>/Library/ApplicationSupport/com.apple.mobileAssetDesktop/</string><string>/Library/ApplicationSupport/com.apple.wallpaper/aerials/</string></array>'; then
     print -u2 "The signed app's sandbox entitlements do not match the reviewed policy."
     exit 1

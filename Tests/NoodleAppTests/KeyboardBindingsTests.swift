@@ -93,4 +93,38 @@ import NoodleCore
         XCTAssertTrue(recorder.eventMonitorHandler()(passing) === passing)
         XCTAssertNil(bindings.recordingAction, "Recording stops when its window is not key")
     }
+
+    /// A shortcut that works from any app records a double tap of a modifier; a menu command ignores it.
+    func testTheRecorderTakesADoubleTapOnlyWhereOneIsAllowed() throws {
+        let bindings = KeyboardBindings(defaults: defaults)
+        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 80), styleMask: [.titled],
+                             backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        func flags(_ flags: NSEvent.ModifierFlags, at time: TimeInterval) -> NSEvent {
+            NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags, timestamp: time, windowNumber: 0,
+                             context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!
+        }
+        func tapOptionTwice(_ recorder: ShortcutRecorderButton) {
+            for (state, time) in [(NSEvent.ModifierFlags.option, 0.0), ([], 0.1), (.option, 0.2), ([], 0.3)] {
+                XCTAssertNil(recorder.captureKey(flags(state, at: 10 + time)), "Modifier changes are consumed while recording")
+            }
+        }
+
+        let menu = ShortcutRecorderButton(action: .newBot, bindings: bindings) { _ in }
+        window.contentView = menu
+        menu.startRecording()
+        tapOptionTwice(menu)
+        XCTAssertEqual(bindings.binding(for: .newBot), NoodleShortcut.newBot.defaultBinding)
+        XCTAssertEqual(bindings.recordingAction, .newBot, "Still waiting for a key")
+        menu.stopRecording()
+
+        let anyApp = ShortcutRecorderButton(action: .chooseConversation, bindings: bindings) { _ in }
+        window.contentView = anyApp
+        defer { anyApp.stopRecording(); window.close() }
+        anyApp.startRecording()
+        tapOptionTwice(anyApp)
+        XCTAssertEqual(bindings.binding(for: .chooseConversation), .doubleTap(.option))
+        XCTAssertNil(bindings.recordingAction)
+        XCTAssertNil(bindings.shortcut(for: .chooseConversation), "A double tap is no menu key equivalent")
+    }
 }

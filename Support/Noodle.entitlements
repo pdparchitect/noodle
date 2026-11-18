@@ -37,6 +37,11 @@
 	<array>
 		<string>/.codex/</string>
 	</array>
+	<!-- Choose Conversation with Context reads the focused field in another app through Accessibility. -->
+	<key>com.apple.security.temporary-exception.mach-lookup.local-name</key>
+	<array>
+		<string>com.apple.axserver</string>
+	</array>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
