@@ -5,7 +5,7 @@ import NoodleRuntime
 import SwiftUI
 
 /// The people on a Hub, to group and filter its usage by. Noodle has none.
-public struct UsagePeople: Equatable {
+public struct UsagePeople: Equatable, Sendable {
     struct User: Identifiable, Equatable {
         let id: UUID
         let name: String
@@ -177,6 +177,93 @@ struct UsageReport {
     }
 }
 
+/// The Usage window's reports, read and summed off the main thread and kept per choice: a choice seen before shows
+/// again at once, and the last report stays on screen while the next is made. New usage, or a new day, starts over.
+@MainActor
+@Observable
+final class UsageReports {
+    struct Choice: Hashable, Sendable {
+        let span: UsageReport.Span
+        let agentID: UUID?
+        let grouping: UsageReport.Grouping
+        let metric: UsageReport.Metric
+        let user: UsageReport.UserFilter?
+    }
+
+    /// A report and the choice it answers, told apart from others by `id` without comparing their contents.
+    struct Shown: Equatable {
+        let id: Int
+        let choice: Choice
+        let report: UsageReport
+
+        static func == (lhs: Shown, rhs: Shown) -> Bool { lhs.id == rhs.id }
+    }
+
+    private(set) var shown: Shown?
+    /// Set once a report has taken long enough to say so; one that comes within a moment shows without a sign of waiting.
+    private(set) var waiting = false
+    @ObservationIgnored private(set) var builds = 0
+    @ObservationIgnored private var pending: Int?
+    @ObservationIgnored private var revision: Int?
+    @ObservationIgnored private var today: Date?
+    @ObservationIgnored private var days: [PeriodKey: [UsageDay]] = [:]
+    @ObservationIgnored private var reports: [Choice: Shown] = [:]
+
+    private struct PeriodKey: Hashable {
+        let span: UsageReport.Span
+        let agentID: UUID?
+    }
+
+    /// The report kept for `choice`, so the window can draw it in the same pass that asks for it.
+    func kept(_ choice: Choice, revision: Int) -> Shown? {
+        revision == self.revision && Calendar.current.startOfDay(for: Date()) == today ? reports[choice] : nil
+    }
+
+    func show(_ choice: Choice, history: UsageHistory, people: UsagePeople) async {
+        let now = Date()
+        let today = Calendar.current.startOfDay(for: now)
+        if history.revision != revision || today != self.today {
+            (revision, self.today, days, reports) = (history.revision, today, [:], [:])
+        }
+        if let kept = reports[choice] { return finish(kept) }
+        builds += 1
+        let build = builds
+        pending = build
+        let timer = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            if !Task.isCancelled, pending == build { waiting = true }
+        }
+        defer { timer.cancel() }
+        // A newer choice or record started another; an answer from before it is already out of date.
+        func current() -> Bool { !Task.isCancelled && revision == history.revision && self.today == today }
+        let period = PeriodKey(span: choice.span, agentID: choice.agentID)
+        let loaded: [UsageDay]
+        if let cached = days[period] {
+            loaded = cached
+        } else {
+            let range = UsageReport.range(choice.span, now: now)
+            loaded = await history.loadDays(from: range.lowerBound, to: range.upperBound, agentID: choice.agentID)
+            guard current() else { return }
+            days[period] = loaded
+        }
+        let report = await Task.detached(priority: .userInitiated) {
+            UsageReport(days: loaded, span: choice.span, grouping: choice.grouping, metric: choice.metric, now: now,
+                        user: choice.user, people: people)
+        }.value
+        guard current() else { return }
+        let shown = Shown(id: build, choice: choice, report: report)
+        reports[choice] = shown
+        finish(shown)
+    }
+
+    /// Observers hear only of real changes: a report shown again would otherwise redraw the window for nothing.
+    private func finish(_ shown: Shown) {
+        pending = nil
+        if self.shown != shown { self.shown = shown }
+        if waiting { waiting = false }
+    }
+}
+
 /// A disk measurement as slices of one pie, largest first.
 struct StorageReport {
     enum Grouping: String, CaseIterable, Identifiable {
@@ -243,21 +330,9 @@ public struct UsageView: View {
     @State private var user: UsageReport.UserFilter?
     @State private var metric = UsageReport.Metric.tokens
     @State private var storageGrouping = StorageReport.Grouping.kind
-    @State private var selectedBucket: Date?
     /// Read only while the window is on screen: SwiftUI keeps a closed window alive to reopen it.
-    @State private var days: [UsageDay]?
+    @State private var reports = UsageReports()
     @State private var visible = false
-
-    /// Categorical hues in fixed order, stepped for the dark surface; anything past them folds into Other.
-    private static let hues: [Color] = ([0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181, 0x008300, 0x9085e9] as [Int]).map(color)
-
-    /// Spelled out in steps: as one expression, slower compilers give up type-checking it.
-    private static func color(_ hex: Int) -> Color {
-        let red = Double((hex >> 16) & 0xff) / 255
-        let green = Double((hex >> 8) & 0xff) / 255
-        let blue = Double(hex & 0xff) / 255
-        return Color(red: red, green: green, blue: blue)
-    }
 
     /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure.
     public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople(), storage: StorageUsage? = nil) {
@@ -284,40 +359,24 @@ public struct UsageView: View {
         .toolbar { toolbar() }
     }
 
+    /// What the toolbar asks for, as a report is kept.
+    private var choice: UsageReports.Choice {
+        UsageReports.Choice(span: span, agentID: history.agentFilter, grouping: people.isEmpty && grouping == .user ? .agent : grouping,
+                            metric: metric, user: people.isEmpty ? nil : user)
+    }
+
+    /// The report for the toolbar's choice when one is kept, or else the last one made until the next is ready.
     @ViewBuilder
     private func ledger() -> some View {
-        let now = Date()
-        let range = UsageReport.range(span, now: now)
-        let report = UsageReport(days: days ?? [], span: span, grouping: people.isEmpty && grouping == .user ? .agent : grouping,
-                                 metric: metric, now: now, user: people.isEmpty ? nil : user, people: people)
-        Group {
-            if days == nil {
-                Color.clear
-            } else if report.rows.isEmpty {
-                ContentUnavailableView("No Usage", systemImage: "chart.bar.xaxis",
-                                       description: Text("No tokens were used in this period."))
-            } else {
-                VStack(spacing: 0) {
-                    summary(report)
-                        .padding([.horizontal, .top], 20)
-                    chart(report)
-                        .frame(minHeight: 200)
-                        .padding(20)
-                    Divider()
-                    breakdown(report)
-                        .frame(minHeight: 140)
-                }
+        let shown = reports.kept(choice, revision: history.revision) ?? reports.shown
+        // Equatable, so the window does not draw the same report again while the next is made.
+        UsageLedger(shown: shown, waiting: reports.waiting)
+            .equatable()
+            .task(id: LedgerQuery(revision: history.revision, choice: choice, visible: visible)) {
+                guard visible else { return }
+                await reports.show(choice, history: history, people: people)
             }
-        }
-        .task(id: LedgerQuery(revision: history.revision, span: span, agentID: history.agentFilter, visible: visible)) {
-            guard visible else { return }
-            let range = UsageReport.range(span, now: Date())
-            let loaded = await history.loadDays(from: range.lowerBound, to: range.upperBound, agentID: history.agentFilter)
-            // A newer period or record started another read; this one's answer is already out of date.
-            guard !Task.isCancelled else { return }
-            days = loaded
-        }
-        .navigationSubtitle(rangeText(range))
+            .navigationSubtitle(shown.map { rangeText(UsageReport.range($0.choice.span, now: Date()), span: $0.choice.span) } ?? "")
     }
 
     @ViewBuilder
@@ -421,7 +480,7 @@ public struct UsageView: View {
     }
 
     /// The period's first and last day, or first and last month.
-    private func rangeText(_ range: Range<Date>) -> String {
+    private func rangeText(_ range: Range<Date>, span: UsageReport.Span) -> String {
         let last = Calendar.current.date(byAdding: .day, value: -1, to: range.upperBound) ?? range.upperBound
         let style: Date.IntervalFormatStyle = span == .year
             ? .interval.month(.abbreviated).year()
@@ -429,126 +488,12 @@ public struct UsageView: View {
         return (range.lowerBound..<last).formatted(style)
     }
 
-    private func summary(_ report: UsageReport) -> some View {
-        HStack(spacing: 0) {
-            stat("Tokens", Self.tokenText(report.tokens.total))
-            Divider().frame(height: 36)
-            stat("Cost", report.cost.map(Self.costText) ?? "—")
-                .help("Only harnesses that report cost are included.")
-            Divider().frame(height: 36)
-            stat("Cache Hits", report.cacheHitRate.formatted(.percent.precision(.fractionLength(0))))
-                .help("Share of input tokens read from the cache.")
-            Divider().frame(height: 36)
-            stat("Input", Self.tokenText(report.tokens.input + report.tokens.cacheWrite))
-                .help("Input tokens not read from the cache.")
-            Divider().frame(height: 36)
-            stat("Output", Self.tokenText(report.tokens.output))
-            Divider().frame(height: 36)
-            stat("Daily Average", text(report.dailyAverage))
-        }
-        .padding(.vertical, 12)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func stat(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
-            Text(value).font(.title2.weight(.semibold)).monospacedDigit()
-                .lineLimit(1).minimumScaleFactor(0.6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-    }
-
-    private func chart(_ report: UsageReport) -> some View {
-        let unit = span.bucket
-        let selected = selectedBucket.map { Calendar.current.dateInterval(of: unit, for: $0)?.start ?? $0 }
-        return Chart {
-            ForEach(report.bars) { bar in
-                BarMark(x: .value("Date", bar.bucket, unit: unit), y: .value(metric.rawValue, bar.value))
-                    .foregroundStyle(by: .value(grouping.rawValue, bar.group))
-                    .opacity(selected == nil || selected == bar.bucket ? 1 : 0.4)
-            }
-            if let selected {
-                RuleMark(x: .value("Date", selected, unit: unit))
-                    .foregroundStyle(.clear)
-                    .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                        tooltip(report.bars.filter { $0.bucket == selected }, date: selected, groups: report.groups)
-                    }
-            }
-        }
-        .chartForegroundStyleScale(domain: report.groups, range: report.groups.map { color(for: $0, in: report.groups) })
-        .chartXSelection(value: $selectedBucket)
-        .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine().foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let number = value.as(Double.self) { Text(text(number)) }
-                }
-            }
-        }
-        .chartLegend(position: .top, alignment: .leading)
-    }
-
-    private func tooltip(_ bars: [UsageReport.Bar], date: Date, groups: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(date, format: span == .year ? .dateTime.month(.wide).year() : .dateTime.weekday().day().month())
-                .font(.caption.weight(.semibold))
-            ForEach(bars.sorted { $0.value > $1.value }) { bar in
-                HStack(spacing: 6) {
-                    Circle().fill(color(for: bar.group, in: groups)).frame(width: 8, height: 8)
-                    Text(bar.group)
-                    Spacer(minLength: 12)
-                    Text(text(bar.value)).monospacedDigit()
-                }
-                .font(.caption)
-            }
-        }
-        .padding(8)
-        .frame(minWidth: 160)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func breakdown(_ report: UsageReport) -> some View {
-        Table(report.rows) {
-            TableColumn(grouping.rawValue) { row in
-                HStack(spacing: 6) {
-                    Circle().fill(color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
-                    Text(row.group).lineLimit(1)
-                }
-            }
-            .width(min: 140, ideal: 200)
-            TableColumn("Tokens") { row in Text(Self.tokenText(row.tokens.total)) }
-                .width(min: 64, ideal: 88)
-                .alignment(.numeric)
-            TableColumn("Input") { row in Text(Self.tokenText(row.tokens.input + row.tokens.cacheWrite)) }
-                .width(min: 64, ideal: 88)
-                .alignment(.numeric)
-            TableColumn("Output") { row in Text(Self.tokenText(row.tokens.output)) }
-                .width(min: 64, ideal: 88)
-                .alignment(.numeric)
-            TableColumn("Cached") { row in Text(Self.tokenText(row.tokens.cacheRead)) }
-                .width(min: 64, ideal: 88)
-                .alignment(.numeric)
-            TableColumn("Cost") { row in Text(row.cost.map(Self.costText) ?? "—") }
-                .width(min: 64, ideal: 88)
-                .alignment(.numeric)
-            TableColumn("Share") { row in
-                Text(report.share(of: row)?.formatted(.percent.precision(.fractionLength(0))) ?? "—")
-            }
-            .width(min: 64, ideal: 88)
-            .alignment(.numeric)
-        }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
-        .monospacedDigit()
-    }
-
     private func diskSummary(_ snapshot: StorageSnapshot) -> some View {
         HStack(spacing: 0) {
-            stat("Total", Self.byteText(snapshot.total))
+            UsageStyle.stat("Total", UsageStyle.byteText(snapshot.total))
             ForEach([StorageSnapshot.Kind.bots, .conversations, .harnesses, .caches], id: \.self) { kind in
                 Divider().frame(height: 36)
-                stat(kind.rawValue, Self.byteText(snapshot.kinds[kind] ?? 0))
+                UsageStyle.stat(kind.rawValue, UsageStyle.byteText(snapshot.kinds[kind] ?? 0))
             }
         }
         .padding(.vertical, 12)
@@ -561,7 +506,7 @@ public struct UsageView: View {
                 .foregroundStyle(by: .value(storageGrouping.rawValue, slice.group))
                 .cornerRadius(3)
         }
-        .chartForegroundStyleScale(domain: report.groups, range: report.groups.map { color(for: $0, in: report.groups) })
+        .chartForegroundStyleScale(domain: report.groups, range: report.groups.map { UsageStyle.color(for: $0, in: report.groups) })
         .chartLegend(position: .trailing, alignment: .center)
     }
 
@@ -569,12 +514,12 @@ public struct UsageView: View {
         Table(report.rows) {
             TableColumn(storageGrouping.rawValue) { row in
                 HStack(spacing: 6) {
-                    Circle().fill(color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
+                    Circle().fill(UsageStyle.color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
                     Text(row.group).lineLimit(1)
                 }
             }
             .width(min: 140, ideal: 260)
-            TableColumn("Size") { row in Text(Self.byteText(row.bytes)) }
+            TableColumn("Size") { row in Text(UsageStyle.byteText(row.bytes)) }
                 .width(min: 64, ideal: 100)
                 .alignment(.numeric)
             TableColumn("Share") { row in
@@ -586,33 +531,204 @@ public struct UsageView: View {
         .tableStyle(.inset(alternatesRowBackgrounds: true))
         .monospacedDigit()
     }
+}
 
-    private func color(for group: String, in groups: [String]) -> Color {
-        guard group != UsageReport.otherGroup, let index = groups.firstIndex(of: group), index < Self.hues.count else { return .gray }
-        return Self.hues[index]
+/// A report as the Usage window draws it, with the choice it was made for.
+private struct UsageLedger: View, Equatable {
+    let shown: UsageReports.Shown?
+    let waiting: Bool
+    @State private var selectedBucket: Date?
+
+    nonisolated static func == (lhs: UsageLedger, rhs: UsageLedger) -> Bool {
+        lhs.shown == rhs.shown && lhs.waiting == rhs.waiting
     }
 
-    private func text(_ value: Double) -> String {
-        metric == .cost ? Self.costText(value) : Self.tokenText(Int(value))
+    var body: some View {
+        Group {
+            if let shown, shown.report.rows.isEmpty {
+                ContentUnavailableView("No Usage", systemImage: "chart.bar.xaxis",
+                                       description: Text("No tokens were used in this period."))
+            } else if let shown {
+                VStack(spacing: 0) {
+                    summary(shown)
+                        .padding([.horizontal, .top], 20)
+                    chart(shown)
+                        .frame(minHeight: 200)
+                        .padding(20)
+                    Divider()
+                    breakdown(shown)
+                        .frame(minHeight: 140)
+                }
+            } else {
+                Color.clear
+            }
+        }
+        .opacity(waiting && shown != nil ? 0.5 : 1)
+        .overlay {
+            if waiting {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .frame(width: 200)
+            }
+        }
     }
 
-    private static func tokenText(_ value: Int) -> String {
+    private func summary(_ shown: UsageReports.Shown) -> some View {
+        let report = shown.report
+        return HStack(spacing: 0) {
+            UsageStyle.stat("Tokens", UsageStyle.tokenText(report.tokens.total))
+            Divider().frame(height: 36)
+            UsageStyle.stat("Cost", report.cost.map(UsageStyle.costText) ?? "—")
+                .help("Only harnesses that report cost are included.")
+            Divider().frame(height: 36)
+            UsageStyle.stat("Cache Hits", report.cacheHitRate.formatted(.percent.precision(.fractionLength(0))))
+                .help("Share of input tokens read from the cache.")
+            Divider().frame(height: 36)
+            UsageStyle.stat("Input", UsageStyle.tokenText(report.tokens.input + report.tokens.cacheWrite))
+                .help("Input tokens not read from the cache.")
+            Divider().frame(height: 36)
+            UsageStyle.stat("Output", UsageStyle.tokenText(report.tokens.output))
+            Divider().frame(height: 36)
+            UsageStyle.stat("Daily Average", text(report.dailyAverage, report.metric))
+        }
+        .padding(.vertical, 12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func chart(_ shown: UsageReports.Shown) -> some View {
+        let (report, choice) = (shown.report, shown.choice)
+        let unit = choice.span.bucket
+        let selected = selectedBucket.map { Calendar.current.dateInterval(of: unit, for: $0)?.start ?? $0 }
+        return Chart {
+            ForEach(report.bars) { bar in
+                BarMark(x: .value("Date", bar.bucket, unit: unit), y: .value(report.metric.rawValue, bar.value))
+                    .foregroundStyle(by: .value(choice.grouping.rawValue, bar.group))
+                    .opacity(selected == nil || selected == bar.bucket ? 1 : 0.4)
+            }
+            if let selected {
+                RuleMark(x: .value("Date", selected, unit: unit))
+                    .foregroundStyle(.clear)
+                    .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        tooltip(report.bars.filter { $0.bucket == selected }, date: selected, groups: report.groups, shown: choice)
+                    }
+            }
+        }
+        .chartForegroundStyleScale(domain: report.groups, range: report.groups.map { UsageStyle.color(for: $0, in: report.groups) })
+        .chartXSelection(value: $selectedBucket)
+        .chartYAxis {
+            AxisMarks { value in
+                AxisGridLine().foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let number = value.as(Double.self) { Text(text(number, report.metric)) }
+                }
+            }
+        }
+        .chartLegend(position: .top, alignment: .leading)
+    }
+
+    private func tooltip(_ bars: [UsageReport.Bar], date: Date, groups: [String], shown choice: UsageReports.Choice) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(date, format: choice.span == .year ? .dateTime.month(.wide).year() : .dateTime.weekday().day().month())
+                .font(.caption.weight(.semibold))
+            ForEach(bars.sorted { $0.value > $1.value }) { bar in
+                HStack(spacing: 6) {
+                    Circle().fill(UsageStyle.color(for: bar.group, in: groups)).frame(width: 8, height: 8)
+                    Text(bar.group)
+                    Spacer(minLength: 12)
+                    Text(text(bar.value, choice.metric)).monospacedDigit()
+                }
+                .font(.caption)
+            }
+        }
+        .padding(8)
+        .frame(minWidth: 160)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func breakdown(_ shown: UsageReports.Shown) -> some View {
+        let report = shown.report
+        return Table(report.rows) {
+            TableColumn(shown.choice.grouping.rawValue) { row in
+                HStack(spacing: 6) {
+                    Circle().fill(UsageStyle.color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
+                    Text(row.group).lineLimit(1)
+                }
+            }
+            .width(min: 140, ideal: 200)
+            TableColumn("Tokens") { row in Text(UsageStyle.tokenText(row.tokens.total)) }
+                .width(min: 64, ideal: 88)
+                .alignment(.numeric)
+            TableColumn("Input") { row in Text(UsageStyle.tokenText(row.tokens.input + row.tokens.cacheWrite)) }
+                .width(min: 64, ideal: 88)
+                .alignment(.numeric)
+            TableColumn("Output") { row in Text(UsageStyle.tokenText(row.tokens.output)) }
+                .width(min: 64, ideal: 88)
+                .alignment(.numeric)
+            TableColumn("Cached") { row in Text(UsageStyle.tokenText(row.tokens.cacheRead)) }
+                .width(min: 64, ideal: 88)
+                .alignment(.numeric)
+            TableColumn("Cost") { row in Text(row.cost.map(UsageStyle.costText) ?? "—") }
+                .width(min: 64, ideal: 88)
+                .alignment(.numeric)
+            TableColumn("Share") { row in
+                Text(report.share(of: row)?.formatted(.percent.precision(.fractionLength(0))) ?? "—")
+            }
+            .width(min: 64, ideal: 88)
+            .alignment(.numeric)
+        }
+        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .monospacedDigit()
+    }
+
+    private func text(_ value: Double, _ metric: UsageReport.Metric) -> String {
+        metric == .cost ? UsageStyle.costText(value) : UsageStyle.tokenText(Int(value))
+    }
+}
+
+/// What the Usage window's ledger and disk views draw alike.
+private enum UsageStyle {
+    /// Categorical hues in fixed order, stepped for the dark surface; anything past them folds into Other.
+    static let hues: [Color] = ([0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181, 0x008300, 0x9085e9] as [Int]).map(color)
+
+    /// Spelled out in steps: as one expression, slower compilers give up type-checking it.
+    static func color(_ hex: Int) -> Color {
+        let red = Double((hex >> 16) & 0xff) / 255
+        let green = Double((hex >> 8) & 0xff) / 255
+        let blue = Double(hex & 0xff) / 255
+        return Color(red: red, green: green, blue: blue)
+    }
+
+    static func color(for group: String, in groups: [String]) -> Color {
+        guard group != UsageReport.otherGroup, let index = groups.firstIndex(of: group), index < hues.count else { return .gray }
+        return hues[index]
+    }
+
+    static func stat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(value).font(.title2.weight(.semibold)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+    }
+
+    static func tokenText(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
     }
 
-    private static func byteText(_ value: Int64) -> String {
+    static func byteText(_ value: Int64) -> String {
         value.formatted(.byteCount(style: .file))
     }
 
-    private static func costText(_ value: Double) -> String {
+    static func costText(_ value: Double) -> String {
         value.formatted(.currency(code: "USD").precision(.fractionLength(value < 1 && value > 0 ? 3 : 2)))
     }
 }
 
 private struct LedgerQuery: Equatable {
     let revision: Int
-    let span: UsageReport.Span
-    let agentID: UUID?
+    let choice: UsageReports.Choice
     let visible: Bool
 }
 

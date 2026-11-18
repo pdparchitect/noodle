@@ -5,6 +5,7 @@
 ### Fixed
 
 - The Usage window switches back from Disk in less than half the time, with its toolbar in place from the start: on Disk, the period and bot filters stay where they are, dimmed, instead of leaving and coming back late.
+- The Usage window no longer holds up while it sums a long history: the last chart stays, dimmed, until the next is ready, and a period, grouping or measure you have already seen shows again at once.
 
 ## [0.55.0] - 2026-11-18
 
