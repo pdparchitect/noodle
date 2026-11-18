@@ -23,10 +23,10 @@ public actor ToolConnectionService {
     public init(namespace: String) {
         #if canImport(Security)
         credentials = ConnectionKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
-                                                       label: "\(ProductIdentity.current.name) MCP connection")
-        tokens = ConnectionKeychainStore<ConnectionToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) MCP token")
+                                                       label: "\(ProductIdentity.current.name) tool sign-in")
+        tokens = ConnectionKeychainStore<ConnectionToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) tool token")
         clients = ConnectionKeychainStore<ConnectionClientSecret>(service: namespace + ".mcp.client",
-                                                    label: "\(ProductIdentity.current.name) MCP client secret")
+                                                    label: "\(ProductIdentity.current.name) tool client secret")
         awsKeys = ConnectionKeychainStore<ConnectionAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
         #else
         credentials = NoConnectionCredentials()

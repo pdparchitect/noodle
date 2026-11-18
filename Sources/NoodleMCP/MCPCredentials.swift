@@ -127,7 +127,8 @@ struct ConnectionKeychainStore<Value: Codable & Sendable>: Sendable {
     }
     func save(_ value: Value, id: UUID) throws {
         let data = try JSONEncoder().encode(value)
-        let fields = [kSecValueData as String: data] as CFDictionary
+        // The label goes too, so an item saved under an older name takes the current one.
+        let fields = [kSecValueData as String: data, kSecAttrLabel as String: label] as CFDictionary
         let status = SecItemUpdate(query(id) as CFDictionary, fields)
         if status == errSecItemNotFound {
             var addition = query(id)
@@ -135,7 +136,7 @@ struct ConnectionKeychainStore<Value: Codable & Sendable>: Sendable {
             // Keep the login Keychain used by existing installations. Omitting
             // kSecAttrAccess lets Keychain create its default calling-app ACL;
             // no deprecated SecAccess/SecTrustedApplication setup is needed.
-            // Updates above change only the data, preserving existing item ACLs.
+            // Updates above change only the data and label, preserving existing item ACLs.
             addition[kSecAttrLabel as String] = label
             let added = SecItemAdd(addition as CFDictionary, nil)
             guard added == errSecSuccess else { throw ToolConnectionServiceError.keychain(added) }

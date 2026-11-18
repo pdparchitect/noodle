@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Saved tool sign-ins, tokens and client secrets are named as tools in Keychain, rather than as MCP connections, which many of them are not.
 - Setup Steps have Open in Window, which keeps them in a small window in front of every app while you follow them in the service's console.
 - Google Cloud signs in with Google through your organisation's own client, as Google Workspace does, instead of a service account's key file, asking only for Logging's read-only scope and Cloud Asset's and Security Command Center's own; who has access and which resources exist now come from Cloud Asset's read-only analysis and listing by type. Add a Google Cloud account again to use it.
 - Editing a catalogue tool lets you change the details you gave when adding it, such as its address or organisation, and no longer shows the header, token address or scope its entry sets; details that move where it points ask for its key again.

@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Saved tool sign-ins, tokens and client secrets are named as tools in Keychain, rather than as MCP connections, which many of them are not.
 - Setup Steps have Open in Window, which keeps them in a small window in front of every app while you follow them in the service's console.
 - Editing a catalogue tool lets you change the details you gave when adding it, such as its address or organisation, and no longer shows the header, token address or scope its entry sets; details that move where it points ask for its key again.
 - Retire upgrade steps for data from before the 0.61.0, 0.76.0 and 0.88.0 milestones: adding Apple's on-device model for bots that already used it, removing bots' copies of the harness command-line tools' own logins, and moving saved tools to their catalogue entries' new IDs. Updates already pass through those releases.
