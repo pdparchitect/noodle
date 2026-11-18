@@ -208,6 +208,22 @@ import XCTest
         XCTAssertThrowsError(try model.open(byAgent: UUID(), .init(title: "Stranger", objective: "x", team: [])))
     }
 
+    /// Agents read a closed Investigation but may not post in it until the champion reopens it; other conversations
+    /// take their messages as before.
+    func testAClosedInvestigationTakesNoMessagesFromAgentsUntilReopened() throws {
+        let avery = try agent("Avery")
+        let investigation = try model.open(.init(title: "Beacon", lead: avery.id))
+        let group = try model.createGroup(name: "Triage", description: nil, members: [avery.id])
+        XCTAssertNil(PionModel.postsRefused(in: investigation.id, store: model.store))
+        model.setStatus(.closed, of: investigation, outcome: .resolved, note: "Fixed.")
+        let reason = try XCTUnwrap(PionModel.postsRefused(in: investigation.id, store: model.store))
+        XCTAssertTrue(reason.contains("direct conversation"), reason)
+        XCTAssertTrue(model.messages(in: investigation.id).last?.body.contains("closed") == true, "the closing was not recorded")
+        XCTAssertNil(PionModel.postsRefused(in: group.id, store: model.store))
+        model.setStatus(.triaging, of: try XCTUnwrap(model.store.investigation(investigation.id)))
+        XCTAssertNil(PionModel.postsRefused(in: investigation.id, store: model.store))
+    }
+
     /// As in Noodle: an archived agent stays a member of its groups until removed, so a group with one can still
     /// be edited, and an Investigation too.
     func testAGroupWithAnArchivedMemberCanStillBeEdited() throws {

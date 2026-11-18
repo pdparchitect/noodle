@@ -19,7 +19,8 @@ a direct conversation or another Investigation, opens one itself and leads it; i
 started it. It starts unassessed until the lead agent sets its
 severity from the evidence; only the lead changes it. The toolbar sets its status, edits its title,
 objective and team, and shows the case record. Investigation > Close Investigation… closes it as a false
-positive, resolved or handed off, with a note.
+positive, resolved or handed off, with a note. Its agents can still read a closed Investigation, but
+no longer post or record in it; they ask you in their own conversation if it needs reopening.
 
 A group is a standing team you talk to outside any Investigation. Each agent also has a conversation
 of its own with you.

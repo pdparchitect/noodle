@@ -72,6 +72,9 @@ public final class MessengerBroker: @unchecked Sendable {
     /// Whether a noodlet has a preview. Only `present` sets one, so a bot attaching a noodlet
     /// without is refused and told to present it rather than leave a plain icon in the conversation.
     public var noodletHasPreview: (@Sendable (URL) async -> Bool)?
+    /// Why a conversation takes nothing from bots, for one the app has closed to them; nil for one that takes posts.
+    /// Bots can still read it.
+    public var refusingPosts: (@Sendable (UUID) -> String?)?
 
     public init(repository: WorkspaceRepository) { self.repository = repository }
     deinit { timer?.cancel() }
@@ -148,6 +151,13 @@ public final class MessengerBroker: @unchecked Sendable {
     }
 
     private func perform(_ request: MessengerBridgeRequest, for agent: AgentRecord) -> MessengerCommandResult {
+        let posting: UUID? = switch request.action {
+        case .send(let id, _, _), .react(let id, _, _, _), .effect(let id, _, _): id
+        default: nil
+        }
+        if let posting, let reason = refusingPosts?(posting) {
+            return .init(exitCode: 2, standardError: "messenger: \(reason)\n")
+        }
         if case .requestCall = request.action, onCallRequested == nil {
             return .init(exitCode: 2, standardError: "messenger: Calls are not available where you run. Send a message instead.\n")
         }

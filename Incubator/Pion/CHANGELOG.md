@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Agents no longer post, react or record evidence in a closed Investigation; they can still read it, and ask you in their own conversation to reopen it. Closing it no longer wakes them.
 - Agents in the restricted sandbox can run python3, git, make and the other developer tools that come with Xcode or the Command Line Tools, which failed before; they find the tools' own copies first, so each runs at once. The rest of the Mac stays as closed to them as before.
 - Google Cloud's access and resource lookups mark what sits in a project pending deletion, which Google keeps listed for 30 days, so it is not taken for live.
 - Google Cloud's audit logs for an organisation or folder include what happened inside each of its projects, which keep their own logs, read past Google's first page up to the limit asked for, and look back 30 days unless told otherwise.

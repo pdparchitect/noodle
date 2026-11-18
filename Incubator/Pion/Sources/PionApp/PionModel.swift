@@ -124,6 +124,7 @@ import UniformTypeIdentifiers
         harnessProfiles.subscriptionUsage = runtime.subscriptionUsage
         self.isScripted = isScripted
         messenger = MessengerBroker(repository: repository)
+        messenger.refusingPosts = { [store] id in Self.postsRefused(in: id, store: store) }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadPion() } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
         messenger.onWakesChanged = { [weak self] id in
@@ -934,18 +935,25 @@ import UniformTypeIdentifiers
 
     // MARK: Conversations
 
-    func send(_ text: String, in id: UUID) throws {
+    /// `waking` false leaves the members asleep, for a message they have nothing to answer, such as a closing.
+    func send(_ text: String, in id: UUID, waking: Bool = true) throws {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty, let conversation = conversation(id) else { return }
-        try personMessage(body, to: conversation)
+        try personMessage(body, to: conversation, waking: waking)
         onSent?(id, body, [])
+    }
+
+    /// Why agents may not post in a conversation: a closed Investigation, which they read but no longer write to.
+    nonisolated static func postsRefused(in id: UUID, store: PionStore) -> String? {
+        guard let investigation = store.investigation(id), investigation.isClosed else { return nil }
+        return "\(investigation.reference) is closed, so it takes no more messages. If it needs more work, ask the champion in your direct conversation with them to reopen it."
     }
 
     /// Noodle's sending, then the transcript is read again and the conversation read.
     private func personMessage(_ text: String, files: [ConversationAttachment] = [], voice: VoiceMessage? = nil,
-                               to conversation: BotConversation) throws {
+                               to conversation: BotConversation, waking: Bool = true) throws {
         try PersonMessage.send(text, files: files, voice: voice, to: conversation, members: members(of: conversation),
-                               runtime: isScripted ? nil : runtime, repository: repository, now: now)
+                               runtime: isScripted || !waking ? nil : runtime, repository: repository, now: now)
         readTranscript(conversation.id)
         markRead(conversation.id)
     }
@@ -1355,7 +1363,8 @@ import UniformTypeIdentifiers
             var line = "\(investigation.reference) is now **\(status.title.lowercased())**"
             if let outcome, status == .closed { line += " as \(outcome.title.lowercased())" }
             if let note, !note.isEmpty { line += ": \(note)" }
-            try send(line + ".", in: investigation.id)
+            // Closing is for the record: the agents can no longer answer there, so it does not wake them.
+            try send(line + ".", in: investigation.id, waking: status != .closed)
         } catch { problem = error.localizedDescription }
     }
 }

@@ -54,6 +54,23 @@ final class MessengerBridgeTests: XCTestCase {
         XCTAssertEqual(sent.standardError, "")
     }
 
+    /// The app may close a conversation to bots: they still read it, but posting, reacting and effects there are
+    /// refused with the app's reason, while their other conversations take them as before.
+    func testAConversationTheAppClosesTakesNothingFromBotsButStillReads() throws {
+        let group = try repository.createGroup(named: "Closed", participantIDs: [agent.id], existingAgents: [agent, other])
+        let sent = ChatMessage(conversationID: group.id, author: .user, body: "Closing this.", delivery: .queued)
+        try repository.append(sent)
+        broker.refusingPosts = { $0 == group.id ? "This is closed. Ask the person in your direct conversation to reopen it." : nil }
+        let refused = try call(.send(conversationID: group.id, body: "one more thing", attachmentURLs: []))
+        XCTAssertNotEqual(refused.exitCode, 0)
+        XCTAssertTrue(refused.standardError.contains("Ask the person in your direct conversation to reopen it."), refused.standardError)
+        XCTAssertNotEqual(try call(.react(conversationID: group.id, messageID: sent.id, emoji: "👍", present: true)).exitCode, 0)
+        XCTAssertNotEqual(try call(.effect(conversationID: group.id, kind: "confetti", requestID: UUID())).exitCode, 0)
+        XCTAssertFalse(try repository.loadMessages(conversationID: group.id).contains { $0.body == "one more thing" })
+        XCTAssertEqual(try call(.listMessages(conversationID: group.id)).exitCode, 0, "a closed conversation could not be read")
+        XCTAssertEqual(try call(.send(conversationID: conversation.id, body: "Can it be reopened?", attachmentURLs: [])).exitCode, 0)
+    }
+
     func testMissingBridgeDoesNotFallBackToRepositoryFiles() throws {
         broker.stop()
         let mailbox = try WorkspaceMailbox(workspace: workspace, path: MessengerBridgeClient.path)

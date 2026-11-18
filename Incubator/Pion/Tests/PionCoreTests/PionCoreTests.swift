@@ -144,6 +144,28 @@ final class PionCoreTests: XCTestCase {
         XCTAssertFalse((none?["tools"] as? [[String: Any]])?.contains { $0["name"] as? String == "open" } ?? true)
     }
 
+    /// A closed Investigation is read-only to agents: they read it, but record nothing more until the champion reopens it.
+    func testAClosedInvestigationTakesNoMoreFromAgents() async throws {
+        lead = agent
+        let investigation = try open()
+        let id = investigation.id.uuidString
+        try store.setStatus(.closed, of: investigation.id, by: .champion("Avery"), outcome: .resolved, note: "Fixed.")
+        for (tool, arguments) in [("entity", ["kind": "host", "name": "LT-0423"]),
+                                  ("evidence", ["source": "Defender", "method": "q", "result": "r"]),
+                                  ("finding", ["claim": "c", "evidence": ["V-1"], "confidence": "high"])] {
+            do {
+                _ = try await call(tool, arguments.merging(["conversation": id]) { $1 })
+                XCTFail("\(tool) was recorded in a closed Investigation")
+            } catch { XCTAssertTrue("\(error)".contains("closed"), "\(error)") }
+        }
+        XCTAssertTrue(store.caseRecord(investigation.id).entities.isEmpty)
+        let read = try await call("read", ["conversation": id])
+        XCTAssertTrue(read.contains(investigation.reference), read)
+        try store.setStatus(.triaging, of: investigation.id, by: .champion("Avery"))
+        _ = try await call("entity", ["conversation": id, "kind": "host", "name": "LT-0423"])
+        XCTAssertEqual(store.caseRecord(investigation.id).entities.count, 1, "a reopened Investigation took nothing")
+    }
+
     func testTheCaseToolRefusesAConversationThatIsNotAnInvestigation() async throws {
         do {
             _ = try await call("read", ["conversation": UUID().uuidString])

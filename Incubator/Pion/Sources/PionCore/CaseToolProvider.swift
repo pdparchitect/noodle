@@ -9,7 +9,7 @@ public struct CaseToolProvider: ToolProvider {
     public let manifest = ToolProviderManifest(
         id: "case", title: "Case", summary: "Read an Investigation and record entities, evidence and findings.",
         instructions: """
-        Every group you are in is an Investigation. Pass its conversation ID as --conversation. Start with read: it returns the objective, the status, the severity and the case record so far.
+        Every group you are in is an Investigation. Once the champion closes one, you can still read it but not record in it or post there; ask them in your direct conversation if it needs reopening. Pass its conversation ID as --conversation. Start with read: it returns the objective, the status, the severity and the case record so far.
 
         Every result also carries its data as JSON in structuredContent, such as the new item's id, for scripts that chain calls with tool --run. Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
@@ -129,6 +129,9 @@ public struct CaseToolProvider: ToolProvider {
         }
         let actor = CaseActor.agent(context.agentID)
         let name = agentName(context.agentID) ?? "An agent"
+        if investigation.isClosed, tool != "read" {
+            throw ToolProviderError("\(investigation.reference) is closed, so it takes nothing more. If it needs more work, ask the champion in your direct conversation with them to reopen it.")
+        }
 
         switch tool {
         case "read":

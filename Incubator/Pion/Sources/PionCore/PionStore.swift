@@ -127,6 +127,8 @@ public final class PionStore: @unchecked Sendable {
                                    _ change: (inout CaseRecord, Investigation) throws -> (Result, event: String, detail: String)) throws -> Result {
         let result = try lock.withLock {
             let investigation = try read(Investigation.self, from: investigationURL(id))
+            // A closed Investigation's record stays as it was closed, until the champion reopens it.
+            guard !investigation.isClosed else { throw CaseError("\(investigation.reference) is closed.") }
             var record = (try? read(CaseRecord.self, from: caseURL(id))) ?? CaseRecord()
             let (result, event, detail) = try change(&record, investigation)
             try write(record, to: caseURL(id))
