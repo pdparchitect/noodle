@@ -54,7 +54,7 @@ public final class PionStore: @unchecked Sendable {
     /// Opens an Investigation for a group conversation that already exists, numbering it after the last one.
     public func open(id: UUID, title: String, objective: String, severity: Investigation.Severity? = nil,
                      champion: String, source: String? = nil,
-                     number: Int? = nil, now: Date = Date()) throws -> Investigation {
+                     number: Int? = nil, openedBy: CaseActor? = nil, now: Date = Date()) throws -> Investigation {
         let investigation = try lock.withLock {
             let next = number ?? (unlockedInvestigations().map(\.number).max() ?? 0) + 1
             let investigation = Investigation(id: id, number: next, title: title, objective: objective,
@@ -63,7 +63,8 @@ public final class PionStore: @unchecked Sendable {
             try FileManager.default.createDirectory(at: folder(id), withIntermediateDirectories: true)
             try write(investigation, to: investigationURL(id))
             try write(CaseRecord(), to: caseURL(id))
-            try unlockedAppend(AuditEntry(at: now, actor: .champion(champion), event: "opened",
+            // The champion owns it whoever opens it; the audit log says who did.
+            try unlockedAppend(AuditEntry(at: now, actor: openedBy ?? .champion(champion), event: "opened",
                                           detail: "\(investigation.reference) \(title)."), to: id)
             return investigation
         }

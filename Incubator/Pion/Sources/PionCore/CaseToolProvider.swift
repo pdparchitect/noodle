@@ -13,18 +13,35 @@ public struct CaseToolProvider: ToolProvider {
 
         Every result also carries its data as JSON in structuredContent, such as the new item's id, for scripts that chain calls with tool --run. Record as you work, not at the end. entity records a host, identity, service or indicator by its exact name. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
+        When a problem needs a record of its own, such as one you found in a direct conversation or in another Investigation, open an Investigation for it with open rather than waiting to be asked: you lead it, the champion owns it, and anyone you name in --team joins it. Then post what started it there, with what you have found so far. Open one only for a real problem to track, not for a question you can answer where you are.
+
         The champion may make one agent the lead; read says who it is, or that there is none. The lead runs the Investigation: it hears the champion's messages a few seconds before the others, splits the work among the team with @mentions by what each agent does, keeps the case record coherent, and gives the champion one summary with its recommendations rather than leaving them to piece replies together. Only the lead sets the severity with severity, once the evidence lets you judge it and again when that changes, and moves the status to triaging or contained with status, each with a note. If you are not the lead, work what it hands you, record what you find, and report back to it in the Investigation; raise anything urgent or anything it has missed. Without a lead, severity and status stay as they are: ask the champion to choose one if it matters. Only the champion closes an Investigation.
         """,
         activation: .always)
 
+    /// What an agent asks for when it opens an Investigation.
+    public struct Opening: Sendable {
+        public let title: String
+        public let objective: String
+        /// Other agents to join it, by name.
+        public let team: [String]
+        public init(title: String, objective: String, team: [String]) {
+            self.title = title; self.objective = objective; self.team = team
+        }
+    }
+
     private let store: PionStore
     private let agentName: @Sendable (UUID) -> String?
+    /// Opens an Investigation the calling agent leads; nil where agents may not open them.
+    private let open: (@Sendable (UUID, Opening) async throws -> Investigation)?
     /// The lead of an Investigation's group, which the champion chooses; nil when it has none.
     private let leadOf: @Sendable (UUID) -> UUID?
 
     public init(store: PionStore, leadOf: @escaping @Sendable (UUID) -> UUID?,
+                open: (@Sendable (UUID, Opening) async throws -> Investigation)? = nil,
                 agentName: @escaping @Sendable (UUID) -> String?) {
         self.store = store
+        self.open = open
         self.leadOf = leadOf
         self.agentName = agentName
     }
@@ -37,14 +54,21 @@ public struct CaseToolProvider: ToolProvider {
         let string: (String) -> [String: Any] = { ["type": "string", "description": $0] }
         let list: (String) -> [String: Any] = { ["type": "array", "items": ["type": "string"], "description": $0] }
         func tool(_ name: String, _ description: String, _ properties: [String: [String: Any]], required: [String],
-                  readOnly: Bool = false) -> [String: Any] {
+                  readOnly: Bool = false, inInvestigation: Bool = true) -> [String: Any] {
             ["name": name, "description": description,
              "annotations": ["readOnlyHint": readOnly, "idempotentHint": readOnly],
              "_meta": ["noodle/timeout": 30],
-             "inputSchema": ["type": "object", "required": ["conversation"] + required,
-                             "properties": properties.merging(["conversation": conversation]) { $1 }]]
+             "inputSchema": ["type": "object", "required": (inInvestigation ? ["conversation"] : []) + required,
+                             "properties": inInvestigation ? properties.merging(["conversation": conversation]) { $1 } : properties]]
         }
-        return try JSONSerialization.data(withJSONObject: ["tools": [
+        let opening = open == nil ? [] : [
+            tool("open", "Open a new Investigation for a problem that needs its own record, which you lead and the champion owns. Returns its conversation ID.", [
+                "title": string("What it is about, in a few words, such as Domain-wide project creation."),
+                "objective": string("What it should establish or fix, in a sentence."),
+                "team": list("Other agents to join it, by name. Repeat --team for each."),
+            ], required: ["title", "objective"], inInvestigation: false),
+        ]
+        return try JSONSerialization.data(withJSONObject: ["tools": opening + [
             tool("read", "Read the Investigation: objective, status, severity and the whole case record.", [:], required: [], readOnly: true),
             tool("entity", "Record a host, identity, service or indicator, or mark one already recorded as seen again.", [
                 "kind": ["type": "string", "enum": CaseRecord.Entity.Kind.allCases.map(\.rawValue), "description": "What it is."],
@@ -88,6 +112,17 @@ public struct CaseToolProvider: ToolProvider {
         func strings(_ key: String) -> [String] {
             ((input[key] as? [Any]) ?? (input[key] as? String).map { [$0] } ?? [])
                 .compactMap { $0 as? String }.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        if tool == "open", let open {
+            let title = try required("title"), objective = try required("objective")
+            guard title.count <= 200 else { throw ToolProviderError("--title is too long; keep it to a few words.") }
+            let opened: Investigation
+            do { opened = try await open(context.agentID, Opening(title: title, objective: objective, team: strings("team"))) }
+            catch let error as CaseError { throw ToolProviderError(error.message) }
+            return try Self.result("""
+                Opened \(opened.reference): \(opened.title). You lead it, and the champion owns it. Its conversation is \(opened.id.uuidString): \
+                post what started it there, with what you have found so far, and record evidence and findings in it as you go.
+                """, ["reference": opened.reference, "conversation": opened.id.uuidString])
         }
         guard let id = UUID(uuidString: text("conversation")), let investigation = store.investigation(id) else {
             throw ToolProviderError("That conversation is not an Investigation.")

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Agents open an Investigation themselves for a problem worth its own record, such as one found in a direct conversation, and lead it; you own it as any other, the audit log says which agent opened it, and an agent opens at most three in an hour.
 - CrowdSec CTI in Settings › Tools: agents look up what CrowdSec's network has seen an IP address do, one or up to 20 at once, with its reputation, behaviours, the attacks that caught it, MITRE ATT&CK techniques, CVEs, history and scores.
 - Sentry and Self-Hosted Sentry, for one you run, even on this Mac or your network, in Settings › Tools: agents list projects, search issues and read an issue's latest event, with its exception, the frames in the service's own code, the request, the user and its tags, only ever reading.
 - Clicking a tool's Connected status offers Sign Out, which revokes its sign-in or key at the service where the service allows it, as Google, Okta and GitHub do, and forgets it here; Remove revokes it the same way before deleting the tool.

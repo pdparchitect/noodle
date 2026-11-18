@@ -115,6 +115,35 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual((read["evidence"] as? [[String: Any]])?.first?["id"] as? String, evidenceID)
     }
 
+    func testAnAgentOpensAnInvestigationThroughTheCaseToolWhereThePionAllowsIt() async throws {
+        let opener = UUID()
+        final class Asked: @unchecked Sendable { var agent: UUID?; var opening: CaseToolProvider.Opening? }
+        let asked = Asked(), store = self.store!
+        let provider = CaseToolProvider(store: store, leadOf: { _ in nil }, open: { agent, opening in
+            asked.agent = agent; asked.opening = opening
+            return try store.open(id: UUID(), title: opening.title, objective: opening.objective, champion: "Avery", openedBy: .agent(agent))
+        }) { _ in "Rafe" }
+        let listed = try JSONSerialization.jsonObject(with: try await provider.tools(context: ToolCallContext(agentID: opener, workspace: root))) as? [String: Any]
+        let open = try XCTUnwrap((listed?["tools"] as? [[String: Any]])?.first { $0["name"] as? String == "open" })
+        XCTAssertEqual((open["inputSchema"] as? [String: Any])?["required"] as? [String], ["title", "objective"], "opening one needs no Investigation")
+
+        let data = try await provider.call("open", arguments: JSONSerialization.data(withJSONObject: [
+            "title": "Domain-wide project creation", "objective": "Restrict it.", "team": ["Morgan"]]), files: [],
+            context: ToolCallContext(agentID: opener, workspace: root))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let text = ((object["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
+        XCTAssertTrue(text.contains("You lead it"), text)
+        let conversation = try XCTUnwrap((object["structuredContent"] as? [String: Any])?["conversation"] as? String)
+        XCTAssertEqual(store.audit(try XCTUnwrap(UUID(uuidString: conversation))).first?.actor, .agent(opener))
+        XCTAssertEqual(asked.agent, opener)
+        XCTAssertEqual(asked.opening?.team, ["Morgan"])
+
+        // Without the Pion's say, agents may not.
+        let closed = CaseToolProvider(store: store, leadOf: { _ in nil }) { _ in "Rafe" }
+        let none = try JSONSerialization.jsonObject(with: try await closed.tools(context: ToolCallContext(agentID: opener, workspace: root))) as? [String: Any]
+        XCTAssertFalse((none?["tools"] as? [[String: Any]])?.contains { $0["name"] as? String == "open" } ?? true)
+    }
+
     func testTheCaseToolRefusesAConversationThatIsNotAnInvestigation() async throws {
         do {
             _ = try await call("read", ["conversation": UUID().uuidString])

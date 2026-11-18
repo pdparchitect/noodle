@@ -188,6 +188,26 @@ import XCTest
         XCTAssertFalse(model.isUnread(direct.id))
     }
 
+    /// An agent opens an Investigation for a problem it found, leads it and posts what started it itself; the
+    /// champion owns it, the audit log says who opened it, and an agent cannot open them without end.
+    func testAnAgentOpensAnInvestigationItLeads() throws {
+        let avery = try agent("Avery"), morgan = try agent("Morgan")
+        let opened = try model.open(byAgent: avery.id, .init(title: "Domain-wide project creation",
+                                                             objective: "Restrict who can create projects.", team: ["morgan"]))
+        XCTAssertEqual(model.conversation(opened.id)?.lead, avery.id)
+        XCTAssertEqual(Set(model.conversation(opened.id)?.participantIDs ?? []), [avery.id, morgan.id])
+        XCTAssertEqual(opened.champion, model.champion)
+        XCTAssertEqual(model.store.audit(opened.id).first?.actor, .agent(avery.id))
+        XCTAssertTrue(model.messages(in: opened.id).isEmpty, "a message was posted in the champion's name")
+
+        XCTAssertThrowsError(try model.open(byAgent: avery.id, .init(title: "Other", objective: "x", team: ["Nobody"])))
+        for index in 1...2 { _ = try model.open(byAgent: avery.id, .init(title: "Lead \(index)", objective: "x", team: [])) }
+        XCTAssertThrowsError(try model.open(byAgent: avery.id, .init(title: "One too many", objective: "x", team: [])),
+                             "an agent opened a fourth Investigation within the hour")
+        XCTAssertNoThrow(try model.open(byAgent: morgan.id, .init(title: "Morgan's", objective: "x", team: [])))
+        XCTAssertThrowsError(try model.open(byAgent: UUID(), .init(title: "Stranger", objective: "x", team: [])))
+    }
+
     /// As in Noodle: an archived agent stays a member of its groups until removed, so a group with one can still
     /// be edited, and an Investigation too.
     func testAGroupWithAnArchivedMemberCanStillBeEdited() throws {

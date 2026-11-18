@@ -14,7 +14,9 @@ your groups; then your agents. Choose File > New Investigation (⌘N), New Group
 (⇧⌘N), or the plus beside a section's title.
 
 An Investigation is a conversation with its team, with an objective, a status, a severity and a
-case record. One agent leads it; you own it. It starts unassessed until the lead agent sets its
+case record. One agent leads it; you own it. An agent that finds a problem worth its own record, in
+a direct conversation or another Investigation, opens one itself and leads it; it posts there what
+started it. It starts unassessed until the lead agent sets its
 severity from the evidence; only the lead changes it. The toolbar sets its status, edits its title,
 objective and team, and shows the case record. Investigation > Close Investigation… closes it as a false
 positive, resolved or handed off, with a note.

@@ -132,6 +132,11 @@ import UniformTypeIdentifiers
         let store = self.store, repository = self.repository
         try? tools.register(CaseToolProvider(store: store, leadOf: { id in
             (try? repository.loadConversations())?.first { $0.id == id }?.lead
+        }, open: { [weak self] agentID, opening in
+            try await MainActor.run {
+                guard let self else { throw CaseError("Pion is closing.") }
+                return try self.open(byAgent: agentID, opening)
+            }
         }) { id in
             (try? repository.loadAgents())?.first { $0.id == id }?.displayName
         })
@@ -1257,8 +1262,33 @@ import UniformTypeIdentifiers
         return updated
     }
 
+    /// When each agent last opened Investigations, so one cannot open them without end.
+    private var agentOpenings: [UUID: [Date]] = [:]
+
+    /// An Investigation an agent opens, which it leads and the champion owns as any other. It says itself what
+    /// started it, so nothing is posted in the champion's name.
     @discardableResult
-    func open(_ draft: Draft) throws -> Investigation {
+    func open(byAgent agentID: UUID, _ opening: CaseToolProvider.Opening) throws -> Investigation {
+        guard agent(agentID) != nil else { throw CaseError("Only an agent of this Pion may open an Investigation.") }
+        let recent = agentOpenings[agentID, default: []].filter { now.timeIntervalSince($0) < 3600 }
+        guard recent.count < 3 else {
+            throw CaseError("You have opened three Investigations in the last hour. Ask the champion before opening another.")
+        }
+        var staff: Set<UUID> = []
+        for name in opening.team {
+            guard let member = agents.first(where: { $0.displayName.caseInsensitiveCompare(name) == .orderedSame }) else {
+                throw CaseError("No agent is called \(name). The agents are " + agents.map(\.displayName).sorted().joined(separator: ", ") + ".")
+            }
+            staff.insert(member.id)
+        }
+        let investigation = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID, staff: staff),
+                                     openedBy: .agent(agentID))
+        agentOpenings[agentID] = recent + [now]
+        return investigation
+    }
+
+    @discardableResult
+    func open(_ draft: Draft, openedBy: CaseActor? = nil) throws -> Investigation {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw CaseError("Give the Investigation a title.") }
         let members = draft.members
@@ -1268,9 +1298,10 @@ import UniformTypeIdentifiers
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
                                     members: members, folders: folders, lead: draft.lead)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
-                                           champion: champion, number: number, now: now)
+                                           champion: champion, number: number, openedBy: openedBy, now: now)
         reload()
         readTranscript(group.id)
+        guard openedBy == nil else { return investigation }
         let leading = draft.lead.flatMap { agent($0)?.displayName }
             .map { "@\($0) leads, and sets the severity once the evidence allows." }
             ?? "There is no lead yet, so the severity stays unassessed until I choose one."
