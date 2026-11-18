@@ -473,10 +473,15 @@ struct PionScenario: Decodable {
             ?? NSApp.windows.first { $0.canBecomeMain && !ScenarioLauncher.isPicker($0) }
     }
 
-    /// Pion's mark on a film's closing card, as the welcome shows it, coming up as the card is written.
+    /// Pion's mark on a film's closing card, as the welcome shows it, coming up as the card is written. The symbol
+    /// fills only the middle of its square, so it is laid out by what is drawn and sits close above the tagline:
+    /// unlike Noodle's wordmark, it has no writing to give the space around it a purpose.
     private static let filmMark: ScenarioFilmModel.Mark = { written, ink, size in
-        AnyView(PionSymbol(ink: ink)
-            .frame(width: size.height * 1.2, height: size.height * 1.2)
+        let side = size.height * 1.2
+        return AnyView(PionSymbol(ink: ink)
+            .frame(width: side, height: side)
+            .padding(.top, -side * 0.09)
+            .padding(.bottom, -side * 0.19 - size.height * 0.2)
             .scaleEffect(written ? 1 : 0.7)
             .opacity(written ? 1 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.62).delay(0.55), value: written))

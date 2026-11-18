@@ -4,7 +4,8 @@
 
 ### Added
 
-- Scenarios record as films with `scripts/scenario.sh --video`, as Noodle's do: titles and a backdrop around the recording, closing on Pion's symbol, the camera moving in on the composer or transcript, and sounds for replies. `--no-intro`, `--no-outro` and `--no-titles` leave the title cards out, and `--background` records over a picture or video of your choosing. The PHP2Shell scenario has its own titles.
+- Scenarios record as films with `scripts/scenario.sh --video`, as Noodle's do: titles and a backdrop around the recording, closing on Pion's symbol, the camera moving in on the composer or transcript, and sounds for replies. `--no-intro`, `--no-outro` and `--no-titles` leave the title cards out, and `--background` records over a picture or video of your choosing.
+- The PHP2Shell scenario plays the investigation as it happens: the team's findings arrive one by one, the case record fills in beside them, and the Investigation moves to Contained.
 - A scenario opened to look at, from the picker or `scripts/scenario.sh` without `--shots` or `--video`, stays in its starting state: its timeline plays only when it is photographed or recorded.
 - crt.sh in Settings › Tools, with nothing to set up: agents discover the hosts under a domain, including forgotten and staging ones, and the other domains they share certificates with, from every certificate issued for its names in the public Certificate Transparency logs, newest first.
 
