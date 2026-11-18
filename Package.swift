@@ -67,7 +67,10 @@ let package = Package(
         .library(name: "NoodleVisionTools", targets: ["NoodleVisionTools"]),
         .library(name: "NoodleMapsTools", targets: ["NoodleMapsTools"]),
         .executable(name: "Noodle", targets: ["Noodle"]),
-        .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"])
+        .executable(name: "NoodleMessenger", targets: ["NoodleMessenger"]),
+        // A developer tool for trying catalogue tools against their services; no app includes it.
+        .library(name: "NoodleToolProbe", targets: ["NoodleToolProbe"]),
+        .executable(name: "noodle-tool-probe", targets: ["NoodleToolProbeCommand"])
     ],
     dependencies: [
         .package(path: "Shared/LaunchChecks"),
@@ -120,6 +123,8 @@ let package = Package(
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
         .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
+        .target(name: "NoodleToolProbe", dependencies: ["NoodleCore", "NoodleMCP"]),
+        .executableTarget(name: "NoodleToolProbeCommand", dependencies: ["NoodleCore", "NoodleToolProbe"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product")]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.

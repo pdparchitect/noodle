@@ -8,6 +8,8 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "PionCore", targets: ["PionCore"]),
+        // A developer tool for trying Pion's tools against their services; the app never includes it.
+        .executable(name: "pion-tool-probe", targets: ["PionToolProbe"]),
     ],
     dependencies: [
         .package(path: "../.."),
@@ -15,6 +17,7 @@ let package = Package(
     targets: [
         .target(name: "PionCore", dependencies: [.product(name: "NoodleCore", package: "noodle"),
                                                 .product(name: "NoodleMCP", package: "noodle")]),
+        .executableTarget(name: "PionToolProbe", dependencies: ["PionCore", .product(name: "NoodleToolProbe", package: "noodle")]),
         .testTarget(name: "PionCoreTests", dependencies: ["PionCore", .product(name: "NoodleCore", package: "noodle"),
                                                           .product(name: "NoodleMCP", package: "noodle")]),
     ],

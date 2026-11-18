@@ -20,6 +20,8 @@ public actor ToolConnectionService {
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
     private var adapters: [String: any ToolConnectionAdapter] = [:]
+    /// The app whose sign-ins these are, which a sign-in through an organisation's own client returns to.
+    private let bundleIdentifier: String?
     public init(namespace: String) {
         #if canImport(Security)
         credentials = ConnectionKeychainStore<MCPCredentials>(service: namespace + ".mcp.oauth",
@@ -35,16 +37,21 @@ public actor ToolConnectionService {
         awsKeys = NoConnectionCredentials()
         #endif
         oauth = MCPOAuth()
-        httpConfiguration = {
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.protocolClasses = [MCPGuardedHTTP.self]
-            configuration.timeoutIntervalForResource = 90
-            return configuration
-        }
+        httpConfiguration = Self.guardedConfiguration
+        bundleIdentifier = Bundle.main.bundleIdentifier
+    }
+    /// Sessions that reach only public HTTPS services, and give up after 90 seconds.
+    static let guardedConfiguration: @Sendable () -> URLSessionConfiguration = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MCPGuardedHTTP.self]
+        configuration.timeoutIntervalForResource = 90
+        return configuration
     }
     init(credentials: any MCPCredentialStorage, tokens: any ConnectionTokenStorage = MemoryConnectionTokens(),
          clients: any ConnectionClientSecretStorage = MemoryConnectionClientSecrets(), awsKeys: any ConnectionAWSKeyStorage = MemoryConnectionAWSKeys(),
-         oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
+         oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration,
+         bundleIdentifier: String? = Bundle.main.bundleIdentifier) {
+        self.bundleIdentifier = bundleIdentifier
         self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
@@ -222,9 +229,10 @@ public actor ToolConnectionService {
         guard let clientID, let bundleIdentifier, let redirect = accountClientRedirect(bundleIdentifier) else { return oauth.with(clients: []) }
         return oauth.with(clients: [MCPOAuthClientConfiguration(id: clientID, bundleIdentifier: bundleIdentifier, redirectURI: redirect)])
     }
-    private nonisolated static func oauthConfiguration(for connection: ToolConnection) -> MCPOAuthConfiguration? {
+    private nonisolated static func oauthConfiguration(for connection: ToolConnection,
+                                                       bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
         let field = connectionConfiguration(for: connection.endpoint)?.oauthClientField
-        return oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] })
+        return oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] }, bundleIdentifier: bundleIdentifier)
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
@@ -389,7 +397,7 @@ public actor ToolConnectionService {
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw ToolConnectionServiceError.signInRequired }
-        let oauthConfiguration = Self.oauthConfiguration(for: connection)
+        let oauthConfiguration = Self.oauthConfiguration(for: connection, bundleIdentifier: bundleIdentifier)
         try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
             do {
