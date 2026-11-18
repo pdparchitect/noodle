@@ -283,9 +283,6 @@ private struct PresetSetUpForm: View {
                     field("Client ID") { TextField("Client ID", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled() }
                     field("Client Secret") { SecureField("Client secret", text: $clientSecret) }
                 }
-                if secret != nil {
-                    Text("Kept in Keychain and used for every request.").font(.caption).foregroundStyle(.secondary)
-                }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
                 if !tool.setup.isEmpty { ToolSetupSteps(steps: tool.setup) }
             }.textFieldStyle(.roundedBorder).padding(20)

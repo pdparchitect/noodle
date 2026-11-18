@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Settings › Tools no longer shows the fixed address of Pion's own tools under their names, and adding a tool no longer notes under its key that it is kept in Keychain.
+
 ## [0.4.0] - 2026-11-18
 
 ### Changed

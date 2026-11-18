@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- Adding a tool no longer notes under its key that it is kept in Keychain.
+
 ## [0.88.0] - 2026-11-18
 
 ### Changed

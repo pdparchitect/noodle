@@ -35,7 +35,10 @@ public struct ToolConnectionsSettingsView: View {
                                     Spacer(minLength: 4)
                                     connectionStatus(connection)
                                 }
-                                Text(connection.endpoint.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                // A tool the app answers has its entry's address, which says nothing worth a line.
+                                if connection.adapter == nil {
+                                    Text(connection.endpoint.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
                                 if !connection.description.isEmpty {
                                     Text(connection.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                                 }
