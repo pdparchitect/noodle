@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-11-18
+
 ### Changed
 
 - Saved tool sign-ins, tokens and client secrets are named as tools in Keychain, rather than as MCP connections, which many of them are not.

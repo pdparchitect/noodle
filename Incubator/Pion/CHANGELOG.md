@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
 ### Added
 
 - NVD in Settings › Tools, with nothing to set up: agents find a product as NVD names it, list its new CVEs newest first with their CVSS scores and whether CISA has seen them exploited, read one in full with its affected versions, and see what CISA has lately found exploited.
