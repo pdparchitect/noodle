@@ -41,4 +41,14 @@ final class PionCatalogueTests: XCTestCase {
             }
         }
     }
+
+    /// Each of Pion's services shows its own icon, bundled from the shared folder, not a letter.
+    func testEveryPionServiceHasAnIcon() {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../../Support/ToolIcons").standardizedFileURL
+        for tool in PionCatalogue.entries {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent(tool.iconName + ".icon").path),
+                          "\(tool.name) has no icon \(tool.iconName).icon")
+        }
+    }
 }
