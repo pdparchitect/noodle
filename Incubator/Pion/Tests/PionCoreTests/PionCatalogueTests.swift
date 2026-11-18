@@ -9,7 +9,7 @@ final class PionCatalogueTests: XCTestCase {
         XCTAssertTrue(ids.allSatisfy { UUID(uuidString: $0) != nil }, "an entry is not identified by a UUID")
         let names = Set(PionCatalogue.entries.map(\.name))
         for security in ["VirusTotal", "Shodan", "Okta", "Microsoft Entra ID", "Microsoft Defender XDR", "CrowdStrike Falcon", "SentinelOne",
-                         "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "AWS",
+                         "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "NVD", "AWS",
                          "Google Cloud", "Google Workspace", "Grafana Cloud", "Grafana", "Sentry", "Self-Hosted Sentry"] {
             XCTAssertTrue(names.contains(security), security)
         }
@@ -28,12 +28,13 @@ final class PionCatalogueTests: XCTestCase {
                       "an entry names an adapter Pion does not have")
     }
 
-    /// Each of Pion's own services asks for a key or account, so each says how to get one, as Markdown the form can show.
+    /// Each of Pion's own services that asks for a key or account says how to get one, as Markdown the form can show;
+    /// one that asks for nothing, as NVD, has nothing to say.
     func testEveryPionServiceSaysHowToSetItUp() {
         let own = PionCatalogue.entries.filter { $0.adapter != nil }
         XCTAssertFalse(own.isEmpty)
         for tool in own {
-            XCTAssertTrue(tool.needsSetUp, tool.id)
+            guard tool.needsSetUp else { XCTAssertTrue(tool.setup.isEmpty, tool.id); continue }
             XCTAssertGreaterThanOrEqual(tool.setup.count, 2, "\(tool.id) has no setup steps")
             for step in tool.setup {
                 XCTAssertNoThrow(try AttributedString(markdown: step, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)), tool.id)

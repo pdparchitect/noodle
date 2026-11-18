@@ -68,6 +68,10 @@ public enum ToolProbe {
         let probe = ToolConnectionProbe(namespace: namespace)
         await probe.useAdapters(adapters)
         let draft = try entry.makeConnection(name: "Probe", values: values)
+        // A tool that needs no sign-in or key has nothing saved to find.
+        if !draft.keepsSecret && !ToolConnectionService.signsInThroughBrowser(draft) {
+            return try await call(probe, draft, positional: positional, listTools: listTools, json: json)
+        }
         guard let saved = try probe.saved(for: draft, id: account) else {
             throw Failure(description: "Nothing saved under \(namespace) was given for \(draft.endpoint.absoluteString). "
                           + "Connect \(entry.name) in the app first, or check the --value fields.")
@@ -75,7 +79,11 @@ public enum ToolProbe {
         FileHandle.standardError.write(Data("Using the saved item for connection \(saved.id.uuidString.lowercased()).\n".utf8))
         if let clientField, let clientID = saved.clientID { values[clientField] = clientID }
         let connection = try entry.makeConnection(id: saved.id, name: "Probe", values: values)
-        let request = MCPBridgeRequest(session: "", connectionID: saved.id, action: listTools ? .tools : .call,
+        try await call(probe, connection, positional: positional, listTools: listTools, json: json)
+    }
+
+    static func call(_ probe: ToolConnectionProbe, _ connection: ToolConnection, positional: [String], listTools: Bool, json: Bool) async throws {
+        let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: listTools ? .tools : .call,
                                        tool: listTools ? nil : positional[1], arguments: Data((positional.count > 2 ? positional[2] : "{}").utf8))
         let data = try await probe.perform(request, connection: connection)
         guard !listTools else { return print(String(decoding: data, as: UTF8.self)) }

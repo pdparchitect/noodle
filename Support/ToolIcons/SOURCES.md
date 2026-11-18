@@ -84,6 +84,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | motherduck.icon (2026-10-06) | https://motherduck.com/apple-touch-icon.png |
 | neon.icon | https://neon.com/favicon.ico |
 | netlify.icon | https://www.netlify.com/favicon/favicon.ico |
+| nvd.icon (2026-11-18) | https://nvd.nist.gov/favicon.ico (48×48 frame, converted to PNG) |
 | notion.icon | https://www.notion.com/front-static/favicon.ico |
 | okta.icon (2026-11-18) | https://www.okta.com/apple-touch-icon.png |
 | otter.icon (2026-10-06) | https://otter.ai (apple-icon on its Webflow CDN) |

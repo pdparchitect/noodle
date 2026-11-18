@@ -4,6 +4,7 @@
 
 ### Added
 
+- NVD in Settings › Tools, with nothing to set up: agents find a product as NVD names it, list its new CVEs newest first with their CVSS scores and whether CISA has seen them exploited, read one in full with its affected versions, and see what CISA has lately found exploited.
 - Agents open an Investigation themselves for a problem worth its own record, such as one found in a direct conversation, and lead it; you own it as any other, the audit log says which agent opened it, and an agent opens at most three in an hour.
 - CrowdSec CTI in Settings › Tools: agents look up what CrowdSec's network has seen an IP address do, one or up to 20 at once, with its reputation, behaviours, the attacks that caught it, MITRE ATT&CK techniques, CVEs, history and scores.
 - Sentry and Self-Hosted Sentry, for one you run, even on this Mac or your network, in Settings › Tools: agents list projects, search issues and read an issue's latest event, with its exception, the frames in the service's own code, the request, the user and its tags, only ever reading.
