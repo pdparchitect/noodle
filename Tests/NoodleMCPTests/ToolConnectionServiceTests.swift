@@ -69,48 +69,6 @@ private final class CloudAdapter: ToolConnectionAdapter, @unchecked Sendable {
     }
 }
 
-/// A Google service account's key, made for the test: its JSON as Google issues it, and its public key to check
-/// signatures with.
-private struct TestGoogleKey {
-    let json: String
-    let publicKey: SecKey
-
-    init() throws {
-        let attributes: [String: Any] = [kSecAttrKeyType as String: kSecAttrKeyTypeRSA, kSecAttrKeySizeInBits as String: 2048]
-        var error: Unmanaged<CFError>?
-        guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error), let publicKey = SecKeyCopyPublicKey(key),
-              let pkcs1 = SecKeyCopyExternalRepresentation(key, &error) as Data? else { throw error!.takeRetainedValue() }
-        func length(_ count: Int) -> [UInt8] {
-            count < 128 ? [UInt8(count)] : count < 256 ? [0x81, UInt8(count)] : [0x82, UInt8(count >> 8), UInt8(count & 0xff)]
-        }
-        // PKCS #8, as Google wraps the RSA key.
-        let algorithm: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
-        let inner = [0x02, 0x01, 0x00] + algorithm + [0x04] + length(pkcs1.count) + [UInt8](pkcs1)
-        let pkcs8 = Data([0x30] + length(inner.count) + inner)
-        let pem = "-----BEGIN PRIVATE KEY-----\n" + pkcs8.base64EncodedString(options: .lineLength64Characters) + "\n-----END PRIVATE KEY-----\n"
-        let object: [String: String] = ["type": "service_account", "project_id": "kestrel-prod", "private_key_id": "kid1",
-                                        "private_key": pem, "client_email": "pion@kestrel-prod.iam.gserviceaccount.com",
-                                        "token_uri": "https://attacker.example/token"]
-        json = String(data: try JSONSerialization.data(withJSONObject: object), encoding: .utf8)!
-        self.publicKey = publicKey
-    }
-
-    /// Whether `jwt` is signed by this key, and its claims.
-    func verify(_ jwt: String) -> [String: Any]? {
-        let parts = jwt.split(separator: ".").map(String.init)
-        guard parts.count == 3 else { return nil }
-        func decode(_ part: String) -> Data? {
-            var base64 = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-            while base64.count % 4 != 0 { base64 += "=" }
-            return Data(base64Encoded: base64)
-        }
-        guard let signature = decode(parts[2]), SecKeyVerifySignature(publicKey, .rsaSignatureMessagePKCS1v15SHA256,
-                Data((parts[0] + "." + parts[1]).utf8) as CFData, signature as CFData, nil),
-              let claims = decode(parts[1]) else { return nil }
-        return try? JSONSerialization.jsonObject(with: claims) as? [String: Any]
-    }
-}
-
 private final class FixtureState: @unchecked Sendable {
     let lock = NSLock()
     /// Revocation requests the stand-ins received: method, path, headers and body; and how they answer.
@@ -727,60 +685,40 @@ final class ToolConnectionServiceTests: XCTestCase {
         }
     }
 
-    func testAGoogleServiceAccountSignsAnAssertionThatGoogleAloneReceives() async throws {
-        let key = try TestGoogleKey()
-        let signing = ConnectionGoogleServiceAccount(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"],
-                                              subject: "admin@kestrel.example")
-        let record = try ToolConnection(name: "Google", endpoint: URL(string: "https://googleapis.com")!,
-                                             googleServiceAccount: signing, adapter: "cloud")
-        final class GoogleAdapter: ToolConnectionAdapter, @unchecked Sendable {
+    func testAGoogleSignInForAllOfGooglesAPIsReachesEachOfThemAndNothingElse() async throws {
+        let cloud = ToolDefinition(id: "cloud", name: "Cloud", summary: "Audit logs.", defaultInstructions: "Read.", iconName: "cloud",
+            configuration: .connection(.init(endpointTemplate: "https://googleapis.com",
+                fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+                oauth: .google(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"], clients: []),
+                oauthClientField: "clientID", adapter: "cloud")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [cloud])
+        let record = try cloud.makeConnection(name: "Cloud", values: ["clientID": "1234-abc.apps.googleusercontent.com"])
+        final class CloudAdapter: ToolConnectionAdapter, @unchecked Sendable {
             var refusedElsewhere = false
             func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
             func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
                 _ = try await access.data(for: URLRequest(url: URL(string: "https://logging.googleapis.com/google")!))
-                _ = try await access.data(for: URLRequest(url: URL(string: "https://admin.googleapis.com/google")!))
+                _ = try await access.data(for: URLRequest(url: URL(string: "https://cloudasset.googleapis.com/google")!))
                 do { _ = try await access.data(for: URLRequest(url: URL(string: "https://googleapis.com.evil.example/google")!)) }
                 catch { refusedElsewhere = true }
                 return Data(#"{"content":[],"isError":false}"#.utf8)
             }
         }
-        let adapter = GoogleAdapter()
+        let adapter = CloudAdapter()
         let client = service(vault: TestVault())
         await client.useAdapters(["cloud": adapter])
+        let redirect = try XCTUnwrap(ToolConnectionService.configuredRedirectURI(for: record.endpoint, bundleIdentifier: Bundle.main.bundleIdentifier))
+        try await client.signIn(record, redirectURI: redirect) { url in
+            let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value ?? ""
+            return URL(string: redirect.absoluteString + "?state=\(state)&code=granted")!
+        }
         let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "x", arguments: Data("{}".utf8))
-        var refused = false
-        do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
-        XCTAssertTrue(refused, "a Google connection without its key was answered")
-
-        try await client.saveGoogleKey(key.json, for: record)
-        _ = try await client.perform(call, connection: record)
         _ = try await client.perform(call, connection: record)
         let state = FixtureProtocol.state
-        XCTAssertEqual(state.googleExchanges.count, 1, "a token still valid is reused, and the key file's own token address is ignored")
-        let form = Dictionary(uniqueKeysWithValues: state.googleExchanges[0].split(separator: "&").map {
-            let pair = $0.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding! }
-            return (pair[0], pair[1])
-        })
-        XCTAssertEqual(form["grant_type"], "urn:ietf:params:oauth:grant-type:jwt-bearer")
-        let claims = try XCTUnwrap(key.verify(form["assertion"] ?? ""), "the assertion is not signed by the service account's key")
-        XCTAssertEqual(claims["iss"] as? String, "pion@kestrel-prod.iam.gserviceaccount.com")
-        XCTAssertEqual(claims["sub"] as? String, "admin@kestrel.example")
-        XCTAssertEqual(claims["aud"] as? String, "https://oauth2.googleapis.com/token")
-        XCTAssertEqual(claims["scope"] as? String, "https://www.googleapis.com/auth/cloud-platform.read-only")
-        let issued = try XCTUnwrap(claims["iat"] as? Int), expires = try XCTUnwrap(claims["exp"] as? Int)
-        XCTAssertEqual(expires - issued, 3600)
-        XCTAssertFalse(state.googleExchanges[0].contains("PRIVATE"), "the private key was sent")
-        XCTAssertEqual(state.googleRequests.map(\.host), ["logging.googleapis.com", "admin.googleapis.com", "logging.googleapis.com", "admin.googleapis.com"])
+        XCTAssertEqual(state.googleRequests.map(\.host), ["logging.googleapis.com", "cloudasset.googleapis.com"])
         XCTAssertEqual(Set(state.googleRequests.compactMap { $0.headers["Authorization"] }), ["Bearer google-access-1"])
-        XCTAssertTrue(adapter.refusedElsewhere, "a Google connection reached a host outside Google")
-
-        for bad in ["{}", #"{"type":"authorized_user","client_email":"a@b.c","private_key":"x"}"#, "not json"] {
-            do { try await client.saveGoogleKey(bad, for: record); XCTFail("accepted \(bad)") } catch {}
-        }
-        try await client.disconnect(record.id)
-        let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
-        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint,
-            googleServiceAccount: ConnectionGoogleServiceAccount(scopes: ["https://evil.example/scope"], subject: nil)))
+        XCTAssertTrue(adapter.refusedElsewhere, "a Google sign-in reached a host outside Google")
     }
 
     func testSigV4MatchesAWSsPublishedExample() throws {

@@ -130,7 +130,7 @@ public struct ToolConnectionsSettingsView: View {
             ConnectedStatus { store.connectionsController.signOut(connection) }
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
-        } else if connection.clientCredentials != nil || connection.awsSigning != nil || connection.googleServiceAccount != nil {
+        } else if connection.clientCredentials != nil || connection.awsSigning != nil {
             SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
         } else {
             SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
@@ -158,7 +158,7 @@ public struct ToolConnectionEditor: View {
     private let onConnect: (ToolConnection) -> Void
     /// Keeps a token or client secret and checks it; nil where those cannot be kept yet, as on a Noodle Hub.
     private let onSecret: ((ToolConnection, ToolConnectionSecret) -> Void)?
-    private enum SignIn: Hashable { case browser, token, client, aws, google }
+    private enum SignIn: Hashable { case browser, token, client, aws }
     @Environment(\.dismiss) private var dismiss
     @State private var signIn: SignIn
     @State private var tokenHeader: String
@@ -168,7 +168,6 @@ public struct ToolConnectionEditor: View {
     @State private var clientID = ""
     @State private var clientSecret = ""
     @State private var sessionToken = ""
-    @State private var serviceAccountKey = ""
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
@@ -191,7 +190,7 @@ public struct ToolConnectionEditor: View {
         self.onConnect = onConnect ?? { controller.connect($0) }
         onSecret = { controller.connect($0, secret: $1) }
         _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client
-                        : existing?.awsSigning != nil ? .aws : existing?.googleServiceAccount != nil ? .google : .browser)
+                        : existing?.awsSigning != nil ? .aws : .browser)
         _values = State(initialValue: existing?.settings ?? [:])
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
@@ -277,12 +276,6 @@ public struct ToolConnectionEditor: View {
                             Text("Client ID & Secret").tag(SignIn.client)
                         }
                         .pickerStyle(.segmented)
-                    }
-                    if signIn == .google {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Service Account Key").font(.caption.weight(.semibold))
-                            ServiceAccountKeyField(key: $serviceAccountKey, replacing: true)
-                        }
                     }
                     if signIn == .aws {
                         VStack(alignment: .leading, spacing: 6) {
@@ -383,7 +376,6 @@ public struct ToolConnectionEditor: View {
         case .browser: false
         case .token: composedToken != nil ? filled(clientID) : filled(token)
         case .client, .aws: filled(clientID)
-        case .google: filled(serviceAccountKey)
         }
     }
     /// The two values an existing connection's token is made from, when its preset composes it.
@@ -430,7 +422,7 @@ public struct ToolConnectionEditor: View {
         record.tokenParameter = nil
         record.clientCredentials = nil
         switch signIn {
-        case .browser, .google: break
+        case .browser: break
         case .aws:
             // Its signing stays as its preset made it; only the key can be replaced.
             let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -481,7 +473,6 @@ public struct ToolConnectionEditor: View {
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
         case .aws: id.isEmpty ? nil : .aws(accessKeyID: id, secretAccessKey: clientSecret, sessionToken: sessionToken)
-        case .google: serviceAccountKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .google(serviceAccountKey)
         }
         let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
         // New details for a catalogue tool connect it again, so a sign-in for the old ones is not kept using.
@@ -512,30 +503,6 @@ private struct ConnectedStatus: View {
         .popover(isPresented: $shown, arrowEdge: .bottom) {
             Button("Sign Out", role: .destructive) { shown = false; onSignOut() }
                 .padding(12)
-        }
-    }
-}
-
-/// Where a Google service account's JSON key is pasted, or read from the file Google gave. What is pasted shows
-/// only that a key is there, never its contents.
-struct ServiceAccountKeyField: View {
-    @Binding var key: String
-    var replacing = false
-    @State private var choosing = false
-
-    var body: some View {
-        HStack {
-            Text(key.isEmpty ? (replacing ? "Saved; choose a new key file to replace it" : "No key chosen") : "Key file chosen")
-                .foregroundStyle(key.isEmpty ? .secondary : .primary)
-            Spacer()
-            Button("Paste") { key = NSPasteboard.general.string(forType: .string) ?? "" }
-            Button("Choose Key File…") { choosing = true }
-        }
-        .fileImporter(isPresented: $choosing, allowedContentTypes: [.json]) { result in
-            guard case .success(let url) = result else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            key = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         }
     }
 }

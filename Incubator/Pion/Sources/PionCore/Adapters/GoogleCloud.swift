@@ -3,8 +3,9 @@ import NoodleCore
 import NoodleMCP
 
 /// Google Cloud, as a defender reads it: who did what in the audit logs, what Security Command Center found, who has
-/// access to what, and where resources are. Each account is one organisation, folder or project, reached as a
-/// service account with read-only access.
+/// access to what, and where resources are. Each account is one organisation, folder or project, read as the person
+/// who signs in with Google, through an iOS OAuth client their organisation made for Pion's bundle ID, as Google
+/// Workspace is.
 public enum GoogleCloud {
     public static let preset = ToolDefinition(
         id: "371912f8-7145-4096-a763-2c3ce3af0e55", name: "Google Cloud", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
@@ -19,15 +20,18 @@ public enum GoogleCloud {
             fields: [ToolField(key: "level", title: "Scope", placeholder: "organizations", kind: .choice([
                          .init(value: "organizations", title: "Organization"), .init(value: "folders", title: "Folder"),
                          .init(value: "projects", title: "Project")])),
-                     ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier)],
-            googleScopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"], adapter: "google-cloud")),
+                     ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier),
+                     ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/cloud-platform.read-only"], clients: []),
+            oauthClientField: "clientID", adapter: "google-cloud")),
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project for Pion and enable the **Cloud Logging**, **Security Command Center** and **Cloud Asset** APIs in it.",
-        "Under **IAM & Admin › Service Accounts**, create a service account. On its **Keys** tab, choose **Add Key › Create new key › JSON**, and choose that file here.",
-        "In IAM for the organisation, folder or project to investigate, grant the service account **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer**. Add **Private Logs Viewer** for Data Access logs too.",
-        "Set Scope and its ID to where you granted them: the organisation's or folder's number, or the project's ID.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation and, under **APIs & Services › Library**, enable the **Cloud Logging**, **Security Command Center** and **Cloud Asset** APIs in it. Pion's requests count against this project.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/cloud-platform.read-only`. The same client can serve Google Workspace too.",
+        "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
+        "Whoever signs in reads with their own access, so they need **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer** on the organisation, folder or project to investigate, and **Private Logs Viewer** for Data Access logs too.",
+        "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect** and sign in.",
     ]
 
     public static let adapter = OperationAdapter(operations: [AuditLogs(), Findings(), IAMPolicies(), FindResources()])

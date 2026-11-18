@@ -52,34 +52,6 @@ struct ConnectionAWSKey: Codable, Sendable {
     let sessionToken: String?
 }
 
-/// A Google service account's key, with the access token last got with it while it lasts.
-struct ConnectionGoogleKey: Codable, Sendable {
-    /// What it was given for; a connection now pointing elsewhere never uses it.
-    let endpoint: URL
-    let clientEmail: String
-    let privateKeyID: String?
-    /// The RSA private key, as the PEM the key file holds.
-    let privateKey: String
-    var accessToken: String?
-    var expiresAt: Date?
-}
-
-/// Where Google service account keys are kept, apart from other secrets.
-protocol ConnectionGoogleKeyStorage: Sendable {
-    func load(_ id: UUID) throws -> ConnectionGoogleKey?
-    func save(_ key: ConnectionGoogleKey, id: UUID) throws
-    func remove(_ id: UUID) throws
-}
-
-/// Google keys kept only while the process runs, for a service made without Keychain, as in tests.
-final class MemoryConnectionGoogleKeys: ConnectionGoogleKeyStorage, @unchecked Sendable {
-    private let lock = NSLock()
-    private var keys: [UUID: ConnectionGoogleKey] = [:]
-    func load(_ id: UUID) -> ConnectionGoogleKey? { lock.withLock { keys[id] } }
-    func save(_ key: ConnectionGoogleKey, id: UUID) { lock.withLock { keys[id] = key } }
-    func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
-}
-
 /// Where AWS keys are kept, apart from other secrets.
 protocol ConnectionAWSKeyStorage: Sendable {
     func load(_ id: UUID) throws -> ConnectionAWSKey?
@@ -178,12 +150,9 @@ extension ConnectionKeychainStore: MCPCredentialStorage where Value == MCPCreden
 extension ConnectionKeychainStore: ConnectionTokenStorage where Value == ConnectionToken {}
 extension ConnectionKeychainStore: ConnectionClientSecretStorage where Value == ConnectionClientSecret {}
 extension ConnectionKeychainStore: ConnectionAWSKeyStorage where Value == ConnectionAWSKey {}
-extension ConnectionKeychainStore: ConnectionGoogleKeyStorage where Value == ConnectionGoogleKey {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct NoConnectionCredentials: MCPCredentialStorage, ConnectionTokenStorage, ConnectionClientSecretStorage, ConnectionAWSKeyStorage, ConnectionGoogleKeyStorage {
-    func load(_ id: UUID) throws -> ConnectionGoogleKey? { nil }
-    func save(_ key: ConnectionGoogleKey, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
+struct NoConnectionCredentials: MCPCredentialStorage, ConnectionTokenStorage, ConnectionClientSecretStorage, ConnectionAWSKeyStorage {
     func load(_ id: UUID) throws -> ConnectionAWSKey? { nil }
     func save(_ key: ConnectionAWSKey, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
     func load(_ id: UUID) throws -> ConnectionClientSecret? { nil }

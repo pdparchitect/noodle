@@ -192,9 +192,6 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public let adapter: String?
     /// For AWS: accounts sign their requests with an access key, in the region their region field names.
     public let signsForAWS: Bool
-    /// For Google: accounts act as a service account with these scopes, on behalf of the user their subject field
-    /// names, when they have one.
-    public let googleScopes: [String]?
     /// How the service revokes an account's key, for one whose API can.
     public let tokenRevocation: TokenRevocation?
     /// For a service whose accounts sign in through an OAuth client their own organisation made, rather than one
@@ -210,7 +207,6 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         self.composedToken = composedToken
         self.adapter = adapter
         signsForAWS = false
-        googleScopes = nil
         tokenRevocation = nil
         oauthClientField = nil
         self.endpoint = endpoint
@@ -226,13 +222,12 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                signsForAWS: Bool = false, googleScopes: [String]? = nil, oauthClientField: String? = nil,
+                signsForAWS: Bool = false, oauthClientField: String? = nil,
                 tokenRevocation: TokenRevocation? = nil, adapter: String? = nil) {
         self.tokenRevocation = tokenRevocation
         self.oauthClientField = oauthClientField
         self.composedToken = composedToken
         self.signsForAWS = signsForAWS
-        self.googleScopes = googleScopes
         self.tokenParameter = tokenParameter
         self.tokenScheme = tokenScheme
         self.adapter = adapter
@@ -310,9 +305,6 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
                                                  tokenScheme: configuration.tokenScheme, tokenParameter: configuration.tokenParameter,
                                                  clientCredentials: account.clientCredentials,
                                                  awsSigning: configuration.signsForAWS ? ConnectionAWSSigning(region: account.settings?["region"] ?? "us-east-1") : nil,
-                                                 googleServiceAccount: configuration.googleScopes.map {
-                                                     ConnectionGoogleServiceAccount(scopes: $0, subject: account.settings?["subject"])
-                                                 },
                                                  adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
@@ -337,7 +329,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
         switch configuration {
         case .connection(let configuration):
             configuration.usesToken || configuration.clientCredentials != nil || configuration.signsForAWS
-                || configuration.googleScopes != nil || !configuration.fields.isEmpty
+                || !configuration.fields.isEmpty
         }
     }
 

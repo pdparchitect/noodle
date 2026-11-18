@@ -9,8 +9,6 @@ public enum ToolConnectionSecret: Sendable {
     case token(String)
     case client(id: String, secret: String)
     case aws(accessKeyID: String, secretAccessKey: String, sessionToken: String?)
-    /// A Google service account's JSON key, as Google issues it.
-    case google(String)
 }
 
 @MainActor @Observable
@@ -208,7 +206,6 @@ public final class ToolConnectionsController {
                     case .client(let id, let value): try await service.saveClientCredentials(clientID: id, secret: value, for: record)
                     case .aws(let id, let secret, let token):
                         try await service.saveAWSKey(accessKeyID: id, secretAccessKey: secret, sessionToken: token, for: record)
-                    case .google(let json): try await service.saveGoogleKey(json, for: record)
                     case nil: break
                     }
                 } else {

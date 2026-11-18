@@ -11,7 +11,6 @@ public actor ToolConnectionService {
     private let tokens: any ConnectionTokenStorage
     private let clients: any ConnectionClientSecretStorage
     private let awsKeys: any ConnectionAWSKeyStorage
-    private let googleKeys: any ConnectionGoogleKeyStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -29,9 +28,7 @@ public actor ToolConnectionService {
         clients = ConnectionKeychainStore<ConnectionClientSecret>(service: namespace + ".mcp.client",
                                                     label: "\(ProductIdentity.current.name) MCP client secret")
         awsKeys = ConnectionKeychainStore<ConnectionAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
-        googleKeys = ConnectionKeychainStore<ConnectionGoogleKey>(service: namespace + ".mcp.google", label: "\(ProductIdentity.current.name) Google service account")
         #else
-        googleKeys = NoConnectionCredentials()
         credentials = NoConnectionCredentials()
         tokens = NoConnectionCredentials()
         clients = NoConnectionCredentials()
@@ -47,9 +44,8 @@ public actor ToolConnectionService {
     }
     init(credentials: any MCPCredentialStorage, tokens: any ConnectionTokenStorage = MemoryConnectionTokens(),
          clients: any ConnectionClientSecretStorage = MemoryConnectionClientSecrets(), awsKeys: any ConnectionAWSKeyStorage = MemoryConnectionAWSKeys(),
-         googleKeys: any ConnectionGoogleKeyStorage = MemoryConnectionGoogleKeys(),
          oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration) {
-        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys; self.googleKeys = googleKeys
+        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     /// The adapters this app serves connections with, by the name connections give.
@@ -58,8 +54,7 @@ public actor ToolConnectionService {
     }
 
     public func hasCredentials(_ id: UUID) -> Bool {
-        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil
-            || (try? googleKeys.load(id)) != nil { return true }
+        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint, clientID: stored.clientID))) != nil
     }
@@ -145,24 +140,6 @@ public actor ToolConnectionService {
         try tokens.remove(id)
         try clients.remove(id)
         try awsKeys.remove(id)
-        try googleKeys.remove(id)
-    }
-
-    /// Keeps a Google service account's key, from the JSON file Google issues, in place of signing in. The key is
-    /// checked by signing with it before it is kept.
-    public func saveGoogleKey(_ json: String, for connection: ToolConnection) throws {
-        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
-        guard connection.googleServiceAccount != nil else {
-            throw ToolConnectionError.message("This connection does not act as a Google service account.")
-        }
-        struct File: Decodable { let type: String?; let client_email: String?; let private_key: String?; let private_key_id: String? }
-        guard json.utf8.count <= 16_384, let file = try? JSONDecoder().decode(File.self, from: Data(json.utf8)),
-              file.type == "service_account", let email = file.client_email, email.contains("@"), let pem = file.private_key else {
-            throw ToolConnectionError.message("Paste the JSON key of a Google service account.")
-        }
-        try GoogleAssertion.validate(pem)
-        try googleKeys.save(ConnectionGoogleKey(endpoint: connection.endpoint, clientEmail: email, privateKeyID: file.private_key_id,
-                                         privateKey: pem), id: connection.id)
     }
 
     /// Keeps the AWS access key a connection signs its requests with, in place of signing in.
@@ -267,7 +244,6 @@ public actor ToolConnectionService {
         try tokens.remove(connection.id)
         try clients.remove(connection.id)
         try awsKeys.remove(connection.id)
-        try googleKeys.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -385,22 +361,6 @@ public actor ToolConnectionService {
             guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw ToolConnectionServiceError.signInRequired }
             return .aws(key, defaultRegion: signing.region)
         }
-        if let account = connection.googleServiceAccount {
-            guard var key = try googleKeys.load(connection.id), key.endpoint == connection.endpoint else { throw ToolConnectionServiceError.signInRequired }
-            if key.accessToken == nil || (key.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
-                let assertion = try GoogleAssertion.make(key, scopes: account.scopes, subject: account.subject)
-                let response = try await oauth.request(GoogleAssertion.tokenEndpoint, form: [
-                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion,
-                ])
-                guard let token = response["access_token"] as? String, !token.isEmpty else { throw ToolConnectionServiceError.invalidMetadata }
-                key.accessToken = token
-                key.expiresAt = Date().addingTimeInterval((response["expires_in"] as? Double) ?? 3_000)
-                try checkActive(connection.id, epoch: epoch, deadline: deadline)
-                try googleKeys.save(key, id: connection.id)
-            }
-            guard let token = key.accessToken else { throw ToolConnectionServiceError.signInRequired }
-            return .google(token)
-        }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
                   token.header == parameter else { throw ToolConnectionServiceError.signInRequired }
@@ -446,6 +406,8 @@ public actor ToolConnectionService {
         }
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
         guard let token = stored.accessToken else { throw ToolConnectionServiceError.signInRequired }
+        // A Google sign-in is good for every googleapis.com service its scopes allow.
+        if oauthConfiguration?.issuer.host == "accounts.google.com" { return .google(token) }
         return .header("Authorization", "Bearer " + token)
     }
 
