@@ -160,7 +160,7 @@ extension Grafana {
             struct Source: Codable { let uid: String?; let name: String?; let type: String? }
             let sources: [Source]
             do { sources = try await service.get(["datasources"], as: [Source].self) }
-            catch ServiceError.rejected {
+            catch ServiceError.rejected, ServiceError.forbidden {
                 throw ServiceError.refused("Grafana did not list its data sources: the token is wrong, or its role may not list them. Each one's UID is in dashboards' panels.")
             }
             let text = sources.isEmpty ? "There are no data sources." : sources.map { "\($0.name ?? "?") (\($0.type ?? "?")): \($0.uid ?? "?")" }.joined(separator: "\n")

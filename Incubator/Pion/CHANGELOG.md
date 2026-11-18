@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- When a service turns a tool away, Pion's own tools tell a wrong or expired key from one that may not do what was asked, and pass on the service's reason.
 - Pion's own tools reach a service on this Mac or the local network, such as a Grafana at http://cbk-ops:3000, and say when a service refuses their credentials, finds nothing or limits them, instead of a generic error.
 - A tool that cannot reach its service says why, in the system's words, such as a refused connection or an untrusted certificate, instead of only asking to reconnect.
 - The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.

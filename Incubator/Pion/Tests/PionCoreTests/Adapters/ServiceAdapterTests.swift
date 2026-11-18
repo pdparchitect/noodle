@@ -57,6 +57,7 @@ final class ServiceAdapterTests: XCTestCase {
         let service = FakeService()
         service.answers["/api/v3/files/bad"] = (401, #"{"error":"WrongCredentials"}"#)
         service.answers["/api/v3/files/busy"] = (429, "{}")
+        service.answers["/api/v3/files/denied"] = (403, #"{"detail":"You do not have permission\nto perform this action."}"#)
         func message(_ arguments: String) async throws -> String {
             let result = try await call(arguments, on: service)
             XCTAssertEqual(result["isError"] as? Bool, true, arguments)
@@ -66,6 +67,10 @@ final class ServiceAdapterTests: XCTestCase {
         XCTAssertTrue(missing.contains("not found"), missing)
         let rejected = try await message(#"{"hash":"bad"}"#)
         XCTAssertTrue(rejected.contains("rejected"), rejected)
+        // Accepted credentials that may not do this are told apart from refused ones, in the service's own words.
+        let denied = try await message(#"{"hash":"denied"}"#)
+        XCTAssertTrue(denied.contains("accepted this connection's credentials, but they may not do this"), denied)
+        XCTAssertTrue(denied.contains("(it said: You do not have permission to perform this action.)"), denied)
         let limited = try await message(#"{"hash":"busy"}"#)
         XCTAssertTrue(limited.contains("rate"), limited)
         let malformed = try await message(#"{"relationships":true}"#)

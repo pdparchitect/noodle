@@ -76,7 +76,10 @@ public struct ServiceResult: Sendable {
 /// Why an operation could not finish, said so the bot can act on it.
 public enum ServiceError: LocalizedError, Equatable, Sendable {
     case notFound
+    /// The service did not accept the credentials at all (HTTP 401).
     case rejected
+    /// The service accepted the credentials, but they may not do this (HTTP 403), saying why when it did.
+    case forbidden(String?)
     case rateLimited
     case status(Int)
     case unreadable
@@ -87,7 +90,10 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .notFound: "The service has not found it (HTTP 404)."
-        case .rejected: "The service rejected this connection's credentials. Ask the person to check them in Settings › Tools."
+        case .rejected: "The service rejected this connection's credentials: the key or token is wrong or has expired. Ask the person to check it in Settings › Tools."
+        case .forbidden(let reason):
+            "The service accepted this connection's credentials, but they may not do this\(reason.map { " (it said: \($0))" } ?? ""). "
+                + "Ask the person to check the permissions they were given, and the organisation, project or account the connection names, in Settings › Tools."
         case .rateLimited: "The service is rate limiting requests (HTTP 429). Wait before trying again, and make fewer requests."
         case .status(let status): "The service could not answer (HTTP \(status))."
         case .unreadable: "The service answered with something that could not be read."
@@ -354,6 +360,14 @@ public struct ServiceClient: Sendable {
         return node
     }
 
+    /// What a service said when it refused, from the fields services put it in, on one short line.
+    static func reason(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let said = ["detail", "message", "error_description", "error"].lazy.compactMap { object[$0] as? String }.first
+        let line = said?.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        return line.flatMap { $0.isEmpty ? nil : String($0.prefix(200)) }
+    }
+
     private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
         do { return try JSONDecoder().decode(Answer.self, from: data) } catch { throw ServiceError.unreadable }
     }
@@ -393,7 +407,8 @@ public struct ServiceClient: Sendable {
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
         case 200..<300: return (data, response)
-        case 401, 403: throw ServiceError.rejected
+        case 401: throw ServiceError.rejected
+        case 403: throw ServiceError.forbidden(Self.reason(data))
         case 404: throw ServiceError.notFound
         case 429: throw ServiceError.rateLimited
         default: throw ServiceError.status(response.statusCode)
