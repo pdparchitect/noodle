@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import NoodleCore
 import NoodleMCP
+import ProductIdentity
 
 public struct ToolConnectionsSettingsView: View {
     let store: any BotSettingsHost
@@ -102,7 +103,7 @@ public struct ToolConnectionsSettingsView: View {
             }
             Button("Cancel", role: .cancel) { removing = nil }
         } message: {
-            Text("This removes this connection from all bots and deletes its saved sign-in from Noodle. Other connections to the same service are unchanged. To revoke the provider's grant too, use its account settings.")
+            Text("This removes this connection from everywhere it is assigned, and deletes its saved sign-in from \(ProductIdentity.current.name). Other connections to the same service are unchanged. To revoke the provider's grant too, use its account settings.")
         }
         .alert("Tools", isPresented: Binding(get: { store.connectionsController.errorMessage != nil }, set: { if !$0 { store.connectionsController.errorMessage = nil } })) {
             Button("OK") { store.connectionsController.errorMessage = nil }
@@ -224,7 +225,7 @@ public struct ToolConnectionEditor: View {
                     Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
                 }
                 Spacer()
-                Text(existing != nil ? "Edit MCP" : "Custom MCP").font(.headline)
+                Text(existing == nil ? "Custom MCP" : servedByApp ? "Edit Tool" : "Edit MCP").font(.headline)
                 Spacer()
                 Button(existing == nil ? "Add & Connect" : "Save", action: save)
                     .buttonStyle(.sheetHeader)
@@ -239,7 +240,7 @@ public struct ToolConnectionEditor: View {
                         .help("Use a distinct name for each account")
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("MCP Server URL").font(.caption.weight(.semibold))
+                    Text(servedByApp ? "Address" : "MCP Server URL").font(.caption.weight(.semibold))
                     TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
                         .autocorrectionDisabled().disabled(existing != nil)
                 }
@@ -328,22 +329,19 @@ public struct ToolConnectionEditor: View {
                         .font(.system(size: 13))
                         .roundedBorderEditor()
                         .frame(height: 130)
-                        .help("Optional guidance for bots using this connection. Do not include passwords or tokens.")
-                }
-                Text(signIn == .browser ? "MCP connection · Sign-in opens in your browser."
-                     : "MCP connection · Kept in Keychain and used for every request.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if existing != nil {
-                    Text("Changes apply to every bot using this connection.").font(.caption).foregroundStyle(.secondary)
+                        .help("Optional guidance on using this connection. Do not include passwords or tokens.")
                 }
                 if onBack != nil { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
-                if onSecret != nil, let steps = existing.flatMap(ToolCatalog.definition(for:))?.setup, !steps.isEmpty {
+                // Only where a key or token can be replaced; one that signs in through the browser asks for nothing here.
+                if onSecret != nil, signIn != .browser, let steps = existing.flatMap(ToolCatalog.definition(for:))?.setup, !steps.isEmpty {
                     ToolSetupSteps(steps: steps)
                 }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
+    /// Whether the app's own adapter answers it, through the service's API rather than an MCP server.
+    private var servedByApp: Bool { existing?.adapter != nil }
     /// The two values an existing connection's token is made from, when its preset composes it.
     private var composedToken: ComposedToken? {
         guard let existing, case .connection(let configuration)? = ToolCatalog.definition(for: existing)?.configuration else { return nil }
