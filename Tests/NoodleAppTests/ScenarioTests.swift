@@ -299,6 +299,24 @@ import XCTest
         XCTAssertNil(session.runtime.snapshot(for: rex.id).failure)
     }
 
+    /// Opened to look at, a scenario shows its starting state and nothing moves on its own: the timeline is for a
+    /// capture run, which photographs or records it.
+    @MainActor func testOpeningAScenarioToLookAtItLeavesTheTimelineUnplayed() async throws {
+        let timeline = "[ { \"agent\": \"ada\", \"reply\": { \"text\": \"All 42 parser tests pass.\" } } ]"
+        let session = try session(try Scenario.load(from: try fixture(timeline: timeline)))
+        let conversation = try XCTUnwrap(session.seeded.conversations["ada"])
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = NoodleAppIdentity.name
+        window.contentViewController = NSViewController()
+        window.contentViewController?.view = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+
+        try await session.start(benchmark: nil)
+        XCTAssertEqual(try session.repository.loadMessages(conversationID: conversation.id).map(\.body),
+                       ["Can you look at the parser change?", "Yes. Two small things, both in the tokenizer."])
+    }
+
     func testTasksListWaitingOnMeFirstAndTimelineStepsMoveThem() async throws {
         let timeline = """
         [ { "agent": "ada", "task": { "key": "fix", "state": "waiting", "on": "user", "note": "Which branch?" } },

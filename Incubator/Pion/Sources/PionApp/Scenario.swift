@@ -451,6 +451,9 @@ struct PionScenario: Decodable {
             }
             try? await Task.sleep(for: .milliseconds(500))
             await announce("SCENARIO READY rect=\(ScenarioCue.region(stage: filmStage, window: mainWindow) ?? "none") \(scenario.title)")
+            // Opened to look at, a scenario stays in its starting state, with nothing moving on its own:
+            // the timeline is for a capture run, which photographs or records it.
+            guard takesShots else { return }
             let sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
             try? await filmStage?.play(.intro, sleep: sleep)
             for (index, step) in (scenario.timeline ?? []).enumerated() {

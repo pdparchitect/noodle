@@ -999,6 +999,22 @@ extension Scenario {
         try await filmStage?.play(stage, sleep: sleep)
     }
 
+    /// Opens the scenario's windows, then runs the benchmark or, for a capture run, plays the timeline.
+    /// Opened to look at, a scenario stays in its starting state, with nothing moving on its own.
+    func start(benchmark: String?) async throws {
+        await arrangeWindows(scenario.present ?? .init(), initial: true)
+        await announceReady()
+        if let benchmark, let window = mainWindow {
+            await ScenarioBenchmark(session: self, phases: benchmark, window: window).run()
+            NSApp.terminate(nil)
+            return
+        }
+        guard takesShots else { return }
+        try await play()
+        await announceDone()
+        NSApp.terminate(nil)
+    }
+
     /// False when the timeline cannot go on.
     private func perform(_ step: Scenario.Step) async throws -> Bool {
         let agent = step.agent.flatMap { seeded.agents[$0] }
@@ -1296,20 +1312,10 @@ extension ScenarioSession {
                 session.takesShots = checks.contains(DevelopmentHook.scenarioShots)
                 session.readTerminal()
                 session.store.startMonitoring()
+                let benchmark = checks.value(after: DevelopmentHook.scenarioBenchmark)
+                    ?? (checks.contains(DevelopmentHook.scenarioBenchmark) ? "all" : nil)
                 Task { @MainActor in
-                    await session.arrangeWindows(session.scenario.present ?? .init(), initial: true)
-                    await session.announceReady()
-                    if let phases = checks.value(after: DevelopmentHook.scenarioBenchmark) ?? (checks.contains(DevelopmentHook.scenarioBenchmark) ? "all" : nil),
-                       let window = session.mainWindow {
-                        await ScenarioBenchmark(session: session, phases: phases, window: window).run()
-                        NSApp.terminate(nil)
-                        return
-                    }
-                    do { try await session.play() } catch { fail(error.localizedDescription) }
-                    if session.takesShots {
-                        await session.announceDone()
-                        NSApp.terminate(nil)
-                    }
+                    do { try await session.start(benchmark: benchmark) } catch { fail(error.localizedDescription) }
                 }
                 return session.store
             } catch {
