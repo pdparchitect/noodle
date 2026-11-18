@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-18
+
+### Changed
+
+- Catalogue tools are now identified by IDs that never change, whatever a tool comes to be called; tools already added in Settings › Tools keep working. Noodle Hub installs this release before any later update.
+
 ## [0.53.1] - 2026-11-17
 
 ### Fixed

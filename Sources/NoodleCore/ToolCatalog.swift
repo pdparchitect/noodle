@@ -272,6 +272,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     /// to `id` when loaded.
     // TODO(0.89.0): remove with ToolConnectionRegistry.adoptEntryIDs and its tests. Milestone: 0.88.0.
     // TODO(Pion 0.5.0): Pion's entries carry it too. Milestone: Pion 0.4.0.
+    // TODO(Hub 0.55.0): the Hub's own Tools settings saved former IDs too. Milestone: Hub 0.54.0.
     public let formerID: String?
     public let name: String
     public let summary: String

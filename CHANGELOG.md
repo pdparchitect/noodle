@@ -6,9 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.88.0] - 2026-11-18
+
 ### Changed
 
-- Catalogue tools are now identified by IDs that never change, whatever a tool comes to be called. `MCPAllowList` and `MCPDenyList` in a configuration profile list these new IDs, shown with each tool's name in the enterprise deployment guide; tools already added keep working.
+- Catalogue tools are now identified by IDs that never change, whatever a tool comes to be called. `MCPAllowList` and `MCPDenyList` in a configuration profile list these new IDs, shown with each tool's name in the enterprise deployment guide; tools already added keep working. Noodle installs this release before any later update.
 
 ## [0.87.1] - 2026-11-17
 

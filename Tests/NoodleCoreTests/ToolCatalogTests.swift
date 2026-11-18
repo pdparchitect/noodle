@@ -257,7 +257,7 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: URL(string: "http://grafana.example.com/api")!, adapter: "dashboards"))
     }
 
-    // TODO(0.89.0): remove with ToolConnectionRegistry.adoptEntryIDs. Milestone: 0.88.0.
+    // TODO(0.89.0): remove with ToolConnectionRegistry.adoptEntryIDs. Milestone: 0.88.0. Not before TODO(Pion 0.5.0) or TODO(Hub 0.55.0).
     func testAccountsSavedBeforeEntriesHadUUIDsMoveToThem() throws {
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
         XCTAssertEqual(notion.formerID, "notion")

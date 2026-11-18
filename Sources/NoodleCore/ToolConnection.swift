@@ -258,7 +258,8 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
         let file = root.appendingPathComponent("MCP/connections.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return Self() }
         var registry = try JSONDecoder().decode(Self.self, from: MCPBridgeFiles.read(file, limit: 32 * 1_048_576))
-        // TODO(0.89.0): remove with adoptEntryIDs. Milestone: 0.88.0. Not before TODO(Pion 0.5.0), milestone Pion 0.4.0.
+        // TODO(0.89.0): remove with adoptEntryIDs. Milestone: 0.88.0. Not before TODO(Pion 0.5.0), milestone Pion 0.4.0,
+        // nor TODO(Hub 0.55.0), milestone Hub 0.54.0.
         registry.adoptEntryIDs(ToolCatalog.entries)
         try registry.validate()
         registry.normalizeSkillNames()
@@ -269,6 +270,7 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
     // TODO(0.89.0): remove with its call in load(root:), ToolDefinition.formerID and
     // ToolCatalogTests.testAccountsSavedBeforeEntriesHadUUIDsMoveToThem. Milestone: 0.88.0.
     // TODO(Pion 0.5.0): Pion runs it too; remove it no earlier. Milestone: Pion 0.4.0.
+    // TODO(Hub 0.55.0): the Hub runs it for accounts added in its own Tools settings; remove it no earlier. Milestone: Hub 0.54.0.
     mutating func adoptEntryIDs(_ entries: [ToolDefinition]) {
         let current = Dictionary(entries.compactMap { entry in entry.formerID.map { ($0, entry.id) } }, uniquingKeysWith: { first, _ in first })
         for index in connections.indices {
