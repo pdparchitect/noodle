@@ -76,8 +76,8 @@ public struct ServiceResult: Sendable {
 /// Why an operation could not finish, said so the bot can act on it.
 public enum ServiceError: LocalizedError, Equatable, Sendable {
     case notFound
-    /// The service did not accept the credentials at all (HTTP 401).
-    case rejected
+    /// The service did not accept the credentials at all (HTTP 401), saying why when it did.
+    case rejected(String?)
     /// The service accepted the credentials, but they may not do this (HTTP 403), saying why when it did.
     case forbidden(String?)
     case rateLimited
@@ -90,7 +90,9 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .notFound: "The service has not found it (HTTP 404)."
-        case .rejected: "The service rejected this connection's credentials: the key or token is wrong or has expired. Ask the person to check it in Settings › Tools."
+        case .rejected(let reason):
+            "The service rejected this connection's credentials\(reason.map { " (it said: \($0))" } ?? ""): the key or token is wrong or has expired. "
+                + "Ask the person to check it in Settings › Tools."
         case .forbidden(let reason):
             "The service accepted this connection's credentials, but they may not do this\(reason.map { " (it said: \($0))" } ?? ""). "
                 + "Ask the person to check the permissions they were given, and the organisation, project or account the connection names, in Settings › Tools."
@@ -407,7 +409,7 @@ public struct ServiceClient: Sendable {
         let (data, response) = try await access.data(for: request)
         switch response.statusCode {
         case 200..<300: return (data, response)
-        case 401: throw ServiceError.rejected
+        case 401: throw ServiceError.rejected(Self.reason(data))
         case 403: throw ServiceError.forbidden(Self.reason(data))
         case 404: throw ServiceError.notFound
         case 429: throw ServiceError.rateLimited
