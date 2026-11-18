@@ -25,10 +25,9 @@ final class GoogleTests: XCTestCase {
     }
 
     func testBothSignInWithGoogleThroughTheOrganisationsOwnClientWithTheNarrowestScopesTheirAPIsTake() throws {
-        // Cloud Asset and Security Command Center take only their own scopes or all of Google Cloud's, not its read-only one.
+        // Cloud Asset's searches take only all of Google Cloud's scope, not its read-only one or Cloud Asset's own.
         let scopes = [(GoogleWorkspace.preset, workspace, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]),
-                      (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
-                                                   "https://www.googleapis.com/auth/securitycenter"])]
+                      (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/cloud-platform"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         ToolCatalog.use(PionCatalogue.entries)
         for (preset, account, scope) in scopes {

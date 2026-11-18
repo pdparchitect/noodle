@@ -415,6 +415,8 @@ public struct ServiceClient: Sendable {
         case 403: throw ServiceError.forbidden(Self.reason(data))
         case 404: throw ServiceError.notFound
         case 429: throw ServiceError.rateLimited
+        // A request turned down for what it asked, or for the service's own state, with the service's reason.
+        case 400, 409, 412, 422: throw Self.reason(data).map(ServiceError.refused) ?? ServiceError.status(response.statusCode)
         default: throw ServiceError.status(response.statusCode)
         }
     }

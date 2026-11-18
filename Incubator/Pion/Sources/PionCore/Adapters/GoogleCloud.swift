@@ -22,18 +22,17 @@ public enum GoogleCloud {
                          .init(value: "projects", title: "Project")])),
                      ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier),
                      ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Cloud Asset and Security Command Center take only their own scopes or all of Google Cloud's, not its
-            // read-only one; these three reach no other API, and what they may do there is the person's IAM roles.
-            oauth: .google(scopes: ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
-                                    "https://www.googleapis.com/auth/securitycenter"], clients: []),
+            // Cloud Asset's searches take only all of Google Cloud's scope, not its read-only one or Cloud Asset's own.
+            // What the token may do is then the IAM roles of whoever signs in; the operations here only read.
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/cloud-platform"], clients: []),
             oauthClientField: "clientID", adapter: "google-cloud")),
         setup: setup)
 
     static let setup = [
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation and, under **APIs & Services › Library**, enable the **Cloud Logging**, **Security Command Center** and **Cloud Asset** APIs in it. Pion's requests count against this project.",
-        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/logging.read`, `https://www.googleapis.com/auth/cloudasset` and `https://www.googleapis.com/auth/securitycenter`. The same client can serve Google Workspace too.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/cloud-platform`, which Cloud Asset's searches need. The same client can serve Google Workspace too.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "Whoever signs in reads with their own access, so they need **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer** on the organisation, folder or project to investigate, and **Private Logs Viewer** for Data Access logs too. Findings also need Security Command Center activated for the organisation.",
+        "Whoever signs in acts with their own access, so sign in with an account that holds only viewer roles where you can. It needs **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer** on the organisation, folder or project to investigate, and **Private Logs Viewer** for Data Access logs too. Findings also need Security Command Center activated for the organisation.",
         "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect** and sign in.",
     ]
 
