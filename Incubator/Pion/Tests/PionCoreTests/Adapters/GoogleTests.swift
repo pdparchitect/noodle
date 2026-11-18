@@ -24,14 +24,16 @@ final class GoogleTests: XCTestCase {
         XCTAssertNotNil(PionAdapters.all["google-workspace"])
     }
 
-    func testBothSignInWithGoogleThroughTheOrganisationsOwnClientWithReadOnlyScopes() throws {
-        let scopes = [(GoogleWorkspace.preset, workspace, "https://www.googleapis.com/auth/admin.reports.audit.readonly"),
-                      (GoogleCloud.preset, cloud, "https://www.googleapis.com/auth/cloud-platform.read-only")]
+    func testBothSignInWithGoogleThroughTheOrganisationsOwnClientWithTheNarrowestScopesTheirAPIsTake() throws {
+        // Cloud Asset and Security Command Center take only their own scopes or all of Google Cloud's, not its read-only one.
+        let scopes = [(GoogleWorkspace.preset, workspace, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]),
+                      (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
+                                                   "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         ToolCatalog.use(PionCatalogue.entries)
         for (preset, account, scope) in scopes {
             guard case .connection(let configuration) = preset.configuration, let oauth = configuration.oauth else { return XCTFail(preset.name) }
-            XCTAssertEqual(oauth.scopes, [scope])
+            XCTAssertEqual(oauth.scopes, scope)
             XCTAssertTrue(oauth.clients.isEmpty, "Pion ships a Google client of its own")
             XCTAssertEqual(configuration.oauthClientField, "clientID")
             XCTAssertEqual(account.settings?["clientID"], "1234-abc.apps.googleusercontent.com")
