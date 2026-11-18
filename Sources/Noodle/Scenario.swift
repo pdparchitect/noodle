@@ -305,10 +305,10 @@ extension Scenario {
         self.present = present
     }
 
-    /// `--scenario-without intro,outro` records the film without those title cards.
-    mutating func leaveOut(_ checks: LaunchChecks) throws {
-        guard let value = checks.value(after: DevelopmentHook.scenarioWithout) else { return }
-        film = try film?.without(value)
+    /// `--scenario-background` and `--scenario-without` change the film for one recording.
+    mutating func adjustFilm(_ checks: LaunchChecks) throws {
+        film = try ScenarioFilm.adjusted(film, background: checks.value(after: DevelopmentHook.scenarioBackground),
+                                         without: checks.value(after: DevelopmentHook.scenarioWithout), media: media)
     }
 
     static let tints = ScenarioFilm.tints
@@ -1305,7 +1305,7 @@ extension ScenarioSession {
                 guard let folder = ScenarioLauncher.folder(for: selection, root: scenariosRoot) else { throw ScenarioError("The bundle does not say where the scenarios are.") }
                 var scenario = try Scenario.load(from: folder)
                 try scenario.resize(checks)
-                try scenario.leaveOut(checks)
+                try scenario.adjustFilm(checks)
                 let session = try open(scenario)
                 session.selection = selection
                 try? ScenarioLauncher.select(selection, pointer: ScenarioLauncher.pointerURL)

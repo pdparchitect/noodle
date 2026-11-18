@@ -18,6 +18,7 @@ usage() {
     print -u2 '  --size WxH  open the main window at that size instead of the scenario'"'"'s own'
     print -u2 '  --silent    leave the sound off the recording'
     print -u2 '  --no-intro, --no-outro, --no-titles  record the film without its opening card, closing card or both'
+    print -u2 '  --background PATH|URL  record over this picture or video instead of the film'"'"'s own background'
     print -u2 '  --shadow    keep the window shadow in those shots'
     [[ "$benchmarks" == false ]] || print -u2 '  --benchmark[=PHASES]  run fixed phases instead of the timeline, print missed frames and quit'
     print -u2 '  --all       every scenario in turn'
@@ -26,13 +27,16 @@ usage() {
 }
 
 build=true shots=false record=false shadow=false all=false silent=false benchmark=
-selections=() ratios=() without=() expect_ratio=false size= expect_size=false
+selections=() ratios=() without=() expect_ratio=false size= expect_size=false background= expect_background=false
 for argument in "$@"; do
     if [[ "$expect_ratio" == true ]]; then
         ratios+=("$argument"); expect_ratio=false; continue
     fi
     if [[ "$expect_size" == true ]]; then
         size="$argument"; expect_size=false; continue
+    fi
+    if [[ "$expect_background" == true ]]; then
+        background="$argument"; expect_background=false; continue
     fi
     case "$argument" in
         --no-build) build=false ;;
@@ -41,6 +45,8 @@ for argument in "$@"; do
         --no-intro) without+=(intro) ;;
         --no-outro) without+=(outro) ;;
         --no-titles) without+=(intro outro) ;;
+        --background) expect_background=true ;;
+        --background=*) background="${argument#--background=}" ;;
         --video) record=true ;;
         --ratio) expect_ratio=true; record=true ;;
         --ratio=*) ratios+=("${argument#--ratio=}"); record=true ;;
@@ -54,7 +60,12 @@ for argument in "$@"; do
         *) selections+=("$argument") ;;
     esac
 done
-[[ "$expect_ratio" == false && "$expect_size" == false ]] || usage
+[[ "$expect_ratio" == false && "$expect_size" == false && "$expect_background" == false ]] || usage
+# A picture or video on this Mac is read where it is: the bundle is let read that one file, by its full path.
+if [[ -n "$background" && "$background" != http://* && "$background" != https://* ]]; then
+    background="${background:A}"
+    [[ -f "$background" ]] || { print -u2 "There is no file at $background."; exit 1; }
+fi
 [[ -z "$size" || "$size" == <->x<-> ]] || { print -u2 "$size is not a window size like 1240x860."; exit 1; }
 for ratio in "${ratios[@]}"; do
     [[ "$ratio" == <->:<-> ]] || { print -u2 "$ratio is not an aspect ratio like 16:9."; exit 1; }
@@ -70,7 +81,7 @@ fi
 # cache beside the scenarios: the bundle has no network of its own, and two scenarios
 # naming the same thing share a copy. Git ignores the folder.
 fetch_media() {
-    python3 - "$1" <<'PYTHON'
+    python3 - "$@" <<'PYTHON'
 import hashlib, json, subprocess, sys, urllib.parse
 from pathlib import Path
 
@@ -78,7 +89,9 @@ folder = Path(sys.argv[1])
 cache = folder.parent / ".cache"
 def addresses(node):
     if isinstance(node, dict):
-        for value in node.values(): yield from addresses(value)
+        # A link card's "url" is the page it stands for, shown without the network, not media to fetch.
+        for key, value in node.items():
+            if key != "url": yield from addresses(value)
     elif isinstance(node, list):
         for value in node: yield from addresses(value)
     elif isinstance(node, str) and node.startswith(("http://", "https://")):
@@ -87,7 +100,8 @@ def addresses(node):
 TYPES = {"video/mp4": ".mp4", "video/quicktime": ".mov", "video/x-m4v": ".m4v",
          "image/jpeg": ".jpg", "image/png": ".png", "image/heic": ".heic", "image/heif": ".heif"}
 
-wanted = sorted(set(addresses(json.loads((folder / "scenario.json").read_text()))))
+# The scenario's own addresses, and any the command line gives, such as --background.
+wanted = sorted(set(addresses(json.loads((folder / "scenario.json").read_text()))) | set(sys.argv[2:]))
 for address in wanted:
     stem = hashlib.sha256(address.encode()).hexdigest()[:16]
     if cache.exists() and any(f.name.startswith(stem) for f in cache.iterdir()):
@@ -165,6 +179,7 @@ for folder in "${folders[@]}"; do
         /usr/libexec/PlistBuddy -c "Add :$readable:0 string $folder/" "$entitlements"
     fi
 done
+[[ "$background" != /* ]] || /usr/libexec/PlistBuddy -c "Add :$readable:0 string $background" "$entitlements"
 
 if [[ -z "$signing_identity" ]]; then
     # find-identity -v still lists a revoked certificate, marked CSSMERR_TP_CERT_REVOKED.
@@ -193,6 +208,7 @@ executable="$contents/MacOS/$app_name"
 launch_arguments=(-AppleLocale en_US -AppleLanguages '(en)')
 [[ -z "$size" ]] || launch_arguments+=(--scenario-size "$size")
 [[ ${#without} == 0 ]] || launch_arguments+=(--scenario-without "${(j:,:)${(@u)without}}")
+[[ -z "$background" ]] || launch_arguments+=(--scenario-background "$background")
 if [[ ${#folders} == 0 ]]; then
     # Without this the bundle returns to the scenario it showed last.
     open "$app" --args --scenario-picker
@@ -209,7 +225,7 @@ for folder in "${folders[@]}"; do
         "$executable" --scenario "$folder" "${launch_arguments[@]}"
         continue
     fi
-    fetch_media "$folder"
+    if [[ "$background" == http://* || "$background" == https://* ]]; then fetch_media "$folder" "$background"; else fetch_media "$folder"; fi
     [[ "$shots" == false ]] || mkdir -p "$folder/shots"
     [[ "$record" == false ]] || mkdir -p "$folder/recordings"
     taken=0

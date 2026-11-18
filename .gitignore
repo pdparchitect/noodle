@@ -42,3 +42,5 @@ Incubator/Pion/*.xcodeproj/
 Incubator/Pion/*.xcworkspace/
 Incubator/Pion/Derived/
 Incubator/Pion/Scenarios/*/shots/
+Incubator/Pion/Scenarios/*/recordings/
+Incubator/Pion/Scenarios/.cache/

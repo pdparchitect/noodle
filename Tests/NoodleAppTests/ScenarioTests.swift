@@ -484,6 +484,25 @@ import XCTest
         XCTAssertEqual(LaunchChecks.digest("--scenario-size"), DevelopmentHook.scenarioSize)
         XCTAssertEqual(LaunchChecks.digest("--scenario-benchmark"), DevelopmentHook.scenarioBenchmark)
         XCTAssertEqual(LaunchChecks.digest("--scenario-without"), DevelopmentHook.scenarioWithout)
+        XCTAssertEqual(LaunchChecks.digest("--scenario-background"), DevelopmentHook.scenarioBackground)
+    }
+
+    /// `--scenario-background` lays a picture behind a recording without writing it into the scenario,
+    /// even into one that has no film of its own.
+    func testALaunchCanPutAPictureBehindTheFilm() throws {
+        let picture = try directory().appendingPathComponent("behind.jpeg")
+        try Data("picture".utf8).write(to: picture)
+        var scenario = try Scenario.load(from: try fixture())
+        XCTAssertNil(scenario.film)
+        try scenario.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-background", picture.path]))
+        XCTAssertEqual(scenario.film?.media, picture.path)
+        XCTAssertNil(scenario.film?.intro, "Only the background was asked for")
+        XCTAssertEqual(try scenario.media(picture.path).path, picture.path)
+        XCTAssertThrowsError(try scenario.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-background", "/nowhere/behind.jpeg"])))
+
+        var bare = try Scenario.load(from: try fixture())
+        try bare.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-without", "intro"]))
+        XCTAssertNil(bare.film, "Leaving out the titles of a scenario without a film makes none")
     }
 
     /// `--scenario-without` records a film without its opening or closing card, or both, and keeps its backdrop.
@@ -491,16 +510,16 @@ import XCTest
         let film = "\"film\": { \"background\": \"white\", \"intro\": { \"title\": \"A morning\" }, \"outro\": { \"tagline\": \"Bots.\" } },"
         for (value, intro, outro) in [("intro", false, true), ("outro", true, false), ("intro,outro", false, false)] {
             var scenario = try Scenario.load(from: try fixture(extra: film))
-            try scenario.leaveOut(LaunchChecks(arguments: ["Noodle", "--scenario-without", value]))
+            try scenario.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-without", value]))
             XCTAssertEqual(scenario.film?.intro != nil, intro, value)
             XCTAssertEqual(scenario.film?.outro != nil, outro, value)
             XCTAssertEqual(scenario.film?.background, "white", value)
         }
         var kept = try Scenario.load(from: try fixture(extra: film))
-        try kept.leaveOut(LaunchChecks(arguments: ["Noodle"]))
+        try kept.adjustFilm(LaunchChecks(arguments: ["Noodle"]))
         XCTAssertNotNil(kept.film?.intro)
         XCTAssertNotNil(kept.film?.outro)
-        XCTAssertThrowsError(try kept.leaveOut(LaunchChecks(arguments: ["Noodle", "--scenario-without", "credits"])))
+        XCTAssertThrowsError(try kept.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-without", "credits"])))
     }
 
     func testALaunchSizeReplacesTheWindowSizeOnly() throws {

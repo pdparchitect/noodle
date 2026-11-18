@@ -49,6 +49,21 @@ struct ScenarioFilm: Codable {
         return ["black", "white"].contains(value) ? nil : value
     }
 
+    /// The film as a launch asks for it, so one scenario can be recorded in different ways without editing it.
+    /// `background`, from `--scenario-background`, replaces what is behind the app, making a film of only that
+    /// for a scenario without one; `without`, from `--scenario-without`, leaves out title cards.
+    static func adjusted(_ film: ScenarioFilm?, background: String?, without: String?,
+                         media: (String) throws -> URL) throws -> ScenarioFilm? {
+        var film = film
+        if let background {
+            _ = try media(background)
+            film = film ?? ScenarioFilm()
+            film?.background = background
+        }
+        if let without { film = try film?.without(without) }
+        return film
+    }
+
     /// The film without the cards `value` names: "intro", "outro", or both separated by a comma, as
     /// `--scenario-without` gives them, so one scenario can be recorded without its titles. The backdrop stays.
     func without(_ value: String) throws -> ScenarioFilm {

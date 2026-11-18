@@ -302,7 +302,12 @@ enum ScenarioSupport {
     /// A picture or video a scenario names: an asset in its own folder, or a web address
     /// that scripts/scenario.sh has fetched into the `.cache` beside the scenarios. The
     /// bundle has no network of its own, so nothing is ever downloaded from in here.
+    /// A full path names a file scripts/scenario.sh has let the bundle read, such as a picture given to a recording.
     static func media(_ value: String, in folder: URL) throws -> URL {
+        if value.hasPrefix("/") {
+            guard FileManager.default.fileExists(atPath: value) else { throw ScenarioError("Missing file: \(value)") }
+            return URL(fileURLWithPath: value)
+        }
         guard isRemote(value) else { return try file(value, under: folder) }
         // One cache for all of them: the name is the address, so two scenarios naming the
         // same thing share the one copy. Found by name rather than by extension, because a

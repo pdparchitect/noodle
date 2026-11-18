@@ -59,7 +59,8 @@ name it opens the picker. With a name, or from the picker, it opens in the scena
 stays there for you to look around; only a capture plays its timeline. `--shots` plays it and saves each
 captured step to the scenario's `shots` folder, and `--video` records the scenario to its `recordings` folder, with `--ratio 16:9` and other shapes as MP4s and
 the film's titles, camera moves and sounds, as Noodle's scenarios have. `--no-intro`, `--no-outro` and
-`--no-titles` record it without its opening card, closing card or both.
+`--no-titles` record it without its opening card, closing card or both, and `--background` with a file or
+web address records it over that picture or video without writing it into the scenario.
 
 ## License
 

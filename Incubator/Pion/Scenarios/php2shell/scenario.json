@@ -7,6 +7,7 @@
   "champion": "Avery Lin",
   "settings": {
     "PionBackdropEffect": "grid",
+    "PionWindowSurface": "frosted",
     "sidebarTasks": "allOpen"
   },
   "agents": [
@@ -202,6 +203,10 @@
       "title": "GitHub - NCSC-NL/php2shell: Operational information regarding the 2026 php2shell vulnerabilities"
     }
   ],
+  "film": {
+    "intro": { "kicker": "Pion" },
+    "outro": { "tagline": "A team of agents on every incident." }
+  },
   "present": {
     "window": { "size": [1440, 880] },
     "select": "php2shell",
@@ -209,8 +214,9 @@
   },
   "timeline": [
     { "capture": "01-tasks-and-pins" },
-    { "waitFor": "key" },
+    { "wait": 3 },
     { "present": { "inspector": "case" } },
-    { "capture": "02-case" }
+    { "capture": "02-case" },
+    { "wait": 4 }
   ]
 }
