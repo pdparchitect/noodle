@@ -160,9 +160,18 @@ final class AttachmentAnnotationTests: XCTestCase {
             XCTAssertFalse(AttachmentAnnotation(source: source, comment: "Feedback", region: region).isValid)
         }
         XCTAssertFalse(AttachmentAnnotation(source: source, comment: " \n ").isValid)
-        XCTAssertFalse(AttachmentAnnotation(source: source, quote: "text", comment: "Feedback",
-            region: .init(x: 0, y: 0, width: 1, height: 1)).isValid)
         XCTAssertTrue(try repository.loadAttachments(conversationID: second.conversation.id).isEmpty)
+    }
+
+    /// A window captured around the field someone was typing in marks the field and quotes its text.
+    func testAVisualNoteMayAlsoQuoteTheTextItMarks() throws {
+        let source = ConversationAttachment(conversationID: UUID(), originalFilename: "Capture — Home - X.png",
+            storedFilename: "capture.png", mediaType: "image/png", byteCount: 1)
+        let note = AttachmentAnnotation(source: source, quote: "Shipping it today", comment: "Context from Google Chrome",
+            region: .init(x: 0.1, y: 0.2, width: 0.5, height: 0.1))
+        XCTAssertTrue(note.isValid)
+        XCTAssertEqual(note.mediaType, "image/png")
+        XCTAssertEqual(try JSONDecoder().decode(AttachmentAnnotation.self, from: JSONEncoder().encode(note)), note)
     }
 
     func testOldAttachmentsRemainCompatibleAndRegionRoundTrips() throws {

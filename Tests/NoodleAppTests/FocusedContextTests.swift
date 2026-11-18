@@ -6,61 +6,88 @@ import NoodleCore
 @MainActor final class FocusedContextTests: XCTestCase {
     private let chrome = FocusedContext(appName: "Google Chrome", bundleIdentifier: "com.google.Chrome", windowTitle: "Home / X",
         pageURL: "https://x.com/compose/post", fieldLabel: "Post text", fieldRole: "text entry area",
-        text: "Shipping it today", selection: "today")
+        text: "Shipping it today", selection: "today",
+        fieldFrame: CGRect(x: 100, y: 200, width: 300, height: 50), windowFrame: CGRect(x: 50, y: 100, width: 1000, height: 500))
 
-    /// The note says where the context came from, then the selection and the field's text, each fenced so
-    /// the bot reads them as quoted text.
-    func testTheNoteNamesTheAppPageAndFieldAndQuotesItsText() {
-        let note = chrome.note
-        XCTAssertTrue(note.hasPrefix("# Context from Google Chrome\n"), note)
-        XCTAssertTrue(note.contains("- Window: Home / X\n"), note)
-        XCTAssertTrue(note.contains("- Page: https://x.com/compose/post\n"), note)
-        XCTAssertTrue(note.contains("- Field: Post text (text entry area)\n"), note)
-        XCTAssertTrue(note.contains("## Selected text\n\n```\ntoday\n```"), note)
-        XCTAssertTrue(note.contains("## Field text\n\n```\nShipping it today\n```"), note)
+    /// The comment says where the context came from; the quote is the selection, or else the field's text.
+    func testTheCommentSaysWhereAndTheQuoteIsTheText() {
+        XCTAssertEqual(chrome.comment, "Context from Google Chrome: Home / X\nhttps://x.com/compose/post\nField: Post text (text entry area), selected text quoted")
+        XCTAssertEqual(chrome.quote, "today")
+        var whole = chrome
+        whole.selection = ""
+        XCTAssertEqual(whole.quote, "Shipping it today")
+        XCTAssertEqual(whole.comment, "Context from Google Chrome: Home / X\nhttps://x.com/compose/post\nField: Post text (text entry area)")
         XCTAssertEqual(chrome.title, "Home / X")
     }
 
-    /// A long field keeps its end, where people type; a fence in the text cannot close the quote.
-    func testLongTextKeepsItsEndAndFencesCannotBreakOut() {
+    /// The field is marked where it sits in the window, from the bottom-left as annotations count.
+    func testTheRegionIsTheFieldWithinTheWindow() throws {
+        let region = try XCTUnwrap(chrome.region)
+        XCTAssertEqual(region.x, 0.05, accuracy: 0.0001)
+        XCTAssertEqual(region.y, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(region.width, 0.3, accuracy: 0.0001)
+        XCTAssertEqual(region.height, 0.1, accuracy: 0.0001)
+        XCTAssertTrue(region.isValid)
+        var outside = chrome
+        outside.fieldFrame = CGRect(x: 2000, y: 2000, width: 10, height: 10)
+        XCTAssertNil(outside.region)
+    }
+
+    /// A long field keeps its end, where people type, and the comment says how much was left out.
+    func testLongTextKeepsItsEnd() throws {
         var context = chrome
         context.selection = nil
         context.text = String(repeating: "a", count: 30_000) + "END"
-        let note = context.note
-        XCTAssertTrue(note.contains("aEND\n"), "The end is kept")
-        XCTAssertLessThan(note.count, 21_000)
-        XCTAssertTrue(note.contains("10,003 earlier characters left out"), note)
-        XCTAssertFalse(note.contains("## Selected text"))
-
-        context.text = "Before\n```\nAfter"
-        XCTAssertTrue(context.note.contains("````\nBefore\n```\nAfter\n````"), context.note)
+        let quote = try XCTUnwrap(context.quote)
+        XCTAssertEqual(quote.count, FocusedContext.textLimit)
+        XCTAssertTrue(quote.hasSuffix("aEND"))
+        XCTAssertTrue(context.comment.hasSuffix("\nThe first 10,003 characters of the field are left out."), context.comment)
     }
 
-    /// An app with no readable field still says which app and window it was.
+    /// An app with no readable field still says which app it was.
     func testAnAppWithoutAFieldStillNamesItself() {
-        let context = FocusedContext(appName: "Preview", bundleIdentifier: "com.apple.Preview", windowTitle: nil,
-            pageURL: nil, fieldLabel: nil, fieldRole: nil, text: nil, selection: nil)
-        XCTAssertEqual(context.note, "# Context from Preview\n")
+        let context = FocusedContext(appName: "Preview", bundleIdentifier: "com.apple.Preview")
+        XCTAssertEqual(context.comment, "Context from Preview")
+        XCTAssertNil(context.quote)
+        XCTAssertNil(context.region)
         XCTAssertEqual(context.title, "Preview")
     }
 
-    /// Picking a conversation with context waits in its message field, ready to send, and sends nothing.
-    func testContextIsStagedInThePickedConversationWithoutSending() throws {
+    /// Picking a conversation with context leaves one annotation in its message field: the window with the
+    /// field outlined, quoting its text. Nothing is sent.
+    func testContextWaitsAsOneAnnotationWithoutSending() throws {
         let f = try StoreFixture(); addTeardownBlock { @MainActor in f.cleanUp() }
-        let image = try XCTUnwrap(CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 16,
+        let image = try XCTUnwrap(CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8, bytesPerRow: 160,
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
         try f.store.stageContext(chrome, screenshot: image, into: f.directA.id)
 
         let staged = f.store.pendingAttachments(for: f.directA.id)
-        XCTAssertEqual(staged.map(\.mediaType), ["image/png", "text/markdown"])
-        XCTAssertEqual(staged.map(\.originalFilename), ["Capture — Home - X.png", "Context — Home - X.md"])
-        let note = try String(contentsOf: f.store.attachmentFileURL(staged[1]), encoding: .utf8)
-        XCTAssertEqual(note, chrome.note)
+        XCTAssertEqual(staged.count, 1)
+        let note = try XCTUnwrap(staged.first?.annotation)
+        XCTAssertEqual(staged.first?.mediaType, "image/png")
+        XCTAssertEqual(note.sourceFilename, "Capture — Home - X.png")
+        XCTAssertEqual(note.quote, "today")
+        XCTAssertEqual(note.comment, chrome.comment)
+        XCTAssertEqual(note.region, chrome.region)
         XCTAssertTrue(f.store.pendingAttachments(for: f.directB.id).isEmpty)
         XCTAssertTrue(try f.repository.loadMessages(conversationID: f.directA.id).isEmpty)
 
-        // Without Screen Recording there is no picture, only the note.
-        try f.store.stageContext(chrome, screenshot: nil, into: f.directB.id)
-        XCTAssertEqual(f.store.pendingAttachments(for: f.directB.id).map(\.mediaType), ["text/markdown"])
+        // Without a field the whole window is marked.
+        try f.store.stageContext(FocusedContext(appName: "Preview", bundleIdentifier: nil), screenshot: image, into: f.directB.id)
+        XCTAssertEqual(f.store.pendingAttachments(for: f.directB.id).first?.annotation?.region,
+                       AttachmentAnnotation.Region(x: 0, y: 0, width: 1, height: 1))
+    }
+
+    /// Without Screen Recording there is no picture, so the field's text goes as a text annotation.
+    func testWithoutAPictureTheTextGoesAsATextAnnotation() throws {
+        let f = try StoreFixture(); addTeardownBlock { @MainActor in f.cleanUp() }
+        try f.store.stageContext(chrome, screenshot: nil, into: f.directA.id)
+        let staged = f.store.pendingAttachments(for: f.directA.id)
+        XCTAssertEqual(staged.map(\.mediaType), ["text/plain"])
+        let note = try XCTUnwrap(staged.first?.annotation)
+        XCTAssertEqual(note.sourceFilename, "Context — Home - X.txt")
+        XCTAssertEqual(note.quote, "today")
+        XCTAssertNil(note.region)
+        XCTAssertEqual(note.comment, chrome.comment)
     }
 }

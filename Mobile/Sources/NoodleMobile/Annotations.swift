@@ -17,14 +17,14 @@ enum AnnotationNotes {
                        comment: comment.trimmingCharacters(in: .whitespacesAndNewlines), region: request.region)
     }
 
-    /// As the Mac checks a note that arrives: a comment, a source, and a quote or a region but not both.
+    /// As the Mac checks a note that arrives: a comment, a source, and a valid region if it has one.
     static func isValid(_ note: LinkAnnotation) -> Bool {
         let regionValid = note.region.map { region in
             [region.x, region.y, region.width, region.height].allSatisfy(\.isFinite) && region.x >= 0 && region.y >= 0 &&
                 region.width > 0 && region.height > 0 && region.x + region.width <= 1.000001 && region.y + region.height <= 1.000001
         } ?? true
         return !note.sourceFilename.isEmpty && !note.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            regionValid && !(note.quote != nil && note.region != nil)
+            regionValid
     }
 
     static func filename(for note: LinkAnnotation) -> String {
@@ -594,7 +594,8 @@ struct AnnotationCard: View {
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            } else if let quote = note.quote {
+            }
+            if let quote = note.quote {
                 Text(quote).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 10)

@@ -73,13 +73,13 @@ without going back to Noodle. Change the shortcut in **Settings → Keybindings*
 
 To ask about what you are working on, tap ⌘ twice instead. The same grid opens
 with the app's name beside the search field, and the conversation you pick opens
-with two attachments waiting in its message field: a picture of the window, and
-a note of the app, window, page address, the field you were typing in, its text
-and any selection. Type your request and send it; nothing goes until you do, and
-Escape discards both. Reading the field needs **Device Control and Data Access**
+with an annotation waiting in its message field: a picture of the window with
+the field you were typing in outlined, its text (or just your selection) quoted,
+and a comment naming the app, window and page address. Type your request and
+send it; nothing goes until you do, and Escape discards it. Reading the field needs **Device Control and Data Access**
 (called **Accessibility** before macOS 27) in **System Settings → Privacy &
 Security**, and the picture needs **Screen Recording**; **Settings → Permissions**
-offers both. Without them, whatever is allowed still comes along. Password
+offers both. Without Screen Recording the annotation quotes the text alone. Password
 fields are never read. Hearing ⌘ tapped twice in another app also needs Device
 Control and Data Access; a key combination set in **Settings → Keybindings**
 works without it.

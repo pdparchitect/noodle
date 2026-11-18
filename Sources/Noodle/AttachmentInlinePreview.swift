@@ -271,11 +271,7 @@ struct AttachmentInlinePreview: View {
             Label("Annotation", systemImage: "text.bubble.fill")
                 .font(.caption.weight(.semibold)).foregroundStyle(.orange)
             Text(note.sourceFilename).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            if let quote = note.quote {
-                Text(quote).font(.callout).foregroundStyle(.secondary).lineLimit(3)
-                    .padding(.leading, 9)
-                    .overlay(alignment: .leading) { Rectangle().fill(.orange.opacity(0.6)).frame(width: 2) }
-            } else if note.region != nil {
+            if note.region != nil {
                 // Loading is driven by scroll visibility. Reserve the preview's
                 // height before loading so it cannot move neighboring rows and
                 // invalidate the lazy stack's placement as they become visible.
@@ -290,6 +286,12 @@ struct AttachmentInlinePreview: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: attachment.mediaType.hasPrefix("image/") ? 190 : nil)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            // A capture around a field marks it and quotes its text too.
+            if let quote = note.quote {
+                Text(quote).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                    .padding(.leading, 9)
+                    .overlay(alignment: .leading) { Rectangle().fill(.orange.opacity(0.6)).frame(width: 2) }
             }
             Text(note.comment).font(.callout).lineLimit(4)
         }

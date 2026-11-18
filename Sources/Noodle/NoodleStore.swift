@@ -2339,21 +2339,30 @@ final class NoodleStore {
     }
 
     func importCapture(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String,
-                       into conversationID: UUID) throws {
-        let saved = try CaptureAttachment.save(image: image, title: title, region: region, comment: comment,
+                       quote: String? = nil, into conversationID: UUID) throws {
+        let saved = try CaptureAttachment.save(image: image, title: title, region: region, comment: comment, quote: quote,
                                                into: conversationID, repository: repository)
         if let source = saved.source { attachmentsByConversation[conversationID, default: []].append(source) }
         attachmentsByConversation[conversationID, default: []].append(saved.attachment)
         drafts[conversationID].attachments.append(saved.attachment)
     }
 
-    /// Choose Conversation with Context: a picture of the window and a note of the field wait in the
-    /// conversation's message field, sent only with the person's message.
+    /// Choose Conversation with Context: one annotation waits in the conversation's message field, sent only with
+    /// the person's message. It marks the field on a picture of its window and quotes its text, or, without
+    /// a picture, quotes the text alone.
     func stageContext(_ context: FocusedContext, screenshot: CGImage?, into conversationID: UUID) throws {
         guard conversations.contains(where: { $0.id == conversationID }) else { throw WorkspaceError.missingConversation(conversationID) }
-        if let screenshot { try importCapture(image: screenshot, title: context.title, region: nil, comment: "", into: conversationID) }
-        try importAttachment(data: Data(context.note.utf8), originalFilename: "Context — \(CaptureAttachment.filenameTitle(context.title)).md",
-                             mediaType: "text/markdown", into: conversationID)
+        if let screenshot {
+            try importCapture(image: screenshot, title: context.title, region: context.region ?? .init(x: 0, y: 0, width: 1, height: 1),
+                              comment: context.comment, quote: context.quote, into: conversationID)
+            return
+        }
+        let text = Data((context.quote ?? context.comment).utf8)
+        let filename = "Context — \(CaptureAttachment.filenameTitle(context.title)).txt"
+        let source = ConversationAttachment(conversationID: conversationID, originalFilename: filename, storedFilename: filename,
+                                            mediaType: "text/plain", byteCount: Int64(text.count))
+        let note = AttachmentAnnotation(source: source, quote: context.quote, comment: context.comment)
+        try saveConversationAnnotation(note, content: Data(note.textRepresentation.utf8), source: source, sourceData: text)
     }
 
     private func importAttachmentFile(from url: URL, into conversationID: UUID) throws {

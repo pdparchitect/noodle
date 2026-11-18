@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Annotations on a picture that also quote text, as Noodle's Choose Conversation with Context sends them, reach the Hub's bots instead of being refused.
+
 ### Fixed
 
 - The Usage window switches back from Disk in less than half the time, with its toolbar in place from the start: on Disk, the period and bot filters stay where they are, dimmed, instead of leaving and coming back late.

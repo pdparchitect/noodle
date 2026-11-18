@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- An annotation on a picture can also quote text, as context sent from Noodle on the Mac does: the picture with the field outlined, then the field's text.
+
+### What to Test
+
+- On the Mac, tap ⌘ twice in a text field, pick a conversation kept on your Hub and send. On the phone, its annotation shows the window with the field outlined in orange, the field's text below it, and where it came from.
+
 ## [0.57.2] - 2026-11-17
 
 ### Fixed

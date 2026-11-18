@@ -21,7 +21,7 @@ import UniformTypeIdentifiers
     static func filenameTitle(_ title: String) -> String {
         String(title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-").prefix(100))
     }
-    static func save(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String,
+    static func save(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String, quote: String? = nil,
                      into conversationID: UUID, repository: WorkspaceRepository) throws -> Saved {
         let safeTitle = filenameTitle(title)
         let filename = "Capture — \(safeTitle.isEmpty ? "Screen" : safeTitle).png"
@@ -29,13 +29,13 @@ import UniformTypeIdentifiers
         // Validate before persisting the original so invalid comments cannot leave orphan captures.
         let proposed = ConversationAttachment(conversationID: conversationID, originalFilename: filename,
             storedFilename: filename, mediaType: "image/png", byteCount: Int64(raw.count))
-        if let region, !AttachmentAnnotation(source: proposed, comment: comment, region: region).isValid {
+        if let region, !AttachmentAnnotation(source: proposed, quote: quote, comment: comment, region: region).isValid {
             throw WorkspaceError.invalidAttachment
         }
         let source = try repository.importAttachment(data: raw, originalFilename: filename, into: conversationID, mediaType: "image/png")
         guard let region else { return Saved(attachment: source, source: nil) }
         do {
-            let note = AttachmentAnnotation(source: source, comment: comment, region: region)
+            let note = AttachmentAnnotation(source: source, quote: quote, comment: comment, region: region)
             let marked = try AnnotationContent.data(for: note, snapshot: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)))
             let attachment = try repository.importAnnotation(note, content: marked, on: source)
             return Saved(attachment: attachment, source: source)

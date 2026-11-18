@@ -55,7 +55,7 @@ public struct AttachmentAnnotation: Codable, Hashable, Sendable {
 
     public var isValid: Bool {
         (version == 1 || version == 2) && !sourceFilename.isEmpty && !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            (region?.isValid ?? true) && !(quote != nil && region != nil)
+            (region?.isValid ?? true)
     }
 
     public var mediaType: String {

@@ -176,6 +176,14 @@ struct AnnotationPreviewContent: View {
                     Divider().overlay(.white.opacity(0.08))
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
+                            // A capture around a field marks it above and quotes its text here.
+                            if note.region != nil, let quote = note.quote {
+                                Text(quote).font(.system(size: 14)).lineSpacing(3).foregroundStyle(.secondary)
+                                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                                    .padding(.leading, 12)
+                                    .overlay(alignment: .leading) { Rectangle().fill(.orange.opacity(0.8)).frame(width: 2) }
+                                    .padding(.bottom, 6)
+                            }
                             commentHeader()
                             if isEditing && editingAllowed { commentEditor }
                             else {

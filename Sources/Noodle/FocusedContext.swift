@@ -1,10 +1,11 @@
 import AppKit
 import ApplicationServices
+import NoodleCore
 import ScreenCaptureKit
 
 /// What was in front when Choose Conversation with Context was pressed: the app, its window and page, and
-/// the field being typed in. It waits in the picked conversation's message field as a note beside a picture
-/// of the window.
+/// the field being typed in. It waits in the picked conversation's message field as one annotation: the
+/// window with the field outlined, quoting its text, and a comment saying where it came from.
 struct FocusedContext: Equatable, Sendable {
     var appName: String
     var bundleIdentifier: String?
@@ -14,46 +15,43 @@ struct FocusedContext: Equatable, Sendable {
     var fieldRole: String?
     var text: String?
     var selection: String?
+    /// Screen frames as Accessibility gives them, from the top-left.
+    var fieldFrame: CGRect?
+    var windowFrame: CGRect?
 
     /// A terminal's whole scrollback is a "field" too; past this, only the end is kept, where people type.
     static let textLimit = 20_000
 
     var title: String { windowTitle.flatMap { $0.isEmpty ? nil : $0 } ?? appName }
 
-    var note: String {
-        var note = "# Context from \(appName)\n"
-        var details: [String] = []
-        if let windowTitle, !windowTitle.isEmpty { details.append("- Window: \(windowTitle)") }
-        if let pageURL, !pageURL.isEmpty { details.append("- Page: \(pageURL)") }
-        switch (fieldLabel.flatMap { $0.isEmpty ? nil : $0 }, fieldRole.flatMap { $0.isEmpty ? nil : $0 }) {
-        case let (label?, role?): details.append("- Field: \(label) (\(role))")
-        case let (label?, nil), let (nil, label?): details.append("- Field: \(label)")
-        case (nil, nil): break
-        }
-        if !details.isEmpty { note += "\n" + details.joined(separator: "\n") + "\n" }
-        if let selection, !selection.isEmpty { note += "\n## Selected text\n\n" + Self.fenced(selection) + "\n" }
-        if let text, !text.isEmpty {
-            note += "\n## Field text\n\n"
-            var kept = text
-            if text.count > Self.textLimit {
-                kept = String(text.suffix(Self.textLimit))
-                let left = (text.count - Self.textLimit).formatted(.number.locale(Locale(identifier: "en_US")))
-                note += "_\(left) earlier characters left out._\n\n"
-            }
-            note += Self.fenced(kept) + "\n"
-        }
-        return note
+    private var selected: String? { selection.flatMap { $0.isEmpty ? nil : $0 } }
+    private var fieldText: String? { text.flatMap { $0.isEmpty ? nil : $0 } }
+
+    /// The selection, or else the field's text.
+    var quote: String? {
+        if let selected { return selected }
+        return fieldText.map { $0.count > Self.textLimit ? String($0.suffix(Self.textLimit)) : $0 }
     }
 
-    /// A fence longer than any run of backticks in the text, so the text cannot close it.
-    private static func fenced(_ text: String) -> String {
-        var longest = 0, run = 0
-        for character in text {
-            run = character == "`" ? run + 1 : 0
-            longest = max(longest, run)
+    var comment: String {
+        var lines = ["Context from \(appName)" + (windowTitle.flatMap { $0.isEmpty ? nil : ": \($0)" } ?? "")]
+        if let pageURL, !pageURL.isEmpty { lines.append(pageURL) }
+        let label = [fieldLabel, fieldRole.map { "(\($0))" }].compactMap { $0.flatMap { $0.isEmpty || $0 == "()" ? nil : $0 } }
+        if !label.isEmpty { lines.append("Field: " + label.joined(separator: " ") + (selected == nil ? "" : ", selected text quoted")) }
+        if selected == nil, let fieldText, fieldText.count > Self.textLimit {
+            let left = (fieldText.count - Self.textLimit).formatted(.number.locale(Locale(identifier: "en_US")))
+            lines.append("The first \(left) characters of the field are left out.")
         }
-        let fence = String(repeating: "`", count: max(3, longest + 1))
-        return fence + "\n" + text + "\n" + fence
+        return lines.joined(separator: "\n")
+    }
+
+    /// The field within the window, as a fraction of it from the bottom-left, as annotations mark regions.
+    var region: AttachmentAnnotation.Region? {
+        guard let fieldFrame, let windowFrame, windowFrame.width > 0, windowFrame.height > 0 else { return nil }
+        let field = fieldFrame.intersection(windowFrame)
+        guard !field.isNull, field.width > 0, field.height > 0 else { return nil }
+        return .init(x: (field.minX - windowFrame.minX) / windowFrame.width, y: (windowFrame.maxY - field.maxY) / windowFrame.height,
+                     width: field.width / windowFrame.width, height: field.height / windowFrame.height)
     }
 }
 
@@ -89,7 +87,10 @@ enum FocusedContextReader {
         var context = FocusedContext(appName: appName, bundleIdentifier: bundleIdentifier)
         guard AXIsProcessTrusted() else { return context }
         let app = application(pid)
-        if let window = element(app, kAXFocusedWindowAttribute) { context.windowTitle = string(window, kAXTitleAttribute) }
+        if let window = element(app, kAXFocusedWindowAttribute) {
+            context.windowTitle = string(window, kAXTitleAttribute)
+            context.windowFrame = frame(window)
+        }
         // Passwords are never read.
         guard let field = element(app, kAXFocusedUIElementAttribute),
               string(field, kAXSubroleAttribute) != kAXSecureTextFieldSubrole else { return context }
@@ -98,6 +99,7 @@ enum FocusedContextReader {
         // A focused button or list is no field to quote.
         guard context.text != nil || context.selection != nil else { return context }
         context.fieldRole = string(field, kAXRoleDescriptionAttribute)
+        context.fieldFrame = frame(field)
         context.fieldLabel = [kAXTitleAttribute, kAXDescriptionAttribute, kAXPlaceholderValueAttribute]
             .lazy.compactMap { string(field, $0) }.first { !$0.isEmpty }
         var current: AXUIElement? = field
@@ -128,6 +130,14 @@ enum FocusedContextReader {
         return (value as! AXUIElement)
     }
 
+    private nonisolated static func frame(_ element: AXUIElement) -> CGRect? {
+        guard let position = attribute(element, kAXPositionAttribute), let size = attribute(element, kAXSizeAttribute),
+              CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else { return nil }
+        var origin = CGPoint.zero, extent = CGSize.zero
+        guard AXValueGetValue(position as! AXValue, .cgPoint, &origin), AXValueGetValue(size as! AXValue, .cgSize, &extent) else { return nil }
+        return CGRect(origin: origin, size: extent)
+    }
+
     private nonisolated static func string(_ element: AXUIElement, _ name: String) -> String? {
         switch attribute(element, name) {
         case let text as String: text
@@ -140,7 +150,7 @@ enum FocusedContextReader {
 extension FocusedContext {
     init(appName: String, bundleIdentifier: String?) {
         self.init(appName: appName, bundleIdentifier: bundleIdentifier, windowTitle: nil, pageURL: nil,
-                  fieldLabel: nil, fieldRole: nil, text: nil, selection: nil)
+                  fieldLabel: nil, fieldRole: nil, text: nil, selection: nil, fieldFrame: nil, windowFrame: nil)
     }
 }
 
