@@ -49,6 +49,20 @@ struct ScenarioFilm: Codable {
         return ["black", "white"].contains(value) ? nil : value
     }
 
+    /// The film without the cards `value` names: "intro", "outro", or both separated by a comma, as
+    /// `--scenario-without` gives them, so one scenario can be recorded without its titles. The backdrop stays.
+    func without(_ value: String) throws -> ScenarioFilm {
+        var film = self
+        for card in value.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            switch card {
+            case "intro": film.intro = nil
+            case "outro": film.outro = nil
+            default: throw ScenarioError("\(card) is not a title card; leave out intro, outro or both.")
+            }
+        }
+        return film
+    }
+
     /// `media` finds a picture or video the film names, and throws when it is missing.
     func validate(media: (String) throws -> URL) throws {
         func require(_ condition: Bool, _ message: String) throws {
@@ -319,10 +333,9 @@ private struct RisesIn: ViewModifier {
             card = film.outro.map { .outro(tagline: $0.tagline) }
             written = 3.3 + (film.outro?.hold ?? 1.6)
         }
-        guard let card else {
-            if stage == .outro { finish() }
-            return
-        }
+        // Without a card the film ends on the app, still on its stage: the recording runs on for a moment after
+        // the last step, and the app quits once it has stopped.
+        guard let card else { return }
         // The opening card is already up, from before the recorder started; presenting it
         // again only makes sure it is in front of the window it covers.
         present(card)

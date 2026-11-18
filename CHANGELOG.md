@@ -8,11 +8,13 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
+- Record a scenario without its title cards: `scripts/scenario.sh --video` takes `--no-intro`, `--no-outro` or `--no-titles`.
 - Choose Conversation with Context: tap ⌘ twice in any app to pick a bot or group with an annotation waiting in its message field, ready for your request: a picture of the window with the field you were typing in outlined, quoting its text or your selection, and saying which app, window and page it came from. It reads the field through Device Control and Data Access (Accessibility before macOS 27), which Settings › Permissions and Keybindings offer to turn on; without Screen Recording the text goes alone. Either Choose Conversation shortcut can also be a double tap of ⌘, ⌥, ⌃ or ⇧.
 - An annotation on a picture can also quote text.
 
 ### Fixed
 
+- A scenario film without a closing card ends on the app, instead of the desktop showing behind it for the last moment of the recording.
 - The Usage window switches back from Disk in less than half the time, with its toolbar in place from the start: on Disk, the period and bot filters stay where they are, dimmed, instead of leaving and coming back late.
 - The Usage window no longer holds up while it sums a long history: the last chart stays, dimmed, until the next is ready, and a period, grouping or measure you have already seen shows again at once.
 

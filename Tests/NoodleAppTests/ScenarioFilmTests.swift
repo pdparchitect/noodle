@@ -220,6 +220,30 @@ import XCTest
         XCTAssertEqual(played, 0, "The titles played with nobody recording")
     }
 
+    /// A film without a closing card ends on the app, still on its stage: the recording runs on for a
+    /// moment after the last step, and taking the backdrop away then showed the desktop behind the window.
+    @MainActor func testAFilmWithoutAClosingCardKeepsItsStageToTheEnd() async throws {
+        let session = try session(try scenario(film: "{ \"background\": \"black\" }"))
+        session.sleep = { _ in }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = NoodleAppIdentity.name
+        window.contentViewController = NSViewController()
+        window.contentViewController?.view = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        func staged() -> Bool {
+            NSApp.windows.contains { $0 !== window && $0.styleMask == .borderless && $0.isOpaque && $0.isVisible }
+        }
+
+        session.takesShots = true
+        await session.arrangeWindows(.init(), initial: true)
+        XCTAssertTrue(staged(), "A recording puts the app on a backdrop")
+        try await session.play()
+        XCTAssertTrue(staged(), "The backdrop went before the recording ended")
+    }
+
     func testAScenarioWithoutAFilmPlaysNoTitles() async throws {
         let folder = try directory()
         let json = """

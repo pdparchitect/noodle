@@ -724,6 +724,7 @@ enum DevelopmentHook {
     static let scenarioPicker = "41998b9aaaa37cb4b3f6a1fc5666714235669efe3190d47bf71511e4f57cc517"  // --scenario-picker
     static let scenarioSize = "3ab6e0e84b864576e7107a1f8502d0fa37e639c8ed3c973b201b159604655a6f"  // --scenario-size
     static let scenarioBenchmark = "63e110b50ffcb837f92c5221b04721f6022226032a1a8042b644c0ba78c23cad"  // --scenario-benchmark
+    static let scenarioWithout = "1d470c435e6827c48ae90b8faeeb49f7da6b0c859873e926cfd3b12ff9ec8aff"  // --scenario-without
     static let rehearse = "b7fc62f920a65a10598dc42ced62403ec5a4ddaea3b2f75aaee52d07b713629a"  // --rehearse
 }
 #endif

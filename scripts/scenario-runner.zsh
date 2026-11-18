@@ -17,6 +17,7 @@ usage() {
     print -u2 '  --ratio W:H also write that shape as an .mp4, once per ratio (16:9, 9:16, 1:1, 4:5)'
     print -u2 '  --size WxH  open the main window at that size instead of the scenario'"'"'s own'
     print -u2 '  --silent    leave the sound off the recording'
+    print -u2 '  --no-intro, --no-outro, --no-titles  record the film without its opening card, closing card or both'
     print -u2 '  --shadow    keep the window shadow in those shots'
     [[ "$benchmarks" == false ]] || print -u2 '  --benchmark[=PHASES]  run fixed phases instead of the timeline, print missed frames and quit'
     print -u2 '  --all       every scenario in turn'
@@ -25,7 +26,7 @@ usage() {
 }
 
 build=true shots=false record=false shadow=false all=false silent=false benchmark=
-selections=() ratios=() expect_ratio=false size= expect_size=false
+selections=() ratios=() without=() expect_ratio=false size= expect_size=false
 for argument in "$@"; do
     if [[ "$expect_ratio" == true ]]; then
         ratios+=("$argument"); expect_ratio=false; continue
@@ -37,6 +38,9 @@ for argument in "$@"; do
         --no-build) build=false ;;
         --shots) shots=true ;;
         --silent) silent=true ;;
+        --no-intro) without+=(intro) ;;
+        --no-outro) without+=(outro) ;;
+        --no-titles) without+=(intro outro) ;;
         --video) record=true ;;
         --ratio) expect_ratio=true; record=true ;;
         --ratio=*) ratios+=("${argument#--ratio=}"); record=true ;;
@@ -188,6 +192,7 @@ executable="$contents/MacOS/$app_name"
 # The scenario argument keeps the terminal attached: Return does what Scenarios > Next Step does.
 launch_arguments=(-AppleLocale en_US -AppleLanguages '(en)')
 [[ -z "$size" ]] || launch_arguments+=(--scenario-size "$size")
+[[ ${#without} == 0 ]] || launch_arguments+=(--scenario-without "${(j:,:)${(@u)without}}")
 if [[ ${#folders} == 0 ]]; then
     # Without this the bundle returns to the scenario it showed last.
     open "$app" --args --scenario-picker

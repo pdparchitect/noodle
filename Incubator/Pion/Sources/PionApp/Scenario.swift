@@ -282,7 +282,10 @@ struct PionScenario: Decodable {
                 guard let folder = ScenarioLauncher.folder(for: selection, root: scenariosRoot) else {
                     throw ScenarioError("The bundle does not say where the scenarios are.")
                 }
-                let session = try ScenarioSession(scenario: try PionScenario.load(from: folder), selection: selection, root: root)
+                var scenario = try PionScenario.load(from: folder)
+                // `--scenario-without intro,outro` records the film without those title cards.
+                if let value = Self.argument(after: "--scenario-without") { scenario.film = try scenario.film?.without(value) }
+                let session = try ScenarioSession(scenario: scenario, selection: selection, root: root)
                 session.takesShots = CommandLine.arguments.contains("--scenario-shots")
                 active = session
                 try? ScenarioLauncher.select(selection, pointer: pointer)
