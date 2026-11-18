@@ -3,14 +3,16 @@ import NoodleCore
 /// The services Pion offers in Settings › Tools › Add Tools: its own security services, which its adapters answer,
 /// and the few of Noodle's presets that help an investigation.
 public enum PionCatalogue {
-    /// Noodle's presets kept: tickets and notes, observability, code security and search, and web research. Grafana and
-    /// Sentry are Pion's own, read-only, for their own services and self-hosted ones.
+    /// Noodle's presets kept: tickets and notes, observability, code security and search, and web research. Grafana's and
+    /// Sentry's MCP servers sit beside Pion's own read-only Grafana and Sentry, which also reach self-hosted ones.
     static let keptFromNoodle: Set<String> = [
         "e1cce3a2-3e55-4949-ad25-950a70fe3599", // atlassian
         "ec956078-71a2-4599-83d6-b9e5ef43ad9c", // linear
         "21bd7ea0-d479-4f46-a705-bd4046a3dfec", // notion
         "e0a407a2-a551-490a-a1b2-eed96f1190a7", // axiom
         "7f412e92-4f67-44ff-87c1-3831ebd975bb", // datadog
+        "bc9a1647-6988-4051-b29c-035ba2bcdd5e", // grafana
+        "2a6427cb-2fc5-4774-b077-2b2a4abc6308", // sentry
         "c70b0318-fb98-4d9e-9c20-1708555045e1", // honeycomb
         "2d121438-4335-4ac7-9705-b9a87b3c2312", // semgrep
         "c0a4eff4-ac47-4b92-8fa2-209f9f304812", // socket

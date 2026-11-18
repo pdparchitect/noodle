@@ -15,10 +15,10 @@ final class PionCatalogueTests: XCTestCase {
         }
         // Noodle's own entries, by their icons' names.
         let fromNoodle = Set(PionCatalogue.entries.filter { entry in ToolCatalog.noodle.contains { $0.id == entry.id } }.map(\.iconName))
-        for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "semgrep", "perplexity"] {
+        for kept in ["atlassian", "linear", "notion", "axiom", "datadog", "grafana", "sentry", "semgrep", "perplexity"] {
             XCTAssertTrue(fromNoodle.contains(kept), kept)
         }
-        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter", "grafana", "sentry"] {
+        for dropped in ["canva", "stripe", "calendly", "gmail", "klaviyo", "otter"] {
             XCTAssertFalse(fromNoodle.contains(dropped), dropped)
         }
         let noodle = Set(ToolCatalog.noodle.map(\.id))

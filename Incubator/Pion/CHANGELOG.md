@@ -9,7 +9,7 @@
 
 ### Changed
 
-- Sentry in Settings › Tools is now Pion's own, read-only, in place of Sentry's MCP server; an account added before keeps working as a custom MCP connection.
+- Grafana's and Sentry's MCP servers are offered again in Settings › Tools, marked MCP, beside Pion's own read-only Grafana and Sentry.
 - Retire the upgrade step that moved saved tools to their catalogue entries' new IDs. Updates already pass through Pion 0.4.0.
 - Grafana's description in Settings › Tools says it is a self-hosted Grafana, without guessing where it runs.
 - Pion's own services show their own icons in Settings › Tools, instead of a letter.
