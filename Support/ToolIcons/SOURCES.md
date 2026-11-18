@@ -36,6 +36,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | convex.icon (2026-10-06) | https://www.convex.dev/favicon.ico |
 | coupler.icon (2026-10-06) | https://www.coupler.io/assets/favicon/apple-touch-icon.png |
 | crmkit.icon | https://crmkit.ai/favicon.ico |
+| crowdsec.icon (2026-11-18) | https://github.com/crowdsecurity.png (CrowdSec's GitHub organisation picture, 256×256; its website offers only a 48×48 favicon) |
 | crowdstrike.icon (2026-11-18) | https://www.crowdstrike.com/etc.clientlibs/crowdstrike/clientlibs/crowdstrike-common/resources/favicon.ico |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | defender.icon (2026-11-18) | https://security.microsoft.com/favicon.ico |
