@@ -239,10 +239,13 @@ public struct ToolConnectionEditor: View {
                     TextField("e.g. Notion — Work", text: $name, axis: .horizontal).lineLimit(1)
                         .help("Use a distinct name for each account")
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(servedByApp ? "Address" : "MCP Server URL").font(.caption.weight(.semibold))
-                    TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
-                        .autocorrectionDisabled().disabled(existing != nil)
+                // A tool the app answers has the address its entry gives it, which cannot change, so it is not shown.
+                if !servedByApp {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("MCP Server URL").font(.caption.weight(.semibold))
+                        TextField("https://…", text: $endpoint, axis: .horizontal).lineLimit(1)
+                            .autocorrectionDisabled().disabled(existing != nil)
+                    }
                 }
                 if onSecret != nil {
                     // An adapter connection proves itself the way its adapter expects; only its values change here.

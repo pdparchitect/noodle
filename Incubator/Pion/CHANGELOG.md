@@ -17,7 +17,7 @@
 
 ### Fixed
 
-- Editing one of Pion's own tools no longer calls it an MCP connection or its address an MCP server's, and drops the notes under its fields; removing a tool no longer says its sign-in is deleted from Noodle.
+- Editing one of Pion's own tools no longer calls it an MCP connection or shows the address it cannot change, drops the notes under its fields, and shows Setup Steps only where a key can be replaced; removing a tool no longer says its sign-in is deleted from Noodle.
 
 ## [0.3.0] - 2026-11-17
 
