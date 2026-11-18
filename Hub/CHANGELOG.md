@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Editing a catalogue tool lets you change the details you gave when adding it, such as its address or organisation, and no longer shows the header, token address or scope its entry sets; details that move where it points ask for its key again.
 - Retire upgrade steps for data from before the 0.43.0 and 0.54.0 milestones: removing bots' copies of the harness command-line tools' own logins, and moving saved tools to their catalogue entries' new IDs. Updates already pass through those releases.
 
 ### Added

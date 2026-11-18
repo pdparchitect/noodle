@@ -71,6 +71,18 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     /// What was filled in for the preset's fields, such as its domain; nil when it has none.
     public var settings: [String: String]?
 
+    /// This account as its preset makes it from new details, such as another address or organisation: what `fresh`
+    /// says it reaches and how, keeping the name bots know it by, its icon and the person's own text.
+    public func remade(as fresh: ToolConnection) -> ToolConnection {
+        var record = fresh
+        record.skillName = skillName
+        record.iconData = iconData
+        record.name = name
+        record.description = description
+        record.instructions = instructions
+        return record
+    }
+
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, clientCredentials: ConnectionClientCredentials? = nil, awsSigning: ConnectionAWSSigning? = nil,

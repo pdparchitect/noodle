@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Editing a catalogue tool lets you change the details you gave when adding it, such as its address or organisation, and no longer shows the header, token address or scope its entry sets; details that move where it points ask for its key again.
 - Grafana's and Sentry's MCP servers are offered again in Settings › Tools, marked MCP, beside Pion's own read-only Grafana and Sentry.
 - Retire the upgrade step that moved saved tools to their catalogue entries' new IDs. Updates already pass through Pion 0.4.0.
 - Grafana's description in Settings › Tools says it is a self-hosted Grafana, without guessing where it runs.

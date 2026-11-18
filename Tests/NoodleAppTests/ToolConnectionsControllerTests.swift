@@ -278,7 +278,8 @@ import XCTest
         try f.controller.assign([account.id], to: f.a)
         try f.start([f.a])
         let response = try await f.exchange(ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName))
-        XCTAssertEqual(response.error, "The tool connection could not complete the request. Try reconnecting in Settings → Tools.")
+        // Only the kind of error, never what the service said.
+        XCTAssertEqual(response.error, "The tool connection could not complete the request (fixture 1). Try reconnecting in Settings → Tools.")
         try await f.waitUntil { f.controller.errors[account.id] == response.error }
         XCTAssertNil(response.result)
     }

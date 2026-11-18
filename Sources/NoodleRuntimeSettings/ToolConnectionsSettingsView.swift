@@ -176,6 +176,8 @@ public struct ToolConnectionEditor: View {
     @State private var error: String?
     @State private var newConnectionID = UUID()
     @State private var saving = false
+    /// What the account filled in for its catalogue entry's fields, such as its address and organisation.
+    @State private var values: [String: String]
     public init(controller: ToolConnectionsController, existing: ToolConnection? = nil,
          onBack: (() -> Void)? = nil, onSaved: @escaping (ToolConnection) -> Void = { _ in },
          onConnect: ((ToolConnection) -> Void)? = nil) {
@@ -190,6 +192,7 @@ public struct ToolConnectionEditor: View {
         onSecret = { controller.connect($0, secret: $1) }
         _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client
                         : existing?.awsSigning != nil ? .aws : existing?.googleServiceAccount != nil ? .google : .browser)
+        _values = State(initialValue: existing?.settings ?? [:])
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
         _scope = State(initialValue: existing?.clientCredentials?.scope ?? "")
@@ -211,6 +214,7 @@ public struct ToolConnectionEditor: View {
         self.onConnect = onConnect
         onSecret = nil
         _signIn = State(initialValue: .browser)
+        _values = State(initialValue: existing?.settings ?? [:])
         _tokenHeader = State(initialValue: "Authorization")
         _tokenEndpoint = State(initialValue: "")
         _scope = State(initialValue: "")
@@ -250,6 +254,20 @@ public struct ToolConnectionEditor: View {
                             .autocorrectionDisabled().disabled(existing != nil)
                     }
                 }
+                ForEach(presetFields, id: \.key) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.title).font(.caption.weight(.semibold))
+                        let value = Binding(get: { values[item.key] ?? "" }, set: { values[item.key] = $0 })
+                        if case .choice(let options) = item.kind {
+                            Picker(item.title, selection: value) {
+                                ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
+                            }
+                            .labelsHidden()
+                        } else {
+                            TextField(item.placeholder, text: value, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                        }
+                    }
+                }
                 if onSecret != nil {
                     // An adapter connection proves itself the way its adapter expects; only its values change here.
                     if existing?.adapter == nil {
@@ -281,15 +299,18 @@ public struct ToolConnectionEditor: View {
                         }
                     }
                     if signIn == .client {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Token URL").font(.caption.weight(.semibold))
-                            TextField("https://…/oauth2/token", text: $tokenEndpoint, axis: .horizontal).lineLimit(1)
-                                .autocorrectionDisabled()
-                                .help("Where the client ID and secret are exchanged for access tokens.")
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Scope").font(.caption.weight(.semibold))
-                            TextField("Optional", text: $scope, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                        // A catalogue tool's token address and scope are its entry's.
+                        if preset == nil {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Token URL").font(.caption.weight(.semibold))
+                                TextField("https://…/oauth2/token", text: $tokenEndpoint, axis: .horizontal).lineLimit(1)
+                                    .autocorrectionDisabled()
+                                    .help("Where the client ID and secret are exchanged for access tokens.")
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Scope").font(.caption.weight(.semibold))
+                                TextField("Optional", text: $scope, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
+                            }
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Client ID").font(.caption.weight(.semibold))
@@ -311,7 +332,8 @@ public struct ToolConnectionEditor: View {
                             SecureField(composed.second, text: $clientSecret)
                         }
                     } else if signIn == .token {
-                        if existing?.tokenParameter == nil {
+                        // A catalogue tool's header is its entry's.
+                        if existing?.tokenParameter == nil, preset == nil {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Header").font(.caption.weight(.semibold))
                                 TextField("Authorization", text: $tokenHeader, axis: .horizontal).lineLimit(1)
@@ -348,6 +370,22 @@ public struct ToolConnectionEditor: View {
     }
     /// Whether the app's own adapter answers it, through the service's API rather than an MCP server.
     private var servedByApp: Bool { existing?.adapter != nil }
+    /// The catalogue entry the account was made from, when it is one; its details are then edited as its fields.
+    private var preset: ToolDefinition? { existing.flatMap(ToolCatalog.definition(for:)) }
+    private var presetFields: [ToolField] {
+        guard case .connection(let configuration)? = preset?.configuration else { return [] }
+        return configuration.fields
+    }
+    /// Whether a new key, token or secret was entered in place of the saved one.
+    private var enteredSecret: Bool {
+        func filled(_ value: String) -> Bool { !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return switch signIn {
+        case .browser: false
+        case .token: composedToken != nil ? filled(clientID) : filled(token)
+        case .client, .aws: filled(clientID)
+        case .google: filled(serviceAccountKey)
+        }
+    }
     /// The two values an existing connection's token is made from, when its preset composes it.
     private var composedToken: ComposedToken? {
         guard let existing, case .connection(let configuration)? = ToolCatalog.definition(for: existing)?.configuration else { return nil }
@@ -366,6 +404,19 @@ public struct ToolConnectionEditor: View {
         } catch { self.error = error.localizedDescription }
     }
     private func draft() throws -> ToolConnection {
+        if let existing, let preset {
+            // Made again from its fields, so a new address or organisation reaches all it touches, as on adding it.
+            let fresh = try preset.makeConnection(id: existing.id, name: try ConversationName.validated(name), values: values)
+            var record = existing.remade(as: fresh)
+            record.name = try ConversationName.validated(name)
+            record.description = String(description.prefix(1_000))
+            record.instructions = String(instructions.prefix(20_000))
+            // A key goes only where it was given: one for an address that moved is asked for again.
+            if record.endpoint != existing.endpoint || record.clientCredentials != existing.clientCredentials, existing.keepsSecret, !enteredSecret {
+                throw ToolConnectionError.message("Enter the key or token again for the new details.")
+            }
+            return record
+        }
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             throw ToolConnectionError.message("Enter a valid HTTPS server URL.")
         }
@@ -433,7 +484,9 @@ public struct ToolConnectionEditor: View {
         case .google: serviceAccountKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .google(serviceAccountKey)
         }
         let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
-        let shouldConnect = existing == nil || switchedToBrowser || secret != nil
+        // New details for a catalogue tool connect it again, so a sign-in for the old ones is not kept using.
+        let detailsChanged = existing.map { $0.endpoint != record.endpoint || $0.settings != record.settings } ?? false
+        let shouldConnect = existing == nil || switchedToBrowser || secret != nil || detailsChanged
         dismiss()
         if shouldConnect {
             Task { @MainActor in

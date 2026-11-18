@@ -257,6 +257,28 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Plain", endpoint: URL(string: "http://grafana.example.com/api")!, adapter: "dashboards"))
     }
 
+    func testAnAccountRemadeFromNewDetailsKeepsTheNameBotsKnowItByAndThePersonsText() throws {
+        let organisation = ToolField(key: "org", title: "Organisation", placeholder: "kestrel", kind: .identifier)
+        let errors = ToolDefinition(id: "errors", name: "Errors", summary: "Issues.", defaultInstructions: "Read.", iconName: "errors",
+            configuration: .connection(.init(endpointTemplate: "https://errors.example/api/0/organizations/{org}", fields: [organisation],
+                                             tokenHeader: "Authorization", adapter: "errors")))
+        var account = try errors.makeConnection(name: "Errors — Work", values: ["org": "sentry"])
+        account.description = "Mine."
+        account.instructions = "Look at web first."
+        account.iconData = Data([1, 2, 3])
+        let fresh = try errors.makeConnection(id: account.id, name: "Something else", values: ["org": "kestrel"])
+        let remade = account.remade(as: fresh)
+        XCTAssertEqual(remade.endpoint.absoluteString, "https://errors.example/api/0/organizations/kestrel")
+        XCTAssertEqual(remade.settings, ["org": "kestrel"])
+        XCTAssertEqual(remade.id, account.id)
+        XCTAssertEqual(remade.skillName, account.skillName, "bots would lose the name they call it by")
+        XCTAssertEqual(remade.name, "Errors — Work")
+        XCTAssertEqual(remade.description, "Mine.")
+        XCTAssertEqual(remade.instructions, "Look at web first.")
+        XCTAssertEqual(remade.iconData, Data([1, 2, 3]))
+        XCTAssertEqual(remade.tokenHeader, "Authorization")
+    }
+
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })
