@@ -6,6 +6,10 @@
 
 - crt.sh in Settings › Tools, with nothing to set up: agents discover the hosts under a domain, including forgotten and staging ones, and the other domains they share certificates with, from every certificate issued for its names in the public Certificate Transparency logs, newest first.
 
+### Fixed
+
+- The case inspector keeps the width you gave it after you visit an agent or group and come back to an Investigation, instead of sometimes narrowing to its smallest and remembering that.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added

@@ -154,6 +154,10 @@ struct ConversationView: View {
                             if (300...520).contains(width) { UserDefaults.standard.set(Double(width), forKey: Self.inspectorWidthKey) }
                         }
                         .background { Backdrop(frosted: true).ignoresSafeArea() }
+                } else {
+                    // Something to carry the width below while an agent or group shows: with nothing, the hidden
+                    // column falls back to a fixed default, and on returning is only held to the minimum.
+                    Color.clear
                 }
             }
             // Back at the width it was left at, here and on the next launch; widths outside the column's
