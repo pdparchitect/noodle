@@ -67,6 +67,7 @@ final class ServiceAdapterTests: XCTestCase {
         XCTAssertTrue(missing.contains("not found"), missing)
         let rejected = try await message(#"{"hash":"bad"}"#)
         XCTAssertTrue(rejected.contains("rejected"), rejected)
+        XCTAssertTrue(rejected.contains("(it said: WrongCredentials)"), rejected)
         // Accepted credentials that may not do this are told apart from refused ones, in the service's own words.
         let denied = try await message(#"{"hash":"denied"}"#)
         XCTAssertTrue(denied.contains("accepted this connection's credentials, but they may not do this"), denied)

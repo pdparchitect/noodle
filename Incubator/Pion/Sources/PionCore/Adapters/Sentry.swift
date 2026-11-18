@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleMCP
 
-/// Sentry, read through its web API with an internal integration's token: an organisation's projects, its issues and
+/// Sentry, read through its web API with a personal or internal integration token: an organisation's projects, its issues and
 /// the latest event behind one. Sentry's own service and a self-hosted Sentry are two entries over the same operations.
 public enum Sentry {
     static let instructions = """
@@ -33,9 +33,10 @@ public enum Sentry {
         setup: serverSetup)
 
     static let token = [
-        "In Sentry, open **Settings › Developer Settings › Custom Integrations** and choose **Create New Integration › Internal Integration**. Name it, such as Pion.",
-        "Under **Permissions**, give it **Read** for **Project**, **Issue & Event** and **Organization**, and nothing else, then save it.",
-        "Under **Tokens**, copy its token and paste it here.",
+        "In Sentry, open **User Settings › Personal Tokens**, at `/settings/account/api/auth-tokens/`, and choose **Create New Token**. Name it, such as Pion.",
+        "Give it **Read** for **Project**, **Issue & Event** and **Organization** (`project:read`, `event:read` and `org:read`), and nothing else. Organization starts at No Access; without it, Sentry refuses every request.",
+        "Copy the token at once, since Sentry shows it only then, and paste it here. It reads only what your own account may see.",
+        "For a Sentry a team shares, an organisation owner or manager can instead make an internal integration, under **Settings › Developer Settings › Custom Integrations**, with the same permissions, so access does not depend on one person's account.",
     ]
 
     static let cloudSetup = token + [
@@ -43,7 +44,7 @@ public enum Sentry {
     ]
 
     static let serverSetup = token + [
-        "For the address, give the one you open Sentry at, such as `http://sentry.example.lan:9000`; plain `http` works only on this Mac or the local network. For the organisation, give its slug from Sentry's addresses, `sentry` unless you made another.",
+        "For the address, give the one you open Sentry at, such as `http://sentry.example.lan:9000`; plain `http` works only on this Mac or the local network. For the organisation, give its slug, from the address of any Sentry page: `kestrel-labs` in `/organizations/kestrel-labs/` or `/settings/kestrel-labs/`.",
     ]
 
     public static let adapter = OperationAdapter(operations: [Projects(), Issues(), IssueEvent()])
