@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-11-18
+
 ### Changed
 
 - An annotation on a picture can also quote text, as context sent from Noodle on the Mac does: the picture with the field outlined, then the field's text.

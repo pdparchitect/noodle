@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.90.0] - 2026-11-18
+
 ### Added
 
 - Record a scenario without its title cards, or over a picture or video of your choosing: `scripts/scenario.sh --video` takes `--no-intro`, `--no-outro` or `--no-titles`, and `--background` with a file or web address, which is not written into the scenario.

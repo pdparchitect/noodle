@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-18
+
 ### Changed
 
 - Annotations on a picture that also quote text, as Noodle's Choose Conversation with Context sends them, reach the Hub's bots instead of being refused.

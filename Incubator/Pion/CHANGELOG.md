@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
 ### Added
 
 - Scenarios record as films with `scripts/scenario.sh --video`, as Noodle's do: titles and a backdrop around the recording, closing on Pion's symbol, the camera moving in on the composer or transcript, and sounds for replies. `--no-intro`, `--no-outro` and `--no-titles` leave the title cards out, and `--background` records over a picture or video of your choosing.
