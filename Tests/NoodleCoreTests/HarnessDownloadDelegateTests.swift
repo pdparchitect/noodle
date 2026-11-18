@@ -46,7 +46,9 @@ final class HarnessDownloadDelegateTests: XCTestCase {
         XCTAssertEqual(reports.values.map(\.0), [60, 100])
         XCTAssertEqual(reports.values.map(\.1), [0, 100], "An unknown total is reported as zero")
         await assertThrows(completion, "exceeded its expected size")
-        XCTAssertEqual(task.state, .canceling)
+        // Cancelled: a task never started only completes by being cancelled, and the session may already
+        // have finished cancelling it by the time it is looked at.
+        XCTAssertTrue([.canceling, .completed].contains(task.state), "\(task.state.rawValue)")
     }
 
     func testAFailedResponseLeavesNothingAtTheDestination() async throws {

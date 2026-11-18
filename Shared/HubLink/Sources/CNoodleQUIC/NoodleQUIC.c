@@ -22,7 +22,20 @@ static HQUIC registration;
 static pthread_once_t loaded = PTHREAD_ONCE_INIT;
 static char load_error[256];
 
+/// Exiting runs OpenSSL's cleanup, which frees its state while a connection may still be loading its
+/// certificate on another thread, crashing on the way out. OpenSSL is told to leave it, before msquic
+/// starts it; the process is ending, so nothing is lost.
+static void keep_openssl_at_exit(void) {
+    void *crypto = dlopen("libcrypto.so.3", RTLD_NOW | RTLD_LOCAL);
+    if (!crypto) return;
+    typedef int (*Init)(uint64_t, const void *);
+    Init init = (Init)dlsym(crypto, "OPENSSL_init_crypto");
+    // OPENSSL_INIT_NO_ATEXIT, from OpenSSL 3's crypto.h, which is not among this package's headers.
+    if (init) init(0x00080000L, NULL);
+}
+
 static void load(void) {
+    keep_openssl_at_exit();
     void *library = dlopen("libmsquic.so.2", RTLD_NOW | RTLD_LOCAL);
     if (!library) library = dlopen("libmsquic.so", RTLD_NOW | RTLD_LOCAL);
     if (!library) {
