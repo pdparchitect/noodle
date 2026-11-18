@@ -38,6 +38,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | crmkit.icon | https://crmkit.ai/favicon.ico |
 | crowdsec.icon (2026-11-18) | https://github.com/crowdsecurity.png (CrowdSec's GitHub organisation picture, 256×256; its website offers only a 48×48 favicon) |
 | crowdstrike.icon (2026-11-18) | https://www.crowdstrike.com/etc.clientlibs/crowdstrike/clientlibs/crowdstrike-common/resources/favicon.ico |
+| crtsh.icon (2026-11-18) | https://crt.sh/favicon.ico (Sectigo, which runs crt.sh; 48×48 frame, converted to PNG) |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | defender.icon (2026-11-18) | https://security.microsoft.com/favicon.ico |
 | dropbox.icon (2026-10-06) | https://cfl.dropboxstatic.com/static/metaserver/static/images/favicon.ico |

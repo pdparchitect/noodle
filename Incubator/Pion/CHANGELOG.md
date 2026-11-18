@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- crt.sh in Settings › Tools, with nothing to set up: agents discover the hosts under a domain, including forgotten and staging ones, and the other domains they share certificates with, from every certificate issued for its names in the public Certificate Transparency logs, newest first.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added

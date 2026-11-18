@@ -42,7 +42,7 @@ Agents never change a system themselves: they recommend changes to you in the co
 
 Harness signs in to the harnesses agents run on, Agents changes their models and archives them, and
 Tools connects them to services, over MCP or through Pion's own lookups: reputation services such as
-VirusTotal, Shodan, GreyNoise and CrowdSec CTI; new vulnerabilities in the products you use, from NVD; identity providers such as Okta, Microsoft Entra ID and Google
+VirusTotal, Shodan, GreyNoise and CrowdSec CTI; new vulnerabilities in the products you use, from NVD; the hosts a domain has, from its certificates on crt.sh; identity providers such as Okta, Microsoft Entra ID and Google
 Workspace; endpoint and XDR consoles such as CrowdStrike Falcon and Microsoft Defender XDR; log
 searches in Splunk, Elastic, Microsoft Sentinel and Sumo Logic; metrics, logs and alerts in Grafana
 Cloud or a Grafana you run, and errors in Sentry or a Sentry you run, even on this Mac or your network; and cloud accounts in AWS, Google
