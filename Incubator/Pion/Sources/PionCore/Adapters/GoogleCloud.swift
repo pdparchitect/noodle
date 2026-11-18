@@ -12,7 +12,7 @@ public enum GoogleCloud {
         defaultInstructions: """
         Use Google Cloud to investigate an organisation, folder or project: search the Cloud Audit Logs by principal, \
         method, resource and time; list Security Command Center findings by severity and category; find who has access \
-        to what from IAM policies; and find resources by name or type. Record each finding as evidence, citing the scope \
+        to what, for a member, including through groups, or for a resource; and list resources by type, by name too. Record each finding as evidence, citing the scope \
         and time window. These tools only read: recommend removing access or changing a resource to the champion.
         """,
         iconName: "google-cloud",
@@ -22,15 +22,17 @@ public enum GoogleCloud {
                          .init(value: "projects", title: "Project")])),
                      ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier),
                      ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Cloud Asset's searches take only all of Google Cloud's scope, not its read-only one or Cloud Asset's own.
-            // What the token may do is then the IAM roles of whoever signs in; the operations here only read.
-            oauth: .google(scopes: ["https://www.googleapis.com/auth/cloud-platform"], clients: []),
+            // The narrowest each API takes: Logging's read-only scope, Cloud Asset's own, whose methods only read, and
+            // Security Command Center's own, as it has no read-only one. Never all of Google Cloud, which Cloud Asset's
+            // searches would need; its read-only list and analysis stand in for them.
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
+                                    "https://www.googleapis.com/auth/securitycenter"], clients: []),
             oauthClientField: "clientID", adapter: "google-cloud")),
         setup: setup)
 
     static let setup = [
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation and, under **APIs & Services › Library**, enable the **Cloud Logging**, **Security Command Center** and **Cloud Asset** APIs in it. Pion's requests count against this project.",
-        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/cloud-platform`, which Cloud Asset's searches need. The same client can serve Google Workspace too.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/logging.read`, `https://www.googleapis.com/auth/cloudasset` and `https://www.googleapis.com/auth/securitycenter`. The same client can serve Google Workspace too.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
         "Whoever signs in acts with their own access, so sign in with an account that holds only viewer roles where you can. It needs **Logs Viewer**, **Security Center Findings Viewer** and **Cloud Asset Viewer** on the organisation, folder or project to investigate, and **Private Logs Viewer** for Data Access logs too. Findings also need Security Command Center activated for the organisation.",
         "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect** and sign in.",
@@ -129,56 +131,94 @@ extension GoogleCloud {
     }
 
     struct IAMPolicies: ServiceOperation {
-        struct Input: Decodable, Sendable { let member: String?, query: String? }
+        struct Input: Decodable, Sendable { let member: String?, resource: String?, role: String? }
         static let name = "iam-policies"
-        static let summary = "Who has which role on what: IAM policy bindings across the scope, for a member or a Cloud Asset query."
+        static let summary = "Who can do what on which resource across the scope: for a member, including access through groups, or for a resource."
         static let input = JSONSchema.object([
-            "member": .string("An email of a user, group or service account, to find every role it holds."),
-            "query": .string("A Cloud Asset IAM policy query instead, such as policy:roles/owner."),
+            "member": .string("A user's or service account's email, or a principal such as group:admins@example.com, to find every role it holds."),
+            "resource": .string("A full resource name instead, such as //cloudresourcemanager.googleapis.com/projects/my-project, to find who has access to it."),
+            "role": .string("Only this role, such as roles/owner."),
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let scope = try GoogleCloud.scope(service)
-            let query: String
-            if let member = input.member { query = "policy:" + (try GoogleCloud.quoted(member, "the member")) }
-            else if let given = input.query { query = try ServiceInput.query(given, limit: 500) }
-            else { throw ServiceError.input("Give a member or a query.") }
+            guard input.member != nil || input.resource != nil else { throw ServiceError.input("Give a member or a resource.") }
+            var query: [String: String?] = [:]
+            if let member = input.member {
+                let value = try ServiceInput.quoted(member.trimmingCharacters(in: .whitespaces), "the member")
+                // A bare email is a person's, or a service account's when it ends as theirs do.
+                query["analysisQuery.identitySelector.identity"] = value.contains(":") ? value
+                    : (value.hasSuffix(".gserviceaccount.com") ? "serviceAccount:" : "user:") + value
+                query["analysisQuery.options.expandGroups"] = "true"
+            }
+            if let resource = input.resource {
+                let value = try ServiceInput.quoted(resource.trimmingCharacters(in: .whitespaces), "the resource")
+                guard value.hasPrefix("//") else { throw ServiceError.input("Give the resource's full name, such as //cloudresourcemanager.googleapis.com/projects/my-project.") }
+                query["analysisQuery.resourceSelector.fullResourceName"] = value
+            }
+            if let role = input.role {
+                let value = try ServiceInput.quoted(role.trimmingCharacters(in: .whitespaces), "the role")
+                guard value.hasPrefix("roles/") || value.contains("/roles/") else { throw ServiceError.input("Give the role as roles/owner or a custom role's name.") }
+                query["analysisQuery.accessSelector.roles"] = value
+            }
             struct Binding: Codable { let role: String?; let members: [String]? }
-            struct Policy: Codable { let bindings: [Binding]? }
-            struct Result: Codable { let resource: String?; let project: String?; let policy: Policy? }
-            struct Answer: Codable { let results: [Result]? }
-            let results = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, "\(scope.id):searchAllIamPolicies"],
-                                                                                       query: ["query": query, "pageSize": "100"], as: Answer.self).results ?? []
-            let text = results.isEmpty ? "No IAM policy matches." : results.prefix(30).map { result in
-                (result.resource ?? "?") + ": " + (result.policy?.bindings ?? []).map { "\($0.role ?? "?") to \(($0.members ?? []).prefix(5).joined(separator: ", "))" }.joined(separator: "; ")
+            struct Named: Codable { let name: String? }
+            struct Identities: Codable { let identities: [Named]? }
+            struct Result: Codable { let attachedResourceFullName: String?; let iamBinding: Binding?; let identityList: Identities? }
+            struct Analysis: Codable { let analysisResults: [Result]?; let fullyExplored: Bool? }
+            struct Answer: Codable { let mainAnalysis: Analysis? }
+            let analysis = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, "\(scope.id):analyzeIamPolicy"],
+                                                                                        query: query, as: Answer.self).mainAnalysis
+            let results = analysis?.analysisResults ?? []
+            var text = results.isEmpty ? "No access matches." : results.prefix(30).map { result in
+                let who = (result.identityList?.identities ?? []).compactMap(\.name)
+                return "\(result.attachedResourceFullName ?? "?"): \(result.iamBinding?.role ?? "?") to "
+                    + ((result.iamBinding?.members ?? []).prefix(5).joined(separator: ", "))
+                    + (who.isEmpty ? "" : " (reaching \(who.prefix(5).joined(separator: ", ")))")
             }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Answer(results: results))
+            if analysis?.fullyExplored == false { text += "\nThe analysis was not complete; narrow it to a resource or a role." }
+            struct Kept: Encodable { let results: [Result] }
+            return try ServiceResult(text: text, structured: Kept(results: results))
         }
     }
 
     struct FindResources: ServiceOperation {
-        struct Input: Decodable, Sendable { let query: String, assetTypes: [String]? }
+        struct Input: Decodable, Sendable { let assetTypes: [String], name: String? }
         static let name = "find-resources"
-        static let summary = "Find resources across the scope with a Cloud Asset query, such as name:web-01 or labels.env:prod."
+        static let summary = "Resources of the given types across the scope, with where each is and its state, optionally only those whose name contains a word."
         static let input = JSONSchema.object([
-            "query": .string("A Cloud Asset resource query, such as name:web-01, location:europe-west1 or state:RUNNING."),
-            "assetTypes": .array(.string("An asset type, such as compute.googleapis.com/Instance."), "Only these types."),
-        ], required: ["query"])
+            "assetTypes": .array(.string("An asset type, such as compute.googleapis.com/Instance or storage.googleapis.com/Bucket."), "The types to list, up to 20."),
+            "name": .string("Only resources whose name contains this, such as web-01."),
+        ], required: ["assetTypes"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let scope = try GoogleCloud.scope(service)
-            var query: [String: String?] = ["query": try ServiceInput.query(input.query, limit: 500), "pageSize": "100"]
-            if let types = input.assetTypes {
-                query["assetTypes"] = try ServiceInput.list(types, limit: 20) { try ServiceInput.quoted($0, "the asset type") }.joined(separator: ",")
+            guard !input.assetTypes.isEmpty else { throw ServiceError.input("Give at least one asset type, such as compute.googleapis.com/Instance.") }
+            let types = try ServiceInput.list(input.assetTypes, limit: 20) { try ServiceInput.quoted($0, "the asset type") }
+            let word = input.name?.trimmingCharacters(in: .whitespaces).lowercased()
+            /// A resource's state, under whichever of the two names its type uses, read leniently since types differ.
+            struct State: Codable {
+                let status: String?, state: String?
+                init(from decoder: Decoder) throws {
+                    let fields = try? decoder.container(keyedBy: CodingKeys.self)
+                    status = try? fields?.decode(String.self, forKey: .status)
+                    state = try? fields?.decode(String.self, forKey: .state)
+                }
             }
-            struct Resource: Codable { let name: String?, assetType: String?, displayName: String?, location: String?, project: String?, state: String? }
-            struct Answer: Codable { let results: [Resource]? }
-            let resources = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, "\(scope.id):searchAllResources"],
-                                                                                         query: query, as: Answer.self).results ?? []
-            let text = resources.isEmpty ? "No resource matches." : resources.prefix(30).map { resource in
-                "\(resource.displayName ?? resource.name ?? "?") (\(resource.assetType ?? "?"))\(resource.location.map { " in \($0)" } ?? "")\(resource.state.map { ", \($0)" } ?? "")"
+            struct Details: Codable { let location: String?; let data: State? }
+            struct Asset: Codable { let name: String?; let assetType: String?; let resource: Details? }
+            struct Answer: Codable { let assets: [Asset]? }
+            let assets = try await service.at(host: "cloudasset.googleapis.com").get(["v1", scope.level, scope.id, "assets"], query: [
+                "assetTypes": types.joined(separator: ","), "contentType": "RESOURCE", "pageSize": "500",
+            ], as: Answer.self).assets ?? []
+            let matching = assets.filter { asset in word.map { !$0.isEmpty && (asset.name ?? "").lowercased().contains($0) } ?? true }
+            let text = matching.isEmpty ? "No resource matches." : matching.prefix(30).map { asset in
+                let short = (asset.name ?? "?").split(separator: "/").last.map(String.init) ?? "?"
+                let state = asset.resource?.data?.status ?? asset.resource?.data?.state
+                return "\(short) (\(asset.assetType ?? "?"))\(asset.resource?.location.map { " in \($0)" } ?? "")\(state.map { ", \($0)" } ?? "")"
             }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Answer(results: resources))
+            struct Kept: Encodable { let resources: [Asset] }
+            return try ServiceResult(text: text, structured: Kept(resources: Array(matching.prefix(100))))
         }
     }
 }

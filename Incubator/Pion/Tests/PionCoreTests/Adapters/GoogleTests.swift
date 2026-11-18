@@ -25,9 +25,11 @@ final class GoogleTests: XCTestCase {
     }
 
     func testBothSignInWithGoogleThroughTheOrganisationsOwnClientWithTheNarrowestScopesTheirAPIsTake() throws {
-        // Cloud Asset's searches take only all of Google Cloud's scope, not its read-only one or Cloud Asset's own.
+        // The narrowest each API takes: Logging's read-only scope, Cloud Asset's own, whose methods only read, and
+        // Security Command Center's own, as it has no read-only one. Never all of Google Cloud.
         let scopes = [(GoogleWorkspace.preset, workspace, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]),
-                      (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/cloud-platform"])]
+                      (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
+                                                   "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         ToolCatalog.use(PionCatalogue.entries)
         for (preset, account, scope) in scopes {
@@ -71,15 +73,43 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(service.requests.first?.url?.host, "securitycenter.googleapis.com")
     }
 
-    func testWhoHasAccessAndWhereAResourceIs() async throws {
+    func testWhoHasAccessAndWhereAResourceIsThroughCloudAssetsReadOnlyMethods() async throws {
         let service = FakeService()
-        service.answers["/v1/projects/kestrel-prod:searchAllIamPolicies"] = (200, #"{"results":[{"resource":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod","policy":{"bindings":[{"role":"roles/owner","members":["user:mallory@kestrel.example"]}]}}]}"#)
-        service.answers["/v1/projects/kestrel-prod:searchAllResources"] = (200, #"{"results":[{"name":"//compute.googleapis.com/projects/kestrel-prod/zones/europe-west1-b/instances/web-01","assetType":"compute.googleapis.com/Instance","displayName":"web-01","location":"europe-west1-b"}]}"#)
+        service.answers["/v1/projects/kestrel-prod:analyzeIamPolicy"] = (200, #"""
+        {"mainAnalysis":{"fullyExplored":true,"analysisResults":[{"attachedResourceFullName":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod",
+          "iamBinding":{"role":"roles/owner","members":["group:admins@kestrel.example"]},
+          "accessControlLists":[{"resources":[{"fullResourceName":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod"}],"accesses":[{"role":"roles/owner"}]}],
+          "identityList":{"identities":[{"name":"user:mallory@kestrel.example"}]}}]}}
+        """#)
+        service.answers["/v1/projects/kestrel-prod/assets"] = (200, #"""
+        {"assets":[{"name":"//compute.googleapis.com/projects/kestrel-prod/zones/europe-west1-b/instances/web-01","assetType":"compute.googleapis.com/Instance",
+                    "resource":{"location":"europe-west1-b","data":{"status":"RUNNING"}}},
+                   {"name":"//compute.googleapis.com/projects/kestrel-prod/zones/europe-west1-b/instances/db-01","assetType":"compute.googleapis.com/Instance",
+                    "resource":{"location":"europe-west1-b"}}]}
+        """#)
         let access = try await callTool(GoogleCloud.adapter, "iam-policies", #"{"member":"mallory@kestrel.example"}"#, on: service, in: project)
+        XCTAssertFalse(access.isError, access.text)
         XCTAssertTrue(access.text.contains("roles/owner"), access.text)
-        XCTAssertEqual(queryItems(service.requests.first)["query"], #"policy:"mallory@kestrel.example""#)
-        let resources = try await callTool(GoogleCloud.adapter, "find-resources", #"{"query":"name:web-01"}"#, on: service, in: project)
-        XCTAssertTrue(resources.text.contains("compute.googleapis.com/Instance"), resources.text)
+        XCTAssertTrue(access.text.contains("group:admins@kestrel.example"), "access through a group was not shown: \(access.text)")
+        let asked = queryItems(service.requests.first)
+        XCTAssertEqual(asked["analysisQuery.identitySelector.identity"], "user:mallory@kestrel.example")
+        XCTAssertEqual(asked["analysisQuery.options.expandGroups"], "true")
+        let onResource = try await callTool(GoogleCloud.adapter, "iam-policies",
+            #"{"resource":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod","role":"roles/owner"}"#, on: service, in: project)
+        XCTAssertFalse(onResource.isError, onResource.text)
+        XCTAssertEqual(queryItems(service.requests.last)["analysisQuery.resourceSelector.fullResourceName"], "//cloudresourcemanager.googleapis.com/projects/kestrel-prod")
+        XCTAssertEqual(queryItems(service.requests.last)["analysisQuery.accessSelector.roles"], "roles/owner")
+        let neither = try await callTool(GoogleCloud.adapter, "iam-policies", "{}", on: service, in: project)
+        XCTAssertTrue(neither.isError)
+
+        let resources = try await callTool(GoogleCloud.adapter, "find-resources",
+            #"{"assetTypes":["compute.googleapis.com/Instance"],"name":"web"}"#, on: service, in: project)
+        XCTAssertFalse(resources.isError, resources.text)
+        XCTAssertTrue(resources.text.contains("web-01 (compute.googleapis.com/Instance) in europe-west1-b, RUNNING"), resources.text)
+        XCTAssertFalse(resources.text.contains("db-01"), "a resource whose name does not match was shown")
+        let listed = queryItems(service.requests.last)
+        XCTAssertEqual(listed["assetTypes"], "compute.googleapis.com/Instance")
+        XCTAssertEqual(listed["contentType"], "RESOURCE")
         XCTAssertEqual(service.requests.last?.url?.host, "cloudasset.googleapis.com")
     }
 
