@@ -114,10 +114,12 @@ public enum RestrictedAgentSandbox {
 
     private static func profile(workspace: URL, executablePaths: [String], application: URL,
                                 readFiles: [String] = [], folders: [AgentFolder] = []) -> String {
+        // The developer tools /usr/bin's python3, git and make run, which hold no one's data.
         let reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone",
                      AgentStorageLayout(workspace: workspace).package.path, application.path] + executablePaths
-            + folders.map(\.path)
+            + folders.map(\.path) + (developerTools().map { [$0.path] } ?? [])
+        let readFiles = readFiles + (FileManager.default.fileExists(atPath: selectedDeveloperLink) ? [selectedDeveloperLink] : [])
         let writes = [workspace.path] + folders.filter(\.writable).map(\.path)
         // Unfiltered outbound would also reach every Unix socket on the Mac:
         // ssh-agent, Docker, other apps' daemons and Noodle's own bridges.
@@ -147,6 +149,37 @@ public enum RestrictedAgentSandbox {
           (global-name "com.apple.trustd")
           (global-name "com.apple.trustd.agent"))
         """
+    }
+
+    /// Where an agent's commands are looked for. The developer tools' own come before /usr/bin's stubs, which would
+    /// otherwise look each tool up again on every run, as they cannot keep their cache inside the sandbox.
+    public static func searchPath(home: URL) -> String {
+        ([home.path + "/.local/bin"] + (developerDirectory().map { [$0.path + "/usr/bin"] } ?? [])
+            + ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin"]).joined(separator: ":")
+    }
+
+    /// What agents may read for the developer tools: all of Xcode, whose tools load its frameworks from beyond its
+    /// Developer folder, or the Command Line Tools' own folder.
+    static func developerTools() -> URL? {
+        guard let developer = developerDirectory() else { return nil }
+        let contents = developer.deletingLastPathComponent()
+        guard developer.lastPathComponent == "Developer", contents.lastPathComponent == "Contents",
+              contents.deletingLastPathComponent().pathExtension == "app" else { return developer }
+        return contents.deletingLastPathComponent()
+    }
+
+    /// Where xcode-select keeps its choice, when one was made.
+    private static let selectedDeveloperLink = "/private/var/db/xcode_select_link"
+
+    /// The developer tools /usr/bin's stubs run, found as xcode-select finds them: its choice when one was made,
+    /// otherwise Xcode, otherwise the Command Line Tools; nil when there are none.
+    static func developerDirectory() -> URL? {
+        let files = FileManager.default
+        if let chosen = try? files.destinationOfSymbolicLink(atPath: selectedDeveloperLink), files.fileExists(atPath: chosen) {
+            return URL(fileURLWithPath: chosen)
+        }
+        return ["/Applications/Xcode.app/Contents/Developer", "/Library/Developer/CommandLineTools"]
+            .first(where: files.fileExists(atPath:)).map { URL(fileURLWithPath: $0) }
     }
 
     // Foundation normalizes some /private/var URLs back to /var on macOS.

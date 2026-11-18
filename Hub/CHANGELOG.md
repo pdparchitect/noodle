@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Agents in the restricted sandbox can run python3, git, make and the other developer tools that come with Xcode or the Command Line Tools, which failed before; they find the tools' own copies first, so each runs at once. The rest of the Mac stays as closed to them as before.
 - A tool that cannot reach its service says why, in the system's words, such as a refused connection or an untrusted certificate, instead of only asking to reconnect.
 - The Usage window no longer freezes on a long history when you switch between Tokens, Cost and Disk or change the period: it reads usage in the background, and reading a period costs a fraction of what it did.
 

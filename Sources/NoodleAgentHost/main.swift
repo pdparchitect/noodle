@@ -71,7 +71,7 @@ private enum HostPaths {
         [
             "HOME": home.path,
             "USER": NSUserName(), "LOGNAME": NSUserName(),
-            "PATH": "\(home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+            "PATH": RestrictedAgentSandbox.searchPath(home: home),
             "TMPDIR": NSTemporaryDirectory()
         ]
     }
@@ -419,7 +419,7 @@ private final class HostSession: NSObject, AgentHostService {
                 child.environment = [
                     "HOME": HostPaths.home.path,
                     "USER": NSUserName(), "LOGNAME": NSUserName(),
-                    "PATH": "\(HostPaths.home.path)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+                    "PATH": RestrictedAgentSandbox.searchPath(home: HostPaths.home),
                     "TMPDIR": NSTemporaryDirectory(),
                     "CODEX_HOME": HostPaths.home.appendingPathComponent(".codex").path,
                     "NOODLE_AGENT_ID": agentID.lowercased(), "NOODLE_WORKSPACE": workspace.path

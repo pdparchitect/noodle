@@ -191,6 +191,40 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         wait(for: [configured], timeout: 15)
     }
 
+    /// macOS's python3, git and make in /usr/bin are stubs that run the copies in the selected developer directory,
+    /// Xcode's or the Command Line Tools'. Agents can run them; the user's own files stay out of reach.
+    func testTheSystemsDeveloperToolsRunAndTheUsersFilesStayOutOfReach() throws {
+        guard let developer = RestrictedAgentSandbox.developerDirectory() else { throw XCTSkip("No developer tools are selected") }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: developer.path))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        let workspace = repository.directory(for: try repository.createAgent(named: "Python probe").agent)
+        let temp = workspace.appendingPathComponent(".noodle/tmp"), secret = root.appendingPathComponent("secret.txt")
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        try Data("private".utf8).write(to: secret)
+        let policy = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository.rootURL, codexHome: workspace,
+                                                    executableDirectory: workspace, application: workspace, temporary: temp)
+        // As agents look them up, the developer tools' own, which run at once, rather than /usr/bin's stubs.
+        let script = """
+        [ "$(command -v python3)" = "$3/usr/bin/python3" ] || exit 13
+        python3 -c 'print(6 * 7)' > "$1/answer.txt" || exit 10
+        git --version > /dev/null || exit 11
+        if python3 -c 'import sys; open(sys.argv[1]).read()' "$2" 2> /dev/null; then exit 12; fi
+        /usr/bin/python3 -c 'pass' 2> /dev/null || exit 14
+        """
+        let process = Process(), errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        process.arguments = ["-p", policy, "/bin/sh", "-c", script, "probe", workspace.path, secret.path, developer.path]
+        process.environment = ["PATH": RestrictedAgentSandbox.searchPath(home: workspace), "HOME": workspace.path, "TMPDIR": temp.path]
+        process.standardOutput = FileHandle.nullDevice; process.standardError = errors
+        try process.run()
+        let details = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0, details)
+        XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("answer.txt"), encoding: .utf8), "42\n")
+    }
+
     func testRealProcessCanWorkAndMessageButCannotChangeConfigurationOrRuntime() throws {
         try checkBoundary(provider: .codex)
     }
