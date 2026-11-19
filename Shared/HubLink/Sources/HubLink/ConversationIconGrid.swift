@@ -17,12 +17,13 @@ public enum ConversationListStyle: String, CaseIterable, Identifiable, Sendable 
     }
 }
 
-/// The icon view's grid, on the Mac and on iPhone and iPad: as many columns of at least 96 points as fit, each row as tall as its tallest picture.
+/// The icon view's grid, on the Mac and on iPhone and iPad: as many columns of at least 96 points as fit, or of
+/// `minimumWidth` for smaller icons, each row as tall as its tallest picture.
 /// Every picture is laid out, unlike a lazy grid, which in a list row only ever drew those first on screen.
 public struct ConversationIconGrid: Layout {
-    public init() {}
+    private let minimumWidth: CGFloat, columnSpacing: CGFloat = 6, rowSpacing: CGFloat = 8
 
-    private let minimumWidth: CGFloat = 96, columnSpacing: CGFloat = 6, rowSpacing: CGFloat = 8
+    public init(minimumWidth: CGFloat = 96) { self.minimumWidth = minimumWidth }
 
     private struct Grid {
         let columns: Int, itemWidth: CGFloat, rowHeights: [CGFloat]

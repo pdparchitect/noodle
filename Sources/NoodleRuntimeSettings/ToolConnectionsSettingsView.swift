@@ -119,22 +119,15 @@ public struct ToolConnectionsSettingsView: View {
     }
 
     @ViewBuilder private func connectionStatus(_ connection: ToolConnection) -> some View {
-        if !allows(connection) {
-            SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
-        } else if store.connectionsController.signingIn == connection.id {
-            Text(store.connectionsController.signInStage.isEmpty ? (ToolConnectionService.signsInThroughBrowser(connection) ? "Signing in…" : "Checking access…") : store.connectionsController.signInStage)
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                .help(store.connectionsController.signInStage)
-        } else if store.connectionsController.errors[connection.id] != nil {
-            SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
-        } else if store.connectionsController.connected.contains(connection.id) {
+        let status = store.connectionsController.status(of: connection)
+        if case .connected = status {
             ConnectedStatus { store.connectionsController.signOut(connection) }
-        } else if connection.usesToken {
-            SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
-        } else if connection.clientCredentials != nil {
-            SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
+        } else if case .signingIn(let stage) = status {
+            Text(stage.isEmpty ? (ToolConnectionService.signsInThroughBrowser(connection) ? "Signing in…" : "Checking access…") : stage)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .help(stage)
         } else {
-            SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
+            ToolConnectionStatusLabel(status: status)
         }
     }
 
@@ -467,6 +460,25 @@ public struct ToolConnectionEditor: View {
     }
 }
 
+/// A connection's status in words and a symbol, as Settings › Tools shows it.
+public struct ToolConnectionStatusLabel: View {
+    let status: ToolConnectionStatus
+
+    public init(status: ToolConnectionStatus) { self.status = status }
+
+    public var body: some View {
+        switch status {
+        case .managed: SettingsStatusLabel(title: Organisation.managedText, systemImage: "building.2", color: .secondary)
+        case .signingIn: SettingsStatusLabel(title: "Signing in…", systemImage: "arrow.triangle.2.circlepath", color: .secondary)
+        case .failed: SettingsStatusLabel(title: "Needs attention", systemImage: "exclamationmark.triangle", color: .orange)
+        case .connected: SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+        case .tokenRequired: SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
+        case .credentialsRequired: SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
+        case .signInRequired: SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
+        }
+    }
+}
+
 /// A connected connection's status, which opens Sign Out: revoke what it signed in with at the service, where the
 /// service allows it, and forget it here.
 private struct ConnectedStatus: View {
@@ -475,7 +487,7 @@ private struct ConnectedStatus: View {
 
     var body: some View {
         Button { shown = true } label: {
-            SettingsStatusLabel(title: "Connected", systemImage: "checkmark.circle.fill", color: .green)
+            ToolConnectionStatusLabel(status: .connected)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $shown, arrowEdge: .bottom) {

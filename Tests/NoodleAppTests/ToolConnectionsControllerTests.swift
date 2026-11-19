@@ -57,6 +57,24 @@ import XCTest
         XCTAssertEqual(f.controller.registry.connections, [first, second])
     }
 
+    func testEachConnectionSaysWhetherItNeedsThePersonToSignIn() async throws {
+        let f = try fixture()
+        let browser = try f.account(name: "Browser")
+        var token = try f.account(name: "Token")
+        token.tokenHeader = "Authorization"
+        // One the app's own adapter answers without a secret is always ready.
+        var open = try f.account(name: "Open")
+        open.adapter = "fixture"
+        for connection in [browser, token, open] { try f.controller.save(connection) }
+        await f.controller.readSignIns()
+        XCTAssertEqual(f.controller.status(of: browser), .signInRequired)
+        XCTAssertEqual(f.controller.status(of: token), .tokenRequired)
+        XCTAssertEqual(f.controller.status(of: open), .connected)
+        XCTAssertTrue(f.controller.status(of: browser).needsAttention)
+        XCTAssertTrue(f.controller.status(of: token).needsAttention)
+        XCTAssertFalse(f.controller.status(of: open).needsAttention)
+    }
+
     func testUnknownAssignmentPreservesSavedAndInMemorySelection() throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)

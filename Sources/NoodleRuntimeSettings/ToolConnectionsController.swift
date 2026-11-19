@@ -10,6 +10,28 @@ public enum ToolConnectionSecret: Sendable {
     case client(id: String, secret: String)
 }
 
+/// Where a connection stands for the person: ready, signing in, or waiting on them, and why.
+public enum ToolConnectionStatus: Equatable, Sendable {
+    /// The organisation does not allow it.
+    case managed
+    /// Signing in or checking access, at the stage the sign-in has reached.
+    case signingIn(String)
+    /// It failed, saying why.
+    case failed(String)
+    case connected
+    case tokenRequired
+    case credentialsRequired
+    case signInRequired
+
+    /// Whether the person has to do something before agents can use it.
+    public var needsAttention: Bool {
+        switch self {
+        case .failed, .tokenRequired, .credentialsRequired, .signInRequired: true
+        case .managed, .signingIn, .connected: false
+        }
+    }
+}
+
 @MainActor @Observable
 public final class ToolConnectionsController {
     public private(set) var registry = ToolConnectionRegistry()
@@ -73,6 +95,21 @@ public final class ToolConnectionsController {
             if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
         }
     }
+
+    public func status(of connection: ToolConnection) -> ToolConnectionStatus {
+        if !OrganisationStatus.shared.allows(Organisation.action(for: connection)) { return .managed }
+        if signingIn == connection.id { return .signingIn(signInStage) }
+        if let error = errors[connection.id] { return .failed(error) }
+        if connected.contains(connection.id) { return .connected }
+        if connection.usesToken { return .tokenRequired }
+        return connection.clientCredentials != nil ? .credentialsRequired : .signInRequired
+    }
+
+    /// Whether a sign-in is under way, for any connection; only one runs at a time.
+    public var isSigningIn: Bool { signingIn != nil }
+
+    /// Whether it is signed in or ready, so it offers to sign in again and to sign out.
+    public func isConnected(_ connection: ToolConnection) -> Bool { connected.contains(connection.id) }
 
     /// The adapters this app serves its own connections with, by the name catalogue entries give them.
     public func serve(_ adapters: [String: any ToolConnectionAdapter]) {
@@ -163,7 +200,7 @@ public final class ToolConnectionsController {
 
     /// Revokes what the connection signed in with or was given at the service, where it can, and forgets it here;
     /// the connection stays, to connect again.
-    func signOut(_ record: ToolConnection) {
+    public func signOut(_ record: ToolConnection) {
         if signingIn == record.id { loginTask?.cancel() }
         Task {
             let revocation = await service.signOut(record)
@@ -191,7 +228,7 @@ public final class ToolConnectionsController {
     /// Signs the connection in through the browser, or through AWS IAM Identity Center with a code the person
     /// approves there, or for one with a token or a client ID and secret keeps `secret` when one is given; either way
     /// it then lists the connection's tools to show it works.
-    func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
+    public func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
         let signsIn = ToolConnectionService.signsInThroughBrowser(record)
         if signsIn { browser.captureReturnWindow() }
@@ -239,7 +276,7 @@ public final class ToolConnectionsController {
             }
         }
     }
-    func cancelSignIn() { loginTask?.cancel() }
+    public func cancelSignIn() { loginTask?.cancel() }
 
     /// Where a sign-in for a connection at `endpoint` returns to this app.
     public static func redirectURI(for endpoint: URL) -> URL {

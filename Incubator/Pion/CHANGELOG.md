@@ -4,6 +4,7 @@
 
 ### Added
 
+- View › Sidebar › Show Tools lists your tool connections as icons at the foot of the sidebar, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out.
 - Unread conversations carry Noodle's blue dot in the sidebar, beside agents, groups and Investigations alike; a muted group's is dimmed.
 - The Usage window shows each agent's mark beside its name when grouped by bot; click it for the agent's profile, to message it, suspend it or anything else the profile offers.
 
