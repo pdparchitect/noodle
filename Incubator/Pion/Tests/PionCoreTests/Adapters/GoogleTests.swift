@@ -103,11 +103,11 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(logs.text.contains("SetIamPolicy"), logs.text)
 
         let down = FakeService()
-        down.sequences["/v2/entries:list"] = [failed, failed]
+        down.sequences["/v2/entries:list"] = [failed, failed, failed]
         let failure = try await callTool(GoogleCloud.adapter, "audit-logs", "{}", on: down, in: project)
         XCTAssertTrue(failure.isError)
         XCTAssertTrue(failure.text.contains("HTTP 500") && failure.text.contains("Internal error encountered."), failure.text)
-        XCTAssertEqual(down.requests.count, 2, "a failure was tried more than once again")
+        XCTAssertEqual(down.requests.count, 3, "once again, then once in small pages, and no more")
 
         // A quota names itself and the project it counts against, which is what the person can raise.
         let limited = FakeService()
@@ -116,6 +116,27 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(access.isError)
         XCTAssertTrue(access.text.contains("HTTP 429") && access.text.contains("for consumer 'project_number:604757830675'"), access.text)
         XCTAssertEqual(limited.requests.count, 1, "a quota was spent again at once")
+    }
+
+    func testAuditLogsLoggingKeepsFailingAreReadInSmallPagesAndKeepWhatWasFound() async throws {
+        // Google fails larger searches over some entries every time, where small pages still come back.
+        let failed = (500, #"{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}"#)
+        let entry = #"{"timestamp":"2026-11-19T09:00:00Z","protoPayload":{"methodName":"SetIamPolicy"}}"#
+        let small = FakeService()
+        small.sequences["/v2/entries:list"] = [failed, failed, (200, #"{"entries":[\#(entry)]}"#)]
+        let logs = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"limit":50}"#, on: small, in: project)
+        XCTAssertFalse(logs.isError, logs.text)
+        XCTAssertTrue(logs.text.contains("SetIamPolicy"), logs.text)
+        XCTAssertEqual(try small.requests.map { try json($0)["pageSize"] as? Int }, [50, 50, 5])
+
+        // Failing partway keeps the entries already read and says where Logging stopped, instead of losing them.
+        let partway = FakeService()
+        partway.sequences["/v2/entries:list"] = [(200, #"{"entries":[\#(entry)],"nextPageToken":"more"}"#), failed, failed, failed]
+        let partial = try await callTool(GoogleCloud.adapter, "audit-logs", "{}", on: partway, in: project)
+        XCTAssertFalse(partial.isError, partial.text)
+        XCTAssertTrue(partial.text.contains("SetIamPolicy"), partial.text)
+        XCTAssertTrue(partial.text.contains("HTTP 500") && partial.text.contains("2026-11-19T09:00:00Z"), partial.text)
+        XCTAssertEqual(partway.requests.count, 4)
     }
 
     func testSecurityCommandCenterFindings() async throws {

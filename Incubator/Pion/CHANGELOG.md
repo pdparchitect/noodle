@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- Google Cloud audit log searches that Google fails every time are read again in small pages, and one that fails partway keeps the entries already found and says where it stopped, instead of ending in an error.
 - A name in code that ends like a web address, such as session.id in a code block or report.md in backticks, no longer gets a link preview card.
 - Pion opens on the conversation you left it on, or, if that one has gone, on the one with the latest activity, instead of on no conversation at all.
 - The button that suggests another agent name sits as close to the field's edge as Noodle's.

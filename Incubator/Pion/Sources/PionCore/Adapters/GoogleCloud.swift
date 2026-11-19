@@ -138,17 +138,31 @@ extension GoogleCloud {
                 if projects.count > 99 { note = "\nOnly the first 99 of \(projects.count) projects' logs were searched; narrow the account to a folder for the rest." }
             }
             // Logging may hand back empty pages that still lead on, so it reads ten at most. It fails a search now and
-            // then, as Google says to expect, so a failed page is asked for once more before giving up.
-            var entries: [Entry] = [], page: String?, pages = 0, retried = false
+            // then, as Google says to expect, so a failed page is asked for once more. Some searches it fails every time
+            // while small pages of the same still come back, so after that the rest is read in pages of five; failing
+            // even those, the search ends with what it found, saying where Logging stopped, and fails only with nothing.
+            let smallPage = 5
+            var entries: [Entry] = [], page: String?, pages = 0, retried = false, pageSize: Int?
             while true {
                 let body = Body(resourceNames: names, filter: filter.joined(separator: " AND "), orderBy: "timestamp desc",
-                                pageSize: limit - entries.count, pageToken: page)
+                                pageSize: min(limit - entries.count, pageSize ?? limit), pageToken: page)
                 let answer: Entries
                 do { answer = try await service.at(host: "logging.googleapis.com").post(["v2", "entries:list"], body: body, as: Entries.self) }
-                catch ServiceError.status(let status, _) where status >= 500 && !retried {
-                    retried = true
-                    try await Task.sleep(for: .seconds(1))
-                    continue
+                catch ServiceError.status(let status, let message) where status >= 500 {
+                    if !retried {
+                        retried = true
+                        try await Task.sleep(for: .seconds(1))
+                        continue
+                    }
+                    if pageSize == nil, body.pageSize > smallPage {
+                        pageSize = smallPage
+                        continue
+                    }
+                    guard let oldest = entries.last else { throw ServiceError.status(status, message) }
+                    note += "\nLogging failed partway (HTTP \(status)\(message.map { ": " + $0 } ?? "")), so entries older than "
+                        + "\(oldest.timestamp ?? "the last one shown") are missing; search again with until before then to read past them."
+                    page = nil
+                    break
                 }
                 pages += 1
                 entries += answer.entries ?? []
