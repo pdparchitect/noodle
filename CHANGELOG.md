@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- The Usage window shows each bot's picture beside its name when grouped by bot; click it for the bot's profile, to message it, suspend it or anything else the profile offers.
+
 ## [0.90.0] - 2026-11-18
 
 ### Added

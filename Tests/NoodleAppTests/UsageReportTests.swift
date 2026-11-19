@@ -75,6 +75,16 @@ final class UsageReportTests: XCTestCase {
         XCTAssertEqual(report.rows.map(\.tokens.total), [20, 15])
     }
 
+    func testBotRowsCarryTheBotSoItsPictureCanOpenItsProfile() {
+        let ada = day(0, "Ada", tokens: 10), again = day(1, "Ada", tokens: 5)
+        var both = again
+        both.agentID = ada.agentID
+        let bots = UsageReport(days: [ada, both], span: .week, grouping: .agent, metric: .tokens, now: now, calendar: calendar)
+        XCTAssertEqual(bots.rows.map(\.agentID), [ada.agentID])
+        let harnesses = UsageReport(days: [ada, both], span: .week, grouping: .harness, metric: .tokens, now: now, calendar: calendar)
+        XCTAssertEqual(harnesses.rows.map(\.agentID), [nil])
+    }
+
     func testCacheHitsAreTheShareOfInputReadFromTheCache() {
         var cached = day(0, "Ada", tokens: 20)
         cached.tokens = UsageTokens(input: 20, output: 500, cacheRead: 70, cacheWrite: 10)

@@ -81,6 +81,8 @@ struct UsageReport {
         let group: String
         let tokens: UsageTokens
         let cost: Double?
+        /// The bot, when grouped by bot.
+        var agentID: UUID?
         var id: String { group }
     }
 
@@ -143,7 +145,8 @@ struct UsageReport {
             return costs.isEmpty ? nil : costs.reduce(0, +)
         }
         rows = Dictionary(grouping: days, by: group).map { group, days in
-            Row(group: group, tokens: days.reduce(UsageTokens()) { $0 + $1.tokens }, cost: sumCost(days))
+            Row(group: group, tokens: days.reduce(UsageTokens()) { $0 + $1.tokens }, cost: sumCost(days),
+                agentID: grouping == .agent ? days.first?.agentID : nil)
         }
         .sorted { (value($0.tokens, $0.cost), $1.group) > (value($1.tokens, $1.cost), $0.group) }
         // Hues go in name order so a new period or measure does not repaint a
@@ -274,6 +277,8 @@ struct StorageReport {
     struct Row: Identifiable, Equatable {
         let group: String
         let bytes: Int64
+        /// The bot, when grouped by bot and it still exists.
+        var agentID: UUID?
         var id: String { group }
     }
 
@@ -288,6 +293,7 @@ struct StorageReport {
     /// `bots` names the bots that still exist; folders of any other bot count together.
     init(snapshot: StorageSnapshot, grouping: Grouping, bots: [UUID: String]) {
         var sums: [String: Int64] = [:]
+        var agentIDs: [String: UUID] = [:]
         switch grouping {
         case .kind:
             for (kind, bytes) in snapshot.kinds { sums[kind.rawValue, default: 0] += bytes }
@@ -299,8 +305,9 @@ struct StorageReport {
                 }
             }
             for (id, bytes) in snapshot.bots { sums[labels[id] ?? Self.removedBots, default: 0] += bytes }
+            for (id, label) in labels { agentIDs[label] = id }
         }
-        rows = sums.filter { $0.value > 0 }.map { Row(group: $0.key, bytes: $0.value) }
+        rows = sums.filter { $0.value > 0 }.map { Row(group: $0.key, bytes: $0.value, agentID: agentIDs[$0.key]) }
             .sorted { ($0.bytes, $1.group) > ($1.bytes, $0.group) }
         let named = rows.prefix(UsageReport.colorCount).map(\.group).sorted()
         groups = rows.count > UsageReport.colorCount ? named + [UsageReport.otherGroup] : named
@@ -325,6 +332,7 @@ public struct UsageView: View {
     let agents: [AgentRecord]
     let people: UsagePeople
     let storage: StorageUsage?
+    let profileButton: (@MainActor (AgentRecord) -> AnyView)?
     @State private var span = UsageReport.Span.month
     @State private var grouping = UsageReport.Grouping.agent
     @State private var user: UsageReport.UserFilter?
@@ -334,12 +342,20 @@ public struct UsageView: View {
     @State private var reports = UsageReports()
     @State private var visible = false
 
-    /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure.
-    public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople(), storage: StorageUsage? = nil) {
+    /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure;
+    /// `profileButton` is a bot's small picture in its row, opening its profile.
+    public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople(), storage: StorageUsage? = nil,
+                profileButton: (@MainActor (AgentRecord) -> AnyView)? = nil) {
         self.history = history
         self.agents = agents
         self.people = people
         self.storage = storage
+        self.profileButton = profileButton
+    }
+
+    /// The bot a row stands for, as the app has it now, so its picture follows a change.
+    private var agentsByID: [UUID: AgentRecord] {
+        Dictionary(agents.map { ($0.id, $0) }) { first, _ in first }
     }
 
     public var body: some View {
@@ -370,7 +386,7 @@ public struct UsageView: View {
     private func ledger() -> some View {
         let shown = reports.kept(choice, revision: history.revision) ?? reports.shown
         // Equatable, so the window does not draw the same report again while the next is made.
-        UsageLedger(shown: shown, waiting: reports.waiting)
+        UsageLedger(shown: shown, waiting: reports.waiting, agents: agentsByID, profileButton: profileButton)
             .equatable()
             .task(id: LedgerQuery(revision: history.revision, choice: choice, visible: visible)) {
                 guard visible else { return }
@@ -511,12 +527,11 @@ public struct UsageView: View {
     }
 
     private func diskBreakdown(_ report: StorageReport) -> some View {
-        Table(report.rows) {
+        let agents = agentsByID
+        return Table(report.rows) {
             TableColumn(storageGrouping.rawValue) { row in
-                HStack(spacing: 6) {
-                    Circle().fill(UsageStyle.color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
-                    Text(row.group).lineLimit(1)
-                }
+                UsageStyle.groupLabel(row.group, color: UsageStyle.color(for: row.group, in: report.groups),
+                                      agent: row.agentID.flatMap { agents[$0] }, profileButton: profileButton)
             }
             .width(min: 140, ideal: 260)
             TableColumn("Size") { row in Text(UsageStyle.byteText(row.bytes)) }
@@ -537,10 +552,12 @@ public struct UsageView: View {
 private struct UsageLedger: View, Equatable {
     let shown: UsageReports.Shown?
     let waiting: Bool
+    let agents: [UUID: AgentRecord]
+    let profileButton: (@MainActor (AgentRecord) -> AnyView)?
     @State private var selectedBucket: Date?
 
     nonisolated static func == (lhs: UsageLedger, rhs: UsageLedger) -> Bool {
-        lhs.shown == rhs.shown && lhs.waiting == rhs.waiting
+        lhs.shown == rhs.shown && lhs.waiting == rhs.waiting && lhs.agents == rhs.agents
     }
 
     var body: some View {
@@ -649,10 +666,8 @@ private struct UsageLedger: View, Equatable {
         let report = shown.report
         return Table(report.rows) {
             TableColumn(shown.choice.grouping.rawValue) { row in
-                HStack(spacing: 6) {
-                    Circle().fill(UsageStyle.color(for: row.group, in: report.groups)).frame(width: 8, height: 8)
-                    Text(row.group).lineLimit(1)
-                }
+                UsageStyle.groupLabel(row.group, color: UsageStyle.color(for: row.group, in: report.groups),
+                                      agent: row.agentID.flatMap { agents[$0] }, profileButton: profileButton)
             }
             .width(min: 140, ideal: 200)
             TableColumn("Tokens") { row in Text(UsageStyle.tokenText(row.tokens.total)) }
@@ -687,6 +702,16 @@ private struct UsageLedger: View, Equatable {
 
 /// What the Usage window's ledger and disk views draw alike.
 private enum UsageStyle {
+    /// A breakdown row's group: its chart colour, the bot's picture when it is a bot that still exists, and its name.
+    @MainActor @ViewBuilder
+    static func groupLabel(_ group: String, color: Color, agent: AgentRecord?, profileButton: (@MainActor (AgentRecord) -> AnyView)?) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            if let agent, let profileButton { profileButton(agent) }
+            Text(group).lineLimit(1)
+        }
+    }
+
     /// Categorical hues in fixed order, stepped for the dark surface; anything past them folds into Other.
     static let hues: [Color] = ([0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181, 0x008300, 0x9085e9] as [Int]).map(color)
 

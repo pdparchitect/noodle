@@ -11,13 +11,14 @@ import SwiftUI
 struct HubBotProfileButton: View {
     let host: HubSettingsHost
     let agent: AgentRecord
+    var size: CGFloat = 32
     @State private var showsProfile = false
     @State private var newSessionAgent: AgentRecord?
     @State private var editing: AgentRecord?
 
     var body: some View {
         Button { showsProfile = true } label: {
-            BotAvatar(agent: agent, size: 32)
+            BotAvatar(agent: agent, size: size)
                 // Suspended bots stay listed, grayed, as in Noodle.
                 .grayscale(agent.isSuspended() ? 1 : 0)
                 .opacity(agent.isSuspended() ? 0.5 : 1)

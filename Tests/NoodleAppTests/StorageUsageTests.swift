@@ -67,10 +67,12 @@ final class StorageUsageTests: XCTestCase {
         XCTAssertEqual(bots.rows.map(\.group), ["Alfred", StorageReport.removedBots])
         XCTAssertEqual(bots.rows.map(\.bytes), [400, 200])
         XCTAssertEqual(bots.share(of: bots.rows[0]), 400.0 / 600.0)
+        XCTAssertEqual(bots.rows.map(\.agentID), [alfred, nil])
 
         let kinds = StorageReport(snapshot: snapshot, grouping: .kind, bots: [:])
         XCTAssertEqual(kinds.rows.map(\.group), ["Bots", "Caches"])
         XCTAssertEqual(kinds.total, 605)
+        XCTAssertEqual(kinds.rows.map(\.agentID), [nil, nil])
     }
 
     func testSlicesPastTheColorsFoldIntoOther() {

@@ -64,7 +64,12 @@ struct PionApp: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         Window("Usage", id: UsageView.windowID) {
-            UsageView(history: delegate.model.usage, agents: delegate.model.everyAgent, storage: delegate.storage)
+            // Editing stays in the main window and Settings, where its sheet is.
+            UsageView(history: delegate.model.usage, agents: delegate.model.everyAgent, storage: delegate.storage) { [model = delegate.model] agent in
+                AnyView(AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent), opensMessageInWindow: true))
+            }
+            .environment(delegate.calls)
+            .environment(delegate.settings)
         }
         .defaultSize(width: 860, height: 680)
         .windowResizability(.contentMinSize)

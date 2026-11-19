@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- The Usage window shows each agent's mark beside its name when grouped by bot; click it for the agent's profile, to message it, suspend it or anything else the profile offers.
+
 ### Changed
 
 - AWS, now AWS Security, signs in through your organisation's IAM Identity Center instead of access keys, and one connection covers every account you are assigned: enter the AWS access portal URL and a permission set's name, and approve the code on your organisation's sign-in page. Agents list the accounts and name one in each lookup, an access key is traced to its own account first, and the connection stays signed in for as long as your organisation lets a session last.
