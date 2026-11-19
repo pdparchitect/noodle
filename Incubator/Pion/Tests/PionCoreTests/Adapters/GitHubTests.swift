@@ -41,17 +41,61 @@ final class GitHubTests: XCTestCase {
         XCTAssertEqual(sent["per_page"], "30")
     }
 
-    func testMembersCollaboratorsAndSecretAlerts() async throws {
+    private static let secret = #"{"number":7,"state":"open","secret_type_display_name":"AWS Access Key ID","created_at":"2026-11-19T09:14:00Z","validity":"active","repository":{"full_name":"kestrel-labs/payroll"},"html_url":"https://github.com/kestrel-labs/payroll/security/secret-scanning/7"}"#
+    private static let code = #"{"number":3,"state":"open","created_at":"2026-11-19T09:11:00Z","rule":{"security_severity_level":"high","description":"SQL query built from user-controlled sources"},"repository":{"full_name":"kestrel-labs/portal"},"html_url":"https://github.com/kestrel-labs/portal/security/code-scanning/3"}"#
+    private static let dependency = #"{"number":12,"state":"open","created_at":"2026-11-18T22:00:00Z","security_advisory":{"severity":"critical","summary":"Remote code execution in log4j"},"dependency":{"package":{"name":"org.apache.logging.log4j:log4j-core"}},"repository":{"full_name":"kestrel-labs/payroll"},"html_url":"https://github.com/kestrel-labs/payroll/security/dependabot/12"}"#
+
+    func testMembersCollaboratorsAndSecurityAlerts() async throws {
         let service = FakeService()
         service.answers["/orgs/kestrel-labs/members"] = (200, #"[{"login":"avery","site_admin":false}]"#)
         service.answers["/orgs/kestrel-labs/outside_collaborators"] = (200, #"[{"login":"contractor-1"}]"#)
-        service.answers["/orgs/kestrel-labs/secret-scanning/alerts"] = (200, #"[{"number":7,"state":"open","secret_type_display_name":"AWS Access Key ID","created_at":"2026-11-13T10:00:00Z","validity":"active","repository":{"full_name":"kestrel-labs/payroll"},"html_url":"https://github.com/kestrel-labs/payroll/security/secret-scanning/7"}]"#)
+        service.answers["/orgs/kestrel-labs/secret-scanning/alerts"] = (200, "[\(Self.secret)]")
+        service.answers["/orgs/kestrel-labs/code-scanning/alerts"] = (200, "[\(Self.code)]")
+        service.answers["/orgs/kestrel-labs/dependabot/alerts"] = (200, "[\(Self.dependency)]")
         let people = try await callTool(GitHub.adapter, "people", "{}", on: service, in: github)
         XCTAssertTrue(people.text.contains("avery"), people.text)
         XCTAssertTrue(people.text.contains("contractor-1"), people.text)
-        let secrets = try await callTool(GitHub.adapter, "secret-alerts", "{}", on: service, in: github)
-        XCTAssertTrue(secrets.text.contains("AWS Access Key ID"), secrets.text)
-        XCTAssertTrue(secrets.text.contains("active"), secrets.text)
-        XCTAssertEqual(queryItems(service.requests.last)["state"], "open")
+
+        // Secret scanning, code scanning and Dependabot, open ones, newest first.
+        let alerts = try await callTool(GitHub.adapter, "security-alerts", "{}", on: service, in: github)
+        let lines = alerts.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.count, 3, alerts.text)
+        XCTAssertTrue(lines[0].contains("AWS Access Key ID") && lines[0].contains("active") && lines[0].contains("kestrel-labs/payroll"), lines[0])
+        XCTAssertTrue(lines[1].contains("high") && lines[1].contains("SQL query"), lines[1])
+        XCTAssertTrue(lines[2].contains("critical") && lines[2].contains("log4j-core"), lines[2])
+        XCTAssertTrue(service.requests.suffix(3).allSatisfy { queryItems($0)["state"] == "open" })
+
+        // From a time on, of one kind.
+        let recent = try await callTool(GitHub.adapter, "security-alerts", #"{"kind":"secret","since":"2026-11-19T09:12:00Z"}"#, on: service, in: github)
+        XCTAssertEqual(recent.text.split(separator: "\n").count, 1, recent.text)
+        XCTAssertTrue(recent.text.contains("AWS Access Key ID"), recent.text)
+        XCTAssertEqual(service.requests.last?.url?.path, "/orgs/kestrel-labs/secret-scanning/alerts")
+
+        // An organisation without code scanning still has its other alerts read.
+        service.answers["/orgs/kestrel-labs/code-scanning/alerts"] = (403, #"{"message":"Advanced Security must be enabled for this repository to use code scanning."}"#)
+        let partial = try await callTool(GitHub.adapter, "security-alerts", "{}", on: service, in: github)
+        XCTAssertFalse(partial.isError, partial.text)
+        XCTAssertTrue(partial.text.contains("AWS Access Key ID") && partial.text.contains("log4j-core"), partial.text)
+        XCTAssertTrue(partial.text.contains("Code scanning could not be read"), partial.text)
+    }
+
+    func testItsTriggerFindsNewSecretsAndHighAndCriticalCodeAndDependencyAlerts() async throws {
+        let service = FakeService()
+        service.answers["/orgs/kestrel-labs/secret-scanning/alerts"] = (200, "[\(Self.secret)]")
+        service.answers["/orgs/kestrel-labs/code-scanning/alerts"] = (200, "[\(Self.code)]")
+        service.answers["/orgs/kestrel-labs/dependabot/alerts"] = (200, "[\(Self.dependency)]")
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let alerts = try await GitHub.adapter.alerts(since: since, connection: github, access: service)
+        XCTAssertEqual(alerts.map(\.id), ["https://github.com/kestrel-labs/payroll/security/secret-scanning/7",
+                                          "https://github.com/kestrel-labs/portal/security/code-scanning/3"], "The Dependabot alert is older")
+        let asked = service.requests.map { ($0.url?.path ?? "", queryItems($0)) }
+        XCTAssertEqual(asked.first { $0.0.hasSuffix("/dependabot/alerts") }?.1["severity"], "critical,high")
+        XCTAssertEqual(Set(asked.filter { $0.0.hasSuffix("/code-scanning/alerts") }.compactMap { $0.1["severity"] }), ["critical", "high"])
+        XCTAssertNil(asked.first { $0.0.hasSuffix("/secret-scanning/alerts") }?.1["severity"], "Every leaked secret counts")
+        XCTAssertEqual(GitHub.adapter.watchedTool, "security-alerts")
+
+        // Only when no feed answers does a check fail.
+        let down = FakeService()
+        do { _ = try await GitHub.adapter.alerts(since: since, connection: github, access: down); XCTFail("No feed answered") } catch {}
     }
 }

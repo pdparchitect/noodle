@@ -2,17 +2,18 @@ import Foundation
 import NoodleCore
 import NoodleMCP
 
-/// GitHub: an organisation's audit log, its people, and the secrets found in its code. Each account is one
+/// GitHub: an organisation's audit log, its people, and its security alerts. Each account is one
 /// organisation, read as the person who signs in through an OAuth app the organisation registered, with a code:
 /// GitHub's browser sign-in needs the app's client secret, which a Mac app cannot keep, and its device sign-in does not.
 public enum GitHub {
     public static let preset = ToolDefinition(
-        id: "07d106a4-0e2c-47b1-a743-3c71161e56e4", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning alerts.",
+        id: "07d106a4-0e2c-47b1-a743-3c71161e56e4", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning, code scanning and Dependabot alerts.",
         defaultInstructions: """
         Use GitHub to see what happened in an organisation: search its audit log for who did what and when, such as \
         repo.destroy, org.add_member or protected_branch changes; list its members and outside collaborators; and list \
-        secrets found in its code, with whether each is still valid. The audit log needs GitHub Enterprise Cloud. Record \
-        each finding as evidence. These tools only read: recommend removing access or rotating a secret to the champion.
+        its open security alerts: secrets found in its code, with whether each is still valid, code scanning results and \
+        vulnerable dependencies. The audit log needs GitHub Enterprise Cloud. Record each finding as evidence. These tools \
+        only read: recommend removing access, rotating a secret or fixing code to the champion.
         """,
         iconName: "github",
         configuration: .connection(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
@@ -31,10 +32,10 @@ public enum GitHub {
         "Name it, such as Pion, and give the organisation's own website as both its homepage and its callback URL; Pion does not use them.",
         "Tick **Enable Device Flow**, register the app and copy its **Client ID** here. It needs no client secret.",
         "Choose **Add & Connect**: Pion shows a code and opens GitHub, where you enter it and approve the app's access to read the organisation, its audit log and its security alerts.",
-        "Sign in as an owner or security manager of the organisation, who can read its secret scanning alerts. The audit log needs GitHub Enterprise Cloud.",
+        "Sign in as an owner or security manager of the organisation, who can read its security alerts. The audit log needs GitHub Enterprise Cloud.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [AuditLog(), People(), SecretAlerts()])
+    public static let adapter = OperationAdapter(operations: [AuditLog(), People(), SecurityAlerts()], trigger: NewSecurityAlerts())
 }
 
 extension GitHub {
@@ -108,25 +109,110 @@ extension GitHub {
         }
     }
 
-    struct SecretAlerts: ServiceOperation {
-        struct Input: Decodable, Sendable { let state: String? }
-        static let name = "secret-alerts"
-        static let summary = "Secrets found in the organisation's code, with the repository and whether each is still valid."
-        static let input = JSONSchema.object(["state": .string("Open or resolved alerts. Open when left out.", oneOf: ["open", "resolved"])])
+    /// The organisation's three feeds of security alerts, each across all its repositories, newest first.
+    enum AlertKind: String, CaseIterable {
+        case secret, code, dependency
+        var path: [String] {
+            switch self {
+            case .secret: ["secret-scanning", "alerts"]
+            case .code: ["code-scanning", "alerts"]
+            case .dependency: ["dependabot", "alerts"]
+            }
+        }
+        var title: String {
+            switch self {
+            case .secret: "Secret scanning"
+            case .code: "Code scanning"
+            case .dependency: "Dependabot"
+            }
+        }
+    }
+
+    struct SecurityAlert: Codable {
+        struct Repository: Codable { let full_name: String? }
+        struct Rule: Codable { let security_severity_level: String?; let description: String? }
+        struct Advisory: Codable { let severity: String?; let summary: String? }
+        struct Package: Codable { let name: String? }
+        struct Dependency: Codable { let package: Package? }
+        let number: Int?, created_at: String?, html_url: String?, repository: Repository?
+        let secret_type_display_name: String?, validity: String?
+        let rule: Rule?
+        let security_advisory: Advisory?, dependency: Dependency?
+    }
+
+    /// The open alerts of one kind, newest first: a page of a hundred, which reaches back far enough between checks.
+    static func openAlerts(_ kind: AlertKind, severity: String? = nil, on service: ServiceClient) async throws -> [SecurityAlert] {
+        try await service.get(kind.path, query: ["state": "open", "severity": severity, "sort": "created", "direction": "desc", "per_page": "100"],
+                              as: [SecurityAlert].self)
+    }
+
+    /// Reads each feed on its own, so one the organisation has not turned on, or the person cannot read, leaves the
+    /// others; only when none answers does it fail.
+    static func eachFeed<Item>(_ feeds: [(AlertKind, () async throws -> [Item])]) async throws -> (items: [Item], failures: [String]) {
+        var items: [Item] = [], failures: [String] = [], first: Error?
+        for (kind, read) in feeds {
+            do { items += try await read() } catch {
+                first = first ?? error
+                failures.append("\(kind.title) could not be read: \(error.localizedDescription)")
+            }
+        }
+        if failures.count == feeds.count, let first { throw first }
+        return (items, failures)
+    }
+
+    struct SecurityAlerts: ServiceOperation {
+        struct Input: Decodable, Sendable { let kind: String?, since: String? }
+        static let name = "security-alerts"
+        static let summary = "Open secret scanning, code scanning and Dependabot alerts across the organisation's repositories, newest first, by kind and time, with the repository, the severity and whether a secret is still valid."
+        static let input = JSONSchema.object([
+            "kind": .string("Only this kind: secrets found in code, code scanning results or vulnerable dependencies. All three when left out.",
+                            oneOf: ["secret", "code", "dependency"]),
+            "since": .string("The earliest time each was raised, in ISO 8601."),
+        ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let state = try ServiceInput.oneOf(input.state ?? "open", ["open", "resolved"], "state")
-            struct Repository: Codable { let full_name: String? }
-            struct Alert: Codable {
-                let number: Int?, state: String?, secret_type_display_name: String?, created_at: String?, validity: String?
-                let repository: Repository?, html_url: String?
+            let kinds = try input.kind.map { [AlertKind(rawValue: try ServiceInput.oneOf($0, ["secret", "code", "dependency"], "kind"))!] }
+                ?? AlertKind.allCases
+            let since = try input.since.map { ServiceAlert.time(try ServiceInput.time($0)) ?? .distantPast }
+            let (found, failures) = try await GitHub.eachFeed(kinds.map { kind in
+                (kind, { try await GitHub.openAlerts(kind, on: service).map { (kind, $0) } })
+            })
+            let alerts = found.compactMap { kind, alert -> (AlertKind, SecurityAlert, Date)? in
+                guard let time = ServiceAlert.time(alert.created_at), time >= since ?? .distantPast else { return nil }
+                return (kind, alert, time)
+            }.sorted { $0.2 > $1.2 }
+            let lines = alerts.prefix(50).map { kind, alert, _ in
+                var line = "\(alert.created_at ?? "?") \(kind.title): "
+                switch kind {
+                case .secret: line += "\(alert.secret_type_display_name ?? "secret")\(alert.validity.map { " (\($0))" } ?? "")"
+                case .code: line += "\(alert.rule?.security_severity_level ?? "?") \(alert.rule?.description ?? "finding")"
+                case .dependency:
+                    line += "\(alert.security_advisory?.severity ?? "?") \(alert.security_advisory?.summary ?? "advisory") in \(alert.dependency?.package?.name ?? "a dependency")"
+                }
+                return line + " in \(alert.repository?.full_name ?? "?")"
             }
-            struct Alerts: Encodable { let alerts: [Alert] }
-            let alerts = try await service.get(["secret-scanning", "alerts"], query: ["state": state, "per_page": "50"], as: [Alert].self)
-            let text = alerts.isEmpty ? "No \(state) secret scanning alerts." : alerts.map { alert in
-                "\(alert.created_at ?? "?") \(alert.secret_type_display_name ?? "secret") in \(alert.repository?.full_name ?? "?")\(alert.validity.map { ", \($0)" } ?? "")"
-            }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Alerts(alerts: alerts))
+            let text = (lines.isEmpty ? ["No open alerts match."] : lines) + failures
+            struct Alerts: Encodable { let alerts: [SecurityAlert] }
+            return try ServiceResult(text: text.joined(separator: "\n"), structured: Alerts(alerts: alerts.map(\.1)))
+        }
+    }
+
+    /// New open alerts: every leaked secret, and code scanning and Dependabot alerts that are high or critical.
+    struct NewSecurityAlerts: ServiceTrigger {
+        var tool: String { SecurityAlerts.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            let (found, _) = try await GitHub.eachFeed([
+                (AlertKind.secret, { try await GitHub.openAlerts(.secret, on: service) }),
+                (AlertKind.code, {
+                    try await GitHub.openAlerts(.code, severity: "critical", on: service) + GitHub.openAlerts(.code, severity: "high", on: service)
+                }),
+                (AlertKind.dependency, { try await GitHub.openAlerts(.dependency, severity: "critical,high", on: service) }),
+            ])
+            var seen = Set<String>()
+            return found.compactMap { alert -> ServiceAlert? in
+                guard let id = alert.html_url, let time = ServiceAlert.time(alert.created_at), time >= since, seen.insert(id).inserted else { return nil }
+                return ServiceAlert(id: id, time: time)
+            }.sorted { $0.time > $1.time }
         }
     }
 }

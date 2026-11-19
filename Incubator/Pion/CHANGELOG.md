@@ -4,6 +4,7 @@
 
 ### Added
 
+- GitHub lists an organisation's open code scanning and Dependabot alerts beside its leaked secrets, by kind and from a time on, and wakes its agents for every new leaked secret and new high or critical code scanning and Dependabot alerts. A feed the organisation has not turned on leaves the others to be read.
 - More tools wake their agents for new alerts: high-severity Microsoft Sentinel incidents, high and critical CrowdStrike Falcon alerts, every SentinelOne threat, users Entra ID newly rates at high risk, Proofpoint threats delivered or clicked through, and open critical and high Wiz issues.
 - Wiz issues can be listed from a time on.
 - New high alerts wake the agents a tool is assigned to: Pion checks Microsoft Defender XDR's alerts and Google Cloud's Security Command Center findings every five minutes with the account's own sign-in, and tells the agents only where to look and the time window, so they read the alerts themselves and decide how far to go. An account starts from when it is first watched, so its past alerts are not news.
