@@ -10,6 +10,13 @@ public enum ToolConnectionSecret: Sendable {
     case client(id: String, secret: String)
 }
 
+/// A line an app shows under one of its accounts in Settings › Tools.
+public struct ToolConnectionNote: Equatable, Sendable {
+    public let text: String
+    public let isProblem: Bool
+    public init(_ text: String, isProblem: Bool = false) { self.text = text; self.isProblem = isProblem }
+}
+
 /// Where a connection stands for the person: ready, signing in, or waiting on them, and why.
 public enum ToolConnectionStatus: Equatable, Sendable {
     /// The organisation does not allow it.
@@ -39,6 +46,8 @@ public final class ToolConnectionsController {
     private(set) var signingIn: UUID?
     private(set) var signInStage = ""
     public private(set) var errors: [UUID: String] = [:]
+    /// A line the app adds under an account about what it does with it, by account; a problem shows as an error does.
+    public var notes: [UUID: ToolConnectionNote] = [:]
     var errorMessage: String?
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.

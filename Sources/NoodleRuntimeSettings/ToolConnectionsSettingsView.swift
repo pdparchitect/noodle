@@ -46,6 +46,10 @@ public struct ToolConnectionsSettingsView: View {
                                 if let error = store.connectionsController.errors[connection.id] {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
+                                if let note = store.connectionsController.notes[connection.id] {
+                                    Text(note.text).font(.caption).foregroundStyle(note.isProblem ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                                 HStack(spacing: 12) {
                                     if connection.keepsSecret, connection.awsIdentityCenter == nil {
                                         // A token or client secret is entered in the editor; there is no sign-in to start.

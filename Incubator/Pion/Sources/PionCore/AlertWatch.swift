@@ -93,12 +93,17 @@ public struct AlertWatch: Codable, Equatable, Sendable {
 
     private var watch: AlertWatch
     private let file: URL
-    private let service: ToolConnectionService
+    /// Reaches an account's service with its own sign-in.
+    private let access: @Sendable (ToolConnection) async throws -> any ServiceAccess
     private var checking = false
 
-    public init(file: URL, service: ToolConnectionService) {
+    public convenience init(file: URL, service: ToolConnectionService) {
+        self.init(file: file) { try await service.access(for: $0) }
+    }
+
+    init(file: URL, access: @escaping @Sendable (ToolConnection) async throws -> any ServiceAccess) {
         self.file = file
-        self.service = service
+        self.access = access
         watch = AlertWatch.load(from: file)
     }
 
@@ -110,28 +115,30 @@ public struct AlertWatch: Codable, Equatable, Sendable {
     /// Checks each account, signed in and assigned to `agents`, once, and wakes those agents with a note for any that has
     /// something new. A check that fails is tried again next time, from where the last one left off. What was seen of
     /// the accounts in `keeping` stays, such as one waiting to be signed in again, so it picks up where it stopped;
-    /// any other is forgotten.
+    /// any other is forgotten. Says why each account that could not be checked could not.
+    @discardableResult
     public func check(_ accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>, at now: Date = Date(),
-                      wake: (UUID, String) -> Void) async {
-        guard !checking else { return }
+                      wake: (UUID, String) -> Void) async -> [UUID: String] {
+        guard !checking else { return [:] }
         checking = true
         defer { checking = false }
-        var watch = watch
+        var watch = watch, problems: [UUID: String] = [:]
         watch.keep(only: keeping.union(accounts.map(\.connection.id)))
         for (connection, agents) in accounts {
             guard !agents.isEmpty, let name = connection.adapter, let adapter = PionAdapters.all[name] as? OperationAdapter,
                   let tool = adapter.watchedTool else { continue }
             guard let since = watch.since(connection.id, at: now) else { continue }
             do {
-                let found = try await adapter.alerts(since: since, connection: connection, access: try await service.access(for: connection))
+                let found = try await adapter.alerts(since: since, connection: connection, access: try await access(connection))
                 guard let news = watch.take(found, for: connection.id) else { continue }
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)
                 for agent in agents { wake(agent, note) }
             } catch {
-                continue
+                problems[connection.id] = error.localizedDescription
             }
         }
         self.watch = watch
         try? watch.save(to: file)
+        return problems
     }
 }

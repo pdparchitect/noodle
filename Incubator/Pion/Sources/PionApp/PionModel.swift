@@ -94,6 +94,8 @@ import UniformTypeIdentifiers
     private var loop: Task<Void, Never>?
     /// Checks the tools that have alerts to watch, every few minutes, and wakes the agents they are assigned to.
     private var alertLoop: Task<Void, Never>?
+    /// Why each account the last check could not check could not, until a check of it succeeds.
+    private var alertProblems: [UUID: String] = [:]
     private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
     private(set) var pinnedIDs: [UUID] = []
@@ -199,10 +201,12 @@ import UniformTypeIdentifiers
         alertLoop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let (accounts, keeping) = self?.watchedAccounts() else { return }
-                await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
+                let problems = await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
                     guard let self else { return }
                     self.runtime.wake(id, note: note, repository: self.repository)
                 }
+                self?.alertProblems = problems
+                self?.showWatchedAccounts()
                 try? await Task.sleep(for: AlertWatcher.interval)
             }
         }
@@ -246,6 +250,17 @@ import UniformTypeIdentifiers
         return (accounts, keeping)
     }
 
+    /// Says in Settings › Tools which accounts wake their agents for new alerts, and why one could not be checked.
+    private func showWatchedAccounts() {
+        guard running, !isScripted else { return }
+        var notes: [UUID: ToolConnectionNote] = [:]
+        for (connection, _) in watchedAccounts().accounts {
+            notes[connection.id] = alertProblems[connection.id].map { ToolConnectionNote("Could not check for alerts: " + $0, isProblem: true) }
+                ?? ToolConnectionNote("Wakes its agents for new alerts")
+        }
+        if connectionsController.notes != notes { connectionsController.notes = notes }
+    }
+
     /// The conversation Pion opens on: the one it was left on, while it is still there, or else the one with the latest
     /// activity, as the sidebar orders them and as Noodle opens on its latest.
     private func openingConversation() -> UUID? {
@@ -286,6 +301,7 @@ import UniformTypeIdentifiers
         runtime.checkHeartbeats()
         budgets.checkExpired()
         runtime.checkWakes(repository: repository)
+        showWatchedAccounts()
         for conversation in conversations { readTranscript(conversation.id) }
         updateBadge()
     }
