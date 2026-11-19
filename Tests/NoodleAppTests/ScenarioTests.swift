@@ -505,6 +505,22 @@ import XCTest
         XCTAssertNil(bare.film, "Leaving out the titles of a scenario without a film makes none")
     }
 
+    /// `--scenario-margin` widens the backdrop around the window, as a share of its shorter side, for stills that want
+    /// more of it than a film.
+    func testALaunchCanWidenTheMarginAroundTheWindow() throws {
+        var scenario = try Scenario.load(from: try fixture())
+        try scenario.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-margin", "0.2"]))
+        XCTAssertEqual(scenario.film?.margin, 0.2)
+        for wrong in ["wide", "0.9", "-0.1"] {
+            var other = try Scenario.load(from: try fixture())
+            XCTAssertThrowsError(try other.adjustFilm(LaunchChecks(arguments: ["Noodle", "--scenario-margin", wrong])), wrong)
+        }
+        // The stage is the window with that share of its shorter side all round, as the screen allows.
+        let stage = ScenarioFilmStage.frame(around: NSRect(x: 0, y: 0, width: 1000, height: 600), inset: 0.2,
+                                            visible: NSRect(x: 0, y: 0, width: 3000, height: 2000))
+        XCTAssertEqual(stage.size, CGSize(width: 1240, height: 840))
+    }
+
     /// `--scenario-without` records a film without its opening or closing card, or both, and keeps its backdrop.
     func testALaunchCanLeaveOutTheFilmsTitles() throws {
         let film = "\"film\": { \"background\": \"white\", \"intro\": { \"title\": \"A morning\" }, \"outro\": { \"tagline\": \"Bots.\" } },"

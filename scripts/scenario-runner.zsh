@@ -18,7 +18,9 @@ usage() {
     print -u2 '  --size WxH  open the main window at that size instead of the scenario'"'"'s own'
     print -u2 '  --silent    leave the sound off the recording'
     print -u2 '  --no-intro, --no-outro, --no-titles  record the film without its opening card, closing card or both'
-    print -u2 '  --background PATH|URL  record over this picture or video instead of the film'"'"'s own background'
+    print -u2 '  --background PATH|URL  record over this picture or video instead of the film'"'"'s own background; with'
+    print -u2 '                         --shots, photograph the window over it, its glass showing it through'
+    print -u2 '  --margin SHARE  the backdrop around the window, as a share of its shorter side (0.07 unless given)'
     print -u2 '  --shadow    keep the window shadow in those shots'
     [[ "$benchmarks" == false ]] || print -u2 '  --benchmark[=PHASES]  run fixed phases instead of the timeline, print missed frames and quit'
     print -u2 '  --all       every scenario in turn'
@@ -27,13 +29,16 @@ usage() {
 }
 
 build=true shots=false record=false shadow=false all=false silent=false benchmark=
-selections=() ratios=() without=() expect_ratio=false size= expect_size=false background= expect_background=false
+selections=() ratios=() without=() expect_ratio=false size= expect_size=false background= expect_background=false margin= expect_margin=false
 for argument in "$@"; do
     if [[ "$expect_ratio" == true ]]; then
         ratios+=("$argument"); expect_ratio=false; continue
     fi
     if [[ "$expect_size" == true ]]; then
         size="$argument"; expect_size=false; continue
+    fi
+    if [[ "$expect_margin" == true ]]; then
+        margin="$argument"; expect_margin=false; continue
     fi
     if [[ "$expect_background" == true ]]; then
         background="$argument"; expect_background=false; continue
@@ -46,6 +51,8 @@ for argument in "$@"; do
         --no-outro) without+=(outro) ;;
         --no-titles) without+=(intro outro) ;;
         --background) expect_background=true ;;
+        --margin) expect_margin=true ;;
+        --margin=*) margin="${argument#--margin=}" ;;
         --background=*) background="${argument#--background=}" ;;
         --video) record=true ;;
         --ratio) expect_ratio=true; record=true ;;
@@ -60,7 +67,7 @@ for argument in "$@"; do
         *) selections+=("$argument") ;;
     esac
 done
-[[ "$expect_ratio" == false && "$expect_size" == false && "$expect_background" == false ]] || usage
+[[ "$expect_ratio" == false && "$expect_size" == false && "$expect_background" == false && "$expect_margin" == false ]] || usage
 # A picture or video on this Mac is read where it is: the bundle is let read that one file, by its full path.
 if [[ -n "$background" && "$background" != http://* && "$background" != https://* ]]; then
     background="${background:A}"
@@ -209,6 +216,7 @@ launch_arguments=(-AppleLocale en_US -AppleLanguages '(en)')
 [[ -z "$size" ]] || launch_arguments+=(--scenario-size "$size")
 [[ ${#without} == 0 ]] || launch_arguments+=(--scenario-without "${(j:,:)${(@u)without}}")
 [[ -z "$background" ]] || launch_arguments+=(--scenario-background "$background")
+[[ -z "$margin" ]] || launch_arguments+=(--scenario-margin "$margin")
 if [[ ${#folders} == 0 ]]; then
     # Without this the bundle returns to the scenario it showed last.
     open "$app" --args --scenario-picker
@@ -272,9 +280,16 @@ for folder in "${folders[@]}"; do
                     fields=(${=line})
                     capture_options=(-x)
                     [[ "$shadow" == true ]] || capture_options+=(-o)
-                    drawn="${${(M)fields:#drawn=*}#drawn=}"
-                    # Needs Screen Recording permission for the terminal running this script.
-                    if screencapture "${capture_options[@]}" -l "${fields[4]#id=}" "$folder/shots/${fields[3]}.png" 2>/dev/null; then
+                    drawn="${fields[(r)drawn=*]#drawn=}"
+                    shot_region="${fields[(r)rect=*]#rect=}"
+                    # Over a background, the area around the window as it is on screen, so its glass shows what is
+                    # behind it; otherwise the window alone. Needs Screen Recording permission for this terminal.
+                    if [[ -n "$background" && -n "$shot_region" && "$shot_region" != none ]]; then
+                        shot_target=(-R "$shot_region")
+                    else
+                        shot_target=(-l "${fields[4]#id=}")
+                    fi
+                    if screencapture "${capture_options[@]}" "${shot_target[@]}" "$folder/shots/${fields[3]}.png" 2>/dev/null; then
                         taken=$((taken + 1))
                     elif [[ -n "$drawn" && "$drawn" != none && -f "$drawn" ]]; then
                         # The screen could not be photographed, as while it is locked: keep the window as the app drew it.

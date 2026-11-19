@@ -305,10 +305,11 @@ extension Scenario {
         self.present = present
     }
 
-    /// `--scenario-background` and `--scenario-without` change the film for one recording.
+    /// `--scenario-background`, `--scenario-without` and `--scenario-margin` change the film for one recording.
     mutating func adjustFilm(_ checks: LaunchChecks) throws {
         film = try ScenarioFilm.adjusted(film, background: checks.value(after: DevelopmentHook.scenarioBackground),
-                                         without: checks.value(after: DevelopmentHook.scenarioWithout), media: media)
+                                         without: checks.value(after: DevelopmentHook.scenarioWithout),
+                                         margin: checks.value(after: DevelopmentHook.scenarioMargin), media: media)
     }
 
     static let tints = ScenarioFilm.tints

@@ -11,6 +11,9 @@ struct ScenarioFilm: Codable {
     /// What is behind the app and under the titles: "black", "white", or a picture
     /// or video, named as an asset in the scenario folder or as a web address.
     var background: String?
+    /// The backdrop around the window, as a share of its shorter side; a film's 0.07 when left out. Stills for a
+    /// README want more of it.
+    var margin: Double?
     var intro: Intro?
     var outro: Outro?
 
@@ -52,13 +55,21 @@ struct ScenarioFilm: Codable {
     /// The film as a launch asks for it, so one scenario can be recorded in different ways without editing it.
     /// `background`, from `--scenario-background`, replaces what is behind the app, making a film of only that
     /// for a scenario without one; `without`, from `--scenario-without`, leaves out title cards.
-    static func adjusted(_ film: ScenarioFilm?, background: String?, without: String?,
+    /// `margin`, from `--scenario-margin`, widens the backdrop around the window.
+    static func adjusted(_ film: ScenarioFilm?, background: String?, without: String?, margin: String? = nil,
                          media: (String) throws -> URL) throws -> ScenarioFilm? {
         var film = film
         if let background {
             _ = try media(background)
             film = film ?? ScenarioFilm()
             film?.background = background
+        }
+        if let margin {
+            guard let value = Double(margin), (0...0.5).contains(value) else {
+                throw ScenarioError("\(margin) is not a margin; give a share of the window's shorter side, from 0 to 0.5.")
+            }
+            film = film ?? ScenarioFilm()
+            film?.margin = value
         }
         if let without { film = try film?.without(without) }
         return film
@@ -387,18 +398,21 @@ private struct RisesIn: ViewModifier {
     /// The margin around a window of this size, as a share of its shorter side.
     static let inset: CGFloat = 0.07
 
+    /// The stage: `window` with `inset` of its shorter side all round, centred in `visible`. A window close to the size
+    /// of the screen gets whatever room is left.
+    static func frame(around window: NSRect, inset: CGFloat, visible: NSRect) -> NSRect {
+        let wanted = (min(window.width, window.height) * inset).rounded()
+        let margin = max(0, min(wanted, ((visible.width - window.width) / 2).rounded(), ((visible.height - window.height) / 2).rounded()))
+        let size = CGSize(width: window.width + margin * 2, height: window.height + margin * 2)
+        return NSRect(x: (visible.midX - size.width / 2).rounded(), y: (visible.midY - size.height / 2).rounded(),
+                      width: size.width, height: size.height)
+    }
+
     /// Centres `window` on the screen inside a stage of its own, and puts the backdrop
     /// behind it and the card in front. Both cover the stage, which is what gets recorded.
     func attach(to window: NSWindow) {
         let visible = NSScreen.main?.visibleFrame ?? ScenarioSupport.screen
-        let wanted = (min(window.frame.width, window.frame.height) * Self.inset).rounded()
-        // A window close to the size of the screen gets whatever room is left.
-        let margin = max(0, min(wanted, ((visible.width - window.frame.width) / 2).rounded(),
-                                ((visible.height - window.frame.height) / 2).rounded()))
-        let size = CGSize(width: window.frame.width + margin * 2, height: window.frame.height + margin * 2)
-        frame = NSRect(x: (visible.midX - size.width / 2).rounded(),
-                       y: (visible.midY - size.height / 2).rounded(),
-                       width: size.width, height: size.height)
+        frame = Self.frame(around: window.frame, inset: film.margin.map { CGFloat($0) } ?? Self.inset, visible: visible)
         window.setFrameOrigin(CGPoint(x: (frame.midX - window.frame.width / 2).rounded(),
                                       y: (frame.midY - window.frame.height / 2).rounded()))
 
