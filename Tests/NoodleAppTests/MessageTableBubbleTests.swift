@@ -115,6 +115,22 @@ import HubLink
         XCTAssertEqual(card, plain, accuracy: 0.5)
     }
 
+    func testLinksTakeTheAccentColourLikeTheControlsAroundThem() {
+        // The app's accent, or the one the person chose in System Settings, rather than the system's fixed link blue.
+        let rendered = MessageMarkdownCache.render("Read [the advisory](https://example.com/advisory) first.")
+        let link = rendered.runs.first { $0.link != nil }
+        XCTAssertEqual(link?.foregroundColor, MessageMarkdownCache.linkColor)
+        // Lightened only in dark appearance, where a deep accent would not read as text.
+        let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+        var light = NSColor.clear, dark = NSColor.clear
+        NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance { light = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)! }
+        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance { dark = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)! }
+        XCTAssertEqual(light.blueComponent, accent.blueComponent, accuracy: 0.01)
+        XCTAssertGreaterThan(dark.redComponent + dark.greenComponent, light.redComponent + light.greenComponent)
+        let prose = rendered.runs.first { $0.link == nil }
+        XCTAssertNil(prose?.foregroundColor)
+    }
+
     func testInlineCodeIsSmallerAndDimmerThanTheTextAroundIt() {
         let rendered = MessageMarkdownCache.render("Run `swift test` now.")
         let code = rendered.runs.first { $0.inlinePresentationIntent?.contains(.code) == true }

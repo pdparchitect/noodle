@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Links in messages take your accent colour, as buttons and selections do, instead of the system's fixed link blue, a little lighter in dark mode so they stay easy to read.
 - A bot's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
 
 ## [0.90.0] - 2026-11-18

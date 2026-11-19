@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import NoodleCore
@@ -61,6 +62,15 @@ final class MessageMarkdownCache: @unchecked Sendable {
         return segments
     }
 
+    /// Links take the accent, the app's own or the one the person chose in System Settings, as the buttons and selections
+    /// around them do, rather than the system's fixed link blue. In dark appearance it is lightened, as macOS lightens it
+    /// for selected controls, so a deep accent still reads as text on a dark window.
+    static let linkColor = Color(nsColor: NSColor(name: nil) { appearance in
+        let accent = NSColor.controlAccentColor
+        guard appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua else { return accent }
+        return accent.blended(withFraction: 0.4, of: .white) ?? accent
+    })
+
     static func render(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
@@ -75,6 +85,8 @@ final class MessageMarkdownCache: @unchecked Sendable {
             return run.range
         }
         for range in unsafeLinkRanges { rendered[range].link = nil }
+        let linkRanges = rendered.runs.compactMap { run in run.link != nil ? run.range : nil }
+        for range in linkRanges { rendered[range].foregroundColor = linkColor }
         // Mono at the 12.5 pt body size looks larger and heavier than the prose around it.
         let codeRanges = rendered.runs.compactMap { run in
             run.inlinePresentationIntent?.contains(.code) == true ? run.range : nil
