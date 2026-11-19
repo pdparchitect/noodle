@@ -5,7 +5,7 @@ import NoodleWallpaper
 import PionCore
 import SwiftUI
 
-/// A second conversation keeps its selection, sheets and inspector independent of the main window.
+/// A second conversation keeps its selection, sheets and case record independent of the main window.
 struct ConversationWindow: View {
     let model: PionModel
     @Binding var selection: UUID?
@@ -55,7 +55,7 @@ struct ConversationWindow: View {
 }
 
 /// One conversation as a document: a header, the messages in a reading column, and the composer.
-/// An Investigation also has its case record in the inspector.
+/// An Investigation also has its case record in a panel beside it.
 struct ConversationView: View {
     let model: PionModel
     @Bindable var window: WindowState
@@ -64,14 +64,6 @@ struct ConversationView: View {
     @Environment(PionSettingsHost.self) private var host
     @Environment(\.openSettings) private var openSettings
     @State private var composerHeight: CGFloat = 0
-    // The column's ideal, read from the width it was left at only as the inspector opens. The width is
-    // kept in defaults, not app storage: a stored value the view watches redraws it on every step of a
-    // divider drag, in the middle of AppKit's layout, and the app crashes.
-    @State private var openingInspectorWidth: Double?
-    private static let inspectorWidthKey = "PionInspectorWidth"
-    private static var storedInspectorWidth: Double {
-        UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double ?? 360
-    }
     // Noodle's previews, capture and annotation, one of each per conversation shown.
     @State private var attachmentPreview = AttachmentPreviewController()
     @State private var screenCapturePreview = ScreenCapturePreviewController()
@@ -84,23 +76,33 @@ struct ConversationView: View {
     private var investigation: Investigation? { model.investigation(conversation.id) }
 
     var body: some View {
-        // Noodle's dissolve: the transcript alone is rebuilt for another conversation, so the toolbar,
-        // composer and inspector stay put and the composer keeps the keyboard.
-        ConversationTransition(conversationID: conversation.id) {
-            transcript
-                // Noodle's shade: messages fade as they pass under the toolbar, and only once there is something under it.
-                .conversationTopFade()
+        HStack(spacing: 0) {
+            // Noodle's dissolve: the transcript alone is rebuilt for another conversation, so the toolbar,
+            // composer and case record stay put and the composer keeps the keyboard.
+            ConversationTransition(conversationID: conversation.id) {
+                transcript
+                    // Noodle's shade: messages fade as they pass under the toolbar, and only once there is something under it.
+                    .conversationTopFade()
+            }
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .ignoresSafeArea(edges: .top)
+            .overlay(alignment: .bottom) {
+                Composer(model: model, window: window, conversation: conversation, investigation: investigation,
+                         actions: ComposerActions(attachFile: { pickers.attachFile(to: conversation.id) },
+                                                  choosePhoto: { pickers.choosePhoto(for: conversation.id) },
+                                                  capture: showCapture,
+                                                  preview: { showPreview($0) }))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
+            }
+            // Hidden for an agent or group without forgetting it was open, so it is back on returning to an Investigation.
+            if window.showsInspector, let investigation {
+                // Its own for each Investigation, so evidence opened in one never shows open in another.
+                CasePanel(model: model, window: window, investigation: investigation)
+                    .id(investigation.id)
+                    .transition(.move(edge: .trailing))
+            }
         }
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .ignoresSafeArea(edges: .top)
-        .overlay(alignment: .bottom) {
-            Composer(model: model, window: window, conversation: conversation, investigation: investigation,
-                     actions: ComposerActions(attachFile: { pickers.attachFile(to: conversation.id) },
-                                              choosePhoto: { pickers.choosePhoto(for: conversation.id) },
-                                              capture: showCapture,
-                                              preview: { showPreview($0) }))
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
-        }
+        .animation(.snappy(duration: 0.25), value: window.showsInspector)
         // As in Noodle: files dropped anywhere on the conversation wait in its message field.
         .conversationFileDrop(isEnabled: { investigation?.isClosed != true }) { model.attachDropped($0, to: conversation.id) }
         // As in Noodle: a picture or file pasted with the message field out of focus waits there too.
@@ -141,32 +143,6 @@ struct ConversationView: View {
         .navigationTitle(investigation?.reference ?? conversation.displayName)
         .navigationSubtitle(investigation?.title ?? subtitle)
         .toolbar { toolbar }
-        // Hidden for an agent or group without forgetting it was open, so it is back on returning to an Investigation.
-        // SwiftUI writes false back while it hides it, sometimes through the binding of the Investigation just
-        // left, so only the Case button and View › Hide Inspector change whether it shows.
-        .inspector(isPresented: Binding(get: { window.showsInspector && investigation != nil }, set: { _ in })) {
-            Group {
-                if let investigation {
-                    // Its own for each Investigation, so evidence opened in one never shows open in another.
-                    CaseInspector(model: model, window: window, investigation: investigation)
-                        .id(investigation.id)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                            if (300...520).contains(width) { UserDefaults.standard.set(Double(width), forKey: Self.inspectorWidthKey) }
-                        }
-                } else {
-                    // Something to carry the width below while an agent or group shows: with nothing, the hidden
-                    // column falls back to a fixed default, and on returning is only held to the minimum.
-                    Color.clear
-                }
-            }
-            // Back at the width it was left at, here and on the next launch; widths outside the column's
-            // range come only from it opening or closing. On the root: inside the condition SwiftUI misses
-            // it and the column is fixed at its default width.
-            .inspectorColumnWidth(min: 300, ideal: openingInspectorWidth ?? Self.storedInspectorWidth, max: 520)
-        }
-        .onChange(of: window.showsInspector && investigation != nil, initial: true) { _, shown in
-            if shown { openingInspectorWidth = Self.storedInspectorWidth }
-        }
         .onChange(of: conversation.id) { _, _ in
             attachmentPreview.close()
             screenCapturePreview.close()
@@ -270,6 +246,53 @@ struct ConversationView: View {
                     .help(KeyboardBindings.shared.help("Show or hide the case record", for: PionShortcuts.showInspector))
             }
         }
+    }
+}
+
+/// The case record beside an Investigation, at the width it was last left at, here and on the next launch. Pion's
+/// own panel rather than SwiftUI's inspector, whose column, even hidden, laid the whole window out a second time at every
+/// step of a resize. Its edge is dragged to resize it, as an inspector's is.
+private struct CasePanel: View {
+    let model: PionModel
+    @Bindable var window: WindowState
+    let investigation: Investigation
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var width = CasePanel.storedWidth
+    @State private var dragStart: CGFloat?
+
+    static let widthKey = "PionInspectorWidth"
+    static let widths: ClosedRange<CGFloat> = 300...520
+    private static var storedWidth: CGFloat {
+        (UserDefaults.standard.object(forKey: widthKey) as? Double).map { CGFloat($0) }.map { min(max($0, widths.lowerBound), widths.upperBound) } ?? 360
+    }
+
+    var body: some View {
+        CaseInspector(model: model, window: window, investigation: investigation)
+            .frame(width: width)
+            // Set apart from the conversation as the sidebar is: the window's backdrop a little darker, to the top.
+            .background(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.04).ignoresSafeArea())
+            .overlay(alignment: .leading) { resizeEdge }
+    }
+
+    /// A strip along the panel's edge, wider than it looks, that drags it wider or narrower. The width is kept once
+    /// the drag ends, not at every step.
+    private var resizeEdge: some View {
+        Color.clear
+            .frame(width: 8)
+            .contentShape(Rectangle())
+            .offset(x: -4)
+            .pointerStyle(.columnResize)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    let start = dragStart ?? width
+                    dragStart = start
+                    width = min(max(start - drag.translation.width, Self.widths.lowerBound), Self.widths.upperBound)
+                }
+                .onEnded { _ in
+                    dragStart = nil
+                    UserDefaults.standard.set(Double(width), forKey: Self.widthKey)
+                })
+            .accessibilityHidden(true)
     }
 }
 
@@ -401,7 +424,7 @@ struct ConversationStart: View {
         .frame(maxWidth: MessageRow.column, alignment: .leading)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
-        // The transcript runs under the toolbar; at rest its heading lines up with the sidebar's first section and the inspector's divider.
+        // The transcript runs under the toolbar; at rest its heading lines up with the sidebar's first section and the case record's divider.
         .padding(.top, 20)
     }
 }
