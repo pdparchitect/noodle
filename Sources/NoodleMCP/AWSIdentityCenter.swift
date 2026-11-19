@@ -53,8 +53,16 @@ struct AWSIdentityCenter: Sendable {
         return nil
     }
 
+    /// Found on the start page, which redirects within its own host, as from /start to /start/; only those are followed.
     func region(of startURL: URL) async throws -> String {
-        let (data, status) = try await send(URLRequest(url: startURL))
+        var address = startURL
+        var (data, status, location) = try await page(address)
+        for _ in 0..<3 where (300..<400).contains(status) {
+            guard let next = location.flatMap({ URL(string: $0, relativeTo: address)?.absoluteURL }),
+                  next.scheme == "https", next.host?.lowercased() == startURL.host?.lowercased() else { break }
+            address = next
+            (data, status, location) = try await page(address)
+        }
         guard status == 200, let region = Self.region(inStartPage: String(decoding: data, as: UTF8.self)) else {
             throw ToolConnectionError.message("That AWS access portal could not be read. Check its URL.")
         }
@@ -218,9 +226,19 @@ struct AWSIdentityCenter: Sendable {
         return try JSONDecoder().decode(Answer.self, from: data)
     }
 
+    private func page(_ url: URL) async throws -> (Data, Int, String?) {
+        let (data, response) = try await exchange(URLRequest(url: url))
+        return (data, response.statusCode, response.value(forHTTPHeaderField: "Location"))
+    }
+
+    private func send(_ request: URLRequest) async throws -> (Data, Int) {
+        let (data, response) = try await exchange(request)
+        return (data, response.statusCode)
+    }
+
     /// Only Identity Center's own hosts and the organisation's start page, over HTTPS, without following redirects.
     /// Every answer's status is read here, since a refusal says why in its body.
-    private func send(_ request: URLRequest) async throws -> (Data, Int) {
+    private func exchange(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         guard let url = request.url, url.scheme == "https", let host = url.host?.lowercased(), url.user == nil,
               host.hasSuffix(".amazonaws.com") || host.hasSuffix(".awsapps.com") else {
             throw ToolConnectionError.message("AWS sign-in may only reach AWS.")
@@ -231,6 +249,6 @@ struct AWSIdentityCenter: Sendable {
         defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request, limit: 2 * 1_048_576, tooLarge: ToolConnectionServiceError.responseTooLarge)
         guard let http = response as? HTTPURLResponse else { throw ToolConnectionServiceError.network(0) }
-        return (data, http.statusCode)
+        return (data, http)
     }
 }

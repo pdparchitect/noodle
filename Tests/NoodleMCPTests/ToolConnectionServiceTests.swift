@@ -217,8 +217,12 @@ private final class FixtureState: @unchecked Sendable {
     private func identityCenter(_ request: URLRequest) throws -> (Int, [String: Any])? {
         let url = request.url!, host = url.host!
         let query = Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") }) { a, _ in a }
-        switch (host, url.path) {
+        // With its trailing slash, which path drops, so /start and /start/ are told apart.
+        switch (host, url.path(percentEncoded: true)) {
+        // As AWS's own portals do: the start URL people are given redirects to the same path with a slash.
         case ("example.awsapps.com", "/start"):
+            return (302, ["location": "/start/"])
+        case ("example.awsapps.com", "/start/"):
             return (200, ["raw": "<meta content=\"connect-src https://portal.sso.eu-west-1.amazonaws.com https://oidc.eu-west-1.amazonaws.com\">"])
         case ("oidc.eu-west-1.amazonaws.com", "/client/register"):
             ssoRegistrations.append(String(data: Self.body(request), encoding: .utf8) ?? "")
@@ -285,7 +289,9 @@ private final class FixtureProtocol: URLProtocol {
     override func startLoading() {
         do {
             let (status, object) = try Self.state.response(request)
-            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+            var headers = ["Content-Type": "application/json"]
+            if let location = object["location"] as? String { headers["Location"] = location }
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             // A page goes as it is; anything else as JSON.
             if let raw = object["raw"] as? String { client?.urlProtocol(self, didLoad: Data(raw.utf8)) }

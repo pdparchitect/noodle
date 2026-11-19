@@ -46,8 +46,9 @@ public struct ToolConnectionsSettingsView: View {
                                     Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
-                                    if connection.keepsSecret {
+                                    if connection.keepsSecret, connection.awsIdentityCenter == nil {
                                         // A token or client secret is entered in the editor; there is no sign-in to start.
+                                        // An AWS Identity Center sign-in is started here, as a browser sign-in is.
                                         let what = connection.usesToken ? "Token" : "Credentials"
                                         Button(store.connectionsController.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
                                             .buttonStyle(.link)
