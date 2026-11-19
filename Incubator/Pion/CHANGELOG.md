@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- A message's attachments wrap side by side again: they have the whole column, rather than the share its text leaves, so two annotations fit on a row.
 - Google Cloud audit log searches that Google fails every time are read again in small pages, and one that fails partway keeps the entries already found and says where it stopped, instead of ending in an error.
 - A name in code that ends like a web address, such as session.id in a code block or report.md in backticks, no longer gets a link preview card.
 - Pion opens on the conversation you left it on, or, if that one has gone, on the one with the latest activity, instead of on no conversation at all.

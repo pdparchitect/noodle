@@ -458,29 +458,35 @@ struct MessageRow: View {
                 ConversationNoticeView(text: message.body, isDirect: conversation.kind == .direct)
                     .padding(.top, 10)
             } else if message.author == .user {
-                HStack {
-                    Spacer(minLength: 120)
-                    VStack(alignment: .trailing, spacing: 4) {
-                        // Written from a task in the sidebar.
-                        if let task = message.task { MessageTaskLabel(task: task) }
-                        if showsText {
-                            MessageBody(text: message.body, message: message, fills: false) { model.problem = $0 }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
-                                .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
-                        }
-                        linkPreview
-                        filesWithReactions
-                        HStack(spacing: 6) {
-                            // Always laid out, only shown on hover, so pointing at a message never moves the others.
-                            Text(message.createdAt.pionShort).font(.caption2).foregroundStyle(.tertiary)
-                                .opacity(hovering ? 1 : 0)
-                            // As Noodle's: whether it reached the conversation, and whether an agent got it.
-                            MessageDeliveryLabel(delivery: message.delivery)
+                VStack(alignment: .trailing, spacing: 4) {
+                    if message.task != nil || showsText || hasLinkPreview {
+                        HStack {
+                            Spacer(minLength: 120)
+                            VStack(alignment: .trailing, spacing: 4) {
+                                // Written from a task in the sidebar.
+                                if let task = message.task { MessageTaskLabel(task: task) }
+                                if showsText {
+                                    MessageBody(text: message.body, message: message, fills: false) { model.problem = $0 }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(Color.secondary.opacity(0.11), in: .rect(cornerRadius: 18, style: .continuous))
+                                        .overlay(alignment: .topTrailing) { reactions.offset(x: 5, y: -12) }
+                                }
+                                linkPreview
+                            }
                         }
                     }
+                    // The whole column, not the text's indented share of it, so two cards fit side by side.
+                    filesWithReactions
+                    HStack(spacing: 6) {
+                        // Always laid out, only shown on hover, so pointing at a message never moves the others.
+                        Text(message.createdAt.pionShort).font(.caption2).foregroundStyle(.tertiary)
+                            .opacity(hovering ? 1 : 0)
+                        // As Noodle's: whether it reached the conversation, and whether an agent got it.
+                        MessageDeliveryLabel(delivery: message.delivery)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.top, 10)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -552,6 +558,8 @@ struct MessageRow: View {
             MessageLinkPreview(url: url, shouldLoad: true).frame(maxWidth: 420, alignment: .leading)
         }
     }
+
+    private var hasLinkPreview: Bool { MessageLinkPreviews.url(for: message, attachments: model.files(of: message)) != nil }
 
     /// As in Noodle: a voice message with nothing but its recordings shows no text of its own.
     private var showsText: Bool { VoiceMessage.showsText(message.body, with: model.files(of: message)) }
