@@ -74,7 +74,7 @@ extension AttachmentPreviewController {
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18)])
         let header = NSStackView(); header.orientation = .horizontal; header.spacing = 9
         let icon = NSImageView(image: NSImage(systemSymbolName: "bubble.left.and.text.bubble.right.fill", accessibilityDescription: nil)!)
-        icon.contentTintColor = .controlAccentColor
+        icon.contentTintColor = .labelColor
         icon.symbolConfiguration = .init(pointSize: 18, weight: .medium)
         header.addArrangedSubview(icon)
         header.addArrangedSubview(annotationLabel("Add a comment", size: 15, weight: .semibold))
