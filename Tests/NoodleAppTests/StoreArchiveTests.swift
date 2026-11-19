@@ -102,4 +102,25 @@ import XCTest
         XCTAssertEqual(f.store.pinnedConversations.map(\.id), [group.id], "Unarchiving brings back its pin")
         XCTAssertTrue(f.store.archivedGroups.isEmpty)
     }
+
+    /// Noodle opens on the conversation it was left on, as long as it is still there and not archived; otherwise on
+    /// the first in the sidebar, as before.
+    func testNoodleOpensOnTheConversationItWasLeftOn() throws {
+        let f = try fixture()
+        UserDefaults.standard.removeObject(forKey: NoodleStore.selectionKey)
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: NoodleStore.selectionKey) }
+        let first = try XCTUnwrap(f.store.selectedConversationID)
+        let other = first == f.directA.id ? f.directB : f.directA
+        f.store.selectedConversationID = other.id
+
+        let reopened = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertEqual(reopened.selectedConversationID, other.id, "Opens where it was left")
+        reopened.stopMonitoring()
+
+        XCTAssertTrue(f.store.setArchived(true, agentID: try XCTUnwrap(other.participantIDs.first)))
+        UserDefaults.standard.set(other.id.uuidString, forKey: NoodleStore.selectionKey)
+        let afterArchive = NoodleStore(repository: f.repository, runtime: f.runtime.runtime, connectsServices: false)
+        XCTAssertEqual(afterArchive.selectedConversationID, first, "An archived conversation is not opened on")
+        afterArchive.stopMonitoring()
+    }
 }

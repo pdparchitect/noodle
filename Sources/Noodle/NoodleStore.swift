@@ -121,7 +121,15 @@ final class NoodleStore {
         didSet { if unread != oldValue { updateDockBadge() } }
     }
     var unreadConversationIDs: Set<UUID> { unread.unread }
-    var selectedConversationID: UUID?
+    /// What the main window shows, remembered so Noodle opens on it again next time.
+    var selectedConversationID: UUID? {
+        didSet {
+            if selectedConversationID != oldValue {
+                UserDefaults.standard.set(selectedConversationID?.uuidString, forKey: Self.selectionKey)
+            }
+        }
+    }
+    static let selectionKey = "Noodle.selectedConversation"
     var searchText = "" {
         didSet { if searchText != oldValue { findMentions() } }
     }
@@ -998,7 +1006,10 @@ final class NoodleStore {
                conversations.contains(where: { $0.id == selectedConversationID }) {
                 return
             }
-            selectedConversationID = conversations.first { !isArchived($0) }?.id
+            // The one it was left on last time, while it is still there and not archived.
+            let saved = UserDefaults.standard.string(forKey: Self.selectionKey).flatMap(UUID.init(uuidString:))
+            selectedConversationID = conversations.first { $0.id == saved && !isArchived($0) }?.id
+                ?? conversations.first { !isArchived($0) }?.id
         } catch {
             errorMessage = error.localizedDescription
         }
