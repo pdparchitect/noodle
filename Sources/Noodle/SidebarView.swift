@@ -342,14 +342,8 @@ private struct ConversationRow: View, Equatable {
         .conversationDropTarget { store.drop($0, onConversation: conversationID) }
         .overlay(alignment: .leading) {
             if content.isUnread {
-                // A muted group's dot is dimmed: new replies show, but do not ask for attention.
-                Circle()
-                    .fill(content.isMuted ? Color.secondary.opacity(0.5) : Color.blue)
-                    .frame(width: 8, height: 8)
-                    // Keep the dot in the leading inset, 5 points before the avatar.
-                    .offset(x: -13)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                // Kept in the leading inset, 5 points before the avatar.
+                UnreadDot(isMuted: content.isMuted).offset(x: -13)
             }
         }
         .contentShape(Rectangle())
@@ -399,14 +393,7 @@ private struct ConversationIcon: View, Equatable {
             }
             .overlay(alignment: .topLeading) {
                 if content.isUnread {
-                    // A muted group's dot is dimmed, as in the list.
-                    Circle()
-                        .fill(content.isMuted ? Color.secondary.opacity(0.5) : Color.blue)
-                        .frame(width: 10, height: 10)
-                        .padding(2)
-                        .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
-                        .offset(x: -2, y: -2)
-                        .accessibilityHidden(true)
+                    UnreadDot(isMuted: content.isMuted, size: 10, ringed: true).offset(x: -2, y: -2)
                 }
             }
             .help(content.runtimeHelp)

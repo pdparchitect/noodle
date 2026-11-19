@@ -4,6 +4,7 @@
 
 ### Added
 
+- Unread conversations carry Noodle's blue dot in the sidebar, beside agents, groups and Investigations alike; a muted group's is dimmed.
 - The Usage window shows each agent's mark beside its name when grouped by bot; click it for the agent's profile, to message it, suspend it or anything else the profile offers.
 
 ### Changed

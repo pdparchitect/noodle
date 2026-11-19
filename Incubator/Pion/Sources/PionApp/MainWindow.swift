@@ -340,6 +340,21 @@ struct InvestigationRow: View {
             }
         }
         .padding(.vertical, 3)
+        .modifier(UnreadMark(model: model, id: investigation.id))
+    }
+}
+
+/// Noodle's blue dot on an unread row, in the leading inset just before its mark; a muted group's is dimmed.
+struct UnreadMark: ViewModifier {
+    let model: PionModel
+    let id: UUID
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .leading) {
+            if model.isUnread(id) {
+                UnreadDot(isMuted: model.notifications(of: id) == .muted).offset(x: -13)
+            }
+        }
     }
 }
 
@@ -360,6 +375,7 @@ struct GroupRow: View {
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(UnreadMark(model: model, id: group.id))
         .contentShape(Rectangle())
     }
 }
@@ -386,6 +402,7 @@ struct AgentRow: View {
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .leading) { if unread { UnreadDot().offset(x: -13) } }
         .contentShape(Rectangle())
     }
 }
