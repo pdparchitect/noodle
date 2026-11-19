@@ -12,7 +12,7 @@ public enum AWS {
                           "ap-northeast-1", "ap-northeast-2", "me-south-1", "af-south-1"]
 
     public static let preset = ToolDefinition(
-        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS",
+        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS Security",
         summary: "CloudTrail, GuardDuty, Security Hub, IAM, Access Analyzer, EC2 and CloudWatch Logs across an organisation, read-only.",
         defaultInstructions: """
         Use AWS to investigate an organisation's accounts: look up CloudTrail events by user, event name, source, resource or access key; \
