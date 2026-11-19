@@ -27,12 +27,12 @@ struct SystemWallpaperSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.foregroundStyle(.blue)
+                Button("Cancel") { dismiss() }.foregroundStyle(Color.accentColor)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Text("System Wallpapers").font(.headline).foregroundStyle(.primary)
                 Spacer()
-                Button("Wallpaper Settings") { NSWorkspace.shared.open(Self.settingsURL) }.foregroundStyle(.blue)
+                Button("Wallpaper Settings") { NSWorkspace.shared.open(Self.settingsURL) }.foregroundStyle(Color.accentColor)
             }.buttonStyle(.plain).padding(16)
             Divider()
             ScrollView {

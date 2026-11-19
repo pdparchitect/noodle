@@ -244,14 +244,14 @@ public struct HarnessInstallationRow: View {
                             HStack {
                                 if guide.command != nil {
                                     Button("Open Terminal") { openTerminal() }
-                                        .buttonStyle(.link)
+                                        .buttonStyle(.accentLink)
                                 }
                                 Link("Installation Guide", destination: guide.documentationURL)
                                 Button("Check Installation") {
                                     hasCheckedInstallation = true
                                     install()
                                 }
-                                .buttonStyle(.link)
+                                .buttonStyle(.accentLink)
                                 .disabled(setup.checking.contains(id))
                             }
                             if hasCheckedInstallation {
@@ -262,13 +262,13 @@ public struct HarnessInstallationRow: View {
                         } else if setup.canInstall(id) {
                             HStack {
                                 Button("Install") { setup.install(id, runtime: store.runtime) }
-                                    .buttonStyle(.link)
+                                    .buttonStyle(.accentLink)
                                 Button("Install Manually…") { showsInstallationGuide = true }
-                                    .buttonStyle(.link)
+                                    .buttonStyle(.accentLink)
                             }
                         } else {
                             Button("Install…") { showsInstallationGuide = true }
-                                .buttonStyle(.link)
+                                .buttonStyle(.accentLink)
                         }
                     }
                 }
@@ -485,7 +485,7 @@ public struct HarnessInstallationRow: View {
             HStack(spacing: 12) {
                 if available, id.supportsProfiles {
                     Button("Profiles") { showsProfiles = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         .sheet(isPresented: $showsProfiles) {
                             HarnessProfilesView(store: store, installation: liveInstallation ?? installation)
                                 .noodleSheetSizing()
@@ -494,18 +494,18 @@ public struct HarnessInstallationRow: View {
                 if updateAvailable {
                     if managed {
                         Button("Update") { setup.install(id, runtime: store.runtime) }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                             .disabled(setup.activity[id] != nil)
                     } else {
                         Button("Update Instructions") { showsUpdateGuide.toggle() }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                             // A popover keeps the row, and so the Settings window, from resizing.
                             .popover(isPresented: $showsUpdateGuide, arrowEdge: .bottom) { updateGuide }
                     }
                 }
                 if managed {
                     Button("Remove") { confirmsRemoval = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         .disabled(setup.activity[id] != nil)
                         .confirmationDialog("Remove \(id.displayName)?", isPresented: $confirmsRemoval) {
                             Button("Remove", role: .destructive) {
@@ -521,17 +521,17 @@ public struct HarnessInstallationRow: View {
                 }
                 if id == .apple {
                     Button("Local Models") { showsLocalModels = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         .sheet(isPresented: $showsLocalModels) { AppleLocalModelsView(store: store).noodleSheetSizing() }
                     Button("Remote Models") { showsRemoteModels = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         .sheet(isPresented: $showsRemoteModels) { AppleRemoteModelsView(store: store).noodleSheetSizing() }
                 }
                 if needsSignIn {
                     Button("Sign In") {
                         if let liveInstallation, liveInstallation.isAvailable { setup.signIn(liveInstallation) }
                     }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         // Only this harness's own check matters; version lookups and the
                         // other harnesses' checks would otherwise keep the link disabled.
                         .disabled(setup.checking.contains(id) || liveInstallation?.isAvailable != true)
@@ -548,7 +548,7 @@ public struct HarnessInstallationRow: View {
                     }
                     Spacer(minLength: 0)
                     Button("Cancel") { setup.cancel(id) }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                 }
             }
         }
@@ -564,10 +564,10 @@ public struct HarnessInstallationRow: View {
             HStack {
                 if guide.command != nil {
                     Button("Open Terminal") { openTerminal() }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                 }
                 Button("Official Update Guide") { openURL(guide.documentationURL) }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
             }
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }
@@ -625,9 +625,9 @@ public struct HarnessTerminalSignInView: View {
             HarnessCommandView(command: command)
             HStack {
                 Button("Open Terminal") { HarnessCommandView.openTerminal { terminalError = $0 } }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                 Button("Check Again", action: checkAgain)
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
             }
             if let terminalError { Text(terminalError).font(.caption).foregroundStyle(.red) }
         }

@@ -88,7 +88,7 @@ private struct NoodleToolChoices: View {
                                 .font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                         }
                         Spacer()
-                        Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                        Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                     }.padding(8).contentShape(Rectangle())
                 }.buttonStyle(.plain)
             }
@@ -103,7 +103,7 @@ private struct NoodleToolChoices: View {
                         Text("Images made on this Mac").font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                     }
                     Spacer()
-                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                    Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                 }.padding(8).contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
@@ -223,7 +223,7 @@ struct HubConnectionPicker: View {
                                     Text("Images made on the Hub").font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                                 }
                                 Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }.padding(8).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
@@ -238,7 +238,7 @@ struct HubConnectionPicker: View {
                                     Text(connection.record.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                                 }
                                 Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }.padding(8).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }

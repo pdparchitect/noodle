@@ -20,7 +20,7 @@ struct ConversationBackgroundSheet: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .disabled(busy)
                 Spacer()
                 Text("Conversation Background").font(.headline)
@@ -41,7 +41,7 @@ struct ConversationBackgroundSheet: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .disabled(busy || selection == original)
                 .keyboardShortcut(.defaultAction)
             }

@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 
 /// One group of shortcuts in Settings > Keybindings.
 struct KeybindingsSection: Identifiable {
@@ -79,7 +80,7 @@ struct KeybindingsSettingsView: View {
                         Button("Open System Settings") {
                             if let url = AppPermission.accessibility.settingsURL { NSWorkspace.shared.open(url) }
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                     }
                     .font(.caption)
                 }

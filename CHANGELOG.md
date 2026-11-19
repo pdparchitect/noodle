@@ -13,7 +13,9 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
-- Links in messages take your accent colour, as buttons and selections do, instead of the system's fixed link blue, a little lighter in dark mode so they stay easy to read.
+- Sheet buttons such as Cancel and Save, the add buttons in pickers, the send button for a voice message, the unread dot and folder icons take your accent colour instead of a fixed blue.
+- Link buttons, such as those in Settings, take your accent colour too, the same colour as links in messages, instead of the system's fixed link blue.
+- Links in messages take your accent colour, as buttons and selections do, instead of the system's fixed link blue. In dark mode a deep accent is lightened just enough to read; a bright one is left as it is.
 - A bot's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
 
 ## [0.90.0] - 2026-11-18

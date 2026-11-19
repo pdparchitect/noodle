@@ -113,7 +113,7 @@ private struct JoinedHubRows: View {
                         store.hubs.clearJoinError()
                         joining = true
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                     .help("Join a Noodle Hub with an invitation")
                     .disabled(!OrganisationStatus.shared.allows(.hubConnections))
                 }
@@ -171,22 +171,22 @@ private struct HubRow: View {
                     // A Hub from before pictures of people cannot keep one.
                     if pairing.status?.userID != nil {
                         Button("Your Picture…") { editingPicture = true }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                     }
                     if pairing.status?.isAdmin == true {
                         Button("Users") { showingUsers = true }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                     }
                     if let mirror, case let archived = store.archivedConversations(on: mirror), !archived.isEmpty {
                         Button("Archived (\(archived.count))") { showingArchived = true }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                     }
                     if mirror != nil {
                         Button("Computers & Browsers…") { showingCompanions = true }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                     }
                     Button("Leave") { confirmingLeave = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                 }
             }
         }
@@ -318,7 +318,7 @@ private struct HubArchivedSheet: View {
                         }
                         Spacer()
                         Button("Unarchive") { store.unarchive(conversation) }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                     }
                 }
             }
@@ -657,7 +657,7 @@ private struct HubUsersSheet: View {
             // Admins are managed on the Hub itself, so their rows only show them.
             if !user.isAdmin {
                 Button("Invite") { Task { inviting = await users.invite(user) } }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                 Menu {
                     Picker("Plan", selection: Binding(
                         get: { user.plan },
@@ -707,7 +707,7 @@ private struct HubUsersSheet: View {
             Spacer(minLength: 8)
             if !user.isAdmin {
                 Button("Remove") { removingDevice = device }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
             }
         }
         .padding(.leading, 32)

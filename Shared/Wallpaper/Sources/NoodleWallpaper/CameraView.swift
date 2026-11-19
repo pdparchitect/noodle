@@ -106,7 +106,7 @@ public struct CameraPhotoSheet: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.foregroundStyle(.blue)
+                Button("Cancel") { dismiss() }.foregroundStyle(Color.accentColor)
                 Spacer(); Text("Camera").font(.headline); Spacer()
                 Button("Take Photo") {
                     guard let image = latest.image() else { return }

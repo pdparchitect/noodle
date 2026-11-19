@@ -532,7 +532,7 @@ private struct AgentPickerView: View {
                 if item.hasUnread {
                     // The sidebar's unread dot.
                     Circle()
-                        .fill(Color.blue)
+                        .fill(Color.accentColor)
                         .frame(width: 8, height: 8)
                         .help("Unread")
                 }

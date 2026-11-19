@@ -457,7 +457,7 @@ struct AgentEditorSheet: View {
             if model.installedProviders.isEmpty {
                 HStack {
                     Text("No harness is installed yet.").font(.caption).foregroundStyle(.secondary)
-                    SettingsLink { Text("Open Harness Settings") }.buttonStyle(.link).font(.caption)
+                    SettingsLink { Text("Open Harness Settings") }.buttonStyle(.accentLink).font(.caption)
                 }
             }
             if let agent {

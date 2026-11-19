@@ -89,7 +89,7 @@ struct HubUsersSettingsView: View {
             }
             Spacer(minLength: 8)
             Button("Remove") { removingDevice = device }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
         }
         .padding(.leading, 32)
     }
@@ -121,7 +121,7 @@ struct HubUsersSettingsView: View {
             }
             Spacer(minLength: 8)
             Button("Invite") { inviting = Invitation(user: user, invitation: host.hub.link.invite(user)) }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .disabled(user.isSuspended)
             Menu {
                 Picker("Plan", selection: Binding(
@@ -182,7 +182,7 @@ struct HubPlansSettingsView: View {
                         }
                         Spacer(minLength: 8)
                         Button("Edit…") { editing = Editing(id: plan.id) }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                         Menu {
                             Button("Duplicate") { duplicate(plan) }
                         } label: {
@@ -545,7 +545,7 @@ private struct HubChoicePicker: View {
 
     var body: some View {
         Button(title) { showing = true }
-            .buttonStyle(.link)
+            .buttonStyle(.accentLink)
             .controlSize(.small)
             .lineLimit(1)
             .truncationMode(.tail)

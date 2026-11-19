@@ -60,7 +60,7 @@ struct SidebarTasks: View {
         }
         if total > Self.collapsedCount {
             Button(showsAll ? "Show Fewer" : "Show All \(total)") { showsAll.toggle() }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .selectionDisabled()
         }
     }
@@ -135,7 +135,7 @@ private struct TaskFeedbackPopover: View {
                     store.openConversation(for: task, of: agent.id)
                     dismiss()
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 Spacer()
                 Button("Send") {
                     do {
@@ -470,7 +470,7 @@ struct SidebarSearchResults<Row: View, RowMenu: View>: View {
                     }
                     if hiddenMentions > 0 {
                         Button("Show All \(mentions.count + hiddenMentions)", action: showAll)
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                             .selectionDisabled()
                     }
                 }

@@ -8,6 +8,8 @@
 
 ### Changed
 
+- Sheet buttons such as Cancel and Save, the add buttons in pickers and the unread dot take your accent colour instead of a fixed blue.
+- Link buttons in Settings take your accent colour, as Noodle's do, instead of the system's fixed link blue.
 - A bot's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
 
 ## [0.56.0] - 2026-11-18

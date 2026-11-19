@@ -194,7 +194,7 @@ struct FirstBotSetupSteps<Leading: View>: View {
                 switch steps.step {
                 case .harness: harnessStep
                 // Its actions follow the step's progress, so they read as links beside it.
-                case .prepare: prepareStep.buttonStyle(.link)
+                case .prepare: prepareStep.buttonStyle(.accentLink)
                 case .team: teamStep
                 }
                 if steps.step == .prepare { navigation }
@@ -231,7 +231,7 @@ struct FirstBotSetupSteps<Leading: View>: View {
             Button("Back") { steps.back() }
                 .keyboardShortcut(.cancelAction)
         }
-        .buttonStyle(.link)
+        .buttonStyle(.accentLink)
     }
 
     private var harnessStep: some View {
@@ -241,7 +241,7 @@ struct FirstBotSetupSteps<Leading: View>: View {
                 ForEach(steps.accounts) { tile(for: $0) }
             }
             Button("Not Now", action: finish)
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .keyboardShortcut(.cancelAction)
         }
         .frame(maxWidth: .infinity)

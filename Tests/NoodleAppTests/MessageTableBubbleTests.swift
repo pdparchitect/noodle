@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import XCTest
 import NoodleCore
+import NoodleRuntimeSettings
 import HubLink
 @testable import Noodle
 
@@ -129,6 +130,54 @@ import HubLink
         XCTAssertGreaterThan(dark.redComponent + dark.greenComponent, light.redComponent + light.greenComponent)
         let prose = rendered.runs.first { $0.link == nil }
         XCTAssertNil(prose?.foregroundColor)
+    }
+
+    func testLinksAreLightenedOnlyAsMuchAsADarkWindowNeeds() {
+        // A bright accent already reads on a dark window, so it is left as it is.
+        let yellow = NSColor(srgbRed: 1, green: 0.84, blue: 0.04, alpha: 1)
+        XCTAssertEqual(AccentLink.readable(yellow).usingColorSpace(.sRGB)!.blueComponent, yellow.blueComponent, accuracy: 0.01)
+        // A deep one is lightened, but only until it reads, not by a fixed amount.
+        let deepBlue = NSColor(srgbRed: 0.07, green: 0.32, blue: 0.8, alpha: 1)
+        let lifted = AccentLink.readable(deepBlue).usingColorSpace(.sRGB)!
+        XCTAssertGreaterThanOrEqual(AccentLink.luminance(lifted), AccentLink.readableLuminance)
+        XCTAssertLessThan(AccentLink.luminance(lifted), AccentLink.readableLuminance + 0.05)
+    }
+
+    func testLinkButtonsDrawInTheSameAccentColourAsLinksInMessages() {
+        // The system's link style keeps its own fixed blue whatever the accent; the accent link style draws in the colour
+        // links in messages have.
+        let accentLink = drawnColour(Button("Profiles") {}.buttonStyle(.accentLink))
+        let systemLink = drawnColour(Button("Profiles") {}.buttonStyle(.link))
+        var expected = NSColor.clear
+        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance {
+            expected = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)!
+        }
+        func distance(_ a: NSColor, _ b: NSColor) -> CGFloat {
+            abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent) + abs(a.blueComponent - b.blueComponent)
+        }
+        XCTAssertLessThan(distance(accentLink, expected), distance(systemLink, expected), "\(accentLink), \(systemLink), \(expected)")
+        XCTAssertLessThan(distance(accentLink, expected), 0.2, "\(accentLink) against \(expected)")
+        // Disabled, it is dimmed as the system dims its own, still in the accent.
+        let disabled = drawnColour(Button("Profiles") {}.buttonStyle(.accentLink).disabled(true))
+        XCTAssertLessThan(disabled.alphaComponent, accentLink.alphaComponent, "\(disabled)")
+        XCTAssertLessThan(distance(disabled, expected), distance(disabled, systemLink), "\(disabled)")
+    }
+
+    /// The most strongly coloured pixel of a button drawn on a dark window: the colour of its text.
+    private func drawnColour<V: View>(_ button: V) -> NSColor {
+        let view = host(button.padding(10).frame(width: 160, height: 40))
+        view.window?.appearance = NSAppearance(named: .darkAqua)
+        view.layoutSubtreeIfNeeded()
+        let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        var best = (score: -1.0, colour: NSColor.clear)
+        for x in 0..<bitmap.pixelsWide { for y in 0..<bitmap.pixelsHigh {
+            // The faint edges of letters carry little of their colour.
+            guard let colour = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), colour.alphaComponent > 0.2 else { continue }
+            let score = colour.blueComponent - min(colour.redComponent, colour.greenComponent) + colour.alphaComponent
+            if score > best.score { best = (score, colour) }
+        } }
+        return best.colour
     }
 
     func testInlineCodeIsSmallerAndDimmerThanTheTextAroundIt() {

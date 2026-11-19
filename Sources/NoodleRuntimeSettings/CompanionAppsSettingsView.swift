@@ -98,7 +98,7 @@ public struct CompanionAppsSettingsView: View {
                     Button(opening == app ? "Opening…" : installation == nil ? "Install" : updates ? "Update" : "Open") {
                         open(app)
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                     .disabled(opening != nil)
                     .accessibilityLabel(installation == nil ? "Install \(app.name)" : updates ? "Update \(app.name)" : "Open \(app.name)")
                     .help(installation == nil ? "Download \(app.name)"

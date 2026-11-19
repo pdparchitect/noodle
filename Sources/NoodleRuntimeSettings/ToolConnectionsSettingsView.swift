@@ -51,17 +51,17 @@ public struct ToolConnectionsSettingsView: View {
                                         // An AWS Identity Center sign-in is started here, as a browser sign-in is.
                                         let what = connection.usesToken ? "Token" : "Credentials"
                                         Button(store.connectionsController.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
-                                            .buttonStyle(.link)
+                                            .buttonStyle(.accentLink)
                                             .disabled(store.connectionsController.signingIn != nil || !allows(connection))
                                     } else {
                                         Button(store.connectionsController.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.connectionsController.connect(connection) }
-                                            .buttonStyle(.link)
+                                            .buttonStyle(.accentLink)
                                             .disabled(store.connectionsController.signingIn != nil || !allows(connection))
                                     }
                                     Button("Edit…") { editing = connection }
-                                        .buttonStyle(.link)
+                                        .buttonStyle(.accentLink)
                                     Button("Remove") { removing = connection }
-                                        .buttonStyle(.link)
+                                        .buttonStyle(.accentLink)
                                     if store.connectionsController.signingIn == connection.id {
                                         Spacer(minLength: 4)
                                         ProgressView().controlSize(.mini)

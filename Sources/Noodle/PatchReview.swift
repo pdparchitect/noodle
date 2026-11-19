@@ -633,7 +633,7 @@ struct PatchReviewView: View {
             Button("Show \(more) more \(more == 1 ? "hunk" : "hunks")") {
                 withAnimation(.easeOut(duration: 0.15)) { _ = model.everyHunk.insert(file.path) }
             }
-            .buttonStyle(.link).font(.system(size: 11)).padding(.leading, 34).padding(.vertical, 6)
+            .buttonStyle(.accentLink).font(.system(size: 11)).padding(.leading, 34).padding(.vertical, 6)
         case .empty(let text):
             Text(text).font(.system(size: 12)).foregroundStyle(.secondary).padding(18)
         }

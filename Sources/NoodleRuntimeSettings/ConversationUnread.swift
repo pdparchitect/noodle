@@ -59,7 +59,7 @@ public struct ConversationUnread: Equatable, Sendable {
     }
 }
 
-/// The blue dot an unread conversation's row carries in a sidebar. A muted group's is dimmed: its new replies show,
+/// The dot, in the accent colour as Mail's is, an unread conversation's row carries in a sidebar. A muted group's is dimmed: its new replies show,
 /// but do not ask for attention. `ringed` parts it from a picture it sits on, as in a grid of conversations.
 public struct UnreadDot: View {
     let isMuted: Bool
@@ -72,7 +72,7 @@ public struct UnreadDot: View {
 
     public var body: some View {
         Circle()
-            .fill(isMuted ? Color.secondary.opacity(0.5) : Color.blue)
+            .fill(isMuted ? Color.secondary.opacity(0.5) : Color.accentColor)
             .frame(width: size, height: size)
             .padding(ringed ? 2 : 0)
             .background { if ringed { Circle().fill(Color(nsColor: .windowBackgroundColor)) } }

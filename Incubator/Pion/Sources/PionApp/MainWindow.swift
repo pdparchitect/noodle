@@ -45,7 +45,7 @@ struct MainWindow: View {
                     Button("Set Up Your Team") { model.showWelcome() }
                         .buttonStyle(.borderedProminent)
                     Button("New Agent") { window.sheet = .newAgent }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                 }
             } else {
                 ContentUnavailableView("No Conversation Selected", systemImage: "shield.lefthalf.filled")
@@ -175,7 +175,7 @@ struct Sidebar: View {
                         Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
                             closedLimit += SidebarOptions.closedShown
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.accentLink)
                         .font(.caption)
                         .selectionDisabled()
                     }

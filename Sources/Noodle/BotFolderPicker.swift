@@ -47,7 +47,7 @@ private struct FoldersSheet: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                 Spacer()
                 Text("Folders").font(.headline)
                 Spacer()
@@ -56,7 +56,7 @@ private struct FoldersSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .disabled(draft == folders)
                 .keyboardShortcut(.defaultAction)
             }
@@ -127,7 +127,7 @@ private struct BotFolderRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "folder.fill").font(.system(size: 18)).foregroundStyle(.blue).frame(width: 24)
+            Image(systemName: "folder.fill").font(.system(size: 18)).foregroundStyle(Color.accentColor).frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     Text(folder.name).lineLimit(1)

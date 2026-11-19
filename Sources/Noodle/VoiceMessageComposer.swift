@@ -70,7 +70,7 @@ struct VoiceMessageComposer<Content: View>: View {
                         Button { Task { await sendRecording() } } label: {
                             Image(systemName: "arrow.up.circle.fill").font(.system(size: 23))
                         }
-                        .buttonStyle(.plain).foregroundStyle(.blue)
+                        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         .disabled(sending || !(recorder.phase == .recording || recorder.phase == .ready))
                         .help("Send Voice Message (Return)")
                         .keyboardShortcut(.defaultAction)

@@ -48,7 +48,7 @@ import SwiftUI
         })
     }
     func botRuntimeEditor(_ agent: AgentRecord) -> AnyView {
-        AnyView(Button("Edit Runtime…") { self.agentEditorTab = .runtime; self.agentBeingEdited = agent }.buttonStyle(.link))
+        AnyView(Button("Edit Runtime…") { self.agentEditorTab = .runtime; self.agentBeingEdited = agent }.buttonStyle(.accentLink))
     }
     func canArchive(_ agent: AgentRecord) -> Bool { true }
     func setArchived(_ archived: Bool, agent: AgentRecord) { model.setArchived(archived, agentID: agent.id) }

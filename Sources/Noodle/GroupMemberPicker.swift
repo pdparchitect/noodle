@@ -181,7 +181,7 @@ struct GroupMemberChooser: View {
                                 picture(agent)
                                 Text(agent.displayName).foregroundStyle(Color.primary)
                                 Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }
                             .padding(8)
                             .contentShape(Rectangle())

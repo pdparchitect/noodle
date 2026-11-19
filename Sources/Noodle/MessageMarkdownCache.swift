@@ -1,7 +1,7 @@
-import AppKit
 import Foundation
 import SwiftUI
 import NoodleCore
+import NoodleRuntimeSettings
 import HubLink
 
 // Shared by chat messages and the isolated native Markdown fixture.
@@ -62,14 +62,8 @@ final class MessageMarkdownCache: @unchecked Sendable {
         return segments
     }
 
-    /// Links take the accent, the app's own or the one the person chose in System Settings, as the buttons and selections
-    /// around them do, rather than the system's fixed link blue. In dark appearance it is lightened, as macOS lightens it
-    /// for selected controls, so a deep accent still reads as text on a dark window.
-    static let linkColor = Color(nsColor: NSColor(name: nil) { appearance in
-        let accent = NSColor.controlAccentColor
-        guard appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua else { return accent }
-        return accent.blended(withFraction: 0.4, of: .white) ?? accent
-    })
+    /// Links take the accent, as the buttons and selections around them do: the same colour link buttons have.
+    static let linkColor = AccentLink.color
 
     static func render(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(

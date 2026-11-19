@@ -307,7 +307,7 @@ struct PendingAttachmentChip: View {
             Button(action: preview) {
                 HStack(spacing: 6) {
                     Image(systemName: attachment.previewSymbolName)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentColor)
                         .frame(width: 14)
                     Text(title)
                         .lineLimit(1)

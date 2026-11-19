@@ -16,14 +16,14 @@ struct SheetHeader: View {
         HStack {
             Button("Cancel") { dismiss() }
                 .buttonStyle(.plain)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .keyboardShortcut(.cancelAction)
             Spacer()
             Text(heading).font(.headline)
             Spacer()
             Button(title, action: action)
                 .buttonStyle(.plain)
-                .foregroundStyle(enabled ? Color.blue : .secondary)
+                .foregroundStyle(enabled ? Color.accentColor : .secondary)
                 .disabled(!enabled)
         }
         .padding(16)

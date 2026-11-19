@@ -51,7 +51,7 @@ private struct BotBudgetSheet: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                 Spacer()
                 Text("Spending Budget").font(.headline)
                 Spacer()
@@ -60,7 +60,7 @@ private struct BotBudgetSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .disabled(draft == saved)
                 .keyboardShortcut(.defaultAction)
             }

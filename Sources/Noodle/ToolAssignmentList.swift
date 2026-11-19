@@ -133,7 +133,7 @@ struct ToolConnectionChooser<Extras: View>: View {
                                     Text(connection.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1)
                                 }
                                 Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }.padding(8).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }

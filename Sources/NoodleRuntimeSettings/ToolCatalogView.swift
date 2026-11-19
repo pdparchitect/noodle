@@ -51,7 +51,7 @@ public struct ToolCatalogView: View {
                                     ToolMaturityBadge(maturity: tool.maturity)
                                     Text(tool.kind.rawValue)
                                         .font(.caption2).foregroundStyle(.secondary)
-                                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                    Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                                 }.padding(9).contentShape(Rectangle())
                             }.buttonStyle(.plain).help(tool.needsSetUp ? "Set up \(tool.name)" : "Add \(tool.name) and sign in")
                         }
@@ -296,7 +296,7 @@ struct ToolSetupSteps: View {
         VStack(alignment: .leading, spacing: 12) {
             Divider()
             Button { shown = true } label: { Label("Setup Steps", systemImage: "list.number") }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .popover(isPresented: $shown, arrowEdge: .top) {
                     ToolSetupStepsList(steps: steps) {
                         shown = false

@@ -50,7 +50,7 @@ public struct ImageGenerationSettingsRow: View {
                     Text(failure).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 }
                 Button("Edit…") { editing = true }
-                    .buttonStyle(.link)
+                    .buttonStyle(.accentLink)
                     .padding(.top, 3)
             }
         }
@@ -134,9 +134,9 @@ public struct ImageModelsSheet: View {
                     isDefault: model.id == controller.currentModel?.id) {
                     HStack(spacing: 12) {
                         if model.id != controller.currentModel?.id {
-                            Button("Make Default") { controller.makeDefault(model) }.buttonStyle(.link)
+                            Button("Make Default") { controller.makeDefault(model) }.buttonStyle(.accentLink)
                         }
-                        Button("Remove", role: .destructive) { removing = model }.buttonStyle(.link)
+                        Button("Remove", role: .destructive) { removing = model }.buttonStyle(.accentLink)
                     }
                 }
                 .padding(12)

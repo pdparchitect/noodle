@@ -37,4 +37,4 @@ or window that has to be filled in.
 - Keep a row to its main controls; move secondary actions and per-item
   switches into its `…` actions menu, with switches as checkmark items above a
   divider and the destructive action last; separate unrelated settings, such as a submenu and a switch, with a divider too.
-- Buttons inside list rows use `.buttonStyle(.link)`, as in System Settings.
+- Buttons inside list rows use `.buttonStyle(.accentLink)`: System Settings' link style in the accent colour, as links in messages have.

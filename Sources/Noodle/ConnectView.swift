@@ -1,6 +1,7 @@
 import SwiftUI
 import NoodleBrand
 import NoodleWallpaper
+import NoodleRuntimeSettings
 
 /// Help > Connect, in the main window as the welcome is: reaching this Mac from other devices,
 /// or sharing harnesses with other people, which takes Noodle Hub.
@@ -42,7 +43,7 @@ struct ConnectView: View {
                 }
             }
             Button("Not Now") { store.showsConnect = false }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .keyboardShortcut(.cancelAction)
         }
     }
@@ -62,7 +63,7 @@ struct ConnectView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             Button("Back") { withAnimation { sharing = false } }
-                .buttonStyle(.link)
+                .buttonStyle(.accentLink)
                 .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 32)

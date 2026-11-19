@@ -33,14 +33,14 @@ struct ForwardAttachmentSheet: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Text("Forward").font(.headline)
                 Spacer()
                 Button("Send", action: forward)
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .disabled(chosenID == nil)
                     .keyboardShortcut(.defaultAction)
             }

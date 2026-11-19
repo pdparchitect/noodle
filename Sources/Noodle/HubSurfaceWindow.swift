@@ -233,7 +233,7 @@ struct HubNoodletSwitch: View {
     var body: some View {
         if let other = run.otherPlace {
             Button(other == .hub ? "Run on Hub" : "Run on This Mac") { run.choose(other) }
-                .buttonStyle(.link).font(.system(size: 11, weight: .medium))
+                .buttonStyle(.accentLink).font(.system(size: 11, weight: .medium))
         }
     }
 }

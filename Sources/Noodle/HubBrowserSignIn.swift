@@ -49,7 +49,7 @@ struct HubBrowserSignInButton: View {
     var body: some View {
         if signIn.available {
             Button("Sign In…", action: signIn.find).disabled(signIn.finding)
-                .buttonStyle(.link).font(.system(size: 11, weight: .medium))
+                .buttonStyle(.accentLink).font(.system(size: 11, weight: .medium))
         }
     }
 }

@@ -592,7 +592,7 @@ private struct BotSharingSheet: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                 Spacer()
                 Text(title).font(.headline)
                 Spacer()
@@ -601,7 +601,7 @@ private struct BotSharingSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .disabled(draft == selectedIDs)
                 .keyboardShortcut(.defaultAction)
             }

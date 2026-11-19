@@ -149,7 +149,7 @@ private struct HubNoodletGrantsSection: View {
                                 NoodletGrants().revoke(grant.id)
                                 noodlets = NoodletGrants().all
                             }
-                            .buttonStyle(.link)
+                            .buttonStyle(.accentLink)
                         }
                     }
                 }

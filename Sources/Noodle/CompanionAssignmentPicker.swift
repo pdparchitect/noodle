@@ -166,7 +166,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                                     Text(item.state).font(.caption).foregroundStyle(Color.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue)
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }.padding(8).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain).help(item.tooltip).accessibilityLabel("Add \(item.name) to bot")
