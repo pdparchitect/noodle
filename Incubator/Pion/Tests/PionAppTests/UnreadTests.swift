@@ -23,6 +23,9 @@ import XCTest
         XCTAssertTrue(model.countsAsUnread(direct.id))
         XCTAssertFalse(model.countsAsUnread(group.id), "A muted group is not shown as unread")
 
+        // Pion reopens on the conversation it was left on, which is then read; leave it on the group so the direct
+        // conversation is not the one opened.
+        model.selection = group.id
         let reopened = PionModel(root: root, messenger: nil, isScripted: true)
         reopened.start()
         XCTAssertTrue(reopened.isUnread(direct.id), "Kept until read")
