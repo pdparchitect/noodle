@@ -16,6 +16,7 @@
 - A group's mark shows its agents' own pieces together, the lead's in front, in place of the people symbol.
 - Links in messages take Pion's accent, its deep blue or the accent you chose in System Settings, instead of the system's fixed link blue. In dark mode a deep accent is lightened just enough to read; a bright one is left as it is.
 - Pion's buttons, selections and links take its own deep blue, from its artwork, when your accent colour in System Settings is Multicolour, the default; any other accent you pick still applies.
+- A new app icon: Pion's pawn on a flat tile of its blue, flat as Noodle's icon is.
 - AWS, now AWS Security, signs in through your organisation's IAM Identity Center instead of access keys, and one connection covers every account you are assigned: enter the AWS access portal URL and a permission set's name, and approve the code on your organisation's sign-in page. Agents list the accounts and name one in each lookup, an access key is traced to its own account first, and the connection stays signed in for as long as your organisation lets a session last.
 - An agent's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
 

@@ -4,7 +4,8 @@ import NoodleRuntimeSettings
 import PionCore
 import SwiftUI
 
-// Pion is monochrome: black and white with the system's shading. Colour is kept for what needs
+// Pion is monochrome: black and white with the system's shading. Its blue, from its artwork, is in its icon and is the
+// accent its controls take unless the person picked another in System Settings. Other colour is kept for what needs
 // attention: critical severity, an agent working or stopped.
 
 extension Investigation.Status {
