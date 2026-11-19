@@ -69,13 +69,22 @@ struct AWSIdentityCenter: Sendable {
         return region
     }
 
+    /// A client name as Identity Center takes one: plain letters, digits, spaces and a few marks. It refuses others,
+    /// such as an em dash, as invalid client metadata.
+    static func clientName(_ name: String) -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-")
+        let plain = String(String.UnicodeScalarView(name.unicodeScalars.map { allowed.contains($0) ? $0 : "-" }))
+        let tidy = plain.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        return String(tidy.prefix(64)).trimmingCharacters(in: .whitespaces)
+    }
+
     func register(region: String, startURL: URL, name: String) async throws -> Client {
         struct Body: Encodable {
             let clientName: String, clientType: String, scopes: [String], grantTypes: [String], issuerUrl: String
         }
         struct Answer: Decodable { let clientId: String; let clientSecret: String; let clientSecretExpiresAt: Double }
         let answer: Answer = try await post(oidc(region, "client/register"), Body(
-            clientName: name, clientType: "public", scopes: [Self.scope],
+            clientName: Self.clientName(name), clientType: "public", scopes: [Self.scope],
             grantTypes: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"], issuerUrl: startURL.absoluteString))
         return Client(id: answer.clientId, secret: answer.clientSecret, expiresAt: Date(timeIntervalSince1970: answer.clientSecretExpiresAt))
     }
@@ -212,7 +221,13 @@ struct AWSIdentityCenter: Sendable {
         request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, status) = try await send(request)
-        guard status == 200 else { throw ToolConnectionServiceError.network(status) }
+        guard status == 200 else {
+            // AWS says why in its own words, which say more than a status.
+            if let refusal = try? JSONDecoder().decode(TokenRefusal.self, from: data), let reason = refusal.error_description ?? refusal.error {
+                throw ToolConnectionError.message("AWS refused the sign-in: \(reason).")
+            }
+            throw ToolConnectionServiceError.network(status)
+        }
         return try JSONDecoder().decode(Answer.self, from: data)
     }
 

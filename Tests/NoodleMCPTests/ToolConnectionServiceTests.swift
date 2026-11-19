@@ -225,6 +225,11 @@ private final class FixtureState: @unchecked Sendable {
         case ("example.awsapps.com", "/start/"):
             return (200, ["raw": "<meta content=\"connect-src https://portal.sso.eu-west-1.amazonaws.com https://oidc.eu-west-1.amazonaws.com\">"])
         case ("oidc.eu-west-1.amazonaws.com", "/client/register"):
+            // AWS refuses a client name with anything but plain characters, such as an em dash.
+            let name = (try JSONSerialization.jsonObject(with: Self.body(request)) as? [String: Any])?["clientName"] as? String ?? ""
+            guard name.unicodeScalars.allSatisfy({ $0.isASCII }) else {
+                return (400, ["error": "invalid_client_metadata", "error_description": "Invalid client name provided"])
+            }
             ssoRegistrations.append(String(data: Self.body(request), encoding: .utf8) ?? "")
             return (200, ["clientId": "sso-client", "clientSecret": "sso-secret", "clientIdIssuedAt": 1_700_000_000,
                           "clientSecretExpiresAt": Date().addingTimeInterval(90 * 86_400).timeIntervalSince1970])
@@ -836,6 +841,7 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertEqual(AWSIdentityCenter.region(inStartPage: "connect-src https://portal.sso.eu-west-1.amazonaws.com https://oidc.eu-west-1.amazonaws.com 'self'"),
                        "eu-west-1")
         XCTAssertNil(AWSIdentityCenter.region(inStartPage: "https://oidc.eu west-1.amazonaws.com"))
+        XCTAssertEqual(AWSIdentityCenter.clientName("Pion — AWS Security"), "Pion - AWS Security", "AWS refuses an em dash")
     }
 
     func testAnAWSConnectionSignsInThroughIdentityCenterAndSignsAsTheRoleInEachAccount() async throws {
