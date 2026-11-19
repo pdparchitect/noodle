@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- The button that suggests another agent name sits as close to the field's edge as Noodle's.
 - The window resizes much more smoothly, about twice as fast with an Investigation's case record open and faster for every conversation: the case record is Pion's own panel beside the conversation instead of the system's inspector, which made every step of a resize lay the window out twice, even while hidden. Its edge still drags to resize it, and it keeps the width it was left at.
 - The background effect shows through the sidebar and inspector as Noodle's wallpaper does, instead of a blurred copy drawn under each that went wild while the window was resized. The Grid's scan and the Glyphs' rain move smoothly as the window changes height, rather than jumping to another place at every step.
 - Google Cloud's audit log search names the audit logs, which Logging finds quickly, instead of matching part of every log's name, which made searches across an organisation fail. A failed search is tried once more, and one Logging did not finish says so instead of reporting no entries.

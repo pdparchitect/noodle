@@ -362,7 +362,8 @@ struct AgentEditorSheet: View {
                             .menuStyle(.borderlessButton)
                             .menuIndicator(.hidden)
                             .fixedSize()
-                            .padding(.trailing, 6)
+                            // The borderless menu brings padding of its own, so little more puts it as near the edge as Noodle's.
+                            .padding(.trailing, 2)
                             .help("Try Another Name")
                             .accessibilityLabel("Generate Another Name")
                             .onChange(of: nameStyle) {
