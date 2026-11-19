@@ -138,7 +138,7 @@ private struct GroupsSettingsView: View {
     var body: some View {
         GroupsSettingsList(
             groups: model.groupsInSettings, members: "agents",
-            picture: { _ in AnyView(SymbolMark(symbol: "person.3.fill", size: 32)) },
+            picture: { group in AnyView(GroupSigil(members: model.members(of: group).map(\.id), size: 32)) },
             subtitle: { group in
                 group.participantIDs.compactMap { id in model.everyAgent.first { $0.id == id }?.displayName }.joined(separator: ", ")
             },

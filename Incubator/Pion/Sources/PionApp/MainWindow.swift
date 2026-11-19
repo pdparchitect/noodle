@@ -218,7 +218,7 @@ struct ConversationPicture: View {
         } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
             AgentMark(agent: agent, size: size)
         } else {
-            SymbolMark(symbol: "person.3.fill", size: size)
+            GroupSigil(members: model.members(of: conversation).map(\.id), size: size)
         }
     }
 }
@@ -376,7 +376,7 @@ struct GroupRow: View {
     var body: some View {
         let unread = model.countsAsUnread(group.id)
         HStack(spacing: 8) {
-            SymbolMark(symbol: "person.3.fill", size: 22)
+            GroupSigil(members: model.members(of: group).map(\.id), size: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.title(of: group)).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
                 Text(model.rowDetail(for: group, showing: line))

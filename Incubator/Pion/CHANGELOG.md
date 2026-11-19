@@ -11,6 +11,7 @@
 ### Changed
 
 - Each agent's mark is a chess piece on its grey disc, in place of the rings of arcs: a pawn, knight, bishop, rook, queen or king, always the same one for that agent, however it is renamed.
+- A group's mark shows its agents' own pieces together, the lead's in front, in place of the people symbol.
 - Links in messages take Pion's accent, its deep blue or the accent you chose in System Settings, instead of the system's fixed link blue, a little lighter in dark mode so they stay easy to read.
 - Pion's buttons, selections and links take its own deep blue, from its artwork, when your accent colour in System Settings is Multicolour, the default; any other accent you pick still applies.
 - AWS, now AWS Security, signs in through your organisation's IAM Identity Center instead of access keys, and one connection covers every account you are assigned: enter the AWS access portal URL and a permission set's name, and approve the code on your organisation's sign-in page. Agents list the accounts and name one in each lookup, an access key is traced to its own account first, and the connection stays signed in for as long as your organisation lets a session last.

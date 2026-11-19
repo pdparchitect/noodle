@@ -200,7 +200,9 @@ struct GroupEditorSheet: View {
             Divider()
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 14) {
-                    SymbolMark(symbol: "person.3.fill", size: 56)
+                    // The chosen members' pieces, the lead's in front, changing as they are picked.
+                    GroupSigil(members: (lead.map { [$0] } ?? []) + model.agents.filter { members.contains($0.id) && $0.id != lead }
+                                   .sorted { $0.displayName < $1.displayName }.map(\.id), size: 56)
                     VStack(alignment: .leading, spacing: 5) {
                         TextField("Group name", text: $name, axis: .horizontal)
                             .lineLimit(1)

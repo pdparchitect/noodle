@@ -45,6 +45,39 @@ struct AgentSigil: View {
     }
 }
 
+/// A group's mark: its agents' own pieces together on the graphite disc, as Noodle shows a group's members' pictures.
+/// The first, the lead, stands in front; two more stand behind it, dimmer. With fewer members their pieces repeat, and
+/// with none yet, as a new group starts, three pawns.
+struct GroupSigil: View {
+    /// The members, the one in front first.
+    let members: [UUID]
+    let size: CGFloat
+
+    var body: some View {
+        let pieces = members.isEmpty ? [ChessPiece.pawn] : members.prefix(3).map { AgentSigil.piece(for: $0) }
+        // Small marks draw the pieces larger and simpler, so they stay clear in a list.
+        let compact = size < 30
+        Canvas { context, canvas in
+            let width = canvas.width
+            let back = width * (compact ? 0.42 : 0.38), front = width * (compact ? 0.56 : 0.5)
+            // Behind, left and right, then the front piece over them.
+            for (offset, side, piece) in [(-0.2, back, pieces[1 % pieces.count]), (0.2, back, pieces[2 % pieces.count]), (0, front, pieces[0])] {
+                let isFront = side == front
+                let box = CGRect(x: width / 2 + offset * width - side / 2, y: (canvas.height - side) / 2 + (isFront ? 0 : width * 0.02),
+                                 width: side, height: side)
+                let path = piece.path(in: box, compact: compact)
+                // A dark outline parts the front piece from those behind it.
+                if isFront {
+                    context.stroke(path, with: .color(Color(white: 0.12)),
+                                   style: StrokeStyle(lineWidth: width * 0.05, lineCap: .round, lineJoin: .round))
+                }
+                context.fill(path, with: .color(.white.opacity(isFront ? 0.92 : 0.5)), style: FillStyle(eoFill: true))
+            }
+        }
+        .graphiteDisc(size: size)
+    }
+}
+
 /// The six pieces, drawn in the app icon's 1254-unit square in the style of its pawn: flat, geometric, one shape each.
 enum ChessPiece: CaseIterable {
     case pawn, knight, bishop, rook, queen, king
