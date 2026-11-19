@@ -20,15 +20,15 @@ import Security
     private let signIns: ReadOnlyKeychainStore<MCPCredentials>
     private let tokens: ReadOnlyKeychainStore<ConnectionToken>
     private let clients: ReadOnlyKeychainStore<ConnectionClientSecret>
-    private let awsKeys: ReadOnlyKeychainStore<ConnectionAWSKey>
+    private let awsSessions: ReadOnlyKeychainStore<ConnectionAWSSession>
 
     public init(namespace: String) {
         self.namespace = namespace
         signIns = ReadOnlyKeychainStore(service: namespace + ".mcp.oauth")
         tokens = ReadOnlyKeychainStore(service: namespace + ".mcp.token")
         clients = ReadOnlyKeychainStore(service: namespace + ".mcp.client")
-        awsKeys = ReadOnlyKeychainStore(service: namespace + ".mcp.aws")
-        service = ToolConnectionService(credentials: signIns, tokens: tokens, clients: clients, awsKeys: awsKeys,
+        awsSessions = ReadOnlyKeychainStore(service: namespace + ".mcp.aws-sso")
+        service = ToolConnectionService(credentials: signIns, tokens: tokens, clients: clients, awsSessions: awsSessions,
                                         oauth: MCPOAuth(), httpConfiguration: ToolConnectionService.guardedConfiguration,
                                         // An app's items are kept under its bundle ID, which its sign-ins return to.
                                         bundleIdentifier: namespace)
@@ -42,13 +42,13 @@ import Security
     /// address. Listing the items asks nothing; reading each asks the person first.
     public func saved(for connection: ToolConnection, id: UUID? = nil) throws -> Saved? {
         for candidate in id.map({ [$0] }) ?? savedIDs(store(for: connection)) {
-            let item: (endpoint: URL, clientID: String?)? = switch store(for: connection) {
-            case tokens.name: try tokens.load(candidate).map { ($0.endpoint, nil) }
-            case clients.name: try clients.load(candidate).map { ($0.endpoint, nil) }
-            case awsKeys.name: try awsKeys.load(candidate).map { ($0.endpoint, nil) }
-            default: try signIns.load(candidate).map { ($0.endpoint, $0.clientID) }
+            let item: (matches: Bool, clientID: String?)? = switch store(for: connection) {
+            case tokens.name: try tokens.load(candidate).map { ($0.endpoint == connection.endpoint, nil) }
+            case clients.name: try clients.load(candidate).map { ($0.endpoint == connection.endpoint, nil) }
+            case awsSessions.name: try awsSessions.load(candidate).map { ($0.startURL == connection.awsIdentityCenter?.startURL, nil) }
+            default: try signIns.load(candidate).map { ($0.endpoint == connection.endpoint, $0.clientID) }
             }
-            if let item, item.endpoint == connection.endpoint { return Saved(id: candidate, clientID: item.clientID) }
+            if let item, item.matches { return Saved(id: candidate, clientID: item.clientID) }
         }
         return nil
     }
@@ -61,11 +61,16 @@ import Security
            (saved.expiresAt ?? .distantPast) < Date().addingTimeInterval(120), saved.issuer.host != "accounts.google.com" {
             throw ToolConnectionError.message("The sign-in's access token has expired. Use the tool once in the app so it renews it, then try again.")
         }
+        // Identity Center may hand out a new refresh token with each renewal, which the app would not have.
+        if store(for: connection) == awsSessions.name, let saved = try awsSessions.load(connection.id),
+           (saved.expiresAt ?? .distantPast) < Date().addingTimeInterval(120) {
+            throw ToolConnectionError.message("The AWS sign-in's access token has expired. Use the tool once in the app so it renews it, then try again.")
+        }
         return try await service.perform(request, connection: connection)
     }
 
     private func store(for connection: ToolConnection) -> String {
-        if connection.awsSigning != nil { return awsKeys.name }
+        if connection.awsIdentityCenter != nil { return awsSessions.name }
         if connection.clientCredentials != nil { return clients.name }
         if connection.usesToken { return tokens.name }
         return signIns.name
@@ -100,5 +105,5 @@ final class ReadOnlyKeychainStore<Value: Codable & Sendable>: @unchecked Sendabl
 extension ReadOnlyKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
 extension ReadOnlyKeychainStore: ConnectionTokenStorage where Value == ConnectionToken {}
 extension ReadOnlyKeychainStore: ConnectionClientSecretStorage where Value == ConnectionClientSecret {}
-extension ReadOnlyKeychainStore: ConnectionAWSKeyStorage where Value == ConnectionAWSKey {}
+extension ReadOnlyKeychainStore: ConnectionAWSSessionStorage where Value == ConnectionAWSSession {}
 #endif

@@ -1,20 +1,64 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
 final class AWSTests: XCTestCase {
-    private let aws = try! AWS.preset.makeConnection(name: "AWS — Production", values: ["region": "eu-west-1"])
+    private let aws = try! AWS.preset.makeConnection(name: "AWS — Production", values: [
+        "startURL": "https://example.awsapps.com/start/#/", "role": "SecurityAudit", "region": "eu-west-1"])
 
     private func json(_ request: URLRequest?) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: request?.httpBody ?? Data()) as? [String: Any])
     }
 
-    func testAnAccountSignsWithAKeyInItsRegion() {
+    func testAConnectionSignsInThroughIdentityCenterAndTakesOneRoleInEachAccount() {
         XCTAssertEqual(aws.endpoint.absoluteString, "https://amazonaws.com")
-        XCTAssertEqual(aws.awsSigning?.region, "eu-west-1")
+        XCTAssertEqual(aws.awsIdentityCenter?.startURL.absoluteString, "https://example.awsapps.com/start", "kept without the browser's #/")
+        XCTAssertEqual(aws.awsIdentityCenter?.role, "SecurityAudit")
+        XCTAssertEqual(aws.awsIdentityCenter?.region, "eu-west-1")
+        XCTAssertTrue(aws.keepsSecret)
         XCTAssertEqual(aws.adapter, "aws")
         XCTAssertNotNil(PionAdapters.all["aws"])
+        XCTAssertThrowsError(try AWS.preset.makeConnection(name: "AWS", values: [
+            "startURL": "https://example.com/start", "role": "SecurityAudit", "region": "eu-west-1"]), "a start URL outside AWS was taken")
+    }
+
+    /// One connection covers the organisation: lookups name an account by ID or name, and an access key is traced to
+    /// its own account first.
+    func testLookupsNameTheAccountTheyAreForAcrossTheOrganisation() async throws {
+        let service = FakeService()
+        service.awsAccountList = [AWSAccount(id: "111111111111", name: "Production", email: "prod@example.com"),
+                                  AWSAccount(id: "222222222222", name: "Staging", email: nil)]
+        let accounts = try await callTool(AWS.adapter, "accounts", "{}", on: service, in: aws)
+        XCTAssertEqual(accounts.text, "2 accounts:\nProduction (111111111111) — prod@example.com\nStaging (222222222222)")
+
+        let unnamed = try await callTool(AWS.adapter, "open-security-groups", "{}", on: service, in: aws)
+        XCTAssertTrue(unnamed.isError)
+        XCTAssertTrue(unnamed.text.contains("Name the account: Production (111111111111), Staging (222222222222)"), unnamed.text)
+        let unknown = try await callTool(AWS.adapter, "open-security-groups", #"{"account":"Sandbox"}"#, on: service, in: aws)
+        XCTAssertTrue(unknown.text.contains("no account Sandbox"), unknown.text)
+
+        service.answers["action:DescribeSecurityGroups"] = (200, "<DescribeSecurityGroupsResponse><securityGroupInfo/></DescribeSecurityGroupsResponse>")
+        _ = try await callTool(AWS.adapter, "open-security-groups", #"{"account":"staging"}"#, on: service, in: aws)
+        _ = try await callTool(AWS.adapter, "open-security-groups", #"{"account":"111111111111"}"#, on: service, in: aws)
+        XCTAssertEqual(service.awsAccountsUsed, ["222222222222", "111111111111"], "an account by its name, then by its ID")
+
+        service.awsAccountsUsed = []
+        service.answers["action:GetAccessKeyInfo"] = (200, "<GetAccessKeyInfoResponse><GetAccessKeyInfoResult><Account>222222222222</Account></GetAccessKeyInfoResult></GetAccessKeyInfoResponse>")
+        service.answers["action:GetAccessKeyLastUsed"] = (200, """
+        <GetAccessKeyLastUsedResponse><GetAccessKeyLastUsedResult><UserName>mallory</UserName><AccessKeyLastUsed>
+        <LastUsedDate>2026-11-14T09:01:00Z</LastUsedDate><ServiceName>s3</ServiceName><Region>eu-west-1</Region></AccessKeyLastUsed>
+        </GetAccessKeyLastUsedResult></GetAccessKeyLastUsedResponse>
+        """)
+        let key = try await callTool(AWS.adapter, "access-key", #"{"accessKeyId":"AKIAIOSFODNN7EXAMPLE"}"#, on: service, in: aws)
+        XCTAssertTrue(key.text.contains("belongs to mallory"), key.text)
+        XCTAssertEqual(service.requests.suffix(2).map { $0.url?.host }, ["sts.amazonaws.com", "iam.amazonaws.com"])
+        XCTAssertEqual(service.awsAccountsUsed.last, "222222222222", "the key was looked up outside its own account")
+
+        service.answers["action:GetAccessKeyInfo"] = (200, "<GetAccessKeyInfoResponse><GetAccessKeyInfoResult><Account>999999999999</Account></GetAccessKeyInfoResult></GetAccessKeyInfoResponse>")
+        let elsewhere = try await callTool(AWS.adapter, "access-key", #"{"accessKeyId":"AKIAIOSFODNN7EXAMPLE"}"#, on: service, in: aws)
+        XCTAssertEqual(elsewhere.text, "AKIAIOSFODNN7EXAMPLE belongs to account 999999999999, which the sign-in does not cover.")
     }
 
     func testCloudTrailEventsAreLookedUpByOneAttribute() async throws {

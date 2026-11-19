@@ -10,7 +10,7 @@ public actor ToolConnectionService {
     private let credentials: any MCPCredentialStorage
     private let tokens: any ConnectionTokenStorage
     private let clients: any ConnectionClientSecretStorage
-    private let awsKeys: any ConnectionAWSKeyStorage
+    private let awsSessions: any ConnectionAWSSessionStorage
     private let oauth: MCPOAuth
     private let httpConfiguration: @Sendable () -> URLSessionConfiguration
     private var queues: [UUID: Task<Data, Error>] = [:]
@@ -20,6 +20,10 @@ public actor ToolConnectionService {
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
     private var adapters: [String: any ToolConnectionAdapter] = [:]
+    /// The accounts each Identity Center sign-in covers, as last listed, and when.
+    private var awsAccountLists: [UUID: (accounts: [AWSAccount], listed: Date)] = [:]
+    /// Each Identity Center connection's role keys, by account, while they last.
+    private var awsRoleKeys: [UUID: [String: ConnectionAWSKey]] = [:]
     /// The app whose sign-ins these are, which a sign-in through an organisation's own client returns to.
     private let bundleIdentifier: String?
     public init(namespace: String) {
@@ -29,12 +33,12 @@ public actor ToolConnectionService {
         tokens = ConnectionKeychainStore<ConnectionToken>(service: namespace + ".mcp.token", label: "\(ProductIdentity.current.name) tool token")
         clients = ConnectionKeychainStore<ConnectionClientSecret>(service: namespace + ".mcp.client",
                                                     label: "\(ProductIdentity.current.name) tool client secret")
-        awsKeys = ConnectionKeychainStore<ConnectionAWSKey>(service: namespace + ".mcp.aws", label: "\(ProductIdentity.current.name) AWS access key")
+        awsSessions = ConnectionKeychainStore<ConnectionAWSSession>(service: namespace + ".mcp.aws-sso", label: "\(ProductIdentity.current.name) AWS sign-in")
         #else
         credentials = NoConnectionCredentials()
         tokens = NoConnectionCredentials()
         clients = NoConnectionCredentials()
-        awsKeys = NoConnectionCredentials()
+        awsSessions = NoConnectionCredentials()
         #endif
         oauth = MCPOAuth()
         httpConfiguration = Self.guardedConfiguration
@@ -48,11 +52,12 @@ public actor ToolConnectionService {
         return configuration
     }
     init(credentials: any MCPCredentialStorage, tokens: any ConnectionTokenStorage = MemoryConnectionTokens(),
-         clients: any ConnectionClientSecretStorage = MemoryConnectionClientSecrets(), awsKeys: any ConnectionAWSKeyStorage = MemoryConnectionAWSKeys(),
+         clients: any ConnectionClientSecretStorage = MemoryConnectionClientSecrets(),
+         awsSessions: any ConnectionAWSSessionStorage = MemoryConnectionAWSSessions(),
          oauth: MCPOAuth, httpConfiguration: @escaping @Sendable () -> URLSessionConfiguration,
          bundleIdentifier: String? = Bundle.main.bundleIdentifier) {
         self.bundleIdentifier = bundleIdentifier
-        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsKeys = awsKeys
+        self.credentials = credentials; self.tokens = tokens; self.clients = clients; self.awsSessions = awsSessions
         self.oauth = oauth; self.httpConfiguration = httpConfiguration
     }
     /// The adapters this app serves connections with, by the name connections give.
@@ -61,7 +66,8 @@ public actor ToolConnectionService {
     }
 
     public func hasCredentials(_ id: UUID) -> Bool {
-        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil || (try? awsKeys.load(id)) != nil { return true }
+        if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil { return true }
+        if let session = try? awsSessions.load(id), session.accessToken != nil || session.refreshToken != nil { return true }
         guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
         return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint, clientID: stored.clientID))) != nil
     }
@@ -78,6 +84,11 @@ public actor ToolConnectionService {
     /// Asks the service to revoke what this connection signed in with or was given: an OAuth sign-in at its
     /// revocation endpoint, or a key its catalogue entry says how to revoke. Nothing is forgotten here.
     public func revoke(_ connection: ToolConnection) async -> Revocation {
+        if connection.awsIdentityCenter != nil {
+            guard let session = try? awsSessions.load(connection.id), let token = session.accessToken else { return .notOffered }
+            do { try await identityCenter.logout(region: session.region, accessToken: token); return .revoked }
+            catch { return .failed(Self.revocationFailure(error)) }
+        }
         if let stored = try? credentials.load(connection.id), stored.endpoint == connection.endpoint,
            stored.refreshToken != nil || stored.accessToken != nil {
             let field = Self.connectionConfiguration(for: connection.endpoint)?.oauthClientField
@@ -146,23 +157,119 @@ public actor ToolConnectionService {
         try credentials.remove(id)
         try tokens.remove(id)
         try clients.remove(id)
-        try awsKeys.remove(id)
+        try awsSessions.remove(id)
+        awsAccountLists[id] = nil
+        awsRoleKeys[id] = nil
     }
 
-    /// Keeps the AWS access key a connection signs its requests with, in place of signing in.
-    public func saveAWSKey(accessKeyID: String, secretAccessKey: String, sessionToken: String?, for connection: ToolConnection) throws {
+    private var identityCenter: AWSIdentityCenter { AWSIdentityCenter(configuration: httpConfiguration) }
+
+    /// Signs an AWS connection in through its organisation's IAM Identity Center. `approve` is given the code and the
+    /// page it is approved on, for the person to open; the sign-in completes once they have approved it there.
+    public func signInWithAWS(_ connection: ToolConnection, progress: @Sendable (String) async -> Void = { _ in },
+                              approve: @Sendable (_ code: String, _ page: URL) async -> Void) async throws {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
-        guard connection.awsSigning != nil else { throw ToolConnectionError.message("This connection does not sign with an AWS key.") }
-        func line(_ value: String, _ name: String) throws -> String {
-            let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty, value.count <= 4_096, !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                throw ToolConnectionError.message("Paste the \(name) on one line.")
-            }
-            return value
+        guard let center = connection.awsIdentityCenter else {
+            throw ToolConnectionError.message("This connection does not sign in through AWS IAM Identity Center.")
         }
-        let token = try sessionToken.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : try line($0, "session token") }
-        try awsKeys.save(ConnectionAWSKey(endpoint: connection.endpoint, accessKeyID: try line(accessKeyID, "access key ID"),
-                                   secretAccessKey: try line(secretAccessKey, "secret access key"), sessionToken: token), id: connection.id)
+        guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
+        try Task.checkCancellation()
+        authenticating.insert(connection.id)
+        defer { authenticating.remove(connection.id) }
+        let epoch = epochs[connection.id, default: 0]
+        do {
+            await progress("Finding your organisation's sign-in…")
+            // The client registered last time is used again while it lasts a day more; registering is free but each one stays listed.
+            let saved = try awsSessions.load(connection.id).flatMap { $0.startURL == center.startURL ? $0 : nil }
+            let region: String
+            if let known = saved?.region { region = known } else { region = try await identityCenter.region(of: center.startURL) }
+            try checkActive(connection.id, epoch: epoch)
+            var client = saved?.client
+            if client.map({ $0.expiresAt < Date().addingTimeInterval(86_400) }) ?? true {
+                client = try await identityCenter.register(region: region, startURL: center.startURL,
+                                                           name: "\(ProductIdentity.current.name) — " + connection.name)
+                try checkActive(connection.id, epoch: epoch)
+            }
+            let approval = try await identityCenter.startApproval(region: region, client: client!, startURL: center.startURL)
+            try checkActive(connection.id, epoch: epoch)
+            await progress("Approve code \(approval.userCode) in your browser…")
+            await approve(approval.userCode, approval.page)
+            var interval = max(1, approval.interval)
+            var tokens: AWSIdentityCenter.Tokens?
+            while tokens == nil {
+                try await Task.sleep(for: .seconds(interval))
+                try checkActive(connection.id, epoch: epoch)
+                guard Date() < approval.expiresAt else {
+                    throw ToolConnectionError.message("The code expired before it was approved. Connect again.")
+                }
+                do { tokens = try await identityCenter.token(region: region, client: client!, approval: approval) }
+                catch AWSIdentityCenter.Pending.waiting { continue }
+                catch AWSIdentityCenter.Pending.slower { interval += 5 }
+            }
+            try checkActive(connection.id, epoch: epoch)
+            try awsSessions.save(ConnectionAWSSession(startURL: center.startURL, region: region, client: client!,
+                                                      accessToken: tokens!.accessToken, expiresAt: tokens!.expiresAt,
+                                                      refreshToken: tokens!.refreshToken), id: connection.id)
+            awsAccountLists[connection.id] = nil
+            awsRoleKeys[connection.id] = nil
+        } catch {
+            try checkActive(connection.id, epoch: epoch)
+            throw error
+        }
+    }
+
+    /// The connection's Identity Center sign-in with an access token good for a minute more, renewed with its refresh
+    /// token first when it is not. One the service no longer renews means signing in again.
+    private func awsSession(_ connection: ToolConnection, epoch: Int, deadline: Date) async throws -> (ConnectionAWSSession, String) {
+        guard let center = connection.awsIdentityCenter, var session = try awsSessions.load(connection.id),
+              session.startURL == center.startURL else { throw ToolConnectionServiceError.signInRequired }
+        if let token = session.accessToken, (session.expiresAt ?? .distantPast) > Date().addingTimeInterval(60) { return (session, token) }
+        guard let refreshToken = session.refreshToken else { throw ToolConnectionServiceError.signInRequired }
+        do {
+            let renewed = try await identityCenter.refresh(region: session.region, client: session.client, refreshToken: refreshToken)
+            try checkActive(connection.id, epoch: epoch, deadline: deadline)
+            session.accessToken = renewed.accessToken
+            session.expiresAt = renewed.expiresAt
+            session.refreshToken = renewed.refreshToken ?? refreshToken
+            try awsSessions.save(session, id: connection.id)
+            return (session, renewed.accessToken)
+        } catch ToolConnectionServiceError.signInRequired {
+            try checkActive(connection.id, epoch: epoch, deadline: deadline)
+            session.accessToken = nil; session.expiresAt = nil; session.refreshToken = nil
+            try awsSessions.save(session, id: connection.id)
+            throw ToolConnectionServiceError.signInRequired
+        }
+    }
+
+    /// The accounts the sign-in covers, listed again after five minutes.
+    private func awsAccounts(_ connection: ToolConnection, epoch: Int, deadline: Date) async throws -> [AWSAccount] {
+        if let listed = awsAccountLists[connection.id], listed.listed > Date().addingTimeInterval(-300) { return listed.accounts }
+        let (session, token) = try await awsSession(connection, epoch: epoch, deadline: deadline)
+        let accounts = try await identityCenter.accounts(region: session.region, accessToken: token)
+        try checkActive(connection.id, epoch: epoch, deadline: deadline)
+        awsAccountLists[connection.id] = (accounts, Date())
+        return accounts
+    }
+
+    /// Keys for the connection's role in `account`, got again five minutes before they expire. An account where the
+    /// person has no such role says which roles they do have there.
+    private func awsKeys(_ connection: ToolConnection, account: String, epoch: Int, deadline: Date) async throws -> ConnectionAWSKey {
+        guard let role = connection.awsIdentityCenter?.role else { throw ToolConnectionServiceError.signInRequired }
+        guard account.count == 12, account.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+            throw ToolConnectionError.message("Name the AWS account by its 12-digit ID.")
+        }
+        if let key = awsRoleKeys[connection.id]?[account], (key.expiresAt ?? .distantPast) > Date().addingTimeInterval(300) { return key }
+        let (session, token) = try await awsSession(connection, epoch: epoch, deadline: deadline)
+        do {
+            let key = try await identityCenter.keys(region: session.region, accessToken: token, account: account, role: role)
+            try checkActive(connection.id, epoch: epoch, deadline: deadline)
+            awsRoleKeys[connection.id, default: [:]][account] = key
+            return key
+        } catch is AWSIdentityCenter.RoleMissing {
+            let roles = (try? await identityCenter.roles(region: session.region, accessToken: token, account: account)) ?? []
+            throw ToolConnectionError.message("The sign-in has no \(role) role in account \(account)."
+                + (roles.isEmpty ? " It has no roles there." : " Its roles there: \(roles.sorted().joined(separator: ", "))."))
+        }
     }
 
     /// Keeps the client ID and secret a connection exchanges for access tokens, in place of signing in.
@@ -251,7 +358,6 @@ public actor ToolConnectionService {
         // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
         try tokens.remove(connection.id)
         try clients.remove(connection.id)
-        try awsKeys.remove(connection.id)
         guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
         try Task.checkCancellation()
         authenticating.insert(connection.id)
@@ -365,9 +471,12 @@ public actor ToolConnectionService {
     /// The header that proves who the connection is: its token as saved, or an OAuth access token,
     /// renewed first when it is about to expire.
     private func authorization(for connection: ToolConnection, epoch: Int, deadline: Date) async throws -> ConnectionAuthorization {
-        if let signing = connection.awsSigning {
-            guard let key = try awsKeys.load(connection.id), key.endpoint == connection.endpoint else { throw ToolConnectionServiceError.signInRequired }
-            return .aws(key, defaultRegion: signing.region)
+        if let center = connection.awsIdentityCenter {
+            // Signed out shows at once, before an adapter names an account.
+            _ = try await awsSession(connection, epoch: epoch, deadline: deadline)
+            return .awsOrganisation(AWSOrganisation(region: center.region,
+                accounts: { try await self.awsAccounts(connection, epoch: epoch, deadline: deadline) },
+                keys: { try await self.awsKeys(connection, account: $0, epoch: epoch, deadline: deadline) }))
         }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,

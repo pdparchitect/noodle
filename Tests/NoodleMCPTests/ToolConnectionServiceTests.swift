@@ -50,21 +50,28 @@ private final class LookupAdapter: ToolConnectionAdapter, @unchecked Sendable {
     }
 }
 
-/// An app's AWS adapter: it reaches two AWS services, and tries a host outside AWS.
+/// An app's AWS adapter: it lists the organisation's accounts and reaches two AWS services as the role in one of them,
+/// then tries a request that names no account, an account without the role, and a host outside AWS.
 private final class CloudAdapter: ToolConnectionAdapter, @unchecked Sendable {
     let lock = NSLock()
-    var refusedElsewhere = false
+    var accounts: [AWSAccount] = []
+    var refusals: [String] = []
     func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+        let listed = try await access.awsAccounts()
+        lock.withLock { accounts = listed }
+        let account = try await access.awsAccount("111111111111")
         var trail = URLRequest(url: URL(string: "https://cloudtrail.eu-west-1.amazonaws.com/aws")!)
         trail.httpMethod = "POST"
         trail.httpBody = Data("{}".utf8)
         trail.setValue("application/x-amz-json-1.1", forHTTPHeaderField: "Content-Type")
         trail.setValue("CloudTrail_20131101.LookupEvents", forHTTPHeaderField: "X-Amz-Target")
-        _ = try await access.data(for: trail)
-        _ = try await access.data(for: URLRequest(url: URL(string: "https://iam.amazonaws.com/aws?Action=ListUsers&Version=2010-05-08")!))
-        do { _ = try await access.data(for: URLRequest(url: URL(string: "https://amazonaws.com.evil.example/aws")!)) }
-        catch { lock.withLock { refusedElsewhere = true } }
+        _ = try await account.data(for: trail)
+        _ = try await account.data(for: URLRequest(url: URL(string: "https://iam.amazonaws.com/aws?Action=ListUsers&Version=2010-05-08")!))
+        do { _ = try await access.data(for: trail) } catch { lock.withLock { refusals.append("no account") } }
+        do { _ = try await access.awsAccount("222222222222") } catch { lock.withLock { refusals.append(error.localizedDescription) } }
+        do { _ = try await account.data(for: URLRequest(url: URL(string: "https://amazonaws.com.evil.example/aws")!)) }
+        catch { lock.withLock { refusals.append("elsewhere") } }
         return Data(#"{"content":[],"isError":false}"#.utf8)
     }
 }
@@ -79,6 +86,16 @@ private final class FixtureState: @unchecked Sendable {
     var googleRequests: [(host: String, headers: [String: String])] = []
     /// Every request made to the AWS stand-in: its host and headers.
     var awsRequests: [(host: String, headers: [String: String])] = []
+    /// What the Identity Center stand-in was asked: client registrations' bodies, token exchanges' grants, the access
+    /// tokens the portal saw, the role keys handed out and sign-outs.
+    var ssoRegistrations: [String] = []
+    var ssoGrants: [String] = []
+    var ssoPortalTokens: [String] = []
+    var ssoKeys = 0
+    var ssoLogouts: [String] = []
+    /// Whether the next device-code exchange is still waiting for approval, and whether a refresh is refused.
+    var ssoPending = true
+    var ssoRefuseRefresh = false
     /// The headers of every request an adapter made to its service.
     var adapterHeaders: [[String: String]] = []
     /// The query of every request, adapter's or MCP, by path.
@@ -110,6 +127,7 @@ private final class FixtureState: @unchecked Sendable {
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
             if let transportError { throw transportError }
+            if let answer = try identityCenter(request) { return answer }
             switch request.url!.path {
             case "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource":
                 if protectedResourceMissing || pathMetadataMissing && request.url!.path.hasSuffix("/mcp") { return (404, [:]) }
@@ -195,6 +213,57 @@ private final class FixtureState: @unchecked Sendable {
             }
         }
     }
+    /// IAM Identity Center's start page, sign-in service and portal, for an organisation in eu-west-1.
+    private func identityCenter(_ request: URLRequest) throws -> (Int, [String: Any])? {
+        let url = request.url!, host = url.host!
+        let query = Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") }) { a, _ in a }
+        switch (host, url.path) {
+        case ("example.awsapps.com", "/start"):
+            return (200, ["raw": "<meta content=\"connect-src https://portal.sso.eu-west-1.amazonaws.com https://oidc.eu-west-1.amazonaws.com\">"])
+        case ("oidc.eu-west-1.amazonaws.com", "/client/register"):
+            ssoRegistrations.append(String(data: Self.body(request), encoding: .utf8) ?? "")
+            return (200, ["clientId": "sso-client", "clientSecret": "sso-secret", "clientIdIssuedAt": 1_700_000_000,
+                          "clientSecretExpiresAt": Date().addingTimeInterval(90 * 86_400).timeIntervalSince1970])
+        case ("oidc.eu-west-1.amazonaws.com", "/device_authorization"):
+            return (200, ["deviceCode": "device-code", "userCode": "ABCD-EFGH", "verificationUri": "https://device.sso.eu-west-1.amazonaws.com/",
+                          "verificationUriComplete": "https://device.sso.eu-west-1.amazonaws.com/?user_code=ABCD-EFGH",
+                          "expiresIn": 600, "interval": 1])
+        case ("oidc.eu-west-1.amazonaws.com", "/token"):
+            let body = try JSONSerialization.jsonObject(with: Self.body(request)) as! [String: Any]
+            let grant = body["grantType"] as? String ?? ""
+            ssoGrants.append(grant)
+            if grant.hasSuffix("device_code"), ssoPending { ssoPending = false; return (400, ["error": "authorization_pending"]) }
+            if grant == "refresh_token", ssoRefuseRefresh { return (400, ["error": "invalid_grant"]) }
+            // Short-lived, so each use renews it.
+            return (200, ["accessToken": "sso-access-\(ssoGrants.count)", "tokenType": "Bearer", "expiresIn": 30,
+                          "refreshToken": "sso-refresh-\(ssoGrants.count)"])
+        case ("portal.sso.eu-west-1.amazonaws.com", "/assignment/accounts"):
+            ssoPortalTokens.append(request.value(forHTTPHeaderField: "x-amz-sso_bearer_token") ?? "")
+            if query["next_token"] == nil {
+                return (200, ["accountList": [["accountId": "111111111111", "accountName": "Production", "emailAddress": "prod@example.com"],
+                                              ["accountId": "222222222222", "accountName": "Staging"]], "nextToken": "page-2"])
+            }
+            return (200, ["accountList": [["accountId": "333333333333", "accountName": "Logs"]]])
+        case ("portal.sso.eu-west-1.amazonaws.com", "/assignment/roles"):
+            return (200, ["roleList": [["roleName": "ReadOnlyAccess", "accountId": query["account_id"] ?? ""],
+                                       ["roleName": "Billing", "accountId": query["account_id"] ?? ""]]])
+        case ("portal.sso.eu-west-1.amazonaws.com", "/federation/credentials"):
+            ssoPortalTokens.append(request.value(forHTTPHeaderField: "x-amz-sso_bearer_token") ?? "")
+            guard query["account_id"] == "111111111111", query["role_name"] == "SecurityAudit" else {
+                return (403, ["message": "No access"])
+            }
+            ssoKeys += 1
+            return (200, ["roleCredentials": ["accessKeyId": "ASIAEXAMPLE", "secretAccessKey": "role/secret+value",
+                                              "sessionToken": "role-session-token",
+                                              "expiration": (Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000).rounded()]])
+        case ("portal.sso.eu-west-1.amazonaws.com", "/logout"):
+            ssoLogouts.append(request.value(forHTTPHeaderField: "x-amz-sso_bearer_token") ?? "")
+            return (200, [:])
+        default:
+            return nil
+        }
+    }
+
     static func body(_ request: URLRequest) -> Data {
         if let body = request.httpBody { return body }
         guard let stream = request.httpBodyStream else { return Data() }
@@ -218,11 +287,21 @@ private final class FixtureProtocol: URLProtocol {
             let (status, object) = try Self.state.response(request)
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            if status != 202 { client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: object)) }
+            // A page goes as it is; anything else as JSON.
+            if let raw = object["raw"] as? String { client?.urlProtocol(self, didLoad: Data(raw.utf8)) }
+            else if status != 202 { client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: object)) }
             client?.urlProtocolDidFinishLoading(self)
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
     override func stopLoading() {}
+}
+
+/// The codes a sign-in showed, and the pages they were to be approved on.
+private final class ShownApproval: @unchecked Sendable {
+    private let lock = NSLock()
+    private var shown: [(code: String, page: URL)] = []
+    var values: [(code: String, page: URL)] { lock.withLock { shown } }
+    func record(_ code: String, _ page: URL) { lock.withLock { shown.append((code, page)) } }
 }
 
 final class ToolConnectionServiceTests: XCTestCase {
@@ -725,8 +804,7 @@ final class ToolConnectionServiceTests: XCTestCase {
         // AWS's Signature Version 4 test suite, get-vanilla.
         var request = URLRequest(url: URL(string: "https://example.amazonaws.com/")!)
         request.httpMethod = "GET"
-        let key = ConnectionAWSKey(endpoint: URL(string: "https://amazonaws.com")!, accessKeyID: "AKIDEXAMPLE",
-                            secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", sessionToken: nil)
+        let key = ConnectionAWSKey(accessKeyID: "AKIDEXAMPLE", secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", sessionToken: nil)
         let date = ISO8601DateFormatter().date(from: "2015-08-30T12:36:00Z")!
         AWSSignature.sign(&request, key: key, region: "us-east-1", service: "service", date: date)
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Amz-Date"), "20150830T123600Z")
@@ -738,35 +816,85 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertNil(AWSSignature.scope(of: "amazonaws.com.evil.example", defaultRegion: "us-east-1"))
     }
 
-    func testAnAWSConnectionSignsEachRequestForItsServiceAndReachesOnlyAWS() async throws {
-        let record = try ToolConnection(name: "AWS", endpoint: URL(string: "https://amazonaws.com")!,
-                                             awsSigning: ConnectionAWSSigning(region: "eu-west-1"), adapter: "cloud")
+    /// An organisation's start URL as people paste it from their browser, and the region its start page names.
+    func testAnIdentityCenterStartURLIsKeptPlainAndItsRegionFoundOnItsPage() throws {
+        XCTAssertEqual(try ToolConnection.validatedAWSStartURL(" https://Websecurify.awsapps.com/start/#/ ").absoluteString,
+                       "https://websecurify.awsapps.com/start")
+        XCTAssertEqual(try ToolConnection.validatedAWSStartURL("https://example.awsapps.com").absoluteString, "https://example.awsapps.com/start")
+        for bad in ["http://example.awsapps.com/start", "https://example.com/start", "https://awsapps.com.evil.example/start",
+                    "https://user@example.awsapps.com/start", "https://example.awsapps.com:8443/start", "example.awsapps.com/start"] {
+            XCTAssertThrowsError(try ToolConnection.validatedAWSStartURL(bad), bad)
+        }
+        XCTAssertEqual(try ToolConnection.validatedAWSRole(" SecurityAudit "), "SecurityAudit")
+        XCTAssertThrowsError(try ToolConnection.validatedAWSRole("Security Audit"))
+        XCTAssertEqual(AWSIdentityCenter.region(inStartPage: "connect-src https://portal.sso.eu-west-1.amazonaws.com https://oidc.eu-west-1.amazonaws.com 'self'"),
+                       "eu-west-1")
+        XCTAssertNil(AWSIdentityCenter.region(inStartPage: "https://oidc.eu west-1.amazonaws.com"))
+    }
+
+    func testAnAWSConnectionSignsInThroughIdentityCenterAndSignsAsTheRoleInEachAccount() async throws {
+        let center = ConnectionAWSIdentityCenter(startURL: URL(string: "https://example.awsapps.com/start")!, role: "SecurityAudit", region: "eu-west-1")
+        let record = try ToolConnection(name: "AWS", endpoint: URL(string: "https://amazonaws.com")!, awsIdentityCenter: center, adapter: "cloud")
         let adapter = CloudAdapter()
         let client = service(vault: TestVault())
         await client.useAdapters(["cloud": adapter])
         let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "lookup", arguments: Data("{}".utf8))
         var refused = false
         do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
-        XCTAssertTrue(refused, "an AWS connection without its keys was answered")
+        XCTAssertTrue(refused, "an AWS connection that never signed in was answered")
 
-        try await client.saveAWSKey(accessKeyID: " AKIAEXAMPLE ", secretAccessKey: "secret/key+value", sessionToken: nil, for: record)
+        let shown = ShownApproval()
+        try await client.signInWithAWS(record) { code, page in shown.record(code, page) }
+        let state = FixtureProtocol.state
+        XCTAssertEqual(shown.values.map(\.code), ["ABCD-EFGH"])
+        XCTAssertEqual(shown.values.first?.page.absoluteString, "https://device.sso.eu-west-1.amazonaws.com/?user_code=ABCD-EFGH")
+        XCTAssertEqual(state.ssoRegistrations.count, 1)
+        XCTAssertTrue(state.ssoRegistrations[0].contains("device_code") && state.ssoRegistrations[0].contains("refresh_token"))
+        XCTAssertTrue(state.ssoRegistrations[0].contains("example.awsapps.com"), "the client is registered for the organisation")
+        XCTAssertEqual(state.ssoGrants.filter { $0.hasSuffix("device_code") }.count, 2, "it asked again after the first was still waiting")
         let saved = await client.hasCredentials(record.id); XCTAssertTrue(saved)
-        _ = try await client.perform(call, connection: record)
-        let requests = FixtureProtocol.state.awsRequests
-        XCTAssertEqual(requests.map(\.host), ["cloudtrail.eu-west-1.amazonaws.com", "iam.amazonaws.com"])
-        XCTAssertTrue(requests[0].headers["Authorization"]?.hasPrefix("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/") == true)
-        XCTAssertTrue(requests[0].headers["Authorization"]?.contains("/eu-west-1/cloudtrail/aws4_request") == true)
-        XCTAssertTrue(requests[0].headers["Authorization"]?.contains("x-amz-target") == true, "the target is signed")
-        XCTAssertTrue(requests[1].headers["Authorization"]?.contains("/us-east-1/iam/aws4_request") == true)
-        XCTAssertNotNil(requests[0].headers["X-Amz-Date"])
-        XCTAssertFalse(requests.contains { $0.headers.values.contains { $0.contains("secret/key+value") } }, "the secret was sent")
-        XCTAssertTrue(adapter.refusedElsewhere, "an AWS connection reached a host outside AWS")
 
-        try await client.disconnect(record.id)
+        _ = try await client.perform(call, connection: record)
+        XCTAssertEqual(adapter.accounts.map(\.id), ["111111111111", "222222222222", "333333333333"], "every page of accounts")
+        XCTAssertEqual(adapter.accounts.first?.name, "Production")
+        let requests = state.awsRequests
+        XCTAssertEqual(requests.map(\.host), ["cloudtrail.eu-west-1.amazonaws.com", "iam.amazonaws.com"])
+        XCTAssertTrue(requests[0].headers["Authorization"]?.hasPrefix("AWS4-HMAC-SHA256 Credential=ASIAEXAMPLE/") == true)
+        XCTAssertTrue(requests[0].headers["Authorization"]?.contains("/eu-west-1/cloudtrail/aws4_request") == true)
+        XCTAssertEqual(requests[0].headers["X-Amz-Security-Token"], "role-session-token")
+        XCTAssertTrue(requests[1].headers["Authorization"]?.contains("/us-east-1/iam/aws4_request") == true)
+        XCTAssertFalse(requests.contains { $0.headers.values.contains { $0.contains("role/secret+value") || $0.contains("sso-access") } },
+                       "a secret or the sign-in's token reached a service")
+        XCTAssertEqual(adapter.refusals.first, "no account", "a request naming no account was sent")
+        XCTAssertTrue(adapter.refusals.contains { $0.contains("no SecurityAudit role in account 222222222222") && $0.contains("Billing, ReadOnlyAccess") },
+                      "\(adapter.refusals)")
+        XCTAssertEqual(adapter.refusals.last, "elsewhere", "a role's keys reached a host outside AWS")
+        // The sign-in's access token lasts 30 seconds here, so using it renewed it with the refresh token.
+        XCTAssertTrue(state.ssoGrants.contains("refresh_token"))
+        XCTAssertFalse(state.ssoPortalTokens.isEmpty)
+        XCTAssertFalse(state.ssoPortalTokens.contains("sso-access-2"), "the portal saw the access token from before its renewal")
+
+        _ = try await client.perform(call, connection: record)
+        XCTAssertEqual(state.ssoKeys, 1, "the role's keys were got again while they lasted")
+
+        state.ssoRefuseRefresh = true
+        refused = false
+        do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { refused = true }
+        XCTAssertTrue(refused, "a sign-in the service no longer renews was used")
+        let renewable = await client.hasCredentials(record.id); XCTAssertFalse(renewable)
+
+        state.ssoRefuseRefresh = false
+        state.ssoPending = false
+        try await client.signInWithAWS(record) { _, _ in }
+        XCTAssertEqual(state.ssoRegistrations.count, 1, "the registered client was not used again")
+        let revocation = await client.signOut(record)
+        XCTAssertEqual(revocation, .revoked)
+        XCTAssertEqual(state.ssoLogouts.count, 1)
         let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
-        XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key",
-                                                     awsSigning: ConnectionAWSSigning(region: "eu-west-1")))
-        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint, awsSigning: ConnectionAWSSigning(region: "eu west")))
+
+        XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key", awsIdentityCenter: center))
+        XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint, awsIdentityCenter: ConnectionAWSIdentityCenter(
+            startURL: URL(string: "https://example.com/start")!, role: "SecurityAudit", region: "eu-west-1")))
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {

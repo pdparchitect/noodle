@@ -8,7 +8,6 @@ import ProductIdentity
 public enum ToolConnectionSecret: Sendable {
     case token(String)
     case client(id: String, secret: String)
-    case aws(accessKeyID: String, secretAccessKey: String, sessionToken: String?)
 }
 
 @MainActor @Observable
@@ -189,8 +188,9 @@ public final class ToolConnectionsController {
             try await service.disconnect(id)
         }
     }
-    /// Signs the connection in through the browser, or for one with a token or a client ID and secret keeps
-    /// `secret` when one is given; either way it then lists the connection's tools to show it works.
+    /// Signs the connection in through the browser, or through AWS IAM Identity Center with a code the person
+    /// approves there, or for one with a token or a client ID and secret keeps `secret` when one is given; either way
+    /// it then lists the connection's tools to show it works.
     func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
         let signsIn = ToolConnectionService.signsInThroughBrowser(record)
@@ -200,12 +200,17 @@ public final class ToolConnectionsController {
         loginTask = Task {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
-                if !signsIn {
+                if record.awsIdentityCenter != nil {
+                    // The page opens with its code filled in; the code shows here too, to check it is the same.
+                    try await service.signInWithAWS(record, progress: { [weak self] stage in
+                        await self?.setSignInStage(stage)
+                    }) { _, page in
+                        await MainActor.run { _ = NSWorkspace.shared.open(page) }
+                    }
+                } else if !signsIn {
                     switch secret {
                     case .token(let token): try await service.saveToken(token, for: record)
                     case .client(let id, let value): try await service.saveClientCredentials(clientID: id, secret: value, for: record)
-                    case .aws(let id, let secret, let token):
-                        try await service.saveAWSKey(accessKeyID: id, secretAccessKey: secret, sessionToken: token, for: record)
                     case nil: break
                     }
                 } else {

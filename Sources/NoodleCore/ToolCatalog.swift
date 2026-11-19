@@ -190,8 +190,10 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public let clientCredentials: ClientCredentialsPreset?
     /// The app adapter that answers for the service, which is then at `endpoint` without an MCP server.
     public let adapter: String?
-    /// For AWS: accounts sign their requests with an access key, in the region their region field names.
-    public let signsForAWS: Bool
+    /// For AWS: accounts sign in through their organisation's IAM Identity Center, covering every account the person may
+    /// use, and fill in its start URL, the role to take in each account and their default region, in fields keyed
+    /// startURL, role and region.
+    public let signsInWithAWSIdentityCenter: Bool
     /// How the service revokes an account's key, for one whose API can.
     public let tokenRevocation: TokenRevocation?
     /// For a service whose accounts sign in through an OAuth client their own organisation made, rather than one
@@ -206,7 +208,7 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         self.tokenParameter = tokenParameter
         self.composedToken = composedToken
         self.adapter = adapter
-        signsForAWS = false
+        signsInWithAWSIdentityCenter = false
         tokenRevocation = nil
         oauthClientField = nil
         self.endpoint = endpoint
@@ -222,12 +224,12 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                signsForAWS: Bool = false, oauthClientField: String? = nil,
+                signsInWithAWSIdentityCenter: Bool = false, oauthClientField: String? = nil,
                 tokenRevocation: TokenRevocation? = nil, adapter: String? = nil) {
         self.tokenRevocation = tokenRevocation
         self.oauthClientField = oauthClientField
         self.composedToken = composedToken
-        self.signsForAWS = signsForAWS
+        self.signsInWithAWSIdentityCenter = signsInWithAWSIdentityCenter
         self.tokenParameter = tokenParameter
         self.tokenScheme = tokenScheme
         self.adapter = adapter
@@ -300,11 +302,14 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
         switch configuration {
         case .connection(let configuration):
             let account = try configuration.account(values)
+            let center = try configuration.signsInWithAWSIdentityCenter ? ConnectionAWSIdentityCenter(
+                startURL: ToolConnection.validatedAWSStartURL(account.settings?["startURL"] ?? ""),
+                role: account.settings?["role"] ?? "", region: account.settings?["region"] ?? "us-east-1") : nil
             var record = try ToolConnection(id: id, name: name, endpoint: account.endpoint, description: summary,
                                                  instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
                                                  tokenScheme: configuration.tokenScheme, tokenParameter: configuration.tokenParameter,
                                                  clientCredentials: account.clientCredentials,
-                                                 awsSigning: configuration.signsForAWS ? ConnectionAWSSigning(region: account.settings?["region"] ?? "us-east-1") : nil,
+                                                 awsIdentityCenter: center,
                                                  adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
@@ -328,7 +333,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
     public var needsSetUp: Bool {
         switch configuration {
         case .connection(let configuration):
-            configuration.usesToken || configuration.clientCredentials != nil || configuration.signsForAWS
+            configuration.usesToken || configuration.clientCredentials != nil || configuration.signsInWithAWSIdentityCenter
                 || !configuration.fields.isEmpty
         }
     }

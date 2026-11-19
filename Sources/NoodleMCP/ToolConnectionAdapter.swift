@@ -23,7 +23,24 @@ public struct ToolConnectionAccess: Sendable {
     static let limit = 8 * 1_048_576
     private func url(_ request: URLRequest) -> URL? { request.url }
 
+    /// For an AWS connection signed in through IAM Identity Center: every account its sign-in covers.
+    public func awsAccounts() async throws -> [AWSAccount] {
+        guard case .awsOrganisation(let organisation)? = authorization else { throw Self.notIdentityCenter }
+        return try await organisation.accounts()
+    }
+
+    /// The same access, signing as the connection's role in one of the accounts its sign-in covers.
+    public func awsAccount(_ id: String) async throws -> ToolConnectionAccess {
+        guard case .awsOrganisation(let organisation)? = authorization else { throw Self.notIdentityCenter }
+        return ToolConnectionAccess(endpoint: endpoint, authorization: .aws(try await organisation.keys(id), defaultRegion: organisation.region),
+                                    configuration: configuration)
+    }
+
+    private static let notIdentityCenter = ToolConnectionError.message("This connection does not sign in through AWS IAM Identity Center.")
+
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        // An organisation's sign-in signs nothing itself: each request goes as one account's role.
+        if case .awsOrganisation? = authorization { throw ToolConnectionError.message("Name the AWS account the request is for.") }
         // Only the connection's host; an AWS connection, any AWS service below it, since each request is signed for one.
         let host = url(request)?.host?.lowercased() ?? "", home = endpoint.host?.lowercased() ?? ""
         let reachable = host == home || (authorization?.coversSubdomains == true && host.hasSuffix("." + home))
@@ -44,20 +61,39 @@ public struct ToolConnectionAccess: Sendable {
     }
 }
 
+/// An AWS account a connection signed in through IAM Identity Center may use.
+public struct AWSAccount: Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let email: String?
+    public init(id: String, name: String, email: String?) { self.id = id; self.name = name; self.email = email }
+}
+
+/// What an AWS connection signed in through Identity Center reaches: the accounts its sign-in covers, and keys for the
+/// connection's role in one of them, got when first asked for.
+struct AWSOrganisation: Sendable {
+    /// Where requests go unless they name another region.
+    let region: String
+    let accounts: @Sendable () async throws -> [AWSAccount]
+    let keys: @Sendable (String) async throws -> ConnectionAWSKey
+}
+
 /// How a request proves who its connection is: a header, or for a service that takes its key only there, a
 /// parameter in its address.
 enum ConnectionAuthorization: Sendable {
     case header(String, String)
     case parameter(String, String)
-    /// Signed with an AWS key, for the service and region each request's address names.
+    /// Signed with one account's AWS keys, for the service and region each request's address names.
     case aws(ConnectionAWSKey, defaultRegion: String)
+    /// An organisation's Identity Center sign-in, which signs as one of its accounts once the adapter names it.
+    case awsOrganisation(AWSOrganisation)
     /// A Google access token, good for every googleapis.com service its scopes allow.
     case google(String)
 
     /// Whether it reaches every service below its connection's host, as an AWS key or a Google token does.
     var coversSubdomains: Bool {
         switch self {
-        case .aws, .google: true
+        case .aws, .awsOrganisation, .google: true
         case .header, .parameter: false
         }
     }
@@ -78,6 +114,8 @@ enum ConnectionAuthorization: Sendable {
         case .aws(let key, let defaultRegion):
             guard let host = request.url?.host, let scope = AWSSignature.scope(of: host, defaultRegion: defaultRegion) else { return }
             AWSSignature.sign(&request, key: key, region: scope.region, service: scope.service)
+        case .awsOrganisation:
+            break
         }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
@@ -12,6 +13,15 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     var sequences: [String: [(Int, String)]] = [:]
     /// Headers every answer carries, such as a cookie the service sets.
     var responseHeaders: [String: String] = [:]
+    /// For an AWS connection: the accounts its sign-in covers, and each one a lookup signed as, in turn.
+    var awsAccountList = [AWSAccount(id: "111111111111", name: "Production", email: nil)]
+    var awsAccountsUsed: [String] = []
+
+    func awsAccounts() async throws -> [AWSAccount] { lock.withLock { awsAccountList } }
+    func access(asAWSAccount id: String) async throws -> any ServiceAccess {
+        lock.withLock { awsAccountsUsed.append(id) }
+        return self
+    }
 
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { requests.append(request) }

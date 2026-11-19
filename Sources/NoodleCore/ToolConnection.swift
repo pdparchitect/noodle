@@ -16,11 +16,16 @@ public struct ConnectionClientCredentials: Codable, Equatable, Sendable {
     }
 }
 
-/// For a connection that signs its requests to AWS with an access key: the region it works in unless a request
-/// names another. The key itself is kept in Keychain.
-public struct ConnectionAWSSigning: Codable, Equatable, Sendable {
+/// For a connection that reaches AWS through an organisation's IAM Identity Center: the start URL its people sign in
+/// at, the role its requests take in each account the sign-in covers, and the region requests go to unless they name
+/// another. The sign-in itself is kept in Keychain.
+public struct ConnectionAWSIdentityCenter: Codable, Equatable, Sendable {
+    public let startURL: URL
+    public let role: String
     public let region: String
-    public init(region: String) { self.region = region }
+    public init(startURL: URL, role: String, region: String) {
+        self.startURL = startURL; self.role = role; self.region = region
+    }
 }
 
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
@@ -44,10 +49,10 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public var tokenScheme: String?
     /// Set for a connection that proves itself with a client ID and secret instead of signing in.
     public var clientCredentials: ConnectionClientCredentials?
-    /// Set for a connection that signs its requests to AWS with an access key instead of sending a token.
-    public var awsSigning: ConnectionAWSSigning?
-    /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret or an AWS key.
-    public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsSigning != nil }
+    /// Set for a connection that reaches AWS through IAM Identity Center instead of sending a token.
+    public var awsIdentityCenter: ConnectionAWSIdentityCenter?
+    /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret or an Identity Center sign-in.
+    public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsIdentityCenter != nil }
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
     /// address of the service the adapter calls. Only the app that has that adapter serves it.
     public var adapter: String?
@@ -70,12 +75,12 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
 
     public init(id: UUID = UUID(), name: String, endpoint: URL,
                 description: String = "", instructions: String = "", tokenHeader: String? = nil, tokenScheme: String? = nil,
-                tokenParameter: String? = nil, clientCredentials: ConnectionClientCredentials? = nil, awsSigning: ConnectionAWSSigning? = nil,
-                adapter: String? = nil) throws {
+                tokenParameter: String? = nil, clientCredentials: ConnectionClientCredentials? = nil,
+                awsIdentityCenter: ConnectionAWSIdentityCenter? = nil, adapter: String? = nil) throws {
         self.id = id
-        self.awsSigning = try awsSigning.map(Self.validatedAWSSigning)
-        guard awsSigning == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil) else {
-            throw ToolConnectionError.message("A connection signs with an AWS key or uses another sign-in, not both.")
+        self.awsIdentityCenter = try awsIdentityCenter.map(Self.validatedAWSIdentityCenter)
+        guard awsIdentityCenter == nil || (tokenHeader == nil && tokenParameter == nil && clientCredentials == nil) else {
+            throw ToolConnectionError.message("A connection signs in through AWS IAM Identity Center or uses another sign-in, not both.")
         }
         self.tokenParameter = try tokenParameter.map(Self.validatedTokenParameter)
         guard tokenHeader == nil || tokenParameter == nil else {
@@ -116,13 +121,49 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         return name
     }
 
+    /// An Identity Center sign-in as kept: its start URL on awsapps.com over HTTPS, without what a browser adds after
+    /// it, such as #/; a role name as AWS allows one; and a region's name, such as eu-west-1.
+    public static func validatedAWSIdentityCenter(_ center: ConnectionAWSIdentityCenter) throws -> ConnectionAWSIdentityCenter {
+        ConnectionAWSIdentityCenter(startURL: try validatedAWSStartURL(center.startURL.absoluteString),
+                                    role: try validatedAWSRole(center.role), region: try validatedAWSRegion(center.region))
+    }
+
+    /// The start URL people sign in to AWS at, such as https://example.awsapps.com/start, from what was pasted.
+    public static func validatedAWSStartURL(_ text: String) throws -> URL {
+        let refusal = ToolConnectionError.message("Enter the AWS access portal URL, such as https://example.awsapps.com/start.")
+        guard var components = URLComponents(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              components.scheme?.lowercased() == "https", components.user == nil, components.password == nil, components.port == nil,
+              let host = components.host?.lowercased(), host.hasSuffix(".awsapps.com"),
+              host.dropLast(".awsapps.com".count).split(separator: ".", omittingEmptySubsequences: false).allSatisfy({ label in
+                  (1...63).contains(label.count) && label.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains)
+              }) else { throw refusal }
+        components.scheme = "https"
+        components.host = host
+        components.query = nil
+        components.fragment = nil
+        while components.path.hasSuffix("/") { components.path.removeLast() }
+        if components.path.isEmpty { components.path = "/start" }
+        guard components.path.count <= 200, let url = components.url else { throw refusal }
+        return url
+    }
+
+    /// A role's name in each account, as Identity Center names its permission sets.
+    public static func validatedAWSRole(_ name: String) throws -> String {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...64).contains(name.count), name.unicodeScalars.allSatisfy(
+            CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+=,.@_-").contains) else {
+            throw ToolConnectionError.message("Enter the role as Identity Center names it, such as SecurityAudit.")
+        }
+        return name
+    }
+
     /// An AWS region's name, such as eu-west-1.
-    public static func validatedAWSSigning(_ signing: ConnectionAWSSigning) throws -> ConnectionAWSSigning {
-        guard (1...32).contains(signing.region.count),
-              signing.region.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
+    public static func validatedAWSRegion(_ region: String) throws -> String {
+        guard (1...32).contains(region.count),
+              region.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains) else {
             throw ToolConnectionError.message("Invalid AWS region.")
         }
-        return signing
+        return region
     }
 
     /// A query parameter's name: letters, digits, hyphens and underscores.
@@ -287,9 +328,9 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
                 }
             }
             if let adapter = connection.adapter { _ = try ToolConnection.validatedAdapter(adapter) }
-            if let signing = connection.awsSigning {
+            if let center = connection.awsIdentityCenter {
                 guard !connection.usesToken, connection.clientCredentials == nil,
-                      try ToolConnection.validatedAWSSigning(signing) == signing else {
+                      try ToolConnection.validatedAWSIdentityCenter(center) == center else {
                     throw ToolConnectionError.message("Invalid saved MCP connection.")
                 }
             }

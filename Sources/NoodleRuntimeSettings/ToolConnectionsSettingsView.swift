@@ -130,7 +130,7 @@ public struct ToolConnectionsSettingsView: View {
             ConnectedStatus { store.connectionsController.signOut(connection) }
         } else if connection.usesToken {
             SettingsStatusLabel(title: "Token required", systemImage: "key", color: .secondary)
-        } else if connection.clientCredentials != nil || connection.awsSigning != nil {
+        } else if connection.clientCredentials != nil {
             SettingsStatusLabel(title: "Credentials required", systemImage: "key", color: .secondary)
         } else {
             SettingsStatusLabel(title: "Sign-in required", systemImage: "person.crop.circle.badge.questionmark", color: .secondary)
@@ -158,7 +158,7 @@ public struct ToolConnectionEditor: View {
     private let onConnect: (ToolConnection) -> Void
     /// Keeps a token or client secret and checks it; nil where those cannot be kept yet, as on a Noodle Hub.
     private let onSecret: ((ToolConnection, ToolConnectionSecret) -> Void)?
-    private enum SignIn: Hashable { case browser, token, client, aws }
+    private enum SignIn: Hashable { case browser, token, client }
     @Environment(\.dismiss) private var dismiss
     @State private var signIn: SignIn
     @State private var tokenHeader: String
@@ -167,7 +167,6 @@ public struct ToolConnectionEditor: View {
     @State private var scope: String
     @State private var clientID = ""
     @State private var clientSecret = ""
-    @State private var sessionToken = ""
     @State private var name: String
     @State private var endpoint: String
     @State private var description: String
@@ -189,8 +188,7 @@ public struct ToolConnectionEditor: View {
         self.onBack = onBack; self.onSaved = onSaved
         self.onConnect = onConnect ?? { controller.connect($0) }
         onSecret = { controller.connect($0, secret: $1) }
-        _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client
-                        : existing?.awsSigning != nil ? .aws : .browser)
+        _signIn = State(initialValue: existing?.usesToken == true ? .token : existing?.clientCredentials != nil ? .client : .browser)
         _values = State(initialValue: existing?.settings ?? [:])
         _tokenHeader = State(initialValue: existing?.tokenHeader ?? "Authorization")
         _tokenEndpoint = State(initialValue: existing?.clientCredentials?.tokenEndpoint.absoluteString ?? "")
@@ -277,20 +275,6 @@ public struct ToolConnectionEditor: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    if signIn == .aws {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Access Key ID").font(.caption.weight(.semibold))
-                            TextField("Saved; enter a new key to replace it", text: $clientID, axis: .horizontal).lineLimit(1).autocorrectionDisabled()
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Secret Access Key").font(.caption.weight(.semibold))
-                            SecureField("Secret access key", text: $clientSecret)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Session Token").font(.caption.weight(.semibold))
-                            SecureField("Only for temporary credentials", text: $sessionToken)
-                        }
-                    }
                     if signIn == .client {
                         // A catalogue tool's token address and scope are its entry's.
                         if preset == nil {
@@ -375,7 +359,7 @@ public struct ToolConnectionEditor: View {
         return switch signIn {
         case .browser: false
         case .token: composedToken != nil ? filled(clientID) : filled(token)
-        case .client, .aws: filled(clientID)
+        case .client: filled(clientID)
         }
     }
     /// The two values an existing connection's token is made from, when its preset composes it.
@@ -423,12 +407,6 @@ public struct ToolConnectionEditor: View {
         record.clientCredentials = nil
         switch signIn {
         case .browser: break
-        case .aws:
-            // Its signing stays as its preset made it; only the key can be replaced.
-            let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-            if id.isEmpty != clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw ToolConnectionError.message("Enter both the access key ID and the secret access key.")
-            }
         case .token where composedToken != nil:
             // Its token is made from the two values; the connection itself stays as its preset made it.
             record.tokenHeader = existing?.tokenHeader
@@ -472,7 +450,6 @@ public struct ToolConnectionEditor: View {
         case .token where composedToken != nil: composed.map { .token($0) }
         case .token: newToken.isEmpty ? nil : .token(newToken)
         case .client: id.isEmpty ? nil : .client(id: id, secret: clientSecret)
-        case .aws: id.isEmpty ? nil : .aws(accessKeyID: id, secretAccessKey: clientSecret, sessionToken: sessionToken)
         }
         let switchedToBrowser = signIn == .browser && (existing?.usesToken == true || existing?.clientCredentials != nil)
         // New details for a catalogue tool connect it again, so a sign-in for the old ones is not kept using.

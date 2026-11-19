@@ -6,9 +6,22 @@ import NoodleMCP
 /// adds its credentials and reaches only its host.
 public protocol ServiceAccess: Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
+    /// For an AWS connection signed in through IAM Identity Center: every account its sign-in covers.
+    func awsAccounts() async throws -> [AWSAccount]
+    /// The same access, signing as the connection's role in one of those accounts.
+    func access(asAWSAccount id: String) async throws -> any ServiceAccess
 }
 
-extension ToolConnectionAccess: ServiceAccess {}
+extension ServiceAccess {
+    public func awsAccounts() async throws -> [AWSAccount] { throw ServiceError.input("This connection does not sign in to AWS.") }
+    public func access(asAWSAccount id: String) async throws -> any ServiceAccess {
+        throw ServiceError.input("This connection does not sign in to AWS.")
+    }
+}
+
+extension ToolConnectionAccess: ServiceAccess {
+    public func access(asAWSAccount id: String) async throws -> any ServiceAccess { try await awsAccount(id) }
+}
 
 /// A tool's input, described in code; bots see it as JSON Schema.
 public indirect enum JSONSchema: Sendable {

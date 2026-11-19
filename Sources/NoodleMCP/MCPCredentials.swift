@@ -43,29 +43,41 @@ struct ConnectionClientSecret: Codable, Sendable {
     var expiresAt: Date?
 }
 
-/// An AWS access key: its ID, its secret, and for temporary credentials their session token.
-struct ConnectionAWSKey: Codable, Sendable {
-    /// What it was given for; a connection now pointing elsewhere never signs with it.
-    let endpoint: URL
+/// Short-lived AWS keys for one role in one account: their ID, secret, session token and when they expire. They are
+/// held only while the app runs, never kept.
+struct ConnectionAWSKey: Sendable {
     let accessKeyID: String
     let secretAccessKey: String
     let sessionToken: String?
+    var expiresAt: Date? = nil
 }
 
-/// Where AWS keys are kept, apart from other secrets.
-protocol ConnectionAWSKeyStorage: Sendable {
-    func load(_ id: UUID) throws -> ConnectionAWSKey?
-    func save(_ key: ConnectionAWSKey, id: UUID) throws
+/// An IAM Identity Center sign-in: the client registered for it, and the tokens the person's approval brought.
+struct ConnectionAWSSession: Codable, Sendable {
+    /// The start URL it was signed in at; a connection now pointing elsewhere never uses it.
+    let startURL: URL
+    /// The region the organisation's Identity Center is in.
+    let region: String
+    let client: AWSIdentityCenter.Client
+    var accessToken: String?
+    var expiresAt: Date?
+    var refreshToken: String?
+}
+
+/// Where Identity Center sign-ins are kept, apart from other secrets.
+protocol ConnectionAWSSessionStorage: Sendable {
+    func load(_ id: UUID) throws -> ConnectionAWSSession?
+    func save(_ session: ConnectionAWSSession, id: UUID) throws
     func remove(_ id: UUID) throws
 }
 
-/// AWS keys kept only while the process runs, for a service made without Keychain, as in tests.
-final class MemoryConnectionAWSKeys: ConnectionAWSKeyStorage, @unchecked Sendable {
+/// Identity Center sign-ins kept only while the process runs, for a service made without Keychain, as in tests.
+final class MemoryConnectionAWSSessions: ConnectionAWSSessionStorage, @unchecked Sendable {
     private let lock = NSLock()
-    private var keys: [UUID: ConnectionAWSKey] = [:]
-    func load(_ id: UUID) -> ConnectionAWSKey? { lock.withLock { keys[id] } }
-    func save(_ key: ConnectionAWSKey, id: UUID) { lock.withLock { keys[id] = key } }
-    func remove(_ id: UUID) { _ = lock.withLock { keys.removeValue(forKey: id) } }
+    private var sessions: [UUID: ConnectionAWSSession] = [:]
+    func load(_ id: UUID) -> ConnectionAWSSession? { lock.withLock { sessions[id] } }
+    func save(_ session: ConnectionAWSSession, id: UUID) { lock.withLock { sessions[id] = session } }
+    func remove(_ id: UUID) { _ = lock.withLock { sessions.removeValue(forKey: id) } }
 }
 
 /// Only linked into the app-side MCP client, never the agent's CLI.
@@ -150,12 +162,12 @@ struct ConnectionKeychainStore<Value: Codable & Sendable>: Sendable {
 extension ConnectionKeychainStore: MCPCredentialStorage where Value == MCPCredentials {}
 extension ConnectionKeychainStore: ConnectionTokenStorage where Value == ConnectionToken {}
 extension ConnectionKeychainStore: ConnectionClientSecretStorage where Value == ConnectionClientSecret {}
-extension ConnectionKeychainStore: ConnectionAWSKeyStorage where Value == ConnectionAWSKey {}
+extension ConnectionKeychainStore: ConnectionAWSSessionStorage where Value == ConnectionAWSSession {}
 #else
 /// Where there is no keychain there is nowhere yet to keep a sign-in: none is found, and none is kept.
-struct NoConnectionCredentials: MCPCredentialStorage, ConnectionTokenStorage, ConnectionClientSecretStorage, ConnectionAWSKeyStorage {
-    func load(_ id: UUID) throws -> ConnectionAWSKey? { nil }
-    func save(_ key: ConnectionAWSKey, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
+struct NoConnectionCredentials: MCPCredentialStorage, ConnectionTokenStorage, ConnectionClientSecretStorage, ConnectionAWSSessionStorage {
+    func load(_ id: UUID) throws -> ConnectionAWSSession? { nil }
+    func save(_ session: ConnectionAWSSession, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
     func load(_ id: UUID) throws -> ConnectionClientSecret? { nil }
     func save(_ secret: ConnectionClientSecret, id: UUID) throws { throw ToolConnectionServiceError.credentialStorage }
     func load(_ id: UUID) throws -> MCPCredentials? { nil }

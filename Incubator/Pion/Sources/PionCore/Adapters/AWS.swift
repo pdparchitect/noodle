@@ -4,46 +4,77 @@ import NoodleMCP
 
 /// AWS, as a defender reads it: who did what in CloudTrail, what GuardDuty, Security Hub and Access Analyzer found,
 /// who an access key belongs to, every user's credentials, what instances and open security groups exist, and
-/// CloudWatch Logs Insights queries. Each account is one AWS account, signed with a read-only access key.
+/// CloudWatch Logs Insights queries. One connection covers a whole organisation: it signs in through the organisation's
+/// IAM Identity Center and takes one read-only role in whichever of its accounts a lookup names.
 public enum AWS {
     static let regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1", "sa-east-1", "eu-west-1", "eu-west-2",
                           "eu-west-3", "eu-central-1", "eu-north-1", "eu-south-1", "ap-south-1", "ap-southeast-1", "ap-southeast-2",
                           "ap-northeast-1", "ap-northeast-2", "me-south-1", "af-south-1"]
 
     public static let preset = ToolDefinition(
-        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS", summary: "CloudTrail, GuardDuty, Security Hub, IAM, Access Analyzer, EC2 and CloudWatch Logs, read-only.",
+        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS",
+        summary: "CloudTrail, GuardDuty, Security Hub, IAM, Access Analyzer, EC2 and CloudWatch Logs across an organisation, read-only.",
         defaultInstructions: """
-        Use AWS to investigate an account: look up CloudTrail events by user, event name, source, resource or access key; \
+        Use AWS to investigate an organisation's accounts: look up CloudTrail events by user, event name, source, resource or access key; \
         list GuardDuty, Security Hub and IAM Access Analyzer findings; trace an access key to its owner and last use; read \
         the credential report for every user's password, keys and MFA; find EC2 instances by ID or IP address and security \
-        groups open to the internet; and query CloudWatch Logs Insights, such as VPC Flow Logs. Most services are regional: \
-        name another region when the activity may be there. Record each finding as evidence, citing the account, region and \
-        time window. These tools only read: recommend disabling a key, isolating an instance or changing a policy to the \
-        champion.
+        groups open to the internet; and query CloudWatch Logs Insights, such as VPC Flow Logs. It covers every account the \
+        sign-in may use: list them with accounts, and name the account in each lookup, by ID or name, unless there is only \
+        one; an access key's own account is found for you. Most services are regional: name another region when the \
+        activity may be there. Record each finding as evidence, citing the account, region and time window. These tools \
+        only read: recommend disabling a key, isolating an instance or changing a policy to the champion.
         """,
         iconName: "aws",
         configuration: .connection(.init(endpointTemplate: "https://amazonaws.com",
-            fields: [ToolField(key: "region", title: "Default region", placeholder: "us-east-1",
+            fields: [ToolField(key: "startURL", title: "AWS access portal URL", placeholder: "https://example.awsapps.com/start", kind: .text),
+                     ToolField(key: "role", title: "Role in each account", placeholder: "SecurityAudit", kind: .text),
+                     ToolField(key: "region", title: "Default region", placeholder: "us-east-1",
                                kind: .choice(regions.map { .init(value: $0, title: $0) }))],
-            signsForAWS: true, adapter: "aws")),
+            signsInWithAWSIdentityCenter: true, adapter: "aws")),
         setup: setup)
 
     static let setup = [
-        "In the AWS console, open **IAM › Users** and choose **Create user**. Name it, such as `pion-readonly`, and leave console access off.",
-        "Choose **Attach policies directly** and pick **SecurityAudit**, AWS's read-only policy for security reviews.",
-        "On the new user, choose **Add permissions › Create inline policy** and allow `logs:StartQuery` and `logs:GetQueryResults` on all resources, for Logs Insights.",
-        "Under **Security credentials**, choose **Create access key**, pick **Third-party service**, and copy the access key ID and secret access key here. Leave Session Token empty.",
-        "For the default region, choose the one most activity is in; agents can name others. Each AWS account needs its own user.",
+        "In the **IAM Identity Center** console, open **Permission sets** and create one from the AWS managed policy **SecurityAudit**, AWS's read-only policy for security reviews, named such as `SecurityAudit`.",
+        "On that permission set, add an inline policy allowing `logs:StartQuery` and `logs:GetQueryResults` on all resources, for Logs Insights.",
+        "Under **AWS accounts**, assign the permission set to whoever signs in to Pion, in every account to investigate; select them all to cover the organisation.",
+        "Enter the **AWS access portal URL** from the Identity Center dashboard, and the permission set's name as the role. For the default region, choose the one most activity is in; agents can name any other, and any account.",
+        "Choose **Add & Connect**. Your organisation's sign-in page opens with a code: check it matches the one Pion shows, and approve it. Pion stays signed in for as long as your organisation lets a session last, then asks again.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(),
+    public static let adapter = OperationAdapter(operations: [Accounts(), CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(),
                                                               CredentialReport(), AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(),
                                                               LogsInsights()])
 
-    /// The client for one AWS service, in the region asked for or the account's own.
-    static func client(_ service: String, region: String?, on client: ServiceClient) throws -> ServiceClient {
+    /// The client for one AWS service, as the connection's role in the account named, in the region asked for or the
+    /// connection's own.
+    static func client(_ service: String, region: String?, account: String?, on client: ServiceClient) async throws -> ServiceClient {
         let region = try region.map(checkedRegion) ?? client.setting("region")
-        return try client.at(host: "\(service).\(region).amazonaws.com")
+        return try await Self.account(account, on: client).at(host: "\(service).\(region).amazonaws.com")
+    }
+
+    /// The client signing as the connection's role in `wanted`, an account named by its ID or name, or in the only
+    /// account when the sign-in covers just one.
+    static func account(_ wanted: String?, on service: ServiceClient) async throws -> ServiceClient {
+        let accounts = try await service.access.awsAccounts()
+        let chosen: AWSAccount
+        if let wanted = wanted?.trimmingCharacters(in: .whitespaces), !wanted.isEmpty {
+            guard let match = accounts.first(where: { $0.id == wanted })
+                    ?? accounts.first(where: { $0.name.caseInsensitiveCompare(wanted) == .orderedSame }) else {
+                throw ServiceError.input("The sign-in has no account \(wanted). Its accounts: \(listing(accounts)).")
+            }
+            chosen = match
+        } else {
+            guard accounts.count == 1 else {
+                throw ServiceError.input(accounts.isEmpty ? "The sign-in covers no AWS accounts." : "Name the account: \(listing(accounts)).")
+            }
+            chosen = accounts[0]
+        }
+        return ServiceClient(base: service.base, access: try await service.access.access(asAWSAccount: chosen.id), settings: service.settings)
+    }
+
+    static func listing(_ accounts: [AWSAccount]) -> String {
+        accounts.prefix(20).map { "\($0.name) (\($0.id))" }.joined(separator: ", ")
+            + (accounts.count > 20 ? ", and \(accounts.count - 20) more" : "")
     }
 
     static func checkedRegion(_ value: String) throws -> String {
@@ -70,14 +101,33 @@ public enum AWS {
     }
 
     /// The region a regional operation may name.
-    static let regionInput = JSONSchema.string("The region, when not the account's default, such as us-east-1.")
+    static let regionInput = JSONSchema.string("The region, when not the connection's default, such as us-east-1.")
+    /// The account every operation may name.
+    static let accountInput = JSONSchema.string("The account, by its 12-digit ID or its name, as accounts lists them. Needed unless the sign-in covers only one.")
 }
 
 extension AWS {
+    struct Accounts: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "accounts"
+        static let summary = "Every AWS account the sign-in covers, with its ID, name and email. Other lookups name one of them."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let accounts = try await service.access.awsAccounts()
+            struct Account: Encodable { let id: String, name: String, email: String? }
+            struct Listed: Encodable { let accounts: [Account] }
+            let text = accounts.isEmpty ? "The sign-in covers no AWS accounts." : "\(accounts.count) accounts:\n" + accounts.map { account in
+                "\(account.name) (\(account.id))" + (account.email.map { " — \($0)" } ?? "")
+            }.joined(separator: "\n")
+            return try ServiceResult(text: text, structured: Listed(accounts: accounts.map { Account(id: $0.id, name: $0.name, email: $0.email) }))
+        }
+    }
+
     struct CloudTrailEvents: ServiceOperation {
         struct Input: Decodable, Sendable {
             let user: String?, eventName: String?, eventSource: String?, resource: String?, accessKeyId: String?
-            let since: String?, until: String?, limit: Int?, region: String?
+            let since: String?, until: String?, limit: Int?, region: String?, account: String?
         }
         static let name = "cloudtrail-events"
         static let summary = "CloudTrail management events, newest first, by one of user, event name, event source, resource or access key, with source IP, agent and error."
@@ -87,7 +137,7 @@ extension AWS {
             "accessKeyId": .string("The access key used."),
             "since": .string("The earliest time, in ISO 8601. The last 7 days when left out; CloudTrail keeps 90."),
             "until": .string("The latest time, in ISO 8601."), "limit": .integer("How many events, at most.", minimum: 1, maximum: 50),
-            "region": AWS.regionInput,
+            "region": AWS.regionInput, "account": AWS.accountInput,
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -109,7 +159,7 @@ extension AWS {
                 let region: String?, error: String?, resources: [Resource]
             }
             struct Events: Encodable { let events: [Kept] }
-            let answer = try await AWS.client("cloudtrail", region: input.region, on: service).post([], body: body,
+            let answer = try await AWS.client("cloudtrail", region: input.region, account: input.account, on: service).post([], body: body,
                 headers: ["X-Amz-Target": "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"],
                 contentType: "application/x-amz-json-1.1", as: Answer.self)
             let events = (answer.Events ?? []).map { event in
@@ -132,16 +182,16 @@ extension AWS {
     }
 
     struct GuardDutyFindings: ServiceOperation {
-        struct Input: Decodable, Sendable { let minimumSeverity: Double?, limit: Int?, region: String? }
+        struct Input: Decodable, Sendable { let minimumSeverity: Double?, limit: Int?, region: String?, account: String? }
         static let name = "guardduty-findings"
         static let summary = "GuardDuty findings, most recently updated first, from a minimum severity, with the resource and identity each concerns."
         static let input = JSONSchema.object([
             "minimumSeverity": .integer("The lowest severity, from 1 to 8; 7 and above is high. 4 when left out.", minimum: 1, maximum: 8),
-            "limit": .integer("How many findings, at most.", minimum: 1, maximum: 50), "region": AWS.regionInput,
+            "limit": .integer("How many findings, at most.", minimum: 1, maximum: 50), "region": AWS.regionInput, "account": AWS.accountInput,
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let client = try AWS.client("guardduty", region: input.region, on: service)
+            let client = try await AWS.client("guardduty", region: input.region, account: input.account, on: service)
             struct Detectors: Decodable { let detectorIds: [String]? }
             guard let detector = try await client.get(["detector"], as: Detectors.self).detectorIds?.first else {
                 return try ServiceResult(text: "GuardDuty is not enabled in this region.", structured: ["findings": [String]()])
@@ -176,12 +226,12 @@ extension AWS {
     }
 
     struct SecurityHubFindings: ServiceOperation {
-        struct Input: Decodable, Sendable { let severities: [String]?, limit: Int?, region: String? }
+        struct Input: Decodable, Sendable { let severities: [String]?, limit: Int?, region: String?, account: String? }
         static let name = "securityhub-findings"
         static let summary = "Active Security Hub findings, most recently updated first, by severity, with the product and resources."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]), "Severities. Critical and high when left out."),
-            "limit": .integer("How many findings, at most.", minimum: 1, maximum: 100), "region": AWS.regionInput,
+            "limit": .integer("How many findings, at most.", minimum: 1, maximum: 100), "region": AWS.regionInput, "account": AWS.accountInput,
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -195,7 +245,7 @@ extension AWS {
             struct Resource: Codable { let `Type`: String?; let Id: String? }
             struct Finding: Codable { let Id: String, Title: String?, Severity: Severity?, ProductName: String?, UpdatedAt: String?, Resources: [Resource]? }
             struct Found: Codable { let Findings: [Finding]? }
-            let findings = try await AWS.client("securityhub", region: input.region, on: service).post(["findings"], body: body, as: Found.self).Findings ?? []
+            let findings = try await AWS.client("securityhub", region: input.region, account: input.account, on: service).post(["findings"], body: body, as: Found.self).Findings ?? []
             let text = findings.isEmpty ? "No active Security Hub findings match." : findings.map { finding in
                 "\(finding.UpdatedAt ?? "?") \(finding.Severity?.Label ?? "?") \(finding.Title ?? finding.Id)\(finding.ProductName.map { " (\($0))" } ?? "")"
                     + ((finding.Resources ?? []).compactMap(\.Id).first.map { " — \($0)" } ?? "")
@@ -205,17 +255,33 @@ extension AWS {
     }
 
     struct AccessKey: ServiceOperation {
-        struct Input: Decodable, Sendable { let accessKeyId: String }
+        struct Input: Decodable, Sendable { let accessKeyId: String, account: String? }
         static let name = "access-key"
-        static let summary = "Who an access key in this account belongs to, and when, where and with which service it was last used."
-        static let input = JSONSchema.object(["accessKeyId": .string("The access key ID, such as AKIA… or ASIA….")], required: ["accessKeyId"])
+        static let summary = "Which account and user an access key belongs to, and when, where and with which service it was last used."
+        static let input = JSONSchema.object(["accessKeyId": .string("The access key ID, such as AKIA… or ASIA…."),
+                                              "account": .string("The account the key is in, by ID or name. Found from the key when left out.")],
+                                             required: ["accessKeyId"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let key = input.accessKeyId.trimmingCharacters(in: .whitespaces)
             guard (16...128).contains(key.count), key.allSatisfy({ $0.isLetter && $0.isUppercase || $0.isNumber }) else {
                 throw ServiceError.input("Give an access key ID such as AKIAIOSFODNN7EXAMPLE.")
             }
-            let answer = try await service.at(host: "iam.amazonaws.com").xml([], query: ["Action": "GetAccessKeyLastUsed", "Version": "2010-05-08", "AccessKeyId": key])
+            // A key's account is found from the key itself, which STS answers for anyone, so a key from anywhere in the
+            // organisation is traced to its own account.
+            var account = input.account
+            if account?.trimmingCharacters(in: .whitespaces).isEmpty != false, try await service.access.awsAccounts().count > 1 {
+                let first = try await AWS.account(try await service.access.awsAccounts().first?.id, on: service)
+                let info = try await first.at(host: "sts.amazonaws.com").xml([], query: ["Action": "GetAccessKeyInfo", "Version": "2011-06-15", "AccessKeyId": key])
+                guard let owner = info.value("GetAccessKeyInfoResult", "Account") else { throw ServiceError.unreadable }
+                guard try await service.access.awsAccounts().contains(where: { $0.id == owner }) else {
+                    return try ServiceResult(text: "\(key) belongs to account \(owner), which the sign-in does not cover.",
+                                             structured: ["accessKeyId": key, "account": owner])
+                }
+                account = owner
+            }
+            let answer = try await AWS.account(account, on: service).at(host: "iam.amazonaws.com")
+                .xml([], query: ["Action": "GetAccessKeyLastUsed", "Version": "2010-05-08", "AccessKeyId": key])
             let result = answer.child("GetAccessKeyLastUsedResult")
             struct Use: Encodable { let accessKeyId: String, user: String?, lastUsed: String?, service: String?, region: String? }
             let use = Use(accessKeyId: key, user: result?.value("UserName"), lastUsed: result?.value("AccessKeyLastUsed", "LastUsedDate"),
@@ -227,13 +293,13 @@ extension AWS {
     }
 
     struct CredentialReport: ServiceOperation {
-        struct Input: Decodable, Sendable {}
+        struct Input: Decodable, Sendable { let account: String? }
         static let name = "credential-report"
         static let summary = "Every IAM user's password and access key use, key ages and whether MFA is on, from the account's credential report."
-        static let input = JSONSchema.object([:])
+        static let input = JSONSchema.object(["account": AWS.accountInput])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let iam = try service.at(host: "iam.amazonaws.com")
+            let iam = try await AWS.account(input.account, on: service).at(host: "iam.amazonaws.com")
             // The report is made on request, usually in seconds.
             for attempt in 0..<6 {
                 let state = try await iam.xml([], query: ["Action": "GenerateCredentialReport", "Version": "2010-05-08"])
@@ -251,13 +317,13 @@ extension AWS {
     }
 
     struct AccessAnalyzerFindings: ServiceOperation {
-        struct Input: Decodable, Sendable { let limit: Int?, region: String? }
+        struct Input: Decodable, Sendable { let limit: Int?, region: String?, account: String? }
         static let name = "access-analyzer-findings"
         static let summary = "Active IAM Access Analyzer findings: resources shared outside the account, and whether publicly."
-        static let input = JSONSchema.object(["limit": .integer("How many findings, at most.", minimum: 1, maximum: 100), "region": AWS.regionInput])
+        static let input = JSONSchema.object(["limit": .integer("How many findings, at most.", minimum: 1, maximum: 100), "region": AWS.regionInput, "account": AWS.accountInput])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let client = try AWS.client("access-analyzer", region: input.region, on: service)
+            let client = try await AWS.client("access-analyzer", region: input.region, account: input.account, on: service)
             struct Analyzer: Decodable { let arn: String; let status: String? }
             struct Analyzers: Decodable { let analyzers: [Analyzer]? }
             guard let analyzer = try await client.get(["analyzer"], as: Analyzers.self).analyzers?.first(where: { $0.status != "DISABLED" }) else {
@@ -276,11 +342,11 @@ extension AWS {
     }
 
     struct Instances: ServiceOperation {
-        struct Input: Decodable, Sendable { let instanceId: String?, ip: String?, region: String? }
+        struct Input: Decodable, Sendable { let instanceId: String?, ip: String?, region: String?, account: String? }
         static let name = "ec2-instances"
         static let summary = "EC2 instances by instance ID or public or private IP address, with their state, addresses, security groups and Name tag."
         static let input = JSONSchema.object(["instanceId": .string("The instance ID, such as i-0abc…."),
-                                              "ip": .string("A public or private IPv4 address."), "region": AWS.regionInput])
+                                              "ip": .string("A public or private IPv4 address."), "region": AWS.regionInput, "account": AWS.accountInput])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             var query: [String: String?] = ["Action": "DescribeInstances", "Version": "2016-11-15"]
@@ -293,7 +359,7 @@ extension AWS {
                 query["Filter.1.Name"] = isPrivate ? "private-ip-address" : "ip-address"
                 query["Filter.1.Value.1"] = ip
             } else { throw ServiceError.input("Give an instance ID or an IP address.") }
-            let answer = try await AWS.client("ec2", region: input.region, on: service).xml([], query: query)
+            let answer = try await AWS.client("ec2", region: input.region, account: input.account, on: service).xml([], query: query)
             struct Instance: Encodable { let id: String?, name: String?, type: String?, state: String?, privateIP: String?, publicIP: String?, launched: String?, securityGroups: [String] }
             struct Found: Encodable { let instances: [Instance] }
             let instances = answer.all("instancesSet").flatMap { $0.children }.map { item in
@@ -310,13 +376,13 @@ extension AWS {
     }
 
     struct OpenSecurityGroups: ServiceOperation {
-        struct Input: Decodable, Sendable { let region: String? }
+        struct Input: Decodable, Sendable { let region: String?, account: String? }
         static let name = "open-security-groups"
         static let summary = "Security groups that let anyone on the internet in, with the ports they open."
-        static let input = JSONSchema.object(["region": AWS.regionInput])
+        static let input = JSONSchema.object(["region": AWS.regionInput, "account": AWS.accountInput])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let answer = try await AWS.client("ec2", region: input.region, on: service).xml([], query: [
+            let answer = try await AWS.client("ec2", region: input.region, account: input.account, on: service).xml([], query: [
                 "Action": "DescribeSecurityGroups", "Version": "2016-11-15", "Filter.1.Name": "ip-permission.cidr", "Filter.1.Value.1": "0.0.0.0/0",
             ])
             struct Rule: Encodable { let protocolName: String, ports: String, from: String }
@@ -340,19 +406,19 @@ extension AWS {
     }
 
     struct LogsInsights: ServiceOperation {
-        struct Input: Decodable, Sendable { let logGroups: [String], query: String, since: String?, until: String?, region: String? }
+        struct Input: Decodable, Sendable { let logGroups: [String], query: String, since: String?, until: String?, region: String?, account: String? }
         static let name = "logs-insights"
         static let summary = "Run a CloudWatch Logs Insights query over log groups, such as VPC Flow Logs or CloudTrail delivered to CloudWatch. Read-only."
         static let input = JSONSchema.object([
             "logGroups": .array(.string("A log group name."), "Up to 10 log groups."),
             "query": .string("The Logs Insights query, ending with limit."),
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out."),
-            "until": .string("The latest time, in ISO 8601. Now when left out."), "region": AWS.regionInput,
+            "until": .string("The latest time, in ISO 8601. Now when left out."), "region": AWS.regionInput, "account": AWS.accountInput,
         ], required: ["logGroups", "query"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let groups = try ServiceInput.list(input.logGroups, limit: 10) { try ServiceInput.quoted($0, "the log group") }
-            let client = try AWS.client("logs", region: input.region, on: service)
+            let client = try await AWS.client("logs", region: input.region, account: input.account, on: service)
             struct Start: Encodable { let logGroupNames: [String], queryString: String, startTime: Int, endTime: Int, limit: Int }
             struct Started: Decodable { let queryId: String }
             let started = try await client.post([], body: Start(
