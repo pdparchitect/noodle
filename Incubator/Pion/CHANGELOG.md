@@ -10,6 +10,11 @@
 ### Changed
 
 - AWS, now AWS Security, signs in through your organisation's IAM Identity Center instead of access keys, and one connection covers every account you are assigned: enter the AWS access portal URL and a permission set's name, and approve the code on your organisation's sign-in page. Agents list the accounts and name one in each lookup, an access key is traced to its own account first, and the connection stays signed in for as long as your organisation lets a session last.
+- An agent's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
+
+### Fixed
+
+- AWS Security's credential report and access-key tracing work: IAM and STS answered in a form Pion did not read. A lookup AWS turns down says what AWS said, such as Security Hub not being enabled or the role lacking a permission, instead of blaming a key.
 
 ## [0.6.0] - 2026-11-18
 

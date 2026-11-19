@@ -318,6 +318,10 @@ public struct ServiceClient: Sendable {
     let access: any ServiceAccess
     /// What the account filled in, such as its account ID.
     var settings: [String: String] = [:]
+    /// Whether a refusal of the credentials is the service's own reason, for one that says plainly why it turned a
+    /// request down, as AWS does for a service that is not enabled or a permission the role lacks, and that has no key
+    /// to blame.
+    var explainsRefusals = false
 
     /// One of the account's details, by its field's key.
     public func setting(_ key: String) throws -> String {
@@ -358,7 +362,7 @@ public struct ServiceClient: Sendable {
     /// connection's access still decides which hosts may be reached.
     public func at(host: String) throws -> ServiceClient {
         guard let base = URL(string: "https://\(host)") else { throw ServiceError.input("\(host) is not a valid host.") }
-        return ServiceClient(base: base, access: access, settings: settings)
+        return ServiceClient(base: base, access: access, settings: settings, explainsRefusals: explainsRefusals)
     }
 
     /// Sends `form` URL-encoded, for services that take their parameters that way.
@@ -370,20 +374,35 @@ public struct ServiceClient: Sendable {
         return try decode(Answer.self, try await data(path, method: "POST", body: Data(body.utf8), contentType: "application/x-www-form-urlencoded"))
     }
 
-    /// The body of an answer in XML, as older AWS APIs give it.
+    /// The body of an answer in XML, as older AWS APIs give it. It is asked for as XML: IAM and STS answer in JSON to
+    /// a request that accepts it.
     public func xml(_ path: [String], query: [String: String?] = [:]) async throws -> XMLNode {
-        guard let node = XMLNode.parse(try await data(path, query: query)) else { throw ServiceError.unreadable }
+        guard let node = XMLNode.parse(try await data(path, query: query, headers: ["Accept": "text/xml"])) else { throw ServiceError.unreadable }
         return node
     }
 
-    /// What a service said when it refused, from the fields services put it in, on one short line.
+    /// What a service said when it refused, from the fields services put it in, on one short line. AWS's names its
+    /// code too, such as AccessDenied, in JSON's __type or Code or in an XML Error.
     static func reason(_ data: Data) -> String? {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        // Google and Microsoft put it one level down, in error.message.
-        let said = ["detail", "message", "error_description", "error"].lazy.compactMap { object[$0] as? String }.first
-            ?? (object["error"] as? [String: Any])?["message"] as? String
-        let line = said?.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        return line.flatMap { $0.isEmpty ? nil : String($0.prefix(300)) }
+        let code: String?, said: String?
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Google and Microsoft put it one level down, in error.message.
+            said = ["detail", "message", "Message", "error_description", "error"].lazy.compactMap { object[$0] as? String }.first
+                ?? (object["error"] as? [String: Any])?["message"] as? String
+            // AWS's JSON APIs name the error in __type, sometimes after its namespace and a #.
+            code = (object["__type"] as? String ?? object["Code"] as? String).map { String($0.split(separator: "#").last ?? "") }
+        } else if let node = XMLNode.parse(data), let error = node.child("Error") ?? node.child("Errors")?.child("Error") {
+            said = error.value("Message")
+            code = error.value("Code")
+        } else { return nil }
+        let words = said?.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let line: String? = switch (code?.isEmpty == false ? code : nil, words?.isEmpty == false ? words : nil) {
+        case let (code?, words?): words.hasPrefix(code) ? words : code + ": " + words
+        case let (code?, nil): code
+        case let (nil, words?): words
+        case (nil, nil): nil
+        }
+        return line.map { String($0.prefix(300)) }
     }
 
     private func decode<Answer: Decodable>(_ type: Answer.Type, _ data: Data) throws -> Answer {
@@ -425,6 +444,9 @@ public struct ServiceClient: Sendable {
         }
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
+        if explainsRefusals, response.statusCode == 401 || response.statusCode == 403, let reason = Self.reason(data) {
+            throw ServiceError.refused(reason)
+        }
         switch response.statusCode {
         case 200..<300: return (data, response)
         case 401: throw ServiceError.rejected(Self.reason(data))

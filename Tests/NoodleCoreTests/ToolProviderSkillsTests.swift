@@ -10,7 +10,9 @@ final class ToolProviderSkillsTests: XCTestCase {
             {"tools":[{"name":"ocr","description":"Recognize text.","inputSchema":{"type":"object","required":["image"],"properties":{
               "image":{"type":"string","format":"noodle-file","description":"Image file."},
               "languages":{"type":"array","items":{"type":"string"},"description":"Preferred languages."},
-              "fast":{"type":"boolean"}}}}]}
+              "fast":{"type":"boolean"},
+              "limit":{"type":"integer","minimum":1,"maximum":50,"description":"How many."},
+              "mode":{"type":"string","enum":["quick","thorough"],"description":"How hard to look."}}}}]}
             """.utf8)
         }
         func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data { Data("{}".utf8) }
@@ -52,7 +54,9 @@ final class ToolProviderSkillsTests: XCTestCase {
         XCTAssertTrue(decoded.hasPrefix("Say \"hi\": now "))
         XCTAssertLessThanOrEqual(decoded.count, 1024)
         for expected in ["# Vision", "./.agents/skills/messenger/messenger tool vision TOOL", "Images stay on this Mac.", "### ocr", "Recognize text.",
-                         "`--image FILE` (required) — Image file.", "`--languages VALUE` (repeatable) — Preferred languages.", "`--fast`"] {
+                         "`--image FILE` (required) — Image file.", "`--languages VALUE` (repeatable) — Preferred languages.", "`--fast`",
+                         // What a value may be, so a bot need not guess and be refused.
+                         "`--limit VALUE` (1–50) — How many.", "`--mode VALUE` (quick or thorough) — How hard to look."] {
             XCTAssertTrue(document.contains(expected), "Missing \(expected) in:\n\(document)")
         }
     }

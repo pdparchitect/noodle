@@ -69,7 +69,9 @@ public enum AWS {
             }
             chosen = accounts[0]
         }
-        return ServiceClient(base: service.base, access: try await service.access.access(asAWSAccount: chosen.id), settings: service.settings)
+        // AWS says why it turns a request down, such as Security Hub not being enabled or the role lacking a permission.
+        return ServiceClient(base: service.base, access: try await service.access.access(asAWSAccount: chosen.id), settings: service.settings,
+                             explainsRefusals: true)
     }
 
     static func listing(_ accounts: [AWSAccount]) -> String {

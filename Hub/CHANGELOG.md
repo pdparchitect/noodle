@@ -6,6 +6,10 @@
 
 - The Usage window shows each bot's picture beside its name when grouped by bot; click it for the bot's profile, to start a new session, edit or suspend it.
 
+### Changed
+
+- A bot's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
+
 ## [0.56.0] - 2026-11-18
 
 ### Changed

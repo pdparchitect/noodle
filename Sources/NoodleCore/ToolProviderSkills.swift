@@ -32,12 +32,31 @@ public enum ToolProviderSkills {
                 let property = value as? [String: Any] ?? [:]
                 let type = property["type"] as? String
                 let placeholder = type == "boolean" ? "" : property["format"] as? String == "noodle-file" ? " FILE" : " VALUE"
-                let notes = [required.contains(name) ? "required" : nil, type == "array" ? "repeatable" : nil].compactMap { $0 }
+                let notes = [required.contains(name) ? "required" : nil, type == "array" ? "repeatable" : nil, Self.allowed(property)].compactMap { $0 }
                 let description = (property["description"] as? String).map { " — " + line($0) } ?? ""
                 text += "- `--\(name)\(placeholder)`\(notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")\(description)\n"
             }
         }
         return text
+    }
+
+    /// What an option's value may be, from its schema, so a bot picks one the tool takes instead of guessing and being
+    /// refused: a range such as 1–50, or a short list of choices.
+    private static func allowed(_ property: [String: Any]) -> String? {
+        let item = property["items"] as? [String: Any] ?? property
+        if let choices = item["enum"] as? [String], (1...8).contains(choices.count) {
+            return choices.count == 1 ? choices[0] : choices.dropLast().joined(separator: ", ") + " or " + choices.last!
+        }
+        func number(_ key: String) -> String? {
+            guard let value = item[key] as? NSNumber else { return nil }
+            return value.doubleValue == value.doubleValue.rounded() ? String(Int(value.doubleValue)) : value.stringValue
+        }
+        switch (number("minimum"), number("maximum")) {
+        case let (low?, high?): return "\(low)–\(high)"
+        case let (low?, nil): return "at least \(low)"
+        case let (nil, high?): return "at most \(high)"
+        case (nil, nil): return nil
+        }
     }
 
     /// The part of a skill that does not depend on its tool list: everything between the header and "## Tools".

@@ -133,9 +133,29 @@ final class AWSTests: XCTestCase {
         service.answers["action:GetCredentialReport"] = (200, "<GetCredentialReportResponse><GetCredentialReportResult><Content>\(Data(csv.utf8).base64EncodedString())</Content></GetCredentialReportResult></GetCredentialReportResponse>")
         let report = try await callTool(AWS.adapter, "credential-report", "{}", on: service, in: aws)
         XCTAssertFalse(report.isError, report.text)
+        // IAM answers in JSON when asked for it, which reads as nothing here.
+        XCTAssertEqual(service.requests.map { $0.value(forHTTPHeaderField: "Accept") }, ["text/xml", "text/xml"])
         XCTAssertTrue(report.text.contains("mallory"), report.text)
         XCTAssertEqual(report.structured?["columns"] as? [String],
                        ["user", "arn", "password_enabled", "password_last_used", "mfa_active", "access_key_1_active", "access_key_1_last_used_date"])
+    }
+
+    /// A refusal says what AWS said, its code and message, not a guess about a key the connection does not have.
+    func testARefusalSaysWhatAWSSaid() async throws {
+        let service = FakeService()
+        service.answers["/findings"] = (401, #"{"__type":"InvalidAccessException","Message":"Account 111111111111 is not subscribed to AWS Security Hub"}"#)
+        let hub = try await callTool(AWS.adapter, "securityhub-findings", "{}", on: service, in: aws)
+        XCTAssertTrue(hub.isError)
+        XCTAssertTrue(hub.text.contains("InvalidAccessException: Account 111111111111 is not subscribed to AWS Security Hub"), hub.text)
+        XCTAssertFalse(hub.text.contains("key or token"), hub.text)
+
+        service.answers["action:GenerateCredentialReport"] = (403, """
+        <ErrorResponse xmlns="https://iam.amazonaws.com/doc/2010-05-08/"><Error><Type>Sender</Type><Code>AccessDenied</Code>
+        <Message>User: arn:aws:sts::111111111111:assumed-role/Security/pdp is not authorized to perform: iam:GenerateCredentialReport</Message></Error></ErrorResponse>
+        """)
+        let report = try await callTool(AWS.adapter, "credential-report", "{}", on: service, in: aws)
+        XCTAssertTrue(report.text.contains("AccessDenied: User: arn:aws:sts::111111111111:assumed-role/Security/pdp is not authorized to perform: iam:GenerateCredentialReport"),
+                      report.text)
     }
 
     func testInstancesAndSecurityGroupsOpenToTheInternet() async throws {
