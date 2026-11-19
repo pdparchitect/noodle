@@ -1,0 +1,355 @@
+{
+  "version": 1,
+  "title": "Typography",
+  "clock": "14:00",
+  "appearance": "dark",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true
+  },
+  "harnesses": {
+    "claude-code": {
+      "models": "builtin"
+    }
+  },
+  "agents": [
+    {
+      "key": "ada",
+      "name": "Ada",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Analyst",
+      "avatar": {
+        "image": "face:feminine-02"
+      }
+    },
+    {
+      "key": "ben",
+      "name": "Ben",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Writer",
+      "avatar": {
+        "image": "face:masculine-02"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "short",
+      "group": {
+        "name": "Short messages",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "09:00",
+          "from": "user",
+          "text": "Morning! Anything overnight?"
+        },
+        {
+          "at": "09:00",
+          "from": "ada",
+          "text": "Quiet night. Two alerts, both noise."
+        },
+        {
+          "at": "09:01",
+          "from": "user",
+          "text": "Great 👍"
+        },
+        {
+          "at": "09:01",
+          "from": "ada",
+          "text": "Ok."
+        },
+        {
+          "at": "09:02",
+          "from": "user",
+          "text": "Can you check the backup job?"
+        },
+        {
+          "at": "09:02",
+          "from": "ada",
+          "text": "Done: it ran at 03:00 and finished in 14 minutes."
+        },
+        {
+          "at": "09:03",
+          "from": "user",
+          "text": "👍"
+        },
+        {
+          "at": "09:03",
+          "from": "ada",
+          "text": "Want me to keep an eye on it tonight too?"
+        },
+        {
+          "at": "09:04",
+          "from": "user",
+          "text": "Yes please, and tell me only if it fails."
+        },
+        {
+          "at": "09:04",
+          "from": "ada",
+          "text": "Will do."
+        }
+      ]
+    },
+    {
+      "key": "prose",
+      "group": {
+        "name": "Long prose",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "10:00",
+          "from": "user",
+          "text": "Write up what happened with the payroll export, in full. Take your time."
+        },
+        {
+          "at": "10:20",
+          "from": "ben",
+          "text": "Here is the full account, from the first alert to where things stand now.\n\nAt 08:51 the mail gateway delivered a message titled \"Q4 payroll correction\" to 23 people in finance. It came from a look-alike domain registered the day before, and it linked to a cloned sign-in page. Four people opened the link; one of them, m.okafor, entered their password and approved the push prompt that followed, which is how the attacker got a valid session without ever needing the second factor themselves.\n\nFrom that session the attacker read the payroll share for about forty minutes. They did not change anything there, but they did create an inbox rule that moves anything mentioning payroll into RSS Feeds, which is the usual way to hide replies from the person whose mailbox it is. The rule is the clearest sign that they meant to come back.\n\nNothing suggests they reached any other account. The session token was revoked at 09:40, the password was reset, the inbox rule is gone, and all 23 copies of the message have been pulled from mailboxes. Two people had forwarded it internally; those copies are gone too."
+        }
+      ]
+    },
+    {
+      "key": "names",
+      "group": {
+        "name": "One long paragraph and long names",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "10:21",
+          "from": "user",
+          "text": "Thanks. One paragraph version for the board?"
+        },
+        {
+          "at": "10:22",
+          "from": "ben",
+          "text": "A phishing email reached 23 finance staff on Thursday morning; one entered their password and approved the sign-in, which let an attacker read the payroll share for about forty minutes before we revoked the session, reset the password and removed every copy of the email, and there is no sign they changed anything or reached any other account, though they did set up a hidden mail rule, which tells us they intended to return and is why we are watching that mailbox closely for the next two weeks."
+        },
+        {
+          "at": "10:24",
+          "from": "ben",
+          "text": "Long names and addresses for the record: the clone lived at https://payroll-kestrel.example/login/oauth2/authorize?client_id=8f3c2a91&redirect_uri=https%3A%2F%2Fpayroll-kestrel.example%2Fcallback, the role that was abused is roles/billing.creator on organizations/493026224144, and the file hash is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855."
+        }
+      ]
+    },
+    {
+      "key": "lists",
+      "group": {
+        "name": "Lists",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "11:00",
+          "from": "user",
+          "text": "Show me how lists come out."
+        },
+        {
+          "at": "11:01",
+          "from": "ada",
+          "text": "Dashes:\n- Short item\n- An item long enough to wrap onto a second line, so we can see whether the wrapped text lines up under the words or under the dash\n- Another short one\n\nStars and bullets:\n* Star item\n• Bullet item\n\nNumbered with dots:\n1. Revoke the session\n2. Reset the password, then confirm with the person by phone that the reset reached them and they can sign in again\n3. Remove the inbox rule\n\nNumbered with brackets:\n1) First\n2) Second\n10) Tenth, to check a wider number lines up"
+        }
+      ]
+    },
+    {
+      "key": "agent-lists",
+      "group": {
+        "name": "Lists as agents write them",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "11:02",
+          "from": "ada",
+          "text": "EVIDENCE\n- Dashboard 'Platform Usage' draws on platform_usage_total, by type and user_id.\n- In Loki, cbk-app logs carry roughly 100-800 '[metric.usage]' lines per hour over the last 24h.\nINFERENCE (confidence: low to medium)\n- Usage is logged in Loki but barely reaches Prometheus, so the alert is probably a low-volume artifact.\n- I found nothing security-relevant."
+        },
+        {
+          "at": "11:03",
+          "from": "ada",
+          "text": "Inline steps, as agents often write them: 1) create a small group, 2) grant it both roles, 3) remove the two domain bindings, 4) add a budget with 50/90/100% alerts."
+        },
+        {
+          "at": "11:04",
+          "from": "user",
+          "text": "My own list:\n- check VPN\n- check DNS\n- then the URLs"
+        }
+      ]
+    },
+    {
+      "key": "markdown",
+      "group": {
+        "name": "Inline Markdown",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "12:00",
+          "from": "user",
+          "text": "And the rest of Markdown?"
+        },
+        {
+          "at": "12:01",
+          "from": "ben",
+          "text": "**Bold**, *italic*, ***both***, ~~struck~~, `inline code`, and [a link](https://example.com).\n\n# A heading\n## A smaller heading\n\n> A quoted line, as an agent might quote a log or an email.\n\nA rule follows:\n\n---\n\nAfter the rule."
+        }
+      ]
+    },
+    {
+      "key": "blocks",
+      "group": {
+        "name": "Code and tables",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "12:02",
+          "from": "ben",
+          "text": "A code block:\n\n```swift\nlet session = try await gateway.revoke(token: token)\nprint(\"revoked\", session.id)\n```\n\nAnd a long one that should scroll rather than wrap:\n\n```\n2026-11-19T09:33:52Z php-fpm[4123]: PHP Fatal error: Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes) in /var/www/portal/upload.php on line 88\n```"
+        },
+        {
+          "at": "12:03",
+          "from": "ben",
+          "text": "A table:\n\n| Account | Signed in | From | Action |\n|---|---|---|---|\n| m.okafor | 09:06 | 203.0.113.77 | Reset |\n| d.price | 01:58 | 198.51.100.23 | Revoked |\n| s.ito | 08:12 | 192.0.2.10 | None |"
+        }
+      ]
+    },
+    {
+      "key": "report",
+      "group": {
+        "name": "A full report",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "13:00",
+          "from": "user",
+          "text": "Sweep report please."
+        },
+        {
+          "at": "13:05",
+          "from": "ada",
+          "text": "Read-only look at Platform Usage Spike, as asked. Nothing was changed.\n\nEVIDENCE\n- Dashboard 'Platform Usage' (platform-usage) draws on the Prometheus metric platform_usage_total, by type and user_id. I did not read the alert rule's own query.\n- In Prometheus, platform_usage_total is almost flat: about 0-1 events per hour across the last 24h.\n- Hourly Google mail ability calls (/api/auxiliary/skillset/ability/google/mail): a steady 5 per hour for each of the last 6 hours.\n\nINFERENCE (confidence: low to medium)\n- Usage is being logged in Loki but barely reaches the Prometheus metric.\n- It does not line up with the Google mail calls.\n\n| Source | Events, 24h | Trend |\n|---|---|---|\n| Prometheus | 5 | flat |\n| Loki | 9,840 | steady |\n\nNext: say the word and I'll read the alert rule itself."
+        }
+      ]
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1440,
+        880
+      ]
+    },
+    "select": "short"
+  },
+  "timeline": [
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "short"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "01-short"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "prose"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "02-prose"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "names"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "03-names"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "lists"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "04-lists"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "agent-lists"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "05-agent-lists"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "markdown"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "06-markdown"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "blocks"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "07-blocks"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "report"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "08-report"
+    }
+  ]
+}

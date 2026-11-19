@@ -10,6 +10,8 @@
 
 ### Changed
 
+- Lines an agent starts with a dash, a star or a number show as a list, with wrapped lines lined up under the text and a little space between items, and every paragraph, list and code block in a message is spaced the same.
+- The conversation's reading column is narrower, about 85 characters to a line instead of 110, so long messages read more easily; the message field narrows with it.
 - Sheet buttons such as Cancel and Create, the add buttons in pickers, the unread dot and folder icons take Pion's accent, or the one you chose in System Settings, instead of a fixed blue.
 - Link buttons, such as Profiles in Settings › Harness, take Pion's accent too, the same colour as links in messages, instead of the system's fixed link blue.
 - Each agent's mark is a chess piece on a flat grey disc, in place of the rings of arcs: a pawn, knight, bishop, rook, queen or king, always the same one for that agent, however it is renamed.

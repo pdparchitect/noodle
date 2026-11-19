@@ -432,7 +432,9 @@ struct ConversationStart: View {
 /// One message. An agent's fills the reading column with its name above, as an assistant's answer in
 /// ChatGPT; the champion's sits on the right in a quiet box. Nothing is folded away.
 struct MessageRow: View {
-    static let column: CGFloat = 780
+    /// The reading column, the composer's width with it: about 85 characters of the transcript's text to a line, as
+    /// long as reads comfortably.
+    static let column: CGFloat = 650
 
     let model: PionModel
     let window: WindowState
@@ -642,14 +644,36 @@ private struct Prose: View {
                     }
                     .background(Color.secondary.opacity(0.09), in: .rect(cornerRadius: 10, style: .continuous))
                 case .text(let text):
-                    Text(text)
-                        .font(.system(size: 14))
-                        .lineSpacing(3.5)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .background { if let message { ConversationAnnotationText(message: message) } }
+                    prose(text)
+                case .list(let items):
+                    // Wrapped lines hang under the item's text, not its marker, with a little air between items.
+                    // As wide as the longest number, so "10." fits and every item's text starts at the same place.
+                    let widest = items.map(\.marker.count).max() ?? 1
+                    let markerWidth: CGFloat = items.contains { $0.marker != "•" } ? 8 + CGFloat(widest) * 8 : 10
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(item.marker)
+                                    .font(.system(size: 14).monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize()
+                                    .frame(width: markerWidth, alignment: .trailing)
+                                prose(item.text)
+                            }
+                        }
+                    }
+                    .padding(.leading, 2)
                 }
             }
         }
+    }
+
+    private func prose(_ text: AttributedString) -> some View {
+        Text(text)
+            .font(.system(size: 14))
+            .lineSpacing(3.5)
+            .fixedSize(horizontal: false, vertical: true)
+            .background { if let message { ConversationAnnotationText(message: message) } }
     }
 }
 

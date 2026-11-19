@@ -15,6 +15,32 @@ import XCTest
         XCTAssertEqual(preparations, 2, "Edited text must be prepared again")
     }
 
+    func testListsAndParagraphsBecomeBlocksOfTheirOwn() {
+        let message = "Read-only look, as asked.\n\nEVIDENCE\n- Dashboard **Platform Usage** draws on one metric.\n* Loki has the lines.\n\n1. Check the rule.\n2) Check the caller.\nNothing else changed."
+        let blocks = MessageBodyRenderer().render(message).flatMap { segment -> [MessageBodyRenderer.Block] in
+            if case .prose(let blocks) = segment { return blocks }
+            return []
+        }
+        func describe(_ block: MessageBodyRenderer.Block) -> String {
+            switch block {
+            case .text(let text): "text: " + String(text.characters)
+            case .code(let code): "code: " + code
+            case .list(let items): "list: " + items.map { "\($0.marker) \(String($0.text.characters))" }.joined(separator: " | ")
+            }
+        }
+        XCTAssertEqual(blocks.map(describe), [
+            "text: Read-only look, as asked.",
+            "text: EVIDENCE",
+            "list: • Dashboard Platform Usage draws on one metric. | • Loki has the lines.",
+            "list: 1. Check the rule. | 2. Check the caller.",
+            "text: Nothing else changed.",
+        ])
+        // An item keeps its own formatting.
+        if case .list(let items) = blocks[2] {
+            XCTAssertTrue(items[0].text.runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        }
+    }
+
     func testPreparedTextPreservesFormattingCodeAndSafeLinks() throws {
         let segments = MessageBodyRenderer().render("**Finding** with `inline code` and [evidence](https://example.com).\n\n```swift\nlet answer = 42\n```")
         let blocks = segments.flatMap { segment -> [MessageBodyRenderer.Block] in
