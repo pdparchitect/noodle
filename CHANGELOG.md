@@ -18,6 +18,10 @@ All notable changes to Noodle are documented here, following
 - Links in messages take your accent colour, as buttons and selections do, instead of the system's fixed link blue. In dark mode a deep accent is lightened just enough to read; a bright one is left as it is.
 - A bot's skill for each tool says what every option takes, such as a range of 1–50 or a short list of choices, so it picks a value the tool accepts instead of guessing and being refused.
 
+### Fixed
+
+- A name in code that ends like a web address, such as session.id in a code block or report.md in backticks, no longer gets a link preview card.
+
 ## [0.90.0] - 2026-11-18
 
 ### Added

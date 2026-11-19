@@ -20,13 +20,33 @@ public enum MessageLink {
             types: NSTextCheckingResult.CheckingType.link.rawValue
         ) else { return nil }
 
-        let range = NSRange(markdown.startIndex..., in: markdown)
+        // Never in code: a name there that ends like a web address, such as session.id or report.md, is not a link.
+        let prose = withoutCode(markdown)
+        let range = NSRange(prose.startIndex..., in: prose)
         var result: URL?
-        detector.enumerateMatches(in: markdown, range: range) { match, _, stop in
+        detector.enumerateMatches(in: prose, range: range) { match, _, stop in
             guard let candidate = match?.url,
                   let safeURL = publicWebURL(from: candidate) else { return }
             result = safeURL
             stop.pointee = true
+        }
+        return result
+    }
+
+    /// The text with its fenced code blocks and inline code spans taken out, each left as a line break or a space so
+    /// the words around them stay apart.
+    static func withoutCode(_ markdown: String) -> String {
+        var lines: [Substring] = [], inFence = false
+        for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") { inFence.toggle(); lines.append(""); continue }
+            lines.append(inFence ? "" : line)
+        }
+        var result = "", inSpan = false
+        for character in lines.joined(separator: "\n") {
+            if character == "`" { inSpan.toggle(); result.append(" "); continue }
+            // An unclosed backtick never runs past its line.
+            if character == "\n" { inSpan = false }
+            if !inSpan { result.append(character) }
         }
         return result
     }
