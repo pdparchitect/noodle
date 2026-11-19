@@ -1,68 +1,137 @@
+<div align="center">
+
+<img src="Support/AppIcon.png" alt="Pion" width="96">
+
 # Pion
 
-Pion is a cyber defence tool for one operator on a Mac: a team of agents investigates incidents with
-you, and you stay in charge of anything that changes a system. It runs agents the way Noodle does,
-on the same harnesses, and keeps its own agents, conversations and sign-ins apart from Noodle's.
+**A team of agents on every incident.**<br>
+Cyber defence on your Mac. Runs on the AI subscriptions you already have.
 
-Pion is incubating: it has no release yet. Build it with `scripts/build.sh` in this folder, which
-puts Pion Dev in the repository's `.build` folder.
+<a href="https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg"><img alt="Download Pion for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
 
-## Investigations, groups and agents
+[Get started](#get-started) · [Features](#features) · [Tools](#tools) · [Changelog](CHANGELOG.md) · [License](LICENSE.md)
 
-The sidebar lists your Investigations, most severe first, with closed ones folded under Closed; then
-your groups; then your agents. Choose File > New Investigation (⌘N), New Group (⌥⌘N) or New Agent
-(⇧⌘N), or the plus beside a section's title.
+</div>
 
-An Investigation is a conversation with its team, with an objective, a status, a severity and a
-case record. One agent leads it; you own it. An agent that finds a problem worth its own record, in
-a direct conversation or another Investigation, opens one itself and leads it; it posts there what
-started it. It starts unassessed until the lead agent sets its
-severity from the evidence; only the lead changes it. The toolbar sets its status, edits its title,
-objective and team, and shows the case record. Investigation > Close Investigation… closes it as a false
-positive, resolved or handed off, with a note. Its agents can still read a closed Investigation, but
-no longer post or record in it; they ask you in their own conversation if it needs reopening.
+<p align="center">
+  <img width="100%" alt="Pion on a Mac: the team works an impossible-travel sign-in for the finance director. Five agents report the stolen session, the stealer and the files it read, and the case record beside them lists the findings, evidence and entities." src=".github/readme/hero.png" />
+</p>
 
-A group is a standing team you talk to outside any Investigation. Each agent also has a conversation
-of its own with you.
+Open an Investigation and a team of agents works it with you: one leads, the others
+trace sign-ins, read endpoint telemetry, check reputation and pull the logs. They record
+what they find as they go, with the evidence behind it, and bring you what needs a
+decision. **Agents never change a system themselves:** they recommend, and you act.
 
-## Writing
+Each agent runs on the [harness](https://github.com/pdparchitect/noodle/blob/main/docs/harness-setup.md)
+you choose, with your own account: **Codex**, **Claude Code**, **Apple Intelligence** on
+device, or any other harness Noodle supports.
 
-Write in the field at the bottom; Return sends. Mention an agent with @. The plus attaches files,
-and the microphone (⌘⇧D) turns what you say into text in the field, to read over before sending.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img width="100%" alt="The PHP2Shell Investigation, contained: tasks waiting on you sit at the top of the sidebar, beside the case record." src=".github/readme/tasks.png"><br>
+      <b>Waiting on you.</b> What needs your decision sits at the top of the sidebar.
+    </td>
+    <td width="50%" valign="top">
+      <img width="100%" alt="The Detection group: the triage agent sums up the night's alerts and another offers a tuned detection rule." src=".github/readme/groups.png"><br>
+      <b>Groups.</b> Standing teams for the work between incidents.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img width="100%" alt="A credential phishing Investigation with its Audit Log: every finding, piece of evidence and status change, and who made it." src=".github/readme/audit.png"><br>
+      <b>Audit Log.</b> Every change to the case and who made it, only ever added to.
+    </td>
+    <td width="50%" valign="top">
+      <img width="100%" alt="Welcome to Pion: sign in to Codex, Claude or Apple Intelligence to set up your team." src=".github/readme/welcome.png"><br>
+      <b>Ready in minutes.</b> Sign in once and Pion sets up a starter team.
+    </td>
+  </tr>
+</table>
 
-## The case record
+## Get Pion
 
-The inspector beside an Investigation (⌥⌘I) shows what its agents record as they work:
-findings with the evidence they cite, evidence with the query that produced it, and the entities
-involved. Audit Log lists every change to the case and who made it, and is only ever added to.
+| App | What it does | Download |
+| --- | --- | --- |
+| **Pion** | A team of agents on every incident. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg) [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.zip) |
 
-Agents never change a system themselves: they recommend changes to you in the conversation.
+Pion needs a Mac with Apple silicon and macOS 26 or later. Open the DMG and drag Pion to
+**Applications**. Pion keeps itself up to date. To remove it, drag it from Applications to the Bin.
 
-## Settings
+Pion is incubating: it works, and it changes quickly. Expect new features in most
+releases, and the odd rough edge.
 
-Harness signs in to the harnesses agents run on, Agents changes their models and archives them, and
-Tools connects them to services, over MCP or through Pion's own lookups: reputation services such as
-VirusTotal, Shodan, GreyNoise and CrowdSec CTI; new vulnerabilities in the products you use, from NVD; the hosts a domain has, from its certificates on crt.sh; identity providers such as Okta, Microsoft Entra ID and Google
-Workspace; endpoint and XDR consoles such as CrowdStrike Falcon and Microsoft Defender XDR; log
-searches in Splunk, Elastic, Microsoft Sentinel and Sumo Logic; metrics, logs and alerts in Grafana
-Cloud or a Grafana you run, and errors in Sentry or a Sentry you run, even on this Mac or your network; and cloud accounts in AWS, Google
-Cloud, Cloudflare and Wiz. Add a service, then assign it to the agents that should use it. Each service's
-form has Setup Steps, saying where in the service's console to make its key or account and the least
-access to give it: Pion's lookups only read. Each service you add is a separate account, so two
-accounts of the same service can sit side by side.
+## Get started
 
-## Scenarios
+1. Open Pion and sign in to a harness on the welcome screen. Pion sets up a starter team
+   of agents and the group they share.
+2. Connect the services your team should use in **Settings → Tools**, and assign each to the
+   agents that need it.
+3. Choose **File → New Investigation** (⌘N), say what happened, and pick the team. Or just tell
+   an agent what you have seen: when it finds something worth a record, it opens the
+   Investigation itself and leads it.
 
-`scripts/scenario.sh` opens Pion in a scenario from `Scenarios/`: a scripted team and
-Investigations in a separate copy of Pion Dev with no network and no access to your data. Without a
-name it opens the picker. With a name, or from the picker, it opens in the scenario's starting state and
-stays there for you to look around; only a capture plays its timeline. `--shots` plays it and saves each
-captured step to the scenario's `shots` folder, and `--video` records the scenario to its `recordings` folder, with `--ratio 16:9` and other shapes as MP4s and
-the film's titles, camera moves and sounds, as Noodle's scenarios have. `--no-intro`, `--no-outro` and
-`--no-titles` record it without its opening card, closing card or both, and `--background` with a file or
-web address records it over that picture or video without writing it into the scenario.
+<details>
+<summary><b>Investigations, groups and agents</b></summary>
+
+The sidebar lists your Investigations, most severe first, then your groups and your agents.
+**View → Sidebar** can also list the tasks waiting on you, closed Investigations and your
+tools, with a red dot on any that needs you to sign in.
+
+An Investigation is a conversation with its team, with an objective, a status, a severity
+and a case record. One agent leads it; you own it. It starts unassessed until the lead sets
+its severity from the evidence. The toolbar sets its status and edits its title, objective
+and team. **Investigation → Close Investigation…** closes it as a false positive, resolved
+or handed off, with a note; its agents can still read it, but no longer post or record in it.
+
+A group is a standing team you talk to outside any Investigation, such as detection
+engineering or threat research. Each agent also has a conversation of its own with you.
+
+Write in the field at the bottom; Return sends. Mention an agent with @. The plus attaches
+files, and the microphone (⌘⇧D) turns what you say into text to read over before sending.
+
+</details>
+
+## Features
+
+- **Investigations** with a lead agent, a team, a severity and a status you control.
+- **A case record** beside each one: findings with the evidence they cite, evidence with the
+  query that produced it, and the entities involved.
+- **An Audit Log** of every change to the case, only ever added to.
+- **Groups** of agents for the work between incidents.
+- **Tasks** waiting on you, at the top of the sidebar.
+- **Read-only lookups**: agents investigate; changes to a system are yours to make.
+- **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
+- **Restricted by default**: each agent works in a sandbox of its own on your Mac.
+- **Native and fast**: voice input, attachments, annotations, Quick Look, notifications.
+
+## Tools
+
+Connect your stack in **Settings → Tools**. Each service's form has **Setup Steps**: where in
+the service's console to make its key or account, and the least access to give it. Pion's
+own lookups only read. Add two accounts of the same service side by side, and assign each
+to the agents that should use it.
+
+| | |
+| --- | --- |
+| **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned |
+| **Attack surface** | crt.sh, NVD, Tenable |
+| **Identity** | Okta, Microsoft Entra ID, Google Workspace |
+| **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
+| **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
+| **Cloud and code** | AWS Security, Google Cloud, Cloudflare Security, Wiz, GitHub |
+
+Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
+Center and covers every account you are assigned; Google Cloud and Google Workspace sign
+in with your Google account.
 
 ## License
 
-Source available under the PolyForm Noncommercial License 1.0.0: free to read, use and
-change for noncommercial purposes. See LICENSE.md. This is not an open-source license.
+Source available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to
+read, use and change for noncommercial purposes. This is not an open-source license.
+Pion is built on [Noodle](https://github.com/pdparchitect/noodle), which is open source
+under Apache 2.0.
+
+## Project
+
+[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [@pdp on X](https://x.com/pdp)
