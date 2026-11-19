@@ -48,8 +48,12 @@ import UniformTypeIdentifiers
     private(set) var transcripts: [UUID: [ChatMessage]] = [:]
     /// Bumped whenever a case record or audit log may have changed, so the views showing one read it again.
     private(set) var caseRevision = 0
-    /// What the main window shows.
-    var selection: UUID?
+    /// What the main window shows, remembered so Pion opens on it again next time.
+    var selection: UUID? {
+        didSet { if selection != oldValue { defaults.set(selection?.uuidString, forKey: Self.selectionKey) } }
+    }
+    static let selectionKey = "PionSelectedConversation"
+    @ObservationIgnored private let defaults: UserDefaults
     /// What is being written in each conversation, with its files, kept as Noodle keeps it.
     var drafts = ConversationDrafts()
     private(set) var attachments: [UUID: [UUID: ConversationAttachment]] = [:]
@@ -123,6 +127,7 @@ import UniformTypeIdentifiers
         harnessProfiles = HarnessProfilesController(store: repository.harnessProfiles)
         harnessProfiles.subscriptionUsage = runtime.subscriptionUsage
         self.isScripted = isScripted
+        defaults = harnessDefaults
         messenger = MessengerBroker(repository: repository)
         messenger.refusingPosts = { [store] id in Self.postsRefused(in: id, store: store) }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadPion() } }
@@ -158,6 +163,7 @@ import UniformTypeIdentifiers
         // Before the first capability check, so Apple Intelligence is offered as ready where the Mac has it.
         if !isScripted { offerAppleModel() }
         reload()
+        if selection == nil { selection = openingConversation() }
         for conversation in conversations {
             readTranscript(conversation.id)
             // As in Noodle, an annotation not sent yet waits in the draft until a message carries it.
@@ -209,6 +215,16 @@ import UniformTypeIdentifiers
         messenger.stop()
         runtime.stopAll()
         running = false
+    }
+
+    /// The conversation Pion opens on: the one it was left on, while it is still there, or else the one with the latest
+    /// activity, as the sidebar orders them and as Noodle opens on its latest.
+    private func openingConversation() -> UUID? {
+        if let saved = defaults.string(forKey: Self.selectionKey).flatMap(UUID.init(uuidString:)),
+           conversations.contains(where: { $0.id == saved }) {
+            return saved
+        }
+        return conversations.max { lastActivity(of: $0) < lastActivity(of: $1) }?.id
     }
 
     private func startTools() throws {

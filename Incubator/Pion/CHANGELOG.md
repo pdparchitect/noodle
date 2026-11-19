@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- Pion opens on the conversation you left it on, or, if that one has gone, on the one with the latest activity, instead of on no conversation at all.
 - The button that suggests another agent name sits as close to the field's edge as Noodle's.
 - The window resizes much more smoothly, about twice as fast with an Investigation's case record open and faster for every conversation: the case record is Pion's own panel beside the conversation instead of the system's inspector, which made every step of a resize lay the window out twice, even while hidden. Its edge still drags to resize it, and it keeps the width it was left at.
 - The background effect shows through the sidebar and inspector as Noodle's wallpaper does, instead of a blurred copy drawn under each that went wild while the window was resized. The Grid's scan and the Glyphs' rain move smoothly as the window changes height, rather than jumping to another place at every step.

@@ -23,6 +23,29 @@ import XCTest
                               provider: .codex, model: "original", effort: "high", symbol: "shield", color: 3)
     }
 
+    func testPionOpensAgainOnTheConversationLeftOpenOrElseTheLatest() throws {
+        let defaults = UserDefaults(suiteName: "PionSelection-\(UUID())")!
+        let first = PionModel(root: root, messenger: nil, isScripted: true, harnessDefaults: defaults)
+        let avery = try first.createAgent(name: "Avery", description: "Analyst", instructions: "Check evidence.", provider: .codex, model: "original")
+        // A minute later, so the two are never created in the same instant.
+        ScenarioClock.offset += 60
+        defer { ScenarioClock.offset -= 60 }
+        let blake = try first.createAgent(name: "Blake", description: "Analyst", instructions: "Check evidence.", provider: .codex, model: "original")
+        let averys = try XCTUnwrap(first.conversations.first { $0.participantIDs == [avery.id] }?.id)
+        let blakes = try XCTUnwrap(first.conversations.first { $0.participantIDs == [blake.id] }?.id)
+        first.selection = averys
+
+        let relaunched = PionModel(root: root, messenger: nil, isScripted: true, harnessDefaults: defaults)
+        relaunched.start()
+        XCTAssertEqual(relaunched.selection, averys, "the conversation left open")
+
+        // With none remembered, the latest conversation, as Noodle opens.
+        relaunched.selection = nil
+        let fresh = PionModel(root: root, messenger: nil, isScripted: true, harnessDefaults: defaults)
+        fresh.start()
+        XCTAssertEqual(fresh.selection, blakes, "the latest conversation")
+    }
+
     func testGeneratedNamesAreTheDefaultAndHumanNamesRemainAvailable() throws {
         XCTAssertEqual(PionModel.defaultAgentNameStyle, .playful)
         let generated = model.suggestedAgentName()
