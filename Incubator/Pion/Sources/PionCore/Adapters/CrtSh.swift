@@ -79,7 +79,7 @@ public enum CrtSh {
                 entries = try await service.get([], query: query, trailingSlash: true, as: [Entry].self)
             } catch ServiceError.unreadable {
                 throw Self.busy
-            } catch ServiceError.status(let status) where status >= 500 {
+            } catch ServiceError.status(let status, _) where status >= 500 {
                 throw Self.busy
             }
             let kind = input.expired == true ? "certificates, current and expired," : "current certificates"

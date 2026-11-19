@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Google Cloud's audit log search names the audit logs, which Logging finds quickly, instead of matching part of every log's name, which made searches across an organisation fail. A failed search is tried once more, and one Logging did not finish says so instead of reporting no entries.
+- A service that limits or fails a request says why, such as which quota ran out and for which project, so the person knows what to raise.
 - AWS Security's credential report and access-key tracing work: IAM and STS answered in a form Pion did not read. A lookup AWS turns down says what AWS said, such as Security Hub not being enabled or the role lacking a permission, instead of blaming a key.
 
 ## [0.6.0] - 2026-11-18

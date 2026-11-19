@@ -107,7 +107,10 @@ extension GoogleCloud {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let scope = try GoogleCloud.scope(service)
-            var filter = [#"logName:"cloudaudit.googleapis.com""#]
+            // The audit logs by name, which Logging finds by index; matching part of every log's name is slow enough
+            // across an organisation's projects for Logging to fail the search.
+            var filter = ["(" + ["activity", "data_access", "system_event", "policy", "access_transparency"]
+                .map { #"log_id("cloudaudit.googleapis.com/\#($0)")"# }.joined(separator: " OR ") + ")"]
             if let principal = input.principal { filter.append("protoPayload.authenticationInfo.principalEmail=" + (try GoogleCloud.quoted(principal, "the principal"))) }
             if let method = input.method { filter.append("protoPayload.methodName:" + (try GoogleCloud.quoted(method, "the method"))) }
             if let resource = input.resource { filter.append("protoPayload.resourceName:" + (try GoogleCloud.quoted(resource, "the resource"))) }
@@ -134,17 +137,30 @@ extension GoogleCloud {
                 names += projects.prefix(99).map { "projects/" + $0 }
                 if projects.count > 99 { note = "\nOnly the first 99 of \(projects.count) projects' logs were searched; narrow the account to a folder for the rest." }
             }
-            // Logging may hand back empty pages that still lead on, so it reads ten at most.
-            var entries: [Entry] = [], page: String?, pages = 0
-            repeat {
+            // Logging may hand back empty pages that still lead on, so it reads ten at most. It fails a search now and
+            // then, as Google says to expect, so a failed page is asked for once more before giving up.
+            var entries: [Entry] = [], page: String?, pages = 0, retried = false
+            while true {
+                let body = Body(resourceNames: names, filter: filter.joined(separator: " AND "), orderBy: "timestamp desc",
+                                pageSize: limit - entries.count, pageToken: page)
+                let answer: Entries
+                do { answer = try await service.at(host: "logging.googleapis.com").post(["v2", "entries:list"], body: body, as: Entries.self) }
+                catch ServiceError.status(let status, _) where status >= 500 && !retried {
+                    retried = true
+                    try await Task.sleep(for: .seconds(1))
+                    continue
+                }
                 pages += 1
-                let answer = try await service.at(host: "logging.googleapis.com").post(["v2", "entries:list"], body: Body(
-                    resourceNames: names, filter: filter.joined(separator: " AND "), orderBy: "timestamp desc", pageSize: limit - entries.count,
-                    pageToken: page), as: Entries.self)
                 entries += answer.entries ?? []
                 page = answer.nextPageToken
-            } while page != nil && entries.count < limit && pages < 10
-            let text = entries.isEmpty ? "No audit log entries match." : entries.prefix(30).map { entry in
+                if page == nil || entries.count >= limit || pages >= 10 { break }
+            }
+            // Pages left unread mean entries may still be there, older ones at least.
+            let unfinished = page != nil && entries.count < limit
+            if unfinished {
+                note += "\nLogging did not finish searching the whole time window, so older entries may be missing; narrow it with since and until, or by principal, method or resource."
+            }
+            let text = entries.isEmpty ? (unfinished ? "No audit log entries were found." : "No audit log entries match.") + note : entries.prefix(30).map { entry in
                 let payload = entry.protoPayload
                 var line = "\(entry.timestamp ?? "?") \(payload?.methodName ?? "?")"
                 if let who = payload?.authenticationInfo?.principalEmail { line += " by \(who)" }

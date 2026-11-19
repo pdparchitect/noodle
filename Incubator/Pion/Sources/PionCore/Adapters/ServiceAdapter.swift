@@ -93,8 +93,10 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     case rejected(String?)
     /// The service accepted the credentials, but they may not do this (HTTP 403), saying why when it did.
     case forbidden(String?)
-    case rateLimited
-    case status(Int)
+    /// Too many requests (HTTP 429), saying why when it did, such as which quota of which project ran out.
+    case rateLimited(String? = nil)
+    /// Any other failure, with the service's reason when it gave one.
+    case status(Int, String? = nil)
     case unreadable
     case input(String)
     /// The service answered, but refused or failed the request, saying why.
@@ -109,8 +111,9 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
         case .forbidden(let reason):
             "The service accepted this connection's credentials, but they may not do this\(reason.map { " (it said: \($0))" } ?? ""). "
                 + "Ask the person to check the permissions they were given, and the organisation, project or account the connection names, in Settings › Tools."
-        case .rateLimited: "The service is rate limiting requests (HTTP 429). Wait before trying again, and make fewer requests."
-        case .status(let status): "The service could not answer (HTTP \(status))."
+        case .rateLimited(let reason):
+            "The service is rate limiting requests (HTTP 429)\(reason.map { "; it said: \($0)" } ?? ""). Wait before trying again, and make fewer requests."
+        case .status(let status, let reason): "The service could not answer (HTTP \(status))\(reason.map { "; it said: \($0)" } ?? "")."
         case .unreadable: "The service answered with something that could not be read."
         case .input(let reason): reason
         case .refused(let reason): "The service refused the request: \(reason)"
@@ -452,10 +455,10 @@ public struct ServiceClient: Sendable {
         case 401: throw ServiceError.rejected(Self.reason(data))
         case 403: throw ServiceError.forbidden(Self.reason(data))
         case 404: throw ServiceError.notFound
-        case 429: throw ServiceError.rateLimited
+        case 429: throw ServiceError.rateLimited(Self.reason(data))
         // A request turned down for what it asked, or for the service's own state, with the service's reason.
         case 400, 409, 412, 422: throw Self.reason(data).map(ServiceError.refused) ?? ServiceError.status(response.statusCode)
-        default: throw ServiceError.status(response.statusCode)
+        default: throw ServiceError.status(response.statusCode, Self.reason(data))
         }
     }
 }

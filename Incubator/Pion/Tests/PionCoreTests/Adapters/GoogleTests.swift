@@ -66,8 +66,9 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(searches.count, 2, "the second page was not read")
         let body = try json(searches.first)
         XCTAssertEqual(body["resourceNames"] as? [String], ["organizations/123456789", "projects/kestrel-prod"], "a live project's logs were left out, or a deleted one's put in")
+        // Named logs, which Logging finds by index, rather than a search through every log's name.
         XCTAssertEqual(body["filter"] as? String,
-            #"logName:"cloudaudit.googleapis.com" AND protoPayload.authenticationInfo.principalEmail="mallory@kestrel.example" AND timestamp>="2026-11-13T00:00:00Z""#)
+            #"(log_id("cloudaudit.googleapis.com/activity") OR log_id("cloudaudit.googleapis.com/data_access") OR log_id("cloudaudit.googleapis.com/system_event") OR log_id("cloudaudit.googleapis.com/policy") OR log_id("cloudaudit.googleapis.com/access_transparency")) AND protoPayload.authenticationInfo.principalEmail="mallory@kestrel.example" AND timestamp>="2026-11-13T00:00:00Z""#)
         XCTAssertEqual(body["orderBy"] as? String, "timestamp desc")
         XCTAssertEqual(body["pageSize"] as? Int, 20)
         XCTAssertEqual(try json(searches.dropFirst().first)["pageToken"] as? String, "page-2")
@@ -81,6 +82,40 @@ final class GoogleTests: XCTestCase {
 
         let bad = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"principal":"x\" OR \"y"}"#, on: service, in: cloud)
         XCTAssertTrue(bad.isError)
+    }
+
+    func testAnAuditLogSearchLoggingDidNotFinishIsNotTakenForNoEntries() async throws {
+        // Logging hands back empty pages that still lead on while a search runs long; ten of them is not "none".
+        let service = FakeService()
+        service.sequences["/v2/entries:list"] = Array(repeating: (200, #"{"nextPageToken":"more"}"#), count: 10)
+        let logs = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"since":"2026-11-19T00:00:00Z"}"#, on: service, in: project)
+        XCTAssertFalse(logs.isError, logs.text)
+        XCTAssertFalse(logs.text.contains("No audit log entries match"), logs.text)
+        XCTAssertTrue(logs.text.contains("did not finish"), logs.text)
+    }
+
+    func testAuditLogsTryAgainOnceWhenLoggingFailsAndSayWhatGoogleSaid() async throws {
+        let failed = (500, #"{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}"#)
+        let service = FakeService()
+        service.sequences["/v2/entries:list"] = [failed, (200, #"{"entries":[{"timestamp":"2026-11-19T09:00:00Z","protoPayload":{"methodName":"SetIamPolicy"}}]}"#)]
+        let logs = try await callTool(GoogleCloud.adapter, "audit-logs", "{}", on: service, in: project)
+        XCTAssertFalse(logs.isError, logs.text)
+        XCTAssertTrue(logs.text.contains("SetIamPolicy"), logs.text)
+
+        let down = FakeService()
+        down.sequences["/v2/entries:list"] = [failed, failed]
+        let failure = try await callTool(GoogleCloud.adapter, "audit-logs", "{}", on: down, in: project)
+        XCTAssertTrue(failure.isError)
+        XCTAssertTrue(failure.text.contains("HTTP 500") && failure.text.contains("Internal error encountered."), failure.text)
+        XCTAssertEqual(down.requests.count, 2, "a failure was tried more than once again")
+
+        // A quota names itself and the project it counts against, which is what the person can raise.
+        let limited = FakeService()
+        limited.answers["/v1/projects/kestrel-prod:analyzeIamPolicy"] = (429, #"{"error":{"code":429,"message":"Quota exceeded for quota metric 'AnalyzeIamPolicy requests' and limit 'AnalyzeIamPolicy requests per minute' of service 'cloudasset.googleapis.com' for consumer 'project_number:604757830675'.","status":"RESOURCE_EXHAUSTED"}}"#)
+        let access = try await callTool(GoogleCloud.adapter, "iam-policies", #"{"member":"mallory@kestrel.example"}"#, on: limited, in: project)
+        XCTAssertTrue(access.isError)
+        XCTAssertTrue(access.text.contains("HTTP 429") && access.text.contains("for consumer 'project_number:604757830675'"), access.text)
+        XCTAssertEqual(limited.requests.count, 1, "a quota was spent again at once")
     }
 
     func testSecurityCommandCenterFindings() async throws {
