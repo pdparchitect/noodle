@@ -151,6 +151,23 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(service.requests.first?.url?.host, "securitycenter.googleapis.com")
     }
 
+    func testCloudsTriggerFindsHighAndCriticalFindingsSinceATime() async throws {
+        let service = FakeService()
+        service.answers["/v2/organizations/123456789/sources/-/findings"] = (200, #"{"listFindingsResults":[{"finding":{"name":"organizations/123456789/sources/1/findings/f2","eventTime":"2026-11-19T09:14:22.500Z"}},{"finding":{"name":"organizations/123456789/sources/1/findings/f1","eventTime":"2026-11-19T09:11:00Z"}}]}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let findings = try await GoogleCloud.adapter.alerts(since: since, connection: cloud, access: service)
+        XCTAssertEqual(findings.map(\.id), ["organizations/123456789/sources/1/findings/f2", "organizations/123456789/sources/1/findings/f1"])
+        let query = queryItems(service.requests.last)
+        XCTAssertEqual(query["filter"], #"state="ACTIVE" AND (severity="HIGH" OR severity="CRITICAL") AND event_time>="2026-11-19T09:00:00Z""#)
+        XCTAssertEqual(query["pageSize"], String(ServiceAlert.most))
+        XCTAssertEqual(GoogleCloud.adapter.watchedTool, "scc-findings")
+        XCTAssertNil(GoogleWorkspace.adapter.watchedTool)
+
+        // The window a wake names can be read back with the findings operation.
+        _ = try await callTool(GoogleCloud.adapter, "scc-findings", #"{"since":"2026-11-19T09:00:00Z"}"#, on: service, in: cloud)
+        XCTAssertEqual(queryItems(service.requests.last)["filter"], #"state="ACTIVE" AND (severity="CRITICAL" OR severity="HIGH") AND event_time>="2026-11-19T09:00:00Z""#)
+    }
+
     func testWhoHasAccessAndWhereAResourceIsThroughCloudAssetsReadOnlyMethods() async throws {
         let service = FakeService()
         service.answers["/v1/projects/kestrel-prod:analyzeIamPolicy"] = (200, #"""

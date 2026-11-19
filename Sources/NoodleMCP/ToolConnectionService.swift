@@ -528,6 +528,16 @@ public actor ToolConnectionService {
         return .header("Authorization", "Bearer " + token)
     }
 
+    /// Reaches an adapted connection's service with its credentials for the app's own use, such as checking it for
+    /// something new, rather than for a bot's call. Fails as a call would when the connection needs signing in again.
+    public func access(for connection: ToolConnection) async throws -> ToolConnectionAccess {
+        let epoch = epochs[connection.id, default: 0], deadline = Date().addingTimeInterval(30)
+        let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
+        let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
+        try checkActive(connection.id, epoch: epoch, deadline: deadline)
+        return ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+    }
+
     /// A connection the app's adapter answers: its tools and calls come from the adapter, which reaches the
     /// service with the connection's credentials, if it has any.
     private func adapt(_ request: MCPBridgeRequest, adapter name: String, connection: ToolConnection, epoch: Int,

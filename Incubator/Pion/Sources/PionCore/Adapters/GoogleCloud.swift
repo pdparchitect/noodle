@@ -38,7 +38,8 @@ public enum GoogleCloud {
         "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect** and sign in.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [AuditLogs(), Findings(), IAMPolicies(), FindResources()])
+    public static let adapter = OperationAdapter(operations: [AuditLogs(), Findings(), IAMPolicies(), FindResources()],
+                                                 trigger: SevereFindings())
 
     /// The account's scope, such as organizations/123456789012.
     static func scope(_ service: ServiceClient) throws -> (level: String, id: String) {
@@ -191,13 +192,32 @@ extension GoogleCloud {
         }
     }
 
+    /// New or recurring high and critical Security Command Center findings across the scope.
+    struct SevereFindings: ServiceTrigger {
+        var tool: String { Findings.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            let scope = try GoogleCloud.scope(service)
+            struct Finding: Decodable { let name: String?; let eventTime: String? }
+            struct Result: Decodable { let finding: Finding? }
+            struct Answer: Decodable { let listFindingsResults: [Result]? }
+            let filter = #"state="ACTIVE" AND (severity="HIGH" OR severity="CRITICAL") AND event_time>=""# + ISO8601DateFormatter().string(from: since) + "\""
+            return try await service.at(host: "securitycenter.googleapis.com").get(["v2", scope.level, scope.id, "sources", "-", "findings"],
+                query: ["filter": filter, "orderBy": "event_time desc", "pageSize": String(ServiceAlert.most)], as: Answer.self)
+                .listFindingsResults?.compactMap { result in
+                    guard let name = result.finding?.name, let time = ServiceAlert.time(result.finding?.eventTime) else { return nil }
+                    return ServiceAlert(id: name, time: time)
+                } ?? []
+        }
+    }
+
     struct Findings: ServiceOperation {
-        struct Input: Decodable, Sendable { let severities: [String]?, category: String?, limit: Int? }
+        struct Input: Decodable, Sendable { let severities: [String]?, category: String?, since: String?, limit: Int? }
         static let name = "scc-findings"
-        static let summary = "Active Security Command Center findings, newest first, by severity and category, with the resource each concerns."
+        static let summary = "Active Security Command Center findings, newest first, by severity, category and time, with the resource each concerns."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW"]), "Severities. Critical and high when left out."),
             "category": .string("A finding category, such as PUBLIC_BUCKET_ACL or Persistence: IAM Anomalous Grant."),
+            "since": .string("The earliest time each was last seen, in ISO 8601."),
             "limit": .integer("How many findings, at most.", minimum: 1, maximum: 100),
         ])
 
@@ -206,6 +226,7 @@ extension GoogleCloud {
             let severities = try (input.severities ?? ["CRITICAL", "HIGH"]).map { try ServiceInput.oneOf($0, ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "severity") }
             var filter = [#"state="ACTIVE""#, "(" + severities.map { "severity=\"\($0)\"" }.joined(separator: " OR ") + ")"]
             if let category = input.category { filter.append("category=" + (try GoogleCloud.quoted(category, "the category"))) }
+            if let since = input.since { filter.append("event_time>=\"\(try ServiceInput.time(since))\"") }
             let limit = input.limit ?? 25
             guard (1...100).contains(limit) else { throw ServiceError.input("Ask for between 1 and 100 findings.") }
             struct Finding: Codable { let name: String?, category: String?, severity: String?, state: String?, eventTime: String?, resourceName: String?, externalUri: String? }

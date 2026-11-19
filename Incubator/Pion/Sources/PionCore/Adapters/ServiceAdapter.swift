@@ -72,6 +72,31 @@ public extension ServiceOperation {
     static var readOnly: Bool { true }
 }
 
+/// Something new and serious a service raised, with only what tells it from the rest: its own ID and when.
+public struct ServiceAlert: Sendable, Equatable {
+    public let id: String
+    public let time: Date
+    public init(id: String, time: Date) { self.id = id; self.time = time }
+
+    /// The most one check reads; a burst that fills it is said to be more.
+    public static let most = 500
+
+    /// A service's time to the whole second, however many digits of a second it gives: Microsoft gives seven,
+    /// which the ISO 8601 parser does not take.
+    static func time(_ value: String?) -> Date? {
+        value.flatMap { ISO8601DateFormatter().date(from: $0.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)) }
+    }
+}
+
+/// What an adapter watches: its service's own feed of new and serious things, such as high alerts, read the same way
+/// for every account so nothing about it is set up. One per adapter, though it may read several of the service's feeds.
+public protocol ServiceTrigger: Sendable {
+    /// The adapter's operation that reads what it finds in full, which the wake names.
+    var tool: String { get }
+    /// What is serious from `since` on, at most `ServiceAlert.most` of it, newest first.
+    func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert]
+}
+
 /// What an operation gives back: a sentence or two for the bot to read, and the fields it kept, as JSON.
 public struct ServiceResult: Sendable {
     let text: String
@@ -472,9 +497,25 @@ public struct OperationAdapter: ToolConnectionAdapter {
         let run: @Sendable (Data, ServiceClient) async throws -> ServiceResult
     }
     private let entries: [(name: String, entry: Entry)]
+    private let trigger: (any ServiceTrigger)?
 
-    public init(operations: [any ServiceOperation]) {
+    public init(operations: [any ServiceOperation], trigger: (any ServiceTrigger)? = nil) {
         entries = operations.map { Self.entry($0) }
+        self.trigger = trigger
+    }
+
+    /// The operation that reads what its trigger finds, if its service has a feed of new and serious things to watch;
+    /// a lookup service has none.
+    public var watchedTool: String? { trigger?.tool }
+
+    /// What the service raised from `since` on, as its trigger finds it, or nothing for an adapter without one.
+    public func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
+        try await alerts(since: since, connection: connection, access: access as any ServiceAccess)
+    }
+
+    func alerts(since: Date, connection: ToolConnection, access: any ServiceAccess) async throws -> [ServiceAlert] {
+        guard let trigger else { return [] }
+        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
     }
 
     private static func entry<Operation: ServiceOperation>(_ operation: Operation) -> (name: String, entry: Entry) {

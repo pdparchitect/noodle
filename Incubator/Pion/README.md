@@ -101,6 +101,8 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **An Audit Log** of every change to the case, only ever added to.
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
+- **Woken by alerts**: new high alerts in Microsoft Defender XDR and Google Cloud wake the
+  agents those tools are assigned to, who read them and decide how far to look.
 - **Read-only lookups**: agents investigate; changes to a system are yours to make.
 - **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
 - **Restricted by default**: each agent works in a sandbox of its own on your Mac.

@@ -92,6 +92,8 @@ import UniformTypeIdentifiers
     private let tools = ToolProviderRegistry()
     private let toolAssignments = ToolAssignmentStore()
     private var loop: Task<Void, Never>?
+    /// Checks the tools that have alerts to watch, every few minutes, and wakes the agents they are assigned to.
+    private var alertLoop: Task<Void, Never>?
     private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
     private(set) var pinnedIDs: [UUID] = []
@@ -193,6 +195,17 @@ import UniformTypeIdentifiers
         running = true
         // As in Noodle: agents that sleep stopped start again as the Mac wakes.
         wakeObserver = runtime.reconcileOnWake(agents: { [weak self] in self?.agents ?? [] }, repository: repository)
+        let watcher = AlertWatcher(file: repository.rootURL.appendingPathComponent("alert-watch.json"), service: connectionsController.service)
+        alertLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let (accounts, keeping) = self?.watchedAccounts() else { return }
+                await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
+                    guard let self else { return }
+                    self.runtime.wake(id, note: note, repository: self.repository)
+                }
+                try? await Task.sleep(for: AlertWatcher.interval)
+            }
+        }
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -208,6 +221,8 @@ import UniformTypeIdentifiers
     func stop() {
         loop?.cancel()
         loop = nil
+        alertLoop?.cancel()
+        alertLoop = nil
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
         toolBroker?.stop()
@@ -215,6 +230,20 @@ import UniformTypeIdentifiers
         messenger.stop()
         runtime.stopAll()
         running = false
+    }
+
+    /// The accounts whose alerts Pion watches: of a service with a feed to watch, assigned to agents, and signed in, with
+    /// those agents. Those assigned but not signed in are kept to pick up where they stopped once they are again.
+    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
+        let registry = connectionsController.registry
+        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
+        for connection in registry.connections where AlertWatcher.watches(connection.adapter) {
+            let holders = agents.map(\.id).filter { registry.assignments[$0.uuidString]?.contains(connection.id) == true }
+            guard !holders.isEmpty else { continue }
+            keeping.insert(connection.id)
+            if connectionsController.status(of: connection) == .connected { accounts.append((connection, holders)) }
+        }
+        return (accounts, keeping)
     }
 
     /// The conversation Pion opens on: the one it was left on, while it is still there, or else the one with the latest

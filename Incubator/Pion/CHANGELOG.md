@@ -4,6 +4,8 @@
 
 ### Added
 
+- New high alerts wake the agents a tool is assigned to: Pion checks Microsoft Defender XDR's alerts and Google Cloud's Security Command Center findings every five minutes with the account's own sign-in, and tells the agents only where to look and the time window, so they read the alerts themselves and decide how far to go. An account starts from when it is first watched, so its past alerts are not news.
+- Google Cloud's Security Command Center findings can be listed from a time on.
 - `scripts/scenario.sh --shots` photographs the window over a picture of your choosing with `--background`, its frosted glass showing the picture through as on a desktop, and `--margin` sets how much of the picture shows around it.
 - View › Sidebar › Show Tools lists your tool connections at the foot of the sidebar as flat icons in the text colour, light or dark to match the window, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out.
 - Unread conversations carry Noodle's blue dot in the sidebar, beside agents, groups and Investigations alike; a muted group's is dimmed.

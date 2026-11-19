@@ -24,10 +24,23 @@ public enum Defender {
         "One app can serve both Defender XDR and Entra ID when it has both sets of permissions.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Alerts(), Incidents(), Hunt()])
+    public static let adapter = OperationAdapter(operations: [Alerts(), Incidents(), Hunt()], trigger: HighAlerts())
 }
 
 extension Defender {
+    /// New high-severity alerts, the highest Defender gives. Incidents only gather alerts, so they are not read too.
+    struct HighAlerts: ServiceTrigger {
+        var tool: String { Alerts.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            struct Alert: Decodable { let id: String; let createdDateTime: String? }
+            let filter = "severity eq 'high' and createdDateTime ge " + ISO8601DateFormatter().string(from: since)
+            return try await service.get(["security", "alerts_v2"], query: ["$filter": filter, "$top": String(ServiceAlert.most)],
+                                         as: Graph.List<Alert>.self).value
+                .compactMap { alert in ServiceAlert.time(alert.createdDateTime).map { ServiceAlert(id: alert.id, time: $0) } }
+                .sorted { $0.time > $1.time }
+        }
+    }
+
     struct Alerts: ServiceOperation {
         struct Input: Decodable, Sendable { let severity: String?, status: String?, since: String?, limit: Int? }
         static let name = "alerts"

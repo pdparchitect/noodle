@@ -44,4 +44,18 @@ final class DefenderTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    func testItsTriggerFindsHighAlertsSinceATime() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/security/alerts_v2"] = (200, #"{"value":[{"id":"a2","createdDateTime":"2026-11-19T09:14:22.1234567Z"},{"id":"a1","createdDateTime":"2026-11-19T09:11:00Z"}]}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let alerts = try await Defender.adapter.alerts(since: since, connection: defender, access: service)
+        XCTAssertEqual(alerts.map(\.id), ["a2", "a1"])
+        XCTAssertEqual(alerts.first?.time, ISO8601DateFormatter().date(from: "2026-11-19T09:14:22Z"))
+        let query = queryItems(service.requests.last)
+        XCTAssertEqual(query["$filter"], "severity eq 'high' and createdDateTime ge 2026-11-19T09:00:00Z")
+        XCTAssertEqual(query["$top"], String(ServiceAlert.most))
+        XCTAssertEqual(Defender.adapter.watchedTool, "alerts", "The tool that reads them in full")
+        XCTAssertNil(VirusTotal.adapter.watchedTool, "A lookup has nothing to watch")
+    }
 }
