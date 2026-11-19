@@ -62,6 +62,7 @@ private struct SidebarList: View {
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
+    @AppStorage(SidebarTools.key) private var showsTools = false
     @Binding var kickRequest: AgentKickRequest?
     @Binding var newSessionAgent: AgentRecord?
     let searchIsFocused: Bool
@@ -84,6 +85,7 @@ private struct SidebarList: View {
                         grid("Unread", sections.unread)
                         grid("Bots", sections.bots)
                         grid("Groups", sections.groups)
+                        if showsTools { SidebarTools(controller: store.connectionsController, inList: false) }
                     }
                     .padding(.horizontal, 10)
                     .padding(.bottom, 10)
@@ -95,6 +97,7 @@ private struct SidebarList: View {
                     section("Unread", sections.unread)
                     section("Bots", sections.bots)
                     section("Groups", sections.groups)
+                    if showsTools { SidebarTools(controller: store.connectionsController, inList: true) }
                 }
                 .listStyle(.sidebar)
             }

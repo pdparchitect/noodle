@@ -569,7 +569,7 @@ struct MainWindowLayoutCommands: View {
 }
 
 /// View › Sidebar: how the sidebar shows bots and groups, the line under each name, their order, which tasks it lists,
-/// and whether it has a space picker.
+/// and whether it has a space picker and the tools.
 struct SidebarCommands: View {
     @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @AppStorage(SidebarSpacePicker.key) private var showsSpacePicker = false
@@ -585,6 +585,7 @@ struct SidebarCommands: View {
             SidebarListPickers()
             Divider()
             Toggle("Space Picker", isOn: $showsSpacePicker)
+            SidebarToolsToggle()
         }
     }
 }

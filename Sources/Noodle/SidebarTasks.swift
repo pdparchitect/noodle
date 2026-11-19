@@ -1,6 +1,9 @@
+import AppKit
 import SwiftUI
 import HubLink
 import NoodleCore
+import NoodleRuntimeSettings
+import NoodleSettingsUI
 
 /// What the Tasks section needs from the app whose bots keep tasks.
 @MainActor protocol AgentTaskHost: AnyObject {
@@ -190,6 +193,151 @@ enum SidebarTimestamp {
         style = style.day().month(.abbreviated)
         if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
         return date.formatted(style)
+    }
+}
+
+/// The tool connections at the foot of the sidebar, as icons, when View › Sidebar › Show Tools is on: a red dot marks
+/// one waiting on the person to sign in or look at a failure. Clicking one shows where it stands and what to do,
+/// in a bubble, leaving the conversation open.
+struct SidebarTools: View {
+    static let key = "sidebarShowsTools"
+    let controller: ToolConnectionsController
+    /// In a list, a section; in the icon grid, icons under a title.
+    let inList: Bool
+    @State private var editing: ToolConnection?
+
+    var body: some View {
+        if !controller.registry.connections.isEmpty {
+            if inList {
+                Section {
+                    // One row for the whole grid; each icon is a button of its own.
+                    grid.selectionDisabled()
+                } header: {
+                    Text("Tools")
+                }
+            } else {
+                Text("Tools")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                    .accessibilityAddTraits(.isHeader)
+                grid
+            }
+        }
+    }
+
+    private var grid: some View {
+        ConversationIconGrid(minimumWidth: 56) {
+            ForEach(controller.registry.connections) { connection in
+                ToolTile(controller: controller, connection: connection, edit: { editing = $0 })
+            }
+        }
+        .padding(.vertical, 4)
+        .sheet(item: $editing) { ToolConnectionEditor(controller: controller, existing: $0).noodleSheetSizing() }
+    }
+}
+
+/// View › Sidebar › Show Tools.
+struct SidebarToolsToggle: View {
+    @AppStorage(SidebarTools.key) private var showsTools = false
+
+    var body: some View { Toggle("Show Tools", isOn: $showsTools) }
+}
+
+/// A tool connection's icon and name, marked when it needs the person, opening its bubble when clicked.
+private struct ToolTile: View {
+    let controller: ToolConnectionsController
+    let connection: ToolConnection
+    let edit: (ToolConnection) -> Void
+    @State private var shown = false
+
+    var body: some View {
+        let status = controller.status(of: connection)
+        Button { shown.toggle() } label: {
+            VStack(spacing: 3) {
+                ToolConnectionIcon(connection: connection, size: 30)
+                    .opacity(status == .managed ? 0.4 : 1)
+                    .overlay(alignment: .topTrailing) {
+                        if status.needsAttention {
+                            Circle().fill(Color.red).frame(width: 8, height: 8)
+                                .padding(1.5)
+                                .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                                .offset(x: 4, y: -4)
+                        } else if case .signingIn = status {
+                            ProgressView().controlSize(.mini).offset(x: 5, y: -5)
+                        }
+                    }
+                Text(connection.name)
+                    .font(.system(size: 10))
+                    .foregroundStyle(status.needsAttention ? Color.primary : Color.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(connection.name)
+        .accessibilityLabel(connection.name)
+        .accessibilityValue(status.needsAttention ? "Needs attention" : "")
+        .popover(isPresented: $shown, arrowEdge: .trailing) {
+            ToolBubble(controller: controller, connection: connection, status: status,
+                       edit: { shown = false; edit(connection) }, close: { shown = false })
+        }
+    }
+}
+
+/// Where a tool connection stands and what can be done about it, as Settings › Tools offers.
+private struct ToolBubble: View {
+    let controller: ToolConnectionsController
+    let connection: ToolConnection
+    let status: ToolConnectionStatus
+    let edit: () -> Void
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ToolConnectionIcon(connection: connection, size: 32)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(connection.name).font(.headline).lineLimit(2)
+                    ToolConnectionStatusLabel(status: status)
+                }
+            }
+            if case .failed(let reason) = status {
+                Text(reason).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            } else if case .signingIn(let stage) = status, !stage.isEmpty {
+                Text(stage).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if status != .managed {
+                HStack(spacing: 8) {
+                    if case .signingIn = status {
+                        Button("Cancel") { controller.cancelSignIn() }
+                    } else if connection.keepsSecret, connection.awsIdentityCenter == nil {
+                        // A token or client secret is entered in the editor, as in Settings › Tools.
+                        let what = connection.usesToken ? "Token" : "Credentials"
+                        Button(controller.isConnected(connection) ? "Change \(what)…" : "Enter \(what)…", action: edit)
+                            .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
+                            .disabled(controller.isSigningIn)
+                    } else {
+                        Button(controller.isConnected(connection) ? "Reconnect" : "Connect") { controller.connect(connection); close() }
+                            .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
+                            .disabled(controller.isSigningIn)
+                    }
+                    Button("Edit…", action: edit)
+                    Spacer(minLength: 0)
+                    if controller.isConnected(connection) {
+                        Button("Sign Out", role: .destructive) { controller.signOut(connection); close() }
+                    }
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(14)
+        .frame(width: 280)
     }
 }
 

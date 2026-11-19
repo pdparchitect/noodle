@@ -393,7 +393,6 @@ private struct FrostedWindowBackground: NSViewRepresentable {
 /// View › Background (Frosted or Solid, and the effect) and View › Sidebar, kept per person as Noodle keeps its view options.
 struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
-    @AppStorage(SidebarOptions.showsToolsKey) private var showsTools = false
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
 
@@ -419,7 +418,7 @@ struct ViewOptions: View {
         Menu("Conversation") { AttachmentLayoutChoices() }
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
-            Toggle("Show Tools", isOn: $showsTools)
+            SidebarToolsToggle()
             Divider()
             // Noodle's: the line under each name, the order and the agents' tasks.
             SidebarListPickers()
@@ -429,8 +428,6 @@ struct ViewOptions: View {
 
 enum SidebarOptions {
     static let showsClosedKey = "PionSidebarShowsClosed"
-    /// Whether the sidebar ends with the tool connections, to see at a glance which need signing in.
-    static let showsToolsKey = "PionSidebarShowsTools"
     /// How many closed Investigations the sidebar lists before offering more.
     static let closedShown = 5
 }
