@@ -399,7 +399,8 @@ struct MessageBubble: View {
         switch segment {
         case .text(let text, let source):
             // Links on the accent bubble are white and underlined; the link blue is unreadable on it.
-            MessageText(message: message, text: isUser ? Self.underliningLinks(text) : text, source: source)
+            MessageText(message: message, text: isUser ? Self.underliningLinks(text) : text, source: source,
+                        restyle: isUser ? Self.underliningLinks : { $0 })
                 .foregroundStyle(isUser ? .white : .primary)
                 .tint(isUser ? .white : nil)
                 .padding(.horizontal, 13)
@@ -418,7 +419,11 @@ struct MessageBubble: View {
 
     private static func underliningLinks(_ text: AttributedString) -> AttributedString {
         var text = text
-        for run in text.runs where run.link != nil { text[run.range].underlineStyle = .single }
+        // In the bubble's white, not the accent links take elsewhere, which would vanish on the accent bubble.
+        for run in text.runs where run.link != nil {
+            text[run.range].underlineStyle = .single
+            text[run.range].foregroundColor = nil
+        }
         return text
     }
 

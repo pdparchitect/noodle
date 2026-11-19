@@ -70,6 +70,7 @@ final class MessageMarkdownCache: @unchecked Sendable {
             interpretedSyntax: .inlineOnlyPreservingWhitespace,
             failurePolicy: .returnPartiallyParsedIfPossible
         )
+        let text = boldHeadings(text)
         var rendered = (try? AttributedString(markdown: text, options: options))
             ?? AttributedString(text)
         let allowedSchemes = Set(["http", "https", "mailto"])
@@ -90,6 +91,107 @@ final class MessageMarkdownCache: @unchecked Sendable {
             rendered[range].foregroundColor = .primary.opacity(0.65)
         }
         return rendered
+    }
+}
+
+/// One stretch of a message's prose, laid out on its own: paragraphs, lists and code each a block, so the space
+/// between any two is the same.
+enum MessageBlock {
+    case text(AttributedString)
+    case code(String)
+    /// Lines begun with "- ", "* ", "• " or a number, so wrapped lines can hang under the text, not the marker.
+    case list([MessageListItem])
+}
+
+struct MessageListItem {
+    /// A bullet, or the item's number written as "1.".
+    let marker: String
+    let text: AttributedString
+}
+
+extension MessageMarkdownCache {
+    private final class BlocksBox {
+        let value: [MessageBlock]
+        init(_ value: [MessageBlock]) { self.value = value }
+    }
+    nonisolated(unsafe) private static let blockCache: NSCache<NSString, BlocksBox> = {
+        let cache = NSCache<NSString, BlocksBox>()
+        cache.countLimit = 1_000
+        return cache
+    }()
+
+    /// `text` as blocks, kept so a redrawn message is not split again.
+    func blocks(_ text: String) -> [MessageBlock] {
+        if let cached = Self.blockCache.object(forKey: text as NSString) { return cached.value }
+        let blocks = Self.blocks(text)
+        Self.blockCache.setObject(BlocksBox(blocks), forKey: text as NSString)
+        return blocks
+    }
+
+    /// Code, paragraphs and lists, each a block of its own: a blank line between paragraphs, the start of a list and its
+    /// end all read as one step.
+    static func blocks(_ text: String) -> [MessageBlock] {
+        var result: [MessageBlock] = [], lines: [Substring] = [], items: [MessageListItem] = [], inCode = false
+        func flushText() {
+            let joined = lines.joined(separator: "\n")
+            if inCode { result.append(.code(joined)) }
+            else if !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                result.append(.text(render(joined.trimmingCharacters(in: .newlines))))
+            }
+            lines = []
+        }
+        func flushList() {
+            if !items.isEmpty { result.append(.list(items)) }
+            items = []
+        }
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                flushList(); flushText(); inCode.toggle()
+            } else if inCode {
+                lines.append(line)
+            } else if trimmed.isEmpty {
+                flushList(); flushText()
+            } else if let item = listItem(trimmed) {
+                flushText(); items.append(item)
+            } else {
+                flushList(); lines.append(line)
+            }
+        }
+        flushList(); flushText()
+        return result
+    }
+
+    /// A line that starts a list item: a dash, star or bullet, or a number followed by "." or ")", then a space.
+    private static func listItem(_ line: String) -> MessageListItem? {
+        if let first = line.first, "-*•".contains(first), line.dropFirst().first == " " {
+            let rest = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
+            return rest.isEmpty ? nil : MessageListItem(marker: "•", text: render(rest))
+        }
+        let digits = line.prefix { $0.isNumber }
+        guard !digits.isEmpty, digits.count <= 3 else { return nil }
+        let after = line.dropFirst(digits.count)
+        guard let mark = after.first, mark == "." || mark == ")", after.dropFirst().first == " " else { return nil }
+        let rest = after.dropFirst(2).trimmingCharacters(in: .whitespaces)
+        return rest.isEmpty ? nil : MessageListItem(marker: digits + ".", text: render(rest))
+    }
+
+    /// Markdown headings as bold lines of their own, rather than large type that breaks a conversation's flow. A "#"
+    /// with no space after it, as in a hashtag, stays as written, and nothing changes inside code.
+    static func boldHeadings(_ text: String) -> String {
+        guard text.contains("#") else { return text }
+        var inCode = false
+        return text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") { inCode.toggle(); return String(line) }
+            let hashes = trimmed.prefix { $0 == "#" }
+            guard !inCode, (1...6).contains(hashes.count), trimmed.dropFirst(hashes.count).first == " " else { return String(line) }
+            var title = trimmed.dropFirst(hashes.count).trimmingCharacters(in: .whitespaces)
+            // A closing run of hashes, as "## Title ##", is part of the syntax too.
+            while title.hasSuffix("#") { title.removeLast() }
+            title = title.trimmingCharacters(in: .whitespaces)
+            return title.isEmpty ? String(line) : "**\(title)**"
+        }.joined(separator: "\n")
     }
 }
 

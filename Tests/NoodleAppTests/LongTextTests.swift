@@ -5,6 +5,18 @@ import NoodleCore
 @testable import Noodle
 
 @MainActor final class LongTextTests: HiddenViewTests {
+    func testAMessageFoldsOnItsVisibleLinesNotItsBlankOnes() {
+        // A list with a few sections, as an agent writes it: 18 lines of text and blank lines between, well short of long.
+        let list = (1...4).map { section in "Section \(section):\n" + (1...3).map { "- item \($0)" }.joined(separator: "\n") }
+            .joined(separator: "\n\n") + "\n\nEnd."
+        XCTAssertFalse(LongTextPolicy.foldsMessage(list))
+        XCTAssertFalse(LongTextPolicy.foldsMessage(Array(repeating: "line", count: 20).joined(separator: "\n\n")))
+        XCTAssertTrue(LongTextPolicy.foldsMessage(Array(repeating: "line", count: 21).joined(separator: "\n")))
+        XCTAssertTrue(LongTextPolicy.foldsMessage(String(repeating: "é", count: 1_201)))
+        // Pasting keeps its own, stricter rule.
+        XCTAssertTrue(LongTextPolicy.requiresPreview(list))
+    }
+
     func testLongTextIncludesDocumentsAndManyShortLinesButNotOrdinaryMessages() {
         XCTAssertFalse(LongTextPolicy.requiresPreview("A short reply.\nWith a second line."))
         XCTAssertFalse(LongTextPolicy.requiresPreview(String(repeating: "é", count: 1_200)))

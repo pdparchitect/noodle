@@ -617,7 +617,7 @@ struct MessageBody: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(MessageBodyRenderer.shared.render(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
-                case .prose(let blocks): Prose(blocks: blocks, message: message)
+                case .prose(let blocks): MessageBlocksView(blocks: blocks, message: message)
                 case .table(let table): MarkdownTable(table: table, failed: failed)
                 }
             }
@@ -627,55 +627,6 @@ struct MessageBody: View {
     }
 }
 
-/// Prose with its code blocks set apart.
-private struct Prose: View {
-    let blocks: [MessageBodyRenderer.Block]
-    let message: ChatMessage?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .code(let text):
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        Text(text)
-                            .font(.system(size: 12, design: .monospaced))
-                            .padding(12)
-                    }
-                    .background(Color.secondary.opacity(0.09), in: .rect(cornerRadius: 10, style: .continuous))
-                case .text(let text):
-                    prose(text)
-                case .list(let items):
-                    // Wrapped lines hang under the item's text, not its marker, with a little air between items.
-                    // As wide as the longest number, so "10." fits and every item's text starts at the same place.
-                    let widest = items.map(\.marker.count).max() ?? 1
-                    let markerWidth: CGFloat = items.contains { $0.marker != "•" } ? 8 + CGFloat(widest) * 8 : 10
-                    VStack(alignment: .leading, spacing: 5) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(item.marker)
-                                    .font(.system(size: 14).monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize()
-                                    .frame(width: markerWidth, alignment: .trailing)
-                                prose(item.text)
-                            }
-                        }
-                    }
-                    .padding(.leading, 2)
-                }
-            }
-        }
-    }
-
-    private func prose(_ text: AttributedString) -> some View {
-        Text(text)
-            .font(.system(size: 14))
-            .lineSpacing(3.5)
-            .fixedSize(horizontal: false, vertical: true)
-            .background { if let message { ConversationAnnotationText(message: message) } }
-    }
-}
 
 /// A table in Pion's reading style, sorted by a click on a column as Noodle sorts, with Noodle's Copy and Save as CSV.
 private struct MarkdownTable: View {

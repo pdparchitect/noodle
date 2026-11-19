@@ -5,30 +5,43 @@ import HubLink
 
 /// A message's prose, or one stretch of it between tables.
 struct MessageText: View {
+    /// About eight lines of the bubble's text, which a folded message shows.
+    static let foldedHeight: CGFloat = 8 * (12.5 * 1.2 + 2)
     let message: ChatMessage
     let text: AttributedString
     let source: String
+    /// How the bubble restyles each block's text, as the accent bubble underlines its links.
+    var restyle: (AttributedString) -> AttributedString = { $0 }
     @State private var showingReader = false
 
     init(message: ChatMessage) {
         self.init(message: message, text: MessageMarkdownCache.shared.render(message), source: message.body)
     }
 
-    init(message: ChatMessage, text: AttributedString, source: String) {
+    init(message: ChatMessage, text: AttributedString, source: String, restyle: @escaping (AttributedString) -> AttributedString = { $0 }) {
         self.message = message
         self.text = text
         self.source = source
+        self.restyle = restyle
     }
 
     var body: some View {
-        let isLong = LongTextPolicy.requiresPreview(source)
+        let isLong = LongTextPolicy.foldsMessage(source)
         VStack(alignment: .leading, spacing: 8) {
-            Text(text)
-                .font(.system(size: 12.5))
-                .lineSpacing(2)
-                .lineLimit(isLong ? 8 : nil)
+            // Paragraphs, lists and code as Pion lays them out, at the bubble's size. A long one shows about its first
+            // eight lines, fading out, with the rest in the reader.
+            let blocks = MessageBlocksView(blocks: MessageMarkdownCache.shared.blocks(source).map { restyled($0) }, message: message,
+                                           size: 12.5, lineSpacing: 2, spacing: 6)
                 .textSelection(.enabled)
-                .background(ConversationAnnotationText(message: message))
+            if isLong {
+                blocks
+                    .frame(maxHeight: Self.foldedHeight, alignment: .top)
+                    .clipped()
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                                         startPoint: .top, endPoint: .bottom))
+            } else {
+                blocks
+            }
 
             if isLong {
                 Button { showingReader = true } label: {
@@ -40,9 +53,20 @@ struct MessageText: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Read full message")
                 .popover(isPresented: $showingReader, arrowEdge: .bottom) {
-                    MessageTextReader(message: message, text: text, close: { showingReader = false })
+                    MessageTextReader(message: message, text: text, source: source, close: { showingReader = false })
                 }
             }
+        }
+    }
+}
+
+extension MessageText {
+    /// A block with its text restyled as the bubble wants.
+    fileprivate func restyled(_ block: MessageBlock) -> MessageBlock {
+        switch block {
+        case .text(let text): .text(restyle(text))
+        case .code: block
+        case .list(let items): .list(items.map { MessageListItem(marker: $0.marker, text: restyle($0.text)) })
         }
     }
 }
@@ -50,6 +74,8 @@ struct MessageText: View {
 struct MessageTextReader: View {
     let message: ChatMessage
     let text: AttributedString
+    /// The message's own text, laid out in blocks; the reader always shows them, as it has the room.
+    var source: String? = nil
     let close: () -> Void
 
     var body: some View {
@@ -74,14 +100,20 @@ struct MessageTextReader: View {
             .padding(16)
             Divider()
             ScrollView {
-                Text(text)
-                    .font(.system(size: 14))
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-                    .background(ConversationAnnotationText(message: message))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18)
+                Group {
+                    if let source {
+                        MessageBlocksView(blocks: MessageMarkdownCache.shared.blocks(source), message: message, size: 14, lineSpacing: 4)
+                    } else {
+                        Text(text)
+                            .font(.system(size: 14))
+                            .lineSpacing(4)
+                            .background(ConversationAnnotationText(message: message))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
             }
         }
         .foregroundStyle(Color.primary)

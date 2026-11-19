@@ -86,7 +86,7 @@ import HubLink
 
     func testLongProseBesideATableStillFolds() async throws {
         let f = try fixture()
-        let prose = (1...20).map { "Finding \($0)." }.joined(separator: "\n")
+        let prose = (1...30).map { "Finding \($0)." }.joined(separator: "\n")
         let view = bubble(prose + "\n\n| A | B |\n|---|---|\n| 1 | 2 |", in: f)
         _ = try await control("Read full message", in: view)
         XCTAssertTrue(hasControl("Sort by A", in: view))
@@ -196,6 +196,30 @@ import HubLink
             XCTAssertEqual(grey(20, 20), 0.9, accuracy: 0.08, "the logo, from a \(background == 1 ? "light" : "dark") tile")
             XCTAssertEqual(grey(3, 3), 0.2, accuracy: 0.08, "the tile, from a \(background == 1 ? "light" : "dark") tile")
         }
+    }
+
+    func testHeadingsAreBoldLinesWithoutTheirHashes() {
+        let rendered = MessageMarkdownCache.render("# Evidence\nThe logs.\n## Next steps\n#hashtag stays as written")
+        XCTAssertEqual(String(rendered.characters), "Evidence\nThe logs.\nNext steps\n#hashtag stays as written")
+        let bold = rendered.runs.filter { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true }
+            .map { String(rendered[$0.range].characters) }
+        XCTAssertEqual(bold, ["Evidence", "Next steps"])
+        // Not inside code, where a # starts a comment.
+        let code = MessageMarkdownCache.blocks("```\n# a comment\n```")
+        guard case .code(let text) = code.first else { return XCTFail("\(code)") }
+        XCTAssertEqual(text, "# a comment")
+    }
+
+    func testNoodleSplitsMessagesIntoTheSameParagraphsListsAndCodeAsPion() {
+        let blocks = MessageMarkdownCache.blocks("Steps:\n- Revoke the session\n2) Reset the password\n\n```\nlet a = 1\n```")
+        func describe(_ block: MessageBlock) -> String {
+            switch block {
+            case .text(let text): "text: " + String(text.characters)
+            case .code(let code): "code: " + code
+            case .list(let items): "list: " + items.map { "\($0.marker) \(String($0.text.characters))" }.joined(separator: " | ")
+            }
+        }
+        XCTAssertEqual(blocks.map(describe), ["text: Steps:", "list: • Revoke the session | 2. Reset the password", "code: let a = 1"])
     }
 
     func testInlineCodeIsSmallerAndDimmerThanTheTextAroundIt() {

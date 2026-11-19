@@ -195,6 +195,26 @@ public enum AttachmentTransfer {
 }
 /// Keep pasted documents and long replies from taking over the conversation.
 public enum LongTextPolicy {
+    /// Whether a message folds to its first lines, with the rest in a reader: over 1,200 characters, or more than 20
+    /// lines with text on them. Blank lines between paragraphs and a list's short items are what make a message easy to
+    /// read, so they do not count against it as they do in a paste.
+    public static func foldsMessage(_ text: String) -> Bool {
+        var lines = 0, count = 0, lineHasText = false
+        for character in text {
+            count += 1
+            if count > 1_200 { return true }
+            if character.isNewline {
+                if lineHasText { lines += 1 }
+                lineHasText = false
+            } else if !character.isWhitespace {
+                lineHasText = true
+            }
+        }
+        if lineHasText { lines += 1 }
+        return lines > 20
+    }
+
+    /// Whether pasted text is long enough to go in as a file instead: over 1,200 characters or more than 12 lines.
     public static func requiresPreview(_ text: String) -> Bool {
         var lines = 1
         for (index, character) in text.enumerated() {
