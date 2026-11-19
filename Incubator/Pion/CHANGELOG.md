@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-19
+
 ### Added
 
 - The skill of each tool that wakes its agents for new alerts says what the `<pion-alerts>` note's parts mean and which tool reads the alerts.

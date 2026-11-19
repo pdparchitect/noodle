@@ -1,10 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.34.4] - 2026-11-19
+
 ### Changed
 
 - The Cancel and Done buttons in the background and icon sheets take your accent colour instead of a fixed blue.
-
 
 ## [0.34.3] - 2026-11-15
 

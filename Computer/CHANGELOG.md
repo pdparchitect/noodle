@@ -1,10 +1,12 @@
 # Noodle Computer changelog
 
 ## [Unreleased]
+
+## [0.33.11] - 2026-11-19
+
 ### Changed
 
 - The Cancel and Done buttons in the background and icon sheets take your accent colour instead of a fixed blue.
-
 
 ## [0.33.10] - 2026-11-15
 

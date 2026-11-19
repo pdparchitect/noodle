@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-11-19
+
 ### Added
 
 - The Usage window shows each bot's picture beside its name when grouped by bot; click it for the bot's profile, to start a new session, edit or suspend it.

@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.91.0] - 2026-11-19
+
 ### Added
 
 - `scripts/scenario.sh --shots` photographs the window over a picture of your choosing with `--background`, its frosted glass showing the picture through as on a desktop, and `--margin` sets how much of the picture shows around it.
