@@ -126,7 +126,8 @@ to the agents that should use it.
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
 Center and covers every account you are assigned; Google Cloud and Google Workspace sign
-in with your Google account.
+in with your Google account; GitHub signs in with a code, through an OAuth app your
+organisation registers.
 
 ## License
 

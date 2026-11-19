@@ -79,14 +79,84 @@ struct MCPOAuth {
                 "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
             }.joined(separator: "&").data(using: .utf8)
         }
-        let (data, response) = try await session.data(for: request, limit: 1_048_576, tooLarge: ToolConnectionServiceError.responseTooLarge)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let object = (try? JSONSerialization.jsonObject(with: data)) as? Object ?? [:]
+        let (status, object) = try await answer(to: request)
         if object["error"] as? String == "invalid_grant" || object["error"] as? String == "invalid_client" {
             throw ToolConnectionServiceError.signInRequired
         }
         guard (200..<300).contains(status) else { throw ToolConnectionServiceError.network(status) }
         return object
+    }
+
+    /// The status and JSON of the answer to `request`, whatever the status.
+    private func answer(to request: URLRequest) async throws -> (Int, Object) {
+        let (data, response) = try await session.data(for: request, limit: 1_048_576, tooLarge: ToolConnectionServiceError.responseTooLarge)
+        return ((response as? HTTPURLResponse)?.statusCode ?? 0, (try? JSONSerialization.jsonObject(with: data)) as? Object ?? [:])
+    }
+
+    /// A device sign-in under way: the code the person approves, where, and how often and until when to ask for the token.
+    struct DeviceApproval: Sendable {
+        let deviceCode: String
+        let userCode: String
+        let page: URL
+        let interval: Int
+        let expiresAt: Date
+    }
+
+    /// What a device sign-in's token exchange says while the person has not approved it yet.
+    enum DevicePending: Error { case waiting, slower }
+
+    /// Starts a device sign-in for `credentials`' client and scopes at `endpoint`.
+    func startDeviceApproval(_ credentials: MCPCredentials, at endpoint: URL) async throws -> DeviceApproval {
+        var form = ["client_id": credentials.clientID]
+        if let scope = credentials.scope { form["scope"] = scope }
+        let response = try await request(endpoint, form: form)
+        guard let deviceCode = response["device_code"] as? String, let userCode = Self.displayable(response["user_code"] as? String),
+              let page = (response["verification_uri_complete"] as? String ?? response["verification_uri"] as? String).flatMap(URL.init(string:)),
+              page.scheme == "https", let lifetime = response["expires_in"] as? Double, lifetime > 0 else {
+            throw ToolConnectionServiceError.invalidMetadata
+        }
+        return DeviceApproval(deviceCode: deviceCode, userCode: userCode, page: page,
+                              interval: max(1, response["interval"] as? Int ?? 5), expiresAt: Date().addingTimeInterval(lifetime))
+    }
+
+    /// Asks once for the token of an approved device sign-in. A service may say it is still waiting with any status,
+    /// as GitHub does with success; a token without a lifetime lasts until it is revoked, and scopes may come
+    /// separated by commas, as GitHub lists them.
+    func deviceToken(_ credentials: MCPCredentials, approval: DeviceApproval, configuration: MCPOAuthConfiguration?) async throws -> MCPCredentials {
+        _ = try ToolConnection.validatedEndpoint(credentials.tokenEndpoint)
+        var request = URLRequest(url: credentials.tokenEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        request.httpBody = ["client_id": credentials.clientID, "device_code": approval.deviceCode,
+                            "grant_type": "urn:ietf:params:oauth:grant-type:device_code"]
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)" }.joined(separator: "&").data(using: .utf8)
+        let (status, response) = try await answer(to: request)
+        switch response["error"] as? String {
+        case "authorization_pending": throw DevicePending.waiting
+        case "slow_down": throw DevicePending.slower
+        case "expired_token": throw ToolConnectionError.message("The code expired before it was approved. Connect again.")
+        case let code?:
+            throw ToolConnectionServiceError.authorizationRefused(code: Self.displayable(code) ?? "error",
+                                                                  reason: Self.displayable(response["error_description"] as? String))
+        case nil: break
+        }
+        guard (200..<300).contains(status) else { throw ToolConnectionServiceError.network(status) }
+        guard let token = response["access_token"] as? String, !token.isEmpty,
+              (response["token_type"] as? String)?.lowercased() == "bearer" else { throw ToolConnectionServiceError.invalidMetadata }
+        let granted = (response["scope"] as? String).map {
+            $0.split(whereSeparator: { $0 == "," || $0 == " " }).joined(separator: " ")
+        } ?? credentials.scope
+        if let configuration, !Set(configuration.scopes).isSubset(of: Set((granted ?? "").split(separator: " ").map(String.init))) {
+            throw ToolConnectionServiceError.signInRequired
+        }
+        var result = credentials
+        result.accessToken = token
+        result.refreshToken = response["refresh_token"] as? String
+        result.expiresAt = (response["expires_in"] as? Double).flatMap { $0 > 0 ? Date().addingTimeInterval($0) : nil } ?? .distantFuture
+        return result
     }
 
     /// `authorizationServer` comes from the catalogue, for services that publish no

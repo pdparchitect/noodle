@@ -96,6 +96,12 @@ private final class FixtureState: @unchecked Sendable {
     /// Whether the next device-code exchange is still waiting for approval, and whether a refresh is refused.
     var ssoPending = true
     var ssoRefuseRefresh = false
+    /// What the device sign-in stand-in was asked for codes and tokens, whether its next exchange still waits, and the
+    /// scopes it grants, comma-separated as GitHub lists them.
+    var deviceRequests: [String] = []
+    var deviceGrants: [String] = []
+    var devicePending = true
+    var deviceScope = "read:org,security_events"
     /// The headers of every request an adapter made to its service.
     var adapterHeaders: [[String: String]] = []
     /// The query of every request, adapter's or MCP, by path.
@@ -148,6 +154,15 @@ private final class FixtureState: @unchecked Sendable {
                 revocations.append((request.httpMethod ?? "", request.url!.path, request.allHTTPHeaderFields ?? [:],
                                     String(data: Self.body(request), encoding: .utf8) ?? ""))
                 return (revocationStatus, revocationStatus == 200 ? [:] : ["error": "server_error"])
+            case "/login/device/code":
+                deviceRequests.append(String(data: Self.body(request), encoding: .utf8) ?? "")
+                return (200, ["device_code": "device-code", "user_code": "WDJB-MJHT", "verification_uri": "https://service.example/login/device",
+                              "expires_in": 900, "interval": 1])
+            case "/login/oauth/access_token":
+                deviceGrants.append(String(data: Self.body(request), encoding: .utf8) ?? "")
+                // As GitHub answers, a sign-in still waiting is a success carrying an error.
+                if devicePending { devicePending = false; return (200, ["error": "authorization_pending"]) }
+                return (200, ["access_token": "device-token", "token_type": "bearer", "scope": deviceScope])
             case "/token" where request.url!.host == "oauth2.googleapis.com":
                 googleExchanges.append(String(data: Self.body(request), encoding: .utf8) ?? "")
                 return (200, ["access_token": "google-access-\(googleExchanges.count)", "token_type": "Bearer", "expires_in": 3599])
@@ -907,6 +922,62 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertThrowsError(try ToolConnection(name: "Both", endpoint: record.endpoint, tokenHeader: "x-key", awsIdentityCenter: center))
         XCTAssertThrowsError(try ToolConnection(name: "Bad", endpoint: record.endpoint, awsIdentityCenter: ConnectionAWSIdentityCenter(
             startURL: URL(string: "https://example.com/start")!, role: "SecurityAudit", region: "eu-west-1")))
+    }
+
+    func testAnAppsOwnLookupSignsInWithACodeThroughTheOrganisationsOwnClient() async throws {
+        let code = ToolDefinition(id: "code", name: "Code", summary: "Code.", defaultInstructions: "Read.", iconName: "code",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/{org}",
+                fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel", kind: .identifier),
+                         ToolField(key: "clientID", title: "Client ID", placeholder: "Ov23abc", kind: .identifier)],
+                oauth: MCPOAuthConfiguration(issuer: URL(string: "https://service.example")!,
+                    authorizationEndpoint: URL(string: "https://service.example/login/oauth/authorize")!,
+                    tokenEndpoint: URL(string: "https://service.example/login/oauth/access_token")!, clients: [],
+                    scopes: ["read:org", "security_events"], usesResourceIndicator: false,
+                    deviceAuthorizationEndpoint: URL(string: "https://service.example/login/device/code")!),
+                oauthClientField: "clientID", adapter: "lookup")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [code])
+        // The organisation is in its address, so its entry is found from the account rather than the address.
+        let record = try code.makeConnection(name: "Code", values: ["org": "v3", "clientID": "Ov23abc"])
+        XCTAssertTrue(ToolConnectionService.signsInWithCode(record))
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(record))
+        let adapter = LookupAdapter()
+        let client = service(vault: TestVault())
+        await client.useAdapters(["lookup": adapter])
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "file", arguments: Data("{}".utf8))
+        do { _ = try await client.perform(call, connection: record); XCTFail("answered before signing in") }
+        catch ToolConnectionServiceError.signInRequired {}
+
+        let shown = ShownApproval()
+        try await client.signInWithCode(record) { code, page in shown.record(code, page) }
+        let state = FixtureProtocol.state
+        XCTAssertEqual(shown.values.map(\.code), ["WDJB-MJHT"])
+        XCTAssertEqual(shown.values.first?.page.absoluteString, "https://service.example/login/device")
+        XCTAssertEqual(state.deviceRequests.count, 1)
+        XCTAssertTrue(state.deviceRequests[0].contains("client_id=Ov23abc"), state.deviceRequests[0])
+        XCTAssertTrue(state.deviceRequests[0].contains("scope=read%3Aorg%20security_events"), state.deviceRequests[0])
+        XCTAssertEqual(state.deviceGrants.count, 2, "it asked again after the first was still waiting")
+        XCTAssertTrue(state.deviceGrants.allSatisfy { $0.contains("device_code=device-code") && $0.contains("urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code") })
+        let saved = await client.hasCredentials(record.id); XCTAssertTrue(saved)
+
+        // A token without a lifetime lasts until it is revoked, so using it asks for nothing more.
+        _ = try await client.perform(call, connection: record)
+        _ = try await client.perform(call, connection: record)
+        XCTAssertEqual(state.adapterHeaders.compactMap { $0["Authorization"] }, ["Bearer device-token", "Bearer device-token"])
+        XCTAssertEqual(state.deviceGrants.count, 2)
+        let result = await client.signOut(record)
+        XCTAssertEqual(result, .notOffered)
+        let forgotten = await client.hasCredentials(record.id); XCTAssertFalse(forgotten)
+
+        // Approved with less than it asks for, it is not signed in.
+        state.devicePending = false
+        state.deviceScope = "read:org"
+        do { try await client.signInWithCode(record) { _, _ in }; XCTFail("signed in without every scope") }
+        catch ToolConnectionServiceError.signInRequired {}
+        let partial = await client.hasCredentials(record.id); XCTAssertFalse(partial)
+
+        let bare = try ToolConnection(name: "Signed In", endpoint: endpoint)
+        XCTAssertFalse(ToolConnectionService.signsInWithCode(bare))
     }
 
     func testATokenIsRefusedWhenEmptyOrForAnOAuthConnection() async throws {

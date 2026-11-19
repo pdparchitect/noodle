@@ -13,6 +13,7 @@
 
 ### Changed
 
+- GitHub signs in instead of taking a pasted token: register an OAuth app for the organisation with device sign-in turned on and enter its client ID, then approve the code Pion shows on GitHub. Accounts added with a token keep working with it.
 - Markdown headings in a message show as bold lines rather than with their # signs, quoted lines are set in with a bar beside them, and a line of dashes draws a rule.
 - Lines an agent starts with a dash, a star or a number show as a list, with wrapped lines lined up under the text and a little space between items, and every paragraph, list and code block in a message is spaced the same.
 - The conversation's reading column is narrower, about 85 characters to a line instead of 110, so long messages read more easily; the message field narrows with it.

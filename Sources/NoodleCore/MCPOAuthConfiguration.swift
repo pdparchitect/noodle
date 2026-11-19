@@ -11,11 +11,16 @@ public struct MCPOAuthConfiguration: Equatable, Sendable {
     public let usesResourceIndicator: Bool
     /// Where a sign-in is revoked at the service, for one that offers it.
     public let revocationEndpoint: URL?
+    /// Where a device sign-in starts, for a service that signs native apps in that way: the person approves a code
+    /// on the service's page instead of being sent back to the app, which needs no client secret.
+    public let deviceAuthorizationEndpoint: URL?
 
     public init(issuer: URL, authorizationEndpoint: URL, tokenEndpoint: URL,
                 clients: [MCPOAuthClientConfiguration], scopes: [String],
-                authorizationParameters: [String: String] = [:], usesResourceIndicator: Bool = true, revocationEndpoint: URL? = nil) {
+                authorizationParameters: [String: String] = [:], usesResourceIndicator: Bool = true, revocationEndpoint: URL? = nil,
+                deviceAuthorizationEndpoint: URL? = nil) {
         self.revocationEndpoint = revocationEndpoint
+        self.deviceAuthorizationEndpoint = deviceAuthorizationEndpoint
         self.issuer = issuer
         self.authorizationEndpoint = authorizationEndpoint
         self.tokenEndpoint = tokenEndpoint
@@ -31,7 +36,8 @@ public extension MCPOAuthConfiguration {
     func with(clients: [MCPOAuthClientConfiguration]) -> MCPOAuthConfiguration {
         MCPOAuthConfiguration(issuer: issuer, authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndpoint,
                               clients: clients, scopes: scopes, authorizationParameters: authorizationParameters,
-                              usesResourceIndicator: usesResourceIndicator, revocationEndpoint: revocationEndpoint)
+                              usesResourceIndicator: usesResourceIndicator, revocationEndpoint: revocationEndpoint,
+                              deviceAuthorizationEndpoint: deviceAuthorizationEndpoint)
     }
 }
 

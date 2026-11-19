@@ -218,6 +218,51 @@ public actor ToolConnectionService {
         }
     }
 
+    /// Signs a connection in with a code: `approve` is given the code and the service's page to approve it on, for the
+    /// person to open, and the sign-in completes once they have. For services that sign native apps in only this way.
+    public func signInWithCode(_ connection: ToolConnection, progress: @Sendable (String) async -> Void = { _ in },
+                               approve: @Sendable (_ code: String, _ page: URL) async -> Void) async throws {
+        guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
+        guard let configuration = Self.oauthConfiguration(for: connection), let start = configuration.deviceAuthorizationEndpoint else {
+            throw ToolConnectionError.message("This connection does not sign in with a code.")
+        }
+        guard let client = configuration.clients.first else { throw ToolConnectionError.message("Enter the client ID first.") }
+        // One that used a token or a client secret before signs in now; they would otherwise still count as its sign-in.
+        try tokens.remove(connection.id)
+        try clients.remove(connection.id)
+        guard !authenticating.contains(connection.id) else { throw ToolConnectionServiceError.signInRequired }
+        try Task.checkCancellation()
+        authenticating.insert(connection.id)
+        defer { authenticating.remove(connection.id) }
+        let epoch = epochs[connection.id, default: 0]
+        do {
+            guard let pending = try MCPOAuth.preconfiguredCredentials(endpoint: connection.endpoint, redirect: client.redirectURI,
+                                                                       configuration: configuration) else { throw ToolConnectionServiceError.invalidMetadata }
+            await progress("Asking for a code…")
+            let approval = try await oauth.startDeviceApproval(pending, at: start)
+            try checkActive(connection.id, epoch: epoch)
+            await progress("Approve code \(approval.userCode) in your browser…")
+            await approve(approval.userCode, approval.page)
+            var interval = approval.interval
+            var signedIn: MCPCredentials?
+            while signedIn == nil {
+                try await Task.sleep(for: .seconds(interval))
+                try checkActive(connection.id, epoch: epoch)
+                guard Date() < approval.expiresAt else {
+                    throw ToolConnectionError.message("The code expired before it was approved. Connect again.")
+                }
+                do { signedIn = try await oauth.deviceToken(pending, approval: approval, configuration: configuration) }
+                catch MCPOAuth.DevicePending.waiting { continue }
+                catch MCPOAuth.DevicePending.slower { interval += 5 }
+            }
+            try checkActive(connection.id, epoch: epoch)
+            try credentials.save(signedIn!, id: connection.id)
+        } catch {
+            try checkActive(connection.id, epoch: epoch)
+            throw error
+        }
+    }
+
     /// The connection's Identity Center sign-in with an access token good for a minute more, renewed with its refresh
     /// token first when it is not. One the service no longer renews means signing in again.
     private func awsSession(_ connection: ToolConnection, epoch: Int, deadline: Date) async throws -> (ConnectionAWSSession, String) {
@@ -321,25 +366,40 @@ public actor ToolConnectionService {
     /// Whether the connection signs in through the browser: an MCP server's that keeps no key, or one the app's
     /// adapter answers whose catalogue entry names how to sign in, as Google's do.
     public nonisolated static func signsInThroughBrowser(_ connection: ToolConnection) -> Bool {
-        !connection.keepsSecret && (connection.adapter == nil || oauthConfiguration(for: connection.endpoint) != nil)
+        !connection.keepsSecret && (connection.adapter == nil || connectionConfiguration(for: connection)?.oauth != nil)
+    }
+    /// Whether it signs in with a code the person approves on the service's page, rather than by being sent back.
+    public nonisolated static func signsInWithCode(_ connection: ToolConnection) -> Bool {
+        !connection.keepsSecret && connectionConfiguration(for: connection)?.oauth?.deviceAuthorizationEndpoint != nil
     }
     private nonisolated static func connectionConfiguration(for endpoint: URL) -> ToolConnectionConfiguration? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
+        return configuration
+    }
+    /// The connection's catalogue entry, found from the account, so one whose address holds its own details, such as
+    /// an organisation's name, is found too.
+    private nonisolated static func connectionConfiguration(for connection: ToolConnection) -> ToolConnectionConfiguration? {
+        guard case .connection(let configuration)? = ToolCatalog.definition(for: connection)?.configuration else { return nil }
         return configuration
     }
     /// How a connection at `endpoint` signs in. For an entry whose accounts bring their organisation's own client,
     /// it is that client, `clientID`, returning to this app's bundle ID.
     private nonisolated static func oauthConfiguration(for endpoint: URL, clientID: String? = nil,
                                                        bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
-        guard let configuration = connectionConfiguration(for: endpoint), let oauth = configuration.oauth else { return nil }
+        oauthConfiguration(connectionConfiguration(for: endpoint), clientID: clientID, bundleIdentifier: bundleIdentifier)
+    }
+    private nonisolated static func oauthConfiguration(_ configuration: ToolConnectionConfiguration?, clientID: String?,
+                                                       bundleIdentifier: String?) -> MCPOAuthConfiguration? {
+        guard let configuration, let oauth = configuration.oauth else { return nil }
         guard configuration.oauthClientField != nil else { return oauth }
         guard let clientID, let bundleIdentifier, let redirect = accountClientRedirect(bundleIdentifier) else { return oauth.with(clients: []) }
         return oauth.with(clients: [MCPOAuthClientConfiguration(id: clientID, bundleIdentifier: bundleIdentifier, redirectURI: redirect)])
     }
     private nonisolated static func oauthConfiguration(for connection: ToolConnection,
                                                        bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
-        let field = connectionConfiguration(for: connection.endpoint)?.oauthClientField
-        return oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] }, bundleIdentifier: bundleIdentifier)
+        let configuration = connectionConfiguration(for: connection)
+        return oauthConfiguration(configuration, clientID: configuration?.oauthClientField.flatMap { connection.settings?[$0] },
+                                  bundleIdentifier: bundleIdentifier)
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }

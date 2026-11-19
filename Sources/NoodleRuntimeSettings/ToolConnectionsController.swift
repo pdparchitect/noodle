@@ -231,7 +231,8 @@ public final class ToolConnectionsController {
     public func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
         let signsIn = ToolConnectionService.signsInThroughBrowser(record)
-        if signsIn { browser.captureReturnWindow() }
+        let withCode = ToolConnectionService.signsInWithCode(record)
+        if signsIn && !withCode { browser.captureReturnWindow() }
         signingIn = record.id
         errors[record.id] = nil
         loginTask = Task {
@@ -240,6 +241,13 @@ public final class ToolConnectionsController {
                 if record.awsIdentityCenter != nil {
                     // The page opens with its code filled in; the code shows here too, to check it is the same.
                     try await service.signInWithAWS(record, progress: { [weak self] stage in
+                        await self?.setSignInStage(stage)
+                    }) { _, page in
+                        await MainActor.run { _ = NSWorkspace.shared.open(page) }
+                    }
+                } else if withCode {
+                    // The code shows here while the service's page is open, for the person to enter there.
+                    try await service.signInWithCode(record, progress: { [weak self] stage in
                         await self?.setSignInStage(stage)
                     }) { _, page in
                         await MainActor.run { _ = NSWorkspace.shared.open(page) }

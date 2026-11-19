@@ -1,16 +1,30 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
 final class GitHubTests: XCTestCase {
-    private let github = try! GitHub.preset.makeConnection(name: "GitHub — Kestrel", values: ["org": "kestrel-labs"])
+    private let github = try! GitHub.preset.makeConnection(name: "GitHub — Kestrel", values: ["org": "kestrel-labs", "clientID": "Ov23liKestrel"])
 
     func testAnOrganisationIsReachedUnderItsOwnPath() {
         XCTAssertEqual(github.endpoint.absoluteString, "https://api.github.com/orgs/kestrel-labs")
-        XCTAssertEqual(github.tokenHeader, "Authorization")
         XCTAssertNotNil(PionAdapters.all["github"])
-        XCTAssertThrowsError(try GitHub.preset.makeConnection(name: "Bad", values: ["org": "a/b"]))
+        XCTAssertThrowsError(try GitHub.preset.makeConnection(name: "Bad", values: ["org": "a/b", "clientID": "Ov23liKestrel"]))
+    }
+
+    func testAnOrganisationSignsInWithACodeThroughItsOwnOAuthApp() throws {
+        // GitHub's browser sign-in needs the app's client secret, which a Mac app cannot keep; its device sign-in does not.
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(PionCatalogue.entries)
+        XCTAssertNil(github.tokenHeader, "No token to paste")
+        XCTAssertTrue(ToolConnectionService.signsInWithCode(github))
+        guard case .connection(let configuration) = GitHub.preset.configuration, let oauth = configuration.oauth else { return XCTFail() }
+        XCTAssertEqual(oauth.deviceAuthorizationEndpoint?.absoluteString, "https://github.com/login/device/code")
+        XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://github.com/login/oauth/access_token")
+        XCTAssertEqual(oauth.scopes, ["read:org", "read:audit_log", "security_events"])
+        XCTAssertTrue(oauth.clients.isEmpty, "Each organisation registers its own")
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
     }
 
     func testTheAuditLogSearchesNewestFirst() async throws {

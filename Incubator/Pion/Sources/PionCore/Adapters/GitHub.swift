@@ -2,8 +2,9 @@ import Foundation
 import NoodleCore
 import NoodleMCP
 
-/// GitHub: an organisation's audit log, its people, and the secrets found in its code, read with a token.
-/// Each account is one organisation.
+/// GitHub: an organisation's audit log, its people, and the secrets found in its code. Each account is one
+/// organisation, read as the person who signs in through an OAuth app the organisation registered, with a code:
+/// GitHub's browser sign-in needs the app's client secret, which a Mac app cannot keep, and its device sign-in does not.
 public enum GitHub {
     public static let preset = ToolDefinition(
         id: "07d106a4-0e2c-47b1-a743-3c71161e56e4", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning alerts.",
@@ -15,18 +16,22 @@ public enum GitHub {
         """,
         iconName: "github",
         configuration: .connection(.init(endpointTemplate: "https://api.github.com/orgs/{org}",
-            fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier)],
-            tokenHeader: "Authorization",
-            // GitHub revokes any token it is handed, without signing in, and emails its owner that it did.
-            tokenRevocation: TokenRevocation(method: "POST", path: "/credentials/revoke", body: #"{"credentials":["{token}"]}"#, authorized: false),
-            adapter: "github")),
+            fields: [ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier),
+                     ToolField(key: "clientID", title: "Client ID", placeholder: "Ov23liAbCdEfGhIjKlMn", kind: .identifier)],
+            oauth: MCPOAuthConfiguration(issuer: URL(string: "https://github.com")!,
+                authorizationEndpoint: URL(string: "https://github.com/login/oauth/authorize")!,
+                tokenEndpoint: URL(string: "https://github.com/login/oauth/access_token")!, clients: [],
+                scopes: ["read:org", "read:audit_log", "security_events"], usesResourceIndicator: false,
+                deviceAuthorizationEndpoint: URL(string: "https://github.com/login/device/code")!),
+            oauthClientField: "clientID", adapter: "github")),
         setup: setup)
 
     static let setup = [
-        "On GitHub, open **Settings › Developer settings › Personal access tokens › Tokens (classic)** and choose **Generate new token (classic)**.",
-        "Give it only `read:org`, `read:audit_log` and `security_events`, and an expiry date.",
-        "If the organisation uses SAML single sign-on, choose **Configure SSO** beside the token and authorise it for the organisation.",
-        "Paste the token here. The audit log needs GitHub Enterprise Cloud, and secret scanning alerts need the token's owner to be an owner or security manager of the organisation.",
+        "On GitHub, open the organisation's **Settings › Developer settings › OAuth Apps** and choose **New OAuth App**.",
+        "Name it, such as Pion, and give the organisation's own website as both its homepage and its callback URL; Pion does not use them.",
+        "Tick **Enable Device Flow**, register the app and copy its **Client ID** here. It needs no client secret.",
+        "Choose **Add & Connect**: Pion shows a code and opens GitHub, where you enter it and approve the app's access to read the organisation, its audit log and its security alerts.",
+        "Sign in as an owner or security manager of the organisation, who can read its secret scanning alerts. The audit log needs GitHub Enterprise Cloud.",
     ]
 
     public static let adapter = OperationAdapter(operations: [AuditLog(), People(), SecretAlerts()])
