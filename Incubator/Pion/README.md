@@ -4,8 +4,9 @@
 
 # Pion
 
-**A team of agents on every incident.**<br>
-Cyber defence on your Mac. Runs on the AI subscriptions you already have.
+**AI-assisted cyber defence.**<br>
+A team of AI agents monitors your environment, investigates incidents and recommends responses,<br>
+using the security tools you already have. You decide what changes.
 
 <a href="https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg"><img alt="Download Pion for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
 
@@ -53,7 +54,7 @@ device, or any other harness Noodle supports.
 
 | App | What it does | Download |
 | --- | --- | --- |
-| **Pion** | A team of agents on every incident. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg) [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.zip) |
+| **Pion** | AI-assisted cyber defence. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg) [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.zip) |
 
 Pion needs a Mac with Apple silicon and macOS 26 or later. Open the DMG and drag Pion to
 **Applications**. Pion keeps itself up to date. To remove it, drag it from Applications to the Bin.

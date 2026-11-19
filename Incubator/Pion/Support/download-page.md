@@ -1,6 +1,6 @@
 Pion {version}
 
-Prototype: a cyber defence workspace where agents investigate incidents and you approve what changes a system.
+AI-assisted cyber defence: a team of AI agents monitors your environment, investigates incidents and recommends responses, using the security tools you already have. You decide what changes. An early prototype, so expect rough edges.
 
 [Download DMG for Apple silicon]({dmg}) · [ZIP]({zip})
 
