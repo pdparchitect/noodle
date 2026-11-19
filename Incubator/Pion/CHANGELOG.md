@@ -4,7 +4,7 @@
 
 ### Added
 
-- View › Sidebar › Show Tools lists your tool connections as grey icons at the foot of the sidebar, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out.
+- View › Sidebar › Show Tools lists your tool connections at the foot of the sidebar as flat icons in the text colour, light or dark to match the window, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out.
 - Unread conversations carry Noodle's blue dot in the sidebar, beside agents, groups and Investigations alike; a muted group's is dimmed.
 - The Usage window shows each agent's mark beside its name when grouped by bot; click it for the agent's profile, to message it, suspend it or anything else the profile offers.
 
@@ -12,7 +12,7 @@
 
 - Sheet buttons such as Cancel and Create, the add buttons in pickers, the unread dot and folder icons take Pion's accent, or the one you chose in System Settings, instead of a fixed blue.
 - Link buttons, such as Profiles in Settings › Harness, take Pion's accent too, the same colour as links in messages, instead of the system's fixed link blue.
-- Each agent's mark is a chess piece on its grey disc, in place of the rings of arcs: a pawn, knight, bishop, rook, queen or king, always the same one for that agent, however it is renamed.
+- Each agent's mark is a chess piece on a flat grey disc, in place of the rings of arcs: a pawn, knight, bishop, rook, queen or king, always the same one for that agent, however it is renamed.
 - A group's mark shows its agents' own pieces together, the lead's in front, in place of the people symbol.
 - Links in messages take Pion's accent, its deep blue or the accent you chose in System Settings, instead of the system's fixed link blue. In dark mode a deep accent is lightened just enough to read; a bright one is left as it is.
 - Pion's buttons, selections and links take its own deep blue, from its artwork, when your accent colour in System Settings is Multicolour, the default; any other accent you pick still applies.

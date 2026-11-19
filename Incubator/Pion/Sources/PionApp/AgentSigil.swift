@@ -187,15 +187,14 @@ struct SymbolMark: View {
 }
 
 extension View {
-    /// A dark disc lit from above, the same in light and dark appearance, like a badge.
+    /// A flat graphite disc, a touch lighter on a light window so it does not read as a hole, as the sidebar's flat
+    /// tool icons are.
     func graphiteDisc(size: CGFloat) -> some View {
         frame(width: size, height: size)
             .background {
-                Circle().fill(LinearGradient(colors: [Color(white: 0.26), Color(white: 0.08)], startPoint: .top, endPoint: .bottom))
-            }
-            .overlay {
-                Circle().strokeBorder(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom),
-                                      lineWidth: max(0.5, size / 64))
+                Circle().fill(Color(nsColor: NSColor(name: nil) { appearance in
+                    NSColor(white: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.24 : 0.32, alpha: 1)
+                }))
             }
             .accessibilityHidden(true)
     }

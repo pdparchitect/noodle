@@ -257,9 +257,9 @@ private struct ToolTile: View {
         let status = controller.status(of: connection)
         Button { shown.toggle() } label: {
             VStack(spacing: 3) {
-                ToolConnectionIcon(connection: connection, size: 30)
-                    // In grey, as the agents' marks around it are, so the red dot of one that needs you is what stands out.
-                    .grayscale(1)
+                // Flat and in the text colour, as the agents' marks around it are, so the red dot of one that needs you is
+                // what stands out.
+                FlatToolIcon(connection: connection, size: 30)
                     .opacity(status == .managed ? 0.4 : 1)
                     .overlay(alignment: .topTrailing) {
                         if status.needsAttention {

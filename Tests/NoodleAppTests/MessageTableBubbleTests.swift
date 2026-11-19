@@ -180,6 +180,24 @@ import HubLink
         return best.colour
     }
 
+    func testAFlatToolIconDrawsTheLogoInInkOnTheTileWhicheverWayRoundItsColoursAre() {
+        // A dark logo on a light tile, and a light logo on a dark one: either way the logo is the smaller part.
+        for (background, logo) in [(CGFloat(1), CGFloat(0)), (0, 1)] {
+            let context = CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(gray: background, alpha: 1); context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+            context.setFillColor(gray: logo, alpha: 1); context.fill(CGRect(x: 12, y: 12, width: 16, height: 16))
+            let tile = NSColor(srgbRed: 0.2, green: 0.2, blue: 0.2, alpha: 1), ink = NSColor(srgbRed: 0.9, green: 0.9, blue: 0.9, alpha: 1)
+            let flat = NSBitmapImageRep(cgImage: FlatToolIcon.twoTone(context.makeImage()!, tile: tile, ink: ink)!)
+            func grey(_ x: Int, _ y: Int) -> CGFloat {
+                let px = Int(CGFloat(x) / 40 * CGFloat(flat.pixelsWide)), py = Int(CGFloat(y) / 40 * CGFloat(flat.pixelsHigh))
+                return flat.colorAt(x: px, y: py)!.usingColorSpace(.sRGB)!.redComponent
+            }
+            XCTAssertEqual(grey(20, 20), 0.9, accuracy: 0.08, "the logo, from a \(background == 1 ? "light" : "dark") tile")
+            XCTAssertEqual(grey(3, 3), 0.2, accuracy: 0.08, "the tile, from a \(background == 1 ? "light" : "dark") tile")
+        }
+    }
+
     func testInlineCodeIsSmallerAndDimmerThanTheTextAroundIt() {
         let rendered = MessageMarkdownCache.render("Run `swift test` now.")
         let code = rendered.runs.first { $0.inlinePresentationIntent?.contains(.code) == true }

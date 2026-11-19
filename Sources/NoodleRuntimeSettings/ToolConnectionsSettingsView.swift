@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import SwiftUI
 import NoodleCore
 import NoodleMCP
@@ -516,6 +517,85 @@ public struct ToolConnectionIcon: View {
     public init(connection: ToolConnection, size: CGFloat) {
         self.connection = connection
         self.size = size
+    }
+}
+
+/// A tool connection's icon in two flat tones, its logo in the text colour on a tile of the window's own grey, for
+/// places where it sits among flat marks, such as the sidebar. Its logo is whichever of its tones covers less.
+public struct FlatToolIcon: View {
+    let connection: ToolConnection
+    let size: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+
+    public init(connection: ToolConnection, size: CGFloat) {
+        self.connection = connection
+        self.size = size
+    }
+
+    public var body: some View {
+        let dark = colorScheme == .dark
+        let tile = NSColor(white: dark ? 0.24 : 0.84, alpha: 1), ink = NSColor(white: dark ? 0.9 : 0.15, alpha: 1)
+        Group {
+            // Made at the pixels it is shown at, so nothing shrinks it again on screen.
+            if let image = Self.image(for: connection, dark: dark, tile: tile, ink: ink, pixels: Int((size * displayScale).rounded())) {
+                Image(nsImage: image).resizable().interpolation(.none).scaledToFit()
+            } else {
+                Text(String(connection.name.prefix(1))).font(.system(size: size * 0.55, weight: .semibold))
+                    .foregroundStyle(Color(nsColor: ink))
+                    .frame(width: size, height: size)
+                    .background(Color(nsColor: tile))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        .accessibilityHidden(true)
+    }
+
+    private nonisolated(unsafe) static let cache = NSCache<NSString, NSImage>()
+
+    @MainActor private static func image(for connection: ToolConnection, dark: Bool, tile: NSColor, ink: NSColor, pixels: Int) -> NSImage? {
+        let key = "\(connection.id)-\(connection.iconData?.count ?? 0)-\(dark)-\(pixels)" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        let source = connection.iconData.flatMap(NSImage.init(data:)) ?? ToolCatalog.definition(for: connection).flatMap(ToolCatalogIcon.image(for:))
+        guard let cg = source?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let flat = twoTone(cg, tile: tile, ink: ink, pixels: pixels) else { return nil }
+        let image = NSImage(cgImage: flat, size: NSSize(width: flat.width, height: flat.height))
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    /// The image in two tones: its logo, the tone that covers less, in `ink`, and the rest in `tile`. Transparent parts
+    /// count as background. It is drawn larger and softened first, then, given `pixels`, shrunk to that width, so the
+    /// logo's edges stay clean at the size it is shown.
+    public static func twoTone(_ image: CGImage, tile: NSColor, ink: NSColor, pixels: Int? = nil) -> CGImage? {
+        let source = CIImage(cgImage: image)
+        let scale = max(1, 256 / max(source.extent.width, 1))
+        let large = source.composited(over: CIImage(color: .white).cropped(to: source.extent))
+            .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale])
+        let extent = large.extent
+        let grey = large.applyingFilter("CIPhotoEffectMono").clampedToExtent()
+            .applyingGaussianBlur(sigma: scale * 0.35).cropped(to: extent)
+        let context = CIContext()
+        var average = [UInt8](repeating: 0, count: 4)
+        context.render(grey.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)]),
+                       toBitmap: &average, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        // The logo is the tone that covers less: dark on a mostly light image, light on a mostly dark one.
+        var mask = grey.applyingFilter("CIColorThreshold", parameters: ["inputThreshold": 0.55])
+        if average[0] > 128 { mask = mask.applyingFilter("CIColorInvert") }
+        guard let tileColour = CIColor(color: tile), let inkColour = CIColor(color: ink) else { return nil }
+        var coloured = mask.applyingFilter("CIFalseColor", parameters: ["inputColor0": tileColour, "inputColor1": inkColour])
+        // Halved a step at a time with Core Image's own downsampling: sharper than one big shrink, and without the dark
+        // halos a Lanczos shrink rings around a light logo.
+        if let pixels, pixels > 0 {
+            var factor = CGFloat(pixels) / extent.width
+            while factor < 0.5 {
+                coloured = coloured.transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5), highQualityDownsample: true)
+                factor *= 2
+            }
+            coloured = coloured.transformed(by: CGAffineTransform(scaleX: factor, y: factor), highQualityDownsample: true)
+        }
+        return context.createCGImage(coloured, from: coloured.extent.integral)
     }
 }
 
