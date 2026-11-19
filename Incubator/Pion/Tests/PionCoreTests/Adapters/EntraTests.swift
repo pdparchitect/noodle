@@ -66,4 +66,15 @@ final class EntraTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    func testItsTriggerFindsUsersNewlyAtHighRisk() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/identityProtection/riskyUsers"] = (200, #"{"value":[{"id":"u2","riskLastUpdatedDateTime":"2026-11-19T09:14:00.1234567Z"},{"id":"u1","riskLastUpdatedDateTime":"2026-11-19T09:11:00Z"}]}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let users = try await Entra.adapter.alerts(since: since, connection: contoso, access: service)
+        XCTAssertEqual(users.map(\.id), ["u2", "u1"])
+        XCTAssertEqual(queryItems(service.requests.last)["$filter"],
+                       "riskLevel eq 'high' and riskState eq 'atRisk' and riskLastUpdatedDateTime ge 2026-11-19T09:00:00Z")
+        XCTAssertEqual(Entra.adapter.watchedTool, "risky-users")
+    }
 }

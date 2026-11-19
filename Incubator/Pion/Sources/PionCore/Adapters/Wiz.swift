@@ -28,30 +28,59 @@ public enum Wiz {
         "For the data center, open **User Settings › Tenant** and take the part of the API endpoint after `api.`: `https://api.us17.app.wiz.io/graphql` is `us17`.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Issues(), Query()])
+    public static let adapter = OperationAdapter(operations: [Issues(), Query()], trigger: SevereIssues())
+
+    /// New open critical and high issues.
+    struct SevereIssues: ServiceTrigger {
+        var tool: String { Issues.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            struct Issue: Decodable { let id: String; let createdAt: String? }
+            struct Nodes: Decodable { let nodes: [Issue]? }
+            struct Data: Decodable { let issues: Nodes? }
+            let filter = Issues.Filter(status: ["OPEN", "IN_PROGRESS"], severity: ["CRITICAL", "HIGH"],
+                                       createdAt: .init(after: ISO8601DateFormatter().string(from: since)))
+            let query = """
+            query Issues($filterBy: IssueFilters, $first: Int) {
+              issues: issuesV2(filterBy: $filterBy, first: $first) { nodes { id createdAt } }
+            }
+            """
+            return (try await service.graphQL(query: query, variables: Issues.Variables(filterBy: filter, first: ServiceAlert.most), as: Data.self)
+                .issues?.nodes ?? [])
+                .compactMap { issue in ServiceAlert.time(issue.createdAt).map { ServiceAlert(id: issue.id, time: $0) } }
+                .sorted { $0.time > $1.time }
+        }
+    }
 }
 
 extension Wiz {
     struct Issues: ServiceOperation {
-        struct Input: Decodable, Sendable { let severities: [String]?, statuses: [String]?, limit: Int? }
+        struct Input: Decodable, Sendable { let severities: [String]?, statuses: [String]?, since: String?, limit: Int? }
+        struct Filter: Encodable {
+            struct After: Encodable { let after: String }
+            let status: [String]
+            var severity: [String]?
+            var createdAt: After?
+        }
+        struct Variables: Encodable { let filterBy: Filter; let first: Int }
         static let name = "issues"
-        static let summary = "Cloud security issues, by severity and status, with the rule that raised each and the resource it concerns."
+        static let summary = "Cloud security issues, by severity, status and time, with the rule that raised each and the resource it concerns."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]), "Severities to include."),
             "statuses": .array(.string("A status.", oneOf: ["OPEN", "IN_PROGRESS", "RESOLVED", "REJECTED"]), "Statuses to include. Open and in progress when left out."),
+            "since": .string("The earliest time each was raised, in ISO 8601."),
             "limit": .integer("How many issues, at most.", minimum: 1, maximum: 100),
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            var filter: [String: [String]] = [
-                "status": try (input.statuses ?? ["OPEN", "IN_PROGRESS"]).map { try ServiceInput.oneOf($0, ["OPEN", "IN_PROGRESS", "RESOLVED", "REJECTED"], "status") },
-            ]
+            var filter = Filter(status: try (input.statuses ?? ["OPEN", "IN_PROGRESS"]).map {
+                try ServiceInput.oneOf($0, ["OPEN", "IN_PROGRESS", "RESOLVED", "REJECTED"], "status")
+            })
             if let severities = input.severities {
-                filter["severity"] = try severities.map { try ServiceInput.oneOf($0, ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"], "severity") }
+                filter.severity = try severities.map { try ServiceInput.oneOf($0, ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"], "severity") }
             }
+            if let since = input.since { filter.createdAt = .init(after: try ServiceInput.time(since)) }
             let limit = input.limit ?? 25
             guard (1...100).contains(limit) else { throw ServiceError.input("Ask for between 1 and 100 issues.") }
-            struct Variables: Encodable { let filterBy: [String: [String]]; let first: Int }
             struct Rule: Codable { let name: String? }
             struct Entity: Codable { let name: String?, type: String?, cloudPlatform: String?, region: String?, subscriptionName: String? }
             struct Issue: Codable { let id: String, severity: String?, status: String?, createdAt: String?, sourceRule: Rule?, entitySnapshot: Entity? }

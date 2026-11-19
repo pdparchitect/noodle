@@ -38,4 +38,27 @@ final class WizTests: XCTestCase {
         }
         XCTAssertEqual(service.requests.count, 1)
     }
+
+    func testItsTriggerFindsOpenHighAndCriticalIssuesSinceATime() async throws {
+        let service = FakeService()
+        service.answers["/graphql"] = (200, #"{"data":{"issues":{"nodes":[{"id":"i2","createdAt":"2026-11-19T09:14:00.123Z"},{"id":"i1","createdAt":"2026-11-19T09:11:00Z"}]}}}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let issues = try await Wiz.adapter.alerts(since: since, connection: wiz, access: service)
+        XCTAssertEqual(issues.map(\.id), ["i2", "i1"])
+        func variables(_ request: URLRequest?) throws -> [String: Any] {
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request?.httpBody ?? Data()) as? [String: Any])
+            return try XCTUnwrap(body["variables"] as? [String: Any])
+        }
+        let sent = try variables(service.requests.last)
+        let filter = try XCTUnwrap(sent["filterBy"] as? [String: Any])
+        XCTAssertEqual(filter["severity"] as? [String], ["CRITICAL", "HIGH"])
+        XCTAssertEqual(filter["status"] as? [String], ["OPEN", "IN_PROGRESS"])
+        XCTAssertEqual((filter["createdAt"] as? [String: String])?["after"], "2026-11-19T09:00:00Z")
+        XCTAssertEqual(sent["first"] as? Int, ServiceAlert.most)
+        XCTAssertEqual(Wiz.adapter.watchedTool, "issues")
+
+        // The window a wake names can be read back with the issues operation.
+        _ = try await callTool(Wiz.adapter, "issues", #"{"since":"2026-11-19T09:00:00Z"}"#, on: service, in: wiz)
+        XCTAssertEqual(((try variables(service.requests.last)["filterBy"] as? [String: Any])?["createdAt"] as? [String: String])?["after"], "2026-11-19T09:00:00Z")
+    }
 }

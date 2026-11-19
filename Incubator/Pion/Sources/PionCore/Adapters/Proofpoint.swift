@@ -23,7 +23,29 @@ public enum Proofpoint {
         "Name it, such as Pion, and copy the **Service Principal** and **Secret** here; the secret is shown only once.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [SIEMEvents()])
+    public static let adapter = OperationAdapter(operations: [SIEMEvents()], trigger: ThreatsThrough())
+
+    /// Threat messages delivered and clicks on threat links permitted: those that reached people, not those blocked.
+    /// Proofpoint gives the last hour at most.
+    struct ThreatsThrough: ServiceTrigger {
+        var tool: String { SIEMEvents.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            struct Message: Decodable { let GUID: String?; let messageTime: String? }
+            struct Click: Decodable { let id: String?; let clickTime: String? }
+            struct Answer: Decodable { let messagesDelivered: [Message]?; let clicksPermitted: [Click]? }
+            let seconds = min(3_600, max(1, Int(Date().timeIntervalSince(since).rounded(.up))))
+            let answer = try await service.get(["siem", "all"], query: ["format": "json", "sinceSeconds": String(seconds)], as: Answer.self)
+            let messages = (answer.messagesDelivered ?? []).compactMap { message -> ServiceAlert? in
+                guard let id = message.GUID, let time = ServiceAlert.time(message.messageTime) else { return nil }
+                return ServiceAlert(id: id, time: time)
+            }
+            let clicks = (answer.clicksPermitted ?? []).compactMap { click -> ServiceAlert? in
+                guard let id = click.id, let time = ServiceAlert.time(click.clickTime) else { return nil }
+                return ServiceAlert(id: id, time: time)
+            }
+            return (messages + clicks).sorted { $0.time > $1.time }
+        }
+    }
 }
 
 extension Proofpoint {

@@ -51,4 +51,17 @@ final class CrowdStrikeTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    func testItsTriggerFindsHighAndCriticalAlertsSinceATime() async throws {
+        let service = FakeService()
+        service.answers["/alerts/queries/alerts/v2"] = (200, #"{"resources":["cid:ind:2","cid:ind:1"]}"#)
+        service.answers["/alerts/entities/alerts/v2"] = (200, #"{"resources":[{"composite_id":"cid:ind:1","created_timestamp":"2026-11-19T09:11:00.123456789Z"},{"composite_id":"cid:ind:2","created_timestamp":"2026-11-19T09:14:00Z"}]}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let alerts = try await CrowdStrike.adapter.alerts(since: since, connection: falconEU, access: service)
+        XCTAssertEqual(alerts.map(\.id), ["cid:ind:2", "cid:ind:1"])
+        let query = queryItems(service.requests.first)
+        XCTAssertEqual(query["filter"], "severity_name:['High','Critical']+created_timestamp:>='2026-11-19T09:00:00Z'")
+        XCTAssertEqual(query["limit"], String(ServiceAlert.most))
+        XCTAssertEqual(CrowdStrike.adapter.watchedTool, "alerts")
+    }
 }

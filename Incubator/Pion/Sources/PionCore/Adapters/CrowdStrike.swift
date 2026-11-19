@@ -29,7 +29,24 @@ public enum CrowdStrike {
         "For the Falcon cloud, choose the one your console's address names: `falcon.us-2.crowdstrike.com` is US-2, and `falcon.crowdstrike.com` is US-1.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindHost(), Alerts()])
+    public static let adapter = OperationAdapter(operations: [FindHost(), Alerts()], trigger: SevereAlerts())
+
+    /// New high and critical alerts: their IDs found first, then each one's time.
+    struct SevereAlerts: ServiceTrigger {
+        var tool: String { Alerts.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            let filter = "severity_name:['High','Critical']+created_timestamp:>='\(ISO8601DateFormatter().string(from: since))'"
+            let ids = try await service.get(["alerts", "queries", "alerts", "v2"],
+                query: ["filter": filter, "sort": "created_timestamp.desc", "limit": String(ServiceAlert.most)],
+                as: Resources<String>.self).resources ?? []
+            guard !ids.isEmpty else { return [] }
+            struct Alert: Decodable { let composite_id: String; let created_timestamp: String? }
+            struct Request: Encodable { let composite_ids: [String] }
+            return (try await service.post(["alerts", "entities", "alerts", "v2"], body: Request(composite_ids: ids), as: Resources<Alert>.self).resources ?? [])
+                .compactMap { alert in ServiceAlert.time(alert.created_timestamp).map { ServiceAlert(id: alert.composite_id, time: $0) } }
+                .sorted { $0.time > $1.time }
+        }
+    }
 
     /// Falcon wraps lists in its resources.
     struct Resources<Item: Decodable>: Decodable { let resources: [Item]? }

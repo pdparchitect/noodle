@@ -24,7 +24,21 @@ public enum Entra {
         "Sign-in logs need Entra ID P1, and risky users P2. One app can serve both Entra ID and Defender XDR when it has both sets of permissions.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers()])
+    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers()],
+                                                 trigger: HighRiskUsers())
+
+    /// Users Identity Protection newly rates at high risk, by when their risk last changed.
+    struct HighRiskUsers: ServiceTrigger {
+        var tool: String { RiskyUsers.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            struct Risky: Decodable { let id: String; let riskLastUpdatedDateTime: String? }
+            let filter = "riskLevel eq 'high' and riskState eq 'atRisk' and riskLastUpdatedDateTime ge " + ISO8601DateFormatter().string(from: since)
+            return try await service.get(["identityProtection", "riskyUsers"], query: ["$filter": filter, "$top": String(ServiceAlert.most)],
+                                         as: Graph.List<Risky>.self).value
+                .compactMap { user in ServiceAlert.time(user.riskLastUpdatedDateTime).map { ServiceAlert(id: user.id, time: $0) } }
+                .sorted { $0.time > $1.time }
+        }
+    }
 }
 
 extension Entra {

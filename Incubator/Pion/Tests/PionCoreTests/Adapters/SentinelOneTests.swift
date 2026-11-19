@@ -37,4 +37,17 @@ final class SentinelOneTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    func testItsTriggerFindsThreatsSinceATime() async throws {
+        // Every threat an agent detects is serious; SentinelOne gives them no severity to filter by.
+        let service = FakeService()
+        service.answers["/web/api/v2.1/threats"] = (200, #"{"data":[{"id":"t2","threatInfo":{"createdAt":"2026-11-19T09:14:00.512000Z"}},{"id":"t1","threatInfo":{"createdAt":"2026-11-19T09:11:00Z"}}]}"#)
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
+        let threats = try await SentinelOne.adapter.alerts(since: since, connection: s1, access: service)
+        XCTAssertEqual(threats.map(\.id), ["t2", "t1"])
+        let query = queryItems(service.requests.first)
+        XCTAssertEqual(query["createdAt__gte"], "2026-11-19T09:00:00Z")
+        XCTAssertEqual(query["limit"], String(ServiceAlert.most))
+        XCTAssertEqual(SentinelOne.adapter.watchedTool, "threats")
+    }
 }

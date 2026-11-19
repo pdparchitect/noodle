@@ -21,4 +21,17 @@ final class ProofpointTests: XCTestCase {
         XCTAssertTrue(tooLong.isError)
         XCTAssertNotNil(PionAdapters.all["proofpoint"])
     }
+
+    func testItsTriggerFindsThreatsThatGotThroughInTheLastHourAtMost() async throws {
+        // Delivered threats and permitted clicks reached people; blocked ones did not.
+        let service = FakeService()
+        service.answers["/v2/siem/all"] = (200, #"{"messagesDelivered":[{"GUID":"m1","messageTime":"2026-11-19T09:11:00.000Z"}],"messagesBlocked":[{"GUID":"b1","messageTime":"2026-11-19T09:12:00.000Z"}],"clicksPermitted":[{"id":"c1","clickTime":"2026-11-19T09:14:00.000Z"}],"clicksBlocked":[{"id":"x1","clickTime":"2026-11-19T09:13:00.000Z"}]}"#)
+        let threats = try await Proofpoint.adapter.alerts(since: Date().addingTimeInterval(-1_800), connection: tap, access: service)
+        XCTAssertEqual(threats.map(\.id), ["c1", "m1"])
+        let seconds = try XCTUnwrap(queryItems(service.requests.last)["sinceSeconds"].flatMap(Int.init))
+        XCTAssertTrue((1_800...1_802).contains(seconds), "\(seconds)")
+        _ = try await Proofpoint.adapter.alerts(since: Date().addingTimeInterval(-10_800), connection: tap, access: service)
+        XCTAssertEqual(queryItems(service.requests.last)["sinceSeconds"], "3600", "Proofpoint gives an hour at most")
+        XCTAssertEqual(Proofpoint.adapter.watchedTool, "siem-events")
+    }
 }

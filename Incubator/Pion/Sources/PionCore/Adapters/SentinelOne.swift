@@ -25,7 +25,21 @@ public enum SentinelOne {
         "For the console address, give your console's host, such as `acme.sentinelone.net`.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindAgent(), Threats()])
+    public static let adapter = OperationAdapter(operations: [FindAgent(), Threats()], trigger: NewThreats())
+
+    /// Every new threat an agent detects: SentinelOne gives threats no severity, and each is serious.
+    struct NewThreats: ServiceTrigger {
+        var tool: String { Threats.name }
+        func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
+            struct Info: Decodable { let createdAt: String? }
+            struct Threat: Decodable { let id: String; let threatInfo: Info? }
+            return (try await service.get(["threats"], query: ["createdAt__gte": ISO8601DateFormatter().string(from: since),
+                                                              "sortBy": "createdAt", "sortOrder": "desc", "limit": String(ServiceAlert.most)],
+                                          as: Page<Threat>.self).data ?? [])
+                .compactMap { threat in ServiceAlert.time(threat.threatInfo?.createdAt).map { ServiceAlert(id: threat.id, time: $0) } }
+                .sorted { $0.time > $1.time }
+        }
+    }
 
     /// SentinelOne wraps lists in their data.
     struct Page<Item: Decodable>: Decodable { let data: [Item]? }
