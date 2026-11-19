@@ -66,7 +66,10 @@ static float glyphs(float2 position, float2 size, float time) {
     float speed = 2.0 + float(seed % 5);
     int trail = 6 + int(seed % 14);
     int span = rows + trail + 8 + int(seed % 23);
-    int head = int(time * speed + float(seed % 997)) % span;
+    // A pass takes a fixed time, that of a window about 900 points tall, and resizing only stretches the path: had the
+    // window's height set the period, every column would leap to another row at each step of a resize.
+    float cycle = float(50 + trail + 8 + int(seed % 23)) / speed;
+    int head = int(fract(time / cycle + float(seed % 997) / 997.0) * float(span));
     int offset = head - row;
     if (offset < 0 || offset >= trail) return 0;
 
@@ -89,7 +92,9 @@ static float glyphs(float2 position, float2 size, float time) {
 /// places across it, lifting and pushing the dots they pass like a sonar sweep.
 static float grid(float2 position, float2 size, float time) {
     const float step = 22;
-    float scan = fmod(time * 40.0, size.y + 240.0) - 120.0;
+    // A sweep takes a fixed 28 seconds however tall the window, so a resize moves the scan smoothly rather than
+    // throwing it elsewhere, as a period set by the height did.
+    float scan = fract(time / 28.0) * (size.y + 240.0) - 120.0;
     float2 home = (floor(position / step) + 0.5) * step;
     float near = max(0.0, 1.0 - abs(home.y - scan) / 120.0);
     float2 push = 0;
@@ -119,7 +124,8 @@ static float scanlines(float2 position, float2 size, float time) {
     if (fmod(position.y, 3.0) >= 1.0) return 0;
     float alpha = 0.03;
     // The beam, bright where it is and dimming behind it.
-    float beam = fmod(time * 110.0, size.y + 300.0) - 60.0;
+    // A fixed 10 seconds a pass, for the same reason as the grid's scan.
+    float beam = fract(time / 10.0) * (size.y + 300.0) - 60.0;
     float behind = beam - position.y;
     alpha += 0.16 * exp(-pow(behind / 5.0, 2.0));
     if (behind > 0) alpha += 0.07 * exp(-behind / 140.0);

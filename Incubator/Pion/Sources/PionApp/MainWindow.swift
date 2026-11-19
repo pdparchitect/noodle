@@ -32,8 +32,6 @@ struct MainWindow: View {
         NavigationSplitView {
             Sidebar(model: model, window: window)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
-                // The backdrop carries on under the sidebar's glass, softened by it.
-                .background { Backdrop(frosted: true).ignoresSafeArea() }
         } detail: {
             if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
@@ -96,6 +94,7 @@ struct Sidebar: View {
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @State private var showsAllMentions = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let line = ConversationRowDetail(rawValue: rowDetail) ?? .standard
@@ -123,6 +122,10 @@ struct Sidebar: View {
         // As in Noodle: Tab in the list goes to the message field, and Shift-Tab there comes back.
         .modifier(ConversationListKeyboardNavigation(hasSelection: model.selection != nil, searchIsFocused: searchFocused,
             focusComposer: { window.composerFocusRequest = UUID() }, focusRequest: window.sidebarFocusRequest))
+        // As Noodle's: the list draws no background of its own, so the window's backdrop carries on under it, a
+        // little darker.
+        .scrollContentBackground(.hidden)
+        .background(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.04).ignoresSafeArea())
         .onAppear { window.hasSidebar = true }
         .onChange(of: window.searchText) {
             showsAllMentions = false
