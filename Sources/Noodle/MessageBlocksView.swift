@@ -24,6 +24,17 @@ struct MessageBlocksView: View {
                     .background(Color.secondary.opacity(0.09), in: .rect(cornerRadius: 10, style: .continuous))
                 case .text(let text):
                     prose(text)
+                case .quote(let text):
+                    // Set in, a little dimmer, with a thin bar down its side.
+                    prose(text)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, size * 0.75)
+                        .overlay(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.45)).frame(width: 3)
+                        }
+                case .rule:
+                    Rectangle().fill(Color.secondary.opacity(0.35)).frame(height: 1)
+                        .padding(.vertical, size * 0.15)
                 case .list(let items):
                     // Wrapped lines hang under the item's text, not its marker, with a little air between items.
                     // As wide as the longest number, so "10." fits and every item's text starts at the same place.

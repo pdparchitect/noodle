@@ -65,7 +65,8 @@ extension MessageText {
     fileprivate func restyled(_ block: MessageBlock) -> MessageBlock {
         switch block {
         case .text(let text): .text(restyle(text))
-        case .code: block
+        case .quote(let text): .quote(restyle(text))
+        case .code, .rule: block
         case .list(let items): .list(items.map { MessageListItem(marker: $0.marker, text: restyle($0.text)) })
         }
     }

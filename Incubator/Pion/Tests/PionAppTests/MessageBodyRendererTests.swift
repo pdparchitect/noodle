@@ -26,6 +26,8 @@ import XCTest
             case .text(let text): "text: " + String(text.characters)
             case .code(let code): "code: " + code
             case .list(let items): "list: " + items.map { "\($0.marker) \(String($0.text.characters))" }.joined(separator: " | ")
+            case .quote(let text): "quote: " + String(text.characters)
+            case .rule: "rule"
             }
         }
         XCTAssertEqual(blocks.map(describe), [

@@ -96,7 +96,8 @@ import HubLink
     func testMessagesWithoutTablesHaveNoTableControls() async throws {
         let f = try fixture()
         let view = bubble("Plain reply with a | pipe.\n---", in: f)
-        try await wait { self.shows("Plain reply with a | pipe.\n---", in: view) }
+        // The dash line is drawn as a rule, so the sentence is the text that shows.
+        try await wait { self.shows("Plain reply with a | pipe.", in: view) }
         XCTAssertFalse(elements(view).contains { labels($0).contains { $0.hasPrefix("Sort by") } })
     }
 
@@ -210,6 +211,26 @@ import HubLink
         XCTAssertEqual(text, "# a comment")
     }
 
+    func testQuotesAndRulesBecomeBlocksOfTheirOwn() {
+        let blocks = MessageMarkdownCache.blocks("The gateway said:\n> 550 **rejected**\n>\n> try later\nThen:\n\n---\n***\nAfter.")
+        func describe(_ block: MessageBlock) -> String {
+            switch block {
+            case .text(let text): "text: " + String(text.characters)
+            case .quote(let text): "quote: " + String(text.characters)
+            case .rule: "rule"
+            default: "other"
+            }
+        }
+        XCTAssertEqual(blocks.map(describe), ["text: The gateway said:", "quote: 550 rejected\n\ntry later", "text: Then:", "rule", "rule", "text: After."])
+        // The quote keeps its own formatting.
+        if case .quote(let text) = blocks[1] {
+            XCTAssertTrue(text.runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        }
+        // A dash line inside code stays code.
+        guard case .code(let code) = MessageMarkdownCache.blocks("```\n---\n```").first else { return XCTFail() }
+        XCTAssertEqual(code, "---")
+    }
+
     func testNoodleSplitsMessagesIntoTheSameParagraphsListsAndCodeAsPion() {
         let blocks = MessageMarkdownCache.blocks("Steps:\n- Revoke the session\n2) Reset the password\n\n```\nlet a = 1\n```")
         func describe(_ block: MessageBlock) -> String {
@@ -217,6 +238,8 @@ import HubLink
             case .text(let text): "text: " + String(text.characters)
             case .code(let code): "code: " + code
             case .list(let items): "list: " + items.map { "\($0.marker) \(String($0.text.characters))" }.joined(separator: " | ")
+            case .quote(let text): "quote: " + String(text.characters)
+            case .rule: "rule"
             }
         }
         XCTAssertEqual(blocks.map(describe), ["text: Steps:", "list: • Revoke the session | 2. Reset the password", "code: let a = 1"])

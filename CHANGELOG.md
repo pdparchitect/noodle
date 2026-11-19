@@ -13,7 +13,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
-- Messages lay out as Pion's do: lines a bot starts with a dash, a star or a number show as a list with wrapped lines lined up under the text, code blocks are set apart, Markdown headings show as bold lines, and paragraphs are spaced evenly. A message folds behind Read more only past 20 lines of text or 1,200 characters, so blank lines and short list items no longer fold it early.
+- Messages lay out as Pion's do: lines a bot starts with a dash, a star or a number show as a list with wrapped lines lined up under the text, code blocks are set apart, Markdown headings show as bold lines, quoted lines are set in with a bar beside them, a line of dashes draws a rule, and paragraphs are spaced evenly. A message folds behind Read more only past 20 lines of text or 1,200 characters, so blank lines and short list items no longer fold it early.
 - Sheet buttons such as Cancel and Save, the add buttons in pickers, the send button for a voice message, the unread dot and folder icons take your accent colour instead of a fixed blue.
 - Link buttons, such as those in Settings, take your accent colour too, the same colour as links in messages, instead of the system's fixed link blue.
 - Links in messages take your accent colour, as buttons and selections do, instead of the system's fixed link blue. In dark mode a deep accent is lightened just enough to read; a bright one is left as it is.

@@ -101,6 +101,10 @@ enum MessageBlock {
     case code(String)
     /// Lines begun with "- ", "* ", "• " or a number, so wrapped lines can hang under the text, not the marker.
     case list([MessageListItem])
+    /// Lines begun with ">", as an agent quotes a log line or an email.
+    case quote(AttributedString)
+    /// A line of three or more dashes, stars or underscores, alone.
+    case rule
 }
 
 struct MessageListItem {
@@ -131,7 +135,7 @@ extension MessageMarkdownCache {
     /// Code, paragraphs and lists, each a block of its own: a blank line between paragraphs, the start of a list and its
     /// end all read as one step.
     static func blocks(_ text: String) -> [MessageBlock] {
-        var result: [MessageBlock] = [], lines: [Substring] = [], items: [MessageListItem] = [], inCode = false
+        var result: [MessageBlock] = [], lines: [Substring] = [], items: [MessageListItem] = [], quoted: [String] = [], inCode = false
         func flushText() {
             let joined = lines.joined(separator: "\n")
             if inCode { result.append(.code(joined)) }
@@ -144,22 +148,40 @@ extension MessageMarkdownCache {
             if !items.isEmpty { result.append(.list(items)) }
             items = []
         }
+        func flushQuote() {
+            if !quoted.isEmpty { result.append(.quote(render(quoted.joined(separator: "\n").trimmingCharacters(in: .newlines)))) }
+            quoted = []
+        }
+        func flushAll() { flushQuote(); flushList(); flushText() }
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("```") {
-                flushList(); flushText(); inCode.toggle()
+                flushAll(); inCode.toggle()
             } else if inCode {
                 lines.append(line)
-            } else if trimmed.isEmpty {
+            } else if trimmed.hasPrefix(">") {
                 flushList(); flushText()
+                let rest = trimmed.dropFirst()
+                quoted.append(String(rest.first == " " ? rest.dropFirst() : rest))
+            } else if trimmed.isEmpty {
+                flushAll()
+            } else if isRule(trimmed) {
+                flushAll(); result.append(.rule)
             } else if let item = listItem(trimmed) {
-                flushText(); items.append(item)
+                flushQuote(); flushText(); items.append(item)
             } else {
-                flushList(); lines.append(line)
+                flushQuote(); flushList(); lines.append(line)
             }
         }
-        flushList(); flushText()
+        flushAll()
         return result
+    }
+
+    /// A line of three or more of the same dash, star or underscore, which Markdown draws as a rule.
+    private static func isRule(_ line: String) -> Bool {
+        let marks = line.filter { $0 != " " }
+        guard marks.count >= 3, let first = marks.first, "-*_".contains(first) else { return false }
+        return marks.allSatisfy { $0 == first }
     }
 
     /// A line that starts a list item: a dash, star or bullet, or a number followed by "." or ")", then a space.
