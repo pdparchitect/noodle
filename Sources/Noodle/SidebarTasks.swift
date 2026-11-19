@@ -318,20 +318,24 @@ private struct ToolBubble: View {
                 HStack(spacing: 8) {
                     if case .signingIn = status {
                         Button("Cancel") { controller.cancelSignIn() }
-                    } else if connection.keepsSecret, connection.awsIdentityCenter == nil {
-                        // A token or client secret is entered in the editor, as in Settings › Tools.
-                        let what = connection.usesToken ? "Token" : "Credentials"
-                        Button(controller.isConnected(connection) ? "Change \(what)…" : "Enter \(what)…", action: edit)
-                            .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
-                            .disabled(controller.isSigningIn)
                     } else {
-                        Button(controller.isConnected(connection) ? "Reconnect" : "Connect") { controller.connect(connection); close() }
-                            .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
-                            .disabled(controller.isSigningIn)
+                        switch controller.signInAction(for: connection) {
+                        case .edit(let title):
+                            // A token or client secret is entered in the editor, as in Settings › Tools.
+                            Button(title, action: edit)
+                                .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
+                                .disabled(controller.isSigningIn)
+                        case .connect(let title):
+                            Button(title) { controller.connect(connection); close() }
+                                .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
+                                .disabled(controller.isSigningIn)
+                        case nil:
+                            EmptyView()
+                        }
                     }
                     Button("Edit…", action: edit)
                     Spacer(minLength: 0)
-                    if controller.isConnected(connection) {
+                    if controller.offersSignOut(connection) {
                         Button("Sign Out", role: .destructive) { controller.signOut(connection); close() }
                     }
                 }

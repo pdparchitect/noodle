@@ -51,17 +51,19 @@ public struct ToolConnectionsSettingsView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 HStack(spacing: 12) {
-                                    if connection.keepsSecret, connection.awsIdentityCenter == nil {
+                                    switch store.connectionsController.signInAction(for: connection) {
+                                    case .edit(let title):
                                         // A token or client secret is entered in the editor; there is no sign-in to start.
                                         // An AWS Identity Center sign-in is started here, as a browser sign-in is.
-                                        let what = connection.usesToken ? "Token" : "Credentials"
-                                        Button(store.connectionsController.connected.contains(connection.id) ? "Change \(what)…" : "Enter \(what)…") { editing = connection }
+                                        Button(title) { editing = connection }
                                             .buttonStyle(.accentLink)
                                             .disabled(store.connectionsController.signingIn != nil || !allows(connection))
-                                    } else {
-                                        Button(store.connectionsController.connected.contains(connection.id) ? "Reconnect" : "Connect") { store.connectionsController.connect(connection) }
+                                    case .connect(let title):
+                                        Button(title) { store.connectionsController.connect(connection) }
                                             .buttonStyle(.accentLink)
                                             .disabled(store.connectionsController.signingIn != nil || !allows(connection))
+                                    case nil:
+                                        EmptyView()
                                     }
                                     Button("Edit…") { editing = connection }
                                         .buttonStyle(.accentLink)
@@ -125,7 +127,7 @@ public struct ToolConnectionsSettingsView: View {
 
     @ViewBuilder private func connectionStatus(_ connection: ToolConnection) -> some View {
         let status = store.connectionsController.status(of: connection)
-        if case .connected = status {
+        if case .connected = status, store.connectionsController.offersSignOut(connection) {
             ConnectedStatus { store.connectionsController.signOut(connection) }
         } else if case .signingIn(let stage) = status {
             Text(stage.isEmpty ? (ToolConnectionService.signsInThroughBrowser(connection) ? "Signing in…" : "Checking access…") : stage)

@@ -75,6 +75,29 @@ import XCTest
         XCTAssertFalse(f.controller.status(of: open).needsAttention)
     }
 
+    /// One that needs no key or sign-in has nothing to sign out of, and only a failure to try again.
+    func testAConnectionWithoutASignInOffersOnlyToTryAgainAfterAFailure() async throws {
+        let f = try fixture()
+        let browser = try f.account(name: "Browser")
+        var token = try f.account(name: "Token")
+        token.tokenHeader = "Authorization"
+        var open = try f.account(name: "Open")
+        open.adapter = "fixture"
+        for connection in [browser, token, open] { try f.controller.save(connection) }
+        await f.controller.readSignIns()
+        XCTAssertEqual(f.controller.signInAction(for: browser), .connect("Connect"))
+        XCTAssertEqual(f.controller.signInAction(for: token), .edit("Enter Token…"))
+        XCTAssertNil(f.controller.signInAction(for: open))
+        XCTAssertFalse(f.controller.offersSignOut(open))
+
+        // No adapter answers it here, so its check fails as a service that cannot be reached does.
+        f.controller.connect(open)
+        while f.controller.isSigningIn { await Task.yield() }
+        XCTAssertTrue(f.controller.status(of: open).needsAttention)
+        XCTAssertEqual(f.controller.signInAction(for: open), .connect("Try Again"))
+        XCTAssertFalse(f.controller.offersSignOut(open))
+    }
+
     func testUnknownAssignmentPreservesSavedAndInMemorySelection() throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)

@@ -11,7 +11,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - `scripts/scenario.sh --shots` photographs the window over a picture of your choosing with `--background`, its frosted glass showing the picture through as on a desktop, and `--margin` sets how much of the picture shows around it.
-- View › Sidebar › Show Tools lists your tool connections at the foot of the sidebar as flat icons in the text colour, light or dark to match the window, in list and icon styles, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out.
+- View › Sidebar › Show Tools lists your tool connections at the foot of the sidebar as flat icons in the text colour, light or dark to match the window, in list and icon styles, with a red dot on any that needs you to sign in or has failed. Click one to see where it stands and to connect, sign in again, edit or sign out; one that needs no sign-in offers Try Again after a failure.
 - The Usage window shows each bot's picture beside its name when grouped by bot; click it for the bot's profile, to message it, suspend it or anything else the profile offers.
 
 ### Changed
@@ -26,6 +26,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- A tool that needs no key or sign-in no longer offers Reconnect or Sign Out in Settings › Tools; after a failure it offers Try Again.
 - Links in your own messages stay white on their coloured bubble, rather than taking the accent colour and disappearing into it.
 - A name in code that ends like a web address, such as session.id in a code block or report.md in backticks, no longer gets a link preview card.
 

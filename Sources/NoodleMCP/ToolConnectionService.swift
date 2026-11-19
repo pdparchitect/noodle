@@ -368,6 +368,10 @@ public actor ToolConnectionService {
     public nonisolated static func signsInThroughBrowser(_ connection: ToolConnection) -> Bool {
         !connection.keepsSecret && (connection.adapter == nil || connectionConfiguration(for: connection)?.oauth != nil)
     }
+    /// Whether it needs nothing from the person: the app's own adapter answers it without a key or a sign-in.
+    public nonisolated static func needsNoSignIn(_ connection: ToolConnection) -> Bool {
+        !connection.keepsSecret && !signsInThroughBrowser(connection)
+    }
     /// Whether it signs in with a code the person approves on the service's page, rather than by being sent back.
     public nonisolated static func signsInWithCode(_ connection: ToolConnection) -> Bool {
         !connection.keepsSecret && connectionConfiguration(for: connection)?.oauth?.deviceAuthorizationEndpoint != nil

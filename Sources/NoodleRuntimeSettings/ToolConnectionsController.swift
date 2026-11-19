@@ -128,6 +128,32 @@ public final class ToolConnectionsController {
     /// Whether it is signed in or ready, so it offers to sign in again and to sign out.
     public func isConnected(_ connection: ToolConnection) -> Bool { connected.contains(connection.id) }
 
+    /// The button that gets a connection working, titled.
+    public enum SignInAction: Equatable {
+        /// Opens the editor, where a token or client secret is entered.
+        case edit(String)
+        /// Signs in, or checks it again.
+        case connect(String)
+    }
+
+    /// What the tools sidebar and Settings › Tools offer to get it working; nil for one that needs no sign-in and
+    /// has not failed, since there is nothing to do.
+    public func signInAction(for connection: ToolConnection) -> SignInAction? {
+        if connection.keepsSecret, connection.awsIdentityCenter == nil {
+            let what = connection.usesToken ? "Token" : "Credentials"
+            return .edit(isConnected(connection) ? "Change \(what)…" : "Enter \(what)…")
+        }
+        if ToolConnectionService.needsNoSignIn(connection) {
+            return errors[connection.id] == nil ? nil : .connect("Try Again")
+        }
+        return .connect(isConnected(connection) ? "Reconnect" : "Connect")
+    }
+
+    /// Whether Sign Out is offered: never for one that needs no sign-in, which has nothing to sign out of.
+    public func offersSignOut(_ connection: ToolConnection) -> Bool {
+        isConnected(connection) && !ToolConnectionService.needsNoSignIn(connection)
+    }
+
     /// The adapters this app serves its own connections with, by the name catalogue entries give them.
     public func serve(_ adapters: [String: any ToolConnectionAdapter]) {
         let service = service
