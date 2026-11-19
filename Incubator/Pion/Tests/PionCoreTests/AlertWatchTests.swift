@@ -121,4 +121,13 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertNotNil(problems[defender.id])
         XCTAssertEqual(woken.count, 2, "A failed check wakes no one")
     }
+
+    func testAWatchedToolsSkillSaysWhatItsWakeMeans() throws {
+        let skill = try XCTUnwrap(AlertWatcher.skillText(for: "defender"))
+        XCTAssertTrue(skill.hasPrefix("## Alerts"), skill)
+        XCTAssertTrue(skill.contains("<pion-alerts"), skill)
+        XCTAssertTrue(skill.contains("`alerts`"), "It names the tool that reads them: \(skill)")
+        XCTAssertNil(AlertWatcher.skillText(for: "virustotal"), "A lookup is never watched")
+        XCTAssertNil(AlertWatcher.skillText(for: nil))
+    }
 }

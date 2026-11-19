@@ -1234,4 +1234,28 @@ final class ToolConnectionServiceTests: XCTestCase {
         _ = try? await Task.detached { try await provider.tools(context: context) }.value
         await fulfillment(of: [reported], timeout: 10)
     }
+
+    /// What the app says about a connection, such as how it uses it on its own, goes in the connection's skill before
+    /// the person's own instructions, and a change to it writes the skill again.
+    @MainActor func testAnAppsOwnWordsAboutAConnectionGoInItsSkillBeforeThePersons() throws {
+        let registry = ToolProviderRegistry()
+        let providers = ToolConnectionProviders(registry: registry, service: ToolConnectionService(credentials: TestVault(), oauth: MCPOAuth(),
+                                                                                     httpConfiguration: { .ephemeral }))
+        var connection = try ToolConnection(name: "Fixture tools", endpoint: URL(string: "https://example.invalid/mcp")!)
+        connection.instructions = "Only the EU tenant."
+        let grant: ToolAssignments = [ConnectionToolProvider.grantKind: [connection.id.uuidString]]
+        var said = "## Alerts\n\nThe app wakes you."
+        providers.appInstructions = { _ in said }
+        providers.synchronize([connection]) { _ in connection }
+        let skill = try XCTUnwrap(registry.manifests(assignments: grant).first?.instructions)
+        let app = try XCTUnwrap(skill.range(of: "## Alerts")), person = try XCTUnwrap(skill.range(of: "Only the EU tenant."))
+        XCTAssertLessThan(app.lowerBound, person.lowerBound)
+
+        said = "## Alerts\n\nThe app checks every five minutes."
+        providers.synchronize([connection]) { _ in connection }
+        XCTAssertTrue(registry.manifests(assignments: grant).first?.instructions.contains("every five minutes") == true)
+        providers.appInstructions = nil
+        providers.synchronize([connection]) { _ in connection }
+        XCTAssertFalse(registry.manifests(assignments: grant).first?.instructions.contains("## Alerts") == true)
+    }
 }

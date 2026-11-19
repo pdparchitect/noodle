@@ -61,6 +61,14 @@ public final class ToolConnectionsController {
         didSet {
             providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
             providers?.onError = { [weak self] id, message in self?.errors[id] = message }
+            providers?.appInstructions = appInstructions
+            synchronizeProviders()
+        }
+    }
+    /// What the app says about a connection in the skill bots read for it, before the person's own instructions.
+    @ObservationIgnored public var appInstructions: (@MainActor (ToolConnection) -> String?)? {
+        didSet {
+            providers?.appInstructions = appInstructions
             synchronizeProviders()
         }
     }

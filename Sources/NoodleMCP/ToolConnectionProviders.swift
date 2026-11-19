@@ -10,6 +10,8 @@ import NoodleCore
     /// Called on the main actor with a failure already safe to show, for the connection it
     /// happened on. Calls fail on background tasks, and whoever shows the error keeps it there.
     public var onError: (@MainActor (UUID, String) -> Void)?
+    /// What the app says about a connection in its skill, before the person's own instructions, if anything.
+    public var appInstructions: (@MainActor (ToolConnection) -> String?)?
 
     public init(registry: ToolProviderRegistry, service: ToolConnectionService) {
         self.registry = registry
@@ -20,7 +22,10 @@ import NoodleCore
     /// `current` looks a connection up at call time; nil means it was removed.
     public func synchronize(_ connections: [ToolConnection],
                             current: @escaping @MainActor (UUID) -> ToolConnection?) {
-        let wanted = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0.skillName + "\n" + $0.name + "\n" + $0.description + "\n" + $0.instructions) })
+        let said = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, appInstructions?($0) ?? "") })
+        let wanted = Dictionary(uniqueKeysWithValues: connections.map {
+            ($0.id, $0.skillName + "\n" + $0.name + "\n" + $0.description + "\n" + $0.instructions + "\n" + said[$0.id, default: ""])
+        })
         for (id, signature) in signatures where wanted[id] != signature {
             registry.unregister(String(signature.prefix { $0 != "\n" }))
             signatures[id] = nil
@@ -28,7 +33,8 @@ import NoodleCore
         for connection in connections where signatures[connection.id] == nil {
             let id = connection.id, service = service
             let provider = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: id,
-                summary: connection.description, userInstructions: connection.instructions) { [weak self] action, tool, arguments, uri, authorized in
+                summary: connection.description, appInstructions: said[id, default: ""],
+                userInstructions: connection.instructions) { [weak self] action, tool, arguments, uri, authorized in
                 guard let current = await current(id) else { throw ToolConnectionServiceError.revoked }
                 do {
                     return try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),

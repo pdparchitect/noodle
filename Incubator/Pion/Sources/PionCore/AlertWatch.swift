@@ -107,8 +107,22 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         watch = AlertWatch.load(from: file)
     }
 
+    /// What the skill of a connection served by the adapter of this name says about its alerts wake, for one Pion
+    /// watches: what the note's parts mean and which tool reads the alerts, and nothing of what to do with them.
+    public nonisolated static func skillText(for adapter: String?) -> String? {
+        guard let tool = adapter.flatMap({ PionAdapters.all[$0] as? OperationAdapter })?.watchedTool else { return nil }
+        return """
+        ## Alerts
+
+        Pion checks this account for new serious alerts every five minutes and wakes the agents it is assigned to with a \
+        note such as `<pion-alerts account="…" skill="…" tool="\(tool)" new="3" since="…" until="…" />`. The note says \
+        where to look and when, not what was found: `new` is how many, with a `+` when there may be more, and `since` and \
+        `until` are the times of the oldest and the newest. Read them with `\(tool)`.
+        """
+    }
+
     /// Whether Pion can watch connections served by the adapter of this name.
-    public static func watches(_ adapter: String?) -> Bool {
+    public nonisolated static func watches(_ adapter: String?) -> Bool {
         adapter.flatMap { PionAdapters.all[$0] as? OperationAdapter }?.watchedTool != nil
     }
 

@@ -152,6 +152,7 @@ import UniformTypeIdentifiers
         })
         connectionsController.toolRegistry = tools
         connectionsController.serve(PionAdapters.all)
+        connectionsController.appInstructions = { AlertWatcher.skillText(for: $0.adapter) }
         connectionsController.onAssignmentsChange = { [weak self, toolAssignments] granted in
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             self?.toolBroker?.synchronizeSkills()
