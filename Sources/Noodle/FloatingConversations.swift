@@ -231,3 +231,29 @@ extension Notification.Name {
     /// The object is the conversation ID whose separate or floating window should return to its input.
     static let focusConversationComposer = Notification.Name("Noodle.focusConversationComposer")
 }
+
+/// View > Enter Full Screen, in place of the one AppKit appends, whose separator a menu SwiftUI rebuilds can lose.
+struct FullScreenCommand: View {
+    @State private var state = FullScreenState()
+
+    var body: some View {
+        Button(state.isFullScreen ? "Exit Full Screen" : "Enter Full Screen") {
+            NSApp.keyWindow?.toggleFullScreen(nil)
+        }
+        .keyboardShortcut("f", modifiers: [.control, .command])
+    }
+}
+
+@MainActor @Observable private final class FullScreenState {
+    var isFullScreen = false
+    @ObservationIgnored private var observers: [Any] = []
+
+    init() {
+        let update: @Sendable (Notification) -> Void = { _ in
+            MainActor.assumeIsolated { self.isFullScreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) == true }
+        }
+        for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification, NSWindow.didBecomeKeyNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: update))
+        }
+    }
+}

@@ -18,6 +18,7 @@
 
 ### Changed
 
+- View lists Sidebar before Conversation, as Noodle does.
 - The comment popover's icon takes the title's colour instead of the accent.
 - GitHub signs in instead of taking a pasted token: register an OAuth app for the organisation with device sign-in turned on and enter its client ID, then approve the code Pion shows on GitHub. Accounts added with a token keep working with it.
 - Markdown headings in a message show as bold lines rather than with their # signs, quoted lines are set in with a bar beside them, and a line of dashes draws a rule.
@@ -35,6 +36,7 @@
 
 ### Fixed
 
+- View › Enter Full Screen always has its separator above it: Pion now carries its own item, as Noodle does, instead of AppKit's, whose separator a rebuilt menu could lose.
 - A message's attachments wrap side by side again: they have the whole column, rather than the share its text leaves, so two annotations fit on a row.
 - Google Cloud audit log searches that Google fails every time are read again in small pages, and one that fails partway keeps the entries already found and says where it stopped, instead of ending in an error.
 - A name in code that ends like a web address, such as session.id in a code block or report.md in backticks, no longer gets a link preview card.

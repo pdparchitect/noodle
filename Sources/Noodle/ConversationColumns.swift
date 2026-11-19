@@ -528,32 +528,6 @@ struct ColumnHeader: View {
     }
 }
 
-/// View > Enter Full Screen, in place of the one AppKit appends right after the layouts.
-struct FullScreenCommand: View {
-    @State private var state = FullScreenState()
-
-    var body: some View {
-        Button(state.isFullScreen ? "Exit Full Screen" : "Enter Full Screen") {
-            NSApp.keyWindow?.toggleFullScreen(nil)
-        }
-        .keyboardShortcut("f", modifiers: [.control, .command])
-    }
-}
-
-@MainActor @Observable private final class FullScreenState {
-    var isFullScreen = false
-    @ObservationIgnored private var observers: [Any] = []
-
-    init() {
-        let update: @Sendable (Notification) -> Void = { _ in
-            MainActor.assumeIsolated { self.isFullScreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) == true }
-        }
-        for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification, NSWindow.didBecomeKeyNotification] {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: update))
-        }
-    }
-}
-
 /// View > As List and As Columns.
 struct MainWindowLayoutCommands: View {
     @AppStorage(MainWindowLayout.key) private var layout = MainWindowLayout.list

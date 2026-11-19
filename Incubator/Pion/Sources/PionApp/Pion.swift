@@ -106,6 +106,8 @@ struct PionApp: App {
         KeyboardBindings.catalog = PionShortcuts.catalog
         // Noodle's sidebar line, but an agent's row says what it does until the champion picks otherwise.
         UserDefaults.standard.register(defaults: [ConversationRowDetail.key: ConversationRowDetail.description.rawValue])
+        // As in Noodle: the View menu carries its own Full Screen item, after a divider.
+        UserDefaults.standard.register(defaults: ["NSFullScreenMenuItemEverywhere": false])
         #if PION_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
@@ -319,6 +321,7 @@ struct PionCommands: Commands {
             Divider()
             ViewOptions()
             Divider()
+            FullScreenCommand()
         }
         CommandMenu("Conversation") {
             Button("Search Conversations") { context?.search?() }
@@ -390,7 +393,8 @@ private struct FrostedWindowBackground: NSViewRepresentable {
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
-/// View › Background (Frosted or Solid, and the effect) and View › Sidebar, kept per person as Noodle keeps its view options.
+/// View › Background (Frosted or Solid, and the effect), View › Sidebar and View › Conversation, in Noodle's order, kept per
+/// person as Noodle keeps its view options.
 struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
@@ -414,8 +418,6 @@ struct ViewOptions: View {
             }
         }
         Divider()
-        // Noodle's, without its choices for long messages: Pion keeps its own reading style.
-        Menu("Conversation") { AttachmentLayoutChoices() }
         Menu("Sidebar") {
             Toggle("Show Closed Investigations", isOn: $showsClosed)
             SidebarToolsToggle()
@@ -423,6 +425,8 @@ struct ViewOptions: View {
             // Noodle's: the line under each name, the order and the agents' tasks.
             SidebarListPickers()
         }
+        // Noodle's, without its choices for long messages: Pion keeps its own reading style.
+        Menu("Conversation") { AttachmentLayoutChoices() }
     }
 }
 
