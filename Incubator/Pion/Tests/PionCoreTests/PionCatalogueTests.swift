@@ -10,7 +10,7 @@ final class PionCatalogueTests: XCTestCase {
         let names = Set(PionCatalogue.entries.map(\.name))
         for security in ["VirusTotal", "Shodan", "Okta", "Microsoft Entra ID", "Microsoft Defender XDR", "CrowdStrike Falcon", "SentinelOne",
                          "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Cloudflare Radar", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "NVD", "crt.sh", "cve.now", "AWS Security",
-                         "Google Cloud", "Google Workspace", "Grafana Cloud", "Grafana", "Sentry", "Self-Hosted Sentry"] {
+                         "Google Cloud", "Google Workspace", "Grafana Cloud", "Self-Hosted Grafana", "Sentry", "Self-Hosted Sentry"] {
             XCTAssertTrue(names.contains(security), security)
         }
         // Noodle's own entries, by their icons' names.
