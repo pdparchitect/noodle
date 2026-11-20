@@ -372,6 +372,19 @@ import XCTest
         XCTAssertEqual(log.entries.count, 1, "Read again, nothing has changed: \(log.text)")
     }
 
+    /// A connection that could not be offered to agents at all says why in its activity, as every failure does.
+    func testAConnectionThatCannotBeOfferedToAgentsSaysSoInItsActivity() async throws {
+        let f = try fixture()
+        let account = try f.account()
+        // Something else already goes by the name its tools would be offered under.
+        try f.registry.register(TakenName(manifest: .init(id: account.skillName, title: "Taken", summary: "")))
+        try f.controller.save(account)
+        let reason = try XCTUnwrap(f.controller.errors[account.id])
+        let log = f.controller.activity.log(for: account.id)
+        XCTAssertTrue(log.text.contains("Could not offer it to agents"), log.text)
+        XCTAssertTrue(log.text.contains(reason), log.text)
+    }
+
     /// Any app watches a connection whose adapter has a feed, with nothing set up: the first check marks where watching
     /// starts, a later one wakes the bots it is assigned to for what is new, each check is in the connection's activity,
     /// and its skill says what the wake means. A lookup without a feed is never checked.
@@ -459,6 +472,7 @@ import XCTest
     let controller: ToolConnectionsController
     /// The same pieces the app wires together around this controller.
     let tools: ToolBridgeBroker
+    let registry: ToolProviderRegistry
     let reach = ToolConnectionServiceReach()
     var registryURL: URL { root.appendingPathComponent("MCP/connections.json") }
 
@@ -474,6 +488,7 @@ import XCTest
         let assignments = ToolAssignmentStore(), registry = ToolProviderRegistry()
         let broker = ToolBridgeBroker(registry: registry) { assignments.assignments(for: $0) }
         tools = broker
+        self.registry = registry
         controller.toolRegistry = registry
         controller.onAssignmentsChange = { assignments.replace(ConnectionToolProvider.grantKind, with: $0); broker.synchronizeSkills() }
         let repository = repository, agents = [a, b]
@@ -602,4 +617,12 @@ private final class FeedAdapter: ToolConnectionAdapter, @unchecked Sendable {
     func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
         lock.withLock { count += 1; return alerts }
     }
+}
+
+/// A provider that only holds a name.
+private struct TakenName: ToolProvider {
+    let kind = ToolProviderKind.builtIn
+    let manifest: ToolProviderManifest
+    func tools(context: ToolCallContext) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+    func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data { Data() }
 }

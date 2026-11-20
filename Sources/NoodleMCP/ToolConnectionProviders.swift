@@ -18,8 +18,8 @@ public struct ToolConnectionCall: Sendable {
     private let registry: ToolProviderRegistry
     private let service: ToolConnectionService
     private var signatures: [UUID: String] = [:]
-    /// Called on the main actor with a failure already safe to show, for the connection it
-    /// happened on. Calls fail on background tasks, and whoever shows the error keeps it there.
+    /// Called on the main actor when a connection could not be registered, saying why in words safe to show. A failed
+    /// call reaches `onCall` instead, with its failure.
     public var onError: (@MainActor (UUID, String) -> Void)?
     /// Called on the main actor after each request a bot made of a connection, whether it succeeded or not.
     public var onCall: (@MainActor (ToolConnectionCall) -> Void)?
@@ -61,7 +61,6 @@ public struct ToolConnectionCall: Sendable {
                     return result
                 } catch {
                     let message = Self.safeError(error)
-                    await self?.onError?(id, message)
                     await report(message)
                     throw ToolProviderError(message)
                 }

@@ -17,6 +17,7 @@ import Observation
     /// The connections whose sign-in has been read since the app started, so one found without it is noted only once.
     @ObservationIgnored private var signInsRead: Set<UUID> = []
     /// Why each connection last failed, in words safe to show, by connection.
+    /// Set only through `fail`, which also adds the failure to the connection's activity.
     public private(set) var problems: [UUID: String] = [:]
     /// Whether the watched connections are being checked.
     public private(set) var isWatching = false
@@ -39,7 +40,7 @@ import Observation
     @ObservationIgnored public var toolRegistry: ToolProviderRegistry? {
         didSet {
             providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
-            providers?.onError = { [weak self] id, message in self?.problems[id] = message }
+            providers?.onError = { [weak self] id, message in self?.fail(id, "Could not offer it to agents", because: message) }
             providers?.onCall = { [weak self] in self?.record($0) }
             providers?.appInstructions = { [weak self] in self?.instructions(for: $0) }
             synchronize()
@@ -241,17 +242,14 @@ import Observation
     public func signInFailed(_ record: ToolConnection, _ error: Error) {
         guard var current = registry.connections.first(where: { $0.id == record.id }) else { return }
         if error is CancellationError {
-            problems[record.id] = "Sign-in cancelled."
-            recordActivity(record.id, "Sign-in cancelled")
+            fail(record.id, "Sign-in cancelled", because: "Sign-in cancelled.", detailed: false)
         } else if case .signInRequired? = error as? ToolConnectionServiceError, record.open == true || current.open == true {
             ready.remove(record.id)
             current.open = nil
             try? save(current)
-            problems[record.id] = "This server now asks for a sign-in. Connect again to sign in."
-            recordActivity(record.id, "Could not connect", detail: problems[record.id] ?? "")
+            fail(record.id, "Could not connect", because: "This server now asks for a sign-in. Connect again to sign in.")
         } else {
-            problems[record.id] = ToolConnectionProviders.safeError(error)
-            recordActivity(record.id, "Could not sign in", detail: problems[record.id] ?? "")
+            fail(record.id, "Could not sign in", because: ToolConnectionProviders.safeError(error))
         }
     }
 
@@ -337,6 +335,13 @@ import Observation
 
     // MARK: Activity
 
+    /// Marks the connection failed, saying why in words safe to show, and adds the failure to its activity: the one way a
+    /// connection fails, so a failure the person sees always has its line.
+    private func fail(_ id: UUID, _ title: String, because reason: String, detailed: Bool = true) {
+        problems[id] = reason
+        recordActivity(id, title, detail: detailed ? reason : "")
+    }
+
     /// Adds a line to the connection's activity, with any detail under it.
     public func recordActivity(_ connection: UUID, _ title: String, detail: String = "") {
         onActivity?(connection, title, detail)
@@ -355,7 +360,7 @@ import Observation
         guard let asked else { return }
         let seconds = Double(call.duration.components.seconds) + Double(call.duration.components.attoseconds) / 1e18
         let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s)"
-        if let failure = call.failure { recordActivity(call.connection, "\(bot): \(asked.failed)" + took, detail: failure) }
+        if let failure = call.failure { fail(call.connection, "\(bot): \(asked.failed)" + took, because: failure) }
         else { recordActivity(call.connection, "\(bot) \(asked.done)" + took) }
     }
 }

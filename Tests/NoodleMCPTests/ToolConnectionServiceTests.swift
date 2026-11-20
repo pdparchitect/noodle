@@ -1285,8 +1285,9 @@ final class ToolConnectionServiceTests: XCTestCase {
         let providers = ToolConnectionProviders(registry: registry, service: ToolConnectionService(credentials: TestVault(), oauth: MCPOAuth(),
                                                                                      httpConfiguration: { .ephemeral }))
         let reported = expectation(description: "error reported")
-        providers.onError = { _, _ in
+        providers.onCall = { call in
             XCTAssertTrue(Thread.isMainThread)
+            XCTAssertNotNil(call.failure)
             reported.fulfill()
         }
         let connection = try ToolConnection(name: "Fixture tools", endpoint: URL(string: "https://example.invalid/mcp")!)
