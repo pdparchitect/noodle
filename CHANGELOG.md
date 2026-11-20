@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - `scripts/readme-shots.sh` photographs a scenario for an app's README over the app's own artwork, blurred, and writes the rounded, optimised images, so README screenshots are retaken the same way every time.
 - Right-click a tool in the sidebar and choose Show Activity to see what it has done since Noodle started: which bot called which of its tools, how long each call took and why any failed, its sign-ins and sign-outs, a sign-in, token or credentials it is missing, and why it could not be offered to bots at all.
+- Bots can fill in what you send them with Choose Conversation with Context: the field you were in, or the whole web form around it. For 15 minutes after you send it, each bot it went to can write text, replace or add to it, tick boxes, pick options and choose from menus, while the app stays in the background and keeps your focus. Each bot gets its own permission that no other bot can use. Fields that look like card details, codes, passwords or identity numbers are left out: bots can neither read nor fill them, and ⌘⌘ no longer quotes one you are typing in. A field you change after sending is left alone, and a bot is told what could not be filled, such as a date, so it can give you the value instead. Not offered for conversations on a Noodle Hub.
 
 ### Changed
 

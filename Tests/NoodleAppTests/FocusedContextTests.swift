@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+import NoodleContextFieldsTools
 import NoodleCore
 @testable import Noodle
 
@@ -89,5 +90,36 @@ import NoodleCore
         XCTAssertEqual(note.quote, "today")
         XCTAssertNil(note.region)
         XCTAssertEqual(note.comment, chrome.comment)
+    }
+
+    /// Fields nobody touches, for tests that only follow the grants.
+    private final class StillFields: ContextFieldSurface, @unchecked Sendable {
+        func value(of field: String) async -> String? { "Shipping it today" }
+        func setText(_ text: String, of field: String) async {}
+        func press(_ field: String) async {}
+        func choose(_ option: String, in field: String) async {}
+    }
+
+    /// Captured fields wait with the context; once it is sent, each bot it went to holds its own token.
+    func testSentContextGivesEachBotItsOwnWayToFillTheFields() throws {
+        let f = try StoreFixture(); addTeardownBlock { @MainActor in f.cleanUp() }
+        let group = try f.group()
+        let capture = ContextFieldCapture(app: "Google Chrome", window: "Home / X", page: "https://x.com/compose/post",
+            fields: [ContextField(id: "f1", label: "Post text", kind: .text, value: "Shipping it today")], surface: StillFields())
+        try f.store.stageContext(chrome, screenshot: nil, fields: capture, into: group.id)
+        let note = try XCTUnwrap(f.store.pendingAttachments(for: group.id).first?.annotation)
+        XCTAssertEqual(note.comment, chrome.comment + "\nUntil 15 minutes after this is sent, its fields can be filled with the context-fields tool.")
+        XCTAssertTrue(f.store.contextFields.grants(for: f.a.id).isEmpty, "nothing until it is sent")
+
+        f.store.sendDraft(to: group.id)
+        let ada = f.store.contextFields.grants(for: f.a.id), grace = f.store.contextFields.grants(for: f.b.id)
+        XCTAssertEqual(ada.count, 1)
+        XCTAssertEqual(grace.count, 1)
+        XCTAssertNotEqual(ada.first?.token, grace.first?.token)
+        XCTAssertEqual(ada.first?.capture.fields.map(\.label), ["Post text"])
+
+        // Context without fields says nothing about filling them.
+        try f.store.stageContext(chrome, screenshot: nil, into: f.directB.id)
+        XCTAssertEqual(f.store.pendingAttachments(for: f.directB.id).first?.annotation?.comment, chrome.comment)
     }
 }

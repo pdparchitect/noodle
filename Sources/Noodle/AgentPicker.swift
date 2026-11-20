@@ -3,6 +3,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import SwiftUI
 import Observation
+import NoodleContextFieldsTools
 import NoodleCore
 
 struct AgentPickerItem: Identifiable, Equatable {
@@ -222,7 +223,7 @@ enum AgentPickerLayout {
     private var hotKeys: [GlobalHotKey] = []
     private var doubleTaps: ModifierDoubleTapMonitor?
     /// Being read while the grid is open, so it opens at once.
-    private var pending: (context: Task<FocusedContext, Never>, screenshot: Task<CGImage?, Never>)?
+    private var pending: (context: Task<(FocusedContext, ContextFieldCapture?), Never>, screenshot: Task<CGImage?, Never>)?
     private var activationObserver: NSObjectProtocol?
     /// Chromium apps asked to keep their pages ready for reading; handed back when no longer needed.
     private var preparedApps: Set<pid_t> = []
@@ -314,7 +315,10 @@ enum AgentPickerLayout {
         let pid = app.processIdentifier, name = app.localizedName ?? "App", bundle = app.bundleIdentifier
         show(context: .init(name: name, icon: app.icon))
         guard panel?.isVisible == true else { return }
-        pending = (Task.detached { FocusedContextReader.read(pid: pid, appName: name, bundleIdentifier: bundle) },
+        pending = (Task.detached {
+                       let context = FocusedContextReader.read(pid: pid, appName: name, bundleIdentifier: bundle)
+                       return (context, ContextFieldReader.capture(pid: pid, context: context))
+                   },
                    Task { await WindowSnapshot.capture(pid: pid) })
     }
 
@@ -354,8 +358,8 @@ enum AgentPickerLayout {
         store.floatConversation(id)
         guard let pending else { return }
         Task {
-            let context = await pending.context.value, screenshot = await pending.screenshot.value
-            do { try store.stageContext(context, screenshot: screenshot, into: id) }
+            let (context, fields) = await pending.context.value, screenshot = await pending.screenshot.value
+            do { try store.stageContext(context, screenshot: screenshot, fields: fields, into: id) }
             catch { store.errorMessage = error.localizedDescription }
             // Each permission is asked for once, by the feature that needs it.
             if screenshot == nil, ScreenRecordingAccess.status == .notRequested { ScreenRecordingAccess.request() }

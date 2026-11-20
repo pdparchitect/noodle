@@ -5,6 +5,7 @@ import Observation
 import NoodleAppletTools
 import NoodleBrand
 import NoodleCalendarTools
+import NoodleContextFieldsTools
 import NoodleCore
 import NoodleHubClient
 import NoodleImagesTools
@@ -224,6 +225,8 @@ final class NoodleStore {
     let browsers: BrowserController
     let calendars: EventKitController
     let reminders: EventKitController
+    /// Fields sent as context from another app, and which bot may fill them until when.
+    @ObservationIgnored let contextFields = ContextFieldGrants()
     let imageGeneration: ImageGenerationController
     let applets: AppletController
     let harnessProfiles: HarnessProfilesController
@@ -365,6 +368,7 @@ final class NoodleStore {
         }
         try? toolProviders.register(CalendarToolProvider(store: calendarStore))
         try? toolProviders.register(ReminderToolProvider(store: reminderStore))
+        try? toolProviders.register(ContextFieldsToolProvider(grants: contextFields))
         // Built in because it reads the models in Noodle's own storage and runs them in the Apple helper.
         imageGeneration = ImageGenerationController(repository: self.repository)
         imageGeneration.onAssignmentsChange = { [toolAssignments, tools] assigned in
@@ -2108,6 +2112,7 @@ final class NoodleStore {
             }
 
             drafts.clear(conversation.id)
+            contextFields.grant(attachments: pendingAttachments.map(\.id), to: conversation.participantIDs)
             voiceCalls.shared(in: conversation.id, body: body, attachmentNames: pendingAttachments.map(\.originalFilename))
             sendToHub(conversation.id)
         } catch {
@@ -2352,31 +2357,39 @@ final class NoodleStore {
         }
     }
 
+    @discardableResult
     func importCapture(image: CGImage, title: String, region: AttachmentAnnotation.Region?, comment: String,
-                       quote: String? = nil, into conversationID: UUID) throws {
+                       quote: String? = nil, into conversationID: UUID) throws -> ConversationAttachment {
         let saved = try CaptureAttachment.save(image: image, title: title, region: region, comment: comment, quote: quote,
                                                into: conversationID, repository: repository)
         if let source = saved.source { attachmentsByConversation[conversationID, default: []].append(source) }
         attachmentsByConversation[conversationID, default: []].append(saved.attachment)
         drafts[conversationID].attachments.append(saved.attachment)
+        return saved.attachment
     }
 
     /// Choose Conversation with Context: one annotation waits in the conversation's message field, sent only with
     /// the person's message. It marks the field on a picture of its window and quotes its text, or, without
-    /// a picture, quotes the text alone.
-    func stageContext(_ context: FocusedContext, screenshot: CGImage?, into conversationID: UUID) throws {
+    /// a picture, quotes the text alone. The window's fields wait with it: once sent, each bot it went to may
+    /// fill them for a while. Bots on a Noodle Hub cannot reach this Mac's windows, so they are not offered that.
+    func stageContext(_ context: FocusedContext, screenshot: CGImage?, fields: ContextFieldCapture? = nil, into conversationID: UUID) throws {
         guard conversations.contains(where: { $0.id == conversationID }) else { throw WorkspaceError.missingConversation(conversationID) }
+        let fields = fields.flatMap { $0.fields.isEmpty || hubMirrors.contains(where: { $0.owns(conversation: conversationID) }) ? nil : $0 }
+        let minutes = Int(ContextFieldGrants.lifetime / 60)
+        let comment = context.comment + (fields == nil ? "" : "\nUntil \(minutes) minutes after this is sent, its fields can be filled with the context-fields tool.")
+        let attachment: ConversationAttachment
         if let screenshot {
-            try importCapture(image: screenshot, title: context.title, region: context.region ?? .init(x: 0, y: 0, width: 1, height: 1),
-                              comment: context.comment, quote: context.quote, into: conversationID)
-            return
+            attachment = try importCapture(image: screenshot, title: context.title, region: context.region ?? .init(x: 0, y: 0, width: 1, height: 1),
+                                           comment: comment, quote: context.quote, into: conversationID)
+        } else {
+            let text = Data((context.quote ?? comment).utf8)
+            let filename = "Context — \(CaptureAttachment.filenameTitle(context.title)).txt"
+            let source = ConversationAttachment(conversationID: conversationID, originalFilename: filename, storedFilename: filename,
+                                                mediaType: "text/plain", byteCount: Int64(text.count))
+            let note = AttachmentAnnotation(source: source, quote: context.quote, comment: comment)
+            attachment = try saveConversationAnnotation(note, content: Data(note.textRepresentation.utf8), source: source, sourceData: text)
         }
-        let text = Data((context.quote ?? context.comment).utf8)
-        let filename = "Context — \(CaptureAttachment.filenameTitle(context.title)).txt"
-        let source = ConversationAttachment(conversationID: conversationID, originalFilename: filename, storedFilename: filename,
-                                            mediaType: "text/plain", byteCount: Int64(text.count))
-        let note = AttachmentAnnotation(source: source, quote: context.quote, comment: context.comment)
-        try saveConversationAnnotation(note, content: Data(note.textRepresentation.utf8), source: source, sourceData: text)
+        if let fields { contextFields.stage(fields, attachment: attachment.id) }
     }
 
     private func importAttachmentFile(from url: URL, into conversationID: UUID) throws {
@@ -2410,13 +2423,15 @@ final class NoodleStore {
         drafts[source.conversationID].attachments.append(attachment)
     }
 
+    @discardableResult
     func saveConversationAnnotation(_ note: AttachmentAnnotation, content: Data,
-                                    source: ConversationAttachment, sourceData: Data) throws {
+                                    source: ConversationAttachment, sourceData: Data) throws -> ConversationAttachment {
         let saved = try ConversationAnnotationContent.save(note, content: content, source: source,
             sourceData: sourceData, repository: repository)
         let id = source.conversationID
         attachmentsByConversation[id, default: []].append(contentsOf: [saved.source, saved.attachment])
         drafts[id].attachments.append(saved.attachment)
+        return saved.attachment
     }
 
     func canEditAnnotation(_ attachment: ConversationAttachment) -> Bool {
