@@ -1,8 +1,16 @@
+<div align="center">
+
 # Rook
 
-An incubating tool. Run it with `swift run` in this folder.
+**AI bug hunting harness.**<br>
+A team of AI agents runs an authorized offensive engagement with you: they map the
+target, find and demonstrate weaknesses, and write up what they found. You stay in
+charge of what is attempted.
 
-## License
+</div>
 
-Source available under the PolyForm Noncommercial License 1.0.0: free to read, use and
-change for noncommercial purposes. See LICENSE.md. This is not an open-source license.
+Rook is an incubating tool, the offensive counterpart to Pion, built on Noodle's core
+(agents, harnesses, groups, the case record). It is for authorized red-team work only.
+
+> Foundations in progress: this is a working Rook app cloned from Pion, with Missions in
+> place of Investigations and no tool connections yet.

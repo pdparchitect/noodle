@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "title": "Typography",
+  "summary": "Messages of every shape, for checking how text is laid out: short replies, long prose, lists, Markdown, code, tables and a full report.",
+  "clock": "14:00",
+  "appearance": "dark",
+  "champion": "Dana Okafor",
+  "settings": {
+    "RookBackdropEffect": "none"
+  },
+  "agents": [
+    {
+      "key": "ada",
+      "name": "Quiet Lynx",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Operator",
+      "avatar": {
+        "symbol": "star.fill",
+        "color": 0
+      }
+    },
+    {
+      "key": "ben",
+      "name": "Silver Kite",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Reporting",
+      "avatar": {
+        "symbol": "pencil",
+        "color": 2
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "short",
+      "group": { "name": "Short messages", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "09:00", "from": "user", "text": "Morning! Anything overnight?" },
+        { "at": "09:00", "from": "ada", "text": "Quiet run. Two new subdomains, both dead ends." },
+        { "at": "09:01", "from": "user", "text": "Great 👍" },
+        { "at": "09:01", "from": "ada", "text": "Ok." },
+        { "at": "09:02", "from": "user", "text": "Can you check the overnight scan?" },
+        { "at": "09:02", "from": "ada", "text": "Done: it finished at 03:14, 1,204 hosts, nothing new since yesterday." },
+        { "at": "09:03", "from": "user", "text": "👍" },
+        { "at": "09:03", "from": "ada", "text": "Want me to keep it running tonight too?" },
+        { "at": "09:04", "from": "user", "text": "Yes please, and tell me only if it finds something." },
+        { "at": "09:04", "from": "ada", "text": "Will do." }
+      ]
+    },
+    {
+      "key": "prose",
+      "group": { "name": "Long prose", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "10:00", "from": "user", "text": "Write up what we found on the web engagement, in full. Take your time." },
+        { "at": "10:20", "from": "ben", "text": "Here is the full account, from the first request to where things stand now.\n\nAt 13:48 recon found the web root of shop.acme-staging.example serving its .git directory: a plain request for /.git/HEAD returned 200. That is enough to pull the whole source history, which we did read-only with git-dumper.\n\nIn the history, config/secrets.php carried an AWS access key that had been committed and then \"removed\" two commits later — but it was still there to recover. The least-intrusive check confirmed it was live: a single get-caller-identity call came back as the IAM user deploy-ci, and the same key could list the acme-staging-backups bucket. We stopped there. No object was read, and nothing on the target was changed.\n\nThe path is complete: an unauthenticated visitor reaches the source, the source leaks a live key, and the key already reaches a backups bucket. We have held before proving full impact and are waiting on your go-ahead to pull a single file as proof. The fix is to rotate deploy-ci, block /.git/ at the web server, and scrub the key from the git history, not just the latest commit." }
+      ]
+    },
+    {
+      "key": "names",
+      "group": { "name": "One long paragraph and long names", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "10:21", "from": "user", "text": "Thanks. One paragraph version for the report?" },
+        { "at": "10:22", "from": "ben", "text": "An exposed .git directory on shop.acme-staging.example leaked the application's full source history, which contained a live AWS key for the deploy-ci CI account; the key was valid and could already list a backups bucket, so an external attacker needs nothing but the web root to reach internal data, and we have held before reading any object and are waiting on the operator's go-ahead to demonstrate full impact, with the fix being to rotate the key, block the .git path and scrub the secret from history." },
+        { "at": "10:24", "from": "ben", "text": "Long names and addresses for the record: the exposed repo was at https://shop.acme-staging.example/.git/HEAD, the key authenticated as arn:aws:iam::604757830675:user/deploy-ci, the leaked access key id was AKIA3X7QW92EXAMPLE, and the commit that introduced it hashes to e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855." }
+      ]
+    },
+    {
+      "key": "lists",
+      "group": { "name": "Lists", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "11:00", "from": "user", "text": "Show me how lists come out." },
+        { "at": "11:01", "from": "ada", "text": "Dashes:\n- Short item\n- An item long enough to wrap onto a second line, so we can see whether the wrapped text lines up under the words or under the dash\n- Another short one\n\nStars and bullets:\n* Star item\n• Bullet item\n\nNumbered with dots:\n1. Pull the repo from the exposed .git\n2. Recover the AWS key from config/secrets.php in history, then confirm it is live with a single read-only get-caller-identity call before going further\n3. Enumerate read-only what the key can reach\n\nNumbered with brackets:\n1) First\n2) Second\n10) Tenth, to check a wider number lines up" }
+      ]
+    },
+    {
+      "key": "agent-lists",
+      "group": { "name": "Lists as agents write them", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "11:02", "from": "ada", "text": "EVIDENCE\n- shop.acme-staging.example serves /.git/HEAD (HTTP 200), so the source history is pullable.\n- config/secrets.php in history carries an AWS key, AKIA3X7QW92EXAMPLE.\nINFERENCE (confidence: medium to high)\n- The key is likely live and tied to CI, so it is worth a single read-only validation.\n- Nothing destructive has been done, and no object has been read." },
+        { "at": "11:03", "from": "ada", "text": "Inline steps, as agents often write them: 1) dump the repo with git-dumper, 2) grep the history for AKIA, 3) validate with a read-only get-caller-identity, 4) list the bucket read-only with --max-items 1." },
+        { "at": "11:04", "from": "user", "text": "My own list:\n- check the scope\n- check the subdomains\n- then the endpoints" }
+      ]
+    },
+    {
+      "key": "markdown",
+      "group": { "name": "Inline Markdown", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "12:00", "from": "user", "text": "And the rest of Markdown?" },
+        { "at": "12:01", "from": "ben", "text": "**Bold**, *italic*, ***both***, ~~struck~~, `inline code`, and [a link](https://example.com).\n\n# A heading\n## A smaller heading\n\n> A quoted line, as an agent might quote a response header or a line from a config.\n\nA rule follows:\n\n---\n\nAfter the rule." }
+      ]
+    },
+    {
+      "key": "blocks",
+      "group": { "name": "Code and tables", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "12:02", "from": "ben", "text": "A code block:\n\n```bash\ncurl -s -o /dev/null -w '%{http_code}' https://shop.acme-staging.example/.git/HEAD   # 200\ngit-dumper https://shop.acme-staging.example/.git loot/\naws sts get-caller-identity   # valid: user deploy-ci\n```\n\nAnd a long one that should scroll rather than wrap:\n\n```\n[13:48:02] nuclei: [exposed-git] [http] [medium] https://shop.acme-staging.example/.git/HEAD [git repository found, history is pullable with git-dumper]\n```" },
+        { "at": "12:03", "from": "ben", "text": "A table:\n\n| Host | Service | Finding | Severity |\n|---|---|---|---|\n| shop.acme-staging.example | web | Exposed .git | high |\n| shop.acme-staging.example | web | Leaked AWS key | critical |\n| acme-staging-backups | s3 | Listable with leaked key | critical |" }
+      ]
+    },
+    {
+      "key": "report",
+      "group": { "name": "A full report", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "13:00", "from": "user", "text": "Recon report please." },
+        { "at": "13:05", "from": "ada", "text": "Read-only recon of shop.acme-staging.example, as asked. Nothing on the target was changed.\n\nEVIDENCE\n- /.git/HEAD returns 200, so the full source history is pullable.\n- config/secrets.php in history carries a live AWS key for deploy-ci; a single get-caller-identity call succeeded.\n- The same key lists the acme-staging-backups bucket; no object was read.\n\nINFERENCE (confidence: high)\n- An external attacker can reach the backups bucket through the leaked key alone.\n- Full impact (reading objects) is not yet demonstrated; I have held for your go-ahead.\n\n| Check | Result | Severity |\n|---|---|---|\n| Exposed .git | serving | high |\n| Leaked AWS key | live | critical |\n\nNext: say the word and I'll pull one file as proof." }
+      ]
+    }
+  ],
+  "present": {
+    "window": { "size": [1440, 880] },
+    "select": "short"
+  },
+  "timeline": [
+    { "wait": 0.5, "present": { "select": "short" } },
+    { "wait": 1.5, "capture": "01-short" },
+    { "wait": 0.5, "present": { "select": "prose" } },
+    { "wait": 1.5, "capture": "02-prose" },
+    { "wait": 0.5, "present": { "select": "names" } },
+    { "wait": 1.5, "capture": "03-names" },
+    { "wait": 0.5, "present": { "select": "lists" } },
+    { "wait": 1.5, "capture": "04-lists" },
+    { "wait": 0.5, "present": { "select": "agent-lists" } },
+    { "wait": 1.5, "capture": "05-agent-lists" },
+    { "wait": 0.5, "present": { "select": "markdown" } },
+    { "wait": 1.5, "capture": "06-markdown" },
+    { "wait": 0.5, "present": { "select": "blocks" } },
+    { "wait": 1.5, "capture": "07-blocks" },
+    { "wait": 0.5, "present": { "select": "report" } },
+    { "wait": 1.5, "capture": "08-report" }
+  ]
+}

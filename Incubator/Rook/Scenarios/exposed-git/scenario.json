@@ -1,0 +1,304 @@
+{
+  "version": 1,
+  "title": "Exposed .git to a live key, held for the champion",
+  "summary": "On an authorized web pentest the team finds the target serving its .git directory, pulls a live AWS key from the source history, proves it works read-only, and stops before touching data until the champion says go.",
+  "clock": "14:16",
+  "appearance": "dark",
+  "champion": "Dana Okafor",
+  "settings": {
+    "RookBackdropEffect": "grid"
+  },
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Lunar Fox",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead operator",
+      "avatar": {
+        "symbol": "star.fill",
+        "color": 0
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Holding on Dana"
+      }
+    },
+    {
+      "key": "ines",
+      "name": "Clever Heron",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Recon",
+      "avatar": {
+        "symbol": "binoculars.fill",
+        "color": 1
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Mapping shop.acme-staging"
+      }
+    },
+    {
+      "key": "ada",
+      "name": "Quiet Lynx",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Web & app",
+      "avatar": {
+        "symbol": "globe",
+        "color": 2
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Reading the leaked repo"
+      }
+    },
+    {
+      "key": "ben",
+      "name": "Silver Kite",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Infrastructure",
+      "avatar": {
+        "symbol": "network",
+        "color": 3
+      },
+      "status": {
+        "phase": "ready",
+        "detail": "Key validated, read-only"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "gitleak",
+      "group": {
+        "name": "External pentest: shop.acme-staging.example",
+        "members": [
+          "margot",
+          "ines",
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "13:40",
+          "from": "user",
+          "text": "**M-0014 is open: external pentest of shop.acme-staging.example**, severity set from what you find. @Lunar Fox leads.\n\nScope is that host and its subdomains only. Find and demonstrate a way in, but clear anything intrusive with me first."
+        },
+        {
+          "at": "13:48",
+          "from": "ines",
+          "text": "Surface mapped. Four live subdomains, a login, and one thing that stands out: the web root serves its `.git` directory.\n\n```\n$ curl -s -o /dev/null -w '%{http_code}\\n' https://shop.acme-staging.example/.git/HEAD\n200\n```\n\nHanding to @Quiet Lynx to pull the history."
+        },
+        {
+          "at": "13:57",
+          "from": "ada",
+          "text": "Dumped the repo read-only with git-dumper. The source history has a live-looking AWS key that was committed and then \"removed\" two commits later — but it is still in history:\n\n```\n$ git log -p config/secrets.php | grep -n AKIA\n42: + 'AWS_ACCESS_KEY_ID' => 'AKIA3X7QW92EXAMPLE',\ncommit 4f1c9a2  config: add S3 backup credentials\n```\n\n@Silver Kite, can you check whether the key is still valid — read-only?"
+        },
+        {
+          "at": "14:06",
+          "from": "ben",
+          "text": "It is live. The least-intrusive call confirms it and nothing more:\n\n```\n$ aws sts get-caller-identity\nAccount: 604757830675  User: deploy-ci\n$ aws s3api list-objects-v2 --bucket acme-staging-backups --max-items 1\n(1 key listed)\n```\n\nThe key authenticates as IAM user `deploy-ci` and can **list** `acme-staging-backups`. I have read **no** objects. Want me to pull one file as proof of impact, or stop here?"
+        },
+        {
+          "at": "14:12",
+          "from": "margot",
+          "text": "Recorded as **critical** and I have held here. @Dana: the target leaks its full source through an exposed `.git`, and the history carries a live AWS key that already lists a backups bucket — we have not read a single object. Say the word and @Silver Kite pulls one file as proof; otherwise this is enough to report.\n\nFix: rotate `deploy-ci`, block `/.git/` at the web server, and scrub the key from history."
+        }
+      ],
+      "mission": {
+        "number": 14,
+        "title": "External pentest: shop.acme-staging.example",
+        "objective": "Find and demonstrate an external way in, within scope, and stop before anything that touches data without Dana's go-ahead.",
+        "severity": "critical",
+        "status": "active",
+        "source": "Authorized engagement — in scope",
+        "opened": "13:40",
+        "lead": "margot",
+        "case": {
+          "entities": [
+            {
+              "kind": "host",
+              "name": "shop.acme-staging.example",
+              "detail": "In-scope web target; serves its /.git directory",
+              "at": "13:48",
+              "by": "ines"
+            },
+            {
+              "kind": "credential",
+              "name": "AKIA3X7Q…EXAMPLE",
+              "detail": "Live AWS access key found in git history, for deploy-ci",
+              "at": "13:57",
+              "by": "ada"
+            },
+            {
+              "kind": "account",
+              "name": "deploy-ci",
+              "detail": "IAM user the leaked key authenticates as; account 604757830675",
+              "at": "14:06",
+              "by": "ben"
+            },
+            {
+              "kind": "service",
+              "name": "acme-staging-backups",
+              "detail": "S3 bucket the key can list; no objects read",
+              "at": "14:06",
+              "by": "ben"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "Recon (curl)",
+              "method": "curl -s -o /dev/null -w '%{http_code}' https://shop.acme-staging.example/.git/HEAD",
+              "result": "200 — the web root serves its .git directory.",
+              "at": "13:48",
+              "by": "ines"
+            },
+            {
+              "source": "git-dumper",
+              "method": "git-dumper of /.git, then git log -p config/secrets.php",
+              "result": "Commit 4f1c9a2 adds AWS key AKIA3X7Q…EXAMPLE; 'removed' in a later commit but present in history.",
+              "at": "13:57",
+              "by": "ada"
+            },
+            {
+              "source": "AWS STS (read-only)",
+              "method": "aws sts get-caller-identity with the leaked key",
+              "result": "Valid; IAM user deploy-ci in account 604757830675.",
+              "at": "14:06",
+              "by": "ben"
+            },
+            {
+              "source": "AWS S3 (read-only)",
+              "method": "aws s3api list-objects-v2 --bucket acme-staging-backups --max-items 1",
+              "result": "Bucket lists; one key shown; no object downloaded.",
+              "at": "14:07",
+              "by": "ben"
+            }
+          ],
+          "findings": [
+            {
+              "claim": "The target serves its .git directory, leaking the full source history to anyone.",
+              "evidence": [
+                "V-1",
+                "V-2"
+              ],
+              "confidence": "high",
+              "entities": [
+                "shop.acme-staging.example"
+              ],
+              "at": "13:58",
+              "by": "ada"
+            },
+            {
+              "claim": "The leaked history contains a live AWS key for deploy-ci that can already list a backups bucket.",
+              "evidence": [
+                "V-2",
+                "V-3",
+                "V-4"
+              ],
+              "confidence": "high",
+              "entities": [
+                "AKIA3X7Q…EXAMPLE",
+                "deploy-ci",
+                "acme-staging-backups"
+              ],
+              "at": "14:08",
+              "by": "margot"
+            }
+          ],
+          "links": [
+            {
+              "from": "AKIA3X7Q…EXAMPLE",
+              "relation": "found-on",
+              "to": "shop.acme-staging.example",
+              "at": "13:57",
+              "by": "ada"
+            },
+            {
+              "from": "AKIA3X7Q…EXAMPLE",
+              "relation": "unlocks",
+              "to": "deploy-ci",
+              "at": "14:06",
+              "by": "ben"
+            },
+            {
+              "from": "deploy-ci",
+              "relation": "can-list",
+              "to": "acme-staging-backups",
+              "at": "14:07",
+              "by": "ben"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "takeover",
+      "group": {
+        "name": "Dangling CNAME on dev.shop.acme-staging.example",
+        "members": [
+          "margot",
+          "ines"
+        ]
+      },
+      "messages": [
+        {
+          "at": "11:20",
+          "from": "ines",
+          "text": "`dev.shop.acme-staging.example` is a CNAME to a deprovisioned bucket host that returns NoSuchBucket. It is in scope and looks claimable."
+        },
+        {
+          "at": "11:34",
+          "from": "margot",
+          "text": "Noted as a candidate, medium. @Dana, claiming it to prove the takeover is intrusive — I will not do it without your word."
+        }
+      ],
+      "mission": {
+        "number": 13,
+        "title": "Dangling CNAME on dev.shop.acme-staging.example",
+        "objective": "Confirm whether the dangling subdomain can be taken over, and stop before claiming it.",
+        "severity": "medium",
+        "status": "active",
+        "source": "Authorized engagement — in scope",
+        "opened": "11:20",
+        "lead": "margot"
+      }
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1440,
+        880
+      ]
+    },
+    "select": "gitleak"
+  },
+  "timeline": [
+    {
+      "capture": "01-finding"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "02-case"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "03-audit"
+    },
+    {
+      "waitFor": "key"
+    },
+    {
+      "capture": "04-agents"
+    }
+  ]
+}

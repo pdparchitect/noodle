@@ -12,6 +12,7 @@ product="${(L)app}"
 # Companions are Noodle APP in APP/; an incubating app is named on its own, in Incubator/APP.
 folder="$project_root/$app"; title="Noodle $app"; archive="Noodle-$app-arm64.zip"
 if [[ "$app" == Pion ]]; then folder="$project_root/Incubator/Pion"; title=Pion; archive=Pion-arm64.zip; fi
+if [[ "$app" == Rook ]]; then folder="$project_root/Incubator/Rook"; title=Rook; archive=Rook-arm64.zip; fi
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || exit 1
 [[ "$version" == "$(tr -d '[:space:]' < "$folder/VERSION")" ]] || exit 1
 tag="$product-v$version"

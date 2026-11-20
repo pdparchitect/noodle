@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "title": "Nothing configured",
+  "summary": "Rook as it first opens: no agents, groups or Missions, for the empty sidebar and the first-run prompt.",
+  "clock": "10:00",
+  "champion": "Avery Lin",
+  "agents": [],
+  "present": { "window": { "size": [1440, 880] } },
+  "timeline": [
+    { "capture": "01-empty" }
+  ]
+}

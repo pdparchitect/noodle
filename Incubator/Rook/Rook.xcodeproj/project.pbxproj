@@ -1,0 +1,1934 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 55;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00F5E6A08A371D40BE39DCF6 /* RookCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5205701D690621009FEC564C /* RookCore */; };
+		029F40B1B4BCC829DE22B132 /* NoodleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 77B9AD639EC818E78747F1A1 /* NoodleCore */; };
+		030EF1FC44CBF9BAAB3B22DB /* KeybindingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5719A3D5F3FE3C1F41860FAB /* KeybindingsSettingsView.swift */; };
+		065489F804B4DD55E6184988 /* DeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F936F369D6E9C55777AA7FD /* DeleteTests.swift */; };
+		06CEBCAB690B9E1F7743C4D2 /* ForwardAttachmentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EB6887003F779FDEA8D8E1 /* ForwardAttachmentSheet.swift */; };
+		08E339E3052F3448D37A16E0 /* SheetControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B4110B9BC99BA08E9540CB /* SheetControls.swift */; };
+		09368654A71FC0F8D3BB17A9 /* TranscriptScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD329CB2F89F0C958D92AF8A /* TranscriptScrollView.swift */; };
+		0943676879DE793B5510895F /* AgentConfigurationFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = C29A4480710AAB736986EA02 /* AgentConfigurationFields.swift */; };
+		0974DE5CAF7F9E83358E8733 /* NoodleBrand in Frameworks */ = {isa = PBXBuildFile; productRef = FB39B4CCF6E5A0D194A85422 /* NoodleBrand */; };
+		097EDD09E1C9787223923C2D /* StoreErrorAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77CB17FB843CEFBF70D27F53 /* StoreErrorAlert.swift */; };
+		0C7D52DBFD37CF33363980AB /* ScenarioLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9055FC18250D8ACD12D011B8 /* ScenarioLauncher.swift */; };
+		0D06C15E1EF8F659B414D3DD /* PauseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD59886804E6F0722B265AE /* PauseTests.swift */; };
+		1006FA2DB144D4141DD68D07 /* WelcomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53E0615856A4DA96AA9C621 /* WelcomeTests.swift */; };
+		10ED907DDAC611D9D8011E16 /* CallHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E01CDB63FF40972AD1F81BC3 /* CallHookTests.swift */; };
+		14BDADE13BF1314C4405F6CA /* TuistAssets+Rook.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98AF205DBD5508A4413F59A /* TuistAssets+Rook.swift */; };
+		15430776D1D9450A21EC22CA /* AgentEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3767EB2E9C99B71523DE0A7 /* AgentEditingTests.swift */; };
+		15A198E87A4848BF60C54A49 /* AttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FC4525DEF0BCFA1E031130 /* AttachmentTests.swift */; };
+		1EF396E8C912EEE6AAA914A0 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0F33EC48672E7C9E35EA4AF /* ConversationView.swift */; };
+		1F51E3528FDE83A179BAA105 /* RookShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B1772AE6878CD1B804CCE7A2 /* RookShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1F6997A5CC98A1DF14C338D7 /* ShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86246EBB847F5AEC414D68F4 /* ShareTests.swift */; };
+		1FB7C20A735EEFA88EE5C402 /* UnreadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE27AF48004552A6E8194C9 /* UnreadTests.swift */; };
+		20572CF810FF53279B08A8DD /* AnnotationContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533F79C995A1C9BA958576B4 /* AnnotationContent.swift */; };
+		22443C29E3419E893B18F81E /* RookModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D905C5795B0786AED8F8D0 /* RookModel.swift */; };
+		25B0223E6DA2428C67D91E41 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 79CFD2E6432361306CAFC930 /* Assets.xcassets */; };
+		28FFA9505084F73C7E9216CD /* TuistBundle+Rook.swift in Sources */ = {isa = PBXBuildFile; fileRef = F604FB67DF024027ECF21196 /* TuistBundle+Rook.swift */; };
+		29ACECD99860FF2192C24A68 /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49B7F52B829D82B4A6BC63 /* Sheets.swift */; };
+		2D8887BF4FF3D593A11706D8 /* RookIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747E9B3233B2C3BF3880C2B4 /* RookIntents.swift */; };
+		2E7592C13FE81359F5E09221 /* HarnessChoosers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0BC8BB4364995619A5834C /* HarnessChoosers.swift */; };
+		2E76E074FECF11C2A0ACF767 /* ScrollableChatComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B043E16BE0CC139549C5EFDC /* ScrollableChatComposer.swift */; };
+		312FE042338D1852BBCDCACB /* DestructiveActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06B4D0CE2CBDA80ABCACED83 /* DestructiveActionButton.swift */; };
+		31C0716D50818B1D0EC2F5CB /* Rook.swift in Sources */ = {isa = PBXBuildFile; fileRef = DED09F9CB324329E39E0C9E6 /* Rook.swift */; };
+		33C3D0735A10D87C78CA2C56 /* MessageMarkdownCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736D5FDB75DB82E67BC4AD14 /* MessageMarkdownCache.swift */; };
+		34E5ED6C78F6633FA93F801C /* AgentSettingsCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11183D8DA590BE2DADFAE945 /* AgentSettingsCheckpoint.swift */; };
+		3B0262CD41192574900B0D46 /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F712E254D9583A3CF77A1399 /* AppIdentity.swift */; };
+		406368614735DA779AE5FC97 /* MessageMarkdownCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736D5FDB75DB82E67BC4AD14 /* MessageMarkdownCache.swift */; };
+		407D887E9CF48068D7F3181B /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F68F09877F76BA5952C764 /* main.swift */; };
+		47AB531A747DE311E3B65FC8 /* IncomingCallPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6347434F5085F29EEE2BADA9 /* IncomingCallPanel.swift */; };
+		49AA3E2A526BC154D05CA03C /* NoodleRuntimeSettings in Frameworks */ = {isa = PBXBuildFile; productRef = C1F2E99BC8B0A8BDC4F8449B /* NoodleRuntimeSettings */; };
+		4A0DB686BCAF25602DECCED1 /* ComposerAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615C2B56A1E582EFF3A2330F /* ComposerAvailabilityTests.swift */; };
+		4AC0D98CEB9852B4DEB0682C /* NoodleAgentHost.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7784C9635EE361BD6E697C16 /* NoodleAgentHost.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4B9D3434F1B4C03C20F0C620 /* NoodleRuntimeSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 529BE6A0D45D42A33A99BB78 /* NoodleRuntimeSettings */; };
+		4D56C6937B1639767574ACB1 /* ScreenCapturePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A45DAC427BFBA8BC54B2EEA1 /* ScreenCapturePreview.swift */; };
+		4D916A9B4DEB8E295C940A58 /* NoodleAppleRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 490A347837535655513D976C /* NoodleAppleRuntime */; };
+		53700B6A5D4698F4C997DCBB /* TaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9D675E37B754EE22807509 /* TaskTests.swift */; };
+		54432C09ECA800C1464B8B95 /* VoiceCallToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B412D7773FBD927D8EA2229 /* VoiceCallToolbar.swift */; };
+		550C463F435933382B06F623 /* NoodleSharing in Frameworks */ = {isa = PBXBuildFile; productRef = F1C46118DD4F1F3C44E7A3FE /* NoodleSharing */; };
+		55E1208A084F6743F2D2D465 /* NoodleSharing in Frameworks */ = {isa = PBXBuildFile; productRef = F27E395C4EA1E0396C989940 /* NoodleSharing */; };
+		577F69F116857BAA5F98E372 /* MessageParts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30878E296957F1DE26942EAC /* MessageParts.swift */; };
+		58A449FB02CA5D8C5AF6509B /* WindowState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782C4B47DBE6E66728911FBD /* WindowState.swift */; };
+		5D40B5B09CF9FD1B56261B2E /* Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6289B6E8D325D14175CE576B /* Style.swift */; };
+		601A13D90484B7D338257594 /* RookCalls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4338572A34E735758C8E6E41 /* RookCalls.swift */; };
+		602E72E6C7507A3D50A4B34E /* SidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F67345FADB6774B2FADCF34 /* SidebarTests.swift */; };
+		623A18E55963B778E130C181 /* KeyboardBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A03FA750E9DC55CF6D74A937 /* KeyboardBindings.swift */; };
+		662B337F5ECB26B7D43CFC12 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 7100CA1C86AE170D12AD2332 /* Sparkle */; };
+		6816B03BB35E0BD9072A1641 /* RookNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D62C02D2E584A0AA7080C8 /* RookNotifications.swift */; };
+		699631BF288744D1968A46D5 /* NoodleHubClient in Frameworks */ = {isa = PBXBuildFile; productRef = FE7B90BA17E42F4B257EB9FC /* NoodleHubClient */; };
+		6A8C7F914E89BBCD2BEB92AE /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DD0781E0F4A8F7135E2F60B /* main.swift */; };
+		6DE41ABCC6157123EC77F850 /* BotFolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BB8D4D59C39BF2C4CC36C31 /* BotFolderPicker.swift */; };
+		6FCFACD709B11E4603E91730 /* ProfileCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28F037A5CBB905A5C71D1B2F /* ProfileCard.swift */; };
+		736458728AAFA500C558F496 /* BotBudgetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE76E43BF3A262D6B9721407 /* BotBudgetSheet.swift */; };
+		73B5B1B1900040399630B693 /* MessageContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0AE1F67EE20BBB98EBB135 /* MessageContextMenu.swift */; };
+		7503F232C749F3A03E78768C /* ReactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5465F1267B06F61D218275C6 /* ReactionTests.swift */; };
+		7615B495DB6472AE5EFC9120 /* NoodleRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 44350563E08CD0965BD271E2 /* NoodleRuntime */; };
+		76811510584DC2360EA3BA62 /* AttachmentLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D244CB4F9397097CC3750CF2 /* AttachmentLayout.swift */; };
+		7792B1C58D489645FFCD7AF3 /* AppleAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B679CB0AF14D8E19CF029DC /* AppleAgent.swift */; };
+		78F3B684EBF69EAC955B153E /* UsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55C3561F82CB609289B17F1 /* UsageTests.swift */; };
+		7B1D6F6D788E089A48FE27B6 /* Backdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6DFF5FD2932ECE3C944F18 /* Backdrop.swift */; };
+		7BC5E8D7C91419D332960A56 /* MessageBodyRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC4CB79CDFCFB008A95D54F0 /* MessageBodyRenderer.swift */; };
+		7D49E722E13A3E016C10C8C9 /* ComposerFocusSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A4AE94EBEAF576230D91A /* ComposerFocusSurface.swift */; };
+		7E7A8888C84CD4A2BDE86DD5 /* NoodleCore in Frameworks */ = {isa = PBXBuildFile; productRef = C2A4AE1ECC0459A86B2FDE93 /* NoodleCore */; };
+		80EE0BE1213EE081A7C2BA4E /* HubLink in Frameworks */ = {isa = PBXBuildFile; productRef = 8EC9811F5A93BC36DD8F8623 /* HubLink */; };
+		80F38E0A6B2C2892BDB9DA12 /* NoodleWallpaper in Frameworks */ = {isa = PBXBuildFile; productRef = 014EF4FD13606589FB92FC28 /* NoodleWallpaper */; };
+		816EAC0CD55E82B318DAE80F /* WindowState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782C4B47DBE6E66728911FBD /* WindowState.swift */; };
+		8206524F78EBE1AF3AAA5E42 /* NoodleRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 66601939CE8A06011C8977E2 /* NoodleRuntime */; };
+		8513F06B32643C1E8AC39FCA /* NoodleBrand in Frameworks */ = {isa = PBXBuildFile; productRef = CC01C614D678BE9B10A92A6D /* NoodleBrand */; };
+		856344799A3139013D9A3844 /* ConversationCommandsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0AA4242CD59317E392971C /* ConversationCommandsTests.swift */; };
+		860C668EE8771255C5CDC0FB /* AgentSigil.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1AEAE1FAB3C49E427CE3BB /* AgentSigil.swift */; };
+		86AEB73D6B17DC36BBDA062C /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72E506EFBEB222EC096ADA8 /* VoiceRecorder.swift */; };
+		881FBECE789C710D323543FE /* ScreenCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 565F83F616102B5659DA0C3B /* ScreenCaptureService.swift */; };
+		8840E0A6C19AD35B38A0943B /* HubLink in Frameworks */ = {isa = PBXBuildFile; productRef = A63D59B51F09127A92BB6F90 /* HubLink */; };
+		8A8D360185EC5ABB7C18DF56 /* NoodleAgentBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 57128D5B267102FFC90DBA57 /* NoodleAgentBridge */; };
+		8CC9D425885E57F1E1499800 /* MessageBodyRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 057147692F8CAB732C79E2EF /* MessageBodyRendererTests.swift */; };
+		8E82966B9E58CEB103C9444A /* AttachmentPreviewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B31DF6C559E8D87E67F876 /* AttachmentPreviewController.swift */; };
+		8EC3D0F9B16D247A2B950111 /* FirstBotSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B562517B70CAB73AE48352A /* FirstBotSetup.swift */; };
+		8ED071BA1142934AC8EEDDFE /* NoodleSettingsUI in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF18C9DCE97E31FEB4BCF81 /* NoodleSettingsUI */; };
+		9149B9BF68BFA08ABD2EAED0 /* ConversationWindowSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98587C070E7E2040E2DD2D1F /* ConversationWindowSession.swift */; };
+		9531F7C382500DBC35DE1FF6 /* Scenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEEBF1CB57A6D54CD85AC6C4 /* Scenario.swift */; };
+		960D338823E71658211CDE87 /* BackdropGames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100AFB833018331A946677CD /* BackdropGames.swift */; };
+		9761505A55FE7EB69CE5AD10 /* AnnotationPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E42320485C0EA103B6740DE /* AnnotationPreview.swift */; };
+		9903CF0132BD0F809564B670 /* VoiceCall.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA2DCE6E8923D551B43F074C /* VoiceCall.swift */; };
+		9C37882A8B29170CED851455 /* BackdropGames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100AFB833018331A946677CD /* BackdropGames.swift */; };
+		9E185263A4577228F1F25DC5 /* VoiceMessageComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84E0B5D22C881E802F61322E /* VoiceMessageComposer.swift */; };
+		9F6E66FD566A3F6322E2C8B9 /* VoiceMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A65EEA344988645124A12870 /* VoiceMessageTests.swift */; };
+		9F81968393926E0ECAF369E7 /* BackdropGamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA6724A97014EAA1D957603 /* BackdropGamesTests.swift */; };
+		A177ED4D6B08218D2F82B6B4 /* FloatingConversations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B57218C9A1B0269A07F7791 /* FloatingConversations.swift */; };
+		A5CEEE177D5ECE56366BE1D0 /* RookCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4D1A6DA61689A031550A14FD /* RookCore */; };
+		A6AD9FFB7E31DAFCE261BE3D /* NoodleCore in Frameworks */ = {isa = PBXBuildFile; productRef = A6F6D1269EC0A4E8E52C336E /* NoodleCore */; };
+		A7D848F13A9CA8BD91137026 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2DEE60666B3ADA10E6CDDF /* MainWindow.swift */; };
+		A9BB3A0343BFBF36E66D5C4E /* MessageBodyRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC4CB79CDFCFB008A95D54F0 /* MessageBodyRenderer.swift */; };
+		ABF893F126C5E1A34F2DEF78 /* NoodleCore in Frameworks */ = {isa = PBXBuildFile; productRef = E011D6728AF708B24F3D79A2 /* NoodleCore */; };
+		AC519728C77D09A28EDDB0CB /* GroupMemberPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03DA5BB2FF87DBC4D3341E4D /* GroupMemberPicker.swift */; };
+		AC57A147179AA9B9CB84CCC6 /* Backdrop.metal in Sources */ = {isa = PBXBuildFile; fileRef = D5BE8C4C9E404E0FA09F1F92 /* Backdrop.metal */; };
+		AD36C9505F15A0AB7239CD4A /* PasteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C463758200EE700988C17751 /* PasteTests.swift */; };
+		ADDFB16B68E373EB163EE400 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2488D126785E0EC67D42D018 /* Assets.xcassets */; };
+		B038AB62AA561708310EF1DE /* NoodleServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 016A973F9B7A891F694D6B28 /* NoodleServices.swift */; };
+		B1BB41FDC0425042673C7207 /* RookModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D905C5795B0786AED8F8D0 /* RookModel.swift */; };
+		B4C6A5ACCA96FBAA309D1346 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCCD5E1BF1689534654A998 /* ShareViewController.swift */; };
+		B84BB2323077232C658351A8 /* VoiceCaptureRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9256BCEEA17AEEDD364C3BB6 /* VoiceCaptureRecovery.swift */; };
+		B8A914EEFC138ED06810F419 /* AttachmentSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 719F04B0707017DFE9B2415F /* AttachmentSupport.swift */; };
+		BA29CF788A8251BAE814C5D8 /* SheetControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B4110B9BC99BA08E9540CB /* SheetControls.swift */; };
+		BCC9CB37ADFE063FA8256AF7 /* ConversationAnnotationContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C9FB15C139EBCF19BFF1C6E /* ConversationAnnotationContent.swift */; };
+		BD2123E121FFA4E261A09943 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC4B500D00B9E06871C6201B /* AppUpdater.swift */; };
+		BF1EC67282AD5342F9330EA7 /* HarnessDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E58086AC39F4064499457553 /* HarnessDefaultsTests.swift */; };
+		C054ABC58ACAD01445C665AF /* ExternalEventPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD285F8DC305DE6C3F807682 /* ExternalEventPresentation.swift */; };
+		C0BB085C9CC05C4CB3BC9625 /* ToolIcons in Resources */ = {isa = PBXBuildFile; fileRef = D6632D8A9F6280A59A1DC55B /* ToolIcons */; };
+		C0C81C41E4E6DE17E6CA93B9 /* ChatSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4866F3BFCD7317782E0FEEA6 /* ChatSettingsView.swift */; };
+		C4330C4B1D1952F14F3794E6 /* ScenarioFilm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0483B7412F9F7BB4537C4F /* ScenarioFilm.swift */; };
+		C4C95624AB82C0078FC26A94 /* VoiceInputDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBADFE7D00C03774DE4D69BB /* VoiceInputDevice.swift */; };
+		C63B6874DDA12B2B709A4FC4 /* ToolAssignmentList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300D715AF8C99F15B7ECCBE1 /* ToolAssignmentList.swift */; };
+		CA97641D34190AC88BF9B71F /* ComposerAttachmentMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32EF8004DE95656247140CF1 /* ComposerAttachmentMenu.swift */; };
+		CB27D6A19758C3CEEB2577B5 /* CaptureAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD168AA302C9AA4714EA7F01 /* CaptureAttachment.swift */; };
+		CE0BD45A6E63924397E7C122 /* ScreenCaptureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF04DE8B3059436AD5407E /* ScreenCaptureModel.swift */; };
+		CFAA99963C9922FA10500ECD /* NoodleVoicePeer in Frameworks */ = {isa = PBXBuildFile; productRef = 6A4EAE244A7A6C493F3FAD3D /* NoodleVoicePeer */; };
+		D177776E81BD8CA475EF6E09 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C771B8361A5AD367CF7FB6 /* Settings.swift */; };
+		D17F7BD1F822259630BCBF9B /* Composer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8E1D205DF09E7F46A143EB /* Composer.swift */; };
+		D50083920A55E9BF991514FF /* AgentSettingsCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11183D8DA590BE2DADFAE945 /* AgentSettingsCheckpoint.swift */; };
+		D60F80CE36EF4C7B1C026F2C /* PermissionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33C0F61EC5CC75F8CB35693 /* PermissionsSettingsView.swift */; };
+		D98FD0DEA0B43A6F398CE2A9 /* IntentSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBE599F111185BD75EBD3D6 /* IntentSupport.swift */; };
+		DA0D3D2978F2CE8372835628 /* BudgetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741051ECB297B27C43DBC456 /* BudgetTests.swift */; };
+		DAF40A33BB2FF21181C8E6D8 /* PatchReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8BC6487D2E324A8295E748E /* PatchReview.swift */; };
+		DC872544846589DE9F9C0417 /* ConversationListKeyboardNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B182B92B11596F4C6B3CC1 /* ConversationListKeyboardNavigation.swift */; };
+		DCB4870E6D77D55474913D2A /* MessageLinkPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55E5B8E264C7BF5ED03D303 /* MessageLinkPreview.swift */; };
+		DE51871A4B783224749BCE8E /* SidebarTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4BC3EFDB3FD553F18092AC /* SidebarTasks.swift */; };
+		E042B68AAE62439AF4587149 /* VoiceMessagePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8EB326C903A0DBD46635BAD /* VoiceMessagePlayer.swift */; };
+		E157AFF481EF1068EA84BFE7 /* Welcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38AC8421FBA413A00B0CBAE2 /* Welcome.swift */; };
+		E1FF9AD0B048C8F11375ADFB /* CaseInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48804F579769F4752EC36A73 /* CaseInspector.swift */; };
+		E4582463B6DBA3DAE748C3CB /* AttachmentDrag.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5676018BFB6FD12D6D5FFA /* AttachmentDrag.swift */; };
+		E47110FD0065AE5F2B9D0D2E /* AnnotationPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BEC1DDBA87F54A983C79E83 /* AnnotationPopover.swift */; };
+		E4A3B971242380D6FD7518CC /* GroupsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A87F7FCD366CF46CED5EA84 /* GroupsSettingsView.swift */; };
+		EA54F7AEC18A19A6B5CBB172 /* ResourceAssignmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E2ADE44075CC2CB76EDC6A2 /* ResourceAssignmentTests.swift */; };
+		EA9FB0AA8DF5A27F904271E9 /* AttachmentInlinePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3731E4405EBED05050A7A00C /* AttachmentInlinePreview.swift */; };
+		EC1E939E7F45DEF3F1B282D4 /* AppSymbol.svg in Resources */ = {isa = PBXBuildFile; fileRef = 8DB1C009AF8A189008940ECC /* AppSymbol.svg */; };
+		EFD1203FDC01B29AFAF47F07 /* ConversationAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0402987DC97F7762BE5B13 /* ConversationAnnotation.swift */; };
+		F0F28F08EB5596BA76BFC724 /* MessageReceivedSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2D26F926CA53A19EE11838 /* MessageReceivedSound.swift */; };
+		F39BF5BABCFC528C9B149139 /* ScenarioNamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5880C09EEF072A675909F889 /* ScenarioNamesTests.swift */; };
+		F4888C9DF65A1B147A2FABAC /* NotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9E0CA3E6B99A5A22FFCA6F /* NotificationTests.swift */; };
+		F5AD89C7BB7AFC13A06500AC /* NoodleCore in Frameworks */ = {isa = PBXBuildFile; productRef = AE06636160431FB530518166 /* NoodleCore */; };
+		F6CCF6FACCAD378E18105A10 /* SheetInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637F3FBB7A3C3DE9F393950F /* SheetInteractionTests.swift */; };
+		F96FC98FD4830731E17C3DEE /* NoodleToolScripting in Frameworks */ = {isa = PBXBuildFile; productRef = F6C1057E50C73FA73465BB80 /* NoodleToolScripting */; };
+		FA7D66090D222DAD718C2DCC /* ConversationTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 602F9F5E71A8BF6A87111126 /* ConversationTransition.swift */; };
+		FA8BA5F16EE98630B1446AEC /* NoodleAudioCapture in Frameworks */ = {isa = PBXBuildFile; productRef = BCB518F122E7EF3EAFFC9ACD /* NoodleAudioCapture */; };
+		FC2AB074A38E6206F0671930 /* ComposerNameCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366F623F3DAC0D23CE002D38 /* ComposerNameCompletion.swift */; };
+		FD55A6319CF9FA14ED1F59FA /* MessageBlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90A215FDD6AFCC69217E6452 /* MessageBlocksView.swift */; };
+		FE82002688DAB6E6F4064F36 /* AnnotationCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26DF11E4D2BD5E6333E0C053 /* AnnotationCommands.swift */; };
+		FF474C356536DC5F8DD0F731 /* AgentNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDF3E61536968A57D9026CF /* AgentNotifications.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		04B126118303F7D0C8A85294 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8551ED3D5A86D0D7BBCB0C85 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8182B9A3AA290F38C3312CB9;
+			remoteInfo = NoodleAgentHost;
+		};
+		3817EB075EBC6497B034C985 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8551ED3D5A86D0D7BBCB0C85 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BFBC1AD0F1F8AE3FAC842A92;
+			remoteInfo = messenger;
+		};
+		BF8BE4C4740199DF0AA0370B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8551ED3D5A86D0D7BBCB0C85 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A9A2C3ED9CF6165F0BA3875;
+			remoteInfo = RookShareExtension;
+		};
+		E1303D5A20A98B6B3952EB8A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8551ED3D5A86D0D7BBCB0C85 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 518179039FA8F2DB24EE3C6C;
+			remoteInfo = NoodleAppleAgent;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0633D6D50F16E17BCFA4F52A /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				4AC0D98CEB9852B4DEB0682C /* NoodleAgentHost.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1C90C67E848C9A0C4853319E /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		41BABFABB4F418163D3931B6 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71A7F373395EFA8917DD16D9 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		895BBD619ADEE4C584D9E2EA /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		995BFBFC3D31E080B0883FD5 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C04DDE75DF5233EFD6F04272 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstSubfolderSpec = 13;
+			files = (
+				1F51E3528FDE83A179BAA105 /* RookShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD7B3C4288CDA046007DD102 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		016A973F9B7A891F694D6B28 /* NoodleServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoodleServices.swift; sourceTree = "<group>"; };
+		03DA5BB2FF87DBC4D3341E4D /* GroupMemberPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMemberPicker.swift; sourceTree = "<group>"; };
+		057147692F8CAB732C79E2EF /* MessageBodyRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBodyRendererTests.swift; sourceTree = "<group>"; };
+		062BDEEFF11EB430C041A1A7 /* NoodleAppleAgent */ = {isa = PBXFileReference; includeInIndex = 0; path = NoodleAppleAgent; sourceTree = BUILT_PRODUCTS_DIR; };
+		06B4D0CE2CBDA80ABCACED83 /* DestructiveActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestructiveActionButton.swift; sourceTree = "<group>"; };
+		0E42320485C0EA103B6740DE /* AnnotationPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationPreview.swift; sourceTree = "<group>"; };
+		100AFB833018331A946677CD /* BackdropGames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackdropGames.swift; sourceTree = "<group>"; };
+		11183D8DA590BE2DADFAE945 /* AgentSettingsCheckpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSettingsCheckpoint.swift; sourceTree = "<group>"; };
+		13B4110B9BC99BA08E9540CB /* SheetControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheetControls.swift; sourceTree = "<group>"; };
+		18B31DF6C559E8D87E67F876 /* AttachmentPreviewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentPreviewController.swift; sourceTree = "<group>"; };
+		1B2DEE60666B3ADA10E6CDDF /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		1B412D7773FBD927D8EA2229 /* VoiceCallToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallToolbar.swift; sourceTree = "<group>"; };
+		1F936F369D6E9C55777AA7FD /* DeleteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteTests.swift; sourceTree = "<group>"; };
+		2488D126785E0EC67D42D018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2519FFE9C3B9FB516B5141FB /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
+		26DF11E4D2BD5E6333E0C053 /* AnnotationCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCommands.swift; sourceTree = "<group>"; };
+		28F037A5CBB905A5C71D1B2F /* ProfileCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCard.swift; sourceTree = "<group>"; };
+		2B562517B70CAB73AE48352A /* FirstBotSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstBotSetup.swift; sourceTree = "<group>"; };
+		2CA6724A97014EAA1D957603 /* BackdropGamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackdropGamesTests.swift; sourceTree = "<group>"; };
+		2E0AA4242CD59317E392971C /* ConversationCommandsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationCommandsTests.swift; sourceTree = "<group>"; };
+		300D715AF8C99F15B7ECCBE1 /* ToolAssignmentList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolAssignmentList.swift; sourceTree = "<group>"; };
+		30878E296957F1DE26942EAC /* MessageParts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageParts.swift; sourceTree = "<group>"; };
+		32EF8004DE95656247140CF1 /* ComposerAttachmentMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAttachmentMenu.swift; sourceTree = "<group>"; };
+		3436237D0A500F9B66716F66 /* HubLink */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HubLink; path = ../../Shared/HubLink; sourceTree = "<group>"; };
+		366F623F3DAC0D23CE002D38 /* ComposerNameCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerNameCompletion.swift; sourceTree = "<group>"; };
+		3731E4405EBED05050A7A00C /* AttachmentInlinePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentInlinePreview.swift; sourceTree = "<group>"; };
+		38AC8421FBA413A00B0CBAE2 /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
+		3B1AEAE1FAB3C49E427CE3BB /* AgentSigil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSigil.swift; sourceTree = "<group>"; };
+		3B57218C9A1B0269A07F7791 /* FloatingConversations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingConversations.swift; sourceTree = "<group>"; };
+		3BEC1DDBA87F54A983C79E83 /* AnnotationPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationPopover.swift; sourceTree = "<group>"; };
+		3E6DFF5FD2932ECE3C944F18 /* Backdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backdrop.swift; sourceTree = "<group>"; };
+		3FBE599F111185BD75EBD3D6 /* IntentSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentSupport.swift; sourceTree = "<group>"; };
+		4338572A34E735758C8E6E41 /* RookCalls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookCalls.swift; sourceTree = "<group>"; };
+		4866F3BFCD7317782E0FEEA6 /* ChatSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSettingsView.swift; sourceTree = "<group>"; };
+		48804F579769F4752EC36A73 /* CaseInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaseInspector.swift; sourceTree = "<group>"; };
+		49E3E8970C7CC27C9C815B25 /* noodle */ = {isa = PBXFileReference; lastKnownFileType = folder; name = noodle; path = ../..; sourceTree = "<group>"; };
+		4D4BC3EFDB3FD553F18092AC /* SidebarTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarTasks.swift; sourceTree = "<group>"; };
+		4D9E142C7CEA1D60B476CDB3 /* messenger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "messenger-Info.plist"; sourceTree = "<group>"; };
+		4E2ADE44075CC2CB76EDC6A2 /* ResourceAssignmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceAssignmentTests.swift; sourceTree = "<group>"; };
+		4F67345FADB6774B2FADCF34 /* SidebarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarTests.swift; sourceTree = "<group>"; };
+		533F79C995A1C9BA958576B4 /* AnnotationContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationContent.swift; sourceTree = "<group>"; };
+		5465F1267B06F61D218275C6 /* ReactionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionTests.swift; sourceTree = "<group>"; };
+		565F83F616102B5659DA0C3B /* ScreenCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureService.swift; sourceTree = "<group>"; };
+		5719A3D5F3FE3C1F41860FAB /* KeybindingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsSettingsView.swift; sourceTree = "<group>"; };
+		5880C09EEF072A675909F889 /* ScenarioNamesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioNamesTests.swift; sourceTree = "<group>"; };
+		5A87F7FCD366CF46CED5EA84 /* GroupsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsSettingsView.swift; sourceTree = "<group>"; };
+		5CB1F697A1A0BBCA8C05273C /* NoodleAgentHost-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "NoodleAgentHost-Info.plist"; sourceTree = "<group>"; };
+		602F9F5E71A8BF6A87111126 /* ConversationTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTransition.swift; sourceTree = "<group>"; };
+		615C2B56A1E582EFF3A2330F /* ComposerAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAvailabilityTests.swift; sourceTree = "<group>"; };
+		6289B6E8D325D14175CE576B /* Style.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Style.swift; sourceTree = "<group>"; };
+		6347434F5085F29EEE2BADA9 /* IncomingCallPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallPanel.swift; sourceTree = "<group>"; };
+		637F3FBB7A3C3DE9F393950F /* SheetInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheetInteractionTests.swift; sourceTree = "<group>"; };
+		64C771B8361A5AD367CF7FB6 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		67FBC8B8654A8806DA22CFC1 /* SettingsUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SettingsUI; path = ../../Shared/SettingsUI; sourceTree = "<group>"; };
+		6BB8D4D59C39BF2C4CC36C31 /* BotFolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotFolderPicker.swift; sourceTree = "<group>"; };
+		6D53BF83DAF19D7E0EFDDDAA /* ShareExtension-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "ShareExtension-Info.plist"; sourceTree = "<group>"; };
+		6F997C7CDC391FA040C7F0D1 /* Rook.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rook.entitlements; sourceTree = "<group>"; };
+		719F04B0707017DFE9B2415F /* AttachmentSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentSupport.swift; sourceTree = "<group>"; };
+		736D5FDB75DB82E67BC4AD14 /* MessageMarkdownCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageMarkdownCache.swift; sourceTree = "<group>"; };
+		741051ECB297B27C43DBC456 /* BudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetTests.swift; sourceTree = "<group>"; };
+		747E9B3233B2C3BF3880C2B4 /* RookIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookIntents.swift; sourceTree = "<group>"; };
+		7784C9635EE361BD6E697C16 /* NoodleAgentHost.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = NoodleAgentHost.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		77CB17FB843CEFBF70D27F53 /* StoreErrorAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreErrorAlert.swift; sourceTree = "<group>"; };
+		782C4B47DBE6E66728911FBD /* WindowState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowState.swift; sourceTree = "<group>"; };
+		79CFD2E6432361306CAFC930 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7A0483B7412F9F7BB4537C4F /* ScenarioFilm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioFilm.swift; sourceTree = "<group>"; };
+		7B0402987DC97F7762BE5B13 /* ConversationAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAnnotation.swift; sourceTree = "<group>"; };
+		7B679CB0AF14D8E19CF029DC /* AppleAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleAgent.swift; sourceTree = "<group>"; };
+		7B8E1D205DF09E7F46A143EB /* Composer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composer.swift; sourceTree = "<group>"; };
+		81D905C5795B0786AED8F8D0 /* RookModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookModel.swift; sourceTree = "<group>"; };
+		84E0B5D22C881E802F61322E /* VoiceMessageComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessageComposer.swift; sourceTree = "<group>"; };
+		84F68F09877F76BA5952C764 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		86246EBB847F5AEC414D68F4 /* ShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareTests.swift; sourceTree = "<group>"; };
+		8C9FB15C139EBCF19BFF1C6E /* ConversationAnnotationContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAnnotationContent.swift; sourceTree = "<group>"; };
+		8DB1C009AF8A189008940ECC /* AppSymbol.svg */ = {isa = PBXFileReference; path = AppSymbol.svg; sourceTree = "<group>"; };
+		8DD0781E0F4A8F7135E2F60B /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		8EDF3E61536968A57D9026CF /* AgentNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentNotifications.swift; sourceTree = "<group>"; };
+		9055FC18250D8ACD12D011B8 /* ScenarioLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioLauncher.swift; sourceTree = "<group>"; };
+		90A215FDD6AFCC69217E6452 /* MessageBlocksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBlocksView.swift; sourceTree = "<group>"; };
+		9256BCEEA17AEEDD364C3BB6 /* VoiceCaptureRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCaptureRecovery.swift; sourceTree = "<group>"; };
+		93FC4525DEF0BCFA1E031130 /* AttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTests.swift; sourceTree = "<group>"; };
+		954FDEA312F6E1BE2A27A66E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		98587C070E7E2040E2DD2D1F /* ConversationWindowSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWindowSession.swift; sourceTree = "<group>"; };
+		9B5A4AE94EBEAF576230D91A /* ComposerFocusSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerFocusSurface.swift; sourceTree = "<group>"; };
+		A03FA750E9DC55CF6D74A937 /* KeyboardBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardBindings.swift; sourceTree = "<group>"; };
+		A23F72A6B70433D77C3691BE /* RookAppTests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "RookAppTests-Info.plist"; sourceTree = "<group>"; };
+		A45DAC427BFBA8BC54B2EEA1 /* ScreenCapturePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCapturePreview.swift; sourceTree = "<group>"; };
+		A5FF04DE8B3059436AD5407E /* ScreenCaptureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureModel.swift; sourceTree = "<group>"; };
+		A65EEA344988645124A12870 /* VoiceMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessageTests.swift; sourceTree = "<group>"; };
+		A72E506EFBEB222EC096ADA8 /* VoiceRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorder.swift; sourceTree = "<group>"; };
+		A8D62C02D2E584A0AA7080C8 /* RookNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookNotifications.swift; sourceTree = "<group>"; };
+		A8EB326C903A0DBD46635BAD /* VoiceMessagePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessagePlayer.swift; sourceTree = "<group>"; };
+		AEEBF1CB57A6D54CD85AC6C4 /* Scenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scenario.swift; sourceTree = "<group>"; };
+		B043E16BE0CC139549C5EFDC /* ScrollableChatComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollableChatComposer.swift; sourceTree = "<group>"; };
+		B1772AE6878CD1B804CCE7A2 /* RookShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RookShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B33C0F61EC5CC75F8CB35693 /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
+		BA0AE1F67EE20BBB98EBB135 /* MessageContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContextMenu.swift; sourceTree = "<group>"; };
+		BB49B7F52B829D82B4A6BC63 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
+		BC2D26F926CA53A19EE11838 /* MessageReceivedSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReceivedSound.swift; sourceTree = "<group>"; };
+		BC4B500D00B9E06871C6201B /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
+		BC4CB79CDFCFB008A95D54F0 /* MessageBodyRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBodyRenderer.swift; sourceTree = "<group>"; };
+		BD168AA302C9AA4714EA7F01 /* CaptureAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAttachment.swift; sourceTree = "<group>"; };
+		BD730310820E953A05D236A6 /* Rook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rook.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BEE27AF48004552A6E8194C9 /* UnreadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnreadTests.swift; sourceTree = "<group>"; };
+		C29A4480710AAB736986EA02 /* AgentConfigurationFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConfigurationFields.swift; sourceTree = "<group>"; };
+		C3767EB2E9C99B71523DE0A7 /* AgentEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentEditingTests.swift; sourceTree = "<group>"; };
+		C463758200EE700988C17751 /* PasteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteTests.swift; sourceTree = "<group>"; };
+		C844B9B38C6E8E687C7C1B29 /* messenger */ = {isa = PBXFileReference; includeInIndex = 0; path = messenger; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD285F8DC305DE6C3F807682 /* ExternalEventPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalEventPresentation.swift; sourceTree = "<group>"; };
+		CE76E43BF3A262D6B9721407 /* BotBudgetSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotBudgetSheet.swift; sourceTree = "<group>"; };
+		D0F33EC48672E7C9E35EA4AF /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		D244CB4F9397097CC3750CF2 /* AttachmentLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentLayout.swift; sourceTree = "<group>"; };
+		D53E0615856A4DA96AA9C621 /* WelcomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeTests.swift; sourceTree = "<group>"; };
+		D5BE8C4C9E404E0FA09F1F92 /* Backdrop.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Backdrop.metal; sourceTree = "<group>"; };
+		D6632D8A9F6280A59A1DC55B /* ToolIcons */ = {isa = PBXFileReference; path = ToolIcons; sourceTree = "<group>"; };
+		DA5676018BFB6FD12D6D5FFA /* AttachmentDrag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentDrag.swift; sourceTree = "<group>"; };
+		DC9E0CA3E6B99A5A22FFCA6F /* NotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTests.swift; sourceTree = "<group>"; };
+		DCAAD5786BC16246085C0068 /* Rook */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Rook; path = .; sourceTree = "<group>"; };
+		DD329CB2F89F0C958D92AF8A /* TranscriptScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptScrollView.swift; sourceTree = "<group>"; };
+		DED09F9CB324329E39E0C9E6 /* Rook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rook.swift; sourceTree = "<group>"; };
+		DFCCD5E1BF1689534654A998 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		E01CDB63FF40972AD1F81BC3 /* CallHookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHookTests.swift; sourceTree = "<group>"; };
+		E38A85F4DB71F8E96A25DE3B /* NoodleAppleAgent-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "NoodleAppleAgent-Info.plist"; sourceTree = "<group>"; };
+		E55C3561F82CB609289B17F1 /* UsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageTests.swift; sourceTree = "<group>"; };
+		E55E5B8E264C7BF5ED03D303 /* MessageLinkPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageLinkPreview.swift; sourceTree = "<group>"; };
+		E58086AC39F4064499457553 /* HarnessDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessDefaultsTests.swift; sourceTree = "<group>"; };
+		E5A36BDB911E778BCF600251 /* Wallpaper */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Wallpaper; path = ../../Shared/Wallpaper; sourceTree = "<group>"; };
+		E8BC6487D2E324A8295E748E /* PatchReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatchReview.swift; sourceTree = "<group>"; };
+		EA2DCE6E8923D551B43F074C /* VoiceCall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCall.swift; sourceTree = "<group>"; };
+		ECD59886804E6F0722B265AE /* PauseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseTests.swift; sourceTree = "<group>"; };
+		EE9D675E37B754EE22807509 /* TaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTests.swift; sourceTree = "<group>"; };
+		F12D4EC53B6A8067CB68E926 /* RookAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RookAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F3B182B92B11596F4C6B3CC1 /* ConversationListKeyboardNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListKeyboardNavigation.swift; sourceTree = "<group>"; };
+		F604FB67DF024027ECF21196 /* TuistBundle+Rook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistBundle+Rook.swift"; sourceTree = "<group>"; };
+		F6EB6887003F779FDEA8D8E1 /* ForwardAttachmentSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardAttachmentSheet.swift; sourceTree = "<group>"; };
+		F712E254D9583A3CF77A1399 /* AppIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIdentity.swift; sourceTree = "<group>"; };
+		F98AF205DBD5508A4413F59A /* TuistAssets+Rook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistAssets+Rook.swift"; sourceTree = "<group>"; };
+		FB0BC8BB4364995619A5834C /* HarnessChoosers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessChoosers.swift; sourceTree = "<group>"; };
+		FBADFE7D00C03774DE4D69BB /* VoiceInputDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputDevice.swift; sourceTree = "<group>"; };
+		FDDF7692EECB50BF8123AAEC /* Brand */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Brand; path = ../../Shared/Brand; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3AD062322D2E81C5F1CCFEB8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				550C463F435933382B06F623 /* NoodleSharing in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4FCD521CC13C6E4FFE4FD496 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F5AD89C7BB7AFC13A06500AC /* NoodleCore in Frameworks */,
+				F96FC98FD4830731E17C3DEE /* NoodleToolScripting in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5CDA7DC067102F054CEBA96F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D916A9B4DEB8E295C940A58 /* NoodleAppleRuntime in Frameworks */,
+				ABF893F126C5E1A34F2DEF78 /* NoodleCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B84BE34895F7920D4E30A03E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A8D360185EC5ABB7C18DF56 /* NoodleAgentBridge in Frameworks */,
+				A6AD9FFB7E31DAFCE261BE3D /* NoodleCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EBCC19E39C0CF73BF9FDA32B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8840E0A6C19AD35B38A0943B /* HubLink in Frameworks */,
+				FA8BA5F16EE98630B1446AEC /* NoodleAudioCapture in Frameworks */,
+				8513F06B32643C1E8AC39FCA /* NoodleBrand in Frameworks */,
+				7E7A8888C84CD4A2BDE86DD5 /* NoodleCore in Frameworks */,
+				699631BF288744D1968A46D5 /* NoodleHubClient in Frameworks */,
+				8206524F78EBE1AF3AAA5E42 /* NoodleRuntime in Frameworks */,
+				49AA3E2A526BC154D05CA03C /* NoodleRuntimeSettings in Frameworks */,
+				8ED071BA1142934AC8EEDDFE /* NoodleSettingsUI in Frameworks */,
+				55E1208A084F6743F2D2D465 /* NoodleSharing in Frameworks */,
+				CFAA99963C9922FA10500ECD /* NoodleVoicePeer in Frameworks */,
+				80F38E0A6B2C2892BDB9DA12 /* NoodleWallpaper in Frameworks */,
+				00F5E6A08A371D40BE39DCF6 /* RookCore in Frameworks */,
+				662B337F5ECB26B7D43CFC12 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F9A936476EEB75F57D00CFA9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				80EE0BE1213EE081A7C2BA4E /* HubLink in Frameworks */,
+				0974DE5CAF7F9E83358E8733 /* NoodleBrand in Frameworks */,
+				029F40B1B4BCC829DE22B132 /* NoodleCore in Frameworks */,
+				7615B495DB6472AE5EFC9120 /* NoodleRuntime in Frameworks */,
+				4B9D3434F1B4C03C20F0C620 /* NoodleRuntimeSettings in Frameworks */,
+				A5CEEE177D5ECE56366BE1D0 /* RookCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0E4A47C53CEF91EA61C6C60E /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				F98AF205DBD5508A4413F59A /* TuistAssets+Rook.swift */,
+				F604FB67DF024027ECF21196 /* TuistBundle+Rook.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		1CA666866AF57B441868A16D /* InfoPlists */ = {
+			isa = PBXGroup;
+			children = (
+				4D9E142C7CEA1D60B476CDB3 /* messenger-Info.plist */,
+				5CB1F697A1A0BBCA8C05273C /* NoodleAgentHost-Info.plist */,
+				E38A85F4DB71F8E96A25DE3B /* NoodleAppleAgent-Info.plist */,
+				A23F72A6B70433D77C3691BE /* RookAppTests-Info.plist */,
+			);
+			path = InfoPlists;
+			sourceTree = "<group>";
+		};
+		2414D2B58418191F4E0D25BF /* NoodleAppleAgent */ = {
+			isa = PBXGroup;
+			children = (
+				7B679CB0AF14D8E19CF029DC /* AppleAgent.swift */,
+			);
+			path = NoodleAppleAgent;
+			sourceTree = "<group>";
+		};
+		3B84888C46C0502477C50D82 = {
+			isa = PBXGroup;
+			children = (
+				9BF2CF96022C225E7F35AC3D /* Products */,
+				50F49BF9418F8940FBE499CA /* Project */,
+				45470E772448A8D9AE52E08E /* Packages */,
+			);
+			sourceTree = "<group>";
+		};
+		43F186198389C1B69146BE0B /* Derived */ = {
+			isa = PBXGroup;
+			children = (
+				1CA666866AF57B441868A16D /* InfoPlists */,
+				0E4A47C53CEF91EA61C6C60E /* Sources */,
+			);
+			path = Derived;
+			sourceTree = "<group>";
+		};
+		45470E772448A8D9AE52E08E /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				FDDF7692EECB50BF8123AAEC /* Brand */,
+				3436237D0A500F9B66716F66 /* HubLink */,
+				49E3E8970C7CC27C9C815B25 /* noodle */,
+				DCAAD5786BC16246085C0068 /* Rook */,
+				67FBC8B8654A8806DA22CFC1 /* SettingsUI */,
+				E5A36BDB911E778BCF600251 /* Wallpaper */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		50F49BF9418F8940FBE499CA /* Project */ = {
+			isa = PBXGroup;
+			children = (
+				43F186198389C1B69146BE0B /* Derived */,
+				BF7AC0E394A8BCB42C1EA6C5 /* Sources */,
+				6412440A81F750C3A3CD55D0 /* Sources */,
+				51ACA1B9CDB0CD0D0C318194 /* Support */,
+				EE6E243FE15A7C79EBCED7D4 /* Support */,
+				695B58A1D6FA7FFD74894219 /* Tests */,
+			);
+			name = Project;
+			sourceTree = "<group>";
+		};
+		51ACA1B9CDB0CD0D0C318194 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				8DB1C009AF8A189008940ECC /* AppSymbol.svg */,
+				2488D126785E0EC67D42D018 /* Assets.xcassets */,
+				954FDEA312F6E1BE2A27A66E /* Info.plist */,
+				6F997C7CDC391FA040C7F0D1 /* Rook.entitlements */,
+				6D53BF83DAF19D7E0EFDDDAA /* ShareExtension-Info.plist */,
+				2519FFE9C3B9FB516B5141FB /* ShareExtension.entitlements */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		55F79C44B0EBC0FAD0F94315 /* RookApp */ = {
+			isa = PBXGroup;
+			children = (
+				3B1AEAE1FAB3C49E427CE3BB /* AgentSigil.swift */,
+				719F04B0707017DFE9B2415F /* AttachmentSupport.swift */,
+				D5BE8C4C9E404E0FA09F1F92 /* Backdrop.metal */,
+				3E6DFF5FD2932ECE3C944F18 /* Backdrop.swift */,
+				100AFB833018331A946677CD /* BackdropGames.swift */,
+				48804F579769F4752EC36A73 /* CaseInspector.swift */,
+				7B8E1D205DF09E7F46A143EB /* Composer.swift */,
+				D0F33EC48672E7C9E35EA4AF /* ConversationView.swift */,
+				1B2DEE60666B3ADA10E6CDDF /* MainWindow.swift */,
+				BC4CB79CDFCFB008A95D54F0 /* MessageBodyRenderer.swift */,
+				DED09F9CB324329E39E0C9E6 /* Rook.swift */,
+				4338572A34E735758C8E6E41 /* RookCalls.swift */,
+				747E9B3233B2C3BF3880C2B4 /* RookIntents.swift */,
+				81D905C5795B0786AED8F8D0 /* RookModel.swift */,
+				A8D62C02D2E584A0AA7080C8 /* RookNotifications.swift */,
+				AEEBF1CB57A6D54CD85AC6C4 /* Scenario.swift */,
+				64C771B8361A5AD367CF7FB6 /* Settings.swift */,
+				BB49B7F52B829D82B4A6BC63 /* Sheets.swift */,
+				6289B6E8D325D14175CE576B /* Style.swift */,
+				38AC8421FBA413A00B0CBAE2 /* Welcome.swift */,
+				782C4B47DBE6E66728911FBD /* WindowState.swift */,
+			);
+			path = RookApp;
+			sourceTree = "<group>";
+		};
+		6412440A81F750C3A3CD55D0 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				C18D9DC6ACE6C598562A347D /* Noodle */,
+				DBDB465BAB90F36A0AB6AAA4 /* NoodleAgentHost */,
+				2414D2B58418191F4E0D25BF /* NoodleAppleAgent */,
+				D944C577456E59B835476EF6 /* NoodleMessenger */,
+				EE7188878FD1E70FE4FFB486 /* NoodleShareExtension */,
+			);
+			name = Sources;
+			path = ../../Sources;
+			sourceTree = "<group>";
+		};
+		695B58A1D6FA7FFD74894219 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				725276B10CAEB0FFFCE23B9C /* RookAppTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		725276B10CAEB0FFFCE23B9C /* RookAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				C3767EB2E9C99B71523DE0A7 /* AgentEditingTests.swift */,
+				93FC4525DEF0BCFA1E031130 /* AttachmentTests.swift */,
+				2CA6724A97014EAA1D957603 /* BackdropGamesTests.swift */,
+				741051ECB297B27C43DBC456 /* BudgetTests.swift */,
+				E01CDB63FF40972AD1F81BC3 /* CallHookTests.swift */,
+				615C2B56A1E582EFF3A2330F /* ComposerAvailabilityTests.swift */,
+				2E0AA4242CD59317E392971C /* ConversationCommandsTests.swift */,
+				1F936F369D6E9C55777AA7FD /* DeleteTests.swift */,
+				E58086AC39F4064499457553 /* HarnessDefaultsTests.swift */,
+				057147692F8CAB732C79E2EF /* MessageBodyRendererTests.swift */,
+				DC9E0CA3E6B99A5A22FFCA6F /* NotificationTests.swift */,
+				C463758200EE700988C17751 /* PasteTests.swift */,
+				ECD59886804E6F0722B265AE /* PauseTests.swift */,
+				5465F1267B06F61D218275C6 /* ReactionTests.swift */,
+				4E2ADE44075CC2CB76EDC6A2 /* ResourceAssignmentTests.swift */,
+				5880C09EEF072A675909F889 /* ScenarioNamesTests.swift */,
+				86246EBB847F5AEC414D68F4 /* ShareTests.swift */,
+				637F3FBB7A3C3DE9F393950F /* SheetInteractionTests.swift */,
+				4F67345FADB6774B2FADCF34 /* SidebarTests.swift */,
+				EE9D675E37B754EE22807509 /* TaskTests.swift */,
+				BEE27AF48004552A6E8194C9 /* UnreadTests.swift */,
+				E55C3561F82CB609289B17F1 /* UsageTests.swift */,
+				A65EEA344988645124A12870 /* VoiceMessageTests.swift */,
+				D53E0615856A4DA96AA9C621 /* WelcomeTests.swift */,
+			);
+			path = RookAppTests;
+			sourceTree = "<group>";
+		};
+		9BF2CF96022C225E7F35AC3D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C844B9B38C6E8E687C7C1B29 /* messenger */,
+				7784C9635EE361BD6E697C16 /* NoodleAgentHost.xpc */,
+				062BDEEFF11EB430C041A1A7 /* NoodleAppleAgent */,
+				BD730310820E953A05D236A6 /* Rook.app */,
+				F12D4EC53B6A8067CB68E926 /* RookAppTests.xctest */,
+				B1772AE6878CD1B804CCE7A2 /* RookShare.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BF7AC0E394A8BCB42C1EA6C5 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				55F79C44B0EBC0FAD0F94315 /* RookApp */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		C18D9DC6ACE6C598562A347D /* Noodle */ = {
+			isa = PBXGroup;
+			children = (
+				C29A4480710AAB736986EA02 /* AgentConfigurationFields.swift */,
+				8EDF3E61536968A57D9026CF /* AgentNotifications.swift */,
+				11183D8DA590BE2DADFAE945 /* AgentSettingsCheckpoint.swift */,
+				26DF11E4D2BD5E6333E0C053 /* AnnotationCommands.swift */,
+				533F79C995A1C9BA958576B4 /* AnnotationContent.swift */,
+				3BEC1DDBA87F54A983C79E83 /* AnnotationPopover.swift */,
+				0E42320485C0EA103B6740DE /* AnnotationPreview.swift */,
+				F712E254D9583A3CF77A1399 /* AppIdentity.swift */,
+				BC4B500D00B9E06871C6201B /* AppUpdater.swift */,
+				DA5676018BFB6FD12D6D5FFA /* AttachmentDrag.swift */,
+				3731E4405EBED05050A7A00C /* AttachmentInlinePreview.swift */,
+				D244CB4F9397097CC3750CF2 /* AttachmentLayout.swift */,
+				18B31DF6C559E8D87E67F876 /* AttachmentPreviewController.swift */,
+				CE76E43BF3A262D6B9721407 /* BotBudgetSheet.swift */,
+				6BB8D4D59C39BF2C4CC36C31 /* BotFolderPicker.swift */,
+				BD168AA302C9AA4714EA7F01 /* CaptureAttachment.swift */,
+				4866F3BFCD7317782E0FEEA6 /* ChatSettingsView.swift */,
+				32EF8004DE95656247140CF1 /* ComposerAttachmentMenu.swift */,
+				9B5A4AE94EBEAF576230D91A /* ComposerFocusSurface.swift */,
+				366F623F3DAC0D23CE002D38 /* ComposerNameCompletion.swift */,
+				7B0402987DC97F7762BE5B13 /* ConversationAnnotation.swift */,
+				8C9FB15C139EBCF19BFF1C6E /* ConversationAnnotationContent.swift */,
+				F3B182B92B11596F4C6B3CC1 /* ConversationListKeyboardNavigation.swift */,
+				602F9F5E71A8BF6A87111126 /* ConversationTransition.swift */,
+				98587C070E7E2040E2DD2D1F /* ConversationWindowSession.swift */,
+				06B4D0CE2CBDA80ABCACED83 /* DestructiveActionButton.swift */,
+				CD285F8DC305DE6C3F807682 /* ExternalEventPresentation.swift */,
+				2B562517B70CAB73AE48352A /* FirstBotSetup.swift */,
+				3B57218C9A1B0269A07F7791 /* FloatingConversations.swift */,
+				F6EB6887003F779FDEA8D8E1 /* ForwardAttachmentSheet.swift */,
+				03DA5BB2FF87DBC4D3341E4D /* GroupMemberPicker.swift */,
+				5A87F7FCD366CF46CED5EA84 /* GroupsSettingsView.swift */,
+				FB0BC8BB4364995619A5834C /* HarnessChoosers.swift */,
+				6347434F5085F29EEE2BADA9 /* IncomingCallPanel.swift */,
+				3FBE599F111185BD75EBD3D6 /* IntentSupport.swift */,
+				5719A3D5F3FE3C1F41860FAB /* KeybindingsSettingsView.swift */,
+				A03FA750E9DC55CF6D74A937 /* KeyboardBindings.swift */,
+				90A215FDD6AFCC69217E6452 /* MessageBlocksView.swift */,
+				BA0AE1F67EE20BBB98EBB135 /* MessageContextMenu.swift */,
+				E55E5B8E264C7BF5ED03D303 /* MessageLinkPreview.swift */,
+				736D5FDB75DB82E67BC4AD14 /* MessageMarkdownCache.swift */,
+				30878E296957F1DE26942EAC /* MessageParts.swift */,
+				BC2D26F926CA53A19EE11838 /* MessageReceivedSound.swift */,
+				016A973F9B7A891F694D6B28 /* NoodleServices.swift */,
+				E8BC6487D2E324A8295E748E /* PatchReview.swift */,
+				B33C0F61EC5CC75F8CB35693 /* PermissionsSettingsView.swift */,
+				28F037A5CBB905A5C71D1B2F /* ProfileCard.swift */,
+				7A0483B7412F9F7BB4537C4F /* ScenarioFilm.swift */,
+				9055FC18250D8ACD12D011B8 /* ScenarioLauncher.swift */,
+				A5FF04DE8B3059436AD5407E /* ScreenCaptureModel.swift */,
+				A45DAC427BFBA8BC54B2EEA1 /* ScreenCapturePreview.swift */,
+				565F83F616102B5659DA0C3B /* ScreenCaptureService.swift */,
+				B043E16BE0CC139549C5EFDC /* ScrollableChatComposer.swift */,
+				13B4110B9BC99BA08E9540CB /* SheetControls.swift */,
+				4D4BC3EFDB3FD553F18092AC /* SidebarTasks.swift */,
+				77CB17FB843CEFBF70D27F53 /* StoreErrorAlert.swift */,
+				300D715AF8C99F15B7ECCBE1 /* ToolAssignmentList.swift */,
+				DD329CB2F89F0C958D92AF8A /* TranscriptScrollView.swift */,
+				EA2DCE6E8923D551B43F074C /* VoiceCall.swift */,
+				1B412D7773FBD927D8EA2229 /* VoiceCallToolbar.swift */,
+				9256BCEEA17AEEDD364C3BB6 /* VoiceCaptureRecovery.swift */,
+				FBADFE7D00C03774DE4D69BB /* VoiceInputDevice.swift */,
+				84E0B5D22C881E802F61322E /* VoiceMessageComposer.swift */,
+				A8EB326C903A0DBD46635BAD /* VoiceMessagePlayer.swift */,
+				A72E506EFBEB222EC096ADA8 /* VoiceRecorder.swift */,
+			);
+			path = Noodle;
+			sourceTree = "<group>";
+		};
+		D944C577456E59B835476EF6 /* NoodleMessenger */ = {
+			isa = PBXGroup;
+			children = (
+				8DD0781E0F4A8F7135E2F60B /* main.swift */,
+			);
+			path = NoodleMessenger;
+			sourceTree = "<group>";
+		};
+		DBDB465BAB90F36A0AB6AAA4 /* NoodleAgentHost */ = {
+			isa = PBXGroup;
+			children = (
+				84F68F09877F76BA5952C764 /* main.swift */,
+			);
+			path = NoodleAgentHost;
+			sourceTree = "<group>";
+		};
+		EE6E243FE15A7C79EBCED7D4 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				79CFD2E6432361306CAFC930 /* Assets.xcassets */,
+				D6632D8A9F6280A59A1DC55B /* ToolIcons */,
+			);
+			name = Support;
+			path = ../../Support;
+			sourceTree = "<group>";
+		};
+		EE7188878FD1E70FE4FFB486 /* NoodleShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				DFCCD5E1BF1689534654A998 /* ShareViewController.swift */,
+			);
+			path = NoodleShareExtension;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2A9A2C3ED9CF6165F0BA3875 /* RookShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 14F0EE089591430F6E64CD49 /* Build configuration list for PBXNativeTarget "RookShareExtension" */;
+			buildPhases = (
+				B268527CA213AA64B7872E01 /* Sources */,
+				E1EC428582E42FC6FAD44753 /* Resources */,
+				3AD062322D2E81C5F1CCFEB8 /* Frameworks */,
+				1C90C67E848C9A0C4853319E /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RookShareExtension;
+			packageProductDependencies = (
+				F1C46118DD4F1F3C44E7A3FE /* NoodleSharing */,
+			);
+			productName = RookShareExtension;
+			productReference = B1772AE6878CD1B804CCE7A2 /* RookShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		518179039FA8F2DB24EE3C6C /* NoodleAppleAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 536BB0639E9E85812F51EE56 /* Build configuration list for PBXNativeTarget "NoodleAppleAgent" */;
+			buildPhases = (
+				6A589A29A526E5061C3AA502 /* Sources */,
+				9E77764CCCFD1CBA27234E72 /* Resources */,
+				5CDA7DC067102F054CEBA96F /* Frameworks */,
+				895BBD619ADEE4C584D9E2EA /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NoodleAppleAgent;
+			packageProductDependencies = (
+				490A347837535655513D976C /* NoodleAppleRuntime */,
+				E011D6728AF708B24F3D79A2 /* NoodleCore */,
+			);
+			productName = NoodleAppleAgent;
+			productReference = 062BDEEFF11EB430C041A1A7 /* NoodleAppleAgent */;
+			productType = "com.apple.product-type.tool";
+		};
+		687C35859962E35BA0F6AFC3 /* RookAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A09985DC1E4D0F059B987EB9 /* Build configuration list for PBXNativeTarget "RookAppTests" */;
+			buildPhases = (
+				8330E02A87B94837D8F82DAB /* Sources */,
+				037F405D4B9B52AA9898DC5B /* Resources */,
+				F9A936476EEB75F57D00CFA9 /* Frameworks */,
+				41BABFABB4F418163D3931B6 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RookAppTests;
+			packageProductDependencies = (
+				8EC9811F5A93BC36DD8F8623 /* HubLink */,
+				FB39B4CCF6E5A0D194A85422 /* NoodleBrand */,
+				77B9AD639EC818E78747F1A1 /* NoodleCore */,
+				44350563E08CD0965BD271E2 /* NoodleRuntime */,
+				529BE6A0D45D42A33A99BB78 /* NoodleRuntimeSettings */,
+				4D1A6DA61689A031550A14FD /* RookCore */,
+			);
+			productName = RookAppTests;
+			productReference = F12D4EC53B6A8067CB68E926 /* RookAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8182B9A3AA290F38C3312CB9 /* NoodleAgentHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CBC72B4D05335E2B90096D31 /* Build configuration list for PBXNativeTarget "NoodleAgentHost" */;
+			buildPhases = (
+				F412B978B5C04F8A943A7200 /* Sources */,
+				3B4FF6B7815A5D029AAF7DC8 /* Resources */,
+				B84BE34895F7920D4E30A03E /* Frameworks */,
+				DD7B3C4288CDA046007DD102 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NoodleAgentHost;
+			packageProductDependencies = (
+				57128D5B267102FFC90DBA57 /* NoodleAgentBridge */,
+				A6F6D1269EC0A4E8E52C336E /* NoodleCore */,
+			);
+			productName = NoodleAgentHost;
+			productReference = 7784C9635EE361BD6E697C16 /* NoodleAgentHost.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
+		BECEADD2309FE9E37792DF18 /* Rook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A686D95BA99B938A4E66840 /* Build configuration list for PBXNativeTarget "Rook" */;
+			buildPhases = (
+				6E9B796607D72A98BF78B29B /* Sources */,
+				33C754E912A2C26EA0AE5394 /* Resources */,
+				C04DDE75DF5233EFD6F04272 /* Embed Foundation Extensions */,
+				0633D6D50F16E17BCFA4F52A /* Embed XPC Services */,
+				EBCC19E39C0CF73BF9FDA32B /* Frameworks */,
+				995BFBFC3D31E080B0883FD5 /* Embed Frameworks */,
+				BBAA736094DFCA6499C31DEF /* Embed Helpers */,
+				6B056AA41D24A34EBF5C6EF8 /* Trim Sparkle */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3B28DF8B2381685983903885 /* PBXTargetDependency */,
+				4598FC196D5FA5223AAEEDEA /* PBXTargetDependency */,
+				EC96CE3C9DEEE1A61CB5AC19 /* PBXTargetDependency */,
+				159058359292503E126F0F76 /* PBXTargetDependency */,
+			);
+			name = Rook;
+			packageProductDependencies = (
+				A63D59B51F09127A92BB6F90 /* HubLink */,
+				BCB518F122E7EF3EAFFC9ACD /* NoodleAudioCapture */,
+				CC01C614D678BE9B10A92A6D /* NoodleBrand */,
+				C2A4AE1ECC0459A86B2FDE93 /* NoodleCore */,
+				FE7B90BA17E42F4B257EB9FC /* NoodleHubClient */,
+				66601939CE8A06011C8977E2 /* NoodleRuntime */,
+				C1F2E99BC8B0A8BDC4F8449B /* NoodleRuntimeSettings */,
+				8FF18C9DCE97E31FEB4BCF81 /* NoodleSettingsUI */,
+				F27E395C4EA1E0396C989940 /* NoodleSharing */,
+				6A4EAE244A7A6C493F3FAD3D /* NoodleVoicePeer */,
+				014EF4FD13606589FB92FC28 /* NoodleWallpaper */,
+				5205701D690621009FEC564C /* RookCore */,
+				7100CA1C86AE170D12AD2332 /* Sparkle */,
+			);
+			productName = Rook;
+			productReference = BD730310820E953A05D236A6 /* Rook.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BFBC1AD0F1F8AE3FAC842A92 /* messenger */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9BBFF6F65C2EAE7CF3BBA3C3 /* Build configuration list for PBXNativeTarget "messenger" */;
+			buildPhases = (
+				CC35E3A767A8FB5397AE1DFF /* Sources */,
+				DB0841BDC3F1431930AB0D61 /* Resources */,
+				4FCD521CC13C6E4FFE4FD496 /* Frameworks */,
+				71A7F373395EFA8917DD16D9 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = messenger;
+			packageProductDependencies = (
+				AE06636160431FB530518166 /* NoodleCore */,
+				F6C1057E50C73FA73465BB80 /* NoodleToolScripting */,
+			);
+			productName = messenger;
+			productReference = C844B9B38C6E8E687C7C1B29 /* messenger */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8551ED3D5A86D0D7BBCB0C85 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 8D92C9375EB3AAE1CAF52C4A /* Build configuration list for PBXProject "Rook" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 3B84888C46C0502477C50D82;
+			packageReferences = (
+				EC71009A5910A1993F895784 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				B8C7F835810F9A414AC42B75 /* XCLocalSwiftPackageReference "../.." */,
+				99B6FB873F9C1701259BD351 /* XCLocalSwiftPackageReference "." */,
+				33E8BAA4137A687CA12F3D0D /* XCLocalSwiftPackageReference "../../Shared/Brand" */,
+				7C9A5BC4063F0113945F5A33 /* XCLocalSwiftPackageReference "../../Shared/HubLink" */,
+				0285FD50997D433C5A83594A /* XCLocalSwiftPackageReference "../../Shared/SettingsUI" */,
+				20C23D9E87809D6315EE2C08 /* XCLocalSwiftPackageReference "../../Shared/Wallpaper" */,
+			);
+			productRefGroup = 9BF2CF96022C225E7F35AC3D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8182B9A3AA290F38C3312CB9 /* NoodleAgentHost */,
+				518179039FA8F2DB24EE3C6C /* NoodleAppleAgent */,
+				BECEADD2309FE9E37792DF18 /* Rook */,
+				687C35859962E35BA0F6AFC3 /* RookAppTests */,
+				2A9A2C3ED9CF6165F0BA3875 /* RookShareExtension */,
+				BFBC1AD0F1F8AE3FAC842A92 /* messenger */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		037F405D4B9B52AA9898DC5B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		33C754E912A2C26EA0AE5394 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EC1E939E7F45DEF3F1B282D4 /* AppSymbol.svg in Resources */,
+				ADDFB16B68E373EB163EE400 /* Assets.xcassets in Resources */,
+				25B0223E6DA2428C67D91E41 /* Assets.xcassets in Resources */,
+				C0BB085C9CC05C4CB3BC9625 /* ToolIcons in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3B4FF6B7815A5D029AAF7DC8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9E77764CCCFD1CBA27234E72 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DB0841BDC3F1431930AB0D61 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1EC428582E42FC6FAD44753 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		6B056AA41D24A34EBF5C6EF8 /* Trim Sparkle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Trim Sparkle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nsparkle=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Sparkle.framework\"\nrm -rf \"$sparkle/Versions/B/XPCServices/Downloader.xpc\"\nfor component in \"$sparkle/Versions/B/XPCServices/Installer.xpc\" \"$sparkle/Versions/B/Autoupdate\" \\\n                 \"$sparkle/Versions/B/Updater.app\" \"$sparkle\"; do\n    codesign --force --options runtime \"$ROOK_CODESIGN_TIMESTAMP\" --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$component\"\ndone\n# Package checkouts sit beside Build/ in derived data, which archives nest deeper.\npackages=\"$BUILD_DIR\"\nwhile [ ! -d \"$packages/SourcePackages\" ]; do\n    [ \"$packages\" != / ] || { echo \"error: no Swift package checkouts above $BUILD_DIR\" >&2; exit 1; }\n    packages=\"$(dirname \"$packages\")\"\ndone\ncp -f \"$packages/SourcePackages/checkouts/Sparkle/LICENSE\" \\\n   \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt\"";
+		};
+		BBAA736094DFCA6499C31DEF /* Embed Helpers */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Helpers";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nhelpers=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nrm -rf \"$helpers\"\nmkdir -p \"$helpers\"\nsign() { codesign --force --options runtime \"$ROOK_CODESIGN_TIMESTAMP\" --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$@\"; }\ninstall_name_tool -delete_rpath \"$BUILT_PRODUCTS_DIR/PackageFrameworks\" \"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\" 2>/dev/null || true\nfor tool in messenger NoodleAppleAgent; do\n    ditto \"$BUILT_PRODUCTS_DIR/$tool\" \"$helpers/$tool\"\ndone\nsign \"$helpers/messenger\"\nsign --identifier \"$PRODUCT_BUNDLE_IDENTIFIER.apple-agent\" \"$helpers/NoodleAppleAgent\"\nfor bundle in mlx-swift_Cmlx swift-transformers_Hub swift-crypto_Crypto; do\n    if [ -d \"$BUILT_PRODUCTS_DIR/$bundle.bundle\" ]; then\n        ditto \"$BUILT_PRODUCTS_DIR/$bundle.bundle\" \"$helpers/$bundle.bundle\"\n        codesign --force \"$ROOK_CODESIGN_TIMESTAMP\" --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$helpers/$bundle.bundle\"\n    fi\ndone";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6A589A29A526E5061C3AA502 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7792B1C58D489645FFCD7AF3 /* AppleAgent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6E9B796607D72A98BF78B29B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				14BDADE13BF1314C4405F6CA /* TuistAssets+Rook.swift in Sources */,
+				28FFA9505084F73C7E9216CD /* TuistBundle+Rook.swift in Sources */,
+				860C668EE8771255C5CDC0FB /* AgentSigil.swift in Sources */,
+				B8A914EEFC138ED06810F419 /* AttachmentSupport.swift in Sources */,
+				AC57A147179AA9B9CB84CCC6 /* Backdrop.metal in Sources */,
+				7B1D6F6D788E089A48FE27B6 /* Backdrop.swift in Sources */,
+				960D338823E71658211CDE87 /* BackdropGames.swift in Sources */,
+				E1FF9AD0B048C8F11375ADFB /* CaseInspector.swift in Sources */,
+				D17F7BD1F822259630BCBF9B /* Composer.swift in Sources */,
+				1EF396E8C912EEE6AAA914A0 /* ConversationView.swift in Sources */,
+				A7D848F13A9CA8BD91137026 /* MainWindow.swift in Sources */,
+				A9BB3A0343BFBF36E66D5C4E /* MessageBodyRenderer.swift in Sources */,
+				31C0716D50818B1D0EC2F5CB /* Rook.swift in Sources */,
+				601A13D90484B7D338257594 /* RookCalls.swift in Sources */,
+				2D8887BF4FF3D593A11706D8 /* RookIntents.swift in Sources */,
+				B1BB41FDC0425042673C7207 /* RookModel.swift in Sources */,
+				6816B03BB35E0BD9072A1641 /* RookNotifications.swift in Sources */,
+				9531F7C382500DBC35DE1FF6 /* Scenario.swift in Sources */,
+				D177776E81BD8CA475EF6E09 /* Settings.swift in Sources */,
+				29ACECD99860FF2192C24A68 /* Sheets.swift in Sources */,
+				5D40B5B09CF9FD1B56261B2E /* Style.swift in Sources */,
+				E157AFF481EF1068EA84BFE7 /* Welcome.swift in Sources */,
+				58A449FB02CA5D8C5AF6509B /* WindowState.swift in Sources */,
+				0943676879DE793B5510895F /* AgentConfigurationFields.swift in Sources */,
+				FF474C356536DC5F8DD0F731 /* AgentNotifications.swift in Sources */,
+				34E5ED6C78F6633FA93F801C /* AgentSettingsCheckpoint.swift in Sources */,
+				FE82002688DAB6E6F4064F36 /* AnnotationCommands.swift in Sources */,
+				20572CF810FF53279B08A8DD /* AnnotationContent.swift in Sources */,
+				E47110FD0065AE5F2B9D0D2E /* AnnotationPopover.swift in Sources */,
+				9761505A55FE7EB69CE5AD10 /* AnnotationPreview.swift in Sources */,
+				3B0262CD41192574900B0D46 /* AppIdentity.swift in Sources */,
+				BD2123E121FFA4E261A09943 /* AppUpdater.swift in Sources */,
+				E4582463B6DBA3DAE748C3CB /* AttachmentDrag.swift in Sources */,
+				EA9FB0AA8DF5A27F904271E9 /* AttachmentInlinePreview.swift in Sources */,
+				76811510584DC2360EA3BA62 /* AttachmentLayout.swift in Sources */,
+				8E82966B9E58CEB103C9444A /* AttachmentPreviewController.swift in Sources */,
+				736458728AAFA500C558F496 /* BotBudgetSheet.swift in Sources */,
+				6DE41ABCC6157123EC77F850 /* BotFolderPicker.swift in Sources */,
+				CB27D6A19758C3CEEB2577B5 /* CaptureAttachment.swift in Sources */,
+				C0C81C41E4E6DE17E6CA93B9 /* ChatSettingsView.swift in Sources */,
+				CA97641D34190AC88BF9B71F /* ComposerAttachmentMenu.swift in Sources */,
+				7D49E722E13A3E016C10C8C9 /* ComposerFocusSurface.swift in Sources */,
+				FC2AB074A38E6206F0671930 /* ComposerNameCompletion.swift in Sources */,
+				EFD1203FDC01B29AFAF47F07 /* ConversationAnnotation.swift in Sources */,
+				BCC9CB37ADFE063FA8256AF7 /* ConversationAnnotationContent.swift in Sources */,
+				DC872544846589DE9F9C0417 /* ConversationListKeyboardNavigation.swift in Sources */,
+				FA7D66090D222DAD718C2DCC /* ConversationTransition.swift in Sources */,
+				9149B9BF68BFA08ABD2EAED0 /* ConversationWindowSession.swift in Sources */,
+				312FE042338D1852BBCDCACB /* DestructiveActionButton.swift in Sources */,
+				C054ABC58ACAD01445C665AF /* ExternalEventPresentation.swift in Sources */,
+				8EC3D0F9B16D247A2B950111 /* FirstBotSetup.swift in Sources */,
+				A177ED4D6B08218D2F82B6B4 /* FloatingConversations.swift in Sources */,
+				06CEBCAB690B9E1F7743C4D2 /* ForwardAttachmentSheet.swift in Sources */,
+				AC519728C77D09A28EDDB0CB /* GroupMemberPicker.swift in Sources */,
+				E4A3B971242380D6FD7518CC /* GroupsSettingsView.swift in Sources */,
+				2E7592C13FE81359F5E09221 /* HarnessChoosers.swift in Sources */,
+				47AB531A747DE311E3B65FC8 /* IncomingCallPanel.swift in Sources */,
+				D98FD0DEA0B43A6F398CE2A9 /* IntentSupport.swift in Sources */,
+				030EF1FC44CBF9BAAB3B22DB /* KeybindingsSettingsView.swift in Sources */,
+				623A18E55963B778E130C181 /* KeyboardBindings.swift in Sources */,
+				FD55A6319CF9FA14ED1F59FA /* MessageBlocksView.swift in Sources */,
+				73B5B1B1900040399630B693 /* MessageContextMenu.swift in Sources */,
+				DCB4870E6D77D55474913D2A /* MessageLinkPreview.swift in Sources */,
+				33C3D0735A10D87C78CA2C56 /* MessageMarkdownCache.swift in Sources */,
+				577F69F116857BAA5F98E372 /* MessageParts.swift in Sources */,
+				F0F28F08EB5596BA76BFC724 /* MessageReceivedSound.swift in Sources */,
+				B038AB62AA561708310EF1DE /* NoodleServices.swift in Sources */,
+				DAF40A33BB2FF21181C8E6D8 /* PatchReview.swift in Sources */,
+				D60F80CE36EF4C7B1C026F2C /* PermissionsSettingsView.swift in Sources */,
+				6FCFACD709B11E4603E91730 /* ProfileCard.swift in Sources */,
+				C4330C4B1D1952F14F3794E6 /* ScenarioFilm.swift in Sources */,
+				0C7D52DBFD37CF33363980AB /* ScenarioLauncher.swift in Sources */,
+				CE0BD45A6E63924397E7C122 /* ScreenCaptureModel.swift in Sources */,
+				4D56C6937B1639767574ACB1 /* ScreenCapturePreview.swift in Sources */,
+				881FBECE789C710D323543FE /* ScreenCaptureService.swift in Sources */,
+				2E76E074FECF11C2A0ACF767 /* ScrollableChatComposer.swift in Sources */,
+				08E339E3052F3448D37A16E0 /* SheetControls.swift in Sources */,
+				DE51871A4B783224749BCE8E /* SidebarTasks.swift in Sources */,
+				097EDD09E1C9787223923C2D /* StoreErrorAlert.swift in Sources */,
+				C63B6874DDA12B2B709A4FC4 /* ToolAssignmentList.swift in Sources */,
+				09368654A71FC0F8D3BB17A9 /* TranscriptScrollView.swift in Sources */,
+				9903CF0132BD0F809564B670 /* VoiceCall.swift in Sources */,
+				54432C09ECA800C1464B8B95 /* VoiceCallToolbar.swift in Sources */,
+				B84BB2323077232C658351A8 /* VoiceCaptureRecovery.swift in Sources */,
+				C4C95624AB82C0078FC26A94 /* VoiceInputDevice.swift in Sources */,
+				9E185263A4577228F1F25DC5 /* VoiceMessageComposer.swift in Sources */,
+				E042B68AAE62439AF4587149 /* VoiceMessagePlayer.swift in Sources */,
+				86AEB73D6B17DC36BBDA062C /* VoiceRecorder.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8330E02A87B94837D8F82DAB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9C37882A8B29170CED851455 /* BackdropGames.swift in Sources */,
+				7BC5E8D7C91419D332960A56 /* MessageBodyRenderer.swift in Sources */,
+				22443C29E3419E893B18F81E /* RookModel.swift in Sources */,
+				816EAC0CD55E82B318DAE80F /* WindowState.swift in Sources */,
+				15430776D1D9450A21EC22CA /* AgentEditingTests.swift in Sources */,
+				15A198E87A4848BF60C54A49 /* AttachmentTests.swift in Sources */,
+				9F81968393926E0ECAF369E7 /* BackdropGamesTests.swift in Sources */,
+				DA0D3D2978F2CE8372835628 /* BudgetTests.swift in Sources */,
+				10ED907DDAC611D9D8011E16 /* CallHookTests.swift in Sources */,
+				4A0DB686BCAF25602DECCED1 /* ComposerAvailabilityTests.swift in Sources */,
+				856344799A3139013D9A3844 /* ConversationCommandsTests.swift in Sources */,
+				065489F804B4DD55E6184988 /* DeleteTests.swift in Sources */,
+				BF1EC67282AD5342F9330EA7 /* HarnessDefaultsTests.swift in Sources */,
+				8CC9D425885E57F1E1499800 /* MessageBodyRendererTests.swift in Sources */,
+				F4888C9DF65A1B147A2FABAC /* NotificationTests.swift in Sources */,
+				AD36C9505F15A0AB7239CD4A /* PasteTests.swift in Sources */,
+				0D06C15E1EF8F659B414D3DD /* PauseTests.swift in Sources */,
+				7503F232C749F3A03E78768C /* ReactionTests.swift in Sources */,
+				EA54F7AEC18A19A6B5CBB172 /* ResourceAssignmentTests.swift in Sources */,
+				F39BF5BABCFC528C9B149139 /* ScenarioNamesTests.swift in Sources */,
+				1F6997A5CC98A1DF14C338D7 /* ShareTests.swift in Sources */,
+				F6CCF6FACCAD378E18105A10 /* SheetInteractionTests.swift in Sources */,
+				602E72E6C7507A3D50A4B34E /* SidebarTests.swift in Sources */,
+				53700B6A5D4698F4C997DCBB /* TaskTests.swift in Sources */,
+				1FB7C20A735EEFA88EE5C402 /* UnreadTests.swift in Sources */,
+				78F3B684EBF69EAC955B153E /* UsageTests.swift in Sources */,
+				9F6E66FD566A3F6322E2C8B9 /* VoiceMessageTests.swift in Sources */,
+				1006FA2DB144D4141DD68D07 /* WelcomeTests.swift in Sources */,
+				D50083920A55E9BF991514FF /* AgentSettingsCheckpoint.swift in Sources */,
+				406368614735DA779AE5FC97 /* MessageMarkdownCache.swift in Sources */,
+				BA29CF788A8251BAE814C5D8 /* SheetControls.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B268527CA213AA64B7872E01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4C6A5ACCA96FBAA309D1346 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CC35E3A767A8FB5397AE1DFF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A8C7F914E89BBCD2BEB92AE /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F412B978B5C04F8A943A7200 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				407D887E9CF48068D7F3181B /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		159058359292503E126F0F76 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = messenger;
+			target = BFBC1AD0F1F8AE3FAC842A92 /* messenger */;
+			targetProxy = 3817EB075EBC6497B034C985 /* PBXContainerItemProxy */;
+		};
+		3B28DF8B2381685983903885 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = NoodleAgentHost;
+			target = 8182B9A3AA290F38C3312CB9 /* NoodleAgentHost */;
+			targetProxy = 04B126118303F7D0C8A85294 /* PBXContainerItemProxy */;
+		};
+		4598FC196D5FA5223AAEEDEA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = NoodleAppleAgent;
+			target = 518179039FA8F2DB24EE3C6C /* NoodleAppleAgent */;
+			targetProxy = E1303D5A20A98B6B3952EB8A /* PBXContainerItemProxy */;
+		};
+		EC96CE3C9DEEE1A61CB5AC19 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = RookShareExtension;
+			target = 2A9A2C3ED9CF6165F0BA3875 /* RookShareExtension */;
+			targetProxy = BF8BE4C4740199DF0AA0370B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0027BE7E76B5EE8210E70085 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/NoodleAppleAgent-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited) -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(SRCROOT)/../../Support/AppleAgent-Info.plist",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = NoodleAppleAgent;
+				PRODUCT_NAME = NoodleAppleAgent;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited)",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1CBEE1668F6A0CDCC7C0F1A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = RookIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Support/Rook.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXECUTABLE_NAME = Rook;
+				INFOPLIST_FILE = Support/Info.plist;
+				INFOPLIST_OTHER_PREPROCESSOR_FLAGS = "-traditional";
+				INFOPLIST_PREPROCESS = YES;
+				INFOPLIST_PREPROCESSOR_DEFINITIONS = "ROOK_UPDATES_ENABLED=false";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID)";
+				PRODUCT_NAME = "$(ROOK_APP_NAME)";
+				ROOK_CODESIGN_TIMESTAMP = "--timestamp=none";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited) DEBUG ROOK_DEV_HOOKS NOODLE_DEV_HOOKS",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		287E893226A2543B4A699FCD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/RookAppTests-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pdparchitect.rook.tests;
+				PRODUCT_NAME = RookAppTests;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited)",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		29B89EF43EAFEF6C913354C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/messenger-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = messenger;
+				PRODUCT_NAME = messenger;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		3CE77E75A86D4429E05AEC29 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/NoodleAppleAgent-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited) -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker $(SRCROOT)/../../Support/AppleAgent-Info.plist",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = NoodleAppleAgent;
+				PRODUCT_NAME = NoodleAppleAgent;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		4760CF0496E3D1CD5C5E1021 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 0.1.0;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = S8VNVK39LH;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				ROOK_APP_BUNDLE_ID = com.pdparchitect.rook;
+				ROOK_APP_NAME = Rook;
+				ROOK_URL_SCHEME = rook;
+				SWIFT_VERSION = 5;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8FEBFB66016987AADEBB6371 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Derived/InfoPlists/NoodleAgentHost-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID).agent-host";
+				PRODUCT_NAME = NoodleAgentHost;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited)",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		91441F353259EEBCD1B5DDD6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 0.1.0;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = S8VNVK39LH;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				ROOK_APP_BUNDLE_ID = com.pdparchitect.rook.local;
+				ROOK_APP_NAME = "Rook Dev";
+				ROOK_URL_SCHEME = "rook-dev";
+				SWIFT_VERSION = 5;
+			};
+			name = Debug;
+		};
+		B4F3D3C4C8800659F868A880 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/messenger-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = messenger;
+				PRODUCT_NAME = messenger;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited)",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BD54EE846FEF53D388E8ED3B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = RookIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Support/Rook.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXECUTABLE_NAME = Rook;
+				INFOPLIST_FILE = Support/Info.plist;
+				INFOPLIST_OTHER_PREPROCESSOR_FLAGS = "-traditional";
+				INFOPLIST_PREPROCESS = YES;
+				INFOPLIST_PREPROCESSOR_DEFINITIONS = "ROOK_UPDATES_ENABLED=false";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID)";
+				PRODUCT_NAME = "$(ROOK_APP_NAME)";
+				ROOK_CODESIGN_TIMESTAMP = "--timestamp=none";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		C4B802A76520FE79528EC07A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				INFOPLIST_FILE = "Derived/InfoPlists/RookAppTests-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pdparchitect.rook.tests;
+				PRODUCT_NAME = RookAppTests;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		CA9B6B682E5BAFDB09B5C8CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_NAME = RookShareExtension;
+				INFOPLIST_FILE = "Support/ShareExtension-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID).share";
+				PRODUCT_NAME = RookShare;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		CF4212F428E19FA07D99980D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_NAME = RookShareExtension;
+				INFOPLIST_FILE = "Support/ShareExtension-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID).share";
+				PRODUCT_NAME = RookShare;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
+					"$(inherited)",
+					DEBUG,
+				);
+				SWIFT_COMPILATION_MODE = singlefile;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		DFD872995C162A1685B55DE4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Derived/InfoPlists/NoodleAgentHost-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-L$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ROOK_APP_BUNDLE_ID).agent-host";
+				PRODUCT_NAME = NoodleAgentHost;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		14F0EE089591430F6E64CD49 /* Build configuration list for PBXNativeTarget "RookShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF4212F428E19FA07D99980D /* Debug */,
+				CA9B6B682E5BAFDB09B5C8CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A686D95BA99B938A4E66840 /* Build configuration list for PBXNativeTarget "Rook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CBEE1668F6A0CDCC7C0F1A9 /* Debug */,
+				BD54EE846FEF53D388E8ED3B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		536BB0639E9E85812F51EE56 /* Build configuration list for PBXNativeTarget "NoodleAppleAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0027BE7E76B5EE8210E70085 /* Debug */,
+				3CE77E75A86D4429E05AEC29 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8D92C9375EB3AAE1CAF52C4A /* Build configuration list for PBXProject "Rook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91441F353259EEBCD1B5DDD6 /* Debug */,
+				4760CF0496E3D1CD5C5E1021 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9BBFF6F65C2EAE7CF3BBA3C3 /* Build configuration list for PBXNativeTarget "messenger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B4F3D3C4C8800659F868A880 /* Debug */,
+				29B89EF43EAFEF6C913354C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A09985DC1E4D0F059B987EB9 /* Build configuration list for PBXNativeTarget "RookAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				287E893226A2543B4A699FCD /* Debug */,
+				C4B802A76520FE79528EC07A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CBC72B4D05335E2B90096D31 /* Build configuration list for PBXNativeTarget "NoodleAgentHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8FEBFB66016987AADEBB6371 /* Debug */,
+				DFD872995C162A1685B55DE4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0285FD50997D433C5A83594A /* XCLocalSwiftPackageReference "../../Shared/SettingsUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Shared/SettingsUI;
+		};
+		20C23D9E87809D6315EE2C08 /* XCLocalSwiftPackageReference "../../Shared/Wallpaper" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Shared/Wallpaper;
+		};
+		33E8BAA4137A687CA12F3D0D /* XCLocalSwiftPackageReference "../../Shared/Brand" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Shared/Brand;
+		};
+		7C9A5BC4063F0113945F5A33 /* XCLocalSwiftPackageReference "../../Shared/HubLink" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Shared/HubLink;
+		};
+		99B6FB873F9C1701259BD351 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+		B8C7F835810F9A414AC42B75 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		EC71009A5910A1993F895784 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		014EF4FD13606589FB92FC28 /* NoodleWallpaper */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleWallpaper;
+		};
+		44350563E08CD0965BD271E2 /* NoodleRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleRuntime;
+		};
+		490A347837535655513D976C /* NoodleAppleRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleAppleRuntime;
+		};
+		4D1A6DA61689A031550A14FD /* RookCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RookCore;
+		};
+		5205701D690621009FEC564C /* RookCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RookCore;
+		};
+		529BE6A0D45D42A33A99BB78 /* NoodleRuntimeSettings */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleRuntimeSettings;
+		};
+		57128D5B267102FFC90DBA57 /* NoodleAgentBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleAgentBridge;
+		};
+		66601939CE8A06011C8977E2 /* NoodleRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleRuntime;
+		};
+		6A4EAE244A7A6C493F3FAD3D /* NoodleVoicePeer */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleVoicePeer;
+		};
+		7100CA1C86AE170D12AD2332 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sparkle;
+		};
+		77B9AD639EC818E78747F1A1 /* NoodleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleCore;
+		};
+		8EC9811F5A93BC36DD8F8623 /* HubLink */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HubLink;
+		};
+		8FF18C9DCE97E31FEB4BCF81 /* NoodleSettingsUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleSettingsUI;
+		};
+		A63D59B51F09127A92BB6F90 /* HubLink */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HubLink;
+		};
+		A6F6D1269EC0A4E8E52C336E /* NoodleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleCore;
+		};
+		AE06636160431FB530518166 /* NoodleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleCore;
+		};
+		BCB518F122E7EF3EAFFC9ACD /* NoodleAudioCapture */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleAudioCapture;
+		};
+		C1F2E99BC8B0A8BDC4F8449B /* NoodleRuntimeSettings */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleRuntimeSettings;
+		};
+		C2A4AE1ECC0459A86B2FDE93 /* NoodleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleCore;
+		};
+		CC01C614D678BE9B10A92A6D /* NoodleBrand */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleBrand;
+		};
+		E011D6728AF708B24F3D79A2 /* NoodleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleCore;
+		};
+		F1C46118DD4F1F3C44E7A3FE /* NoodleSharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleSharing;
+		};
+		F27E395C4EA1E0396C989940 /* NoodleSharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleSharing;
+		};
+		F6C1057E50C73FA73465BB80 /* NoodleToolScripting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleToolScripting;
+		};
+		FB39B4CCF6E5A0D194A85422 /* NoodleBrand */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleBrand;
+		};
+		FE7B90BA17E42F4B257EB9FC /* NoodleHubClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoodleHubClient;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 8551ED3D5A86D0D7BBCB0C85 /* Project object */;
+}

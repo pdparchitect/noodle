@@ -23,6 +23,7 @@ PRODUCTS = {
 # Incubating apps release on their own, from their own workflows: never planned or tagged with the products above.
 INCUBATOR = {
     "pion": ("Incubator/Pion/VERSION", "Incubator/Pion/CHANGELOG.md", "pion-v"),
+    "rook": ("Incubator/Rook/VERSION", "Incubator/Rook/CHANGELOG.md", "rook-v"),
 }
 ALL = PRODUCTS | INCUBATOR
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"

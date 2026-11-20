@@ -15,6 +15,9 @@ if [[ "$app_folder" == Noodle ]]; then
 elif [[ "$app_folder" == Pion ]]; then
     # An incubating app of its own: Incubator/Pion, com.pdparchitect.pion, the pion-v tag and Pion-arm64.zip.
     folder="$project_root/Incubator/Pion"; app_name=Pion; bundle=com.pdparchitect.pion; tag_prefix=pion-v
+elif [[ "$app_folder" == Rook ]]; then
+    # An incubating app of its own: Incubator/Rook, com.pdparchitect.rook, the rook-v tag and Rook-arm64.zip.
+    folder="$project_root/Incubator/Rook"; app_name=Rook; bundle=com.pdparchitect.rook; tag_prefix=rook-v
 else
     folder="$project_root/$app_folder"; app_name="Noodle $app_folder"; bundle="com.pdparchitect.noodle.$product"; tag_prefix="$product-v"
 fi

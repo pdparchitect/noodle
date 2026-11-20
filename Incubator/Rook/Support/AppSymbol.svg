@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" data-icon-background="rook" role="img" aria-labelledby="title">
+  <title id="title">Rook symbol</title>
+  <g id="symbol" fill="#f2efe4" fill-rule="evenodd">
+    <!-- Crenellated top: three merlons over a connecting band. -->
+    <path d="M452,280 H528 V450 H452 Z"/>
+    <path d="M589,280 H665 V450 H589 Z"/>
+    <path d="M726,280 H802 V450 H726 Z"/>
+    <path d="M452,360 H802 V450 H452 Z"/>
+    <!-- Body: shoulders taper to a waist, then flare toward the base. -->
+    <path d="M470,450 H784 L744,720 Q742,800 772,862 H482 Q512,800 510,720 Z"/>
+    <!-- Base molding. -->
+    <path d="M452,846 H802 A24,24 0 0 1 826,870 V888 A24,24 0 0 1 802,912 H452 A24,24 0 0 1 428,888 V870 A24,24 0 0 1 452,846 Z"/>
+    <!-- Flared foot. -->
+    <path d="M430,904 H824 L860,992 A18,18 0 0 1 842,1010 H412 A18,18 0 0 1 394,992 Z"/>
+  </g>
+</svg>
