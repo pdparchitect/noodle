@@ -5,12 +5,14 @@ import NoodleRuntime
 import NoodleRuntimeSettings
 import RookCore
 import SwiftUI
+import NoodleSettingsUI
 
 /// The sidebar of Missions, groups and agents beside the conversation that is selected.
 struct MainWindow: View {
     let model: RookModel
     @Bindable var window: WindowState
     let setup: HarnessSetupController
+    @State private var graphContainerSize = CGSize(width: 1000, height: 760)
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -35,7 +37,7 @@ struct MainWindow: View {
         } detail: {
             if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
-                ConversationView(model: model, window: window, conversation: conversation, showsGraphOverlay: false)
+                ConversationView(model: model, window: window, conversation: conversation, presentsGraphSheet: false)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("No Agents", systemImage: "person.2")
@@ -51,14 +53,17 @@ struct MainWindow: View {
                 ContentUnavailableView("No Conversation Selected", systemImage: "shield.lefthalf.filled")
             }
         }
-        // The attack-graph popup floats over the whole window — sidebar, transcript and inspector — centred, not just the conversation column.
-        .overlay {
-            if window.showsGraph, let conversation = model.conversation(model.selection), let mission = model.mission(conversation.id) {
+        .onGeometryChange(for: CGSize.self, of: \.size) { graphContainerSize = $0 }
+        // A native sheet makes the whole parent window, including its toolbar, modal.
+        .sheet(isPresented: $window.showsGraph) {
+            if let conversation = model.conversation(model.selection), let mission = model.mission(conversation.id) {
+                let size = MissionGraphView.sheetSize(in: graphContainerSize)
                 MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
-                    .transition(.opacity)
+                    .frame(width: size.width, height: size.height)
+                    .presentationBackground(.ultraThinMaterial)
+                    .noodleSheetSizing()
             }
         }
-        .animation(.snappy(duration: 0.2), value: window.showsGraph)
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))

@@ -92,6 +92,19 @@ public struct CaseRecord: Codable, Equatable, Sendable {
 
     public init() {}
 
+    /// Focus includes both ends of incident edges, but never follows a neighbour's other edges.
+    /// A removed selection falls back to the full graph as the case changes underneath the view.
+    public func graphFocus(around selected: String?) -> Set<String> {
+        let known = Set(entities.map(\.id))
+        guard let selected, known.contains(selected) else { return known }
+        var focused: Set<String> = [selected]
+        for link in links where link.from == selected || link.to == selected {
+            focused.insert(link.from)
+            focused.insert(link.to)
+        }
+        return focused.intersection(known)
+    }
+
     /// The next identifier with `prefix`, such as V-4 after V-3. Identifiers are never reused.
     static func nextID(_ prefix: String, after existing: [String]) -> String {
         let numbers = existing.compactMap { $0.hasPrefix(prefix + "-") ? Int($0.dropFirst(prefix.count + 1)) : nil }

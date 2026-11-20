@@ -4,6 +4,7 @@ import NoodleRuntimeSettings
 import NoodleWallpaper
 import RookCore
 import SwiftUI
+import NoodleSettingsUI
 
 /// A second conversation keeps its selection, sheets and case record independent of the main window.
 struct ConversationWindow: View {
@@ -60,8 +61,9 @@ struct ConversationView: View {
     let model: RookModel
     @Bindable var window: WindowState
     let conversation: BotConversation
-    /// The main window draws the attack-graph popup over the whole window itself; a floating conversation window draws its own.
-    var showsGraphOverlay = true
+    /// The main window presents the graph itself; floating conversations present their own sheet.
+    var presentsGraphSheet = true
+    @State private var graphContainerSize = CGSize(width: 1000, height: 760)
     @Environment(RookCalls.self) private var calls
     @Environment(RookSettingsHost.self) private var host
     @Environment(\.openSettings) private var openSettings
@@ -104,15 +106,17 @@ struct ConversationView: View {
                     .transition(.move(edge: .trailing))
             }
         }
-        // A floating conversation window draws the attack-graph popup itself; in the main window MainWindow draws it over the whole window.
-        .overlay {
-            if showsGraphOverlay, window.showsGraph, let mission {
+        .onGeometryChange(for: CGSize.self, of: \.size) { graphContainerSize = $0 }
+        .sheet(isPresented: Binding(get: { presentsGraphSheet && window.showsGraph }, set: { window.showsGraph = $0 })) {
+            if let mission {
+                let size = MissionGraphView.sheetSize(in: graphContainerSize)
                 MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
-                    .transition(.opacity)
+                    .frame(width: size.width, height: size.height)
+                    .presentationBackground(.ultraThinMaterial)
+                    .noodleSheetSizing()
             }
         }
         .animation(.snappy(duration: 0.25), value: window.showsInspector)
-        .animation(.snappy(duration: 0.2), value: window.showsGraph)
         // Leaving the Mission closes the graph, so it never lingers over another conversation.
         .onChange(of: conversation.id) { window.showsGraph = false }
         // As in Noodle: files dropped anywhere on the conversation wait in its message field.

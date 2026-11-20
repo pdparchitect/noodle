@@ -251,6 +251,7 @@ let project = Project(
             sources: ["Tests/RookAppTests/**", "Sources/RookApp/RookModel.swift", "Sources/RookApp/MessageBodyRenderer.swift",
                       "../../Sources/Noodle/MessageMarkdownCache.swift",
                       "Sources/RookApp/WindowState.swift", "../../Sources/Noodle/SheetControls.swift", "Sources/RookApp/BackdropGames.swift",
+                      "Sources/RookApp/MissionGraphView.swift",
                       "../../Sources/Noodle/AgentSettingsCheckpoint.swift"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleRuntime"), .package(product: "RookCore"),
                            .package(product: "HubLink"), .package(product: "NoodleBrand"), .package(product: "NoodleRuntimeSettings")],
