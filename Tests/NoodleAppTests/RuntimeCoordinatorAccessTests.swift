@@ -68,7 +68,7 @@ import XCTest
     func testUnrestrictedAccessStaysOffUntilTurnedOnOutsideTheApp() throws {
         let f = try fixture(), agent = try f.agent()
         f.defaults.removeObject(forKey: "AllowUnrestrictedAccess")
-        f.runtime.reloadAccess()
+        f.runtime.reconcile(agents: [], repository: f.repository, immediately: true)
         _ = try f.start(agent)
         f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
         XCTAssertEqual(f.factory.processes.count, 1, "Nothing restarts")

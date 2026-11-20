@@ -7,7 +7,7 @@ final class AgentAccessTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         var bot = AgentRecord(displayName: "Bot", harnessIdentifier: "codex")
-        var config = AgentAccessConfiguration(autonomousAgentIDs: [bot.id])
+        var config = AgentAccessConfiguration(autonomousAgentIDs: [bot.id], unrestrictedAccessTurnedOn: true)
         XCTAssertTrue(config.isExtended(for: bot))
         XCTAssertFalse(config.appsEnabled(for: bot), "Unrestricted bots must also default apps off")
         config.setAppsEnabled(true, for: bot)
