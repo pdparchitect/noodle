@@ -427,10 +427,20 @@
   },
   "timeline": [
     {
+      "present": {
+        "inspector": "hidden"
+      }
+    },
+    {
       "capture": "01-finding"
     },
     {
       "waitFor": "key"
+    },
+    {
+      "present": {
+        "inspector": "case"
+      }
     },
     {
       "capture": "02-case"
@@ -439,13 +449,32 @@
       "waitFor": "key"
     },
     {
+      "present": {
+        "inspector": "audit"
+      }
+    },
+    {
       "capture": "03-audit"
     },
     {
       "waitFor": "key"
     },
     {
-      "capture": "04-agents"
+      "present": {
+        "inspector": "case",
+        "graph": true
+      }
+    },
+    {
+      "wait": 0.8
+    },
+    {
+      "capture": "04-graph"
+    },
+    {
+      "present": {
+        "graph": false
+      }
     }
   ]
 }

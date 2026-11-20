@@ -105,6 +105,9 @@ struct RookScenario: Decodable {
         var window: Window?
         var select: String?
         var inspector: String?
+        /// Opens the selected Mission's attack graph, or closes it with false. Selecting another conversation closes it, so
+        /// open it in a step after the one that selects.
+        var graph: Bool?
         /// edit, new-mission, new-group, new-agent, or none to dismiss.
         var sheet: String?
         struct Window: Decodable { let size: [Double] }
@@ -574,6 +577,7 @@ struct RookScenario: Decodable {
             window?.showsInspector = inspector != "hidden"
             window?.inspectorTab = inspector == "audit" ? .audit : .caseRecord
         }
+        if let graph = present.graph { window?.showsGraph = graph }
     }
 
     /// Tells scripts/scenario.sh, and when it is capturing, waits for its empty line before going on.

@@ -21,7 +21,8 @@ zsh scripts/readme-shots.sh Pion suspicious-sign-in 02-case=hero@1722
 - `SHOT` is a `capture` name from the scenario. The hero goes at the capture's own width, about 1722; tiles at 1200.
 - The terminal needs Screen Recording permission and the screen must stay unlocked, or the shots come out without the
   glass.
-- Look at every image before committing them.
+- Look at every image before committing them. A capture only shows something new if a step before it changed the
+  view: `waitFor` changes nothing, so set `present` (`inspector`, `select`, `sheet`, and in Rook `graph`) first.
 
 Pion's README set:
 
@@ -31,6 +32,13 @@ zsh scripts/readme-shots.sh Pion php2shell 01-tasks-and-pins=tasks@1200
 zsh scripts/readme-shots.sh Pion week-overview 02-group=groups@1200
 zsh scripts/readme-shots.sh Pion phishing-triage 03-audit=audit@1200
 zsh scripts/readme-shots.sh Pion nothing-configured 01-empty=welcome@1200
+```
+
+Rook's README set:
+
+```sh
+zsh scripts/readme-shots.sh Rook exposed-git 02-case=hero@1722 04-graph=graph@1200 03-audit=audit@1200 01-finding=mission@1200
+zsh scripts/readme-shots.sh Rook nothing-configured 01-empty=welcome@1200
 ```
 
 ## Another app
