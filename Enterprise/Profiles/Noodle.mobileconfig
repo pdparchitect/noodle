@@ -27,7 +27,7 @@
 								<key>AllowMCP</key>
 								<true/>
 								<key>AllowUnrestrictedAccess</key>
-								<true/>
+								<false/>
 								<key>AllowUpdates</key>
 								<true/>
 								<key>AllowedHarnesses</key>

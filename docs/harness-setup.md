@@ -57,8 +57,9 @@ To install a harness yourself:
 | Apple Intelligence | Turn on Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
 
 Once a harness is found, create a bot and choose its model and, where available,
-reasoning effort. Every bot starts with restricted access; you can give a bot
-[unrestricted access](security.md) in **Settings → Bots**.
+reasoning effort. Every bot starts with restricted access; once you
+[turn on unrestricted access](security.md), you can give it to a bot in
+**Settings → Bots**.
 
 Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Turn
 on **Apps** beside a bot in **Settings → Bots** to allow them. This setting is

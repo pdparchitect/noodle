@@ -114,6 +114,8 @@ import XCTest
     init(inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) }) throws {
         defaults = UserDefaults(suiteName: suite)!
         defaults.set(MessageDeliveryMode.queue.rawValue, forKey: MessageDeliveryMode.defaultsKey)
+        // Off in the apps until turned on outside them; on here so tests can grant it.
+        defaults.set(true, forKey: AgentAccessConfiguration.unrestrictedAccessKey)
         repository = WorkspaceRepository(rootURL: root.appendingPathComponent("library"))
         try repository.prepare()
         let bin = root.appendingPathComponent("bin")

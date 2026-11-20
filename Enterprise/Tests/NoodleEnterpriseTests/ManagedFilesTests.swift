@@ -36,8 +36,8 @@ final class ManagedFilesTests: XCTestCase {
         let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]])
         func defaultValue(_ key: String) -> Any? { properties[key]?["default"] }
         let unmanaged = UnmanagedPolicy()
+        XCTAssertEqual(defaultValue(ManagedKeys.allowUnrestrictedAccess) as? Bool, AgentAccessConfiguration().allowsUnrestrictedAccess)
         let actions: [String: OrganisationAction] = [
-            ManagedKeys.allowUnrestrictedAccess: .unrestrictedAccess,
             ManagedKeys.allowMCP: .toolConnections,
             ManagedKeys.allowCustomMCP: .toolConnection(catalogueID: nil, endpoint: URL(string: "https://mcp.example.com")!),
             ManagedKeys.allowBrowser: .browsers, ManagedKeys.allowComputers: .computers, ManagedKeys.allowHubHosting: .hubHosting,
@@ -71,7 +71,8 @@ final class ManagedFilesTests: XCTestCase {
         let policy = ManagedPolicy(reading: ForcedValues(values: settings))
         XCTAssertTrue(policy.problems.isEmpty)
         XCTAssertTrue(HarnessProvider.allCases.allSatisfy { policy.allows(.harness($0)) })
-        for action: OrganisationAction in [.unrestrictedAccess, .browsers, .computers, .hubHosting, .hubConnections, .updates,
+        XCTAssertFalse(policy.allows(.unrestrictedAccess), "Off, as without a profile")
+        for action: OrganisationAction in [.browsers, .computers, .hubHosting, .hubConnections, .updates,
                                            .hubAddress("hub.example.com"),
                                            .toolConnection(catalogueID: nil, endpoint: URL(string: "https://mcp.example.com")!)] {
             XCTAssertTrue(policy.allows(action), "\(action)")

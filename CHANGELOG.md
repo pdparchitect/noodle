@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Unrestricted access is off until turned on outside Noodle with `defaults write com.pdparchitect.noodle AllowUnrestrictedAccess -bool true` or a configuration profile; until then Settings › Bots hides it, and bots that had it run restricted, keeping it for when it is turned on.
 - Removing a tool from a device joined to This Mac as a Hub revokes its sign-in at the service, where the service allows it, as removing it in Settings does.
 
 ### Fixed

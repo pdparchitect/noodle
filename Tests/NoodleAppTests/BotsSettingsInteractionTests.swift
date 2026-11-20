@@ -26,6 +26,21 @@ import NoodleCore
         XCTAssertTrue(enabled(access)); XCTAssertTrue(enabled(apps))
     }
 
+    func testUnrestrictedSwitchesStayHiddenUntilTurnedOnOutsideTheApp() async throws {
+        let f = try fixture()
+        f.runtime.defaults.removeObject(forKey: AgentAccessConfiguration.unrestrictedAccessKey)
+        f.runtime.runtime.reloadAccess()
+        let settings = host(BotsSettingsView(store: f.store).environment(f.store))
+        _ = try await control("Heartbeat for Ada", in: settings)
+        _ = try await control("Ada, account apps", in: settings)
+        XCTAssertFalse(hasControl("Ada, unrestricted access", in: settings))
+        XCTAssertFalse(hasControl("About unrestricted access", in: settings))
+
+        f.runtime.defaults.set(true, forKey: AgentAccessConfiguration.unrestrictedAccessKey)
+        f.runtime.runtime.reconcile(agents: f.store.agents, repository: f.repository)
+        _ = try await control("Ada, unrestricted access", in: settings)
+    }
+
     func testArchivedSwitchArchivesABotAndLocksItsOtherSwitches() async throws {
         let f = try fixture()
         let settings = host(BotsSettingsView(store: f.store).environment(f.store))

@@ -84,8 +84,8 @@ Noodle Computer, Noodle Applet, Noodle Browser, Noodle Hub, Noodle Server, Noodl
 2. Create a bot, choose its harness, and describe its role in the backstory.
 3. Give it a task and the files or context it needs. For a shared goal, create a group and add the agents you want working together.
 
-All harnesses start with restricted access. Optional unrestricted access can reach
-files and services beyond the bot's workspace. See
+All harnesses start with restricted access. Unrestricted access, off until you
+turn it on, can reach files and services beyond the bot's workspace. See
 [how the sandbox works, its strengths, and its limitations](docs/security.md).
 
 <details>

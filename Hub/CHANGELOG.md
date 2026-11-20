@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Unrestricted access is off until turned on with `defaults write com.pdparchitect.noodle.hub AllowUnrestrictedAccess -bool true`; until then Settings › Bots hides it, and bots that had it run restricted, keeping it for when it is turned on.
 - Removing a tool revokes its sign-in at the service, where the service allows it, before forgetting it here, as Noodle does.
 
 ### Fixed

@@ -57,6 +57,7 @@ final class AgentAccessTests: XCTestCase {
         let suite = "Noodle.AccessTests.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AgentAccessConfiguration.unrestrictedAccessKey)
         for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse] {
             let bot = AgentRecord(displayName: "Existing", harnessIdentifier: provider.rawValue)
             defaults.set([bot.id.uuidString: [provider.rawValue]], forKey: "Noodle.access.requiredHarnessGrants")
@@ -89,7 +90,7 @@ final class AgentAccessTests: XCTestCase {
 
     func testSwitchingHarnessRestoresDiscretionaryAccessPreference() {
         var bot = AgentRecord(displayName: "Bot", harnessIdentifier: HarnessProvider.codex.rawValue)
-        var configuration = AgentAccessConfiguration()
+        var configuration = AgentAccessConfiguration(unrestrictedAccessTurnedOn: true)
         XCTAssertFalse(configuration.isExtended(for: bot))
         bot.harnessIdentifier = HarnessProvider.claudeCode.rawValue
         XCTAssertFalse(configuration.isExtended(for: bot))
@@ -112,6 +113,22 @@ final class AgentAccessTests: XCTestCase {
 
     func testNewBotsDefaultToRestrictedAccess() {
         XCTAssertFalse(AgentAccessConfiguration().isExtended(UUID()))
+    }
+
+    func testUnrestrictedAccessIsOffUntilTurnedOnAndSavingNeverTurnsItOn() {
+        let suite = "Noodle.AccessTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bot = AgentRecord(displayName: "Bot", harnessIdentifier: HarnessProvider.codex.rawValue)
+        var configuration = AgentAccessConfiguration.load(from: defaults)
+        configuration.setExtended(true, for: bot.id)
+        XCTAssertFalse(configuration.allowsUnrestrictedAccess)
+        XCTAssertFalse(configuration.isExtended(for: bot))
+        configuration.unrestrictedAccessTurnedOn = true
+        configuration.save(to: defaults)
+        XCTAssertNil(defaults.object(forKey: AgentAccessConfiguration.unrestrictedAccessKey))
+        defaults.set(true, forKey: AgentAccessConfiguration.unrestrictedAccessKey)
+        XCTAssertTrue(AgentAccessConfiguration.load(from: defaults).isExtended(for: bot))
     }
 
     func testRestrictionPersistsPerBotAndCanBeRemoved() {

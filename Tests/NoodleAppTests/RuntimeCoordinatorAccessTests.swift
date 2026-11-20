@@ -65,6 +65,31 @@ import XCTest
         XCTAssertFalse(AgentAccessConfiguration.load(from: f.defaults).appsEnabled(for: agent))
     }
 
+    func testUnrestrictedAccessStaysOffUntilTurnedOnOutsideTheApp() throws {
+        let f = try fixture(), agent = try f.agent()
+        f.defaults.removeObject(forKey: "AllowUnrestrictedAccess")
+        f.runtime.reloadAccess()
+        _ = try f.start(agent)
+        f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 1, "Nothing restarts")
+        XCTAssertFalse(f.runtime.accessConfiguration.isGranted(for: agent), "The grant is refused, not kept for later")
+
+        var saved = AgentAccessConfiguration.load(from: f.defaults)
+        saved.setExtended(true, for: agent.id)
+        saved.save(to: f.defaults)
+        f.runtime.reloadAccess()
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        XCTAssertFalse(f.runtime.accessConfiguration.isExtended(for: agent), "An earlier grant waits")
+        XCTAssertEqual(f.factory.processes.count, 1)
+        XCTAssertFalse(try XCTUnwrap(f.factory.processes.last).launch.extendedAccess)
+
+        f.defaults.set(true, forKey: "AllowUnrestrictedAccess")
+        f.runtime.reconcile(agents: [agent], repository: f.repository, immediately: true)
+        XCTAssertTrue(f.runtime.accessConfiguration.isExtended(for: agent))
+        XCTAssertEqual(f.factory.processes.count, 2, "Turning it on restarts the bot unrestricted")
+        XCTAssertTrue(try XCTUnwrap(f.factory.processes.last).launch.extendedAccess)
+    }
+
     func testGrantIsPersistedOnlyAfterTheRestrictedProcessStops() throws {
         let f = try fixture(), agent = try f.agent(), process = try f.start(agent)
         process.automaticallyStops = false

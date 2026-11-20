@@ -7,16 +7,27 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
     private static let storageKey = "Noodle.access.autonomousAgents"
     private static let harnessGrantsKey = "Noodle.access.requiredHarnessGrants"
     private static let accountAppsKey = "Noodle.access.accountApps"
+    /// Unrestricted access stays off until someone turns it on outside the app, with
+    /// `defaults write <the app's domain> AllowUnrestrictedAccess -bool true` or a configuration
+    /// profile, whose value wins. No switch in the app turns it on, so nobody does by accident.
+    public static let unrestrictedAccessKey = "AllowUnrestrictedAccess"
+    /// Whether unrestricted access was turned on outside the app, as last read from `unrestrictedAccessKey`.
+    public var unrestrictedAccessTurnedOn: Bool
 
-    public init(autonomousAgentIDs: Set<UUID> = []) { self.autonomousAgentIDs = autonomousAgentIDs }
+    public init(autonomousAgentIDs: Set<UUID> = [], unrestrictedAccessTurnedOn: Bool = false) {
+        self.autonomousAgentIDs = autonomousAgentIDs
+        self.unrestrictedAccessTurnedOn = unrestrictedAccessTurnedOn
+    }
+
+    /// Whether bots may be given unrestricted access now: turned on, and not forbidden by the organisation.
+    public var allowsUnrestrictedAccess: Bool { unrestrictedAccessTurnedOn && Organisation.allows(.unrestrictedAccess) }
     public func isExtended(_ id: UUID) -> Bool { autonomousAgentIDs.contains(id) }
 
     /// A provider's requirements never grant access. The app records the user's
     /// harness selection separately from mutable/imported agent configuration.
-    /// An organisation that doesn't allow unrestricted access keeps every bot sandboxed, without
-    /// forgetting the person's grants.
+    /// While unrestricted access is not allowed every bot stays sandboxed, without forgetting the person's grants.
     public func isExtended(for agent: AgentRecord) -> Bool {
-        isGranted(for: agent) && Organisation.allows(.unrestrictedAccess)
+        isGranted(for: agent) && allowsUnrestrictedAccess
     }
 
     /// What the person granted, whatever the organisation allows.
@@ -51,8 +62,10 @@ public struct AgentAccessConfiguration: Equatable, Sendable {
         requiredHarnessGrants.removeValue(forKey: id.uuidString)
         accountAppGrants.removeValue(forKey: id.uuidString)
     }
+    /// The switch is only ever read here: saving never writes it.
     public static func load(from defaults: UserDefaults) -> Self {
-        var result = Self(autonomousAgentIDs: Set((defaults.stringArray(forKey: storageKey) ?? []).compactMap(UUID.init(uuidString:))))
+        var result = Self(autonomousAgentIDs: Set((defaults.stringArray(forKey: storageKey) ?? []).compactMap(UUID.init(uuidString:))),
+                          unrestrictedAccessTurnedOn: defaults.bool(forKey: unrestrictedAccessKey))
         result.requiredHarnessGrants = defaults.dictionary(forKey: harnessGrantsKey) as? [String: [String]] ?? [:]
         result.accountAppGrants = defaults.dictionary(forKey: accountAppsKey) as? [String: [String]] ?? [:]
         return result

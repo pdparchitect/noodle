@@ -13,6 +13,7 @@
 ### Changed
 
 - The Grafana you run is called Self-Hosted Grafana in Settings › Tools, as Self-Hosted Sentry is, so it is told apart from Grafana's MCP server.
+- Unrestricted access is off until turned on with `defaults write com.pdparchitect.pion AllowUnrestrictedAccess -bool true`; until then Settings › Bots hides it, and agents that had it run restricted, keeping it for when it is turned on.
 - Settings › Tools says an account Pion watches is "Watched for new alerts", and the note that wakes its agents is `<tool-alerts>`.
 
 ### Fixed

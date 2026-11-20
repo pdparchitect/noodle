@@ -155,9 +155,9 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored private var heartbeatTurns: Set<UUID> = []
     public private(set) var accessConfiguration: AgentAccessConfiguration
     public private(set) var changingAccess: Set<UUID> = []
-    /// Whether the organisation allowed unrestricted access when the running bots started, so a
-    /// change restarts those it grants to with the access allowed now.
-    @ObservationIgnored private var unrestrictedAccessAllowed = Organisation.allows(.unrestrictedAccess)
+    /// Whether unrestricted access was allowed when the running bots started, so a change
+    /// restarts those it grants to with the access allowed now.
+    @ObservationIgnored private var unrestrictedAccessAllowed = false
     /// The harnesses the organisation allowed when they were last looked for.
     @ObservationIgnored private var allowedHarnesses = Set(HarnessProvider.allCases.filter { Organisation.allows(.harness($0)) })
     @ObservationIgnored private let sleepController = AgentActivitySleepController()
@@ -416,7 +416,9 @@ public final class AgentRuntimeCoordinator {
         subscriptionUsage = SubscriptionUsageStore(defaults: defaults)
         self.harnesses = harnesses ?? HarnessSelection()
         preventIdleSleepWhileWorking = defaults.bool(forKey: Self.preventIdleSleepDefaultsKey)
-        accessConfiguration = AgentAccessConfiguration.load(from: defaults)
+        let access = AgentAccessConfiguration.load(from: defaults)
+        accessConfiguration = access
+        unrestrictedAccessAllowed = access.allowsUnrestrictedAccess
         let configuration = AgentHeartbeatConfiguration.load(from: defaults)
         heartbeatConfiguration = configuration
         heartbeatScheduler = AgentHeartbeatScheduler(
@@ -456,7 +458,7 @@ public final class AgentRuntimeCoordinator {
 
     public func setExtendedAccess(_ enabled: Bool, agent: AgentRecord, repository: WorkspaceRepository) {
         let required = HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false
-        guard (!required || enabled), !enabled || Organisation.allows(.unrestrictedAccess),
+        guard (!required || enabled), !enabled || accessConfiguration.allowsUnrestrictedAccess,
               accessConfiguration.isExtended(for: agent) != enabled else { return }
         changeAccess(enabled, agent: agent, repository: repository) { configuration in
             if required { configuration.authorizeSelectedHarness(for: agent) }
@@ -1481,9 +1483,11 @@ public final class AgentRuntimeCoordinator {
 
     /// Stops what the organisation's policy no longer allows, keeping everything for when it does again: a bot
     /// on a harness it blocks stops at once, and one running with unrestricted access restarts with the access
-    /// allowed now. `reconcile` starts them again once allowed.
+    /// allowed now, also when it was turned on or off outside the app. `reconcile` starts them again once allowed.
     private func applyOrganisationPolicy(agents: [AgentRecord], repository: WorkspaceRepository) {
-        let unrestricted = Organisation.allows(.unrestrictedAccess)
+        let turnedOn = defaults.bool(forKey: AgentAccessConfiguration.unrestrictedAccessKey)
+        if turnedOn != accessConfiguration.unrestrictedAccessTurnedOn { accessConfiguration.unrestrictedAccessTurnedOn = turnedOn }
+        let unrestricted = accessConfiguration.allowsUnrestrictedAccess
         let accessChanged = unrestricted != unrestrictedAccessAllowed
         unrestrictedAccessAllowed = unrestricted
         let allowed = Set(HarnessProvider.allCases.filter { Organisation.allows(.harness($0)) })

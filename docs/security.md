@@ -5,6 +5,18 @@
 Every bot starts with restricted access. Unrestricted access is optional and set
 for each bot.
 
+Unrestricted access is off on a new Mac, and **Settings → Bots** does not show
+it. To make it available, quit Noodle, run this in Terminal and open Noodle
+again:
+
+```sh
+defaults write com.pdparchitect.noodle AllowUnrestrictedAccess -bool true
+```
+
+Run it again with `false` to turn it off; bots you made unrestricted then run
+restricted until you turn it back on. If your organisation manages Noodle, its
+setting wins.
+
 Change a bot's access in **Settings → Bots**. Click the **Unrestricted**
 heading or a bot's **restricted** or **unrestricted** label to see what that mode
 allows. Turning on **Unrestricted** or **Apps** asks for confirmation first;

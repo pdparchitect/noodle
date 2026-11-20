@@ -717,6 +717,7 @@ extension Scenario {
             seeded.directs[agent.key] = result.conversation
         }
         var access = AgentAccessConfiguration(autonomousAgentIDs: Set(agents.filter { $0.unrestricted == true }.compactMap { seeded.agents[$0.key]?.id }))
+        if !access.autonomousAgentIDs.isEmpty { defaults.set(true, forKey: AgentAccessConfiguration.unrestrictedAccessKey) }
         for agent in seeded.agents.values { access.authorizeSelectedHarness(for: agent) }
         access.save(to: defaults)
 

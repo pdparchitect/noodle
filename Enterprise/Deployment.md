@@ -143,7 +143,7 @@ read this domain.
 | Key | Type | Default | Since | What it does |
 | --- | --- | --- | --- | --- |
 | `AllowedHarnesses` | Array of strings | All | 0.84.0 | The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. |
-| `AllowUnrestrictedAccess` | Boolean | `true` | 0.84.0 | Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. |
+| `AllowUnrestrictedAccess` | Boolean | `false` | 0.84.0 | Whether people can turn off the macOS sandbox for a bot (Unrestricted access in Settings › Bots). When true, Settings › Bots shows the switch. When false, every bot runs sandboxed; bots that had unrestricted access restart sandboxed. Missing: off, unless the person turns it on with defaults write. |
 | `AllowMCP` | Boolean | `true` | 0.84.0 | Whether people can sign in to and bots can use MCP tool connections at all. When false, every connection stops working; none is deleted. |
 | `MCPAllowList` | Array of strings | Not set | 0.84.0 | The only connections from Noodle's catalogue people can use, by catalogue ID. Missing: all of them. Does not apply to custom connections. |
 | `MCPDenyList` | Array of strings | Not set | 0.84.0 | Connections from Noodle's catalogue people can't use, by catalogue ID. Wins over the allowed list. |

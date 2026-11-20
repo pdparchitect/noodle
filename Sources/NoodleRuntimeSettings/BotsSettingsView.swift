@@ -24,6 +24,11 @@ public struct BotsSettingsView: View {
 
     private var showsArchived: Bool { agents.contains(where: store.canArchive) }
 
+    /// Hidden until unrestricted access is turned on outside the app and the organisation allows it.
+    private var showsUnrestricted: Bool {
+        store.runtime.accessConfiguration.unrestrictedAccessTurnedOn && OrganisationStatus.shared.allows(.unrestrictedAccess)
+    }
+
     private var intervalOptions: [Int] {
         let current = store.runtime.heartbeatConfiguration.intervalMinutes
         return Array(Set(Self.suggestedIntervals + [current])).sorted()
@@ -64,12 +69,14 @@ public struct BotsSettingsView: View {
                             .help("About heartbeats")
                             .frame(width: heartbeatColumnWidth)
                             .popover(isPresented: $showsHeartbeatInfo) { HeartbeatInfo() }
-                        Button("Unrestricted") { showsAccessInfo.toggle() }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("About unrestricted access")
-                            .help("About unrestricted access")
-                            .frame(width: accessColumnWidth)
-                            .popover(isPresented: $showsAccessInfo) { AgentAccessInfo(isExtended: true) }
+                        if showsUnrestricted {
+                            Button("Unrestricted") { showsAccessInfo.toggle() }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("About unrestricted access")
+                                .help("About unrestricted access")
+                                .frame(width: accessColumnWidth)
+                                .popover(isPresented: $showsAccessInfo) { AgentAccessInfo(isExtended: true) }
+                        }
                         Button("Apps") { showsAppsInfo.toggle() }
                             .buttonStyle(.plain)
                             .accessibilityLabel("About account apps")
@@ -166,26 +173,26 @@ public struct BotsSettingsView: View {
             .opacity(archived ? Self.archivedOpacity : 1)
             .frame(width: heartbeatColumnWidth)
 
-            Toggle(isOn: Binding(
-                get: { store.runtime.accessConfiguration.isExtended(for: agent) || confirming == .init(agent: agent, kind: .unrestricted) },
-                set: { enabled in
-                    if enabled {
-                        confirming = .init(agent: agent, kind: .unrestricted)
-                    } else {
-                        store.runtime.setExtendedAccess(false, agent: agent, repository: store.repository)
+            if showsUnrestricted {
+                Toggle(isOn: Binding(
+                    get: { store.runtime.accessConfiguration.isExtended(for: agent) || confirming == .init(agent: agent, kind: .unrestricted) },
+                    set: { enabled in
+                        if enabled {
+                            confirming = .init(agent: agent, kind: .unrestricted)
+                        } else {
+                            store.runtime.setExtendedAccess(false, agent: agent, repository: store.repository)
+                        }
                     }
+                )) {
+                    Text(agent.displayName)
                 }
-            )) {
-                Text(agent.displayName)
+                .labelsHidden()
+                .controlSize(.mini)
+                .accessibilityLabel("\(agent.displayName), unrestricted access")
+                .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived)
+                .opacity(archived ? Self.archivedOpacity : 1)
+                .frame(width: accessColumnWidth)
             }
-            .labelsHidden()
-            .controlSize(.mini)
-            .accessibilityLabel("\(agent.displayName), unrestricted access")
-            .disabled((requiresUnrestrictedAccess && store.runtime.accessConfiguration.isExtended(for: agent)) || changingAccess || archived
-                      || !OrganisationStatus.shared.allows(.unrestrictedAccess))
-            .help(OrganisationStatus.shared.allows(.unrestrictedAccess) ? "" : Organisation.managedText)
-            .opacity(archived ? Self.archivedOpacity : 1)
-            .frame(width: accessColumnWidth)
 
             if provider?.supportsAccountApps == true {
                 Toggle(isOn: Binding(
