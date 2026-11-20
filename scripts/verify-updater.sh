@@ -22,8 +22,14 @@ case "$bundle_identifier" in
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/hub-latest/appcast.xml' ;;
     com.pdparchitect.pion|com.pdparchitect.pion.local)
         expected_feed='https://github.com/pdparchitect/noodle/releases/download/pion-latest/appcast.xml' ;;
+    com.pdparchitect.rook|com.pdparchitect.rook.local)
+        expected_feed='https://github.com/pdparchitect/noodle/releases/download/rook-latest/appcast.xml' ;;
 esac
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")" == "$expected_feed" ]]
+actual_feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info")"
+if [[ "$actual_feed" != "$expected_feed" ]]; then
+    print -u2 "Unexpected update feed for $bundle_identifier: $actual_feed (expected $expected_feed)"
+    exit 1
+fi
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info")" == '1ZT5NrPiDPaQ54iHGSI1a9JIn6kTrmjQvzZRBA9f/sk=' ]]
 if [[ "${NOODLE_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :NoodleUpdatesEnabled' "$info")" == true ]]
