@@ -4,7 +4,7 @@
 
 # Rook
 
-**AI bug hunting harness.**<br>
+**Autonomous red team.**<br>
 A team of AI agents runs an authorized offensive engagement with you: they map the target,<br>
 find and demonstrate weaknesses, and write up what they found. You decide what is attempted.
 
@@ -55,7 +55,7 @@ device, or any other harness Noodle supports.
 
 | App | What it does | Download |
 | --- | --- | --- |
-| **Rook** | AI bug hunting harness. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-B84756?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.dmg) [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-B84756?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.zip) |
+| **Rook** | Autonomous AI red teaming. | [![macOS 26 DMG](https://img.shields.io/badge/macOS_26-DMG-B84756?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.dmg) [![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-B84756?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.zip) |
 
 Rook needs a Mac with Apple silicon and macOS 26 or later. Open the DMG and drag Rook to
 **Applications**. Rook keeps itself up to date. To remove it, drag it from Applications to the Bin.
