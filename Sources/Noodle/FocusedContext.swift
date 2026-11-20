@@ -173,7 +173,7 @@ enum ContextFieldReader {
         guard !found.isEmpty else { return nil }
         return ContextFieldCapture(app: context.appName, window: context.windowTitle, page: context.pageURL,
                                    fields: found.map(\.0), withheld: withheld,
-                                   surface: AccessibilityFields(Dictionary(found.map { ($0.0.id, $0.1) }) { $1 }))
+                                   surface: AccessibilityFields(Dictionary(found.map { ($0.0.id, $0.1) }) { $1 }, home: focused))
     }
 
     private static func collect(_ element: AXUIElement, into found: inout [(ContextField, AXUIElement)], withheld: inout [String], depth: Int = 0) {
@@ -273,25 +273,51 @@ enum ContextFieldReader {
 /// Context already does for the apps that come to the front.
 final class AccessibilityFields: ContextFieldSurface, @unchecked Sendable {
     private let elements: [String: AXUIElement]
-    init(_ elements: [String: AXUIElement]) { self.elements = elements }
+    /// The field the person was in at capture. A background app may report no focus at all, yet
+    /// gives the last focused field back when the person returns to it.
+    private let home: AXUIElement?
+    init(_ elements: [String: AXUIElement], home: AXUIElement?) { self.elements = elements; self.home = home }
 
     func value(of field: String) async -> String? {
         guard let element = elements[field], let kind = ContextFieldReader.kind(element) else { return nil }
         return ContextFieldReader.value(element, kind: kind)
     }
 
+    /// Safari writes a value into whichever field has focus, so the field is focused first. That moves
+    /// focus only within the app, which stays in the background.
     func setText(_ text: String, of field: String) async {
         guard let element = elements[field] else { return }
-        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString)
-        await settle(field) { $0 == text }
+        await keepingFocus(element) {
+            AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString)
+            await settle(field) { $0 == text }
+        }
     }
 
     /// Setting a toggle's value does nothing in browsers; pressing it works in every app.
     func press(_ field: String) async {
         guard let element = elements[field] else { return }
         let before = await value(of: field)
-        AXUIElementPerformAction(element, kAXPressAction as CFString)
-        await settle(field) { $0 != before }
+        await keepingFocus(element) {
+            AXUIElementPerformAction(element, kAXPressAction as CFString)
+            await settle(field) { $0 != before }
+        }
+    }
+
+    /// Writing moves the app's focus, so whatever the person was in gets it back, where they left off.
+    /// A browser takes a moment before it lets focus be set again.
+    private func keepingFocus(_ element: AXUIElement, _ body: () async -> Void) async {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success else { await body(); return }
+        let app = AXUIElementCreateApplication(pid)
+        let previous = ContextFieldReader.element(app, kAXFocusedUIElementAttribute) ?? home
+        await body()
+        guard let previous else { return }
+        for _ in 0..<5 {
+            if ContextFieldReader.element(app, kAXFocusedUIElementAttribute).map({ CFEqual($0, previous) }) == true { return }
+            try? await Task.sleep(for: .milliseconds(100))
+            AXUIElementSetAttributeValue(previous, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        }
     }
 
     /// A page in a hidden tab answers with its old value for a moment after a write.
@@ -306,22 +332,24 @@ final class AccessibilityFields: ContextFieldSurface, @unchecked Sendable {
     /// A menu in a hidden tab does not open, so it stays as it was and the bot is told.
     func choose(_ option: String, in field: String) async {
         guard let element = elements[field] else { return }
-        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, option as CFString)
-        try? await Task.sleep(for: .milliseconds(150))
-        guard await value(of: field) != option else { return }
-        AXUIElementPerformAction(element, kAXPressAction as CFString)
-        var item: AXUIElement?
-        for _ in 0..<10 where item == nil {
-            try? await Task.sleep(for: .milliseconds(100))
-            item = ContextFieldReader.children(element).flatMap(ContextFieldReader.children).first {
-                ContextFieldReader.string($0, kAXTitleAttribute) == option || ContextFieldReader.string($0, kAXValueAttribute) == option
+        await keepingFocus(element) {
+            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, option as CFString)
+            try? await Task.sleep(for: .milliseconds(150))
+            guard await value(of: field) != option else { return }
+            AXUIElementPerformAction(element, kAXPressAction as CFString)
+            var item: AXUIElement?
+            for _ in 0..<10 where item == nil {
+                try? await Task.sleep(for: .milliseconds(100))
+                item = ContextFieldReader.children(element).flatMap(ContextFieldReader.children).first {
+                    ContextFieldReader.string($0, kAXTitleAttribute) == option || ContextFieldReader.string($0, kAXValueAttribute) == option
+                }
             }
-        }
-        if let item {
-            AXUIElementPerformAction(item, kAXPressAction as CFString)
-            await settle(field) { $0 == option }
-        } else if let menu = ContextFieldReader.children(element).first(where: { ContextFieldReader.string($0, kAXRoleAttribute) == kAXMenuRole }) {
-            AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+            if let item {
+                AXUIElementPerformAction(item, kAXPressAction as CFString)
+                await settle(field) { $0 == option }
+            } else if let menu = ContextFieldReader.children(element).first(where: { ContextFieldReader.string($0, kAXRoleAttribute) == kAXMenuRole }) {
+                AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+            }
         }
     }
 }

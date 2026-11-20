@@ -250,4 +250,18 @@ final class ContextFieldsToolProviderTests: XCTestCase {
         let third = try await write(token, [["id": "f2", "value": "Side gate."]], as: alice)
         XCTAssertEqual(third.fields["f2"], "changed", "the old text is no longer Noodle's once a write was confirmed")
     }
+
+    /// A huge field, such as a terminal's scrollback, keeps only its end in the list, where people type,
+    /// and says how much was left out; writing still works on the whole field.
+    func testAHugeFieldIsListedByItsEnd() async throws {
+        stageAndSend(to: [alice])
+        surface.set("f2", String(repeating: "a", count: 25_000) + "END")
+        let listed = try await captures(alice); let fields = try XCTUnwrap(listed.first?["fields"] as? [[String: Any]])
+        let notes = try XCTUnwrap(fields.first { $0["id"] as? String == "f2" })
+        let value = try XCTUnwrap(notes["value"] as? String)
+        XCTAssertEqual(value.count, 20_000)
+        XCTAssertTrue(value.hasSuffix("aEND"))
+        XCTAssertEqual(notes["omitted"] as? Int, 5_003)
+        XCTAssertNil(fields.first { $0["id"] as? String == "f1" }?["omitted"])
+    }
 }

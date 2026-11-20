@@ -11,7 +11,7 @@ public struct ContextFieldsToolProvider: ToolProvider {
         instructions: """
         When the person sends context from another app on this Mac, you can write into the fields of that window for 15 minutes after it was sent. The app stays where it is and keeps its focus; nothing is clicked or sent for the person.
 
-        Start with list: it returns the context you may still fill, each with a token, the app, window and page, and its fields with their IDs, labels, kinds and current values. Then call write with the token and the fields to fill.
+        Start with list: it returns the context you may still fill, each with a token, the app, window and page, and its fields with their IDs, labels, kinds and current values. Then call write with the token and the fields to fill. A very long value is listed by its last 20,000 characters, with omitted saying how many come before them; append and replace still act on the whole field.
 
         Kinds: text takes any text, with mode replace (the default) or append. checkbox takes true or false; radio takes true to pick that option. choice takes one of its listed options, or, when none are listed, the option's text as the person sees it. date and other cannot be filled from here: give the person the value in your reply instead. A menu on a page whose tab is hidden cannot be opened, so it reports not-filled. Appending to a rich text editor keeps its words but drops its formatting.
 
@@ -59,12 +59,20 @@ public struct ContextFieldsToolProvider: ToolProvider {
 
     // MARK: List
 
+    /// A terminal's scrollback is a field too; past this, only its end is listed, where people type.
+    static let valueLimit = 20_000
+
     private func list(for agent: UUID) async throws -> Data {
         var described: [[String: Any]] = []
         for grant in grants.grants(for: agent) {
             var fields: [[String: Any]] = []
             for field in grant.capture.fields {
-                var entry: [String: Any] = ["id": field.id, "kind": field.kind.rawValue, "value": await grant.capture.surface.value(of: field.id) ?? ""]
+                let value = await grant.capture.surface.value(of: field.id) ?? ""
+                var entry: [String: Any] = ["id": field.id, "kind": field.kind.rawValue, "value": value]
+                if value.count > Self.valueLimit {
+                    entry["value"] = String(value.suffix(Self.valueLimit))
+                    entry["omitted"] = value.count - Self.valueLimit
+                }
                 if let label = field.label, !label.isEmpty { entry["label"] = label }
                 if !field.options.isEmpty { entry["options"] = field.options }
                 fields.append(entry)
