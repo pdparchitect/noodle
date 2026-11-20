@@ -8,8 +8,13 @@
 - Right-click a tool in the sidebar and choose Show Activity to see what it has done since Pion started: which agent called which of its tools, how long each call took and why any failed, its sign-ins and sign-outs, and each check for new alerts, with what it found and which agents it woke.
 - cve.now in Settings › Tools, with nothing to set up: agents look up a CVE, GHSA or OSV entry, search for vulnerabilities by product, package or whether they are exploited, read feeds of new and critical ones, and check a project's dependencies, through cve.now's free MCP server. CVEs joining the top 10 of its Index, the worst of the past seven days, wake the agents it is assigned to; Pion reads it every hour.
 
+### Changed
+
+- Settings › Tools says an account Pion watches is "Watched for new alerts", and the note that wakes its agents is `<tool-alerts>`.
+
 ### Fixed
 
+- Tools that watch for new alerts wake the agents they are assigned to: the watch found none of them, so no new alert, and no CVE joining the cve.now Index, woke anyone.
 - An MCP server that needs no sign-in, added by its address, connects and works: Connect finds it answers without one, instead of failing on the sign-in details it does not publish.
 
 ## [0.7.0] - 2026-11-19

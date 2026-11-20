@@ -47,17 +47,21 @@ public final class ToolConnectionsController {
     private(set) var signingIn: UUID?
     private(set) var signInStage = ""
     public private(set) var errors: [UUID: String] = [:]
-    /// A line the app adds under an account about what it does with it, by account; a problem shows as an error does.
-    public var notes: [UUID: ToolConnectionNote] = [:]
     var errorMessage: String?
     /// What each connection has done since the app started: bots' calls, sign-ins, and what the app adds, by connection.
     @ObservationIgnored public let activity = ActivityStore()
     @ObservationIgnored private let activityWindows = ActivityWindows()
+    /// Watches the connections whose adapter has a feed, or whose catalogue entry a trigger, for something new.
+    @ObservationIgnored private let watcher: AlertWatcher
+    @ObservationIgnored private var watching: Task<Void, Never>?
+    private var isWatching = false
+    /// Why each watched account could not be checked last time, by account.
+    private var watchProblems: [UUID: String] = [:]
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
     @ObservationIgnored public let service: ToolConnectionService
     @ObservationIgnored private var loginTask: Task<Void, Never>?
-    @ObservationIgnored private var agents: [AgentRecord] = []
+    private var agents: [AgentRecord] = []
     @ObservationIgnored private var started = false
     @ObservationIgnored private var providers: ToolConnectionProviders?
     /// Where this controller registers one provider per connection.
@@ -66,16 +70,14 @@ public final class ToolConnectionsController {
             providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
             providers?.onError = { [weak self] id, message in self?.errors[id] = message }
             providers?.onCall = { [weak self] in self?.recordCall($0) }
-            providers?.appInstructions = appInstructions
+            providers?.appInstructions = { [weak self] in self?.instructions(for: $0) }
             synchronizeProviders()
         }
     }
-    /// What the app says about a connection in the skill bots read for it, before the person's own instructions.
+    /// What the app says about a connection in the skill bots read for it, after what its wake means, if it is watched,
+    /// and before the person's own instructions.
     @ObservationIgnored public var appInstructions: (@MainActor (ToolConnection) -> String?)? {
-        didSet {
-            providers?.appInstructions = appInstructions
-            synchronizeProviders()
-        }
+        didSet { synchronizeProviders() }
     }
     /// Receives the connections each bot is granted, now and on every change.
     @ObservationIgnored public var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
@@ -87,13 +89,14 @@ public final class ToolConnectionsController {
         self.repository = repository
         self.service = service ?? ToolConnectionService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
         deletions = DeletionJournal(url: repository.rootURL.appendingPathComponent("MCP/removed-sign-ins.json"))
+        watcher = AlertWatcher(file: repository.rootURL.appendingPathComponent("alert-watch.json"), service: self.service)
         do { registry = try ToolConnectionRegistry.load(root: repository.rootURL) }
         catch {
             registryReadable = false
             errorMessage = "Could not read saved tool connections. They have not been replaced."
         }
     }
-    deinit { loginTask?.cancel() }
+    deinit { loginTask?.cancel(); watching?.cancel() }
     /// Bots reach tool connections through Noodle's tool broker. This controller owns the
     /// connections, their sign-in, and which bot is granted which connection.
     public func start(agents: [AgentRecord]) {
@@ -159,10 +162,15 @@ public final class ToolConnectionsController {
         isConnected(connection) && !ToolConnectionService.needsNoSignIn(connection)
     }
 
-    /// The adapters this app serves its own connections with, by the name catalogue entries give them.
-    public func serve(_ adapters: [String: any ToolConnectionAdapter]) {
+    /// The adapters this app serves its own connections with, by the name catalogue entries give them, and the boards
+    /// it watches on MCP servers, by the catalogue entry their connections are made from. An adapter with a feed is
+    /// watched too.
+    public func serve(_ adapters: [String: any ToolConnectionAdapter], triggers: [String: MCPTrigger] = [:]) {
+        watcher.adapters = adapters
+        watcher.triggers = triggers
         let service = service
         Task { await service.useAdapters(adapters) }
+        synchronizeProviders()
     }
     func save(_ record: ToolConnection) throws {
         guard Organisation.allows(Organisation.action(for: record)) else { throw ToolConnectionServiceError.notAllowed }
@@ -387,6 +395,81 @@ public final class ToolConnectionsController {
     }
     private nonisolated static func safeError(_ error: Error) -> String { ToolConnectionProviders.safeError(error) }
 
+    /// What a connection's skill says before the person's own instructions: what its wake means, if it is watched, then
+    /// what the app adds.
+    private func instructions(for connection: ToolConnection) -> String? {
+        let parts = [watcher.skillText(for: connection), appInstructions?(connection)].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+    }
+
+    /// Starts checking the watched connections every few minutes, waking the bots each is assigned to through `runtime`
+    /// when it has something new. Every app calls it once its bots run; a connection is watched only if its adapter or
+    /// catalogue entry says so in code.
+    public func watch(with runtime: AgentRuntimeCoordinator) {
+        guard watching == nil else { return }
+        isWatching = true
+        watching = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.checkWatched { [weak self] id, note in
+                    guard let self else { return }
+                    runtime.wake(id, note: note, repository: self.repository)
+                }
+                try? await Task.sleep(for: AlertWatcher.interval)
+            }
+        }
+    }
+
+    public func stopWatching() {
+        watching?.cancel()
+        watching = nil
+        isWatching = false
+    }
+
+    /// The connections watched, signed in and assigned, with the bots each is assigned to; and those watched and assigned
+    /// but not signed in too, whose checks pick up where they stopped once they are signed in again.
+    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
+        let allowed = registryReadable ? registry.connections.filter { Organisation.allows(Organisation.action(for: $0)) } : []
+        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
+        for connection in allowed where watcher.watches(connection) {
+            let holders = agents.map(\.id).filter { registry.assigned(to: $0).contains { $0.id == connection.id } }
+            guard !holders.isEmpty else { continue }
+            keeping.insert(connection.id)
+            if status(of: connection) == .connected { accounts.append((connection, holders)) }
+        }
+        return (accounts, keeping)
+    }
+
+    /// While watching, a line under each watched account in Settings › Tools, by account: that it is watched, or why it
+    /// could not be checked last time, which shows as an error does.
+    public var notes: [UUID: ToolConnectionNote] {
+        guard isWatching else { return [:] }
+        var notes: [UUID: ToolConnectionNote] = [:]
+        for (connection, _) in watchedAccounts().accounts {
+            notes[connection.id] = watchProblems[connection.id].map { ToolConnectionNote("Could not check for alerts: " + $0, isProblem: true) }
+                ?? ToolConnectionNote("Watched for new alerts")
+        }
+        return notes
+    }
+
+    /// One round of checks, waking with `wake` the bots each account with something new is assigned to, and adding each
+    /// check to its account's activity.
+    func checkWatched(at now: Date = Date(), wake: (UUID, String) -> Void) async {
+        let (accounts, keeping) = watchedAccounts()
+        guard !keeping.isEmpty else { return }
+        let checked = await watcher.check(accounts, keeping: keeping, at: now, wake: wake)
+        watchProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
+        for (connection, holders) in accounts {
+            switch checked[connection.id] {
+            case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new")
+            case .found(let what)?:
+                let names = holders.compactMap { id in agents.first { $0.id == id }?.displayName }.formatted(.list(type: .and))
+                recordActivity(connection.id, "Found \(what); woke \(names)")
+            case .failed(let reason)?: recordActivity(connection.id, "Could not check for alerts", detail: reason)
+            case nil: break
+            }
+        }
+    }
+
     /// Shows what the connection has done since the app started, in its own window.
     public func showActivity(_ connection: ToolConnection) {
         activityWindows.show(id: connection.id, name: connection.name, log: activity.log(for: connection.id))
@@ -400,7 +483,7 @@ public final class ToolConnectionsController {
     /// A bot's request, named by the bot and what it asked for. Listing tools comes before every call, so only a failed
     /// listing is worth a line.
     private func recordCall(_ call: ToolConnectionCall) {
-        let bot = agents.first { $0.id == call.agent }?.displayName ?? "A removed bot"
+        let bot = agents.first { $0.id == call.agent }?.displayName ?? "Someone removed since"
         let asked: (done: String, failed: String)? = switch call.action {
         case .call: ("called \(call.tool ?? "a tool")", "\(call.tool ?? "a tool") failed")
         case .resources: ("listed resources", "listing resources failed")

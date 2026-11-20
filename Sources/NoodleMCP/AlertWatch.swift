@@ -1,8 +1,18 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import ProductIdentity
 
-/// What Pion has seen of each watched account's alerts, so an agent is woken only for what is new.
+/// Something new and serious a service raised, with only what tells it from the rest: its own ID and when.
+public struct ServiceAlert: Sendable, Equatable {
+    public let id: String
+    public let time: Date
+    public init(id: String, time: Date) { self.id = id; self.time = time }
+
+    /// The most one check reads; a burst that fills it is said to be more.
+    public static let most = 500
+}
+
+/// What the app has seen of each watched account's alerts, so an agent is woken only for what is new.
 ///
 /// An account first watched starts from then, so its past is not news. Each check after reads back an hour from the
 /// newest alert seen, as services list some alerts after their time, and leaves out the IDs it has seen already.
@@ -88,13 +98,13 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         let format = ISO8601DateFormatter()
         let since = format.string(from: Date(timeIntervalSince1970: news.since.timeIntervalSince1970.rounded(.down)))
         let until = format.string(from: Date(timeIntervalSince1970: news.until.timeIntervalSince1970.rounded(.up)))
-        return #"<pion-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(news.count)\#(news.capped ? "+" : "")" since="\#(since)" until="\#(until)" />"#
+        return #"<tool-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(news.count)\#(news.capped ? "+" : "")" since="\#(since)" until="\#(until)" />"#
     }
 
     /// What wakes an agent for what is newly on a board: where to look, and the IDs of what is new, which on a board
     /// are what tells it from the rest. Only IDs a trigger took are given.
     public static func note(_ entries: [String], account: String, skill: String, tool: String) -> String {
-        #"<pion-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(entries.count)" entries="\#(entries.joined(separator: ","))" />"#
+        #"<tool-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(entries.count)" entries="\#(entries.joined(separator: ","))" />"#
     }
 
     private static func escaped(_ text: String) -> String {
@@ -111,7 +121,7 @@ public struct AlertWatch: Codable, Equatable, Sendable {
     }
 }
 
-/// What Pion watches on an MCP server it does not answer for itself: a board one of the server's tools reads, such as
+/// What the app watches on an MCP server it does not answer for itself: a board one of the server's tools reads, such as
 /// a ranking, called as an agent would call it, every `interval`, waking the agents for what is newly on it.
 public struct MCPTrigger: Sendable {
     /// The server's tool that reads the board, and the arguments it is called with, as JSON.
@@ -143,7 +153,8 @@ public struct MCPTrigger: Sendable {
 
 /// Checks the watched accounts' services every few minutes, with each account's own sign-in, and says which agents to
 /// wake; an MCP server's board, every hour or as its trigger says. What it has seen is kept in a file, so a relaunch
-/// neither repeats alerts nor misses those raised meanwhile.
+/// neither repeats alerts nor misses those raised meanwhile. What is watched is written in code, never set up: an
+/// adapter's own feed, or the trigger of the catalogue entry a connection was made from.
 @MainActor public final class AlertWatcher {
     /// How often each watched account is checked.
     public static let interval: Duration = .seconds(300)
@@ -157,10 +168,14 @@ public struct MCPTrigger: Sendable {
         case failed(String)
     }
 
+    /// The app's adapters, by the name connections give; those with a feed are watched.
+    public var adapters: [String: any ToolConnectionAdapter] = [:]
+    /// The boards watched on MCP servers, by the catalogue entry their connections are made from.
+    public var triggers: [String: MCPTrigger] = [:]
     private var watch: AlertWatch
     private let file: URL
-    /// Reaches an account's service with its own sign-in.
-    private let access: @Sendable (ToolConnection) async throws -> any ServiceAccess
+    /// What an adapted connection's service raised from a time on, with its own sign-in.
+    private let alerts: @Sendable (ToolConnection, Date) async throws -> [ServiceAlert]
     /// Makes a request of a connection's MCP server, as an agent's goes.
     private let call: @Sendable (ToolConnection, MCPBridgeRequest) async throws -> Data
     /// When each MCP server's board was last read, so it is read only as often as its trigger says.
@@ -168,54 +183,49 @@ public struct MCPTrigger: Sendable {
     private var checking = false
 
     public convenience init(file: URL, service: ToolConnectionService) {
-        self.init(file: file, access: { try await service.access(for: $0) },
+        self.init(file: file, alerts: { try await service.alerts(since: $1, connection: $0) },
                   call: { try await service.perform($1, connection: $0) })
     }
 
-    init(file: URL, access: @escaping @Sendable (ToolConnection) async throws -> any ServiceAccess,
-         call: @escaping @Sendable (ToolConnection, MCPBridgeRequest) async throws -> Data = { _, _ in
-             throw ToolConnectionError.message("No MCP server can be reached here.")
-         }) {
+    public init(file: URL, alerts: @escaping @Sendable (ToolConnection, Date) async throws -> [ServiceAlert],
+                call: @escaping @Sendable (ToolConnection, MCPBridgeRequest) async throws -> Data = { _, _ in
+                    throw ToolConnectionError.message("No MCP server can be reached here.")
+                }) {
         self.file = file
-        self.access = access
+        self.alerts = alerts
         self.call = call
         watch = AlertWatch.load(from: file)
     }
 
-    /// The trigger Pion watches a connection's MCP server with, by the catalogue entry it was made from.
-    nonisolated static func trigger(for connection: ToolConnection) -> MCPTrigger? {
+    /// The trigger a connection's MCP server is watched with, by the catalogue entry it was made from.
+    public func trigger(for connection: ToolConnection) -> MCPTrigger? {
         guard connection.adapter == nil else { return nil }
-        return connection.catalogueID.flatMap { PionCatalogue.triggers[$0] }
+        return connection.catalogueID.flatMap { triggers[$0] }
     }
 
-    /// What the skill of this connection says about its wake, for one Pion watches: what the note's parts mean and
-    /// which tool reads what it names, and nothing of what to do about it.
-    public nonisolated static func skillText(for connection: ToolConnection) -> String? {
-        trigger(for: connection)?.skill ?? skillText(for: connection.adapter)
+    /// The tool that reads what an adapted connection's feed finds, if its adapter has one.
+    public func watchedTool(for connection: ToolConnection) -> String? {
+        connection.adapter.flatMap { adapters[$0] }?.watchedTool
     }
 
-    /// What the skill of a connection served by the adapter of this name says about its alerts wake, for one Pion
-    /// watches: what the note's parts mean and which tool reads the alerts, and nothing of what to do with them.
-    public nonisolated static func skillText(for adapter: String?) -> String? {
-        guard let tool = adapter.flatMap({ PionAdapters.all[$0] as? OperationAdapter })?.watchedTool else { return nil }
+    /// Whether this connection is watched: its adapter has a feed, or its MCP server a board.
+    public func watches(_ connection: ToolConnection) -> Bool {
+        trigger(for: connection) != nil || watchedTool(for: connection) != nil
+    }
+
+    /// What the skill of a watched connection says about its wake: what the note's parts mean and which tool reads what
+    /// it names, and nothing of what to do about it.
+    public func skillText(for connection: ToolConnection) -> String? {
+        if let trigger = trigger(for: connection) { return trigger.skill }
+        guard let tool = watchedTool(for: connection) else { return nil }
         return """
         ## Alerts
 
-        Pion checks this account for new serious alerts every five minutes and wakes the agents it is assigned to with a \
-        note such as `<pion-alerts account="…" skill="…" tool="\(tool)" new="3" since="…" until="…" />`. The note says \
-        where to look and when, not what was found: `new` is how many, with a `+` when there may be more, and `since` and \
-        `until` are the times of the oldest and the newest. Read them with `\(tool)`.
+        \(ProductIdentity.current.name) checks this account for new serious alerts every five minutes and wakes the agents \
+        it is assigned to with a note such as `<tool-alerts account="…" skill="…" tool="\(tool)" new="3" since="…" \
+        until="…" />`. The note says where to look and when, not what was found: `new` is how many, with a `+` when there \
+        may be more, and `since` and `until` are the times of the oldest and the newest. Read them with `\(tool)`.
         """
-    }
-
-    /// Whether Pion watches this connection: its adapter has a feed to watch, or its MCP server a board.
-    public nonisolated static func watches(_ connection: ToolConnection) -> Bool {
-        trigger(for: connection) != nil || watches(connection.adapter)
-    }
-
-    /// Whether Pion can watch connections served by the adapter of this name.
-    public nonisolated static func watches(_ adapter: String?) -> Bool {
-        adapter.flatMap { PionAdapters.all[$0] as? OperationAdapter }?.watchedTool != nil
     }
 
     /// Checks each account, signed in and assigned to `agents`, once, and wakes those agents with a note for any that has
@@ -235,7 +245,7 @@ public struct MCPTrigger: Sendable {
         boardsRead = boardsRead.filter { watched.contains($0.key) }
         for (connection, agents) in accounts where !agents.isEmpty {
             do {
-                if let trigger = Self.trigger(for: connection) {
+                if let trigger = trigger(for: connection) {
                     if let read = boardsRead[connection.id], now.timeIntervalSince(read) < trigger.interval { continue }
                     let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: trigger.tool,
                                                    arguments: trigger.arguments)
@@ -248,10 +258,8 @@ public struct MCPTrigger: Sendable {
                     for agent in agents { wake(agent, note) }
                     continue
                 }
-                guard let name = connection.adapter, let adapter = PionAdapters.all[name] as? OperationAdapter,
-                      let tool = adapter.watchedTool else { continue }
-                guard let since = watch.since(connection.id, at: now) else { continue }
-                let found = try await adapter.alerts(since: since, connection: connection, access: try await access(connection))
+                guard let tool = watchedTool(for: connection), let since = watch.since(connection.id, at: now) else { continue }
+                let found = try await alerts(connection, since)
                 guard let news = watch.take(found, for: connection.id) else { checked[connection.id] = .nothingNew; continue }
                 checked[connection.id] = .found("\(news.count)\(news.capped ? "+" : "") new alert\(news.count == 1 && !news.capped ? "" : "s")")
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)

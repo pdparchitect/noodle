@@ -359,6 +359,38 @@ import XCTest
         XCTAssertEqual(log.entries.count, 2, "Listing tools before every call is not activity: \(log.text)")
     }
 
+    /// Any app watches a connection whose adapter has a feed, with nothing set up: the first check marks where watching
+    /// starts, a later one wakes the bots it is assigned to for what is new, each check is in the connection's activity,
+    /// and its skill says what the wake means. A lookup without a feed is never checked.
+    func testAConnectionWhoseAdapterHasAFeedWakesItsBotsAndLogsEachCheck() async throws {
+        let f = try fixture(), feed = FeedAdapter()
+        var account = try f.account(), lookup = try f.account(name: "Lookup")
+        account.adapter = "feed"
+        lookup.adapter = "activity"
+        f.controller.serve(["feed": feed, "activity": ActivityAdapter()])
+        await f.service.useAdapters(["feed": feed, "activity": ActivityAdapter()])
+        try f.controller.save(account)
+        try f.controller.save(lookup)
+        try f.controller.assign([account.id, lookup.id], to: f.a)
+        try f.start([f.a])
+        await f.controller.readSignIns()
+        let now = Date()
+        var woken: [(UUID, String)] = []
+        await f.controller.checkWatched(at: now) { woken.append(($0, $1)) }
+        XCTAssertTrue(woken.isEmpty, "The first check only marks where watching starts")
+        feed.found = [ServiceAlert(id: "a1", time: now.addingTimeInterval(60))]
+        await f.controller.checkWatched(at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
+        XCTAssertEqual(woken.map(\.0), [f.a.id])
+        XCTAssertTrue(woken.first?.1.contains(#"<tool-alerts account="Fixture tools""#) == true, "\(woken)")
+        XCTAssertTrue(woken.first?.1.contains(#"tool="read-alerts" new="1""#) == true, "\(woken)")
+        let log = f.controller.activity.log(for: account.id).text
+        XCTAssertTrue(log.contains("Found 1 new alert; woke MCP A"), log)
+        XCTAssertEqual(feed.checks, 1)
+        XCTAssertTrue(f.controller.activity.log(for: lookup.id).entries.isEmpty, "A lookup is never checked")
+        let skill = f.repository.directory(for: f.a).appendingPathComponent(".agents/skills/\(account.skillName)/SKILL.md")
+        try await f.waitUntil { ((try? String(contentsOf: skill, encoding: .utf8)) ?? "").contains("<tool-alerts") }
+    }
+
     func testRevokedAssignmentAndOldSessionAreRejectedOnLaterScans() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
@@ -538,5 +570,23 @@ private struct ActivityAdapter: ToolConnectionAdapter {
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         guard tool == "lookup" else { throw NSError(domain: "service", code: 403, userInfo: [NSLocalizedDescriptionKey: Self.secret]) }
         return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
+    }
+}
+
+/// An app's adapter whose service has a feed: it answers with what the test puts there, and counts the checks.
+private final class FeedAdapter: ToolConnectionAdapter, @unchecked Sendable {
+    private let lock = NSLock()
+    private var alerts: [ServiceAlert] = [], count = 0
+    var found: [ServiceAlert] { get { lock.withLock { alerts } } set { lock.withLock { alerts = newValue } } }
+    var checks: Int { lock.withLock { count } }
+    var watchedTool: String? { "read-alerts" }
+    func tools(for connection: ToolConnection) async throws -> Data {
+        Data(#"{"tools":[{"name":"read-alerts","inputSchema":{"type":"object"}}]}"#.utf8)
+    }
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+        Data(#"{"content":[],"isError":false}"#.utf8)
+    }
+    func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
+        lock.withLock { count += 1; return alerts }
     }
 }

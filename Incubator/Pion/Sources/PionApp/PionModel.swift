@@ -92,10 +92,6 @@ import UniformTypeIdentifiers
     private let tools = ToolProviderRegistry()
     private let toolAssignments = ToolAssignmentStore()
     private var loop: Task<Void, Never>?
-    /// Checks the tools that have alerts to watch, every few minutes, and wakes the agents they are assigned to.
-    private var alertLoop: Task<Void, Never>?
-    /// Why each account the last check could not check could not, until a check of it succeeds.
-    private var alertProblems: [UUID: String] = [:]
     private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
     private(set) var pinnedIDs: [UUID] = []
@@ -151,8 +147,7 @@ import UniformTypeIdentifiers
             (try? repository.loadAgents())?.first { $0.id == id }?.displayName
         })
         connectionsController.toolRegistry = tools
-        connectionsController.serve(PionAdapters.all)
-        connectionsController.appInstructions = { AlertWatcher.skillText(for: $0) }
+        connectionsController.serve(PionAdapters.all, triggers: PionCatalogue.triggers)
         connectionsController.onAssignmentsChange = { [weak self, toolAssignments] granted in
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             self?.toolBroker?.synchronizeSkills()
@@ -198,20 +193,8 @@ import UniformTypeIdentifiers
         running = true
         // As in Noodle: agents that sleep stopped start again as the Mac wakes.
         wakeObserver = runtime.reconcileOnWake(agents: { [weak self] in self?.agents ?? [] }, repository: repository)
-        let watcher = AlertWatcher(file: repository.rootURL.appendingPathComponent("alert-watch.json"), service: connectionsController.service)
-        alertLoop = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let (accounts, keeping) = self?.watchedAccounts() else { return }
-                let checked = await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
-                    guard let self else { return }
-                    self.runtime.wake(id, note: note, repository: self.repository)
-                }
-                self?.alertProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
-                self?.recordChecks(checked, of: accounts)
-                self?.showWatchedAccounts()
-                try? await Task.sleep(for: AlertWatcher.interval)
-            }
-        }
+        // As in Noodle: tools that watch their service wake the agents they are assigned to.
+        connectionsController.watch(with: runtime)
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -227,8 +210,7 @@ import UniformTypeIdentifiers
     func stop() {
         loop?.cancel()
         loop = nil
-        alertLoop?.cancel()
-        alertLoop = nil
+        connectionsController.stopWatching()
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
         toolBroker?.stop()
@@ -236,45 +218,6 @@ import UniformTypeIdentifiers
         messenger.stop()
         runtime.stopAll()
         running = false
-    }
-
-    /// The accounts whose alerts Pion watches: of a service with a feed to watch, assigned to agents, and signed in, with
-    /// those agents. Those assigned but not signed in are kept to pick up where they stopped once they are again.
-    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
-        let registry = connectionsController.registry
-        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
-        for connection in registry.connections where AlertWatcher.watches(connection) {
-            let holders = agents.map(\.id).filter { registry.assignments[$0.uuidString]?.contains(connection.id) == true }
-            guard !holders.isEmpty else { continue }
-            keeping.insert(connection.id)
-            if connectionsController.status(of: connection) == .connected { accounts.append((connection, holders)) }
-        }
-        return (accounts, keeping)
-    }
-
-    /// Adds each check to its account's activity, naming the agents a find woke.
-    private func recordChecks(_ checked: [UUID: AlertWatcher.Checked], of accounts: [(connection: ToolConnection, agents: [UUID])]) {
-        for (connection, holders) in accounts {
-            switch checked[connection.id] {
-            case .nothingNew?: connectionsController.recordActivity(connection.id, "Checked for alerts: nothing new")
-            case .found(let what)?:
-                let names = holders.compactMap { agent($0)?.displayName }.formatted(.list(type: .and))
-                connectionsController.recordActivity(connection.id, "Found \(what); woke \(names)")
-            case .failed(let reason)?: connectionsController.recordActivity(connection.id, "Could not check for alerts", detail: reason)
-            case nil: break
-            }
-        }
-    }
-
-    /// Says in Settings › Tools which accounts wake their agents for new alerts, and why one could not be checked.
-    private func showWatchedAccounts() {
-        guard running, !isScripted else { return }
-        var notes: [UUID: ToolConnectionNote] = [:]
-        for (connection, _) in watchedAccounts().accounts {
-            notes[connection.id] = alertProblems[connection.id].map { ToolConnectionNote("Could not check for alerts: " + $0, isProblem: true) }
-                ?? ToolConnectionNote("Wakes its agents for new alerts")
-        }
-        if connectionsController.notes != notes { connectionsController.notes = notes }
     }
 
     /// The conversation Pion opens on: the one it was left on, while it is still there, or else the one with the latest
@@ -317,7 +260,6 @@ import UniformTypeIdentifiers
         runtime.checkHeartbeats()
         budgets.checkExpired()
         runtime.checkWakes(repository: repository)
-        showWatchedAccounts()
         for conversation in conversations { readTranscript(conversation.id) }
         updateBadge()
     }

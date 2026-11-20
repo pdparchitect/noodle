@@ -957,6 +957,8 @@ final class NoodleStore {
                 try tools.start(agents: toolAgents)
                 toolExtensions.start()
                 connectionsController.start(agents: agents)
+                // Tools that watch their service wake the bots they are assigned to.
+                connectionsController.watch(with: runtime)
                 computers.start(agents: agents)
                 browsers.start(agents: agents)
                 applets.start(agents: agents)
@@ -2829,6 +2831,7 @@ final class NoodleStore {
         hubCheckInTask = nil
         hubMirrorTasks.values.forEach { $0.cancel() }
         hubMirrorTasks.removeAll()
+        connectionsController.stopWatching()
         runtime.stopAll()
     }
 }

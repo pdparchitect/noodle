@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 
 /// cve.now, Sazabi's free vulnerability catalogue: CVE, GHSA and OSV entries, feeds and dependency checks, through an
 /// open MCP server. Pion watches its Index, the week's worst CVEs ranked, and wakes agents for those newly at its top.
@@ -28,7 +29,7 @@ public enum CVENow {
         ## New on the cve.now Index
 
         Pion reads the top 10 of the cve.now Index, the worst CVEs of the past seven days, every hour, and wakes the \
-        agents this tool is assigned to when CVEs join it, with a note such as `<pion-alerts account="…" skill="…" \
+        agents this tool is assigned to when CVEs join it, with a note such as `<tool-alerts account="…" skill="…" \
         tool="execute" new="2" entries="CVE-…,CVE-…" />`. `entries` are the CVEs new to it. Read the board with \
         `execute` running `rankings.get` with `{"id": "cves", "period": "7d"}`, and each CVE with `entities.get`.
         """,

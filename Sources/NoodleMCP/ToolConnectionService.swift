@@ -636,6 +636,13 @@ public actor ToolConnectionService {
         return ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
     }
 
+    /// What an adapted connection's service raised from `since` on, as its adapter's feed reads it with the connection's
+    /// own sign-in; nothing for one whose adapter has no feed.
+    public func alerts(since: Date, connection: ToolConnection) async throws -> [ServiceAlert] {
+        guard let adapter = connection.adapter.flatMap({ adapters[$0] }), adapter.watchedTool != nil else { return [] }
+        return try await adapter.alerts(since: since, connection: connection, access: try await access(for: connection))
+    }
+
     /// A connection the app's adapter answers: its tools and calls come from the adapter, which reaches the
     /// service with the connection's credentials, if it has any.
     private func adapt(_ request: MCPBridgeRequest, adapter name: String, connection: ToolConnection, epoch: Int,

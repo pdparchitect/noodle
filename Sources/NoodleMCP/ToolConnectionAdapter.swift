@@ -12,6 +12,16 @@ public protocol ToolConnectionAdapter: Sendable {
     /// One call with its JSON arguments, as an MCP tools/call result. `access` reaches the service with the
     /// connection's credentials.
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data
+    /// The tool that reads in full what `alerts` finds, for an adapter whose service has a feed of new and serious things,
+    /// which the app then watches for every connection it serves; nil for one without, such as a lookup service.
+    var watchedTool: String? { get }
+    /// What the service raised from `since` on, at most `ServiceAlert.most` of it, newest first.
+    func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert]
+}
+
+public extension ToolConnectionAdapter {
+    var watchedTool: String? { nil }
+    func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] { [] }
 }
 
 /// How an adapter reaches its service: only the connection's own host, over its own scheme (HTTPS, or HTTP for a

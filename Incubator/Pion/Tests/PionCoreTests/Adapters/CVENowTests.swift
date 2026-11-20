@@ -1,5 +1,6 @@
 import Foundation
 import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
@@ -45,13 +46,15 @@ final class CVENowTests: XCTestCase {
         XCTAssertEqual(try CVENow.trigger.entries(result), ["CVE-2026-1"])
     }
 
-    func testItIsOfferedOpenAndWatched() throws {
+    @MainActor func testItIsOfferedOpenAndWatched() throws {
         let entry = try XCTUnwrap(PionCatalogue.entries.first { $0.name == "cve.now" })
         let account = try entry.makeConnection(name: "cve.now")
         XCTAssertEqual(account.open, true, "It needs no sign-in")
-        XCTAssertTrue(AlertWatcher.watches(account))
-        let skill = try XCTUnwrap(AlertWatcher.skillText(for: account))
-        XCTAssertTrue(skill.contains("<pion-alerts"), skill)
+        let watcher = AlertWatcher(file: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), alerts: { _, _ in [] })
+        watcher.triggers = PionCatalogue.triggers
+        XCTAssertTrue(watcher.watches(account))
+        let skill = try XCTUnwrap(watcher.skillText(for: account))
+        XCTAssertTrue(skill.contains("<tool-alerts"), skill)
         XCTAssertTrue(skill.contains("`rankings.get`"), skill)
     }
 }

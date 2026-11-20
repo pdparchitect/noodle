@@ -72,15 +72,7 @@ public extension ServiceOperation {
     static var readOnly: Bool { true }
 }
 
-/// Something new and serious a service raised, with only what tells it from the rest: its own ID and when.
-public struct ServiceAlert: Sendable, Equatable {
-    public let id: String
-    public let time: Date
-    public init(id: String, time: Date) { self.id = id; self.time = time }
-
-    /// The most one check reads; a burst that fills it is said to be more.
-    public static let most = 500
-
+extension ServiceAlert {
     /// A service's time to the whole second, however many digits of a second it gives: Microsoft gives seven,
     /// which the ISO 8601 parser does not take.
     static func time(_ value: String?) -> Date? {

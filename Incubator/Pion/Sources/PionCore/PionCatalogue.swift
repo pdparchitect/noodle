@@ -1,4 +1,5 @@
 import NoodleCore
+import NoodleMCP
 
 /// The services Pion offers in Settings › Tools › Add Tools: its own security services, which its adapters answer,
 /// the open security MCP servers that need no account, and the few of Noodle's presets that help an investigation.
@@ -25,7 +26,7 @@ public enum PionCatalogue {
     ]
 
     /// The boards Pion watches on MCP servers, by the catalogue entry their connections are made from.
-    static let triggers: [String: MCPTrigger] = [CVENow.preset.id: CVENow.trigger]
+    public static let triggers: [String: MCPTrigger] = [CVENow.preset.id: CVENow.trigger]
 
     public static let entries: [ToolDefinition] = [
         VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset, CrowdStrike.preset, SentinelOne.preset,

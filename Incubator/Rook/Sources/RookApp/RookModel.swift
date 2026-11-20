@@ -192,6 +192,8 @@ import UniformTypeIdentifiers
         running = true
         // As in Noodle: agents that sleep stopped start again as the Mac wakes.
         wakeObserver = runtime.reconcileOnWake(agents: { [weak self] in self?.agents ?? [] }, repository: repository)
+        // As in Noodle: tools that watch their service wake the agents they are assigned to.
+        connectionsController.watch(with: runtime)
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -211,6 +213,7 @@ import UniformTypeIdentifiers
         wakeObserver = nil
         toolBroker?.stop()
         toolBroker = nil
+        connectionsController.stopWatching()
         messenger.stop()
         runtime.stopAll()
         running = false
