@@ -76,6 +76,8 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onMessagesArrived: (([ChatMessage]) -> Void)?
     /// A conversation that notifies less than before, whose shown replies the app takes back.
     @ObservationIgnored var onNotificationsNarrowed: ((UUID) -> Void)?
+    /// An Investigation an agent opened, which the champion hears of at once; the app shows it.
+    @ObservationIgnored var onAgentOpenedInvestigation: ((Investigation, AgentRecord) -> Void)?
     /// What the champion sent, with the files' names, for a call in that conversation to hear about.
     @ObservationIgnored var onSent: ((UUID, String, [String]) -> Void)?
     /// Agents were added, archived, brought back or deleted.
@@ -1297,7 +1299,7 @@ import UniformTypeIdentifiers
     /// started it, so nothing is posted in the champion's name.
     @discardableResult
     func open(byAgent agentID: UUID, _ opening: CaseToolProvider.Opening) throws -> Investigation {
-        guard agent(agentID) != nil else { throw CaseError("Only an agent of this Pion may open an Investigation.") }
+        guard let opener = agent(agentID) else { throw CaseError("Only an agent of this Pion may open an Investigation.") }
         let recent = agentOpenings[agentID, default: []].filter { now.timeIntervalSince($0) < 3600 }
         guard recent.count < 3 else {
             throw CaseError("You have opened three Investigations in the last hour. Ask the champion before opening another.")
@@ -1312,6 +1314,7 @@ import UniformTypeIdentifiers
         let investigation = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID, staff: staff),
                                      openedBy: .agent(agentID))
         agentOpenings[agentID] = recent + [now]
+        onAgentOpenedInvestigation?(investigation, opener)
         return investigation
     }
 

@@ -5,7 +5,7 @@ import UserNotifications
 
 /// Pion's side of Noodle's notifications: what posts them, and where a click on one goes.
 extension PionDelegate: UNUserNotificationCenterDelegate {
-    /// Agent replies and pauses on what arrived while Pion was away; sign-ins whenever they are needed.
+    /// Agent replies and pauses on what arrived while Pion was away; sign-ins and Investigations agents open whenever they happen.
     func connectNotifications() {
         // Noodle's notifications, with Pion's agent marks.
         AgentNotifications.picture = { AnyView(AgentMark(agent: $0, size: 128)) }
@@ -19,6 +19,12 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
             AgentNotifications.post(replies: messages, agent: { model.agent($0) }, conversation: { model.conversation($0) })
         }
         model.onNotificationsNarrowed = { AgentNotifications.withdraw(conversation: $0) }
+        // An agent opening an Investigation shows even with Pion in front, whether or not the agent posts in it.
+        model.onAgentOpenedInvestigation = { investigation, agent in
+            AgentNotifications.postAlert(from: agent, subtitle: "Opened \(investigation.reference) \(investigation.title)",
+                                         body: investigation.objective.isEmpty ? investigation.title : investigation.objective,
+                                         conversationID: investigation.id)
+        }
         // As Noodle's: the Dock shows how many conversations wait for the champion.
         model.onBadge = { NSApp.dockTile.badgeLabel = $0 == 0 ? nil : String($0) }
         model.runtime.onSignInRequired = { [weak self] id in

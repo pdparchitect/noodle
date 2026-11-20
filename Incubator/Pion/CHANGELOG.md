@@ -4,6 +4,7 @@
 
 ### Added
 
+- An Investigation an agent opens shows a notification as soon as it is opened, even with Pion in front, naming the agent, the Investigation and its objective; clicking it opens the Investigation.
 - Pion's banner artwork is kept in the repository, so its README screenshots can be retaken over it with `scripts/readme-shots.sh`.
 - Right-click a tool in the sidebar and choose Show Activity to see what it has done since Pion started: which agent called which of its tools, how long each call took and why any failed, its sign-ins and sign-outs, a sign-in, token or credentials it is missing, why it could not be offered to agents at all, and each check for new alerts, with what it found and which agents it woke.
 - cve.now in Settings › Tools, with nothing to set up: agents look up a CVE, GHSA or OSV entry, search for vulnerabilities by product, package or whether they are exploited, read feeds of new and critical ones, and check a project's dependencies, through cve.now's free MCP server. CVEs joining the top 10 of its Index, the worst of the past seven days, wake the agents it is assigned to; Pion reads it every hour.

@@ -14,6 +14,7 @@ import UserNotifications
     static let messageIDKey = "messageID"
     static let signInKey = "signIn"
     static let callKey = "call"
+    static let alertKey = "alert"
     /// One at a time: a call rings again by replacing it.
     private static let ringingIdentifier = "ringing"
 
@@ -128,12 +129,24 @@ import UserNotifications
         add(content, identifier: "paused-\(agent.id.uuidString)", agent: agent, pictureName: UUID().uuidString)
     }
 
+    /// Something a bot did that the person must hear of even with the app in front, such as a conversation it started;
+    /// a click opens that conversation.
+    static func postAlert(from agent: AgentRecord, subtitle: String, body: String, conversationID: UUID) {
+        let content = UNMutableNotificationContent()
+        content.title = agent.displayName
+        content.subtitle = subtitle
+        content.body = MessageSegment.notificationText(body)
+        content.sound = .default
+        content.userInfo = [conversationIDKey: conversationID.uuidString, alertKey: true]
+        add(content, identifier: "alert-\(conversationID.uuidString)", agent: agent, pictureName: UUID().uuidString)
+    }
+
     /// How a banner shows while the app is in front: a ringing call only rings, since its panel shows who calls; a
-    /// sign-in always shows; anything else only while the app is away.
+    /// sign-in or an alert always shows; anything else only while the app is away.
     static func presentation(of notification: UNNotification) -> UNNotificationPresentationOptions {
         let info = notification.request.content.userInfo
         if info[callKey] != nil { return [.sound] }
-        return info[signInKey] != nil || shouldPresentActivity ? [.banner, .sound] : []
+        return info[signInKey] != nil || info[alertKey] != nil || shouldPresentActivity ? [.banner, .sound] : []
     }
 
     /// What a clicked banner is about.

@@ -231,6 +231,19 @@ import XCTest
         XCTAssertThrowsError(try model.open(byAgent: UUID(), .init(title: "Stranger", objective: "x", team: [])))
     }
 
+    /// The champion hears of an Investigation an agent opens as soon as it is opened, whether or not the agent posts
+    /// in it; one the champion opens is not announced back to them.
+    func testAnInvestigationAnAgentOpensIsAnnounced() throws {
+        let avery = try agent("Avery")
+        var announced: [(Investigation, AgentRecord)] = []
+        model.onAgentOpenedInvestigation = { announced.append(($0, $1)) }
+        _ = try model.open(.init(title: "Champion's own", lead: avery.id))
+        XCTAssertTrue(announced.isEmpty, "the champion was told of an Investigation they opened")
+        let opened = try model.open(byAgent: avery.id, .init(title: "Beacon", objective: "Find the beacon.", team: []))
+        XCTAssertEqual(announced.map(\.0.id), [opened.id])
+        XCTAssertEqual(announced.map(\.1.id), [avery.id])
+    }
+
     /// Agents read a closed Investigation but may not post in it until the champion reopens it; other conversations
     /// take their messages as before.
     func testAClosedInvestigationTakesNoMessagesFromAgentsUntilReopened() throws {
