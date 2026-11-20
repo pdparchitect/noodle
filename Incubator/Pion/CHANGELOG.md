@@ -8,6 +8,7 @@
 - Right-click a tool in the sidebar and choose Show Activity to see what it has done since Pion started: which agent called which of its tools, how long each call took and why any failed, its sign-ins and sign-outs, a sign-in, token or credentials it is missing, why it could not be offered to agents at all, and each check for new alerts, with what it found and which agents it woke.
 - cve.now in Settings › Tools, with nothing to set up: agents look up a CVE, GHSA or OSV entry, search for vulnerabilities by product, package or whether they are exploited, read feeds of new and critical ones, and check a project's dependencies, through cve.now's free MCP server. CVEs joining the top 10 of its Index, the worst of the past seven days, wake the agents it is assigned to; Pion reads it every hour.
 - Cloudflare Radar in Settings › Tools, signed in with any Cloudflare account: agents read Internet-wide attack and traffic trends, outages, BGP hijacks and route leaks, network, IP address and domain details, and URL scans, through Cloudflare's Radar MCP server.
+- Google Workspace wakes the agents it is assigned to for audit events that mean an attack, checked every five minutes with the sign-in it already has: suspicious and blocked sign-ins, leaked passwords, hijacked accounts, government-backed attack warnings, admin privileges granted, primary admin, SSO and 2-step verification changes, compromised devices and rules that fired above low. Agents read them with its new `security-events` tool.
 
 ### Changed
 
