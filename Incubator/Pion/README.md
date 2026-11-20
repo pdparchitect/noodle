@@ -102,8 +102,8 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Sentinel, CrowdStrike,
-  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud and GitHub wake the agents those tools are
-  assigned to, who read them and decide how far to look.
+  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud and GitHub, and CVEs joining the top of the
+  cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Read-only lookups**: agents investigate; changes to a system are yours to make.
 - **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
 - **Restricted by default**: each agent works in a sandbox of its own on your Mac.
@@ -119,7 +119,7 @@ to the agents that should use it.
 | | |
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned |
-| **Attack surface** | crt.sh, NVD, Tenable |
+| **Attack surface** | crt.sh, NVD, cve.now, Tenable |
 | **Identity** | Okta, Microsoft Entra ID, Google Workspace |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |

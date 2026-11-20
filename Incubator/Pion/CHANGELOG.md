@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- cve.now in Settings › Tools, with nothing to set up: agents look up a CVE, GHSA or OSV entry, search for vulnerabilities by product, package or whether they are exploited, read feeds of new and critical ones, and check a project's dependencies, through cve.now's free MCP server. CVEs joining the top 10 of its Index, the worst of the past seven days, wake the agents it is assigned to; Pion reads it every hour.
+
+### Fixed
+
+- An MCP server that needs no sign-in, added by its address, connects and works: Connect finds it answers without one, instead of failing on the sign-in details it does not publish.
+
 ## [0.7.0] - 2026-11-19
 
 ### Added

@@ -1,4 +1,6 @@
 import Foundation
+import NoodleCore
+import NoodleMCP
 @testable import PionCore
 import XCTest
 
@@ -122,6 +124,62 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertEqual(woken.count, 2, "A failed check wakes no one")
     }
 
+    /// A board, such as a ranking, wakes only for what is newly on it: the first check notes what is there, and what
+    /// leaves and comes back within a week is not new again.
+    func testABoardWakesOnlyForWhatIsNewlyOnIt() async throws {
+        var watch = AlertWatch()
+        let first = watch.board(account, at: start, found: ["a", "b"])
+        XCTAssertNil(first, "What is on it when first watched is not new")
+        let next = watch.board(account, at: start.addingTimeInterval(3_600), found: ["c", "a", "b"])
+        XCTAssertEqual(next, ["c"])
+        let same = watch.board(account, at: start.addingTimeInterval(7_200), found: ["c", "a"])
+        XCTAssertNil(same)
+        let back = watch.board(account, at: start.addingTimeInterval(86_400), found: ["b", "c", "a"])
+        XCTAssertNil(back, "Back within the week")
+        let later = watch.board(account, at: start.addingTimeInterval(9 * 86_400), found: ["c", "b"])
+        XCTAssertEqual(later, ["c", "b"], "Gone for over a week, so new again")
+    }
+
+    func testABoardsNoteNamesWhatIsNewOnIt() {
+        XCTAssertEqual(AlertWatch.note(["CVE-2026-1", "CVE-2026-2"], account: "cve.now", skill: "mcp-cve-now", tool: "execute"),
+                       #"<pion-alerts account="cve.now" skill=".agents/skills/mcp-cve-now/SKILL.md" tool="execute" new="2" entries="CVE-2026-1,CVE-2026-2" />"#)
+    }
+
+    /// cve.now's board is read through its MCP server once an hour, and wakes the agents for CVEs newly on it.
+    @MainActor func testTheWatcherReadsAnMCPServersBoardHourlyAndWakesForWhatIsNew() async throws {
+        let entry = try XCTUnwrap(PionCatalogue.entries.first { $0.name == "cve.now" })
+        let cve = try entry.makeConnection(name: "cve.now")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let board = Board()
+        let watcher = AlertWatcher(file: file, access: { _ in FakeService() }) { connection, request in
+            XCTAssertEqual(connection.id, cve.id)
+            XCTAssertEqual(request.action, .call)
+            XCTAssertEqual(request.tool, "execute")
+            return try board.answer()
+        }
+        let lead = UUID()
+        var woken: [(UUID, String)] = []
+        let now = Date()
+
+        board.ids = ["CVE-2026-1", "CVE-2026-2"]
+        var problems = await watcher.check([(cve, [lead])], keeping: [], at: now) { woken.append(($0, $1)) }
+        XCTAssertTrue(problems.isEmpty && woken.isEmpty, "The first check only notes what is on it")
+        board.ids = ["CVE-2026-3", "CVE-2026-1", "CVE-2026-2"]
+        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
+        XCTAssertTrue(woken.isEmpty, "Not read again within the hour")
+        XCTAssertEqual(board.reads, 1)
+        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(3_600)) { woken.append(($0, $1)) }
+        XCTAssertTrue(problems.isEmpty)
+        XCTAssertEqual(woken.map(\.0), [lead])
+        XCTAssertTrue(woken.first?.1.contains(#"entries="CVE-2026-3""#) == true, "\(woken)")
+
+        board.refused = true
+        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(7_200)) { woken.append(($0, $1)) }
+        XCTAssertNotNil(problems[cve.id])
+        XCTAssertEqual(woken.count, 1, "A failed check wakes no one")
+    }
+
     func testAWatchedToolsSkillSaysWhatItsWakeMeans() throws {
         let skill = try XCTUnwrap(AlertWatcher.skillText(for: "defender"))
         XCTAssertTrue(skill.hasPrefix("## Alerts"), skill)
@@ -129,5 +187,21 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertTrue(skill.contains("`alerts`"), "It names the tool that reads them: \(skill)")
         XCTAssertNil(AlertWatcher.skillText(for: "virustotal"), "A lookup is never watched")
         XCTAssertNil(AlertWatcher.skillText(for: nil))
+    }
+}
+
+/// The board an MCP server's tool answers with, in turn.
+private final class Board: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _ids: [String] = []
+    private var _refused = false
+    private var _reads = 0
+    var ids: [String] { get { lock.withLock { _ids } } set { lock.withLock { _ids = newValue } } }
+    var refused: Bool { get { lock.withLock { _refused } } set { lock.withLock { _refused = newValue } } }
+    var reads: Int { lock.withLock { _reads } }
+    func answer() throws -> Data {
+        let (ids, refused) = lock.withLock { _reads += 1; return (_ids, _refused) }
+        if refused { throw ToolConnectionServiceError.network(503) }
+        return CVENowTests.ranking(ids)
     }
 }

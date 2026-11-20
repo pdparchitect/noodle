@@ -9,6 +9,8 @@ import NoodleMCP
 public struct AlertWatch: Codable, Equatable, Sendable {
     /// How far each check reads back from the newest alert seen.
     static let overlap: TimeInterval = 3_600
+    /// How long what was on a board is remembered after it leaves, so one going and coming back is not news.
+    static let boardMemory: TimeInterval = 7 * 86_400
 
     struct Account: Codable, Equatable, Sendable {
         var start: Date
@@ -60,6 +62,21 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         return News(count: new.count, capped: found.count >= ServiceAlert.most, since: first, until: last)
     }
 
+    /// Takes in the IDs on a board `account` keeps, such as a ranking, as read at `now`. Returns those newly on it, or
+    /// nil when none are or when it is first watched, as what is on it then is not news.
+    public mutating func board(_ account: UUID, at now: Date, found: [String]) -> [String]? {
+        let first = accounts[account] == nil
+        var watched = accounts[account] ?? Account(start: now)
+        watched.seen = watched.seen.filter { now.timeIntervalSince($0.value) < Self.boardMemory }
+        var new: [String] = []
+        for id in found {
+            if !first, watched.seen[id] == nil, !new.contains(id) { new.append(id) }
+            watched.seen[id] = now
+        }
+        accounts[account] = watched
+        return new.isEmpty ? nil : new
+    }
+
     /// Forgets the accounts no longer watched, so one watched again starts afresh rather than with all it missed.
     public mutating func keep(only watched: Set<UUID>) {
         accounts = accounts.filter { watched.contains($0.key) }
@@ -71,9 +88,18 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         let format = ISO8601DateFormatter()
         let since = format.string(from: Date(timeIntervalSince1970: news.since.timeIntervalSince1970.rounded(.down)))
         let until = format.string(from: Date(timeIntervalSince1970: news.until.timeIntervalSince1970.rounded(.up)))
-        let escaped = account.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;")
+        return #"<pion-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(news.count)\#(news.capped ? "+" : "")" since="\#(since)" until="\#(until)" />"#
+    }
+
+    /// What wakes an agent for what is newly on a board: where to look, and the IDs of what is new, which on a board
+    /// are what tells it from the rest. Only IDs a trigger took are given.
+    public static func note(_ entries: [String], account: String, skill: String, tool: String) -> String {
+        #"<pion-alerts account="\#(escaped(account))" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(entries.count)" entries="\#(entries.joined(separator: ","))" />"#
+    }
+
+    private static func escaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
-        return #"<pion-alerts account="\#(escaped)" skill=".agents/skills/\#(skill)/SKILL.md" tool="\#(tool)" new="\#(news.count)\#(news.capped ? "+" : "")" since="\#(since)" until="\#(until)" />"#
     }
 
     public static func load(from file: URL) -> AlertWatch {
@@ -85,8 +111,39 @@ public struct AlertWatch: Codable, Equatable, Sendable {
     }
 }
 
+/// What Pion watches on an MCP server it does not answer for itself: a board one of the server's tools reads, such as
+/// a ranking, called as an agent would call it, every `interval`, waking the agents for what is newly on it.
+public struct MCPTrigger: Sendable {
+    /// The server's tool that reads the board, and the arguments it is called with, as JSON.
+    public let tool: String
+    public let arguments: Data
+    public let interval: TimeInterval
+    /// What the skill of a connection it watches says about its wake: what the note's parts mean and how to read
+    /// what it names.
+    public let skill: String
+    /// The IDs on the board, from the tool's answer, each one `isEntryID` allows.
+    public let entries: @Sendable (Data) throws -> [String]
+
+    public init(tool: String, arguments: [String: Any], interval: TimeInterval, skill: String,
+                entries: @escaping @Sendable (Data) throws -> [String]) {
+        self.tool = tool
+        // Fixed arguments written in code, so they always make JSON.
+        self.arguments = try! JSONSerialization.data(withJSONObject: arguments, options: .sortedKeys)
+        self.interval = interval; self.skill = skill; self.entries = entries
+    }
+
+    /// Whether a board's entry ID may go in the note that wakes an agent: a short run of letters, digits and the
+    /// marks IDs such as CVE-2026-1234 or GHSA-xxxx-xxxx-xxxx use, and nothing else the server could send.
+    public static func isEntryID(_ id: String) -> Bool {
+        (1...64).contains(id.count) && id.unicodeScalars.allSatisfy {
+            CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._:").contains($0)
+        }
+    }
+}
+
 /// Checks the watched accounts' services every few minutes, with each account's own sign-in, and says which agents to
-/// wake. What it has seen is kept in a file, so a relaunch neither repeats alerts nor misses those raised meanwhile.
+/// wake; an MCP server's board, every hour or as its trigger says. What it has seen is kept in a file, so a relaunch
+/// neither repeats alerts nor misses those raised meanwhile.
 @MainActor public final class AlertWatcher {
     /// How often each watched account is checked.
     public static let interval: Duration = .seconds(300)
@@ -95,16 +152,37 @@ public struct AlertWatch: Codable, Equatable, Sendable {
     private let file: URL
     /// Reaches an account's service with its own sign-in.
     private let access: @Sendable (ToolConnection) async throws -> any ServiceAccess
+    /// Makes a request of a connection's MCP server, as an agent's goes.
+    private let call: @Sendable (ToolConnection, MCPBridgeRequest) async throws -> Data
+    /// When each MCP server's board was last read, so it is read only as often as its trigger says.
+    private var boardsRead: [UUID: Date] = [:]
     private var checking = false
 
     public convenience init(file: URL, service: ToolConnectionService) {
-        self.init(file: file) { try await service.access(for: $0) }
+        self.init(file: file, access: { try await service.access(for: $0) },
+                  call: { try await service.perform($1, connection: $0) })
     }
 
-    init(file: URL, access: @escaping @Sendable (ToolConnection) async throws -> any ServiceAccess) {
+    init(file: URL, access: @escaping @Sendable (ToolConnection) async throws -> any ServiceAccess,
+         call: @escaping @Sendable (ToolConnection, MCPBridgeRequest) async throws -> Data = { _, _ in
+             throw ToolConnectionError.message("No MCP server can be reached here.")
+         }) {
         self.file = file
         self.access = access
+        self.call = call
         watch = AlertWatch.load(from: file)
+    }
+
+    /// The trigger Pion watches a connection's MCP server with, by the catalogue entry it was made from.
+    nonisolated static func trigger(for connection: ToolConnection) -> MCPTrigger? {
+        guard connection.adapter == nil else { return nil }
+        return connection.catalogueID.flatMap { PionCatalogue.triggers[$0] }
+    }
+
+    /// What the skill of this connection says about its wake, for one Pion watches: what the note's parts mean and
+    /// which tool reads what it names, and nothing of what to do about it.
+    public nonisolated static func skillText(for connection: ToolConnection) -> String? {
+        trigger(for: connection)?.skill ?? skillText(for: connection.adapter)
     }
 
     /// What the skill of a connection served by the adapter of this name says about its alerts wake, for one Pion
@@ -119,6 +197,11 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         where to look and when, not what was found: `new` is how many, with a `+` when there may be more, and `since` and \
         `until` are the times of the oldest and the newest. Read them with `\(tool)`.
         """
+    }
+
+    /// Whether Pion watches this connection: its adapter has a feed to watch, or its MCP server a board.
+    public nonisolated static func watches(_ connection: ToolConnection) -> Bool {
+        trigger(for: connection) != nil || watches(connection.adapter)
     }
 
     /// Whether Pion can watch connections served by the adapter of this name.
@@ -137,12 +220,26 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         checking = true
         defer { checking = false }
         var watch = watch, problems: [UUID: String] = [:]
-        watch.keep(only: keeping.union(accounts.map(\.connection.id)))
-        for (connection, agents) in accounts {
-            guard !agents.isEmpty, let name = connection.adapter, let adapter = PionAdapters.all[name] as? OperationAdapter,
-                  let tool = adapter.watchedTool else { continue }
-            guard let since = watch.since(connection.id, at: now) else { continue }
+        let watched = keeping.union(accounts.map(\.connection.id))
+        watch.keep(only: watched)
+        boardsRead = boardsRead.filter { watched.contains($0.key) }
+        for (connection, agents) in accounts where !agents.isEmpty {
             do {
+                if let trigger = Self.trigger(for: connection) {
+                    if let read = boardsRead[connection.id], now.timeIntervalSince(read) < trigger.interval { continue }
+                    let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: trigger.tool,
+                                                   arguments: trigger.arguments)
+                    let found = try trigger.entries(try await call(connection, request))
+                    let new = watch.board(connection.id, at: now, found: found)
+                    boardsRead[connection.id] = now
+                    guard let new else { continue }
+                    let note = AlertWatch.note(new, account: connection.name, skill: connection.skillName, tool: trigger.tool)
+                    for agent in agents { wake(agent, note) }
+                    continue
+                }
+                guard let name = connection.adapter, let adapter = PionAdapters.all[name] as? OperationAdapter,
+                      let tool = adapter.watchedTool else { continue }
+                guard let since = watch.since(connection.id, at: now) else { continue }
                 let found = try await adapter.alerts(since: since, connection: connection, access: try await access(connection))
                 guard let news = watch.take(found, for: connection.id) else { continue }
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)

@@ -1,7 +1,7 @@
 import NoodleCore
 
 /// The services Pion offers in Settings › Tools › Add Tools: its own security services, which its adapters answer,
-/// and the few of Noodle's presets that help an investigation.
+/// the open security MCP servers that need no account, and the few of Noodle's presets that help an investigation.
 public enum PionCatalogue {
     /// Noodle's presets kept: tickets and notes, observability, code security and search, and web research. Grafana's and
     /// Sentry's MCP servers sit beside Pion's own read-only Grafana and Sentry, which also reach self-hosted ones.
@@ -24,10 +24,13 @@ public enum PionCatalogue {
         "13c81353-d291-448c-83a4-0cc71bd67b05", // parallelai-search
     ]
 
+    /// The boards Pion watches on MCP servers, by the catalogue entry their connections are made from.
+    static let triggers: [String: MCPTrigger] = [CVENow.preset.id: CVENow.trigger]
+
     public static let entries: [ToolDefinition] = [
         VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset, CrowdStrike.preset, SentinelOne.preset,
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
-        URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset,
+        URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, CVENow.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset,
         Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

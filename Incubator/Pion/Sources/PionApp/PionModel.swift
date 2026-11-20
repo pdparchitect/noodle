@@ -152,7 +152,7 @@ import UniformTypeIdentifiers
         })
         connectionsController.toolRegistry = tools
         connectionsController.serve(PionAdapters.all)
-        connectionsController.appInstructions = { AlertWatcher.skillText(for: $0.adapter) }
+        connectionsController.appInstructions = { AlertWatcher.skillText(for: $0) }
         connectionsController.onAssignmentsChange = { [weak self, toolAssignments] granted in
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             self?.toolBroker?.synchronizeSkills()
@@ -242,7 +242,7 @@ import UniformTypeIdentifiers
     private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
         let registry = connectionsController.registry
         var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
-        for connection in registry.connections where AlertWatcher.watches(connection.adapter) {
+        for connection in registry.connections where AlertWatcher.watches(connection) {
             let holders = agents.map(\.id).filter { registry.assignments[$0.uuidString]?.contains(connection.id) == true }
             guard !holders.isEmpty else { continue }
             keeping.insert(connection.id)
