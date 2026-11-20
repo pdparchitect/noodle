@@ -194,7 +194,7 @@ final class NoodleStore {
         drafts[conversationID].attachments
     }
     let conversationWindows: ConversationWindowRegistry
-    let activityWindows = AgentActivityWindows()
+    let activityWindows = ActivityWindows()
     @ObservationIgnored private var voiceRecorders: [UUID: AnyObject] = [:]
     /// Each conversation's last preview. Parsing Markdown is slow, and every sidebar row asks again whenever any message changes.
     @ObservationIgnored private var previewTexts: [UUID: (messageID: UUID, body: String, text: String)] = [:]

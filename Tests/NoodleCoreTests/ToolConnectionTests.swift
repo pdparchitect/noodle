@@ -33,12 +33,12 @@ final class ToolConnectionTests: XCTestCase {
     /// The skill Noodle generates for a connection: its provider's manifest and tools, rendered.
     private func generatedSkill(_ record: ToolConnection) -> String {
         let provider = ConnectionToolProvider(id: record.skillName, title: record.name, connection: record.id,
-            summary: record.description, userInstructions: record.instructions) { _, _, _, _, _ in Data() }
+            summary: record.description, userInstructions: record.instructions) { _, _, _, _, _, _ in Data() }
         return ToolProviderSkills.document(provider.manifest, tools: [])
     }
     private func provider(_ record: ToolConnection) -> (manifest: ToolProviderManifest, tools: [ToolDescriptor]) {
         (ConnectionToolProvider(id: record.skillName, title: record.name, connection: record.id, summary: record.description,
-                                userInstructions: record.instructions) { _, _, _, _, _ in Data() }.manifest, [])
+                                userInstructions: record.instructions) { _, _, _, _, _, _ in Data() }.manifest, [])
     }
     func testRenameDoesNotChangeSkillOrAssignment() throws {
         var record = try ToolConnection(name: "Notion Personal", endpoint: endpoint)

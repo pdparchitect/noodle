@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Right-click a tool in the sidebar and choose Show Activity to see what it has done since Noodle started: which bot called which of its tools, how long each call took and why any failed, and its sign-ins and sign-outs.
+
 ### Fixed
 
 - An MCP server that needs no sign-in, added by its address, connects and works: Connect finds it answers without one, instead of failing on the sign-in details it does not publish, and it then needs nothing more, as tools that need no key do.

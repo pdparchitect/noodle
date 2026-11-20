@@ -148,6 +148,15 @@ public struct MCPTrigger: Sendable {
     /// How often each watched account is checked.
     public static let interval: Duration = .seconds(300)
 
+    /// What one check of an account found.
+    public enum Checked: Equatable, Sendable {
+        case nothingNew
+        /// Something new, in a few words; its agents were woken for it.
+        case found(String)
+        /// The check failed, saying why.
+        case failed(String)
+    }
+
     private var watch: AlertWatch
     private let file: URL
     /// Reaches an account's service with its own sign-in.
@@ -212,14 +221,15 @@ public struct MCPTrigger: Sendable {
     /// Checks each account, signed in and assigned to `agents`, once, and wakes those agents with a note for any that has
     /// something new. A check that fails is tried again next time, from where the last one left off. What was seen of
     /// the accounts in `keeping` stays, such as one waiting to be signed in again, so it picks up where it stopped;
-    /// any other is forgotten. Says why each account that could not be checked could not.
+    /// any other is forgotten. Says what each account checked found, or why it could not be checked; one not due yet,
+    /// or first watched from now, is left out.
     @discardableResult
     public func check(_ accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>, at now: Date = Date(),
-                      wake: (UUID, String) -> Void) async -> [UUID: String] {
+                      wake: (UUID, String) -> Void) async -> [UUID: Checked] {
         guard !checking else { return [:] }
         checking = true
         defer { checking = false }
-        var watch = watch, problems: [UUID: String] = [:]
+        var watch = watch, checked: [UUID: Checked] = [:]
         let watched = keeping.union(accounts.map(\.connection.id))
         watch.keep(only: watched)
         boardsRead = boardsRead.filter { watched.contains($0.key) }
@@ -232,7 +242,8 @@ public struct MCPTrigger: Sendable {
                     let found = try trigger.entries(try await call(connection, request))
                     let new = watch.board(connection.id, at: now, found: found)
                     boardsRead[connection.id] = now
-                    guard let new else { continue }
+                    guard let new else { checked[connection.id] = .nothingNew; continue }
+                    checked[connection.id] = .found("\(new.count) new: " + new.joined(separator: ", "))
                     let note = AlertWatch.note(new, account: connection.name, skill: connection.skillName, tool: trigger.tool)
                     for agent in agents { wake(agent, note) }
                     continue
@@ -241,15 +252,16 @@ public struct MCPTrigger: Sendable {
                       let tool = adapter.watchedTool else { continue }
                 guard let since = watch.since(connection.id, at: now) else { continue }
                 let found = try await adapter.alerts(since: since, connection: connection, access: try await access(connection))
-                guard let news = watch.take(found, for: connection.id) else { continue }
+                guard let news = watch.take(found, for: connection.id) else { checked[connection.id] = .nothingNew; continue }
+                checked[connection.id] = .found("\(news.count)\(news.capped ? "+" : "") new alert\(news.count == 1 && !news.capped ? "" : "s")")
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)
                 for agent in agents { wake(agent, note) }
             } catch {
-                problems[connection.id] = error.localizedDescription
+                checked[connection.id] = .failed(error.localizedDescription)
             }
         }
         self.watch = watch
         try? watch.save(to: file)
-        return problems
+        return checked
     }
 }

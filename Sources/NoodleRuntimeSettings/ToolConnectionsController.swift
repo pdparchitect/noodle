@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import NoodleCore
 import NoodleMCP
+import NoodleRuntime
 import ProductIdentity
 
 /// What a connection that does not sign in through the browser is given to prove who it is.
@@ -49,6 +50,9 @@ public final class ToolConnectionsController {
     /// A line the app adds under an account about what it does with it, by account; a problem shows as an error does.
     public var notes: [UUID: ToolConnectionNote] = [:]
     var errorMessage: String?
+    /// What each connection has done since the app started: bots' calls, sign-ins, and what the app adds, by connection.
+    @ObservationIgnored public let activity = ActivityStore()
+    @ObservationIgnored private let activityWindows = ActivityWindows()
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
     @ObservationIgnored public let service: ToolConnectionService
@@ -61,6 +65,7 @@ public final class ToolConnectionsController {
         didSet {
             providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
             providers?.onError = { [weak self] id, message in self?.errors[id] = message }
+            providers?.onCall = { [weak self] in self?.recordCall($0) }
             providers?.appInstructions = appInstructions
             synchronizeProviders()
         }
@@ -227,6 +232,8 @@ public final class ToolConnectionsController {
             try next.save(root: repository.rootURL)
             registry = next // Revoke broker access immediately, before asynchronous cleanup.
             synchronizeProviders()
+            activity.retain(Set(next.connections.map(\.id)))
+            activityWindows.synchronize(names: Dictionary(uniqueKeysWithValues: next.connections.map { ($0.id, $0.name) }))
             connected.remove(record.id)
             errors[record.id] = nil
             Task {
@@ -249,6 +256,7 @@ public final class ToolConnectionsController {
             let revocation = await service.signOut(record)
             connected.remove(record.id)
             errors[record.id] = nil
+            recordActivity(record.id, "Signed out")
             let app = ProductIdentity.current.name
             switch revocation {
             case .revoked: break
@@ -323,8 +331,10 @@ public final class ToolConnectionsController {
                 if record.open == true { current.open = true }
                 if current != found { try save(current) }
                 else { try synchronize() }
+                recordActivity(record.id, record.open == true ? "Connected, with no sign-in" : "Signed in")
             } catch is CancellationError {
                 errors[record.id] = "Sign-in cancelled."
+                recordActivity(record.id, "Sign-in cancelled")
             } catch ToolConnectionServiceError.signInRequired where record.open == true {
                 // No longer open: it is signed in to from now on.
                 connected.remove(record.id)
@@ -332,10 +342,12 @@ public final class ToolConnectionsController {
                     current.open = nil
                     try? save(current)
                     errors[record.id] = "This server now asks for a sign-in. Connect again to sign in."
+                    recordActivity(record.id, "Could not connect", detail: errors[record.id] ?? "")
                 }
             } catch {
                 if registry.connections.contains(where: { $0.id == record.id }) {
                     errors[record.id] = Self.safeError(error)
+                    recordActivity(record.id, "Could not sign in", detail: Self.safeError(error))
                 }
             }
         }
@@ -374,6 +386,33 @@ public final class ToolConnectionsController {
         }))
     }
     private nonisolated static func safeError(_ error: Error) -> String { ToolConnectionProviders.safeError(error) }
+
+    /// Shows what the connection has done since the app started, in its own window.
+    public func showActivity(_ connection: ToolConnection) {
+        activityWindows.show(id: connection.id, name: connection.name, log: activity.log(for: connection.id))
+    }
+
+    /// Adds a line to the connection's activity, with any detail under it.
+    public func recordActivity(_ connection: UUID, _ title: String, detail: String = "") {
+        activity.log(for: connection).record(ActivityEvent(title: title, detail: detail))
+    }
+
+    /// A bot's request, named by the bot and what it asked for. Listing tools comes before every call, so only a failed
+    /// listing is worth a line.
+    private func recordCall(_ call: ToolConnectionCall) {
+        let bot = agents.first { $0.id == call.agent }?.displayName ?? "A removed bot"
+        let asked: (done: String, failed: String)? = switch call.action {
+        case .call: ("called \(call.tool ?? "a tool")", "\(call.tool ?? "a tool") failed")
+        case .resources: ("listed resources", "listing resources failed")
+        case .readResource: ("read a resource", "reading a resource failed")
+        case .tools, .inspect: call.failure == nil ? nil : ("", "listing tools failed")
+        }
+        guard let asked else { return }
+        let seconds = Double(call.duration.components.seconds) + Double(call.duration.components.attoseconds) / 1e18
+        let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s)"
+        if let failure = call.failure { recordActivity(call.connection, "\(bot): \(asked.failed)" + took, detail: failure) }
+        else { recordActivity(call.connection, "\(bot) \(asked.done)" + took) }
+    }
     /// Puts a changed organisation policy in force: blocked connections leave the bots that had them.
     public func applyOrganisationPolicy() { synchronizeProviders() }
 }

@@ -292,7 +292,7 @@ struct ConversationRowMenu: View {
 }
 
 /// One activity window per agent, Noodle's own, kept for the whole app.
-@MainActor private let activityWindows = AgentActivityWindows()
+@MainActor private let activityWindows = ActivityWindows()
 
 extension PionModel {
     func showActivity(for agent: AgentRecord) {

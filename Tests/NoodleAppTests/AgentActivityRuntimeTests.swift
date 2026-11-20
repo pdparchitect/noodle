@@ -83,7 +83,7 @@ import XCTest
     func testMuseForwardsStableItemEventsWithoutTopLevelTurnID() async throws {
         let f = try MuseRuntimeFixture(), wire = MuseWireFixture(workspace: f.workspace)
         defer { f.cleanUp() }
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         let process = MuseAgentProcess(agent: .init(displayName: "Muse", harnessIdentifier: "muse"),
             executableURL: f.root, workspaceURL: f.workspace, extendedAccess: false, recoverInterruptedWork: false,
             onSnapshot: { _ in }, onHeartbeat: {}, onUnexpectedTermination: { _, _, _ in },

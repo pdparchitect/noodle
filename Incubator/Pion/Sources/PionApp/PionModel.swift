@@ -202,11 +202,12 @@ import UniformTypeIdentifiers
         alertLoop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let (accounts, keeping) = self?.watchedAccounts() else { return }
-                let problems = await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
+                let checked = await watcher.check(accounts, keeping: keeping) { [weak self] id, note in
                     guard let self else { return }
                     self.runtime.wake(id, note: note, repository: self.repository)
                 }
-                self?.alertProblems = problems
+                self?.alertProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
+                self?.recordChecks(checked, of: accounts)
                 self?.showWatchedAccounts()
                 try? await Task.sleep(for: AlertWatcher.interval)
             }
@@ -249,6 +250,20 @@ import UniformTypeIdentifiers
             if connectionsController.status(of: connection) == .connected { accounts.append((connection, holders)) }
         }
         return (accounts, keeping)
+    }
+
+    /// Adds each check to its account's activity, naming the agents a find woke.
+    private func recordChecks(_ checked: [UUID: AlertWatcher.Checked], of accounts: [(connection: ToolConnection, agents: [UUID])]) {
+        for (connection, holders) in accounts {
+            switch checked[connection.id] {
+            case .nothingNew?: connectionsController.recordActivity(connection.id, "Checked for alerts: nothing new")
+            case .found(let what)?:
+                let names = holders.compactMap { agent($0)?.displayName }.formatted(.list(type: .and))
+                connectionsController.recordActivity(connection.id, "Found \(what); woke \(names)")
+            case .failed(let reason)?: connectionsController.recordActivity(connection.id, "Could not check for alerts", detail: reason)
+            case nil: break
+            }
+        }
     }
 
     /// Says in Settings › Tools which accounts wake their agents for new alerts, and why one could not be checked.

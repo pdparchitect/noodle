@@ -122,7 +122,7 @@ public struct AgentKickRequest: Identifiable {
 @MainActor
 @Observable
 public final class AgentRuntimeCoordinator {
-    public let activity = AgentActivityStore()
+    public let activity = ActivityStore()
     public private(set) var installations: [HarnessInstallation]
     private(set) var modelsByProvider: [HarnessProvider: [HarnessModel]] = [:]
     public private(set) var capabilityErrors: [HarnessProvider: String] = [:]
@@ -802,7 +802,7 @@ public final class AgentRuntimeCoordinator {
     public func refresh(agents: [AgentRecord], repository: WorkspaceRepository? = nil) {
         installations = discoveredInstallations()
         let liveIDs = Set(agents.map(\.id))
-        activity.retainAgents(liveIDs)
+        activity.retain(liveIDs)
         usageMeters = usageMeters.filter { liveIDs.contains($0.key) }
         let trackedIDs = Set(processes.keys).union(restartTasks.keys).union(stabilityTasks.keys)
             .union(changingAccess).union(recoveryPending).union(blockedRecoveries).union(blockedRestarts)
@@ -1565,7 +1565,7 @@ public final class AgentRuntimeCoordinator {
     }
 
     private func announceHarnessSwitch(_ agentID: UUID, _ line: String) {
-        activity.log(for: agentID).record(AgentActivityEvent(title: line), at: now())
+        activity.log(for: agentID).record(ActivityEvent(title: line), at: now())
         onHarnessSwitch?(agentID, line)
     }
 

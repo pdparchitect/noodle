@@ -39,7 +39,7 @@ final class AppleSkillCatalogTests: XCTestCase {
                                                   description: "Search files.\nRead C:\\notes too.")
         // The skill Noodle generates for a tool connection, from its provider's manifest.
         let manifest = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: connection.id,
-                                              summary: connection.description) { _, _, _, _, _ in Data() }.manifest
+                                              summary: connection.description) { _, _, _, _, _, _ in Data() }.manifest
         let skill = try XCTUnwrap(AppleSkillCatalog.parse(ToolProviderSkills.document(manifest, tools: []), directory: "fallback", path: "skill.md"))
         XCTAssertEqual(skill.name, connection.skillName)
         XCTAssertEqual(skill.description, "Use the user's Team \"Tools\" tool connection. Search files. Read C:\\notes too. Tools: .")

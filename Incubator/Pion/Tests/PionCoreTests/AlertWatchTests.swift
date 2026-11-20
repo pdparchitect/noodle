@@ -99,7 +99,7 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertTrue(AlertWatch.note(more, account: "Wiz", skill: "mcp-wiz", tool: "issues").contains(#"new="\#(ServiceAlert.most)+""#))
     }
 
-    @MainActor func testTheWatcherWakesEachAgentAnAccountIsAssignedToAndSaysWhichItCouldNotCheck() async throws {
+    @MainActor func testTheWatcherWakesEachAgentAnAccountIsAssignedToAndSaysWhatEachCheckFound() async throws {
         let defender = try Defender.preset.makeConnection(name: "Defender — Contoso", values: ["tenant": "contoso.onmicrosoft.com"])
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -111,16 +111,18 @@ final class AlertWatchTests: XCTestCase {
         let (lead, analyst) = (UUID(), UUID())
         var woken: [(UUID, String)] = []
 
-        var problems = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now) { woken.append(($0, $1)) }
-        XCTAssertTrue(problems.isEmpty && woken.isEmpty, "The first check only marks where watching starts")
-        problems = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
-        XCTAssertTrue(problems.isEmpty)
+        var checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now) { woken.append(($0, $1)) }
+        XCTAssertTrue(checked.isEmpty && woken.isEmpty, "The first check only marks where watching starts")
+        checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
+        XCTAssertEqual(checked, [defender.id: .found("1 new alert")])
         XCTAssertEqual(woken.map(\.0), [lead, analyst])
         XCTAssertTrue(woken.allSatisfy { $0.1.contains(#"new="1""#) && $0.1.contains(#"tool="alerts""#) }, "\(woken)")
+        checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(450)) { woken.append(($0, $1)) }
+        XCTAssertEqual(checked, [defender.id: .nothingNew])
 
         service.answers["/v1.0/security/alerts_v2"] = (403, #"{"error":{"code":"Forbidden","message":"Missing role permissions."}}"#)
-        problems = await watcher.check([(defender, [lead])], keeping: [], at: now.addingTimeInterval(600)) { woken.append(($0, $1)) }
-        XCTAssertNotNil(problems[defender.id])
+        checked = await watcher.check([(defender, [lead])], keeping: [], at: now.addingTimeInterval(600)) { woken.append(($0, $1)) }
+        guard case .failed? = checked[defender.id] else { return XCTFail("\(checked)") }
         XCTAssertEqual(woken.count, 2, "A failed check wakes no one")
     }
 
@@ -163,20 +165,21 @@ final class AlertWatchTests: XCTestCase {
         let now = Date()
 
         board.ids = ["CVE-2026-1", "CVE-2026-2"]
-        var problems = await watcher.check([(cve, [lead])], keeping: [], at: now) { woken.append(($0, $1)) }
-        XCTAssertTrue(problems.isEmpty && woken.isEmpty, "The first check only notes what is on it")
+        var checked = await watcher.check([(cve, [lead])], keeping: [], at: now) { woken.append(($0, $1)) }
+        XCTAssertEqual(checked, [cve.id: .nothingNew], "The first read only notes what is on it")
+        XCTAssertTrue(woken.isEmpty)
         board.ids = ["CVE-2026-3", "CVE-2026-1", "CVE-2026-2"]
-        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
-        XCTAssertTrue(woken.isEmpty, "Not read again within the hour")
+        checked = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
+        XCTAssertTrue(checked.isEmpty && woken.isEmpty, "Not read again within the hour")
         XCTAssertEqual(board.reads, 1)
-        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(3_600)) { woken.append(($0, $1)) }
-        XCTAssertTrue(problems.isEmpty)
+        checked = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(3_600)) { woken.append(($0, $1)) }
+        XCTAssertEqual(checked, [cve.id: .found("1 new: CVE-2026-3")])
         XCTAssertEqual(woken.map(\.0), [lead])
         XCTAssertTrue(woken.first?.1.contains(#"entries="CVE-2026-3""#) == true, "\(woken)")
 
         board.refused = true
-        problems = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(7_200)) { woken.append(($0, $1)) }
-        XCTAssertNotNil(problems[cve.id])
+        checked = await watcher.check([(cve, [lead])], keeping: [], at: now.addingTimeInterval(7_200)) { woken.append(($0, $1)) }
+        guard case .failed? = checked[cve.id] else { return XCTFail("\(checked)") }
         XCTAssertEqual(woken.count, 1, "A failed check wakes no one")
     }
 

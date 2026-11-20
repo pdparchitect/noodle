@@ -2,24 +2,30 @@ import AppKit
 import NoodleCore
 import NoodleRuntime
 
-/// One activity window per bot, for Noodle and Noodle Hub.
+/// One activity window per bot, or per tool connection, for Noodle and Noodle Hub.
 @MainActor
-public final class AgentActivityWindows {
-    public private(set) var controllers: [UUID: AgentActivityWindowController] = [:]
+public final class ActivityWindows {
+    public private(set) var controllers: [UUID: ActivityWindowController] = [:]
 
     public init() {}
 
     @discardableResult
-    public func show(agent: AgentRecord, log: AgentActivityLog) -> AgentActivityWindowController {
-        let controller: AgentActivityWindowController
-        if let existing = controllers[agent.id] {
+    public func show(agent: AgentRecord, log: ActivityLog) -> ActivityWindowController {
+        show(id: agent.id, name: agent.displayName, log: log)
+    }
+
+    /// Shows the log of the bot or tool connection with this ID, titled with its name.
+    @discardableResult
+    public func show(id: UUID, name: String, log: ActivityLog) -> ActivityWindowController {
+        let controller: ActivityWindowController
+        if let existing = controllers[id] {
             controller = existing
         } else {
-            controller = AgentActivityWindowController(log: log)
-            controller.onClose = { [weak self] in self?.controllers[agent.id] = nil }
-            controllers[agent.id] = controller
+            controller = ActivityWindowController(log: log)
+            controller.onClose = { [weak self] in self?.controllers[id] = nil }
+            controllers[id] = controller
         }
-        controller.updateTitle(agent.displayName)
+        controller.updateTitle(name)
         controller.refresh()
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
@@ -30,7 +36,11 @@ public final class AgentActivityWindows {
     }
 
     public func synchronize(agents: [AgentRecord]) {
-        let names = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0.displayName) })
+        synchronize(names: Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0.displayName) }))
+    }
+
+    /// Retitles each open window by `names` and closes those whose bot or connection is gone.
+    public func synchronize(names: [UUID: String]) {
         for (id, controller) in Array(controllers) {
             if let name = names[id] { controller.updateTitle(name) }
             else { controller.close() }
@@ -39,17 +49,17 @@ public final class AgentActivityWindows {
 }
 
 @MainActor
-public final class AgentActivityWindowController: NSWindowController, NSWindowDelegate {
-    let log: AgentActivityLog
-    let output = AgentActivityTextView()
+public final class ActivityWindowController: NSWindowController, NSWindowDelegate {
+    let log: ActivityLog
+    let output = ActivityTextView()
     private let empty = ActivityEmptyLabel(labelWithString: "No activity yet")
     private var timer: Timer?
     private var revision = -1
     var onClose: (() -> Void)?
 
-    init(log: AgentActivityLog) {
+    init(log: ActivityLog) {
         self.log = log
-        let panel = AgentActivityPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 500),
+        let panel = ActivityPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 500),
                                       styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
@@ -101,8 +111,8 @@ public final class AgentActivityWindowController: NSWindowController, NSWindowDe
 
     required init?(coder: NSCoder) { nil }
 
-    func updateTitle(_ agentName: String) {
-        let title = "\(agentName) - Activity"
+    func updateTitle(_ name: String) {
+        let title = "\(name) - Activity"
         window?.title = title
         (window?.contentView as? AnnotationPreviewFrame)?.filename = title
     }
@@ -157,7 +167,7 @@ public final class AgentActivityWindowController: NSWindowController, NSWindowDe
 }
 
 @MainActor
-private final class AgentActivityPanel: NSPanel {
+private final class ActivityPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func zoom(_ sender: Any?) {}
@@ -174,10 +184,10 @@ private final class AgentActivityPanel: NSPanel {
 /// Native selectable text keeps standard Find/Copy/Select All behavior. Updating
 /// just the changed suffix preserves selections and avoids rebuilding on every token.
 @MainActor
-final class AgentActivityTextView: NSScrollView {
+final class ActivityTextView: NSScrollView {
     let textView = ActivityLogTextView()
     let latestButton = NSGlassEffectView()
-    private var rendered: [AgentActivityEntry] = []
+    private var rendered: [ActivityEntry] = []
 
     init() {
         super.init(frame: .zero)
@@ -257,7 +267,7 @@ final class AgentActivityTextView: NSScrollView {
     }
 
     /// Tints each entry's time, dims its output and sets its title in semibold; the text itself stays as copied.
-    static func style(_ storage: NSTextStorage, entries: [AgentActivityEntry]) {
+    static func style(_ storage: NSTextStorage, entries: [ActivityEntry]) {
         let regular = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let spaced = NSMutableParagraphStyle()
         spaced.paragraphSpacingBefore = 6
@@ -281,7 +291,7 @@ final class AgentActivityTextView: NSScrollView {
         storage.endEditing()
     }
 
-    func update(_ entries: [AgentActivityEntry]) {
+    func update(_ entries: [ActivityEntry]) {
         guard entries != rendered, let storage = textView.textStorage else { return }
         let following = isFollowing
         let selection = textView.selectedRange()

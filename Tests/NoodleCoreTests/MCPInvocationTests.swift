@@ -42,7 +42,7 @@ final class MCPInvocationTests: XCTestCase {
         try "My own skill".write(to: file, atomically: true, encoding: .utf8)
         let connection = try ToolConnection(name: "Notion", endpoint: URL(string: "https://mcp.notion.com/mcp")!)
         ToolProviderSkills.synchronize(workspace: root, providers: [(ConnectionToolProvider(id: connection.skillName, title: connection.name,
-            connection: connection.id) { _, _, _, _, _ in Data() }.manifest, [])])
+            connection: connection.id) { _, _, _, _, _, _ in Data() }.manifest, [])])
         XCTAssertEqual(try String(contentsOf: file), "My own skill")
     }
 }

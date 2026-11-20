@@ -108,7 +108,7 @@ import XCTest
     }
 
     func testActivityShowsTextAndToolsFromACapturedTurn() throws {
-        func event(_ text: String) throws -> [AgentActivityEvent] {
+        func event(_ text: String) throws -> [ActivityEvent] {
             let message = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
             return AgentActivityParser.events(message, provider: .antigravity)
         }

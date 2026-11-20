@@ -1,8 +1,8 @@
 import Foundation
 import NoodleCore
 
-/// Display-only observations. These never acknowledge messages or drive a runtime.
-public struct AgentActivityEvent {
+/// Display-only observations of a bot or a tool connection. These never acknowledge messages or drive a runtime.
+public struct ActivityEvent {
     var title: String
     var detail = ""
     var streamID: String? = nil
@@ -16,7 +16,7 @@ public struct AgentActivityEvent {
     }
 }
 
-public struct AgentActivityEntry: Equatable {
+public struct ActivityEntry: Equatable {
     public let id: UUID
     let date: Date
     var title: String
@@ -33,8 +33,8 @@ public struct AgentActivityEntry: Equatable {
 }
 
 @MainActor
-public final class AgentActivityLog {
-    public private(set) var entries: [AgentActivityEntry] = []
+public final class ActivityLog {
+    public private(set) var entries: [ActivityEntry] = []
     public private(set) var revision = 0
     /// The login a bot is temporarily running on while its own is out of usage; nil on its own.
     public var fallbackLogin: String?
@@ -49,7 +49,7 @@ public final class AgentActivityLog {
         self.byteLimit = max(1024, byteLimit)
     }
 
-    public func record(_ event: AgentActivityEvent, at date: Date = Date()) {
+    public func record(_ event: ActivityEvent, at date: Date = Date()) {
         let title = Self.bounded(event.title, bytes: 256)
         let streamID = event.streamID.map { Self.bounded($0, bytes: 512) }
         let detail = Self.bounded(event.detail, bytes: min(16 * 1024, byteLimit - 768))
@@ -61,7 +61,7 @@ public final class AgentActivityLog {
                 : detail
             byteCount += entries[index].byteCount
         } else {
-            let entry = AgentActivityEntry(id: UUID(), date: date, title: title, detail: detail, streamID: streamID)
+            let entry = ActivityEntry(id: UUID(), date: date, title: title, detail: detail, streamID: streamID)
             entries.append(entry)
             byteCount += entry.byteCount
         }
@@ -102,14 +102,17 @@ public final class AgentActivityLog {
     }
 }
 
+/// One log for each bot, or for each tool connection, kept in memory only.
 @MainActor
-public final class AgentActivityStore {
-    private var logs: [UUID: AgentActivityLog] = [:]
+public final class ActivityStore {
+    private var logs: [UUID: ActivityLog] = [:]
 
-    public func log(for agentID: UUID) -> AgentActivityLog {
-        if let log = logs[agentID] { return log }
-        let log = AgentActivityLog()
-        logs[agentID] = log
+    public init() {}
+
+    public func log(for id: UUID) -> ActivityLog {
+        if let log = logs[id] { return log }
+        let log = ActivityLog()
+        logs[id] = log
         return log
     }
 
@@ -126,7 +129,8 @@ public final class AgentActivityStore {
     /// Clears the fallback login without creating a log for a bot that has none.
     func clearFallbackLogin(_ agentID: UUID) { logs[agentID]?.fallbackLogin = nil }
 
-    func retainAgents(_ ids: Set<UUID>) {
+    /// Forgets the logs of everything not in `ids`.
+    public func retain(_ ids: Set<UUID>) {
         logs = logs.filter { ids.contains($0.key) }
     }
 }

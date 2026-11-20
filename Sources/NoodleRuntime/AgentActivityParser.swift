@@ -4,7 +4,7 @@ import NoodleCore
 /// Only consume public activity fields; initialization, auth, opaque reasoning,
 /// raw stderr and transport responses are deliberately not dumped into the log.
 public enum AgentActivityParser {
-    static func events(_ message: [String: Any], provider: HarnessProvider) -> [AgentActivityEvent] {
+    static func events(_ message: [String: Any], provider: HarnessProvider) -> [ActivityEvent] {
         switch provider {
         case .codex: return items(message)
         case .muse: return muse(message)
@@ -16,7 +16,7 @@ public enum AgentActivityParser {
 
     /// MSP v1 uses kind/itemId and item/delta field paths, not Codex item types.
     /// Field names follow the stable schema exported by `muse schema generate-ts`.
-    private static func muse(_ message: [String: Any]) -> [AgentActivityEvent] {
+    private static func muse(_ message: [String: Any]) -> [ActivityEvent] {
         guard let method = message["method"] as? String,
               let params = message["params"] as? [String: Any] else { return [] }
         if method == "view/gap" { return [.init(title: "Some activity was not delivered by Muse")] }
@@ -51,7 +51,7 @@ public enum AgentActivityParser {
         }
     }
 
-    private static func items(_ message: [String: Any]) -> [AgentActivityEvent] {
+    private static func items(_ message: [String: Any]) -> [ActivityEvent] {
         guard let method = message["method"] as? String,
               let params = message["params"] as? [String: Any] else { return [] }
         let scope = (params["turnId"] as? String ?? "") + ":"
@@ -100,7 +100,7 @@ public enum AgentActivityParser {
         }
     }
 
-    private static func acp(_ message: [String: Any], provider: HarnessProvider) -> [AgentActivityEvent] {
+    private static func acp(_ message: [String: Any], provider: HarnessProvider) -> [ActivityEvent] {
         guard message["method"] as? String == "session/update",
               let params = message["params"] as? [String: Any],
               let update = params["update"] as? [String: Any],
@@ -137,7 +137,7 @@ public enum AgentActivityParser {
     }
 
     /// Step updates carry text deltas and, for a tool, its name, input and outcome.
-    private static func antigravity(_ message: [String: Any]) -> [AgentActivityEvent] {
+    private static func antigravity(_ message: [String: Any]) -> [ActivityEvent] {
         guard message["event"] as? String == "step_update", let step = message["step_update"] as? [String: Any],
               let type = step["step_type"] as? String, let index = step["step_index"] as? Int else { return [] }
         let stream = (step["conversation_id"] as? String ?? "") + ":\(index)"
@@ -161,7 +161,7 @@ public enum AgentActivityParser {
         }
     }
 
-    private static func claude(_ message: [String: Any]) -> [AgentActivityEvent] {
+    private static func claude(_ message: [String: Any]) -> [ActivityEvent] {
         guard let type = message["type"] as? String, ["assistant", "user"].contains(type),
               let body = message["message"] as? [String: Any], let blocks = body["content"] as? [[String: Any]] else { return [] }
         return blocks.compactMap { block in
@@ -178,7 +178,7 @@ public enum AgentActivityParser {
         }
     }
 
-    private static func textEvent(_ title: String, _ value: Any?, stream: String? = nil, appending: Bool = false) -> [AgentActivityEvent] {
+    private static func textEvent(_ title: String, _ value: Any?, stream: String? = nil, appending: Bool = false) -> [ActivityEvent] {
         guard let text = value as? String, !text.isEmpty else { return [] }
         return [.init(title: title, detail: text, streamID: stream, appending: appending)]
     }

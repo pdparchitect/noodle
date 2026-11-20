@@ -5,9 +5,9 @@ import ProductIdentity
 /// so everything it returns is cleaned of Noodle's own markers, and the connection as a
 /// whole is what Noodle grants to a bot.
 public struct ConnectionToolProvider: ToolProvider {
-    /// The app's connection service: action, tool, arguments, resource URI, and the check the
+    /// The app's connection service: the calling bot, action, tool, arguments, resource URI, and the check the
     /// service runs again after queueing and token refresh, just before the request is sent.
-    public typealias Perform = @Sendable (MCPBridgeAction, String?, Data?, String?, @escaping @Sendable () async -> Bool) async throws -> Data
+    public typealias Perform = @Sendable (UUID, MCPBridgeAction, String?, Data?, String?, @escaping @Sendable () async -> Bool) async throws -> Data
     public static let grantKind = "mcp"
     public static let resourcesTool = "mcp-resources", readResourceTool = "mcp-read-resource"
 
@@ -47,7 +47,7 @@ public struct ConnectionToolProvider: ToolProvider {
     }
 
     public func tools(context: ToolCallContext) async throws -> Data {
-        let cleaned = try ToolUntrustedContent.tools(try await perform(.tools, nil, nil, nil, Self.checkpoint(context)))
+        let cleaned = try ToolUntrustedContent.tools(try await perform(context.agentID, .tools, nil, nil, nil, Self.checkpoint(context)))
         var object = try JSONSerialization.jsonObject(with: cleaned) as? [String: Any] ?? [:]
         let remote = (object["tools"] as? [[String: Any]] ?? []).filter { ![Self.resourcesTool, Self.readResourceTool].contains($0["name"] as? String) }
         object["tools"] = remote + [
@@ -62,13 +62,13 @@ public struct ConnectionToolProvider: ToolProvider {
     public func call(_ tool: String, arguments: Data, files: [ToolFile], context: ToolCallContext) async throws -> Data {
         let checkpoint = Self.checkpoint(context)
         switch tool {
-        case Self.resourcesTool: return try ToolUntrustedContent.result(try await perform(.resources, nil, nil, nil, checkpoint))
+        case Self.resourcesTool: return try ToolUntrustedContent.result(try await perform(context.agentID, .resources, nil, nil, nil, checkpoint))
         case Self.readResourceTool:
             guard let uri = (try JSONSerialization.jsonObject(with: arguments) as? [String: Any])?["uri"] as? String, !uri.isEmpty else {
                 throw ToolProviderError("Specify --uri from \(Self.resourcesTool).")
             }
-            return try ToolUntrustedContent.result(try await perform(.readResource, nil, nil, uri, checkpoint))
-        default: return try ToolUntrustedContent.result(try await perform(.call, tool, arguments, nil, checkpoint))
+            return try ToolUntrustedContent.result(try await perform(context.agentID, .readResource, nil, nil, uri, checkpoint))
+        default: return try ToolUntrustedContent.result(try await perform(context.agentID, .call, tool, arguments, nil, checkpoint))
         }
     }
 

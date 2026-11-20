@@ -27,7 +27,7 @@ struct HubSettingsProblem: Equatable {
     var selectedTab: HubSettingsTab = .network
     /// Why archiving a bot or group, or changing a bot's model, failed, shown until dismissed.
     var problem: HubSettingsProblem?
-    let activityWindows = AgentActivityWindows()
+    let activityWindows = ActivityWindows()
 
     init(hub: Hub) {
         self.hub = hub

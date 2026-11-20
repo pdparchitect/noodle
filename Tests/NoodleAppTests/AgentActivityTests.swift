@@ -7,7 +7,7 @@ import XCTest
 
 @MainActor final class AgentActivityTests: XCTestCase {
     func testAppleStatusesAndToolResultsReachWindowLog() {
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         func feed(_ update: [String: Any]) {
             let message: [String: Any] = ["method": "session/update", "params": ["sessionId": "apple", "update": update]]
             AgentActivityParser.events(message, provider: .apple).forEach { log.record($0) }
@@ -34,7 +34,7 @@ import XCTest
     }
 
     func testStreamCoalescingCompletionAndLifecycleBoundaries() {
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         let id = UUID()
         log.record(.init(agentID: id, phase: .working, detail: "Working"))
         log.record(.init(title: "Output", detail: "Hello ", streamID: "text", appending: true))
@@ -57,7 +57,7 @@ import XCTest
     }
 
     func testLogBoundsEntriesAndBytesIncludingMultibyteOutput() {
-        let log = AgentActivityLog(entryLimit: 3, byteLimit: 4096)
+        let log = ActivityLog(entryLimit: 3, byteLimit: 4096)
         for index in 0..<10 { log.record(.init(title: "Event \(index)")) }
         XCTAssertEqual(log.entries.map(\.title), ["Event 7", "Event 8", "Event 9"])
         for _ in 0..<50 {
@@ -69,17 +69,17 @@ import XCTest
     }
 
     func testAgentBuffersAreIsolatedAndDeletedAgentsAreForgotten() {
-        let store = AgentActivityStore(), first = UUID(), second = UUID()
+        let store = ActivityStore(), first = UUID(), second = UUID()
         store.log(for: first).record(.init(title: "First"))
         store.log(for: second).record(.init(title: "Second"))
         XCTAssertFalse(store.log(for: first).text.contains("Second"))
-        store.retainAgents([second])
+        store.retain([second])
         XCTAssertTrue(store.log(for: first).entries.isEmpty)
         XCTAssertTrue(store.log(for: second).text.contains("Second"))
     }
 
     func testCodexCommandOutputAndFinalTextShareTheirStreamingRows() {
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         func feed(_ method: String, _ params: [String: Any]) {
             for event in AgentActivityParser.events(["method": method, "params": params], provider: .codex) { log.record(event) }
         }
@@ -105,14 +105,14 @@ import XCTest
         }
         let working: [String: Any] = ["method": "session/update", "params": ["update": [
             "sessionUpdate": "agent_thought_chunk", "content": ["type": "text", "text": "Working"]]]]
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         for _ in 0..<4 { AgentActivityParser.events(working, provider: .apple).forEach { log.record($0) } }
         XCTAssertEqual(log.entries.count, 1)
         XCTAssertEqual(log.entries[0].title, "Working")
     }
 
     func testMuseStableSchemaDeltasAndFinalSnapshots() {
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         func feed(_ method: String, _ fields: [String: Any]) {
             var params = fields
             params["sessionId"] = "s"
@@ -173,7 +173,7 @@ import XCTest
 
     func testNativeWindowReuseCloseReopenAndDeletion() async throws {
         _ = NSApplication.shared
-        let registry = AgentActivityWindows(), log = AgentActivityLog()
+        let registry = ActivityWindows(), log = ActivityLog()
         var agent = AgentRecord(displayName: "Activity fixture")
         log.record(.init(agentID: agent.id, phase: .working, detail: "Working"))
         log.record(.init(title: "Reading files"))
@@ -218,9 +218,9 @@ import XCTest
     func testOpeningActivityScrollsToLatest() throws {
         _ = NSApplication.shared
         let agent = AgentRecord(displayName: "Scroller")
-        let log = AgentActivityLog(entryLimit: 200)
+        let log = ActivityLog(entryLimit: 200)
         for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
-        let registry = AgentActivityWindows()
+        let registry = ActivityWindows()
         let controller = registry.show(agent: agent, log: log)
         defer { controller.close() }
         XCTAssertTrue(controller.output.isAtBottom)
@@ -235,10 +235,10 @@ import XCTest
 
     func testLogTintsTimesDimsOutputAndSpacesEntries() throws {
         _ = NSApplication.shared
-        let log = AgentActivityLog()
+        let log = ActivityLog()
         log.record(.init(title: "Bash: started", detail: "ls -la"))
         log.record(.init(title: "Tool result", detail: "total 0"))
-        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Reader"), log: log)
+        let controller = ActivityWindows().show(agent: AgentRecord(displayName: "Reader"), log: log)
         defer { controller.close() }
         let storage = try XCTUnwrap(controller.output.textView.textStorage)
         let text = storage.string as NSString
@@ -262,8 +262,8 @@ import XCTest
 
     func testTitleShowsTheFallbackLoginOnTheRightOnlyWhileAway() throws {
         _ = NSApplication.shared
-        let log = AgentActivityLog()
-        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Alfred"), log: log)
+        let log = ActivityLog()
+        let controller = ActivityWindows().show(agent: AgentRecord(displayName: "Alfred"), log: log)
         defer { controller.close() }
         let frame = try XCTUnwrap(controller.window?.contentView as? AnnotationPreviewFrame)
         XCTAssertEqual(frame.filename, "Alfred - Activity")
@@ -280,9 +280,9 @@ import XCTest
     func testFollowLatestButtonShowsOnlyAwayFromBottom() throws {
         _ = NSApplication.shared
         let agent = AgentRecord(displayName: "Follower")
-        let log = AgentActivityLog(entryLimit: 200)
+        let log = ActivityLog(entryLimit: 200)
         for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
-        let controller = AgentActivityWindows().show(agent: agent, log: log)
+        let controller = ActivityWindows().show(agent: agent, log: log)
         defer { controller.close() }
         let output = controller.output
         XCTAssertTrue(output.latestButton.isHidden)
@@ -302,7 +302,7 @@ import XCTest
     /// A scroller subclass that doesn't say it can overlay forces the legacy, always-shown scroller.
     func testScrollerStillOverlaysAndHides() throws {
         _ = NSApplication.shared
-        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Overlay"), log: AgentActivityLog())
+        let controller = ActivityWindows().show(agent: AgentRecord(displayName: "Overlay"), log: ActivityLog())
         defer { controller.close() }
         let scroller = try XCTUnwrap(controller.output.verticalScroller)
         XCTAssertTrue(type(of: scroller).isCompatibleWithOverlayScrollers)
@@ -311,9 +311,9 @@ import XCTest
 
     func testScrollerAndFollowLatestShowTheArrowCursor() throws {
         _ = NSApplication.shared
-        let log = AgentActivityLog(entryLimit: 200)
+        let log = ActivityLog(entryLimit: 200)
         for index in 0..<200 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
-        let controller = AgentActivityWindows().show(agent: AgentRecord(displayName: "Pointer"), log: log)
+        let controller = ActivityWindows().show(agent: AgentRecord(displayName: "Pointer"), log: log)
         defer { controller.close() }
         let output = controller.output
         output.textView.scrollRangeToVisible((output.textView.string as NSString).range(of: "Line 10"))
@@ -330,9 +330,9 @@ import XCTest
 
     func testNativeLogKeepsSelectionAndScrollPositionWhileAppendingAndEvicting() throws {
         _ = NSApplication.shared
-        let log = AgentActivityLog(entryLimit: 80)
+        let log = ActivityLog(entryLimit: 80)
         for index in 0..<80 { log.record(.init(title: "Line \(index)", detail: "A short line of output")) }
-        let controller = AgentActivityWindowController(log: log)
+        let controller = ActivityWindowController(log: log)
         defer { controller.close() }
         controller.showWindow(nil)
         controller.window?.contentView?.layoutSubtreeIfNeeded()

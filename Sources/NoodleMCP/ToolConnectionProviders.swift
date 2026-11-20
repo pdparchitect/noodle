@@ -1,6 +1,17 @@
 import Foundation
 import NoodleCore
 
+/// One request a bot made of a connection, as its activity shows it: never the arguments or the answer.
+public struct ToolConnectionCall: Sendable {
+    public let connection: UUID
+    public let agent: UUID
+    public let action: MCPBridgeAction
+    public let tool: String?
+    public let duration: Duration
+    /// Why it failed, already safe to show; nil when it did not.
+    public let failure: String?
+}
+
 /// Keeps one tool provider registered per saved connection. Each call reads the connection
 /// as it is at that moment, since its endpoint or account may have been edited since.
 @MainActor public final class ToolConnectionProviders {
@@ -10,6 +21,8 @@ import NoodleCore
     /// Called on the main actor with a failure already safe to show, for the connection it
     /// happened on. Calls fail on background tasks, and whoever shows the error keeps it there.
     public var onError: (@MainActor (UUID, String) -> Void)?
+    /// Called on the main actor after each request a bot made of a connection, whether it succeeded or not.
+    public var onCall: (@MainActor (ToolConnectionCall) -> Void)?
     /// What the app says about a connection in its skill, before the person's own instructions, if anything.
     public var appInstructions: (@MainActor (ToolConnection) -> String?)?
 
@@ -34,14 +47,22 @@ import NoodleCore
             let id = connection.id, service = service
             let provider = ConnectionToolProvider(id: connection.skillName, title: connection.name, connection: id,
                 summary: connection.description, appInstructions: said[id, default: ""],
-                userInstructions: connection.instructions) { [weak self] action, tool, arguments, uri, authorized in
+                userInstructions: connection.instructions) { [weak self] agent, action, tool, arguments, uri, authorized in
                 guard let current = await current(id) else { throw ToolConnectionServiceError.revoked }
+                let started = ContinuousClock.now
+                func report(_ failure: String?) async {
+                    await self?.onCall?(ToolConnectionCall(connection: id, agent: agent, action: action, tool: tool,
+                                                           duration: ContinuousClock.now - started, failure: failure))
+                }
                 do {
-                    return try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
-                                                     connection: current, authorized: authorized)
+                    let result = try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
+                                                           connection: current, authorized: authorized)
+                    await report(nil)
+                    return result
                 } catch {
                     let message = Self.safeError(error)
                     await self?.onError?(id, message)
+                    await report(message)
                     throw ToolProviderError(message)
                 }
             }

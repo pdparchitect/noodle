@@ -333,6 +333,32 @@ import XCTest
         XCTAssertNil(response.result)
     }
 
+    /// Each connection keeps its own activity: which agent called which tool and how it went, a failure in Noodle's own
+    /// words only, never what the service said.
+    func testAConnectionsActivityNamesTheAgentTheToolAndOnlyASafeFailure() async throws {
+        let f = try fixture()
+        var account = try f.account()
+        account.adapter = "activity"
+        await f.service.useAdapters(["activity": ActivityAdapter()])
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a])
+        let session = try f.session(f.a).token
+        let answered = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
+                                                              tool: "lookup", arguments: Data("{}".utf8)))
+        XCTAssertNil(answered.error)
+        let refused = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
+                                                             tool: "refuse", arguments: Data("{}".utf8)))
+        let reason = try XCTUnwrap(refused.error)
+        let log = f.controller.activity.log(for: account.id)
+        try await f.waitUntil { log.text.contains("refuse") }
+        XCTAssertTrue(log.text.contains("MCP A called lookup"), log.text)
+        XCTAssertTrue(log.text.contains("MCP A: refuse failed"), log.text)
+        XCTAssertTrue(log.text.contains(reason), log.text)
+        XCTAssertFalse(log.text.contains(ActivityAdapter.secret), log.text)
+        XCTAssertEqual(log.entries.count, 2, "Listing tools before every call is not activity: \(log.text)")
+    }
+
     func testRevokedAssignmentAndOldSessionAreRejectedOnLaterScans() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
@@ -500,5 +526,17 @@ private final class RefusingControllerCredentials: MCPCredentialStorage, @unchec
             if refusal { throw ToolConnectionServiceError.keychain(-25308) }
             deleted.append(id)
         }
+    }
+}
+
+/// An app's adapter that answers `lookup` and refuses anything else with words of its own, which may be private.
+private struct ActivityAdapter: ToolConnectionAdapter {
+    static let secret = "Account 4411 has no access to tenant contoso"
+    func tools(for connection: ToolConnection) async throws -> Data {
+        Data(#"{"tools":[{"name":"lookup","inputSchema":{"type":"object"}},{"name":"refuse","inputSchema":{"type":"object"}}]}"#.utf8)
+    }
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+        guard tool == "lookup" else { throw NSError(domain: "service", code: 403, userInfo: [NSLocalizedDescriptionKey: Self.secret]) }
+        return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
     }
 }

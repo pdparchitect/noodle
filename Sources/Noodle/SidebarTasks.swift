@@ -198,7 +198,7 @@ enum SidebarTimestamp {
 
 /// The tool connections at the foot of the sidebar, as icons, when View › Sidebar › Show Tools is on: a red dot marks
 /// one waiting on the person to sign in or look at a failure. Clicking one shows where it stands and what to do,
-/// in a bubble, leaving the conversation open.
+/// in a bubble, leaving the conversation open; its menu shows its activity.
 struct SidebarTools: View {
     static let key = "sidebarShowsTools"
     let controller: ToolConnectionsController
@@ -282,6 +282,7 @@ private struct ToolTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu { Button("Show Activity") { controller.showActivity(connection) } }
         .help(connection.name)
         .accessibilityLabel(connection.name)
         .accessibilityValue(status.needsAttention ? "Needs attention" : "")
