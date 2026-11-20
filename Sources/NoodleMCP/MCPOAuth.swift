@@ -159,19 +159,21 @@ struct MCPOAuth {
         return result
     }
 
+    /// The protected-resource metadata the server publishes, naming where it signs in; nil when it publishes none.
+    func protectedResource(for endpoint: URL) async -> Object? {
+        for candidate in DefaultOAuthMetadataDiscovery().protectedResourceMetadataURLs(for: endpoint) {
+            if let object = try? await request(candidate), object["authorization_servers"] is [String] { return object }
+        }
+        return nil
+    }
+
     /// `authorizationServer` comes from the catalogue, for services that publish no
     /// protected-resource metadata; published metadata still wins when present.
     func discoverAndRegister(endpoint: URL, redirect: URL, clientName: String, authorizationServer: URL? = nil,
                              progress: @Sendable (String) async -> Void = { _ in }) async throws -> MCPCredentials {
         await progress("Discovering authorization…")
         let discovery = DefaultOAuthMetadataDiscovery()
-        var protectedResource: Object?
-        for candidate in discovery.protectedResourceMetadataURLs(for: endpoint) {
-            if let object = try? await request(candidate), object["authorization_servers"] is [String] {
-                protectedResource = object
-                break
-            }
-        }
+        let protectedResource = await protectedResource(for: endpoint)
         let resource: URL, issuer: URL
         if let protectedResource {
             guard let resourceString = protectedResource["resource"] as? String,

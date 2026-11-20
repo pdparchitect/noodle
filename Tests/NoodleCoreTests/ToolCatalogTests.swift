@@ -93,6 +93,20 @@ final class ToolCatalogTests: XCTestCase {
         }
     }
 
+    /// An entry for an open MCP server makes accounts kept as open, which stay so once saved; others are not.
+    func testAnOpenServersAccountsAreKeptAsOpen() throws {
+        let entry = ToolDefinition(id: UUID().uuidString, name: "Open", summary: "", defaultInstructions: "", iconName: "open",
+                                   configuration: .connection(.init(endpoint: URL(string: "https://open.example/mcp")!, open: true)))
+        let account = try entry.makeConnection(name: "Open")
+        XCTAssertEqual(account.open, true)
+        var registry = ToolConnectionRegistry()
+        registry.connections.append(account)
+        let roundTrip = try JSONDecoder().decode(ToolConnectionRegistry.self, from: JSONEncoder().encode(registry))
+        XCTAssertEqual(roundTrip.connections.first?.open, true)
+        let notion = try XCTUnwrap(ToolCatalog.matching("Notion").first)
+        XCTAssertNil(try notion.makeConnection(name: "Notion").open)
+    }
+
     func testExperimentalPresetsSortLastAndAreSearchable() throws {
         let gmail = try XCTUnwrap(ToolCatalog.matching("experimental").first)
         XCTAssertEqual(gmail.iconName, "gmail")

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An MCP server that needs no sign-in connects and works for your bots: signing it in finds it answers without one, instead of failing on the sign-in details it does not publish.
+
 ## [0.57.0] - 2026-11-19
 
 ### Added

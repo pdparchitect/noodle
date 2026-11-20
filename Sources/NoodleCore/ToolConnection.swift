@@ -53,6 +53,9 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public var awsIdentityCenter: ConnectionAWSIdentityCenter?
     /// Whether it proves itself with a secret kept in Keychain: a token, a client ID and secret or an Identity Center sign-in.
     public var keepsSecret: Bool { usesToken || clientCredentials != nil || awsIdentityCenter != nil }
+    /// True for an MCP server that answers without a sign-in or a key, as its catalogue entry says or connecting it
+    /// found; it is then called with no authorization at all.
+    public var open: Bool?
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
     /// address of the service the adapter calls. Only the app that has that adapter serves it.
     public var adapter: String?

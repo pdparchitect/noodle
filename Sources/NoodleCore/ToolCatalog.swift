@@ -190,6 +190,8 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public let clientCredentials: ClientCredentialsPreset?
     /// The app adapter that answers for the service, which is then at `endpoint` without an MCP server.
     public let adapter: String?
+    /// For an MCP server that answers without a sign-in or a key: its accounts need nothing set up.
+    public let open: Bool
     /// For AWS: accounts sign in through their organisation's IAM Identity Center, covering every account the person may
     /// use, and fill in its start URL, the role to take in each account and their default region, in fields keyed
     /// startURL, role and region.
@@ -203,11 +205,12 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
                 tokenScheme: String? = nil, tokenParameter: String? = nil, composedToken: ComposedToken? = nil,
-                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil) {
+                clientCredentials: ClientCredentialsPreset? = nil, adapter: String? = nil, open: Bool = false) {
         self.tokenScheme = tokenScheme
         self.tokenParameter = tokenParameter
         self.composedToken = composedToken
         self.adapter = adapter
+        self.open = open
         signsInWithAWSIdentityCenter = false
         tokenRevocation = nil
         oauthClientField = nil
@@ -233,6 +236,7 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         self.tokenParameter = tokenParameter
         self.tokenScheme = tokenScheme
         self.adapter = adapter
+        open = false
         self.clientCredentials = clientCredentials
         self.endpointTemplate = endpointTemplate
         self.fields = fields
@@ -270,8 +274,10 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
 
     /// Every addition is a separate account, including repeated presets.
     public func makeConnection(id: UUID = UUID(), name: String, description: String = "", instructions: String = "") throws -> ToolConnection {
-        try ToolConnection(id: id, name: name, endpoint: endpoint, description: description, instructions: instructions,
-                                tokenHeader: tokenHeader, tokenScheme: tokenScheme, tokenParameter: tokenParameter)
+        var record = try ToolConnection(id: id, name: name, endpoint: endpoint, description: description, instructions: instructions,
+                                        tokenHeader: tokenHeader, tokenScheme: tokenScheme, tokenParameter: tokenParameter)
+        if open { record.open = true }
+        return record
     }
 }
 
@@ -313,6 +319,7 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
                                                  adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
+            if configuration.open { record.open = true }
             return record
         }
     }

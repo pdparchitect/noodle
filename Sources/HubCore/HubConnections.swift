@@ -17,8 +17,9 @@ import NoodleMCP
     public var onAssignmentsChange: (() -> Void)?
     /// Called with the owner when a sign-in ends, whether it worked or not.
     public var onSignInEnded: ((UUID) -> Void)?
-    /// Signs a connection in through `browser` and checks it answers. Returns its icon.
-    public var signInFlow: (ToolConnection, URL, @escaping @Sendable (URL) async throws -> URL) async throws -> Data?
+    /// Signs a connection in through `browser`, or finds it needs no sign-in, and checks it answers. Returns its icon, and
+    /// whether it is open.
+    public var signInFlow: (ToolConnection, URL, @escaping @Sendable (URL) async throws -> URL) async throws -> (icon: Data?, open: Bool)
 
     private let root: URL
     private let access: HubAccess
@@ -43,18 +44,25 @@ import NoodleMCP
         registry = (try? ToolConnectionRegistry.load(root: root)) ?? ToolConnectionRegistry()
         deletions = DeletionJournal(url: root.appendingPathComponent("MCP/removed-sign-ins.json"))
         signInFlow = { record, redirect, browser in
-            try await service.signIn(record, redirectURI: redirect, browser: browser)
+            var record = record
+            if record.open != true, try await service.signIn(record, redirectURI: redirect, browser: browser) == .open { record.open = true }
             _ = try await service.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
                                           connection: record)
-            return await service.icon(for: record)
+            return (await service.icon(for: record), record.open == true)
         }
         providers.onError = { [weak self] id, message in self?.problems[id] = message }
         synchronize()
         Task { await deleteRemovedSignIns() }
-        let ids = registry.connections.map(\.id)
+        let saved = registry.connections
         Task { [weak self] in
-            for id in ids where await service.hasCredentials(id) { self?.signedIn.insert(id) }
+            for connection in saved where await Self.isReady(connection, service: service) { self?.signedIn.insert(connection.id) }
         }
+    }
+
+    /// Whether it answers without anything more: an open server, or one signed in.
+    private static func isReady(_ connection: ToolConnection, service: ToolConnectionService) async -> Bool {
+        if connection.open == true { return true }
+        return await service.hasCredentials(connection.id)
     }
 
     /// The user's connections as their devices see them.
@@ -81,18 +89,26 @@ import NoodleMCP
         Task {
             defer { signingIn.remove(id) }
             do {
-                let icon = try await signInFlow(record, redirect) { [weak self] url in
+                let (icon, open) = try await signInFlow(record, redirect) { [weak self] url in
                     guard let self else { throw LinkError("Noodle Hub is stopping.") }
                     return try await self.page(url, for: id, show: show)
                 }
                 signedIn.insert(id)
-                if let icon, var current = registry.connections.first(where: { $0.id == id }), current.iconData != icon {
-                    current.iconData = icon
-                    try? add(current, for: user)
+                if var current = registry.connections.first(where: { $0.id == id }) {
+                    let found = current
+                    if let icon { current.iconData = icon }
+                    if open { current.open = true }
+                    if current != found { try? add(current, for: user) }
                 }
             } catch {
                 signedIn.remove(id)
                 problems[id] = ToolConnectionProviders.safeError(error)
+                // An open server that now asks for a sign-in is signed in to from now on.
+                if case .signInRequired? = error as? ToolConnectionServiceError,
+                   var current = registry.connections.first(where: { $0.id == id }), current.open == true {
+                    current.open = nil
+                    try? add(current, for: user)
+                }
             }
             onSignInEnded?(user.id)
         }
@@ -148,7 +164,7 @@ import NoodleMCP
         registry = saved
         Task { [weak self, service] in
             var signedIn: Set<UUID> = []
-            for connection in saved.connections where await service.hasCredentials(connection.id) { signedIn.insert(connection.id) }
+            for connection in saved.connections where await Self.isReady(connection, service: service) { signedIn.insert(connection.id) }
             self?.signedIn = signedIn
         }
     }

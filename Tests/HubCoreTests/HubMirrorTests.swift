@@ -892,7 +892,7 @@ import XCTest
         let notes = try await mirror.saveConnection(LinkConnectionDraft(name: "Notes", endpoint: URL(string: "https://example.com/mcp")!))
         f.hub.connections.signInFlow = { _, _, browser in
             _ = try await browser(page)
-            return nil
+            return (nil, false)
         }
         var opened: [URL] = []
         mirror.onSignInPage = { _, url in

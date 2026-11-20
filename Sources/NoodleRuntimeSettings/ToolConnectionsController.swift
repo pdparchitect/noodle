@@ -104,10 +104,10 @@ public final class ToolConnectionsController {
         }
     }
     /// Reads which connections are signed in, after something besides Settings signed one in or out.
-    /// One the app's adapter answers without credentials is always ready.
+    /// One the app's adapter answers without credentials, or an open server, is always ready.
     public func readSignIns() async {
         for connection in registry.connections {
-            let open = connection.adapter != nil && !connection.keepsSecret
+            let open = (connection.adapter != nil && !connection.keepsSecret) || connection.open == true
             let signedIn = await service.hasCredentials(connection.id)
             if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
         }
@@ -270,9 +270,10 @@ public final class ToolConnectionsController {
     }
     /// Signs the connection in through the browser, or through AWS IAM Identity Center with a code the person
     /// approves there, or for one with a token or a client ID and secret keeps `secret` when one is given; either way
-    /// it then lists the connection's tools to show it works.
+    /// it then lists the connection's tools to show it works. A server found to need no sign-in is kept as open.
     public func connect(_ record: ToolConnection, secret: ToolConnectionSecret? = nil) {
         guard signingIn == nil else { return }
+        var record = record
         let signsIn = ToolConnectionService.signsInThroughBrowser(record)
         let withCode = ToolConnectionService.signsInWithCode(record)
         if signsIn && !withCode { browser.captureReturnWindow() }
@@ -303,11 +304,12 @@ public final class ToolConnectionsController {
                     }
                 } else {
                     let redirect = Self.redirectURI(for: record.endpoint)
-                    try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
+                    let result = try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
                         await self?.setSignInStage(stage)
                     }) { [browser] url in
                         try await browser.authorize(url: url, callbackURL: redirect)
                     }
+                    if result == .open { record.open = true }
                 }
                 try Task.checkCancellation()
                 signInStage = "Checking available tools…"
@@ -316,10 +318,21 @@ public final class ToolConnectionsController {
                 let icon = await service.icon(for: record)
                 guard var current = registry.connections.first(where: { $0.id == record.id }) else { return }
                 connected.insert(record.id)
-                if let icon { current.iconData = icon; try save(current) }
+                let found = current
+                if let icon { current.iconData = icon }
+                if record.open == true { current.open = true }
+                if current != found { try save(current) }
                 else { try synchronize() }
             } catch is CancellationError {
                 errors[record.id] = "Sign-in cancelled."
+            } catch ToolConnectionServiceError.signInRequired where record.open == true {
+                // No longer open: it is signed in to from now on.
+                connected.remove(record.id)
+                if var current = registry.connections.first(where: { $0.id == record.id }) {
+                    current.open = nil
+                    try? save(current)
+                    errors[record.id] = "This server now asks for a sign-in. Connect again to sign in."
+                }
             } catch {
                 if registry.connections.contains(where: { $0.id == record.id }) {
                     errors[record.id] = Self.safeError(error)

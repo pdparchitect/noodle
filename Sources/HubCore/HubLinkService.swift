@@ -791,8 +791,12 @@ import os
             }
         case .saveConnection(let draft):
             let user = try user(key)
-            let record = try ToolConnection(id: draft.id, name: draft.name, endpoint: draft.endpoint,
+            var record = try ToolConnection(id: draft.id, name: draft.name, endpoint: draft.endpoint,
                                                  description: draft.description, instructions: draft.instructions)
+            // A server found open stays so while it is at the same address.
+            if let saved = try hubConnections().connections(for: user).first(where: { $0.id == draft.id }), saved.endpoint == record.endpoint {
+                record.open = saved.open
+            }
             try hubConnections().add(record, for: user)
             push(.connectionsChanged, to: user.id)
             return .connection(try hubConnections().link(for: user).first { $0.id == draft.id } ?? {

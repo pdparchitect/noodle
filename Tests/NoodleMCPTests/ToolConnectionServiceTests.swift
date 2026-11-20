@@ -122,6 +122,8 @@ private final class FixtureState: @unchecked Sendable {
     var resourceIdentifier = "https://service.example/mcp"
     var pathMetadataMissing = false
     var protectedResourceMissing = false
+    /// Whether the MCP endpoint refuses a request without authorization, as the guarded transport reports it.
+    var mcpNeedsAuthorization = false
     var registrationMissing = false
     var metadataDocumentClients = false
     var tokenRedirects: [String] = []
@@ -193,6 +195,7 @@ private final class FixtureState: @unchecked Sendable {
             case "/mcp":
                 queries[request.url!.path, default: []].append(request.url!.query ?? "")
                 mcpHeaders.append(request.allHTTPHeaderFields ?? [:])
+                if mcpNeedsAuthorization, request.value(forHTTPHeaderField: "Authorization") == nil { throw MCPHTTPError(status: 401) }
                 let object = try JSONSerialization.jsonObject(with: Self.body(request)) as! [String: Any]
                 guard let id = object["id"] else { return (202, [:]) }
                 let result: [String: Any]
@@ -1092,6 +1095,65 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertTrue(MCPOAuth.sameIssuer("https://service.example/tenant/", as: URL(string: "https://service.example/tenant")!))
         XCTAssertFalse(MCPOAuth.sameIssuer(nil, as: URL(string: "https://service.example")!))
     }
+    /// A server that publishes no way to sign in and answers without one is open: connecting it opens no browser and
+    /// registers nothing, and kept as open it needs nothing from the person and is called without authorization.
+    func testAnOpenServerConnectsWithoutSigningIn() async throws {
+        FixtureProtocol.state.protectedResourceMissing = true
+        let vault = TestVault()
+        let client = service(vault: vault)
+        var record = try ToolConnection(name: "Open", endpoint: endpoint)
+        let result = try await client.signIn(record, redirectURI: redirect) { _ in
+            XCTFail("An open server opened the browser")
+            throw CancellationError()
+        }
+        XCTAssertEqual(result, .open)
+        XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+        XCTAssertNil(vault.load(record.id))
+
+        record.open = true
+        XCTAssertTrue(ToolConnectionService.needsNoSignIn(record))
+        XCTAssertFalse(ToolConnectionService.signsInThroughBrowser(record))
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "first",
+                                                      arguments: Data("{}".utf8)), connection: record)
+        XCTAssertEqual(FixtureProtocol.state.calls, 1)
+        XCTAssertFalse(FixtureProtocol.state.mcpHeaders.isEmpty)
+        XCTAssertTrue(FixtureProtocol.state.mcpHeaders.allSatisfy { $0["Authorization"] == nil }, "\(FixtureProtocol.state.mcpHeaders)")
+    }
+
+    /// One that publishes no way to sign in but refuses requests without one is not taken for open; and an open one
+    /// that starts refusing them has to be signed in to.
+    func testAServerThatRefusesRequestsWithoutASignInIsNotOpen() async throws {
+        FixtureProtocol.state.protectedResourceMissing = true
+        FixtureProtocol.state.mcpNeedsAuthorization = true
+        let client = service(vault: TestVault())
+        var record = try ToolConnection(name: "Closed", endpoint: endpoint)
+        do {
+            try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
+            XCTFail("A server refusing requests was taken for open")
+        } catch {
+            guard case .invalidMetadata? = error as? ToolConnectionServiceError else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(FixtureProtocol.state.registrations, 0)
+
+        record.open = true
+        do {
+            _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil),
+                                         connection: record)
+            XCTFail("A refused request succeeded")
+        } catch {
+            guard case .signInRequired? = error as? ToolConnectionServiceError else { return XCTFail("\(error)") }
+        }
+    }
+
+    /// A server that publishes how to sign in is signed in to, even if it would answer without.
+    func testAServerThatPublishesASignInIsNeverTakenForOpen() async throws {
+        let client = service(vault: TestVault())
+        let record = try ToolConnection(name: "Signed", endpoint: endpoint)
+        let result = try await client.signIn(record, redirectURI: redirect, browser: Self.callback)
+        XCTAssertEqual(result, .signedIn)
+        XCTAssertEqual(FixtureProtocol.state.registrations, 1)
+    }
+
     func testCatalogueAuthorizationServerStandsInForMissingResourceMetadata() async throws {
         FixtureProtocol.state.protectedResourceMissing = true
         let oauth = MCPOAuth(session: URLSession(configuration: configuration()))

@@ -363,12 +363,14 @@ public actor ToolConnectionService {
     private nonisolated static func accountClientRedirect(_ bundleIdentifier: String) -> URL? {
         URL(string: bundleIdentifier + ":/oauth2callback")
     }
-    /// Whether the connection signs in through the browser: an MCP server's that keeps no key, or one the app's
-    /// adapter answers whose catalogue entry names how to sign in, as Google's do.
+    /// Whether the connection signs in through the browser: an MCP server's that keeps no key and is not open, or one
+    /// the app's adapter answers whose catalogue entry names how to sign in, as Google's do.
     public nonisolated static func signsInThroughBrowser(_ connection: ToolConnection) -> Bool {
-        !connection.keepsSecret && (connection.adapter == nil || connectionConfiguration(for: connection)?.oauth != nil)
+        !connection.keepsSecret && connection.open != true
+            && (connection.adapter == nil || connectionConfiguration(for: connection)?.oauth != nil)
     }
-    /// Whether it needs nothing from the person: the app's own adapter answers it without a key or a sign-in.
+    /// Whether it needs nothing from the person: an open MCP server, or the app's own adapter answering it without a
+    /// key or a sign-in.
     public nonisolated static func needsNoSignIn(_ connection: ToolConnection) -> Bool {
         !connection.keepsSecret && !signsInThroughBrowser(connection)
     }
@@ -412,9 +414,18 @@ public actor ToolConnectionService {
     private func rememberIcons(_ icons: [Icon], id: UUID, epoch: Int) {
         if epochs[id, default: 0] == epoch { serverIcons[id] = icons }
     }
+    /// What connecting through the browser came to.
+    public enum SignIn: Equatable, Sendable {
+        case signedIn
+        /// The server publishes no way to sign in and answers without one: nothing was signed in, and the connection
+        /// is to be kept as open.
+        case open
+    }
+
+    @discardableResult
     public func signIn(_ connection: ToolConnection, redirectURI: URL,
                        progress: @Sendable (String) async -> Void = { _ in },
-                       browser: @Sendable (URL) async throws -> URL) async throws {
+                       browser: @Sendable (URL) async throws -> URL) async throws -> SignIn {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
         guard Self.signsInThroughBrowser(connection) else {
             throw ToolConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
@@ -451,10 +462,19 @@ public actor ToolConnectionService {
                 stored = nil
             }
             if stored == nil {
-                stored = try await oauth.discoverAndRegister(endpoint: connection.endpoint, redirect: redirectURI,
-                                                             clientName: "\(ProductIdentity.current.name) — " + connection.name,
-                                                             authorizationServer: Self.authorizationServer(for: connection.endpoint),
-                                                             progress: progress)
+                let server = Self.authorizationServer(for: connection.endpoint)
+                do {
+                    stored = try await oauth.discoverAndRegister(endpoint: connection.endpoint, redirect: redirectURI,
+                                                                 clientName: "\(ProductIdentity.current.name) — " + connection.name,
+                                                                 authorizationServer: server, progress: progress)
+                } catch ToolConnectionServiceError.invalidMetadata where configuration == nil && server == nil && connection.adapter == nil {
+                    // One that publishes no way to sign in may need none.
+                    try checkActive(connection.id, epoch: epoch)
+                    guard await oauth.protectedResource(for: connection.endpoint) == nil else { throw ToolConnectionServiceError.invalidMetadata }
+                    await progress("Checking access…")
+                    try await checkOpen(connection, epoch: epoch)
+                    return .open
+                }
                 try checkActive(connection.id, epoch: epoch)
                 // Persist client ID BEFORE authorization; never re-register on app restart.
                 try credentials.save(stored!, id: connection.id)
@@ -469,6 +489,7 @@ public actor ToolConnectionService {
             }
             try checkActive(connection.id, epoch: epoch)
             try credentials.save(authorized, id: connection.id)
+            return .signedIn
         } catch {
             // Preserve cancellation/revocation even when URLSession reports its own error.
             try checkActive(connection.id, epoch: epoch)
@@ -523,6 +544,19 @@ public actor ToolConnectionService {
         } onCancel: {
             timeout.cancel()
             if completion.finish(.failure(CancellationError())) { task.cancel() }
+        }
+    }
+
+    /// Lists the server's tools without authorization, which only an open server allows. One that refuses is not
+    /// open, and since it publishes no way to sign in either, its metadata is what is wrong.
+    private func checkOpen(_ connection: ToolConnection, epoch: Int) async throws {
+        var open = connection
+        open.open = true
+        let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: .tools, tool: nil, arguments: nil)
+        do {
+            _ = try await execute(request, connection: open, epoch: epoch, deadline: Date().addingTimeInterval(60)) { true }
+        } catch ToolConnectionServiceError.signInRequired, ToolConnectionServiceError.network(403) {
+            throw ToolConnectionServiceError.invalidMetadata
         }
     }
 
@@ -641,12 +675,13 @@ public actor ToolConnectionService {
         if let name = connection.adapter {
             return try await adapt(request, adapter: name, connection: connection, epoch: epoch, deadline: deadline, authorized: authorized)
         }
-        let authorization = try await authorization(for: connection, epoch: epoch, deadline: deadline)
+        // An open server is sent no authorization at all.
+        let authorization = connection.open == true ? nil : try await authorization(for: connection, epoch: epoch, deadline: deadline)
         let configuration = httpConfiguration()
         let transport = HTTPClientTransport(endpoint: connection.endpoint, configuration: configuration, streaming: false,
             requestModifier: { original in
                 var request = original
-                authorization.apply(to: &request)
+                authorization?.apply(to: &request)
                 return request
             })
         // A fresh protocol session per operation avoids leaking server-side session
@@ -732,7 +767,11 @@ public actor ToolConnectionService {
             if case MCPError.transportError(let cause) = error { underlying = cause }
             else { underlying = error }
             let http = underlying as NSError
-            if http.domain == MCPHTTPError.errorDomain { throw ToolConnectionServiceError.network(http.code) }
+            if http.domain == MCPHTTPError.errorDomain {
+                // An open server that now refuses one without authorization has to be signed in to after all.
+                if http.code == 401, connection.open == true { throw ToolConnectionServiceError.signInRequired }
+                throw ToolConnectionServiceError.network(http.code)
+            }
             let message: String
             if !initialized { message = "The MCP server could not start a connection. Try connecting again." }
             else if request.action == .call {

@@ -65,11 +65,15 @@ import XCTest
         // One the app's own adapter answers without a secret is always ready.
         var open = try f.account(name: "Open")
         open.adapter = "fixture"
-        for connection in [browser, token, open] { try f.controller.save(connection) }
+        // So is an MCP server that answers without a sign-in.
+        var server = try f.account(name: "Open Server")
+        server.open = true
+        for connection in [browser, token, open, server] { try f.controller.save(connection) }
         await f.controller.readSignIns()
         XCTAssertEqual(f.controller.status(of: browser), .signInRequired)
         XCTAssertEqual(f.controller.status(of: token), .tokenRequired)
         XCTAssertEqual(f.controller.status(of: open), .connected)
+        XCTAssertEqual(f.controller.status(of: server), .connected)
         XCTAssertTrue(f.controller.status(of: browser).needsAttention)
         XCTAssertTrue(f.controller.status(of: token).needsAttention)
         XCTAssertFalse(f.controller.status(of: open).needsAttention)
@@ -83,12 +87,16 @@ import XCTest
         token.tokenHeader = "Authorization"
         var open = try f.account(name: "Open")
         open.adapter = "fixture"
-        for connection in [browser, token, open] { try f.controller.save(connection) }
+        var server = try f.account(name: "Open Server")
+        server.open = true
+        for connection in [browser, token, open, server] { try f.controller.save(connection) }
         await f.controller.readSignIns()
         XCTAssertEqual(f.controller.signInAction(for: browser), .connect("Connect"))
         XCTAssertEqual(f.controller.signInAction(for: token), .edit("Enter Token…"))
         XCTAssertNil(f.controller.signInAction(for: open))
         XCTAssertFalse(f.controller.offersSignOut(open))
+        XCTAssertNil(f.controller.signInAction(for: server))
+        XCTAssertFalse(f.controller.offersSignOut(server))
 
         // No adapter answers it here, so its check fails as a service that cannot be reached does.
         f.controller.connect(open)

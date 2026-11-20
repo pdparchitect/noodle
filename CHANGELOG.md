@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- An MCP server that needs no sign-in, added by its address, connects and works: Connect finds it answers without one, instead of failing on the sign-in details it does not publish, and it then needs nothing more, as tools that need no key do.
+
 ## [0.91.0] - 2026-11-19
 
 ### Added

@@ -67,7 +67,7 @@ import XCTest
             XCTAssertEqual(redirectURI, redirect)
             let returned = try await browser(page)
             XCTAssertEqual(returned, callback)
-            return nil
+            return (nil, false)
         }
         let events = try await f.device.subscribe()
         _ = try await f.device.request(.signIn(connectionID: saved.id, redirect: redirect))
@@ -87,6 +87,31 @@ import XCTest
             if signedIn { break }
         }
         XCTAssertTrue(signedIn)
+    }
+
+    /// A server that needs no sign-in is kept as open on the Hub, and stays open, and signed in, when its device saves
+    /// it again at the same address and when the Hub reads its connections again.
+    func testAnOpenServerIsKeptOpenOnTheHub() async throws {
+        let f = try await fixture()
+        guard case .connection(let saved) = try await f.device.request(.saveConnection(draft)) else { return XCTFail("not saved") }
+        f.hub.connections.signInFlow = { _, _, _ in (nil, true) }
+        try f.hub.connections.signIn(saved.id, redirect: URL(string: "noodle://mcp/oauth/callback")!, for: f.ada) { _ in false }
+        for _ in 0..<100 where f.hub.connections.connections(for: f.ada).first?.open != true {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(f.hub.connections.connections(for: f.ada).first?.open, true)
+        XCTAssertEqual(f.hub.connections.link(for: f.ada).first?.signedIn, true)
+
+        _ = try await f.device.request(.saveConnection(saved.draft))
+        XCTAssertEqual(f.hub.connections.connections(for: f.ada).first?.open, true, "Saved again at the same address")
+        try f.hub.connections.reloadAssignments()
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(f.hub.connections.link(for: f.ada).first?.signedIn, true, "Read again")
+
+        let moved = LinkConnectionDraft(id: saved.id, name: draft.name, endpoint: URL(string: "https://elsewhere.example.com/mcp")!,
+                                        description: draft.description)
+        _ = try await f.device.request(.saveConnection(moved))
+        XCTAssertNil(f.hub.connections.connections(for: f.ada).first?.open, "At a new address it is found out again")
     }
 
     func testADeviceListsTheToolsTheHubOffers() async throws {
