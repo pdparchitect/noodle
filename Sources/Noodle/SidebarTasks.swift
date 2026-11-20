@@ -282,7 +282,9 @@ private struct ToolTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contextMenu { Button("Show Activity") { controller.showActivity(connection) } }
+        // Its own menu rather than .contextMenu: in a sidebar list the whole grid is one row, and the list outlines that
+        // row for a menu asked of any icon in it.
+        .overlay { RightClickMenu(items: [("Show Activity", { controller.showActivity(connection) })]) }
         .help(connection.name)
         .accessibilityLabel(connection.name)
         .accessibilityValue(status.needsAttention ? "Needs attention" : "")
@@ -484,5 +486,35 @@ struct SidebarSearchResults<Row: View, RowMenu: View>: View {
             }
         }
         .listStyle(.sidebar)
+    }
+}
+
+/// A menu for right clicks only, opened by its own view so a list around it does not outline the row it sits in;
+/// every other click passes through.
+private struct RightClickMenu: NSViewRepresentable {
+    let items: [(title: String, action: () -> Void)]
+
+    func makeNSView(context: Context) -> Host { Host() }
+    func updateNSView(_ host: Host, context: Context) { host.items = items }
+
+    final class Host: NSView {
+        var items: [(title: String, action: () -> Void)] = []
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSApp.currentEvent?.type == .rightMouseDown ? super.hitTest(point) : nil
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            let menu = NSMenu()
+            for (index, item) in items.enumerated() {
+                let entry = NSMenuItem(title: item.title, action: #selector(choose(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.tag = index
+                menu.addItem(entry)
+            }
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        }
+
+        @objc private func choose(_ sender: NSMenuItem) { items[sender.tag].action() }
     }
 }
