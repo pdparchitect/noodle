@@ -30,6 +30,11 @@ import Observation
     @ObservationIgnored private let deletions: DeletionJournal<UUID>
     @ObservationIgnored private let watcher: AlertWatcher
     @ObservationIgnored private var watching: Task<Void, Never>?
+    /// While watching, how bots are woken: for something new on a watched connection, or when one is signed in again.
+    @ObservationIgnored private var wake: (@MainActor (UUID, String) -> Void)?
+    /// The connections that failed since they last worked, whose bots are told when one is signed in again. Kept apart
+    /// from `problems`, which a sign-in clears as it starts.
+    @ObservationIgnored private var down: Set<UUID> = []
     @ObservationIgnored private var providers: ToolConnectionProviders?
     @ObservationIgnored private var started = false
 
@@ -169,6 +174,7 @@ import Observation
         for record in records {
             ready.remove(record.id)
             problems[record.id] = nil
+            down.remove(record.id)
         }
         let service = service
         Task {
@@ -228,13 +234,28 @@ import Observation
     /// need no sign-in, as `record.open` says.
     public func signedIn(_ record: ToolConnection, icon: Data?) throws {
         guard var current = registry.connections.first(where: { $0.id == record.id }) else { return }
-        ready.insert(record.id)
+        let failed = down.remove(record.id) != nil
+        let recovered = ready.insert(record.id).inserted || failed
         problems[record.id] = nil
         let found = current
         if let icon { current.iconData = icon }
         if record.open == true { current.open = true }
         if current != found { try save(current) }
         recordActivity(record.id, record.open == true ? "Connected, with no sign-in" : "Signed in")
+        if recovered { tellBots(current) }
+    }
+
+    /// Wakes the bots the connection is assigned to, saying it is working: nothing else tells a bot that found it
+    /// failed, or signed out, and is waiting on it.
+    private func tellBots(_ connection: ToolConnection) {
+        guard let wake else { return }
+        let names = bots()
+        let told = names.keys.filter { bot in registry.assigned(to: bot).contains { $0.id == connection.id } }
+            .sorted { $0.uuidString < $1.uuidString }
+        guard !told.isEmpty else { return }
+        let note = "The \(connection.name) tool connection is working: the person just signed it in. Its skill is .agents/skills/\(connection.skillName)/SKILL.md. If you were waiting on it, retry what failed and carry on; otherwise finish silently."
+        for bot in told { wake(bot, note) }
+        recordActivity(connection.id, "Told \(told.compactMap { names[$0] }.formatted(.list(type: .and))) it is working")
     }
 
     /// A sign-in that failed, saying why in words safe to show. An open server that now asks for a sign-in is signed in
@@ -278,6 +299,7 @@ import Observation
     public func watch(wake: @escaping @MainActor (UUID, String) -> Void) {
         guard watching == nil else { return }
         isWatching = true
+        self.wake = wake
         watching = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.checkWatched(wake: wake)
@@ -289,6 +311,7 @@ import Observation
     public func stopWatching() {
         watching?.cancel()
         watching = nil
+        wake = nil
         isWatching = false
     }
 
@@ -339,6 +362,7 @@ import Observation
     /// connection fails, so a failure the person sees always has its line.
     private func fail(_ id: UUID, _ title: String, because reason: String, detailed: Bool = true) {
         problems[id] = reason
+        down.insert(id)
         recordActivity(id, title, detail: detailed ? reason : "")
     }
 
@@ -350,6 +374,7 @@ import Observation
     /// A bot's request, named by the bot and what it asked for. Listing tools comes before every call, so only a failed
     /// listing is worth a line.
     private func record(_ call: ToolConnectionCall) {
+        if call.failure == nil { down.remove(call.connection) }
         let bot = bots()[call.agent] ?? "Someone removed since"
         let asked: (done: String, failed: String)? = switch call.action {
         case .call: ("called \(call.tool ?? "a tool")", "\(call.tool ?? "a tool") failed")

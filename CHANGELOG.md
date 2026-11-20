@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Signing a tool in again after it failed, or after it was signed out, wakes the bots it is assigned to and tells them it is working, so one waiting on it retries and carries on; nothing told them before. Its activity says who was told.
 - An MCP server that needs no sign-in, added by its address, connects and works: Connect finds it answers without one, instead of failing on the sign-in details it does not publish, and it then needs nothing more, as tools that need no key do.
 
 ## [0.91.0] - 2026-11-19

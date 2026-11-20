@@ -359,6 +359,28 @@ import XCTest
         XCTAssertEqual(log.entries.count, 2, "Listing tools before every call is not activity: \(log.text)")
     }
 
+    /// The bots a connection is assigned to are told once it is signed in again after failing, so one waiting on it can
+    /// retry and carry on; a bot without it is left alone, and signing in while it works tells no one.
+    func testSigningInAfterAFailureWakesTheBotsItIsAssignedTo() async throws {
+        let f = try fixture(), account = try f.account()
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a, f.b])
+        var woken: [(UUID, String)] = []
+        f.controller.store.watch { woken.append(($0, $1)) }
+        addTeardownBlock { @MainActor in f.controller.stopWatching() }
+        let failed = try await f.exchange(ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName))
+        try await f.waitUntil { f.controller.errors[account.id] == failed.error }
+        try f.controller.store.signedIn(account, icon: nil)
+        XCTAssertEqual(woken.map(\.0), [f.a.id])
+        XCTAssertTrue(woken.first?.1.contains(account.name) == true, "\(woken)")
+        XCTAssertTrue(woken.first?.1.contains(".agents/skills/\(account.skillName)/SKILL.md") == true, "\(woken)")
+        XCTAssertTrue(f.controller.activity.log(for: account.id).text.contains("Told MCP A it is working"),
+                      f.controller.activity.log(for: account.id).text)
+        try f.controller.store.signedIn(account, icon: nil)
+        XCTAssertEqual(woken.count, 1, "Signing in while it works tells no one")
+    }
+
     /// A connection found without a sign-in when the app starts says so in its activity, once, so the sidebar's mark
     /// on it never opens an empty log.
     func testAConnectionWithoutASignInSaysSoInItsActivityOnce() async throws {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Signing a tool in again after it failed, or after it was signed out, wakes the agents it is assigned to and tells them it is working, so one waiting on it retries and carries on; nothing told them before. Its activity says who was told.
+
 ## [0.1.0] - 2026-11-20
 
 ### Added
