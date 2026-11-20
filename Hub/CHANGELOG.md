@@ -8,7 +8,7 @@
 
 ### Fixed
 
-- Signing a tool in again after it failed, or after it was signed out, wakes the bots it is assigned to and tells them it is working, so one waiting on it retries and carries on; nothing told them before. Its activity says who was told.
+- A tool that works again wakes the bots it is assigned to and tells them, so one waiting on it retries and carries on; nothing told them before. That is when it is signed in again after failing or being signed out, and when a failed tool comes back by itself: a call that works shows it, and every five minutes a failed tool is checked. Its failure mark clears, and its activity says it is working again and who was told.
 - Saved tools that cannot be read are no longer replaced when a tool is added or changed: the Hub refuses changes until the file is restored, as Noodle does.
 - An MCP server that needs no sign-in connects and works for your bots: signing it in finds it answers without one, instead of failing on the sign-in details it does not publish.
 

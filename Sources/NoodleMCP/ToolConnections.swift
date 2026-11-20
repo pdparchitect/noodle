@@ -32,8 +32,8 @@ import Observation
     @ObservationIgnored private var watching: Task<Void, Never>?
     /// While watching, how bots are woken: for something new on a watched connection, or when one is signed in again.
     @ObservationIgnored private var wake: (@MainActor (UUID, String) -> Void)?
-    /// The connections that failed since they last worked, whose bots are told when one is signed in again. Kept apart
-    /// from `problems`, which a sign-in clears as it starts.
+    /// The connections whose service failed a bot's request since they last worked: checked while watching, and their
+    /// bots told once one works again. Kept apart from `problems`, which a sign-in clears as it starts.
     @ObservationIgnored private var down: Set<UUID> = []
     @ObservationIgnored private var providers: ToolConnectionProviders?
     @ObservationIgnored private var started = false
@@ -46,7 +46,7 @@ import Observation
         didSet {
             providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
             providers?.onError = { [weak self] id, message in self?.fail(id, "Could not offer it to agents", because: message) }
-            providers?.onCall = { [weak self] in self?.record($0) }
+            providers?.onCall = { [weak self] in self?.record($0); self?.note($0) }
             providers?.appInstructions = { [weak self] in self?.instructions(for: $0) }
             synchronize()
         }
@@ -242,18 +242,17 @@ import Observation
         if record.open == true { current.open = true }
         if current != found { try save(current) }
         recordActivity(record.id, record.open == true ? "Connected, with no sign-in" : "Signed in")
-        if recovered { tellBots(current) }
+        if recovered, let wake { tellBots(current, "is working: the person just signed it in", wake: wake) }
     }
 
-    /// Wakes the bots the connection is assigned to, saying it is working: nothing else tells a bot that found it
-    /// failed, or signed out, and is waiting on it.
-    private func tellBots(_ connection: ToolConnection) {
-        guard let wake else { return }
+    /// Wakes the bots the connection is assigned to, except `sparing`, saying it is working: nothing else tells a bot
+    /// that found it failed, or signed out, and is waiting on it.
+    private func tellBots(_ connection: ToolConnection, _ news: String, sparing: UUID? = nil, wake: (UUID, String) -> Void) {
         let names = bots()
-        let told = names.keys.filter { bot in registry.assigned(to: bot).contains { $0.id == connection.id } }
+        let told = names.keys.filter { bot in bot != sparing && registry.assigned(to: bot).contains { $0.id == connection.id } }
             .sorted { $0.uuidString < $1.uuidString }
         guard !told.isEmpty else { return }
-        let note = "The \(connection.name) tool connection is working: the person just signed it in. Its skill is .agents/skills/\(connection.skillName)/SKILL.md. If you were waiting on it, retry what failed and carry on; otherwise finish silently."
+        let note = "The \(connection.name) tool connection \(news). Its skill is .agents/skills/\(connection.skillName)/SKILL.md. If you were waiting on it, retry what failed and carry on; otherwise finish silently."
         for bot in told { wake(bot, note) }
         recordActivity(connection.id, "Told \(told.compactMap { names[$0] }.formatted(.list(type: .and))) it is working")
     }
@@ -303,6 +302,7 @@ import Observation
         watching = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.checkWatched(wake: wake)
+                await self?.checkFailed(wake: wake)
                 try? await Task.sleep(for: AlertWatcher.interval)
             }
         }
@@ -356,13 +356,36 @@ import Observation
         }
     }
 
+    /// Lists the tools of each connection that failed and could work again by itself, being ready and assigned to a bot,
+    /// waking with `wake` the bots of one that now answers. One that still fails changes nothing.
+    public func checkFailed(wake: (UUID, String) -> Void) async {
+        guard isReadable else { return }
+        let bots = bots().keys
+        for id in down.sorted(by: { $0.uuidString < $1.uuidString }) where ready.contains(id) {
+            guard let connection = registry.connections.first(where: { $0.id == id }),
+                  bots.contains(where: { bot in registry.assigned(to: bot).contains { $0.id == id } }) else { continue }
+            let request = MCPBridgeRequest(session: "", connectionID: id, action: .tools, tool: nil, arguments: nil)
+            guard (try? await service.perform(request, connection: connection)) != nil, recovered(id) else { continue }
+            tellBots(connection, Self.workingAgain, wake: wake)
+        }
+    }
+
+    private static let workingAgain = "is working again after failing"
+
+    /// Whether a connection that failed works again, clearing its failure if so; its bots are told by the caller.
+    private func recovered(_ id: UUID) -> Bool {
+        guard down.remove(id) != nil else { return false }
+        problems[id] = nil
+        recordActivity(id, "Working again")
+        return true
+    }
+
     // MARK: Activity
 
     /// Marks the connection failed, saying why in words safe to show, and adds the failure to its activity: the one way a
     /// connection fails, so a failure the person sees always has its line.
     private func fail(_ id: UUID, _ title: String, because reason: String, detailed: Bool = true) {
         problems[id] = reason
-        down.insert(id)
         recordActivity(id, title, detail: detailed ? reason : "")
     }
 
@@ -374,7 +397,6 @@ import Observation
     /// A bot's request, named by the bot and what it asked for. Listing tools comes before every call, so only a failed
     /// listing is worth a line.
     private func record(_ call: ToolConnectionCall) {
-        if call.failure == nil { down.remove(call.connection) }
         let bot = bots()[call.agent] ?? "Someone removed since"
         let asked: (done: String, failed: String)? = switch call.action {
         case .call: ("called \(call.tool ?? "a tool")", "\(call.tool ?? "a tool") failed")
@@ -387,5 +409,15 @@ import Observation
         let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s)"
         if let failure = call.failure { fail(call.connection, "\(bot): \(asked.failed)" + took, because: failure) }
         else { recordActivity(call.connection, "\(bot) \(asked.done)" + took) }
+    }
+
+    /// Notes what a bot's request says about whether the connection works: a failure marks it down, and a call that
+    /// worked after one tells its other bots; the bot that made it already knows. A listing proves nothing about who
+    /// knows, since one is made for every bot's skill and before every call, so `checkFailed` notices those.
+    private func note(_ call: ToolConnectionCall) {
+        if call.failure != nil { down.insert(call.connection); return }
+        guard [.call, .resources, .readResource].contains(call.action), recovered(call.connection), let wake,
+              let connection = registry.connections.first(where: { $0.id == call.connection }) else { return }
+        tellBots(connection, Self.workingAgain, sparing: call.agent, wake: wake)
     }
 }

@@ -381,6 +381,66 @@ import XCTest
         XCTAssertEqual(woken.count, 1, "Signing in while it works tells no one")
     }
 
+    /// A tool that failed and comes back by itself is noticed by the next round of checks, which clears its failure and
+    /// wakes the bots it is assigned to once; a check that still fails changes nothing.
+    func testAFailedToolThatAnswersAgainIsNoticedAndItsBotsWoken() async throws {
+        let f = try fixture(), flaky = FlakyAdapter()
+        var account = try f.account()
+        account.adapter = "flaky"
+        await f.service.useAdapters(["flaky": flaky])
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a, f.b])
+        await f.controller.readSignIns()
+        flaky.failing = true
+        let failed = try await f.exchange(ToolBridgeRequest(session: try f.session(f.a).token, action: .call, provider: account.skillName,
+                                                            tool: "lookup", arguments: Data("{}".utf8)))
+        try await f.waitUntil { f.controller.errors[account.id] != nil && f.controller.errors[account.id] == failed.error }
+        let log = f.controller.activity.log(for: account.id)
+        let lines = log.entries.count
+        var woken: [(UUID, String)] = []
+        await f.controller.store.checkFailed { woken.append(($0, $1)) }
+        XCTAssertTrue(woken.isEmpty)
+        XCTAssertNotNil(f.controller.errors[account.id])
+        XCTAssertEqual(log.entries.count, lines, "A check that still fails adds nothing: \(log.text)")
+        flaky.failing = false
+        await f.controller.store.checkFailed { woken.append(($0, $1)) }
+        XCTAssertEqual(woken.map(\.0), [f.a.id])
+        XCTAssertTrue(woken.first?.1.contains("working again") == true, "\(woken)")
+        XCTAssertNil(f.controller.errors[account.id])
+        XCTAssertTrue(log.text.contains("Working again"), log.text)
+        XCTAssertTrue(log.text.contains("Told MCP A it is working"), log.text)
+        await f.controller.store.checkFailed { woken.append(($0, $1)) }
+        XCTAssertEqual(woken.count, 1, "A recovery is told once")
+    }
+
+    /// A bot whose own call works after the tool failed shows it came back: the other bots it is assigned to are told,
+    /// the bot that made the call already knows.
+    func testACallThatWorksAfterAFailureTellsTheOtherBots() async throws {
+        let f = try fixture(), flaky = FlakyAdapter()
+        var account = try f.account()
+        account.adapter = "flaky"
+        await f.service.useAdapters(["flaky": flaky])
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.controller.assign([account.id], to: f.b)
+        try f.start([f.a, f.b])
+        var woken: [(UUID, String)] = []
+        f.controller.store.watch { woken.append(($0, $1)) }
+        addTeardownBlock { @MainActor in f.controller.stopWatching() }
+        let session = try f.session(f.a).token
+        flaky.failing = true
+        let failed = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
+                                                            tool: "lookup", arguments: Data("{}".utf8)))
+        try await f.waitUntil { f.controller.errors[account.id] != nil && f.controller.errors[account.id] == failed.error }
+        flaky.failing = false
+        let answered = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
+                                                              tool: "lookup", arguments: Data("{}".utf8)))
+        XCTAssertNil(answered.error)
+        try await f.waitUntil { f.controller.errors[account.id] == nil }
+        XCTAssertEqual(woken.map(\.0), [f.b.id])
+    }
+
     /// A connection found without a sign-in when the app starts says so in its activity, once, so the sidebar's mark
     /// on it never opens an empty log.
     func testAConnectionWithoutASignInSaysSoInItsActivityOnce() async throws {
@@ -619,6 +679,21 @@ private struct ActivityAdapter: ToolConnectionAdapter {
     }
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         guard tool == "lookup" else { throw NSError(domain: "service", code: 403, userInfo: [NSLocalizedDescriptionKey: Self.secret]) }
+        return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
+    }
+}
+
+/// An app's adapter whose service fails while the test says so, and answers otherwise.
+private final class FlakyAdapter: ToolConnectionAdapter, @unchecked Sendable {
+    private let lock = NSLock()
+    private var down = false
+    var failing: Bool { get { lock.withLock { down } } set { lock.withLock { down = newValue } } }
+    func tools(for connection: ToolConnection) async throws -> Data {
+        if failing { throw URLError(.cannotConnectToHost) }
+        return Data(#"{"tools":[{"name":"lookup","inputSchema":{"type":"object"}}]}"#.utf8)
+    }
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+        if failing { throw URLError(.cannotConnectToHost) }
         return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
     }
 }
