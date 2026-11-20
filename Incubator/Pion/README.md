@@ -10,7 +10,7 @@ using the security tools you already have. You decide what changes.
 
 <a href="https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg"><img alt="Download Pion for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
 
-[Get started](#get-started) · [Features](#features) · [Tools](#tools) · [Changelog](CHANGELOG.md) · [License](LICENSE.md)
+[Website](https://websecurify.com/pion) · [Get started](#get-started) · [Features](#features) · [Tools](#tools) · [Changelog](CHANGELOG.md) · [License](LICENSE.md)
 
 </div>
 
@@ -139,4 +139,4 @@ under Apache 2.0.
 
 ## Project
 
-[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [Rook](https://github.com/pdparchitect/rook) · [@pdp on X](https://x.com/pdp)
+[Website](https://websecurify.com/pion) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [Rook](https://github.com/pdparchitect/rook) · [@pdp on X](https://x.com/pdp)
