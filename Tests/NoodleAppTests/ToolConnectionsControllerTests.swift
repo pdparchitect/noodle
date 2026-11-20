@@ -359,6 +359,19 @@ import XCTest
         XCTAssertEqual(log.entries.count, 2, "Listing tools before every call is not activity: \(log.text)")
     }
 
+    /// A connection found without a sign-in when the app starts says so in its activity, once, so the sidebar's mark
+    /// on it never opens an empty log.
+    func testAConnectionWithoutASignInSaysSoInItsActivityOnce() async throws {
+        let f = try fixture()
+        let account = try f.account()
+        try f.controller.save(account)
+        try f.start([f.a])
+        let log = f.controller.activity.log(for: account.id)
+        try await f.waitUntil { log.text.contains("Sign-in required") }
+        await f.controller.readSignIns()
+        XCTAssertEqual(log.entries.count, 1, "Read again, nothing has changed: \(log.text)")
+    }
+
     /// Any app watches a connection whose adapter has a feed, with nothing set up: the first check marks where watching
     /// starts, a later one wakes the bots it is assigned to for what is new, each check is in the connection's activity,
     /// and its skill says what the wake means. A lookup without a feed is never checked.

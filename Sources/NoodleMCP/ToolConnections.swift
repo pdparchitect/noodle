@@ -14,6 +14,8 @@ import Observation
     /// The connections that answer without anything more: signed in, an open server, or one the app's adapter answers
     /// without a secret.
     public private(set) var ready: Set<UUID> = []
+    /// The connections whose sign-in has been read since the app started, so one found without it is noted only once.
+    @ObservationIgnored private var signInsRead: Set<UUID> = []
     /// Why each connection last failed, in words safe to show, by connection.
     public private(set) var problems: [UUID: String] = [:]
     /// Whether the watched connections are being checked.
@@ -80,7 +82,16 @@ import Observation
         for connection in registry.connections {
             let open = (connection.adapter != nil && !connection.keepsSecret) || connection.open == true
             let signedIn = await service.hasCredentials(connection.id)
-            if open || signedIn { ready.insert(connection.id) } else { ready.remove(connection.id) }
+            if open || signedIn {
+                ready.insert(connection.id)
+            } else {
+                // Noted when first found, or when it is lost, so the mark the sidebar puts on it never opens an empty log.
+                if ready.remove(connection.id) != nil || !signInsRead.contains(connection.id) {
+                    recordActivity(connection.id, connection.usesToken ? "Token required"
+                                   : connection.clientCredentials != nil ? "Credentials required" : "Sign-in required")
+                }
+            }
+            signInsRead.insert(connection.id)
         }
         ready.formIntersection(registry.connections.map(\.id))
     }

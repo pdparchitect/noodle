@@ -9,7 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - `scripts/readme-shots.sh` photographs a scenario for an app's README over the app's own artwork, blurred, and writes the rounded, optimised images, so README screenshots are retaken the same way every time.
-- Right-click a tool in the sidebar and choose Show Activity to see what it has done since Noodle started: which bot called which of its tools, how long each call took and why any failed, and its sign-ins and sign-outs.
+- Right-click a tool in the sidebar and choose Show Activity to see what it has done since Noodle started: which bot called which of its tools, how long each call took and why any failed, its sign-ins and sign-outs, and a sign-in, token or credentials it is missing.
 
 ### Changed
 
