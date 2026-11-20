@@ -161,6 +161,8 @@ public struct MCPTrigger: Sendable {
 
     /// What one check of an account found.
     public enum Checked: Equatable, Sendable {
+        /// The account's first check, which only marks where watching starts, so what it raised before is not news.
+        case started
         case nothingNew
         /// Something new, in a few words; its agents were woken for it.
         case found(String)
@@ -231,8 +233,8 @@ public struct MCPTrigger: Sendable {
     /// Checks each account, signed in and assigned to `agents`, once, and wakes those agents with a note for any that has
     /// something new. A check that fails is tried again next time, from where the last one left off. What was seen of
     /// the accounts in `keeping` stays, such as one waiting to be signed in again, so it picks up where it stopped;
-    /// any other is forgotten. Says what each account checked found, or why it could not be checked; one not due yet,
-    /// or first watched from now, is left out.
+    /// any other is forgotten. Says what each account checked found, that it is first watched from now, or why it could
+    /// not be checked; one not due yet is left out.
     @discardableResult
     public func check(_ accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>, at now: Date = Date(),
                       wake: (UUID, String) -> Void) async -> [UUID: Checked] {
@@ -258,7 +260,8 @@ public struct MCPTrigger: Sendable {
                     for agent in agents { wake(agent, note) }
                     continue
                 }
-                guard let tool = watchedTool(for: connection), let since = watch.since(connection.id, at: now) else { continue }
+                guard let tool = watchedTool(for: connection) else { continue }
+                guard let since = watch.since(connection.id, at: now) else { checked[connection.id] = .started; continue }
                 let found = try await alerts(connection, since)
                 guard let news = watch.take(found, for: connection.id) else { checked[connection.id] = .nothingNew; continue }
                 checked[connection.id] = .found("\(news.count)\(news.capped ? "+" : "") new alert\(news.count == 1 && !news.capped ? "" : "s")")

@@ -29,6 +29,8 @@ import Observation
     @ObservationIgnored private let root: URL
     @ObservationIgnored private let deletions: DeletionJournal<UUID>
     @ObservationIgnored private let watcher: AlertWatcher
+    /// The watched connections whose activity says they are not checked, being assigned to no bot.
+    @ObservationIgnored private var toldUnassigned: Set<UUID> = []
     @ObservationIgnored private var watching: Task<Void, Never>?
     /// While watching, how bots are woken: for something new on a watched connection, or when one is signed in again.
     @ObservationIgnored private var wake: (@MainActor (UUID, String) -> Void)?
@@ -37,6 +39,8 @@ import Observation
     @ObservationIgnored private var down: Set<UUID> = []
     @ObservationIgnored private var providers: ToolConnectionProviders?
     @ObservationIgnored private var started = false
+    /// Reading which connections are ready when whoever keeps them starts, which the first round of checks waits for.
+    @ObservationIgnored private var startup: Task<Void, Never>?
 
     /// The bots these connections are kept for, by ID, with their names: those a watched connection wakes, and the
     /// names its activity gives them.
@@ -79,7 +83,7 @@ import Observation
         guard !started else { return }
         started = true
         // Finishes even if nothing else keeps these connections, so a sign-in left behind is never kept.
-        Task {
+        startup = Task {
             await deleteRemovedSignIns()
             await readSignIns()
         }
@@ -310,6 +314,8 @@ import Observation
         isWatching = true
         self.wake = wake
         watching = Task { [weak self] in
+            // Checked as soon as the app knows which are ready, not a round later for finding none ready yet.
+            await self?.startup?.value
             while !Task.isCancelled {
                 await self?.checkWatched(wake: wake)
                 await self?.checkFailed(wake: wake)
@@ -325,20 +331,21 @@ import Observation
         isWatching = false
     }
 
-    /// The watched connections that are ready and have not failed, with the bots each is assigned to; and every watched
-    /// connection assigned to a bot, whose checks pick up where they stopped once it is ready again.
-    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
-        guard isReadable else { return ([], []) }
+    /// The watched connections that are ready and have not failed, with the bots each is assigned to; every watched
+    /// connection assigned to a bot, whose checks pick up where they stopped once it is ready again; and those assigned
+    /// to none, which are never checked.
+    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>, unassigned: Set<UUID>) {
+        guard isReadable else { return ([], [], []) }
         let bots = bots().keys
-        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
+        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = [], unassigned: Set<UUID> = []
         for connection in registry.connections where Organisation.allows(Organisation.action(for: connection)) && watcher.watches(connection) {
             let holders = bots.filter { registry.assigned(to: $0).contains { $0.id == connection.id } }
                 .sorted { $0.uuidString < $1.uuidString }
-            guard !holders.isEmpty else { continue }
+            guard !holders.isEmpty else { unassigned.insert(connection.id); continue }
             keeping.insert(connection.id)
             if ready.contains(connection.id), problems[connection.id] == nil { accounts.append((connection, holders)) }
         }
-        return (accounts, keeping)
+        return (accounts, keeping, unassigned)
     }
 
     /// While watching, the connections checked each round: watched, assigned to a bot, ready and not failed.
@@ -347,15 +354,18 @@ import Observation
     }
 
     /// One round of checks, waking with `wake` the bots each connection with something new is assigned to, and adding
-    /// each check to its connection's activity.
+    /// each check to its connection's activity. A watched connection assigned to no bot says once that it is not checked.
     public func checkWatched(at now: Date = Date(), wake: (UUID, String) -> Void) async {
-        let (accounts, keeping) = watchedAccounts()
+        let (accounts, keeping, unassigned) = watchedAccounts()
+        for id in unassigned.subtracting(toldUnassigned) { recordActivity(id, "Not checked for alerts until it is assigned") }
+        toldUnassigned = unassigned
         guard !keeping.isEmpty else { return }
         let checked = await watcher.check(accounts, keeping: keeping, at: now, wake: wake)
         watchProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
         let names = bots()
         for (connection, holders) in accounts {
             switch checked[connection.id] {
+            case .started?: recordActivity(connection.id, "Watching for alerts from now on")
             case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new")
             case .found(let what)?:
                 let woke = holders.compactMap { names[$0] }.formatted(.list(type: .and))

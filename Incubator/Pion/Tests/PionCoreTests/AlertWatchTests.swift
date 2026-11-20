@@ -22,7 +22,8 @@ final class AlertWatchTests: XCTestCase {
         var woken: [(UUID, String)] = []
 
         var checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now) { woken.append(($0, $1)) }
-        XCTAssertTrue(checked.isEmpty && woken.isEmpty, "The first check only marks where watching starts")
+        XCTAssertEqual(checked, [defender.id: .started], "The first check only marks where watching starts")
+        XCTAssertTrue(woken.isEmpty)
         checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
         XCTAssertEqual(checked, [defender.id: .found("1 new alert")])
         XCTAssertEqual(woken.map(\.0), [lead, analyst])

@@ -524,6 +524,44 @@ import XCTest
         try await f.waitUntil { ((try? String(contentsOf: skill, encoding: .utf8)) ?? "").contains("<tool-alerts") }
     }
 
+    /// Watching that begins as the app starts checks its connections in its first round, once the app knows which are
+    /// signed in, rather than finding none ready and waiting a round; an account first watched says it is from now on.
+    func testTheFirstRoundAtLaunchChecksTheConnectionsOnceTheAppKnowsTheyAreReady() async throws {
+        let f = try fixture(), feed = FeedAdapter()
+        var account = try f.account()
+        account.adapter = "feed"
+        f.controller.serve(["feed": feed])
+        await f.service.useAdapters(["feed": feed])
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a])
+        f.controller.store.watch { _, _ in }
+        addTeardownBlock { @MainActor in f.controller.stopWatching() }
+        let log = f.controller.activity.log(for: account.id)
+        try await f.waitUntil { log.text.contains("Watching for alerts from now on") }
+    }
+
+    /// A watched connection no bot is assigned to is never checked, and says so in its activity once, until one is.
+    func testAWatchedConnectionNoBotIsAssignedToSaysOnceThatItIsNotChecked() async throws {
+        let f = try fixture(), feed = FeedAdapter()
+        var account = try f.account()
+        account.adapter = "feed"
+        f.controller.serve(["feed": feed])
+        await f.service.useAdapters(["feed": feed])
+        try f.controller.save(account)
+        try f.start([f.a])
+        await f.controller.readSignIns()
+        let now = Date(), log = f.controller.activity.log(for: account.id)
+        await f.controller.checkWatched(at: now) { _, _ in }
+        await f.controller.checkWatched(at: now.addingTimeInterval(300)) { _, _ in }
+        XCTAssertEqual(log.entries.count, 1, log.text)
+        XCTAssertTrue(log.text.contains("Not checked for alerts until it is assigned"), log.text)
+        try f.controller.assign([account.id], to: f.a)
+        await f.controller.checkWatched(at: now.addingTimeInterval(600)) { _, _ in }
+        XCTAssertTrue(log.text.contains("Watching for alerts from now on"), log.text)
+        XCTAssertEqual(feed.checks, 0)
+    }
+
     func testRevokedAssignmentAndOldSessionAreRejectedOnLaterScans() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)
