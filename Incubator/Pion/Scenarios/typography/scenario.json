@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "Typography",
-  "summary": "Messages of every shape, for checking how text is laid out: short replies, long prose, lists, Markdown, code, tables and a full report.",
+  "summary": "Messages of every shape, for checking how text is laid out: short replies, long prose, lists, Markdown, code, tables, a full report and links.",
   "clock": "14:00",
   "appearance": "dark",
   "champion": "Avery Lin",
@@ -258,6 +258,28 @@
           "text": "Read-only look at Platform Usage Spike, as asked. Nothing was changed.\n\nEVIDENCE\n- Dashboard 'Platform Usage' (platform-usage) draws on the Prometheus metric platform_usage_total, by type and user_id. I did not read the alert rule's own query.\n- In Prometheus, platform_usage_total is almost flat: about 0-1 events per hour across the last 24h.\n- Hourly Google mail ability calls (/api/auxiliary/skillset/ability/google/mail): a steady 5 per hour for each of the last 6 hours.\n\nINFERENCE (confidence: low to medium)\n- Usage is being logged in Loki but barely reaches the Prometheus metric.\n- It does not line up with the Google mail calls.\n\n| Source | Events, 24h | Trend |\n|---|---|---|\n| Prometheus | 5 | flat |\n| Loki | 9,840 | steady |\n\nNext: say the word and I'll read the alert rule itself."
         }
       ]
+    },
+    {
+      "key": "links",
+      "group": {
+        "name": "Links",
+        "members": [
+          "ada",
+          "ben"
+        ]
+      },
+      "messages": [
+        {
+          "at": "13:30",
+          "from": "user",
+          "text": "Enabling the budgets API failed:\npdp@cloudshell:~$ gcloud services enable billingbudgets.googleapis.com\nERROR: INVALID_ARGUMENT: Request contains an invalid argument."
+        },
+        {
+          "at": "13:31",
+          "from": "ada",
+          "text": "That error comes from the request, not the API. The flags are described at https://cloud.google.com/billing/docs/how-to/budgets."
+        }
+      ]
     }
   ],
   "present": {
@@ -349,6 +371,16 @@
     {
       "wait": 1.5,
       "capture": "08-report"
+    },
+    {
+      "wait": 0.5,
+      "present": {
+        "select": "links"
+      }
+    },
+    {
+      "wait": 1.5,
+      "capture": "09-links"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "Typography",
-  "summary": "Messages of every shape, for checking how text is laid out: short replies, long prose, lists, Markdown, code, tables and a full report.",
+  "summary": "Messages of every shape, for checking how text is laid out: short replies, long prose, lists, Markdown, code, tables, a full report and links.",
   "clock": "14:00",
   "appearance": "dark",
   "champion": "Dana Okafor",
@@ -106,6 +106,14 @@
         { "at": "13:00", "from": "user", "text": "Recon report please." },
         { "at": "13:05", "from": "ada", "text": "Read-only recon of shop.acme-staging.example, as asked. Nothing on the target was changed.\n\nEVIDENCE\n- /.git/HEAD returns 200, so the full source history is pullable.\n- config/secrets.php in history carries a live AWS key for deploy-ci; a single get-caller-identity call succeeded.\n- The same key lists the acme-staging-backups bucket; no object was read.\n\nINFERENCE (confidence: high)\n- An external attacker can reach the backups bucket through the leaked key alone.\n- Full impact (reading objects) is not yet demonstrated; I have held for your go-ahead.\n\n| Check | Result | Severity |\n|---|---|---|\n| Exposed .git | serving | high |\n| Leaked AWS key | live | critical |\n\nNext: say the word and I'll pull one file as proof." }
       ]
+    },
+    {
+      "key": "links",
+      "group": { "name": "Links", "members": ["ada", "ben"] },
+      "messages": [
+        { "at": "13:30", "from": "user", "text": "The scan stopped here:\n$ curl -sI https://shop.acme-staging.example/.git/HEAD\nHTTP/2 403" },
+        { "at": "13:31", "from": "ada", "text": "A 403 means the path is now blocked. The fix is described at https://git-scm.com/docs/gitrepository-layout." }
+      ]
     }
   ],
   "present": {
@@ -128,6 +136,8 @@
     { "wait": 0.5, "present": { "select": "blocks" } },
     { "wait": 1.5, "capture": "07-blocks" },
     { "wait": 0.5, "present": { "select": "report" } },
-    { "wait": 1.5, "capture": "08-report" }
+    { "wait": 1.5, "capture": "08-report" },
+    { "wait": 0.5, "present": { "select": "links" } },
+    { "wait": 1.5, "capture": "09-links" }
   ]
 }

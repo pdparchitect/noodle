@@ -573,9 +573,10 @@ struct MessageRow: View {
     }
 
     /// Noodle's card for the first web page a message links to, unless that page is already attached.
+    /// It is a fixed width, so the column it sits in puts it on the author's side.
     @ViewBuilder private var linkPreview: some View {
         if let url = MessageLinkPreviews.url(for: message, attachments: model.files(of: message)) {
-            MessageLinkPreview(url: url, shouldLoad: true).frame(maxWidth: 420, alignment: .leading)
+            MessageLinkPreview(url: url, shouldLoad: true)
         }
     }
 
