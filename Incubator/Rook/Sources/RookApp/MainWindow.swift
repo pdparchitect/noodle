@@ -35,7 +35,7 @@ struct MainWindow: View {
         } detail: {
             if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
-                ConversationView(model: model, window: window, conversation: conversation)
+                ConversationView(model: model, window: window, conversation: conversation, showsGraphOverlay: false)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("No Agents", systemImage: "person.2")
@@ -51,6 +51,14 @@ struct MainWindow: View {
                 ContentUnavailableView("No Conversation Selected", systemImage: "shield.lefthalf.filled")
             }
         }
+        // The attack-graph popup floats over the whole window — sidebar, transcript and inspector — centred, not just the conversation column.
+        .overlay {
+            if window.showsGraph, let conversation = model.conversation(model.selection), let mission = model.mission(conversation.id) {
+                MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: window.showsGraph)
         // As in Noodle: the toolbar draws no band of its own over the content beneath it.
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .modifier(ConversationSheets(model: model, window: window, selection: $model.selection))

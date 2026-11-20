@@ -2,7 +2,7 @@
   "version": 1,
   "title": "Exposed .git to a live key, held for the champion",
   "summary": "On an authorized web pentest the team finds the target serving its .git directory, pulls a live AWS key from the source history, proves it works read-only, and stops before touching data until the champion says go.",
-  "clock": "14:16",
+  "clock": "14:40",
   "appearance": "dark",
   "champion": "Dana Okafor",
   "settings": {
@@ -107,6 +107,26 @@
           "at": "14:12",
           "from": "margot",
           "text": "Recorded as **critical** and I have held here. @Dana: the target leaks its full source through an exposed `.git`, and the history carries a live AWS key that already lists a backups bucket — we have not read a single object. Say the word and @Silver Kite pulls one file as proof; otherwise this is enough to report.\n\nFix: rotate `deploy-ci`, block `/.git/` at the web server, and scrub the key from history."
+        },
+        {
+          "at": "14:14",
+          "from": "user",
+          "text": "Good work holding. You have my go-ahead to map how far it reaches — read-only — but do not pull any customer data."
+        },
+        {
+          "at": "14:22",
+          "from": "ben",
+          "text": "Mapped it read-only. The key lists a nightly dump `db-backup.sql.gz` in the bucket, and it also opens an **SSM shell on web-01.internal**, the app server.\n\n```\naws ssm start-session --target i-0ab42f… web-01   # opens\nls ~/.ssh    # id_rsa\n```"
+        },
+        {
+          "at": "14:31",
+          "from": "ada",
+          "text": "Both roads lead to the **production database**. The dump carries prod-db creds for `svc-sql` on **db-07.internal**, and the `id_rsa` on web-01 reaches the same `svc-sql`. On db-07 sits the **customers** table. I have **not** touched it."
+        },
+        {
+          "at": "14:36",
+          "from": "margot",
+          "text": "Marked **proven**: from an exposed `.git` we have a demonstrated path to the production database and its customer data, by two independent routes. @Dana — we are holding at the door of `db-07`. Say the word and we pull one row of `customers` as proof; otherwise this is the report.\n\nOpen the **Graph** to see the whole path."
         }
       ],
       "mission": {
@@ -114,7 +134,7 @@
         "title": "External pentest: shop.acme-staging.example",
         "objective": "Find and demonstrate an external way in, within scope, and stop before anything that touches data without Dana's go-ahead.",
         "severity": "critical",
-        "status": "active",
+        "status": "proven",
         "source": "Authorized engagement — in scope",
         "opened": "13:40",
         "lead": "margot",
@@ -129,24 +149,73 @@
             },
             {
               "kind": "credential",
-              "name": "AKIA3X7Q…EXAMPLE",
-              "detail": "Live AWS access key found in git history, for deploy-ci",
+              "name": "AKIA3X7QW92EXAMPLE",
+              "detail": "Live AWS access key from the git history, for deploy-ci",
               "at": "13:57",
               "by": "ada"
             },
             {
               "kind": "account",
               "name": "deploy-ci",
-              "detail": "IAM user the leaked key authenticates as; account 604757830675",
+              "detail": "IAM user the key authenticates as; account 604757830675",
               "at": "14:06",
               "by": "ben"
             },
             {
               "kind": "service",
               "name": "acme-staging-backups",
-              "detail": "S3 bucket the key can list; no objects read",
+              "detail": "S3 bucket deploy-ci can list",
               "at": "14:06",
               "by": "ben"
+            },
+            {
+              "kind": "artifact",
+              "name": "db-backup.sql.gz",
+              "detail": "Nightly database dump sitting in the bucket; not downloaded",
+              "at": "14:22",
+              "by": "ben"
+            },
+            {
+              "kind": "host",
+              "name": "web-01.internal",
+              "detail": "App server; the key opens an SSM shell on it",
+              "at": "14:22",
+              "by": "ben"
+            },
+            {
+              "kind": "credential",
+              "name": "id_rsa",
+              "detail": "SSH private key found on web-01",
+              "at": "14:28",
+              "by": "ben"
+            },
+            {
+              "kind": "credential",
+              "name": "prod-db creds",
+              "detail": "Database password found inside the dump",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "kind": "account",
+              "name": "svc-sql",
+              "detail": "Database account both the dump creds and id_rsa reach, on db-07",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "kind": "host",
+              "name": "db-07.internal",
+              "detail": "Production database host; holds the customers table",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "kind": "artifact",
+              "name": "customers",
+              "detail": "Customers table on db-07 — not pulled, held for Dana",
+              "at": "14:33",
+              "by": "margot"
             }
           ],
           "evidence": [
@@ -160,7 +229,7 @@
             {
               "source": "git-dumper",
               "method": "git-dumper of /.git, then git log -p config/secrets.php",
-              "result": "Commit 4f1c9a2 adds AWS key AKIA3X7Q…EXAMPLE; 'removed' in a later commit but present in history.",
+              "result": "Commit 4f1c9a2 adds AWS key AKIA3X7QW92EXAMPLE; present in history.",
               "at": "13:57",
               "by": "ada"
             },
@@ -173,9 +242,16 @@
             },
             {
               "source": "AWS S3 (read-only)",
-              "method": "aws s3api list-objects-v2 --bucket acme-staging-backups --max-items 1",
-              "result": "Bucket lists; one key shown; no object downloaded.",
-              "at": "14:07",
+              "method": "aws s3api list-objects-v2 --bucket acme-staging-backups",
+              "result": "db-backup.sql.gz (nightly dump) present; no object downloaded.",
+              "at": "14:22",
+              "by": "ben"
+            },
+            {
+              "source": "AWS SSM + web-01 (read-only)",
+              "method": "ssm start-session to web-01, read ~/.ssh and the app config",
+              "result": "id_rsa on web-01; dump and app config both point svc-sql at db-07.internal.",
+              "at": "14:30",
               "by": "ben"
             }
           ],
@@ -194,7 +270,7 @@
               "by": "ada"
             },
             {
-              "claim": "The leaked history contains a live AWS key for deploy-ci that can already list a backups bucket.",
+              "claim": "The leaked history contains a live AWS key for deploy-ci that can list a backups bucket and open an SSM shell on the app server.",
               "evidence": [
                 "V-2",
                 "V-3",
@@ -202,24 +278,39 @@
               ],
               "confidence": "high",
               "entities": [
-                "AKIA3X7Q…EXAMPLE",
+                "AKIA3X7QW92EXAMPLE",
                 "deploy-ci",
-                "acme-staging-backups"
+                "web-01.internal"
               ],
-              "at": "14:08",
+              "at": "14:23",
+              "by": "margot"
+            },
+            {
+              "claim": "Two independent paths — the key's SSM access and the credentials in the backup dump — both reach the production database db-07, where the customers table sits.",
+              "evidence": [
+                "V-4",
+                "V-5"
+              ],
+              "confidence": "high",
+              "entities": [
+                "db-07.internal",
+                "svc-sql",
+                "customers"
+              ],
+              "at": "14:34",
               "by": "margot"
             }
           ],
           "links": [
             {
-              "from": "AKIA3X7Q…EXAMPLE",
+              "from": "AKIA3X7QW92EXAMPLE",
               "relation": "found-on",
               "to": "shop.acme-staging.example",
               "at": "13:57",
               "by": "ada"
             },
             {
-              "from": "AKIA3X7Q…EXAMPLE",
+              "from": "AKIA3X7QW92EXAMPLE",
               "relation": "unlocks",
               "to": "deploy-ci",
               "at": "14:06",
@@ -231,6 +322,62 @@
               "to": "acme-staging-backups",
               "at": "14:07",
               "by": "ben"
+            },
+            {
+              "from": "db-backup.sql.gz",
+              "relation": "found-in",
+              "to": "acme-staging-backups",
+              "at": "14:22",
+              "by": "ben"
+            },
+            {
+              "from": "deploy-ci",
+              "relation": "opened-ssm",
+              "to": "web-01.internal",
+              "at": "14:22",
+              "by": "ben"
+            },
+            {
+              "from": "id_rsa",
+              "relation": "found-on",
+              "to": "web-01.internal",
+              "at": "14:28",
+              "by": "ben"
+            },
+            {
+              "from": "prod-db creds",
+              "relation": "found-in",
+              "to": "db-backup.sql.gz",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "from": "prod-db creds",
+              "relation": "unlocks",
+              "to": "svc-sql",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "from": "id_rsa",
+              "relation": "unlocks",
+              "to": "svc-sql",
+              "at": "14:30",
+              "by": "ben"
+            },
+            {
+              "from": "svc-sql",
+              "relation": "on",
+              "to": "db-07.internal",
+              "at": "14:31",
+              "by": "ada"
+            },
+            {
+              "from": "customers",
+              "relation": "on",
+              "to": "db-07.internal",
+              "at": "14:33",
+              "by": "margot"
             }
           ]
         }

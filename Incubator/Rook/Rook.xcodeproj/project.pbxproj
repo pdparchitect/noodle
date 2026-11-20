@@ -150,6 +150,7 @@
 		EA9FB0AA8DF5A27F904271E9 /* AttachmentInlinePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3731E4405EBED05050A7A00C /* AttachmentInlinePreview.swift */; };
 		EC1E939E7F45DEF3F1B282D4 /* AppSymbol.svg in Resources */ = {isa = PBXBuildFile; fileRef = 8DB1C009AF8A189008940ECC /* AppSymbol.svg */; };
 		EFD1203FDC01B29AFAF47F07 /* ConversationAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0402987DC97F7762BE5B13 /* ConversationAnnotation.swift */; };
+		F09E721089F36EBAA5EE496A /* MissionGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80F54CCF5E856F90152EE6E /* MissionGraphView.swift */; };
 		F0F28F08EB5596BA76BFC724 /* MessageReceivedSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2D26F926CA53A19EE11838 /* MessageReceivedSound.swift */; };
 		F39BF5BABCFC528C9B149139 /* ScenarioNamesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5880C09EEF072A675909F889 /* ScenarioNamesTests.swift */; };
 		F4888C9DF65A1B147A2FABAC /* NotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9E0CA3E6B99A5A22FFCA6F /* NotificationTests.swift */; };
@@ -395,6 +396,7 @@
 		D53E0615856A4DA96AA9C621 /* WelcomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeTests.swift; sourceTree = "<group>"; };
 		D5BE8C4C9E404E0FA09F1F92 /* Backdrop.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Backdrop.metal; sourceTree = "<group>"; };
 		D6632D8A9F6280A59A1DC55B /* ToolIcons */ = {isa = PBXFileReference; path = ToolIcons; sourceTree = "<group>"; };
+		D80F54CCF5E856F90152EE6E /* MissionGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionGraphView.swift; sourceTree = "<group>"; };
 		DA5676018BFB6FD12D6D5FFA /* AttachmentDrag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentDrag.swift; sourceTree = "<group>"; };
 		DC9E0CA3E6B99A5A22FFCA6F /* NotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTests.swift; sourceTree = "<group>"; };
 		DCAAD5786BC16246085C0068 /* Rook */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Rook; path = .; sourceTree = "<group>"; };
@@ -592,6 +594,7 @@
 				D0F33EC48672E7C9E35EA4AF /* ConversationView.swift */,
 				1B2DEE60666B3ADA10E6CDDF /* MainWindow.swift */,
 				BC4CB79CDFCFB008A95D54F0 /* MessageBodyRenderer.swift */,
+				D80F54CCF5E856F90152EE6E /* MissionGraphView.swift */,
 				DED09F9CB324329E39E0C9E6 /* Rook.swift */,
 				4338572A34E735758C8E6E41 /* RookCalls.swift */,
 				747E9B3233B2C3BF3880C2B4 /* RookIntents.swift */,
@@ -1100,6 +1103,7 @@
 				1EF396E8C912EEE6AAA914A0 /* ConversationView.swift in Sources */,
 				A7D848F13A9CA8BD91137026 /* MainWindow.swift in Sources */,
 				A9BB3A0343BFBF36E66D5C4E /* MessageBodyRenderer.swift in Sources */,
+				F09E721089F36EBAA5EE496A /* MissionGraphView.swift in Sources */,
 				31C0716D50818B1D0EC2F5CB /* Rook.swift in Sources */,
 				601A13D90484B7D338257594 /* RookCalls.swift in Sources */,
 				2D8887BF4FF3D593A11706D8 /* RookIntents.swift in Sources */,

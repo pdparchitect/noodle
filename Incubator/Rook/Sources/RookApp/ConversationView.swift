@@ -60,6 +60,8 @@ struct ConversationView: View {
     let model: RookModel
     @Bindable var window: WindowState
     let conversation: BotConversation
+    /// The main window draws the attack-graph popup over the whole window itself; a floating conversation window draws its own.
+    var showsGraphOverlay = true
     @Environment(RookCalls.self) private var calls
     @Environment(RookSettingsHost.self) private var host
     @Environment(\.openSettings) private var openSettings
@@ -102,7 +104,17 @@ struct ConversationView: View {
                     .transition(.move(edge: .trailing))
             }
         }
+        // A floating conversation window draws the attack-graph popup itself; in the main window MainWindow draws it over the whole window.
+        .overlay {
+            if showsGraphOverlay, window.showsGraph, let mission {
+                MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
+                    .transition(.opacity)
+            }
+        }
         .animation(.snappy(duration: 0.25), value: window.showsInspector)
+        .animation(.snappy(duration: 0.2), value: window.showsGraph)
+        // Leaving the Mission closes the graph, so it never lingers over another conversation.
+        .onChange(of: conversation.id) { window.showsGraph = false }
         // As in Noodle: files dropped anywhere on the conversation wait in its message field.
         .conversationFileDrop(isEnabled: { mission?.isClosed != true }) { model.attachDropped($0, to: conversation.id) }
         // As in Noodle: a picture or file pasted with the message field out of focus waits there too.
@@ -241,6 +253,10 @@ struct ConversationView: View {
             }
             // Apart from the export menu, so each sits in its own glass.
             ToolbarSpacer(.fixed)
+            ToolbarItem {
+                Button { window.showsGraph.toggle() } label: { Label("Graph", systemImage: "point.3.connected.trianglepath.dotted") }
+                    .help("Show the Mission's attack graph")
+            }
             ToolbarItem {
                 Button { window.showsInspector.toggle() } label: { Label("Case", systemImage: "sidebar.trailing") }
                     .help(KeyboardBindings.shared.help("Show or hide the case record", for: RookShortcuts.showInspector))

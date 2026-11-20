@@ -47,6 +47,8 @@ import SwiftUI
 
     var sheet: Sheet?
     var showsInspector = true
+    /// The attack-graph overlay for the selected Mission; ephemeral, so leaving the Mission closes it.
+    var showsGraph = false
     var inspectorTab: InspectorTab = .caseRecord
     /// Asks the composer of the selected conversation to take the keyboard.
     var composerFocusRequest = UUID()
