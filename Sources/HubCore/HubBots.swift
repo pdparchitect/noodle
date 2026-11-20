@@ -2,6 +2,7 @@ import AppletBridge
 import Foundation
 import HubWire
 import NoodleCore
+import NoodleMCP
 import NoodleRuntime
 
 /// A bot that cannot answer because its owner's plan stopped lending its model, though it still lends the harness.
@@ -125,6 +126,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.tasksChanged(of: id) } }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        // The bots kept here, whose names a connection's activity gives and whom a watched connection wakes.
+        connections.store.bots = { [repository] in
+            Dictionary(((try? repository.loadAgents()) ?? []).map { ($0.id, $0.displayName) }) { first, _ in first }
+        }
         computers?.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         browsers?.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         clearAbandonedUploads()
@@ -169,6 +174,8 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         runtime.refreshCapabilities()
         applets?.start(agents: agents)
         try startTools()
+        // As in Noodle: tools that watch their service wake the bots they are assigned to.
+        connections.store.watch { [runtime, repository] id, note in runtime.wake(id, note: note, repository: repository) }
         running = true
         loop = Task { [weak self] in
             var round = 0
@@ -343,6 +350,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     public func stop() {
         applets?.start(agents: [])
+        connections.store.stopWatching()
         toolBroker?.stop()
         toolBroker = nil
         loop?.cancel()

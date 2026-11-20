@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Removing a tool revokes its sign-in at the service, where the service allows it, before forgetting it here, as Noodle does.
+
 ### Fixed
 
+- Saved tools that cannot be read are no longer replaced when a tool is added or changed: the Hub refuses changes until the file is restored, as Noodle does.
 - An MCP server that needs no sign-in connects and works for your bots: signing it in finds it answers without one, instead of failing on the sign-in details it does not publish.
 
 ## [0.57.0] - 2026-11-19

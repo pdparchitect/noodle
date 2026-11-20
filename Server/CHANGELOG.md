@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Removing a tool revokes its sign-in at the service, where the service allows it, before forgetting it here, as Noodle does.
+
+### Fixed
+
+- Saved tools that cannot be read are no longer replaced when a tool is added or changed: the server refuses changes until the file is restored.
+
 ## [0.1.0] - 2026-11-11
 
 ### Added

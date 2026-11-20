@@ -40,86 +40,65 @@ public enum ToolConnectionStatus: Equatable, Sendable {
     }
 }
 
+/// Noodle's tool connections as its Settings and tools sidebar show them, kept in the shared `ToolConnections` that a
+/// Hub keeps its people's in too. What is only the Mac's is here: signing in through this Mac's browser, or with AWS
+/// IAM Identity Center, a code, a token or a client secret; where each connection stands for the person; the activity
+/// window; and the bots' own workspaces, which follow every change.
 @MainActor @Observable
 public final class ToolConnectionsController {
-    public private(set) var registry = ToolConnectionRegistry()
-    private(set) var connected: Set<UUID> = []
+    /// The connections, their grants and sign-ins, watching and activity, as every app and Hub keeps them.
+    @ObservationIgnored public let store: ToolConnections
+    public var registry: ToolConnectionRegistry { store.registry }
+    var connected: Set<UUID> { store.ready }
     private(set) var signingIn: UUID?
     private(set) var signInStage = ""
-    public private(set) var errors: [UUID: String] = [:]
+    public var errors: [UUID: String] { store.problems }
     var errorMessage: String?
     /// What each connection has done since the app started: bots' calls, sign-ins, and what the app adds, by connection.
     @ObservationIgnored public let activity = ActivityStore()
     @ObservationIgnored private let activityWindows = ActivityWindows()
-    /// Watches the connections whose adapter has a feed, or whose catalogue entry a trigger, for something new.
-    @ObservationIgnored private let watcher: AlertWatcher
-    @ObservationIgnored private var watching: Task<Void, Never>?
-    private var isWatching = false
-    /// Why each watched account could not be checked last time, by account.
-    private var watchProblems: [UUID: String] = [:]
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
-    @ObservationIgnored public let service: ToolConnectionService
+    public var service: ToolConnectionService { store.service }
     @ObservationIgnored private var loginTask: Task<Void, Never>?
     private var agents: [AgentRecord] = []
-    @ObservationIgnored private var started = false
-    @ObservationIgnored private var providers: ToolConnectionProviders?
     /// Where this controller registers one provider per connection.
     @ObservationIgnored public var toolRegistry: ToolProviderRegistry? {
-        didSet {
-            providers = toolRegistry.map { ToolConnectionProviders(registry: $0, service: service) }
-            providers?.onError = { [weak self] id, message in self?.errors[id] = message }
-            providers?.onCall = { [weak self] in self?.recordCall($0) }
-            providers?.appInstructions = { [weak self] in self?.instructions(for: $0) }
-            synchronizeProviders()
-        }
+        get { store.toolRegistry }
+        set { store.toolRegistry = newValue }
     }
     /// What the app says about a connection in the skill bots read for it, after what its wake means, if it is watched,
     /// and before the person's own instructions.
     @ObservationIgnored public var appInstructions: (@MainActor (ToolConnection) -> String?)? {
-        didSet { synchronizeProviders() }
+        get { store.appInstructions }
+        set { store.appInstructions = newValue }
     }
     /// Receives the connections each bot is granted, now and on every change.
-    @ObservationIgnored public var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronizeProviders() } }
+    @ObservationIgnored public var onAssignmentsChange: (([UUID: Set<String>]) -> Void)? {
+        get { store.onGrantsChange }
+        set { store.onGrantsChange = newValue }
+    }
     @ObservationIgnored private let browser = MCPBrowserAuthorization()
-    @ObservationIgnored private var registryReadable = true
-    @ObservationIgnored private let deletions: DeletionJournal<UUID>
 
     public init(repository: WorkspaceRepository, service: ToolConnectionService? = nil) {
         self.repository = repository
-        self.service = service ?? ToolConnectionService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local")
-        deletions = DeletionJournal(url: repository.rootURL.appendingPathComponent("MCP/removed-sign-ins.json"))
-        watcher = AlertWatcher(file: repository.rootURL.appendingPathComponent("alert-watch.json"), service: self.service)
-        do { registry = try ToolConnectionRegistry.load(root: repository.rootURL) }
-        catch {
-            registryReadable = false
-            errorMessage = "Could not read saved tool connections. They have not been replaced."
-        }
+        store = ToolConnections(root: repository.rootURL,
+            service: service ?? ToolConnectionService(namespace: Bundle.main.bundleIdentifier ?? "com.pdparchitect.noodle.local"))
+        if !store.isReadable { errorMessage = "Could not read saved tool connections. They have not been replaced." }
+        store.bots = { [weak self] in Dictionary((self?.agents ?? []).map { ($0.id, $0.displayName) }) { first, _ in first } }
+        store.onActivity = { [activity] id, title, detail in activity.log(for: id).record(ActivityEvent(title: title, detail: detail)) }
     }
-    deinit { loginTask?.cancel(); watching?.cancel() }
+    deinit { loginTask?.cancel() }
     /// Bots reach tool connections through Noodle's tool broker. This controller owns the
     /// connections, their sign-in, and which bot is granted which connection.
     public func start(agents: [AgentRecord]) {
         self.agents = agents
-        synchronizeProviders()
-        if !started {
-            started = true
-            Task { [weak self] in
-                guard let self else { return }
-                await deleteRemovedSignIns()
-                await readSignIns()
-            }
-        }
+        store.synchronize()
+        store.start()
     }
     /// Reads which connections are signed in, after something besides Settings signed one in or out.
     /// One the app's adapter answers without credentials, or an open server, is always ready.
-    public func readSignIns() async {
-        for connection in registry.connections {
-            let open = (connection.adapter != nil && !connection.keepsSecret) || connection.open == true
-            let signedIn = await service.hasCredentials(connection.id)
-            if open || signedIn { connected.insert(connection.id) } else { connected.remove(connection.id) }
-        }
-    }
+    public func readSignIns() async { await store.readSignIns() }
 
     public func status(of connection: ToolConnection) -> ToolConnectionStatus {
         if !OrganisationStatus.shared.allows(Organisation.action(for: connection)) { return .managed }
@@ -166,21 +145,10 @@ public final class ToolConnectionsController {
     /// it watches on MCP servers, by the catalogue entry their connections are made from. An adapter with a feed is
     /// watched too.
     public func serve(_ adapters: [String: any ToolConnectionAdapter], triggers: [String: MCPTrigger] = [:]) {
-        watcher.adapters = adapters
-        watcher.triggers = triggers
-        let service = service
-        Task { await service.useAdapters(adapters) }
-        synchronizeProviders()
+        store.serve(adapters, triggers: triggers)
     }
     func save(_ record: ToolConnection) throws {
-        guard Organisation.allows(Organisation.action(for: record)) else { throw ToolConnectionServiceError.notAllowed }
-        try requireReadableRegistry()
-        var next = registry
-        if let index = next.connections.firstIndex(where: { $0.id == record.id }) { next.connections[index] = record }
-        else { next.connections.append(record) }
-        try next.save(root: repository.rootURL)
-        registry = next
-        synchronizeProviders()
+        try store.save(record)
         try synchronize()
     }
 
@@ -205,53 +173,23 @@ public final class ToolConnectionsController {
         return registry.connections.first { $0.id == record.id }!
     }
     public func assign(_ ids: Set<UUID>, to agent: AgentRecord, synchronizeWorkspace: Bool = true) throws {
-        try validateAssignment(ids)
-        var next = registry
-        try next.assign(ids, to: agent.id)
-        try next.save(root: repository.rootURL)
-        registry = next
-        synchronizeProviders()
+        try store.assign(ids, to: agent.id)
         if synchronizeWorkspace { try repository.synchronizeAgentWorkspace(agent) }
     }
-    public func reloadAssignments() throws {
-        defer { synchronizeProviders() }
-        do { registry = try ToolConnectionRegistry.load(root: repository.rootURL); registryReadable = true }
-        catch { registryReadable = false; throw error }
-    }
-    public func validateAssignment(_ ids: Set<UUID>) throws {
-        try requireReadableRegistry()
-        guard ids.isSubset(of: Set(registry.connections.map(\.id))) else {
-            throw ToolConnectionError.message("One of the selected tool connections no longer exists.")
-        }
-    }
-    private func requireReadableRegistry() throws {
-        guard registryReadable else {
-            throw ToolConnectionError.message("Saved tool connections could not be read. Restore the registry before making changes; the existing file has not been replaced.")
-        }
-    }
+    public func reloadAssignments() throws { try store.reload() }
+    public func validateAssignment(_ ids: Set<UUID>) throws { try store.validate(ids) }
     public func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
     func remove(_ record: ToolConnection) {
         if signingIn == record.id { loginTask?.cancel() }
-        var next = registry
-        next.remove(record.id)
         do {
-            try requireReadableRegistry()
-            try deletions.schedule([record.id])
-            try next.save(root: repository.rootURL)
-            registry = next // Revoke broker access immediately, before asynchronous cleanup.
-            synchronizeProviders()
-            activity.retain(Set(next.connections.map(\.id)))
-            activityWindows.synchronize(names: Dictionary(uniqueKeysWithValues: next.connections.map { ($0.id, $0.name) }))
-            connected.remove(record.id)
-            errors[record.id] = nil
-            Task {
-                // Revoked at the service first, while what it signed in with is still here; deleted whatever the service said.
-                let revocation = await service.revoke(record)
-                if let error = await deleteRemovedSignIns() { errorMessage = error.localizedDescription }
+            try store.remove([record.id]) { [weak self] record, revocation, failure in
+                if let failure { self?.errorMessage = failure.localizedDescription }
                 else if case .failed(let reason) = revocation {
-                    errorMessage = "\(record.name) was removed, but the service could not revoke its sign-in: \(reason) Revoke it in the service's account settings."
+                    self?.errorMessage = "\(record.name) was removed, but the service could not revoke its sign-in: \(reason) Revoke it in the service's account settings."
                 }
             }
+            activity.retain(Set(registry.connections.map(\.id)))
+            activityWindows.synchronize(names: Dictionary(uniqueKeysWithValues: registry.connections.map { ($0.id, $0.name) }))
             try synchronize()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -261,10 +199,7 @@ public final class ToolConnectionsController {
     public func signOut(_ record: ToolConnection) {
         if signingIn == record.id { loginTask?.cancel() }
         Task {
-            let revocation = await service.signOut(record)
-            connected.remove(record.id)
-            errors[record.id] = nil
-            recordActivity(record.id, "Signed out")
+            let revocation = await store.signOut(record)
             let app = ProductIdentity.current.name
             switch revocation {
             case .revoked: break
@@ -273,15 +208,6 @@ public final class ToolConnectionsController {
             case .failed(let reason):
                 errorMessage = "\(record.name) is signed out of \(app), but the service could not revoke it: \(reason) Revoke it in the service's account settings."
             }
-        }
-    }
-    /// Deletes removed connections' sign-ins; one that fails is tried again on the next removal or start.
-    @discardableResult private func deleteRemovedSignIns() async -> Error? {
-        await deletions.run { id in
-            // A removal whose registry write failed keeps its connection, so it keeps its sign-in too.
-            guard registryReadable else { throw ToolConnectionError.message("Saved tool connections could not be read.") }
-            guard !registry.connections.contains(where: { $0.id == id }) else { return }
-            try await service.disconnect(id)
         }
     }
     /// Signs the connection in through the browser, or through AWS IAM Identity Center with a code the person
@@ -294,7 +220,7 @@ public final class ToolConnectionsController {
         let withCode = ToolConnectionService.signsInWithCode(record)
         if signsIn && !withCode { browser.captureReturnWindow() }
         signingIn = record.id
-        errors[record.id] = nil
+        store.beginSignIn(record.id)
         loginTask = Task {
             defer { signingIn = nil; loginTask = nil; signInStage = "" }
             do {
@@ -331,32 +257,10 @@ public final class ToolConnectionsController {
                 signInStage = "Checking available tools…"
                 let request = MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil)
                 _ = try await service.perform(request, connection: record)
-                let icon = await service.icon(for: record)
-                guard var current = registry.connections.first(where: { $0.id == record.id }) else { return }
-                connected.insert(record.id)
-                let found = current
-                if let icon { current.iconData = icon }
-                if record.open == true { current.open = true }
-                if current != found { try save(current) }
-                else { try synchronize() }
-                recordActivity(record.id, record.open == true ? "Connected, with no sign-in" : "Signed in")
-            } catch is CancellationError {
-                errors[record.id] = "Sign-in cancelled."
-                recordActivity(record.id, "Sign-in cancelled")
-            } catch ToolConnectionServiceError.signInRequired where record.open == true {
-                // No longer open: it is signed in to from now on.
-                connected.remove(record.id)
-                if var current = registry.connections.first(where: { $0.id == record.id }) {
-                    current.open = nil
-                    try? save(current)
-                    errors[record.id] = "This server now asks for a sign-in. Connect again to sign in."
-                    recordActivity(record.id, "Could not connect", detail: errors[record.id] ?? "")
-                }
+                try store.signedIn(record, icon: await service.icon(for: record))
+                try synchronize()
             } catch {
-                if registry.connections.contains(where: { $0.id == record.id }) {
-                    errors[record.id] = Self.safeError(error)
-                    recordActivity(record.id, "Could not sign in", detail: Self.safeError(error))
-                }
+                store.signInFailed(record, error)
             }
         }
     }
@@ -379,95 +283,35 @@ public final class ToolConnectionsController {
         browser.receive(url)
     }
     private func setSignInStage(_ stage: String) { signInStage = stage }
+    /// The bots' workspaces follow every change to their connections.
     private func synchronize() throws {
         for agent in agents { try repository.synchronizeAgentWorkspace(agent) }
-    }
-    /// Call after every change to `registry`. A connection that cannot be read grants nothing.
-    private func synchronizeProviders() {
-        // What the organisation blocks reaches no bot; nothing is deleted, so it comes back once allowed.
-        let allowed = Set(registry.connections.filter { Organisation.allows(Organisation.action(for: $0)) }.map(\.id))
-        let connections = registryReadable ? registry.connections.filter { allowed.contains($0.id) } : []
-        providers?.synchronize(connections) { [weak self] id in self?.registry.connections.first { $0.id == id } }
-        let granted = registryReadable ? registry.assignments : [:]
-        onAssignmentsChange?(Dictionary(uniqueKeysWithValues: granted.compactMap { key, ids in
-            UUID(uuidString: key).map { ($0, Set(ids.filter(allowed.contains).map(\.uuidString))) }
-        }))
-    }
-    private nonisolated static func safeError(_ error: Error) -> String { ToolConnectionProviders.safeError(error) }
-
-    /// What a connection's skill says before the person's own instructions: what its wake means, if it is watched, then
-    /// what the app adds.
-    private func instructions(for connection: ToolConnection) -> String? {
-        let parts = [watcher.skillText(for: connection), appInstructions?(connection)].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 
     /// Starts checking the watched connections every few minutes, waking the bots each is assigned to through `runtime`
     /// when it has something new. Every app calls it once its bots run; a connection is watched only if its adapter or
     /// catalogue entry says so in code.
     public func watch(with runtime: AgentRuntimeCoordinator) {
-        guard watching == nil else { return }
-        isWatching = true
-        watching = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.checkWatched { [weak self] id, note in
-                    guard let self else { return }
-                    runtime.wake(id, note: note, repository: self.repository)
-                }
-                try? await Task.sleep(for: AlertWatcher.interval)
-            }
-        }
+        let repository = repository
+        store.watch { runtime.wake($0, note: $1, repository: repository) }
     }
 
-    public func stopWatching() {
-        watching?.cancel()
-        watching = nil
-        isWatching = false
-    }
+    public func stopWatching() { store.stopWatching() }
 
-    /// The connections watched, signed in and assigned, with the bots each is assigned to; and those watched and assigned
-    /// but not signed in too, whose checks pick up where they stopped once they are signed in again.
-    private func watchedAccounts() -> (accounts: [(connection: ToolConnection, agents: [UUID])], keeping: Set<UUID>) {
-        let allowed = registryReadable ? registry.connections.filter { Organisation.allows(Organisation.action(for: $0)) } : []
-        var accounts: [(connection: ToolConnection, agents: [UUID])] = [], keeping: Set<UUID> = []
-        for connection in allowed where watcher.watches(connection) {
-            let holders = agents.map(\.id).filter { registry.assigned(to: $0).contains { $0.id == connection.id } }
-            guard !holders.isEmpty else { continue }
-            keeping.insert(connection.id)
-            if status(of: connection) == .connected { accounts.append((connection, holders)) }
-        }
-        return (accounts, keeping)
+    /// One round of checks, as the watch makes every few minutes.
+    func checkWatched(at now: Date = Date(), wake: (UUID, String) -> Void) async {
+        await store.checkWatched(at: now, wake: wake)
     }
 
     /// While watching, a line under each watched account in Settings › Tools, by account: that it is watched, or why it
     /// could not be checked last time, which shows as an error does.
     public var notes: [UUID: ToolConnectionNote] {
-        guard isWatching else { return [:] }
         var notes: [UUID: ToolConnectionNote] = [:]
-        for (connection, _) in watchedAccounts().accounts {
-            notes[connection.id] = watchProblems[connection.id].map { ToolConnectionNote("Could not check for alerts: " + $0, isProblem: true) }
+        for connection in store.watched {
+            notes[connection.id] = store.watchProblems[connection.id].map { ToolConnectionNote("Could not check for alerts: " + $0, isProblem: true) }
                 ?? ToolConnectionNote("Watched for new alerts")
         }
         return notes
-    }
-
-    /// One round of checks, waking with `wake` the bots each account with something new is assigned to, and adding each
-    /// check to its account's activity.
-    func checkWatched(at now: Date = Date(), wake: (UUID, String) -> Void) async {
-        let (accounts, keeping) = watchedAccounts()
-        guard !keeping.isEmpty else { return }
-        let checked = await watcher.check(accounts, keeping: keeping, at: now, wake: wake)
-        watchProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
-        for (connection, holders) in accounts {
-            switch checked[connection.id] {
-            case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new")
-            case .found(let what)?:
-                let names = holders.compactMap { id in agents.first { $0.id == id }?.displayName }.formatted(.list(type: .and))
-                recordActivity(connection.id, "Found \(what); woke \(names)")
-            case .failed(let reason)?: recordActivity(connection.id, "Could not check for alerts", detail: reason)
-            case nil: break
-            }
-        }
     }
 
     /// Shows what the connection has done since the app started, in its own window.
@@ -477,27 +321,11 @@ public final class ToolConnectionsController {
 
     /// Adds a line to the connection's activity, with any detail under it.
     public func recordActivity(_ connection: UUID, _ title: String, detail: String = "") {
-        activity.log(for: connection).record(ActivityEvent(title: title, detail: detail))
+        store.recordActivity(connection, title, detail: detail)
     }
 
-    /// A bot's request, named by the bot and what it asked for. Listing tools comes before every call, so only a failed
-    /// listing is worth a line.
-    private func recordCall(_ call: ToolConnectionCall) {
-        let bot = agents.first { $0.id == call.agent }?.displayName ?? "Someone removed since"
-        let asked: (done: String, failed: String)? = switch call.action {
-        case .call: ("called \(call.tool ?? "a tool")", "\(call.tool ?? "a tool") failed")
-        case .resources: ("listed resources", "listing resources failed")
-        case .readResource: ("read a resource", "reading a resource failed")
-        case .tools, .inspect: call.failure == nil ? nil : ("", "listing tools failed")
-        }
-        guard let asked else { return }
-        let seconds = Double(call.duration.components.seconds) + Double(call.duration.components.attoseconds) / 1e18
-        let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s)"
-        if let failure = call.failure { recordActivity(call.connection, "\(bot): \(asked.failed)" + took, detail: failure) }
-        else { recordActivity(call.connection, "\(bot) \(asked.done)" + took) }
-    }
     /// Puts a changed organisation policy in force: blocked connections leave the bots that had them.
-    public func applyOrganisationPolicy() { synchronizeProviders() }
+    public func applyOrganisationPolicy() { store.synchronize() }
 }
 
 // Open an ordinary default-browser tab, retaining normal profiles and extensions.
