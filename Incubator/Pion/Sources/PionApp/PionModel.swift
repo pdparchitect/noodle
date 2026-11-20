@@ -152,6 +152,7 @@ import UniformTypeIdentifiers
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             self?.toolBroker?.synchronizeSkills()
         }
+        connectionsController.refreshSkills = { [weak self] in await self?.toolBroker?.synchronizeSkills().value }
     }
 
     // MARK: Running

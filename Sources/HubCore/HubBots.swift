@@ -126,6 +126,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.tasksChanged(of: id) } }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
+        connections.store.refreshSkills = { [weak self] in await self?.toolBroker?.synchronizeSkills().value }
         // The bots kept here, whose names a connection's activity gives and whom a watched connection wakes.
         connections.store.bots = { [repository] in
             Dictionary(((try? repository.loadAgents()) ?? []).map { ($0.id, $0.displayName) }) { first, _ in first }

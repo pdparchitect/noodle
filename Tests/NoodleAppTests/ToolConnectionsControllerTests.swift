@@ -372,6 +372,7 @@ import XCTest
         let failed = try await f.exchange(ToolBridgeRequest(session: try f.session(f.a).token, action: .tools, provider: account.skillName))
         try await f.waitUntil { f.controller.errors[account.id] == failed.error }
         try f.controller.store.signedIn(account, icon: nil)
+        try await f.waitUntil { !woken.isEmpty }
         XCTAssertEqual(woken.map(\.0), [f.a.id])
         XCTAssertTrue(woken.first?.1.contains(account.name) == true, "\(woken)")
         XCTAssertTrue(woken.first?.1.contains(".agents/skills/\(account.skillName)/SKILL.md") == true, "\(woken)")
@@ -414,6 +415,30 @@ import XCTest
         XCTAssertEqual(woken.count, 1, "A recovery is told once")
     }
 
+    /// A tool that never listed its tools has them in its bots' skills by the time they are told it works again, so they
+    /// find them listed and hear of both at once.
+    func testAToolThatWorksAgainHasItsSkillRewrittenBeforeItsBotsAreTold() async throws {
+        let f = try fixture(), flaky = FlakyAdapter()
+        var account = try f.account()
+        account.adapter = "flaky"
+        flaky.failing = true
+        await f.service.useAdapters(["flaky": flaky])
+        f.controller.refreshSkills = { [tools = f.tools] in await tools.synchronizeSkills().value }
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a])
+        await f.controller.readSignIns()
+        let skill = f.repository.directory(for: f.a).appendingPathComponent(".agents/skills/\(account.skillName)/SKILL.md")
+        try await f.waitUntil { f.controller.errors[account.id] != nil && FileManager.default.fileExists(atPath: skill.path) }
+        XCTAssertFalse(try String(contentsOf: skill, encoding: .utf8).contains("### lookup"))
+        flaky.failing = false
+        var listed: [Bool] = []
+        await f.controller.store.checkFailed { _, _ in
+            listed.append(((try? String(contentsOf: skill, encoding: .utf8)) ?? "").contains("### lookup"))
+        }
+        XCTAssertEqual(listed, [true], "Told once, with its tools already in the skill")
+    }
+
     /// A bot whose own call works after the tool failed shows it came back: the other bots it is assigned to are told,
     /// the bot that made the call already knows.
     func testACallThatWorksAfterAFailureTellsTheOtherBots() async throws {
@@ -437,7 +462,7 @@ import XCTest
         let answered = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
                                                               tool: "lookup", arguments: Data("{}".utf8)))
         XCTAssertNil(answered.error)
-        try await f.waitUntil { f.controller.errors[account.id] == nil }
+        try await f.waitUntil { f.controller.errors[account.id] == nil && !woken.isEmpty }
         XCTAssertEqual(woken.map(\.0), [f.b.id])
     }
 

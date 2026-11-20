@@ -78,6 +78,11 @@ public final class ToolConnectionsController {
         get { store.onGrantsChange }
         set { store.onGrantsChange = newValue }
     }
+    /// Rewrites the bots' tool skills and returns once they are written; see `ToolConnections.refreshSkills`.
+    @ObservationIgnored public var refreshSkills: (@MainActor () async -> Void)? {
+        get { store.refreshSkills }
+        set { store.refreshSkills = newValue }
+    }
     @ObservationIgnored private let browser = MCPBrowserAuthorization()
 
     public init(repository: WorkspaceRepository, service: ToolConnectionService? = nil) {

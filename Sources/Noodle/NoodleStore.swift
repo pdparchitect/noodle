@@ -331,6 +331,7 @@ final class NoodleStore {
             toolAssignments.replace(ConnectionToolProvider.grantKind, with: granted)
             tools.synchronizeSkills()
         }
+        connectionsController.refreshSkills = { [tools] in await tools.synchronizeSkills().value }
         computers = ComputerController(repository: self.repository)
         computers.onAssignmentsChange = { [toolAssignments, tools] assigned in
             toolAssignments.replace("computer", with: assigned)

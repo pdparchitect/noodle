@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- A tool that works again wakes the agents it is assigned to and tells them, so one waiting on it retries and carries on; nothing told them before. That is when it is signed in again after failing or being signed out, and when a failed tool comes back by itself: a call that works shows it, and every five minutes a failed tool is checked. Its failure mark clears, and its activity says it is working again and who was told.
+- A tool that works again wakes the agents it is assigned to and tells them, so one waiting on it retries and carries on; nothing told them before. That is when it is signed in again after failing or being signed out, and when a failed tool comes back by itself: a call that works shows it, and every five minutes a failed tool is checked. Its tools are listed in their skills before they are told, even if it never listed them before; its failure mark clears, and its activity says it is working again and who was told.
 
 ## [0.1.0] - 2026-11-20
 

@@ -126,7 +126,7 @@ public final class ToolBridgeBroker: @unchecked Sendable {
     deinit { timer?.cancel() }
 
     /// Rewrites every agent's generated tool skills. Runs on start and whenever providers
-    /// change; call it after changing what an agent is assigned.
+    /// change; call it after changing what an agent is assigned. The task ends once they are written.
     @discardableResult public func synchronizeSkills() -> Task<Void, Never> {
         let (agents, generation) = queue.sync { skillsGeneration += 1; return (self.agents, skillsGeneration) }
         guard !agents.isEmpty, relay == nil else { return Task {} }
@@ -134,12 +134,15 @@ public final class ToolBridgeBroker: @unchecked Sendable {
             for agent in agents {
                 let listings = await ToolProviderListing.list(registry: registry, assignments: assignments(agent.id),
                                                               agentID: agent.id, workspace: agent.workspace)
-                queue.async { [weak self] in
-                    guard let self, generation == self.skillsGeneration, self.agents.contains(where: { $0.id == agent.id }) else { return }
-                    let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
-                    ToolProviderListing.synchronize(workspace: agent.workspace, listings: listings)
-                    if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
-                        self.skillsObserver?(agent.id)
+                await withCheckedContinuation { (written: CheckedContinuation<Void, Never>) in
+                    queue.async { [weak self] in
+                        defer { written.resume() }
+                        guard let self, generation == self.skillsGeneration, self.agents.contains(where: { $0.id == agent.id }) else { return }
+                        let before = ToolProviderSkills.generated(workspace: agent.workspace).map { $0.name + "\n" + $0.description }
+                        ToolProviderListing.synchronize(workspace: agent.workspace, listings: listings)
+                        if before != ToolProviderSkills.generated(workspace: agent.workspace).map({ $0.name + "\n" + $0.description }) {
+                            self.skillsObserver?(agent.id)
+                        }
                     }
                 }
             }

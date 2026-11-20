@@ -58,6 +58,9 @@ import Observation
     }
     /// Receives the connections each bot is granted, by bot, now and on every change.
     @ObservationIgnored public var onGrantsChange: (([UUID: Set<String>]) -> Void)? { didSet { synchronize() } }
+    /// Rewrites the bots' tool skills and returns once they are written. A connection that works again has its skills
+    /// rewritten through it before its bots are told, so they find its tools listed and hear both at once.
+    @ObservationIgnored public var refreshSkills: (@MainActor () async -> Void)?
     /// Receives each line of a connection's activity: the connection, the line, and any detail under it.
     @ObservationIgnored public var onActivity: ((UUID, String, String) -> Void)?
 
@@ -242,7 +245,14 @@ import Observation
         if record.open == true { current.open = true }
         if current != found { try save(current) }
         recordActivity(record.id, record.open == true ? "Connected, with no sign-in" : "Signed in")
-        if recovered, let wake { tellBots(current, "is working: the person just signed it in", wake: wake) }
+        if recovered, let wake { Task { await tell([current], "is working: the person just signed it in", wake: wake) } }
+    }
+
+    /// Rewrites the bots' skills, then tells the bots of each connection, but `sparing`, that it is working: the skill a
+    /// note names then lists the connection's tools, and any note the rewrite wakes a bot with arrives with this one.
+    private func tell(_ connections: [ToolConnection], _ news: String, sparing: UUID? = nil, wake: (UUID, String) -> Void) async {
+        await refreshSkills?()
+        for connection in connections { tellBots(connection, news, sparing: sparing, wake: wake) }
     }
 
     /// Wakes the bots the connection is assigned to, except `sparing`, saying it is working: nothing else tells a bot
@@ -361,13 +371,15 @@ import Observation
     public func checkFailed(wake: (UUID, String) -> Void) async {
         guard isReadable else { return }
         let bots = bots().keys
+        var back: [ToolConnection] = []
         for id in down.sorted(by: { $0.uuidString < $1.uuidString }) where ready.contains(id) {
             guard let connection = registry.connections.first(where: { $0.id == id }),
                   bots.contains(where: { bot in registry.assigned(to: bot).contains { $0.id == id } }) else { continue }
             let request = MCPBridgeRequest(session: "", connectionID: id, action: .tools, tool: nil, arguments: nil)
             guard (try? await service.perform(request, connection: connection)) != nil, recovered(id) else { continue }
-            tellBots(connection, Self.workingAgain, wake: wake)
+            back.append(connection)
         }
+        if !back.isEmpty { await tell(back, Self.workingAgain, wake: wake) }
     }
 
     private static let workingAgain = "is working again after failing"
@@ -418,6 +430,6 @@ import Observation
         if call.failure != nil { down.insert(call.connection); return }
         guard [.call, .resources, .readResource].contains(call.action), recovered(call.connection), let wake,
               let connection = registry.connections.first(where: { $0.id == call.connection }) else { return }
-        tellBots(connection, Self.workingAgain, sparing: call.agent, wake: wake)
+        Task { await tell([connection], Self.workingAgain, sparing: call.agent, wake: wake) }
     }
 }
