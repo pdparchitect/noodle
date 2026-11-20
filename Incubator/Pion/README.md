@@ -139,4 +139,4 @@ under Apache 2.0.
 
 ## Project
 
-[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [@pdp on X](https://x.com/pdp)
+[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [Rook](https://github.com/pdparchitect/rook) · [@pdp on X](https://x.com/pdp)

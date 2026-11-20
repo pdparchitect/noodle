@@ -114,4 +114,4 @@ under Apache 2.0.
 
 ## Project
 
-[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [@pdp on X](https://x.com/pdp)
+[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Noodle](https://github.com/pdparchitect/noodle) · [Pion](https://github.com/pdparchitect/pion) · [@pdp on X](https://x.com/pdp)
