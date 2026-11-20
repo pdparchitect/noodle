@@ -19,6 +19,21 @@ public enum Cloudflare {
             tokenHeader: "Authorization", adapter: "cloudflare")),
         setup: setup)
 
+    /// Cloudflare Radar's MCP server: the Internet as Cloudflare's network sees it, through any Cloudflare account's
+    /// sign-in. It knows nothing of the account's own zones, which Cloudflare Security reads.
+    public static let radar = ToolDefinition(
+        id: "1a8b84b4-61cf-489c-9674-7dd239072a2e", name: "Cloudflare Radar",
+        summary: "Internet-wide attacks, traffic, BGP routing, outages and domain and IP intelligence.",
+        defaultInstructions: """
+        Use Cloudflare Radar for context from across the Internet: DDoS and application-layer attack trends, traffic \
+        anomalies and outages, BGP hijacks and route leaks, an autonomous system's or IP address's details, domain \
+        rankings, and URL scans. Radar reports Internet-wide figures, not the user's own zones or traffic. Cite the \
+        time window, location or network of each figure and record what matters as evidence. Use only tools actually \
+        offered by this connection and only within the user's request and granted permissions.
+        """,
+        iconName: "cloudflare",
+        configuration: .connection(.init(endpoint: URL(string: "https://radar.mcp.cloudflare.com/mcp")!)))
+
     static let setup = [
         "In the Cloudflare dashboard, open **My Profile › API Tokens** and choose **Create Token › Create Custom Token**.",
         "Add the permissions **Account › Audit Logs › Read**, **Zone › Zone › Read**, **Zone › DNS › Read** and **Zone › Analytics › Read**.",
