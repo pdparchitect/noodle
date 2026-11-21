@@ -270,12 +270,17 @@ public struct ToolConnectionEditor: View {
                 if onSecret != nil {
                     // An adapter connection proves itself the way its adapter expects; only its values change here.
                     if existing?.adapter == nil {
-                        Picker("Sign-in", selection: $signIn) {
-                            Text("Browser").tag(SignIn.browser)
-                            Text("Token").tag(SignIn.token)
-                            Text("Client ID & Secret").tag(SignIn.client)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Sign-in").font(.caption.weight(.semibold))
+                            Picker("Sign-in", selection: $signIn) {
+                                Text("Browser").tag(SignIn.browser)
+                                Text("Token").tag(SignIn.token)
+                                Text("Client ID & Secret").tag(SignIn.client)
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .fixedSize()
                         }
-                        .pickerStyle(.segmented)
                     }
                     if signIn == .client {
                         // A catalogue tool's token address and scope are its entry's.
