@@ -9,7 +9,8 @@ public enum Defender {
         instructions: """
         Use Microsoft Defender XDR to see what Microsoft's detections found: list alerts and incidents by severity, status \
         and time, and hunt with KQL across the advanced hunting tables, such as DeviceProcessEvents, DeviceNetworkEvents, \
-        EmailEvents and IdentityLogonEvents. Keep hunting queries narrow, with a time filter and a row limit. Record each \
+        EmailEvents and IdentityLogonEvents. Who holds which Microsoft Entra role is in IdentityInfo's AssignedRoles, such as \
+        IdentityInfo | where AssignedRoles has "Global Administrator", for auditing who holds what. Keep hunting queries narrow, with a time filter and a row limit. Record each \
         query and what it returned as evidence, with the query itself as the method. These tools only read: recommend \
         isolating a device or other responses to the champion.
         """,

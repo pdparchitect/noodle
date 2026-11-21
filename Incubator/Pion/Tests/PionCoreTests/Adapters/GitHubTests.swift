@@ -98,4 +98,16 @@ final class GitHubTests: XCTestCase {
         let down = FakeService()
         do { _ = try await GitHub.adapter.alerts(since: since, connection: github, access: down); XCTFail("No feed answered") } catch {}
     }
+
+    /// Owners can do anything in the organisation, so an audit of who holds what starts with them.
+    func testPeopleSaysWhoTheOwnersAre() async throws {
+        let service = FakeService()
+        service.answers["/orgs/kestrel-labs/members"] = (200, #"[{"login":"avery"},{"login":"mallory"}]"#)
+        service.answers["/orgs/kestrel-labs/members?per_page=100&role=admin"] = (200, #"[{"login":"mallory"}]"#)
+        service.answers["/orgs/kestrel-labs/outside_collaborators"] = (200, "[]")
+        let people = try await callTool(GitHub.adapter, "people", "{}", on: service, in: github)
+        XCTAssertFalse(people.isError, people.text)
+        XCTAssertTrue(people.text.contains("1 owner: mallory"), people.text)
+        XCTAssertEqual(people.structured?["owners"] as? [String], ["mallory"])
+    }
 }

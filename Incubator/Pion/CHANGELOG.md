@@ -8,6 +8,7 @@
 - Approvals, as in Noodle: an agent's call to a tool marked destructive, such as suspending a user, waits for you in a new Approvals section at the top of the sidebar, which stays there while anything waits, and in a notification that comes through even with Pion in front. Each shows exactly what will run and the agent's reason; approve or decline it there. The Dock counts it, the agent is told the outcome, and the Investigation's Audit Log records the request and how it was decided.
 - A guide to both Google Workspace tools in `docs/tools`: the access each asks for, the least access to set it up with, and their caveats.
 - A tool's activity says how many requests an agent's call or a check for alerts retried because the service rate limited them or was briefly unavailable, on that call's or check's own line, such as "Checked for alerts: nothing new (2 requests retried)".
+- Agents can audit who holds what: AWS Security's new `iam-access` lists each IAM user, with its groups' policies, and each role, full administrators first; GitHub's `people` says which members are owners; and Microsoft Defender XDR's agents are told that who holds which Entra role is in its hunting tables.
 
 ### Changed
 

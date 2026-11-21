@@ -95,17 +95,20 @@ extension GitHub {
     struct People: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "people"
-        static let summary = "The organisation's members and its outside collaborators."
+        static let summary = "The organisation's members, which of them are owners, and its outside collaborators."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Person: Codable { let login: String; let site_admin: Bool? }
-            struct People: Encodable { let members: [Person]; let outsideCollaborators: [Person] }
+            struct People: Encodable { let members: [Person]; let owners: [String]; let outsideCollaborators: [Person] }
             let members = try await service.get(["members"], query: ["per_page": "100"], as: [Person].self)
+            // Owners can do anything in the organisation, so an audit of who holds what starts with them.
+            let owners = try await service.get(["members"], query: ["per_page": "100", "role": "admin"], as: [Person].self).map(\.login)
             let outside = try await service.get(["outside_collaborators"], query: ["per_page": "100"], as: [Person].self)
             let text = "\(members.count) member\(members.count == 1 ? "" : "s"): \(members.map(\.login).joined(separator: ", "))."
+                + " \(owners.count) owner\(owners.count == 1 ? "" : "s"): \(owners.isEmpty ? "none listed" : owners.joined(separator: ", "))."
                 + (outside.isEmpty ? " No outside collaborators." : " \(outside.count) outside collaborator\(outside.count == 1 ? "" : "s"): \(outside.map(\.login).joined(separator: ", ")).")
-            return try ServiceResult(text: text, structured: People(members: members, outsideCollaborators: outside))
+            return try ServiceResult(text: text, structured: People(members: members, owners: owners, outsideCollaborators: outside))
         }
     }
 

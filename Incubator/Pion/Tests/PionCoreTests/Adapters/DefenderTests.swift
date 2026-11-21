@@ -59,4 +59,10 @@ final class DefenderTests: XCTestCase {
         XCTAssertEqual(Defender.adapter.watchedTool, "alerts", "The tool that reads them in full")
         XCTAssertNil(VirusTotal.adapter.watchedTool, "A lookup has nothing to watch")
     }
+
+    /// Who holds which Entra role is in Defender's hunting tables, so an audit of privileges can start there.
+    func testItsInstructionsSayWhereEntraRolesAre() {
+        XCTAssertTrue(Defender.preset.defaultInstructions.contains("IdentityInfo"))
+        XCTAssertTrue(Defender.preset.defaultInstructions.contains("AssignedRoles"))
+    }
 }
