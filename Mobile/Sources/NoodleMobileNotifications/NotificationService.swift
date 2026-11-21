@@ -1,4 +1,5 @@
 import Foundation
+import HubLink
 import Intents
 import UserNotifications
 
@@ -18,6 +19,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         if let count = AppBadge.arrived(route, hubs: hubs) { content.badge = NSNumber(value: count) }
         lock.withLock { pending = (content, contentHandler) }
         Task { @MainActor in
+            // The Hub pings a call a bot holds under the call's own ID: it shows as that call, with Approve and Decline.
+            if let held = await HeldCallNotification.held(for: route, hubs: hubs) { return self.finish(holding: held, route: route, hubs: hubs) }
             let reply = await ReplyNotification.content(for: route, hubs: hubs)
             // As a message from the bot, with its picture, which also has the share sheet suggest the conversation.
             var intent: INSendMessageIntent?
@@ -27,6 +30,21 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 intent = message
             }
             self.finish(with: reply, from: intent)
+        }
+    }
+
+    /// A held call counts on the icon as one, not as an unread conversation.
+    @MainActor private func finish(holding held: (approval: LinkApproval, bot: LinkBot), route: NotificationRoute, hubs: URL) {
+        let content = HeldCallNotification.content(held.approval, botID: held.bot.id, botName: held.bot.draft.name, topic: route.topic)
+        if let directory = PushTopic.directory(of: route.topic, in: hubs) {
+            AppBadge.read(route.conversation, in: directory)
+            AppBadge.setPendingApprovals(AppBadge.pendingApprovals(in: directory).union([held.approval.id]), in: directory)
+            content.badge = NSNumber(value: AppBadge.count(hubs: hubs))
+        }
+        lock.withLock {
+            guard let pending else { return }
+            self.pending = nil
+            pending.deliver(content)
         }
     }
 

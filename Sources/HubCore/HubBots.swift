@@ -910,6 +910,16 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         onChange?(owner, .botsChanged)
     }
 
+    /// The calls the user's own bots hold for them, as their devices list them.
+    public func pendingApprovalIDs(of user: UUID) -> Set<UUID> {
+        let agents = ((try? repository.loadAgents()) ?? []).filter {
+            $0.archivedAt == nil && access.owner(ofBot: $0.id) == user && access.host(ofBot: $0.id) == nil
+        }
+        return Set(agents.flatMap { agent in
+            ((try? repository.currentApprovals(agentID: agent.id)) ?? []).filter { $0.state == .pending }.map(\.id)
+        })
+    }
+
     /// Carries out the owner's decision for bots something else runs, as Noodle serving its own owner, which then
     /// wakes the bot itself. Nil where the Hub runs its bots' tools.
     public var decideElsewhere: ((_ approval: UUID, _ agent: UUID, _ approve: Bool) async throws -> AgentApproval)?

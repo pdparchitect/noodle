@@ -39,18 +39,16 @@ extension HubChats {
 }
 
 /// A notification for each call a bot holds for the person, with Approve and Decline, which decide it without opening
-/// the app. Posted as the app hears of the call from the Hub, and taken back once it is decided on any device.
+/// the app. Posted as the app hears of the call from the Hub, unless its ping already showed it, and taken back once it
+/// is decided on any device.
 enum ApprovalNotifications {
-    static let category = "approval"
-    static let approveAction = "approve", declineAction = "decline"
-    static let approvalKey = "approval", botKey = "bot"
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "Approvals")
 
     /// Either button needs the phone unlocked.
     static func register() {
-        UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: category, actions: [
-            UNNotificationAction(identifier: approveAction, title: "Approve", options: [.authenticationRequired]),
-            UNNotificationAction(identifier: declineAction, title: "Decline", options: [.authenticationRequired, .destructive]),
+        UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: HeldCallNotification.category, actions: [
+            UNNotificationAction(identifier: HeldCallNotification.approveAction, title: "Approve", options: [.authenticationRequired]),
+            UNNotificationAction(identifier: HeldCallNotification.declineAction, title: "Decline", options: [.authenticationRequired, .destructive]),
         ], intentIdentifiers: [])])
     }
 
@@ -61,44 +59,29 @@ enum ApprovalNotifications {
         let entries = ApprovalEntry.listed(in: [chats])
         let changes = LinkApproval.changes(listed: entries.map(\.approval), known: AppBadge.pendingApprovals(in: directory))
         let topic = PushTopic.topic(for: chats.pairing)
-        let center = UNUserNotificationCenter.current()
         for approval in changes.new {
             guard let entry = entries.first(where: { $0.id == approval.id }) else { continue }
-            center.add(UNNotificationRequest(identifier: approval.notificationIdentifier, content: content(for: entry, topic: topic), trigger: nil))
+            let content = HeldCallNotification.content(approval, botID: entry.bot.id, botName: entry.bot.draft.name, topic: topic)
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: approval.notificationIdentifier, content: content, trigger: nil))
         }
-        if !changes.gone.isEmpty { center.removeDeliveredNotifications(withIdentifiers: changes.gone.map(LinkApproval.notificationIdentifier)) }
+        Task { await HeldCallNotification.remove(changes.gone) }
         guard changes.pending != AppBadge.pendingApprovals(in: directory) else { return }
         AppBadge.setPendingApprovals(changes.pending, in: directory)
         let hubs = directory.deletingLastPathComponent()
         Task { await AppBadge.show(AppBadge.count(hubs: hubs)) }
     }
 
-    /// Exactly what will run, from the call itself, and the bot's reason. Tapping it opens the call in full.
-    private static func content(for entry: ApprovalEntry, topic: String) -> UNMutableNotificationContent {
-        let content = UNMutableNotificationContent()
-        content.title = entry.bot.draft.name
-        content.subtitle = "Asks to run \(entry.approval.tool) on \(entry.approval.providerTitle)"
-        let input = entry.approval.inputLines.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
-        content.body = MessageSegment.notificationText([input, entry.approval.reason].filter { !$0.isEmpty }.joined(separator: "\n"))
-        content.sound = .default
-        content.categoryIdentifier = category
-        content.threadIdentifier = entry.approval.conversationID.uuidString
-        content.userInfo = [LinkPush.topicField: topic, LinkPush.conversationField: entry.approval.conversationID.uuidString,
-                            approvalKey: entry.approval.id.uuidString, botKey: entry.bot.id.uuidString]
-        return content
-    }
-
     /// The call a notification is about, with the decision when one of its buttons was chosen.
     static func decision(in response: UNNotificationResponse) -> (topic: String, decision: LinkApprovalDecision?, route: NotificationRoute)? {
         let info = response.notification.request.content.userInfo
-        guard response.notification.request.content.categoryIdentifier == category,
+        guard response.notification.request.content.categoryIdentifier == HeldCallNotification.category,
               let topic = info[LinkPush.topicField] as? String,
               let conversation = (info[LinkPush.conversationField] as? String).flatMap(UUID.init(uuidString:)),
-              let approval = (info[approvalKey] as? String).flatMap(UUID.init(uuidString:)),
-              let bot = (info[botKey] as? String).flatMap(UUID.init(uuidString:)) else { return nil }
+              let approval = (info[HeldCallNotification.approvalKey] as? String).flatMap(UUID.init(uuidString:)),
+              let bot = (info[HeldCallNotification.botKey] as? String).flatMap(UUID.init(uuidString:)) else { return nil }
         let approve: Bool? = switch response.actionIdentifier {
-        case approveAction: true
-        case declineAction: false
+        case HeldCallNotification.approveAction: true
+        case HeldCallNotification.declineAction: false
         default: nil
         }
         return (topic, approve.map { LinkApprovalDecision(botID: bot, approvalID: approval, approve: $0) },

@@ -196,7 +196,7 @@ extension AppBadge {
     // Both on the main actor: iOS requires their answers there, and aborts the app otherwise.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        notification.request.content.categoryIdentifier == ApprovalNotifications.category ? [.banner, .list, .sound] : []
+        notification.request.content.categoryIdentifier == HeldCallNotification.category ? [.banner, .list, .sound] : []
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
@@ -214,6 +214,12 @@ extension AppBadge {
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         guard let withdrawal = PushTopic.withdrawal(userInfo: userInfo), let hubs = AppGroup.hubs else { return .noData }
+        // A held call decided on any device.
+        if let decided = HeldCallNotification.withdrawn(withdrawal, hubs: hubs) {
+            await HeldCallNotification.remove([decided])
+            await AppBadge.show(AppBadge.count(hubs: hubs))
+            return .newData
+        }
         let changed = AppBadge.withdrawn(withdrawal, hubs: hubs)
         if changed { await AppBadge.show(AppBadge.count(hubs: hubs)) }
         await HubNotifications.clearDelivered(where: withdrawal.matches)

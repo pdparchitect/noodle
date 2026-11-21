@@ -480,6 +480,32 @@ import XCTest
         XCTAssertEqual(whileConnected, 1)
     }
 
+    /// A call a bot holds is pushed to its owner's devices away, one ping per call under its own ID, so the phone can
+    /// tell it from replies; deciding it takes the ping back.
+    func testHeldCallsArePushedToDevicesAwayAndTakenBackOnceDecided() async throws {
+        let pushes = RecordedPushes()
+        let f = try await fixture(pushes: pushes)
+        let bot = try await createBot(f)
+        _ = try await f.device.request(.pushTopic(LinkPushTopic(topic: "phone-topic")))
+        let held = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Phished"))
+        f.hub.bots.approvalsChanged(of: bot.id)
+        for _ in 0..<50 where await pushes.unread("phone-topic", held.id) == nil { try await Task.sleep(for: .milliseconds(100)) }
+        let pushed = await pushes.unread("phone-topic", held.id)
+        XCTAssertNotNil(pushed)
+        // Other changes to the bot push it no more.
+        f.hub.bots.tasksChanged(of: bot.id)
+        try await Task.sleep(for: .milliseconds(300))
+        let publishedOnce = await pushes.published.filter { $0.hasSuffix(held.id.uuidString) }.count
+        XCTAssertEqual(publishedOnce, 1)
+
+        _ = try await f.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: false)))
+        for _ in 0..<50 where await pushes.unread("phone-topic", held.id) != nil { try await Task.sleep(for: .milliseconds(100)) }
+        let afterDeciding = await pushes.unread("phone-topic", held.id)
+        XCTAssertNil(afterDeciding)
+    }
+
     /// Muting a group on one device mutes it on all of them: what it showed on a device away is taken back,
     /// and its replies notify nothing until it is unmuted. A bot's own conversation and other people's groups cannot be muted.
     func testAMutedGroupNotifiesNoDevice() async throws {
