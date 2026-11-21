@@ -50,6 +50,14 @@ private struct NoSignIns: MCPCredentialStorage {
     func remove(_ id: UUID) {}
 }
 
+/// What a request waiting its turn came to, once it did.
+private final class Outcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Bool?
+    var value: Bool? { lock.withLock { result } }
+    func set(_ value: Bool) { lock.withLock { result = value } }
+}
+
 /// An adapter whose call and feed each send six requests to its service at once, for a service that takes two.
 private struct BurstAdapter: ToolConnectionAdapter {
     var simultaneousRequests: Int? { 2 }
@@ -156,5 +164,72 @@ final class AdapterRequestPacingTests: XCTestCase {
         _ = try await service.alerts(since: Date(), connection: connection)
         XCTAssertEqual(PacedService.asked, 6)
         XCTAssertLessThanOrEqual(PacedService.mostHeld, 2, "checking for alerts sent more at once than the service takes")
+    }
+
+    func testTheServiceCanAskForAPauseUntilADate() async throws {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        let later = formatter.string(from: Date().addingTimeInterval(10))
+        PacedService.reset([.init(status: 429, headers: ["Retry-After": later]), .init(status: 200)])
+        let status = try await send()
+        XCTAssertEqual(status, 200)
+        let waited = try XCTUnwrap(pauses.waited.first)
+        XCTAssertTrue((8...10.5).contains(waited), "waited \(waited) s for a date 10 s away")
+    }
+
+    func testRetriesAreCountedForTheCallThatMadeThemThroughItsConnectionsTurns() async throws {
+        PacedService.reset([.init(status: 429), .init(status: 503)])
+        let service = pacedService()
+        await service.useAdapters(["burst": BurstAdapter()])
+        let connection = try ToolConnection(name: "Burst", endpoint: URL(string: "https://service.example/v1")!, adapter: "burst")
+        let retries = Retries()
+        let call = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: "burst", arguments: Data("{}".utf8))
+        _ = try await Retries.$counting.withValue(retries) { try await service.perform(call, connection: connection) }
+        XCTAssertEqual(retries.total, 2)
+        XCTAssertEqual(retries.shown, "2 requests retried")
+        XCTAssertEqual(Retries().shown, "")
+    }
+
+    func testARequestCancelledWhileWaitingItsTurnGivesUpItsPlace() async throws {
+        let gate = RequestGate(limit: 1)
+        try await gate.enter()
+        let waiting = Task { try await gate.enter() }
+        while await gate.queued == 0 { await Task.yield() }
+        waiting.cancel()
+        let outcome = Outcome()
+        Task { do { try await waiting.value; outcome.set(false) } catch { outcome.set(error is CancellationError) } }
+        // Bounded only so a gate that ignores the cancellation fails rather than hangs.
+        for _ in 0..<500 where outcome.value == nil { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(outcome.value, true, "a cancelled request kept waiting for its turn")
+        guard outcome.value == true else { return }
+        let queued = await gate.queued
+        XCTAssertEqual(queued, 0)
+        // Its place was not taken by the cancelled request: the next one gets in once the first is done.
+        await gate.leave()
+        try await gate.enter()
+    }
+
+    func testARemovedConnectionsTurnsAreForgotten() async throws {
+        PacedService.reset([])
+        let service = pacedService()
+        await service.useAdapters(["burst": BurstAdapter()])
+        let connection = try ToolConnection(name: "Burst", endpoint: URL(string: "https://service.example/v1")!, adapter: "burst")
+        let call = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: "burst", arguments: Data("{}".utf8))
+        _ = try await service.perform(call, connection: connection)
+        let kept = await service.gates[connection.id]
+        XCTAssertNotNil(kept)
+        try await service.disconnect(connection.id)
+        let forgotten = await service.gates[connection.id]
+        XCTAssertNil(forgotten)
+    }
+
+    private func pacedService() -> ToolConnectionService {
+        ToolConnectionService(credentials: NoSignIns(), oauth: MCPOAuth(session: URLSession(configuration: .ephemeral)), httpConfiguration: {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [PacedService.self]
+            return configuration
+        })
     }
 }

@@ -82,6 +82,7 @@ public struct ToolConnectionAccess: Sendable {
             attempt += 1
             waited += pause
             try await self.pause(pause)
+            Retries.counting?.add()
         }
     }
 
@@ -92,8 +93,18 @@ public struct ToolConnectionAccess: Sendable {
     static func pause(after response: HTTPURLResponse, _ data: Data, method: String?, attempt: Int) -> Double? {
         let read = ["GET", "HEAD"].contains(method?.uppercased() ?? "GET")
         guard response.statusCode == 429 || (response.statusCode == 503 && read) || isQuotaRefusal(response.statusCode, data) else { return nil }
-        if let asked = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init), asked >= 0 { return asked }
+        if let asked = response.value(forHTTPHeaderField: "Retry-After").flatMap(retryAfter) { return asked }
         return Double(1 << (attempt - 1)) * Double.random(in: 0.5...1)
+    }
+
+    /// Retry-After in seconds, or as an HTTP date.
+    private static func retryAfter(_ value: String) -> Double? {
+        if let seconds = Double(value.trimmingCharacters(in: .whitespaces)) { return seconds >= 0 ? seconds : nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value).map { max(0, $0.timeIntervalSinceNow) }
     }
 
     /// Whether a 403 is a quota or rate limit rather than missing permission, as Google says it, in the reason of
@@ -109,7 +120,7 @@ public struct ToolConnectionAccess: Sendable {
 
     /// One try, in turn with the connection's other requests when its service takes only so many at once.
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        await gate?.enter()
+        try await gate?.enter()
         do {
             let answer = try await reach(request)
             await gate?.leave()
@@ -137,18 +148,58 @@ public struct ToolConnectionAccess: Sendable {
 actor RequestGate {
     private let limit: Int
     private var running = 0
-    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var waiting: [(id: UUID, turn: CheckedContinuation<Void, Error>)] = []
 
     init(limit: Int) { self.limit = max(1, limit) }
 
-    func enter() async {
+    /// How many requests are waiting their turn.
+    var queued: Int { waiting.count }
+
+    /// Waits for a place, giving up its turn if cancelled meanwhile.
+    func enter() async throws {
         guard running >= limit else { running += 1; return }
-        await withCheckedContinuation { waiting.append($0) }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (turn: CheckedContinuation<Void, Error>) -> Void in
+                if Task.isCancelled { turn.resume(throwing: CancellationError()) } else { waiting.append((id: id, turn: turn)) }
+            }
+        } onCancel: {
+            Task { await self.abandon(id) }
+        }
+    }
+
+    private func abandon(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+        waiting.remove(at: index).turn.resume(throwing: CancellationError())
     }
 
     /// Hands the place to the longest waiting request, if any.
     func leave() {
-        if waiting.isEmpty { running -= 1 } else { waiting.removeFirst().resume() }
+        if waiting.isEmpty { running -= 1 } else { waiting.removeFirst().turn.resume() }
+    }
+}
+
+/// The requests a bot's call or an alert check sent again, after its service rate limited them or could not answer,
+/// so its line in the tool's activity can say so.
+public final class Retries: @unchecked Sendable {
+    /// The count for whatever this task, and the tasks it starts, send.
+    @TaskLocal public static var counting: Retries?
+    private let lock = NSLock()
+    private var count = 0
+
+    public init() {}
+    public var total: Int { lock.withLock { count } }
+    func add() { lock.withLock { count += 1 } }
+
+    /// What a line of activity adds for them: nothing when there were none.
+    public var shown: String { Self.shown(total) }
+
+    static func shown(_ count: Int) -> String {
+        switch count {
+        case ...0: ""
+        case 1: "1 request retried"
+        default: "\(count) requests retried"
+        }
     }
 }
 

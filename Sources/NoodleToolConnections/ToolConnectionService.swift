@@ -21,7 +21,7 @@ public actor ToolConnectionService {
     private var serverIcons: [UUID: [Icon]] = [:]
     private var adapters: [String: any ToolConnectionAdapter] = [:]
     /// Each adapted connection's share of a service that takes only so many requests at once, kept across its calls.
-    private var gates: [UUID: RequestGate] = [:]
+    var gates: [UUID: RequestGate] = [:]
     /// The accounts each Identity Center sign-in covers, as last listed, and when.
     private var awsAccountLists: [UUID: (accounts: [AWSAccount], listed: Date)] = [:]
     /// Each Identity Center connection's role keys, by account, while they last.
@@ -155,6 +155,7 @@ public actor ToolConnectionService {
         }
         queues[id] = nil
         queueTickets[id] = nil
+        gates[id] = nil
         serverIcons[id] = nil
         try credentials.remove(id)
         try tokens.remove(id)

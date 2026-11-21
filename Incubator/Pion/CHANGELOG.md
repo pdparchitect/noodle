@@ -6,6 +6,7 @@
 
 - Google Workspace Containment in Settings › Tools, a tool of its own beside Google Workspace Audit with a sign-in of its own: agents see whether a user is suspended, an admin or enrolled in 2-step verification, the apps they granted access and their app passwords. Signing a user out everywhere, revoking an app's access, deleting an app password, and suspending or restoring a user are listed for agents to recommend, but never run on their call. Its Setup Steps make an admin role with only Users › Read, Suspend users and User Security Management.
 - A guide to both Google Workspace tools in `docs/tools`: the access each asks for, the least access to set it up with, and their caveats.
+- A tool's activity says how many requests an agent's call or a check for alerts retried because the service rate limited them or was briefly unavailable, on that call's or check's own line, such as "Checked for alerts: nothing new (2 requests retried)".
 
 ### Changed
 

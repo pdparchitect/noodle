@@ -170,6 +170,8 @@ public struct MCPTrigger: Sendable {
         case failed(String)
     }
 
+    /// The requests each account's last check sent again, after its service rate limited them or could not answer.
+    public private(set) var retried: [UUID: Int] = [:]
     /// The app's adapters, by the name connections give; those with a feed are watched.
     public var adapters: [String: any ToolConnectionAdapter] = [:]
     /// The boards watched on MCP servers, by the catalogue entry their connections are made from.
@@ -245,13 +247,16 @@ public struct MCPTrigger: Sendable {
         let watched = keeping.union(accounts.map(\.connection.id))
         watch.keep(only: watched)
         boardsRead = boardsRead.filter { watched.contains($0.key) }
+        retried = [:]
         for (connection, agents) in accounts where !agents.isEmpty {
+            let retries = Retries()
+            defer { if retries.total > 0 { retried[connection.id] = retries.total } }
             do {
                 if let trigger = trigger(for: connection) {
                     if let read = boardsRead[connection.id], now.timeIntervalSince(read) < trigger.interval { continue }
                     let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: trigger.tool,
                                                    arguments: trigger.arguments)
-                    let found = try trigger.entries(try await call(connection, request))
+                    let found = try trigger.entries(try await Retries.$counting.withValue(retries) { try await call(connection, request) })
                     let new = watch.board(connection.id, at: now, found: found)
                     boardsRead[connection.id] = now
                     guard let new else { checked[connection.id] = .nothingNew; continue }
@@ -262,7 +267,7 @@ public struct MCPTrigger: Sendable {
                 }
                 guard let tool = watchedTool(for: connection) else { continue }
                 guard let since = watch.since(connection.id, at: now) else { checked[connection.id] = .started; continue }
-                let found = try await alerts(connection, since)
+                let found = try await Retries.$counting.withValue(retries) { try await alerts(connection, since) }
                 guard let news = watch.take(found, for: connection.id) else { checked[connection.id] = .nothingNew; continue }
                 checked[connection.id] = .found("\(news.count)\(news.capped ? "+" : "") new alert\(news.count == 1 && !news.capped ? "" : "s")")
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)
