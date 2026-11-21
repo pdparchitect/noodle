@@ -30,6 +30,11 @@ public enum GoogleWorkspace {
         admin-roles lists the super admins and every admin role with what it allows and who holds it. For a breach's \
         scope, users finds accounts by search, such as isEnrolledIn2Sv=false; user-groups and user-devices show what a user \
         reaches through groups and which phones hold their data; and the takeout and vault reports show what was exported. \
+        To investigate an account, start with user-timeline, everything it and admins did to it in one list. oauth-apps \
+        lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
+        Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
+        group, flagging outsiders, and devices every laptop, desktop and phone with its users and risks. Drive sharing \
+        changes are drive events change_document_visibility, change_document_access_scope and change_user_access. \
         Record each finding as evidence, citing the application, user \
         and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
@@ -37,25 +42,27 @@ public enum GoogleWorkspace {
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
             fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and mobile devices.
+            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and devices.
             oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"], clients: []),
+                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
+                                    "https://www.googleapis.com/auth/cloud-identity.devices.readonly"], clients: []),
             oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API**.",
-        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly` and `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly`.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API** and the **Cloud Identity API**.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/cloud-identity.devices.readonly`.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to mobile devices, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to devices, and assign it to an admin account kept for Pion, never a super admin.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
-    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices()], trigger: NewSecurityEvents(),
+    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), Devices()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -66,7 +73,8 @@ public enum GoogleWorkspace {
         defaultInstructions: """
         Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
         an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
-        app-passwords lists its app passwords. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
+        app-passwords lists its app passwords; apps lists every app holding access to any account now, by client ID, \
+        with its scopes and holders. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
         for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
         it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working.
         """,
@@ -87,9 +95,10 @@ public enum GoogleWorkspace {
         "Choose **Add & Connect** and sign in as the admin with the Pion Containment role.",
     ]
 
+    /// Paced, as apps asks for each user's tokens in turn.
     public static let containmentAdapter = OperationAdapter(operations: [
-        UserState(), Tokens(), AppPasswords(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
-    ])
+        UserState(), Tokens(), Apps(), AppPasswords(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
+    ], simultaneousRequests: 8)
 
     /// The audit events that mean an account or the domain may be under attack, each asked for by name as the Reports
     /// API takes one at a time, with a parameter value that makes one not count: Google's suspicious and blocked
@@ -103,6 +112,13 @@ public enum GoogleWorkspace {
         ("admin", "GRANT_ADMIN_PRIVILEGE", nil), ("admin", "GRANT_DELEGATED_ADMIN_PRIVILEGES", nil),
         ("admin", "UPDATE_DOMAIN_PRIMARY_ADMIN_EMAIL", nil), ("admin", "CHANGE_SSO_SETTINGS", nil), ("admin", "TOGGLE_SSO_ENABLED", nil),
         ("admin", "TURN_OFF_2_STEP_VERIFICATION", nil),
+        // An account taken over: its second factor or recovery changed, its mail sent elsewhere or copied, codes or a
+        // mailbox dump made for someone else.
+        ("user_accounts", "2sv_disable", nil), ("user_accounts", "recovery_email_edit", nil), ("user_accounts", "recovery_phone_edit", nil),
+        ("user_accounts", "email_forwarding_out_of_domain", nil), ("user_accounts", "titanium_unenroll", nil),
+        ("admin", "CREATE_EMAIL_MONITOR", nil), ("admin", "MAIL_ROUTING_DESTINATION_ADDED", nil), ("admin", "GENERATE_2SV_SCRATCH_CODES", nil),
+        ("admin", "REQUEST_MAILBOX_DUMP", nil), ("admin", "CHANGE_RECOVERY_EMAIL", nil), ("admin", "ADD_RECOVERY_EMAIL", nil),
+        ("login", "account_disabled_generic", nil),
         ("mobile", "DEVICE_COMPROMISED_EVENT", ("DEVICE_COMPROMISED_STATE", "NOT_COMPROMISED")), ("mobile", "SUSPICIOUS_ACTIVITY_EVENT", nil),
         ("rules", "rule_trigger", ("severity", "LOW")),
     ]
@@ -453,7 +469,7 @@ extension GoogleWorkspace {
     struct Users: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String?, limit: Int? }
         static let name = "users"
-        static let summary = "Accounts in the domain, optionally by search such as isEnrolledIn2Sv=false, isSuspended=true or orgUnitPath=/Finance, with admin, 2-step verification and last sign-in."
+        static let summary = "Accounts in the domain, optionally by search such as isEnrolledIn2Sv=false, isSuspended=true or orgUnitPath=/Finance, with admin, 2-step verification and its enforcement, recovery email and phone, aliases and last sign-in."
         static let input = JSONSchema.object([
             "query": .string("A Directory search, such as isEnrolledIn2Sv=false, isAdmin=true, isSuspended=false or email:m.okafor*. Everyone when left out."),
             "limit": .integer("How many accounts, at most.", minimum: 1, maximum: 500),
@@ -463,8 +479,9 @@ extension GoogleWorkspace {
             let limit = input.limit ?? 200
             guard (1...500).contains(limit) else { throw ServiceError.input("Ask for between 1 and 500 accounts.") }
             struct User: Codable {
-                let primaryEmail: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?, isEnrolledIn2Sv: Bool?, suspended: Bool?
+                let primaryEmail: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?, isEnrolledIn2Sv: Bool?, isEnforcedIn2Sv: Bool?, suspended: Bool?
                 let lastLoginTime: String?, creationTime: String?, orgUnitPath: String?
+                let recoveryEmail: String?, recoveryPhone: String?, aliases: [String]?, isGuestUser: Bool?, archived: Bool?
             }
             struct Listed: Codable { let users: [User]? }
             var query: [String: String?] = ["customer": "my_customer", "maxResults": String(limit), "viewType": "admin_view"]
@@ -475,9 +492,19 @@ extension GoogleWorkspace {
             let users = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
                 .get(["admin", "directory", "v1", "users"], query: query, as: Listed.self).users ?? [] }
             let text = users.isEmpty ? "No accounts match." : users.map { user in
-                var parts = [user.isAdmin == true ? "super admin" : user.isDelegatedAdmin == true ? "delegated admin" : nil,
-                             user.isEnrolledIn2Sv == true ? nil : "2-step verification off", user.suspended == true ? "suspended" : nil].compactMap { $0 }
+                let twoStep = user.isEnrolledIn2Sv != true ? "2-step verification off" : user.isEnforcedIn2Sv == false ? "2-step verification not enforced" : nil
+                var parts = [user.isAdmin == true ? "super admin" : user.isDelegatedAdmin == true ? "delegated admin" : nil, twoStep,
+                             user.suspended == true ? "suspended" : nil, user.isGuestUser == true ? "guest" : nil, user.archived == true ? "archived" : nil]
+                    .compactMap { $0 }
                 if let unit = user.orgUnitPath { parts.append("in \(unit)") }
+                // An attacker who takes an account over often points its recovery somewhere they control.
+                let domains = Set(([user.primaryEmail] + (user.aliases ?? []).map { $0 }).compactMap { $0?.split(separator: "@").last?.lowercased() })
+                if let recovery = user.recoveryEmail, !recovery.isEmpty {
+                    let domain = recovery.split(separator: "@").last?.lowercased() ?? ""
+                    if !domains.contains(domain) { parts.append("recovery email outside the domain: \(recovery)") }
+                }
+                if let phone = user.recoveryPhone, !phone.isEmpty { parts.append("recovery phone set") }
+                if let aliases = user.aliases, !aliases.isEmpty { parts.append("aliases " + aliases.joined(separator: ", ")) }
                 parts.append(user.lastLoginTime.map { $0.hasPrefix("1970") ? "never signed in" : "last signed in \($0)" } ?? "")
                 return "\(user.primaryEmail ?? "?"): " + parts.filter { !$0.isEmpty }.joined(separator: ", ")
             }.joined(separator: "\n")
@@ -540,6 +567,270 @@ extension GoogleWorkspace {
                 read access to admin roles and mobile devices besides Reports. Ask the champion to add them, and to sign the tool \
                 in again if it was connected before it asked for the Directory scopes.
                 """)
+        }
+    }
+}
+
+// MARK: - Investigation
+
+extension GoogleWorkspace {
+    /// What a set of OAuth scopes lets an app do, the most dangerous first, or nil for nothing that reads data or administers.
+    static func risk(_ scopes: [String]) -> (rank: Int, said: String)? {
+        let held = Set(scopes.flatMap { $0.split(separator: " ").map(String.init) })
+        let kinds: [(Int, String, (String) -> Bool)] = [
+            (0, "administers the domain", { $0.contains("/auth/admin.") && !$0.hasSuffix(".readonly") }),
+            (1, "reads and sends mail", { $0 == "https://mail.google.com/" || $0.hasSuffix("/gmail.modify") || $0.hasSuffix("/gmail.compose") }),
+            (1, "reads mail", { $0.hasSuffix("/gmail.readonly") || $0.hasSuffix("/gmail.metadata") }),
+            (2, "reads and changes every file", { $0.hasSuffix("/auth/drive") }),
+            (2, "reads every file", { $0.hasSuffix("/auth/drive.readonly") }),
+            (3, "full Google Cloud access", { $0.hasSuffix("/auth/cloud-platform") }),
+            (4, "reads directory data", { $0.contains("/auth/admin.") }),
+            (5, "reads and changes calendars", { $0.hasSuffix("/auth/calendar") }),
+            (5, "reads contacts", { $0.contains("/auth/contacts") }),
+        ]
+        let found = kinds.filter { kind in held.contains(where: kind.2) }
+        guard let rank = found.map(\.0).min() else { return nil }
+        return (rank, found.map(\.1).joined(separator: ", "))
+    }
+
+    /// Who is in a group, and so reads what it receives, with members outside the domain flagged.
+    struct GroupMembers: ServiceOperation {
+        struct Input: Decodable, Sendable { let group: String }
+        static let name = "group-members"
+        static let summary = "Who is in a group, with their role, flagging members outside the domain."
+        static let input = JSONSchema.object(["group": .string("The group's email address.")], required: ["group"])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Member: Codable { let email: String?; let id: String?; let role: String?; let type: String?; let status: String? }
+            struct Listed: Codable { let members: [Member]? }
+            let group = try ServiceInput.email(input.group)
+            let domain = group.split(separator: "@").last.map(String.init) ?? ""
+            let members = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+                .get(["admin", "directory", "v1", "groups", group, "members"], query: ["maxResults": "200"], as: Listed.self).members ?? [] }
+            let text = members.isEmpty ? "\(group) has no members." : "\(group) (\(members.count)): " + members.map { member in
+                if member.type == "CUSTOMER" { return "everyone in the domain" }
+                let email = member.email ?? member.id ?? "?"
+                var notes: [String] = []
+                if member.type == "GROUP" { notes.append("group") }
+                if let role = member.role, role != "MEMBER" { notes.append(role.lowercased()) }
+                let theirs = email.split(separator: "@").last.map { $0.lowercased() == domain || $0.lowercased().hasSuffix("." + domain) } ?? true
+                if !theirs { notes.append("outside the domain") }
+                return email + (notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")
+            }.joined(separator: ", ")
+            return try ServiceResult(text: text, structured: Listed(members: members))
+        }
+    }
+
+    /// Every app people granted access to their accounts in a window, from the token audit log, which keeps six months:
+    /// its client ID, name, type and scopes, who granted it and who revoked it. The access apps hold now is
+    /// Containment's apps.
+    struct OAuthApps: ServiceOperation {
+        struct Input: Decodable, Sendable { let since: String?, until: String? }
+        static let name = "oauth-apps"
+        static let summary = "Every app people granted access to their accounts in a window, by client ID, with its scopes and who granted or revoked it, those that read mail or files or administer first."
+        static let input = JSONSchema.object([
+            "since": .string("The earliest time, in ISO 8601. The last 180 days when left out, as far back as Google keeps."),
+            "until": .string("The latest time, in ISO 8601."),
+        ])
+
+        struct App: Encodable {
+            let clientId: String, name: String, type: String?, scopes: [String], grantedBy: [String], revokedBy: [String], lastGranted: String?
+            let risk: String?
+        }
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(180), "maxResults": "1000"]
+            if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
+            async let granted = GoogleWorkspace.events(service, application: "token", event: "authorize", query: query)
+            async let revoked = GoogleWorkspace.events(service, application: "token", event: "revoke", query: query)
+            let (grants, revokes) = try await (granted, revoked)
+            let apps = Dictionary(grouping: grants) { $0.parameters["client_id"] ?? "?" }.map { client, events in
+                let scopes = Array(Set(events.flatMap { ($0.parameters["scope"] ?? "").components(separatedBy: ", ") }.filter { !$0.isEmpty })).sorted()
+                return App(clientId: client, name: events.compactMap { $0.parameters["app_name"] }.first ?? client,
+                           type: events.compactMap { $0.parameters["client_type"] }.first, scopes: scopes,
+                           grantedBy: Array(NSOrderedSet(array: events.compactMap(\.user))) as? [String] ?? [],
+                           revokedBy: Array(NSOrderedSet(array: revokes.filter { $0.parameters["client_id"] == client }.compactMap(\.user))) as? [String] ?? [],
+                           lastGranted: events.compactMap(\.time).max(), risk: GoogleWorkspace.risk(scopes)?.said)
+            }.sorted { first, second in
+                let ranks = (GoogleWorkspace.risk(first.scopes)?.rank ?? 9, GoogleWorkspace.risk(second.scopes)?.rank ?? 9)
+                return ranks.0 != ranks.1 ? ranks.0 < ranks.1 : (first.grantedBy.count, second.name) > (second.grantedBy.count, first.name)
+            }
+            let text = apps.isEmpty ? "No app was granted access in this window." : apps.map { app in
+                "\(app.name) (client \(app.clientId)\(app.type.map { ", \($0)" } ?? ""))" + (app.risk.map { ": \($0)" } ?? "")
+                    + "; granted by \(app.grantedBy.joined(separator: ", ")), last \(app.lastGranted ?? "?")"
+                    + (app.revokedBy.isEmpty ? "" : "; revoked by \(app.revokedBy.joined(separator: ", "))")
+                    + "; scopes \(app.scopes.joined(separator: " "))"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let apps: [App] }
+            return try ServiceResult(text: text, structured: Kept(apps: apps))
+        }
+    }
+
+    /// What apps did with the access they were given: API calls and the data they pulled, by app, user and method.
+    /// A large pull by one app on one account is how data leaves through an OAuth grant.
+    struct AppActivity: ServiceOperation {
+        struct Input: Decodable, Sendable { let clientId: String?, user: String?, since: String?, until: String? }
+        static let name = "app-activity"
+        static let summary = "API calls apps made on people's behalf and the data they pulled, by app, user and method, the largest first; by client ID, user or both."
+        static let input = JSONSchema.object([
+            "clientId": .string("Only this app, by its client ID from oauth-apps."),
+            "user": .string("Only calls on behalf of this user's email."),
+            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "until": .string("The latest time, in ISO 8601."),
+        ])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7), "maxResults": "1000"]
+            if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
+            if let client = input.clientId { query["filters"] = "client_id==" + (try ServiceInput.quoted(client, "the client ID")) }
+            let user = try input.user.map(ServiceInput.email) ?? "all"
+            let calls = try await GoogleWorkspace.events(service, application: "token", user: user, event: "activity", query: query)
+            struct Usage: Encodable { let app: String, clientId: String, user: String, method: String, calls: Int, bytes: Int }
+            let usage = Dictionary(grouping: calls) { [$0.parameters["app_name"] ?? "?", $0.parameters["client_id"] ?? "?", $0.user ?? "?",
+                                                      $0.parameters["method_name"] ?? "?"] }
+                .map { key, events in
+                    Usage(app: key[0], clientId: key[1], user: key[2], method: key[3], calls: events.count,
+                          bytes: events.reduce(0) { $0 + (Int($1.parameters["num_response_bytes"] ?? "") ?? 0) })
+                }.sorted { ($0.bytes, $0.calls) > ($1.bytes, $1.calls) }
+            func size(_ bytes: Int) -> String {
+                bytes >= 1_000_000 ? String(format: "%.1f MB", Double(bytes) / 1_000_000) : bytes >= 1_000 ? String(format: "%.1f KB", Double(bytes) / 1_000) : "\(bytes) bytes"
+            }
+            let text = usage.isEmpty ? "No API calls by apps match." : usage.prefix(60).map {
+                "\($0.app) (\($0.clientId)) as \($0.user): \($0.method) \($0.calls) call\($0.calls == 1 ? "" : "s"), \(size($0.bytes))"
+            }.joined(separator: "\n") + (calls.count >= 1000 ? "\nOnly the first 1000 calls were read; narrow the window or name the app." : "")
+            struct Kept: Encodable { let usage: [Usage] }
+            return try ServiceResult(text: text, structured: Kept(usage: usage))
+        }
+    }
+
+    /// One account's activity across the reports, and what admins did to it, merged newest first: where an
+    /// investigation of an account starts.
+    struct UserTimeline: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String, since: String?, until: String? }
+        static let name = "user-timeline"
+        static let summary = "Everything one account did, and admins did to it, newest first: sign-ins, account and recovery changes, app grants, Drive, SAML, devices, groups and admin actions."
+        static let input = JSONSchema.object([
+            "user": .string("The user's email."),
+            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "until": .string("The latest time, in ISO 8601."),
+        ], required: ["user"])
+        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups"]
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let user = try ServiceInput.email(input.user)
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7), "maxResults": "200"]
+            if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
+            let asked = query, about = query.merging(["filters": "USER_EMAIL==\(user)"]) { $1 }
+            let events = try await withThrowingTaskGroup(of: [Event].self) { group in
+                for application in Self.applications {
+                    group.addTask { try await GoogleWorkspace.events(service, application: application, user: user, query: asked) }
+                }
+                // What admins did to the account, as they are the actors there.
+                group.addTask { try await GoogleWorkspace.events(service, application: "admin", query: about) }
+                return try await group.reduce(into: [String: Event]()) { found, events in for event in events { found[event.id] = event } }
+            }.values.sorted { ($0.time ?? "") > ($1.time ?? "") }
+            let text = events.isEmpty ? "Nothing for \(user) in this window." : events.prefix(150).map { "\($0.application) \($0.line)" }.joined(separator: "\n")
+                + (events.count > 150 ? "\n\(events.count - 150) more in the structured result." : "")
+            struct Kept: Encodable { let events: [Event] }
+            return try ServiceResult(text: text, structured: Kept(events: events))
+        }
+    }
+
+    /// Every device the organisation knows, from Cloud Identity: laptops and desktops with Endpoint Verification,
+    /// company-owned devices and phones, with who uses each, compromised, unencrypted or unmanaged ones first.
+    struct Devices: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String? }
+        static let name = "devices"
+        static let summary = "Every laptop, desktop and phone the organisation knows, with who uses it and whether it is compromised, unencrypted or not approved; or only one user's."
+        static let input = JSONSchema.object(["user": .string("Only this user's devices, by email.")])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Device: Codable {
+                let name: String, deviceType: String?, model: String?, osVersion: String?, ownerType: String?, encryptionState: String?
+                let managementState: String?, compromisedState: String?, lastSyncTime: String?, serialNumber: String?, hostname: String?
+            }
+            struct DevicePage: Decodable { let devices: [Device]?; let nextPageToken: String? }
+            struct DeviceUser: Codable { let name: String; let userEmail: String?; let managementState: String?; let lastSyncTime: String? }
+            struct UserPage: Decodable { let deviceUsers: [DeviceUser]?; let nextPageToken: String? }
+            let identity = try service.at(host: "cloudidentity.googleapis.com")
+            let user = try input.user.map(ServiceInput.email)
+            var devices: [Device] = [], users: [DeviceUser] = [], token: String?
+            try await GoogleWorkspace.directoryRead {
+                for _ in 0..<10 {
+                    let page = try await identity.get(["v1", "devices"], query: ["customer": "customers/my_customer", "pageSize": "100", "pageToken": token],
+                                                      as: DevicePage.self)
+                    devices += page.devices ?? []
+                    guard let next = page.nextPageToken, !next.isEmpty else { break }
+                    token = next
+                }
+                token = nil
+                // Twenty a page at most, so a large fleet is read in part.
+                for _ in 0..<25 {
+                    let page = try await identity.get(["v1", "devices", "-", "deviceUsers"],
+                                                      query: ["customer": "customers/my_customer", "pageSize": "20", "pageToken": token], as: UserPage.self)
+                    users += page.deviceUsers ?? []
+                    guard let next = page.nextPageToken, !next.isEmpty else { break }
+                    token = next
+                }
+            }
+            let owners = Dictionary(grouping: users) { $0.name.components(separatedBy: "/deviceUsers/").first ?? "" }
+            struct Kept: Encodable { let device: Device; let users: [String]; let risks: [String] }
+            let kept = devices.map { device -> Kept in
+                var risks: [String] = []
+                if device.compromisedState == "COMPROMISED" { risks.append("compromised") }
+                if device.encryptionState == "NOT_ENCRYPTED" { risks.append("not encrypted") }
+                if let state = device.managementState, !["APPROVED"].contains(state) { risks.append(state.lowercased().replacingOccurrences(of: "_", with: " ")) }
+                return Kept(device: device, users: (owners[device.name] ?? []).compactMap(\.userEmail), risks: risks)
+            }.filter { item in user.map { email in item.users.contains { $0.lowercased() == email } } ?? true }
+                .sorted { ($0.risks.contains("compromised") ? 0 : $0.risks.isEmpty ? 2 : 1, $0.device.model ?? "") < ($1.risks.contains("compromised") ? 0 : $1.risks.isEmpty ? 2 : 1, $1.device.model ?? "") }
+            let text = kept.isEmpty ? (user.map { "\($0) uses no devices the organisation knows." } ?? "The organisation knows no devices.") : kept.map { item in
+                let device = item.device
+                let what = [device.deviceType, device.osVersion, device.ownerType.map { $0 == "COMPANY" ? "company-owned" : "personal" }].compactMap { $0 }.joined(separator: ", ")
+                return "\(device.model ?? device.hostname ?? device.name) (\(what)), used by \(item.users.isEmpty ? "nobody listed" : item.users.joined(separator: ", "))"
+                    + ", last synced \(device.lastSyncTime ?? "?")" + (item.risks.isEmpty ? "" : " [\(item.risks.joined(separator: ", "))]")
+            }.joined(separator: "\n")
+            return try ServiceResult(text: text, structured: ["devices": kept])
+        }
+    }
+}
+
+extension GoogleWorkspace {
+    /// The access apps hold now, across every account, from each user's tokens: what is still open after a breach,
+    /// whatever the audit log has kept.
+    struct Apps: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "apps"
+        static let summary = "Every app holding access to accounts now, across all users, by client ID, with its scopes and holders, those that read mail or files or administer first."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct User: Decodable { let primaryEmail: String? }
+            struct Users: Decodable { let users: [User]? }
+            struct Token: Decodable { let clientId: String?; let displayText: String?; let scopes: [String]? }
+            struct Tokens: Decodable { let items: [Token]? }
+            let emails = try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "500"],
+                                               as: Users.self).users?.compactMap(\.primaryEmail) ?? []
+            let held = try await withThrowingTaskGroup(of: (String, [Token]).self) { group in
+                for email in emails {
+                    group.addTask { (email, try await directory(email, ["tokens"]) { try await service.get($0, as: Tokens.self) }.items ?? []) }
+                }
+                return try await group.reduce(into: []) { $0.append($1) }
+            }
+            struct App: Encodable { let clientId: String, name: String, scopes: [String], holders: [String], risk: String? }
+            let apps = Dictionary(grouping: held.flatMap { email, tokens in tokens.map { (email, $0) } }) { $0.1.clientId ?? "?" }.map { client, pairs in
+                let scopes = Array(Set(pairs.flatMap { $0.1.scopes ?? [] })).sorted()
+                return App(clientId: client, name: pairs.compactMap { $0.1.displayText }.first ?? client, scopes: scopes,
+                           holders: Array(Set(pairs.map(\.0))).sorted(), risk: GoogleWorkspace.risk(scopes)?.said)
+            }.sorted { first, second in
+                let ranks = (GoogleWorkspace.risk(first.scopes)?.rank ?? 9, GoogleWorkspace.risk(second.scopes)?.rank ?? 9)
+                return ranks.0 != ranks.1 ? ranks.0 < ranks.1 : (first.holders.count, second.name) > (second.holders.count, first.name)
+            }
+            let text = apps.isEmpty ? "No app holds access to any account." : apps.map { app in
+                "\(app.name) (\(app.clientId))" + (app.risk.map { ": \($0)" } ?? "")
+                    + "; held by \(app.holders.count) user\(app.holders.count == 1 ? "" : "s"): \(app.holders.joined(separator: ", ")); scopes \(app.scopes.joined(separator: " "))"
+            }.joined(separator: "\n") + (emails.count >= 500 ? "\nOnly the first 500 accounts were read." : "")
+            struct Kept: Encodable { let apps: [App] }
+            return try ServiceResult(text: text, structured: Kept(apps: apps))
         }
     }
 }

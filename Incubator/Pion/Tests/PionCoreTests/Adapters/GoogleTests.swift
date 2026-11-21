@@ -31,7 +31,8 @@ final class GoogleTests: XCTestCase {
                                                            "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"]),
+                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
+                                                           "https://www.googleapis.com/auth/cloud-identity.devices.readonly"]),
                       (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
                                                    "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
@@ -270,6 +271,7 @@ final class GoogleTests: XCTestCase {
         service.answers[reports + "login"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:20:00.000Z","uniqueQualifier":"101","applicationName":"login"},"actor":{"email":"m.okafor@kestrel.example"},"ipAddress":"203.0.113.77","events":[{"type":"account_warning","name":"suspicious_login","parameters":[{"name":"affected_email_address","value":"m.okafor@kestrel.example"}]}]},{"id":{"time":"2026-11-19T09:19:00.000Z","uniqueQualifier":"102","applicationName":"login"},"actor":{"email":"j.lee@kestrel.example"},"events":[{"type":"login","name":"login_success"}]}]}"#)
         service.answers[reports + "admin"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:18:00.000Z","uniqueQualifier":"201","applicationName":"admin"},"actor":{"email":"it@kestrel.example"},"events":[{"type":"USER_SETTINGS","name":"GRANT_ADMIN_PRIVILEGE","parameters":[{"name":"USER_EMAIL","value":"intern@kestrel.example"}]}]},{"id":{"time":"2026-11-19T09:17:00.000Z","uniqueQualifier":"202","applicationName":"admin"},"events":[{"type":"USER_SETTINGS","name":"CHANGE_PASSWORD"}]}]}"#)
         service.answers[reports + "mobile"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:16:00.000Z","uniqueQualifier":"301","applicationName":"mobile"},"events":[{"type":"suspicious_activity","name":"DEVICE_COMPROMISED_EVENT","parameters":[{"name":"DEVICE_COMPROMISED_STATE","value":"COMPROMISED"}]}]},{"id":{"time":"2026-11-19T09:15:00.000Z","uniqueQualifier":"302","applicationName":"mobile"},"events":[{"type":"suspicious_activity","name":"DEVICE_COMPROMISED_EVENT","parameters":[{"name":"DEVICE_COMPROMISED_STATE","value":"NOT_COMPROMISED"}]}]}]}"#)
+        service.answers[reports + "user_accounts"] = (200, "{}")
         service.answers[reports + "rules"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:14:00.000Z","uniqueQualifier":"401","applicationName":"rules"},"events":[{"type":"rule_trigger_type","name":"rule_trigger","parameters":[{"name":"rule_name","value":"Mass download"},{"name":"severity","value":"HIGH"}]}]},{"id":{"time":"2026-11-19T09:13:00.000Z","uniqueQualifier":"402","applicationName":"rules"},"events":[{"type":"rule_trigger_type","name":"rule_trigger","parameters":[{"name":"rule_name","value":"External share"},{"name":"severity","value":"LOW"}]}]}]}"#)
         let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
         let found = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service)
@@ -291,7 +293,7 @@ final class GoogleTests: XCTestCase {
     /// What a wake names is read back with security-events, for its window: each event with who it concerns.
     func testWorkspaceSecurityEventsReadTheWatchedEventsForAWindow() async throws {
         let service = FakeService()
-        for report in ["admin", "mobile", "rules"] { service.answers["/admin/reports/v1/activity/users/all/applications/" + report] = (200, "{}") }
+        for report in ["admin", "mobile", "rules", "user_accounts"] { service.answers["/admin/reports/v1/activity/users/all/applications/" + report] = (200, "{}") }
         service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:20:00.000Z","uniqueQualifier":"101","applicationName":"login"},"actor":{"email":"m.okafor@kestrel.example"},"ipAddress":"203.0.113.77","events":[{"type":"account_warning","name":"suspicious_login","parameters":[{"name":"affected_email_address","value":"m.okafor@kestrel.example"}]}]}]}"#)
         let events = try await callTool(GoogleWorkspace.adapter, "security-events",
             #"{"since":"2026-11-19T09:00:00Z","until":"2026-11-19T10:00:00Z"}"#, on: service, in: workspace)
@@ -475,6 +477,125 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(devices.text.contains("Pixel 8") && devices.text.contains("Compromised"), devices.text)
         XCTAssertFalse(devices.text.contains("iPhone"), "another user whose address starts the same is not theirs")
         XCTAssertEqual(queryItems(service.requests.last)["query"], "email:m.okafor@kestrel.example")
+    }
+
+    // MARK: Investigation
+
+    /// An account's 2-step verification enforcement, and recovery details an attacker would change, flagged when they
+    /// lead outside the domain.
+    func testUsersShowEnforcementRecoveryAliasesAndGuests() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[{"primaryEmail":"ivana@kestrel.example","isEnrolledIn2Sv":true,"isEnforcedIn2Sv":false,"recoveryEmail":"ivana.p@gmail.com","recoveryPhone":"+447700900123","aliases":["accounts@kestrel.example"],"isGuestUser":false,"creationTime":"2024-01-02T00:00:00.000Z"},{"primaryEmail":"nick@kestrel.example","isEnrolledIn2Sv":true,"isEnforcedIn2Sv":true,"recoveryEmail":"nick@kestrel.example","isGuestUser":true,"archived":true}]}"#)
+        let users = try await callTool(GoogleWorkspace.adapter, "users", "{}", on: service, in: workspace)
+        let lines = users.text.split(separator: "\n").map(String.init)
+        let ivana = try XCTUnwrap(lines.first { $0.hasPrefix("ivana@") })
+        XCTAssertTrue(ivana.contains("2-step verification not enforced") && ivana.contains("recovery email outside the domain: ivana.p@gmail.com")
+                      && ivana.contains("recovery phone set") && ivana.contains("aliases accounts@kestrel.example"), ivana)
+        let nick = try XCTUnwrap(lines.first { $0.hasPrefix("nick@") })
+        XCTAssertTrue(nick.contains("guest") && nick.contains("archived") && !nick.contains("outside the domain"), nick)
+    }
+
+    /// Who is in a group, so who reads what it receives, with members outside the domain flagged.
+    func testGroupMembersFlagThoseOutsideTheDomain() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/groups/accounting@kestrel.example/members"] = (200, #"{"members":[{"email":"ivana@kestrel.example","role":"MEMBER","type":"USER","status":"ACTIVE"},{"email":"bookkeeper@agency.example","role":"MEMBER","type":"USER"},{"email":"finance@kestrel.example","role":"OWNER","type":"GROUP"},{"id":"C01","role":"MEMBER","type":"CUSTOMER"}]}"#)
+        let members = try await callTool(GoogleWorkspace.adapter, "group-members", #"{"group":"accounting@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertFalse(members.isError, members.text)
+        XCTAssertTrue(members.text.contains("bookkeeper@agency.example (outside the domain)"), members.text)
+        XCTAssertTrue(members.text.contains("finance@kestrel.example (group, owner)"), members.text)
+        XCTAssertTrue(members.text.contains("everyone in the domain"), members.text)
+        XCTAssertFalse(members.text.contains("ivana@kestrel.example (outside"), members.text)
+    }
+
+    /// Every app people let into their accounts in the window, by its client ID, with its scopes and who granted or
+    /// revoked it, those that can read mail or files or administer first.
+    func testOAuthAppsAreBuiltFromAuthorizationsAndRevocations() async throws {
+        let service = FakeService()
+        let token = "/admin/reports/v1/activity/users/all/applications/token"
+        service.answers[token + "?eventName=authorize&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[{"id":{"time":"2026-11-10T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"pdp@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"},{"name":"client_type","value":"WEB"},{"name":"scope","multiValue":["https://www.googleapis.com/auth/calendar"]}]}]},{"id":{"time":"2026-11-11T09:00:00.000Z","uniqueQualifier":"2"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"},{"name":"scope","multiValue":["https://www.googleapis.com/auth/calendar"]}]}]},{"id":{"time":"2026-11-12T09:00:00.000Z","uniqueQualifier":"3"},"actor":{"email":"nick@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Mail Helper"},{"name":"client_id","value":"222.apps.googleusercontent.com"},{"name":"scope","multiValue":["https://mail.google.com/"]}]}]}]}"#)
+        service.answers[token + "?eventName=revoke&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[{"id":{"time":"2026-11-13T09:00:00.000Z","uniqueQualifier":"4"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"revoke","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"}]}]}]}"#)
+        let apps = try await callTool(GoogleWorkspace.adapter, "oauth-apps", #"{"since":"2026-06-01T00:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertFalse(apps.isError, apps.text)
+        let lines = apps.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("Mail Helper") && lines[0].contains("222.apps.googleusercontent.com") && lines[0].contains("reads and sends mail"), apps.text)
+        let reclaim = try XCTUnwrap(lines.first { $0.contains("Reclaim.ai") })
+        XCTAssertTrue(reclaim.contains("granted by pdp@kestrel.example") && reclaim.contains("revoked by ivana@kestrel.example")
+                      && reclaim.contains("https://www.googleapis.com/auth/calendar"), reclaim)
+    }
+
+    /// What an app did with the access it was given: its API calls and how much data it pulled, by client ID or user.
+    func testAppActivitySumsCallsAndBytesPerAppAndMethod() async throws {
+        let service = FakeService()
+        let token = "/admin/reports/v1/activity/users/all/applications/token"
+        service.answers[token] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"nick@kestrel.example"},"events":[{"name":"activity","parameters":[{"name":"app_name","value":"Mail Helper"},{"name":"client_id","value":"222"},{"name":"api_name","value":"gmail"},{"name":"method_name","value":"gmail.users.messages.get"},{"name":"num_response_bytes","intValue":"5000000"}]}]},{"id":{"time":"2026-11-14T09:01:00.000Z","uniqueQualifier":"2"},"actor":{"email":"nick@kestrel.example"},"events":[{"name":"activity","parameters":[{"name":"app_name","value":"Mail Helper"},{"name":"client_id","value":"222"},{"name":"api_name","value":"gmail"},{"name":"method_name","value":"gmail.users.messages.get"},{"name":"num_response_bytes","intValue":"3000000"}]}]}]}"#)
+        let activity = try await callTool(GoogleWorkspace.adapter, "app-activity", #"{"clientId":"222","since":"2026-11-13T00:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertFalse(activity.isError, activity.text)
+        XCTAssertTrue(activity.text.contains("Mail Helper (222) as nick@kestrel.example: gmail.users.messages.get 2 calls, 8.0 MB"), activity.text)
+        let sent = queryItems(service.requests.last)
+        XCTAssertEqual(sent["eventName"], "activity")
+        XCTAssertEqual(sent["filters"], "client_id==222")
+    }
+
+    /// One account's sign-ins, account changes, app grants, files and admin actions, and what admins did to it, in one
+    /// list, newest first.
+    func testAUserTimelineMergesTheirActivityAcrossReports() async throws {
+        let service = FakeService()
+        let user = "/admin/reports/v1/activity/users/ivana@kestrel.example/applications/"
+        for application in ["user_accounts", "drive", "saml", "mobile", "groups", "admin"] { service.answers[user + application] = (200, "{}") }
+        service.answers[user + "login"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"ivana@kestrel.example"},"ipAddress":"203.0.113.77","events":[{"name":"login_success"}]}]}"#)
+        service.answers[user + "token"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:05:00.000Z","uniqueQualifier":"2"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Mail Helper"}]}]}]}"#)
+        service.answers["/admin/reports/v1/activity/users/all/applications/admin"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:10:00.000Z","uniqueQualifier":"3"},"actor":{"email":"pdp@kestrel.example"},"events":[{"name":"CHANGE_PASSWORD","parameters":[{"name":"USER_EMAIL","value":"ivana@kestrel.example"}]}]}]}"#)
+        let timeline = try await callTool(GoogleWorkspace.adapter, "user-timeline", #"{"user":"ivana@kestrel.example","since":"2026-11-13T00:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertFalse(timeline.isError, timeline.text)
+        let lines = timeline.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("admin") && lines[0].contains("CHANGE_PASSWORD") && lines[0].contains("by pdp@kestrel.example"), timeline.text)
+        XCTAssertTrue(lines[1].contains("token") && lines[1].contains("authorize"), timeline.text)
+        XCTAssertTrue(lines[2].contains("login") && lines[2].contains("203.0.113.77"), timeline.text)
+        let aboutThem = service.requests.first { $0.url?.path.hasSuffix("/users/all/applications/admin") == true }
+        XCTAssertEqual(queryItems(aboutThem)["filters"], "USER_EMAIL==ivana@kestrel.example")
+    }
+
+    /// Laptops, desktops and phones the organisation knows, with who uses each and whether it is compromised,
+    /// unencrypted or unmanaged.
+    func testDevicesListEveryDeviceWithItsUsersAndRisks() async throws {
+        let service = FakeService()
+        service.answers["/v1/devices"] = (200, #"{"devices":[{"name":"devices/d1","deviceType":"MAC_OS","model":"MacBook Pro","osVersion":"MacOS 15.1","ownerType":"COMPANY","encryptionState":"NOT_ENCRYPTED","managementState":"APPROVED","compromisedState":"UNCOMPROMISED","lastSyncTime":"2026-11-20T09:00:00Z","serialNumber":"C02X"},{"name":"devices/d2","deviceType":"ANDROID","model":"Pixel 8","compromisedState":"COMPROMISED","lastSyncTime":"2026-11-19T09:00:00Z"}]}"#)
+        service.answers["/v1/devices/-/deviceUsers"] = (200, #"{"deviceUsers":[{"name":"devices/d1/deviceUsers/u1","userEmail":"ivana@kestrel.example","managementState":"APPROVED"},{"name":"devices/d2/deviceUsers/u2","userEmail":"nick@kestrel.example"}]}"#)
+        let all = try await callTool(GoogleWorkspace.adapter, "devices", "{}", on: service, in: workspace)
+        XCTAssertFalse(all.isError, all.text)
+        let lines = all.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("Pixel 8") && lines[0].contains("compromised") && lines[0].contains("nick@kestrel.example"), all.text)
+        XCTAssertTrue(lines.contains { $0.contains("MacBook Pro") && $0.contains("not encrypted") && $0.contains("ivana@kestrel.example") }, all.text)
+        XCTAssertEqual(service.requests.first?.url?.host, "cloudidentity.googleapis.com")
+        XCTAssertEqual(queryItems(service.requests.first)["customer"], "customers/my_customer")
+        let hers = try await callTool(GoogleWorkspace.adapter, "devices", #"{"user":"ivana@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertTrue(hers.text.contains("MacBook Pro") && !hers.text.contains("Pixel 8"), hers.text)
+    }
+
+    /// The signs of an account being taken over wake the agents: 2-step verification turned off, recovery changed,
+    /// mail forwarded out or monitored, backup codes made for someone, a mailbox dumped.
+    func testTheTriggerWatchesForAccountTakeover() {
+        let watched = Set(GoogleWorkspace.watched.map { "\($0.application)/\($0.event)" })
+        for event in ["user_accounts/2sv_disable", "user_accounts/recovery_email_edit", "user_accounts/recovery_phone_edit",
+                      "user_accounts/email_forwarding_out_of_domain", "admin/CREATE_EMAIL_MONITOR", "admin/MAIL_ROUTING_DESTINATION_ADDED",
+                      "admin/GENERATE_2SV_SCRATCH_CODES", "admin/REQUEST_MAILBOX_DUMP", "admin/CHANGE_RECOVERY_EMAIL"] {
+            XCTAssertTrue(watched.contains(event), event)
+        }
+    }
+
+    /// The apps that hold access to accounts now, across everyone, by client ID, those that can read mail or files or
+    /// administer first: what is still open after a breach.
+    func testContainmentAppsListEveryAppHoldingAccessNow() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[{"primaryEmail":"pdp@kestrel.example"},{"primaryEmail":"nick@kestrel.example"}]}"#)
+        service.answers["/admin/directory/v1/users/pdp@kestrel.example/tokens"] = (200, #"{"items":[{"clientId":"111","displayText":"Reclaim.ai","scopes":["https://www.googleapis.com/auth/calendar"]}]}"#)
+        service.answers["/admin/directory/v1/users/nick@kestrel.example/tokens"] = (200, #"{"items":[{"clientId":"111","displayText":"Reclaim.ai","scopes":["https://www.googleapis.com/auth/calendar"]},{"clientId":"222","displayText":"Mail Helper","scopes":["https://mail.google.com/"]}]}"#)
+        let apps = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
+        XCTAssertFalse(apps.isError, apps.text)
+        let lines = apps.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("Mail Helper (222)") && lines[0].contains("reads and sends mail") && lines[0].contains("nick@kestrel.example"), apps.text)
+        XCTAssertTrue(lines.contains { $0.contains("Reclaim.ai (111)") && $0.contains("2 users") }, apps.text)
+        XCTAssertEqual(GoogleWorkspace.containmentAdapter.simultaneousRequests, 8)
     }
 }
 
