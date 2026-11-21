@@ -562,6 +562,55 @@ import XCTest
         XCTAssertEqual(feed.checks, 0)
     }
 
+    /// What a tool's page shows of its watch since the app started: whether it is watched, how many checks, the last
+    /// one and what it found, when the next is due, and each wake with whom it woke. A lookup is not watched.
+    func testAWatchedConnectionKeepsWhatItsChecksFoundSinceTheAppStarted() async throws {
+        let f = try fixture(), feed = FeedAdapter()
+        var account = try f.account(), lookup = try f.account(name: "Lookup")
+        account.adapter = "feed"
+        lookup.adapter = "activity"
+        f.controller.serve(["feed": feed, "activity": ActivityAdapter()])
+        await f.service.useAdapters(["feed": feed, "activity": ActivityAdapter()])
+        try f.controller.save(account)
+        try f.controller.save(lookup)
+        try f.controller.assign([account.id, lookup.id], to: f.a)
+        try f.start([f.a])
+        await f.controller.readSignIns()
+        XCTAssertTrue(f.controller.store.watches(account))
+        XCTAssertFalse(f.controller.store.watches(lookup))
+        XCTAssertNil(f.controller.store.watchStatus[account.id])
+        let now = Date()
+        await f.controller.checkWatched(at: now) { _, _ in }
+        feed.found = [ServiceAlert(id: "a1", time: now.addingTimeInterval(60))]
+        await f.controller.checkWatched(at: now.addingTimeInterval(300)) { _, _ in }
+        let status = try XCTUnwrap(f.controller.store.watchStatus[account.id])
+        XCTAssertEqual(status.checks, 2)
+        XCTAssertEqual(status.lastChecked, now.addingTimeInterval(300))
+        XCTAssertEqual(status.last, .found("1 new alert"))
+        XCTAssertEqual(status.nextCheck, now.addingTimeInterval(600))
+        XCTAssertEqual(status.wakes.map(\.found), ["1 new alert"])
+        XCTAssertEqual(status.wakes.first?.woke, ["MCP A"])
+        XCTAssertNil(f.controller.store.watchStatus[lookup.id])
+    }
+
+    /// A tool's page assigns it to a bot and takes it away, leaving the bot's other tools as they were.
+    func testAToolsPageAssignsItToABotAndTakesItAwayAlone() throws {
+        let f = try fixture()
+        let account = try f.account(), other = try f.account(name: "Other")
+        try f.controller.save(account)
+        try f.controller.save(other)
+        try f.controller.assign([other.id], to: f.a)
+        try f.start([f.a, f.b])
+        XCTAssertEqual(Set(f.controller.agents.map(\.id)), [f.a.id, f.b.id])
+        XCTAssertTrue(f.controller.holders(of: account).isEmpty)
+        try f.controller.setAssigned(true, account, to: f.a)
+        XCTAssertEqual(f.controller.holders(of: account).map(\.id), [f.a.id])
+        XCTAssertEqual(f.controller.selectedIDs(for: f.a), [account.id, other.id])
+        try f.controller.setAssigned(false, account, to: f.a)
+        XCTAssertTrue(f.controller.holders(of: account).isEmpty)
+        XCTAssertEqual(f.controller.selectedIDs(for: f.a), [other.id])
+    }
+
     func testRevokedAssignmentAndOldSessionAreRejectedOnLaterScans() async throws {
         let f = try fixture(), account = try f.account()
         try f.controller.save(account)

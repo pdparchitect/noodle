@@ -6,6 +6,23 @@ import XCTest
 @testable import NoodleRuntimeSettings
 
 @MainActor final class AgentActivityTests: XCTestCase {
+    /// A tool's page shows a run of the same quiet line, such as a check that found nothing, as one line saying how many
+    /// and since when, so they never bury the rest; a line with output under it is never folded.
+    func testARunOfTheSameQuietLineShowsAsOneSayingHowManyAndSinceWhen() {
+        let log = ActivityLog(), start = Date(timeIntervalSince1970: 1_800_000_000)
+        log.record(.init(title: "Found 1 new alert; woke Lead"), at: start)
+        for round in 1...3 { log.record(.init(title: "Checked for alerts: nothing new"), at: start.addingTimeInterval(300 * Double(round))) }
+        log.record(.init(title: "Could not check for alerts", detail: "HTTP 500"), at: start.addingTimeInterval(1_200))
+        log.record(.init(title: "Could not check for alerts", detail: "HTTP 500"), at: start.addingTimeInterval(1_500))
+        log.record(.init(title: "Checked for alerts: nothing new"), at: start.addingTimeInterval(1_800))
+        let shown = ActivityEntry.collapsingRepeats(log.entries)
+        XCTAssertEqual(shown.count, 5, shown.map(\.text).joined())
+        XCTAssertTrue(shown[1].text.contains("Checked for alerts: nothing new (3 times since "), shown[1].text)
+        XCTAssertEqual(shown[1].id, log.entries[3].id, "The run shows as its latest line")
+        XCTAssertFalse(shown[4].text.contains("times"), shown[4].text)
+        XCTAssertEqual(ActivityEntry.collapsingRepeats([]), [])
+    }
+
     func testAppleStatusesAndToolResultsReachWindowLog() {
         let log = ActivityLog()
         func feed(_ update: [String: Any]) {

@@ -46,6 +46,8 @@ import SwiftUI
     }
 
     var sheet: Sheet?
+    /// The tool whose page is shown where a conversation would be, picked in the sidebar; picking a conversation clears it.
+    var selectedTool: UUID?
     var showsInspector = true
     var inspectorTab: InspectorTab = .caseRecord
     /// Asks the composer of the selected conversation to take the keyboard.

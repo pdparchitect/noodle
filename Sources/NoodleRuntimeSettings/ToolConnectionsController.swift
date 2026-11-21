@@ -43,7 +43,7 @@ public enum ToolConnectionStatus: Equatable, Sendable {
 /// Noodle's tool connections as its Settings and tools sidebar show them, kept in the shared `ToolConnections` that a
 /// Hub keeps its people's in too. What is only the Mac's is here: signing in through this Mac's browser, or with AWS
 /// IAM Identity Center, a code, a token or a client secret; where each connection stands for the person; the activity
-/// window; and the bots' own workspaces, which follow every change.
+/// page; and the bots' own workspaces, which follow every change.
 @MainActor @Observable
 public final class ToolConnectionsController {
     /// The connections, their grants and sign-ins, watching and activity, as every app and Hub keeps them.
@@ -56,12 +56,13 @@ public final class ToolConnectionsController {
     var errorMessage: String?
     /// What each connection has done since the app started: bots' calls, sign-ins, and what the app adds, by connection.
     @ObservationIgnored public let activity = ActivityStore()
-    @ObservationIgnored private let activityWindows = ActivityWindows()
+    @ObservationIgnored private let pages = ToolWindows()
     @ObservationIgnored private let repository: WorkspaceRepository
     /// Keeps the connections' sign-ins; This Mac as a Hub signs tools in through it too.
     public var service: ToolConnectionService { store.service }
     @ObservationIgnored private var loginTask: Task<Void, Never>?
-    private var agents: [AgentRecord] = []
+    /// The bots tool connections can be assigned to.
+    public private(set) var agents: [AgentRecord] = []
     /// Where this controller registers one provider per connection.
     @ObservationIgnored public var toolRegistry: ToolProviderRegistry? {
         get { store.toolRegistry }
@@ -184,6 +185,16 @@ public final class ToolConnectionsController {
     public func reloadAssignments() throws { try store.reload() }
     public func validateAssignment(_ ids: Set<UUID>) throws { try store.validate(ids) }
     public func selectedIDs(for agent: AgentRecord) -> Set<UUID> { Set(registry.assigned(to: agent.id).map(\.id)) }
+    /// The bots the connection is assigned to.
+    public func holders(of connection: ToolConnection) -> [AgentRecord] {
+        agents.filter { registry.assigned(to: $0.id).contains { $0.id == connection.id } }
+    }
+    /// Assigns the connection to the bot, or takes it away, leaving the bot's other connections as they are.
+    public func setAssigned(_ assigned: Bool, _ connection: ToolConnection, to agent: AgentRecord) throws {
+        var ids = selectedIDs(for: agent)
+        if assigned { ids.insert(connection.id) } else { ids.remove(connection.id) }
+        try assign(ids, to: agent)
+    }
     func remove(_ record: ToolConnection) {
         if signingIn == record.id { loginTask?.cancel() }
         do {
@@ -194,7 +205,7 @@ public final class ToolConnectionsController {
                 }
             }
             activity.retain(Set(registry.connections.map(\.id)))
-            activityWindows.synchronize(names: Dictionary(uniqueKeysWithValues: registry.connections.map { ($0.id, $0.name) }))
+            pages.synchronize(names: Dictionary(uniqueKeysWithValues: registry.connections.map { ($0.id, $0.name) }))
             try synchronize()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -319,10 +330,9 @@ public final class ToolConnectionsController {
         return notes
     }
 
-    /// Shows what the connection has done since the app started, in its own window.
-    public func showActivity(_ connection: ToolConnection) {
-        activityWindows.show(id: connection.id, name: connection.name, log: activity.log(for: connection.id))
-    }
+    /// Shows the connection's page in its own window: where it stands, which bots have it, what its watch found, the
+    /// tools it offers and what it has done since the app started.
+    public func showPage(_ connection: ToolConnection) { pages.show(connection, controller: self) }
 
     /// Adds a line to the connection's activity, with any detail under it.
     public func recordActivity(_ connection: UUID, _ title: String, detail: String = "") {

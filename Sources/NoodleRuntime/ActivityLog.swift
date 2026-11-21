@@ -18,15 +18,39 @@ public struct ActivityEvent {
 
 public struct ActivityEntry: Equatable {
     public let id: UUID
-    let date: Date
-    var title: String
-    var detail: String
+    public let date: Date
+    public internal(set) var title: String
+    public internal(set) var detail: String
     var streamID: String?
 
     public var text: String {
         let time = date.formatted(.dateTime.hour().minute().second())
         let output = detail.trimmingCharacters(in: .newlines)
         return "[\(time)] \(title)\n" + (output.isEmpty ? "" : "\(output)\n")
+    }
+
+    /// `entries` with each run of the same line and nothing under it shown as its latest, saying how many and since
+    /// when, such as a check that found nothing every few minutes. A line with output under it is never folded.
+    public static func collapsingRepeats(_ entries: [ActivityEntry]) -> [ActivityEntry] {
+        var shown: [ActivityEntry] = [], run: (first: ActivityEntry, count: Int)?
+        func close() {
+            guard let (first, count) = run, var last = shown.popLast() else { return }
+            if count > 1 { last.title = "\(first.title) (\(count) times since \(first.date.formatted(.dateTime.hour().minute())))" }
+            shown.append(last)
+        }
+        for entry in entries {
+            let quiet = entry.detail.isEmpty && entry.streamID == nil
+            if quiet, let current = run, current.first.title == entry.title {
+                shown[shown.count - 1] = entry
+                run?.count += 1
+                continue
+            }
+            close()
+            shown.append(entry)
+            run = quiet ? (entry, 1) : nil
+        }
+        close()
+        return shown
     }
 
     var byteCount: Int { title.utf8.count + detail.utf8.count + (streamID?.utf8.count ?? 0) }

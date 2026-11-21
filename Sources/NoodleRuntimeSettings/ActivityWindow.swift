@@ -370,7 +370,7 @@ private extension NSTrackingArea {
 }
 
 @MainActor
-private final class ActivityEmptyLabel: NSTextField {
+final class ActivityEmptyLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 

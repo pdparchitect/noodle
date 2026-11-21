@@ -197,14 +197,17 @@ enum SidebarTimestamp {
 }
 
 /// The tool connections at the foot of the sidebar, as icons, when View › Sidebar › Show Tools is on: a red dot marks
-/// one waiting on the person to sign in or look at a failure. Clicking one shows where it stands and what to do,
-/// in a bubble, leaving the conversation open; its menu shows its activity.
+/// one waiting on the person to sign in or look at a failure. Clicking one opens its page: where the app shows it, or
+/// in a window of its own.
 struct SidebarTools: View {
     static let key = "sidebarShowsTools"
     let controller: ToolConnectionsController
     /// In a list, a section; in the icon grid, icons under a title.
     let inList: Bool
-    @State private var editing: ToolConnection?
+    /// The tool whose page is shown, marked as a selected row is.
+    var selected: UUID?
+    /// Shows a tool's page where the app shows it; without it, the page opens in a window of its own.
+    var open: ((ToolConnection) -> Void)?
 
     var body: some View {
         if !controller.registry.connections.isEmpty {
@@ -231,11 +234,12 @@ struct SidebarTools: View {
     private var grid: some View {
         ConversationIconGrid(minimumWidth: 56) {
             ForEach(controller.registry.connections) { connection in
-                ToolTile(controller: controller, connection: connection, edit: { editing = $0 })
+                ToolTile(controller: controller, connection: connection, selected: selected == connection.id) {
+                    if let open { open(connection) } else { controller.showPage(connection) }
+                }
             }
         }
         .padding(.vertical, 4)
-        .sheet(item: $editing) { ToolConnectionEditor(controller: controller, existing: $0).noodleSheetSizing() }
     }
 }
 
@@ -246,16 +250,16 @@ struct SidebarToolsToggle: View {
     var body: some View { Toggle("Show Tools", isOn: $showsTools) }
 }
 
-/// A tool connection's icon and name, marked when it needs the person, opening its bubble when clicked.
+/// A tool connection's icon and name, marked when it needs the person, opening its page when clicked.
 private struct ToolTile: View {
     let controller: ToolConnectionsController
     let connection: ToolConnection
-    let edit: (ToolConnection) -> Void
-    @State private var shown = false
+    let selected: Bool
+    let open: () -> Void
 
     var body: some View {
         let status = controller.status(of: connection)
-        Button { shown.toggle() } label: {
+        Button(action: open) {
             VStack(spacing: 3) {
                 // Flat and in the text colour, as the agents' marks around it are, so the red dot of one that needs you is
                 // what stands out.
@@ -273,80 +277,19 @@ private struct ToolTile: View {
                     }
                 Text(connection.name)
                     .font(.system(size: 10))
-                    .foregroundStyle(status.needsAttention ? Color.primary : Color.secondary)
+                    .foregroundStyle(status.needsAttention || selected ? Color.primary : Color.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity)
+            .background(Color.primary.opacity(selected ? 0.1 : 0), in: .rect(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // Its own menu rather than .contextMenu: in a sidebar list the whole grid is one row, and the list outlines that
-        // row for a menu asked of any icon in it.
-        .overlay { RightClickMenu(items: [("Show Activity", { controller.showActivity(connection) })]) }
         .help(connection.name)
         .accessibilityLabel(connection.name)
         .accessibilityValue(status.needsAttention ? "Needs attention" : "")
-        .popover(isPresented: $shown, arrowEdge: .trailing) {
-            ToolBubble(controller: controller, connection: connection, status: status,
-                       edit: { shown = false; edit(connection) }, close: { shown = false })
-        }
-    }
-}
-
-/// Where a tool connection stands and what can be done about it, as Settings › Tools offers.
-private struct ToolBubble: View {
-    let controller: ToolConnectionsController
-    let connection: ToolConnection
-    let status: ToolConnectionStatus
-    let edit: () -> Void
-    let close: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                ToolConnectionIcon(connection: connection, size: 32)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(connection.name).font(.headline).lineLimit(2)
-                    ToolConnectionStatusLabel(status: status)
-                }
-            }
-            if case .failed(let reason) = status {
-                Text(reason).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-            } else if case .signingIn(let stage) = status, !stage.isEmpty {
-                Text(stage).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if status != .managed {
-                HStack(spacing: 8) {
-                    if case .signingIn = status {
-                        Button("Cancel") { controller.cancelSignIn() }
-                    } else {
-                        switch controller.signInAction(for: connection) {
-                        case .edit(let title):
-                            // A token or client secret is entered in the editor, as in Settings › Tools.
-                            Button(title, action: edit)
-                                .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
-                                .disabled(controller.isSigningIn)
-                        case .connect(let title):
-                            Button(title) { controller.connect(connection); close() }
-                                .keyboardShortcut(status.needsAttention ? .defaultAction : nil)
-                                .disabled(controller.isSigningIn)
-                        case nil:
-                            EmptyView()
-                        }
-                    }
-                    Button("Edit…", action: edit)
-                    Spacer(minLength: 0)
-                    if controller.offersSignOut(connection) {
-                        Button("Sign Out", role: .destructive) { controller.signOut(connection); close() }
-                    }
-                }
-                .controlSize(.small)
-            }
-        }
-        .padding(14)
-        .frame(width: 280)
     }
 }
 
@@ -486,35 +429,5 @@ struct SidebarSearchResults<Row: View, RowMenu: View>: View {
             }
         }
         .listStyle(.sidebar)
-    }
-}
-
-/// A menu for right clicks only, opened by its own view so a list around it does not outline the row it sits in;
-/// every other click passes through.
-private struct RightClickMenu: NSViewRepresentable {
-    let items: [(title: String, action: () -> Void)]
-
-    func makeNSView(context: Context) -> Host { Host() }
-    func updateNSView(_ host: Host, context: Context) { host.items = items }
-
-    final class Host: NSView {
-        var items: [(title: String, action: () -> Void)] = []
-
-        override func hitTest(_ point: NSPoint) -> NSView? {
-            NSApp.currentEvent?.type == .rightMouseDown ? super.hitTest(point) : nil
-        }
-
-        override func rightMouseDown(with event: NSEvent) {
-            let menu = NSMenu()
-            for (index, item) in items.enumerated() {
-                let entry = NSMenuItem(title: item.title, action: #selector(choose(_:)), keyEquivalent: "")
-                entry.target = self
-                entry.tag = index
-                menu.addItem(entry)
-            }
-            NSMenu.popUpContextMenu(menu, with: event, for: self)
-        }
-
-        @objc private func choose(_ sender: NSMenuItem) { items[sender.tag].action() }
     }
 }

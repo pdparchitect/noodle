@@ -33,7 +33,17 @@ struct MainWindow: View {
             Sidebar(model: model, window: window)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
-            if let conversation = model.conversation(model.selection) {
+            if let tool = window.selectedTool.flatMap({ id in model.connectionsController.registry.connections.first { $0.id == id } }) {
+                ToolPage(controller: model.connectionsController, connectionID: tool.id,
+                         picture: { agent, size in AnyView(AgentMark(agent: agent, size: size)) },
+                         chooser: { agents, chosen, search in
+                             AnyView(GroupMemberChooser(agents: agents, selectedIDs: chosen, search: search,
+                                                        words: GroupMemberWords(bot: "agent", bots: "agents", group: "tool"),
+                                                        picture: { AnyView(AgentMark(agent: $0, size: 32)) }))
+                         })
+                .navigationTitle(tool.name)
+                .id(tool.id)
+            } else if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
                 ConversationView(model: model, window: window, conversation: conversation)
             } else if model.agents.isEmpty {
@@ -73,7 +83,10 @@ struct MainWindow: View {
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .onChange(of: model.selection) { _, id in
-            if let id { model.markRead(id) }
+            if let id {
+                window.selectedTool = nil
+                model.markRead(id)
+            }
             guard !window.selectedFromKeyboard else { window.selectedFromKeyboard = false; return }
             window.composerFocusRequest = UUID()
         }
@@ -185,7 +198,12 @@ struct Sidebar: View {
             }
             rows(sections.groups, header: "Groups", line: line)
             rows(sections.agents, header: "Agents", line: line)
-            if showsTools { SidebarTools(controller: model.connectionsController, inList: true) }
+            if showsTools {
+                SidebarTools(controller: model.connectionsController, inList: true, selected: window.selectedTool) { tool in
+                    window.selectedTool = tool.id
+                    model.selection = nil
+                }
+            }
         }
         .listStyle(.sidebar)
     }

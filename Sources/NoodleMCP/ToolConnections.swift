@@ -23,6 +23,8 @@ import Observation
     public private(set) var isWatching = false
     /// Why each watched connection could not be checked last time, by connection.
     public private(set) var watchProblems: [UUID: String] = [:]
+    /// What each watched connection's checks found since the app started, by connection.
+    public private(set) var watchStatus: [UUID: WatchStatus] = [:]
 
     /// Keeps the connections' sign-ins, where bots never see them.
     @ObservationIgnored public let service: ToolConnectionService
@@ -348,6 +350,9 @@ import Observation
         return (accounts, keeping, unassigned)
     }
 
+    /// Whether this connection is watched: its adapter has a feed, or its MCP server a board.
+    public func watches(_ connection: ToolConnection) -> Bool { watcher.watches(connection) }
+
     /// While watching, the connections checked each round: watched, assigned to a bot, ready and not failed.
     public var watched: [ToolConnection] {
         isWatching ? watchedAccounts().accounts.map(\.connection) : []
@@ -364,6 +369,11 @@ import Observation
         watchProblems = checked.compactMapValues { if case .failed(let reason) = $0 { reason } else { nil } }
         let names = bots()
         for (connection, holders) in accounts {
+            if let result = checked[connection.id] {
+                let woke = holders.compactMap { names[$0] }
+                watchStatus[connection.id] = WatchStatus(previous: watchStatus[connection.id], checked: now, result: result, woke: woke,
+                                                         interval: watcher.trigger(for: connection)?.interval ?? AlertWatcher.interval.seconds)
+            }
             switch checked[connection.id] {
             case .started?: recordActivity(connection.id, "Watching for alerts from now on")
             case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new")
@@ -442,4 +452,38 @@ import Observation
               let connection = registry.connections.first(where: { $0.id == call.connection }) else { return }
         Task { await tell([connection], Self.workingAgain, sparing: call.agent, wake: wake) }
     }
+}
+
+/// What a watched connection's checks found since the app started: how many, the last one and what it found, when the
+/// next is due, and the latest wakes, each with what was found and whom it woke.
+public struct WatchStatus: Equatable, Sendable {
+    public struct Wake: Equatable, Sendable {
+        public let date: Date
+        public let found: String
+        public let woke: [String]
+    }
+
+    /// The most wakes kept.
+    static let wakesKept = 20
+
+    public let checks: Int
+    public let lastChecked: Date
+    public let last: AlertWatcher.Checked
+    public let nextCheck: Date
+    /// Oldest first.
+    public let wakes: [Wake]
+
+    init(previous: WatchStatus?, checked: Date, result: AlertWatcher.Checked, woke: [String], interval: TimeInterval) {
+        checks = (previous?.checks ?? 0) + 1
+        lastChecked = checked
+        last = result
+        nextCheck = checked.addingTimeInterval(interval)
+        var wakes = previous?.wakes ?? []
+        if case .found(let what) = result { wakes.append(Wake(date: checked, found: what, woke: woke)) }
+        self.wakes = Array(wakes.suffix(Self.wakesKept))
+    }
+}
+
+private extension Duration {
+    var seconds: TimeInterval { Double(components.seconds) + Double(components.attoseconds) / 1e18 }
 }
