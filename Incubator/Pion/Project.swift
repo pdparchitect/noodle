@@ -162,6 +162,7 @@ let project = Project(
                 "../../Sources/Noodle/AnnotationCommands.swift",
                 "../../Sources/Noodle/ConversationAnnotation.swift",
                 "../../Sources/Noodle/MessageBlocksView.swift",
+                "../../Sources/Noodle/MessageTextView.swift",
                 "../../Sources/Noodle/ConversationAnnotationContent.swift",
                 "../../Sources/Noodle/ScreenCaptureModel.swift",
                 "../../Sources/Noodle/ScreenCapturePreview.swift",

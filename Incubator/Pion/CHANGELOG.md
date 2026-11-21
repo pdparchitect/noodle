@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A selection runs across the whole of a message: drag from a paragraph through its lists, quotes and code, or select it all, and copy it in one go. Long lines in a code block wrap rather than scroll sideways.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added
