@@ -319,6 +319,8 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
                                                  adapter: configuration.adapter)
             record.catalogueID = self.id
             record.settings = account.settings
+            // Given again now its preset is known, so its preset's name is followed rather than kept.
+            record.name = record.name
             if configuration.open { record.open = true }
             return record
         }

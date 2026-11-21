@@ -295,21 +295,24 @@ final class ToolCatalogTests: XCTestCase {
 
     func testAnAccountFollowsItsPresetsTextUntilThePersonWritesTheirOwn() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
-        func errors(_ summary: String, _ instructions: String) -> ToolDefinition {
-            ToolDefinition(id: "errors", name: "Errors", summary: summary, defaultInstructions: instructions, iconName: "errors",
+        func errors(_ name: String, _ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "errors", name: name, summary: summary, defaultInstructions: instructions, iconName: "errors",
                            configuration: .connection(.init(endpointTemplate: "https://errors.example/api", fields: [], tokenHeader: "Authorization",
                                                             adapter: "errors")))
         }
-        func notes(_ summary: String, _ instructions: String) -> ToolDefinition {
-            ToolDefinition(id: "notes", name: "Notes", summary: summary, defaultInstructions: instructions, iconName: "notes",
+        func notes(_ name: String, _ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "notes", name: name, summary: summary, defaultInstructions: instructions, iconName: "notes",
                            configuration: .connection(.init(endpointTemplate: "https://notes.example/mcp", fields: [])))
         }
-        ToolCatalog.use([errors("Issues.", "Read."), notes("Pages.", "Search first.")])
-        let untouched = try errors("Issues.", "Read.").makeConnection(name: "Errors")
-        var edited = try errors("Issues.", "Read.").makeConnection(name: "Errors — Mine")
+        let preset = errors("Errors", "Issues.", "Read.")
+        ToolCatalog.use([preset, notes("Notes", "Pages.", "Search first.")])
+        let untouched = try preset.makeConnection(name: "Errors")
+        var edited = try preset.makeConnection(name: "Errors — Mine")
         edited.instructions = "Mine."
-        var restored = try errors("Issues.", "Read.").makeConnection(name: "Errors — Restored")
+        var restored = try preset.makeConnection(name: "Errors")
+        restored.name = "Mine"
         restored.instructions = "Mine."
+        restored.name = "Errors"
         restored.instructions = "Read."
         // As a Hub keeps one sent from a device, by address only, with the text it was shown.
         let sent = try ToolConnection(name: "Notes", endpoint: URL(string: "https://notes.example/mcp")!,
@@ -319,12 +322,15 @@ final class ToolCatalogTests: XCTestCase {
         var registry = ToolConnectionRegistry()
         registry.connections = [untouched, edited, restored, sent]
         try registry.save(root: root)
+        let skillNames = try ToolConnectionRegistry.load(root: root).connections.map(\.skillName)
 
-        // A later release rewrites the presets' text.
-        ToolCatalog.use([errors("Issues and releases.", "Read them."), notes("Pages and databases.", "Search before adding.")])
+        // A later release renames the presets and rewrites their text.
+        ToolCatalog.use([errors("Bugs", "Issues and releases.", "Read them."), notes("Wiki", "Pages and databases.", "Search before adding.")])
         let loaded = try ToolConnectionRegistry.load(root: root).connections
+        XCTAssertEqual(loaded.map(\.name), ["Bugs", "Errors — Mine", "Bugs", "Wiki"])
         XCTAssertEqual(loaded.map(\.description), ["Issues and releases.", "Issues and releases.", "Issues and releases.", "Pages and databases."])
         XCTAssertEqual(loaded.map(\.instructions), ["Read them.", "Mine.", "Read them.", "Search before adding."])
+        XCTAssertEqual(loaded.map(\.skillName), skillNames, "bots would lose the name they call it by")
     }
 
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {

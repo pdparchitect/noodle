@@ -243,6 +243,7 @@ public struct ToolConnectionEditor: View {
                     Text("Name").font(.caption.weight(.semibold))
                     TextField("e.g. Notion — Work", text: $name, axis: .horizontal).lineLimit(1)
                         .help("Use a distinct name for each account")
+                        .overlay(alignment: .trailing) { resetButton($name, to: existing?.defaultName) }
                 }
                 // A tool the app answers has the address its entry gives it, which cannot change, so it is not shown.
                 if !servedByApp {
@@ -348,7 +349,7 @@ public struct ToolConnectionEditor: View {
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
     }
-    /// Puts its preset's text back in a field the person changed; saved so, the account follows that text's updates.
+    /// Puts its preset's name or text back in a field the person changed; saved so, the account follows that text's updates.
     @ViewBuilder private func resetButton(_ text: Binding<String>, to fallback: String?) -> some View {
         if let fallback, !fallback.isEmpty, text.wrappedValue != fallback {
             Button { text.wrappedValue = fallback } label: { Image(systemName: "arrow.counterclockwise") }

@@ -31,12 +31,17 @@ public struct ConnectionAWSIdentityCenter: Codable, Equatable, Sendable {
 /// One user-authorized account, not one unique endpoint. URLs are never keys.
 public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
-    public var name: String
     public let endpoint: URL
-    /// The person's own description and instructions; nil follows the catalogue's current text, so an untouched
-    /// account picks up a newer release's.
+    /// The person's own name, description and instructions; nil follows the catalogue's current ones, so an untouched
+    /// account picks up a newer release's. Bots keep calling it by `skillName` whatever its name becomes.
+    public private(set) var ownName: String?
     public private(set) var ownDescription: String?
     public private(set) var ownInstructions: String?
+    /// Its name, the person's or else its preset's. Setting the preset's name again follows the preset.
+    public var name: String {
+        get { ownName ?? defaultName ?? "Tool" }
+        set { ownName = newValue == defaultName ? nil : newValue }
+    }
     /// Its description, the person's or else its preset's. Setting the preset's text again follows the preset.
     public var description: String {
         get { ownDescription ?? defaultDescription }
@@ -47,7 +52,8 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         get { ownInstructions ?? defaultInstructions }
         set { ownInstructions = newValue == defaultInstructions ? nil : String(newValue.prefix(20_000)) }
     }
-    /// Its preset's text, empty for an account added by address alone.
+    /// Its preset's name and text; no name and empty text for an account added by address alone.
+    public var defaultName: String? { ToolCatalog.definition(for: self)?.name }
     public var defaultDescription: String { ToolCatalog.definition(for: self)?.summary ?? "" }
     public var defaultInstructions: String { ToolCatalog.definition(for: self)?.defaultInstructions ?? "" }
     public fileprivate(set) var skillName: String
@@ -80,9 +86,9 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public var settings: [String: String]?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, endpoint, skillName, iconData, tokenHeader, tokenParameter, tokenScheme, clientCredentials,
+        case id, endpoint, skillName, iconData, tokenHeader, tokenParameter, tokenScheme, clientCredentials,
              awsIdentityCenter, open, adapter, catalogueID, settings
-        case ownDescription = "description", ownInstructions = "instructions"
+        case ownName = "name", ownDescription = "description", ownInstructions = "instructions"
     }
 
     /// This account as its preset makes it from new details, such as another address or organisation: what `fresh`
@@ -91,7 +97,7 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         var record = fresh
         record.skillName = skillName
         record.iconData = iconData
-        record.name = name
+        record.ownName = ownName
         record.ownDescription = ownDescription
         record.ownInstructions = ownInstructions
         return record
@@ -120,14 +126,15 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         guard (tokenHeader == nil && tokenParameter == nil) || clientCredentials == nil else {
             throw ToolConnectionError.message("A connection uses either a token or a client ID and secret, not both.")
         }
-        self.name = try ConversationName.validated(name)
+        let name = try ConversationName.validated(name)
         self.endpoint = try Self.validatedEndpoint(endpoint, adapter: self.adapter)
         let slug = name.lowercased().unicodeScalars.map {
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").contains($0) ? String($0) : "-"
         }.joined().split(separator: "-").joined(separator: "-")
         let prefix = String(slug.prefix(20)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         self.skillName = "mcp-" + (prefix.isEmpty ? "connection" : prefix)
-        // Text sent with it, as a device sends a Hub, is the person's only where it differs from its preset's.
+        // What is sent with it, as a device sends a Hub, is the person's only where it differs from its preset's.
+        self.name = name
         if !description.isEmpty { self.description = description }
         if !instructions.isEmpty { self.instructions = instructions }
     }
