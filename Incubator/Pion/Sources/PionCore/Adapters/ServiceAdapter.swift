@@ -92,12 +92,18 @@ public protocol ServiceTrigger: Sendable {
     var tool: String { get }
     /// What is serious from `since` on, at most `ServiceAlert.most` of it, newest first.
     func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert]
+    /// The same for one account, for a trigger that keeps track of an account between its checks, such as how long a
+    /// report has failed; the rest need not.
+    func check(since: Date, on service: ServiceClient, account: UUID) async throws -> [ServiceAlert]
     /// How far each check reads back from the newest alert seen, as the service lists some after their time.
     var lookBack: TimeInterval { get }
 }
 
 public extension ServiceTrigger {
     var lookBack: TimeInterval { AlertWatch.overlap }
+    func check(since: Date, on service: ServiceClient, account: UUID) async throws -> [ServiceAlert] {
+        try await check(since: since, on: service)
+    }
 }
 
 /// What an operation gives back: a sentence or two for the bot to read, and the fields it kept, as JSON.
@@ -525,7 +531,8 @@ public struct OperationAdapter: ToolConnectionAdapter {
 
     func alerts(since: Date, connection: ToolConnection, access: any ServiceAccess) async throws -> [ServiceAlert] {
         guard let trigger else { return [] }
-        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
+        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]),
+                                       account: connection.id)
     }
 
     private static func entry<Operation: ServiceOperation>(_ operation: Operation) -> (name: String, entry: Entry) {
