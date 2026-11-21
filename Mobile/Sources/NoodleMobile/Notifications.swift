@@ -186,19 +186,26 @@ extension AppBadge {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        ApprovalNotifications.register()
         // Before anything else: a VoIP push that launched the app must reach the call screen at once.
         CallPushes.shared.start()
         return true
     }
 
-    /// The app on screen shows replies as they come.
+    /// The app on screen shows replies as they come; a call held for the person shows anyway, as it waits on them.
     // Both on the main actor: iOS requires their answers there, and aborts the app otherwise.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        []
+        notification.request.content.categoryIdentifier == ApprovalNotifications.category ? [.banner, .list, .sound] : []
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        // Approve or Decline decides without opening anything; the notification itself opens the call in full.
+        if let held = ApprovalNotifications.decision(in: response) {
+            if let decision = held.decision { return await ApprovalNotifications.decide(decision, topic: held.topic) }
+            opening = held.route
+            return
+        }
         opening = PushTopic.route(userInfo: response.notification.request.content.userInfo)
     }
 

@@ -5,10 +5,12 @@
 ### Added
 
 - Approvals: a call one of your bots holds for you, such as suspending a user, shows in a new Approvals section at the top of the conversation list, with exactly what will run and the bot's reason. Tap it to approve or decline. The section shows every Hub's, whatever space is shown.
+- Each held call also comes as a notification, even with the app open, with Approve and Decline that decide it without opening the app; tapping it opens the call in full. It is taken back once decided on any device, and the app icon counts held calls with unread conversations.
 
 ### What to Test
 
 - Give a bot a tool whose service marks a tool destructive, and ask the bot to use it. Check the call shows under Approvals with what it will do and the bot's reason, that Decline leaves it undone and Approve runs it, and that the bot then says how it went.
+- With the app in the background, check the held call's notification comes once Noodle hears from the Hub, that Approve and Decline on it work without opening the app, that tapping it opens the call, and that the icon's number counts it until it is decided.
 
 ## [0.58.0] - 2026-11-18
 

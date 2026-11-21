@@ -1482,6 +1482,19 @@ public struct LinkApproval: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+extension LinkApproval {
+    /// What a device tells its person as a list of held calls comes, against the IDs it knew pending: the new ones,
+    /// oldest first, to announce once; the IDs decided or gone since, to take back; and the IDs pending now, to keep.
+    public static func changes(listed: [LinkApproval], known: Set<UUID>) -> (new: [LinkApproval], gone: Set<UUID>, pending: Set<UUID>) {
+        let pending = Set(listed.map(\.id))
+        return (listed.filter { !known.contains($0.id) }.sorted { $0.createdAt < $1.createdAt }, known.subtracting(pending), pending)
+    }
+
+    /// One notification per held call, so deciding it anywhere takes back just that one.
+    public static func notificationIdentifier(_ id: UUID) -> String { "approval-\(id.uuidString)" }
+    public var notificationIdentifier: String { Self.notificationIdentifier(id) }
+}
+
 /// The owner's decision on a call one of their bots holds.
 public struct LinkApprovalDecision: Codable, Equatable, Sendable {
     public var botID: UUID

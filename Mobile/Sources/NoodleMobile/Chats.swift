@@ -1246,6 +1246,8 @@ final class ChatsCacheFile: @unchecked Sendable {
     func reload() async throws {
         guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
         setAgents(pairing.keptPictures(bots))
+        // As the Hub lists them now, not as kept from before.
+        ApprovalNotifications.sync(self)
         // A Hub from before groups does not know the request; it has none to show.
         let listed = (try? await listGroups()) ?? []
         let failure = await loadConversations(bots.map(\.conversationID) + listed.map(\.id))
@@ -2605,6 +2607,7 @@ struct AgentsView: View {
               let thread = hub.listedThreads.first(where: { $0.conversationID == route.conversation }) else { return }
         navigation.open(ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id), in: layout)
         opening = nil
+        if let approval = route.approval { decidingApproval = ApprovalEntry.listed(in: [hub]).first { $0.id == approval } }
         if Self.startsCall(route, to: thread, calling: hub.calls.call?.threadID,
                            canCallNow: thread.bot.map { hub.canCallNow(hub.agent($0.id) ?? $0) } ?? false) {
             hub.calls.start(threadID: thread.id, conversationID: thread.conversationID, name: thread.name)

@@ -1,5 +1,8 @@
 import HubLink
+import OSLog
 import SwiftUI
+import UIKit
+import UserNotifications
 
 /// A call one of the person's bots holds for their approval, from whichever Hub runs it.
 struct ApprovalEntry: Identifiable {
@@ -32,6 +35,92 @@ extension HubChats {
     func decide(_ approval: LinkApproval, of bot: LinkBot, approve: Bool) async throws {
         _ = try await pairing.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: approval.id, approve: approve)))
         try await reload()
+    }
+}
+
+/// A notification for each call a bot holds for the person, with Approve and Decline, which decide it without opening
+/// the app. Posted as the app hears of the call from the Hub, and taken back once it is decided on any device.
+enum ApprovalNotifications {
+    static let category = "approval"
+    static let approveAction = "approve", declineAction = "decline"
+    static let approvalKey = "approval", botKey = "bot"
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleMobile", category: "Approvals")
+
+    /// Either button needs the phone unlocked.
+    static func register() {
+        UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: category, actions: [
+            UNNotificationAction(identifier: approveAction, title: "Approve", options: [.authenticationRequired]),
+            UNNotificationAction(identifier: declineAction, title: "Decline", options: [.authenticationRequired, .destructive]),
+        ], intentIdentifiers: [])])
+    }
+
+    /// Announces the Hub's new held calls, takes back those decided, and keeps the icon's number, from the list just
+    /// heard. Only the person's own bots hold calls for them.
+    @MainActor static func sync(_ chats: HubChats) {
+        let directory = chats.pairing.directory
+        let entries = ApprovalEntry.listed(in: [chats])
+        let changes = LinkApproval.changes(listed: entries.map(\.approval), known: AppBadge.pendingApprovals(in: directory))
+        let topic = PushTopic.topic(for: chats.pairing)
+        let center = UNUserNotificationCenter.current()
+        for approval in changes.new {
+            guard let entry = entries.first(where: { $0.id == approval.id }) else { continue }
+            center.add(UNNotificationRequest(identifier: approval.notificationIdentifier, content: content(for: entry, topic: topic), trigger: nil))
+        }
+        if !changes.gone.isEmpty { center.removeDeliveredNotifications(withIdentifiers: changes.gone.map(LinkApproval.notificationIdentifier)) }
+        guard changes.pending != AppBadge.pendingApprovals(in: directory) else { return }
+        AppBadge.setPendingApprovals(changes.pending, in: directory)
+        let hubs = directory.deletingLastPathComponent()
+        Task { await AppBadge.show(AppBadge.count(hubs: hubs)) }
+    }
+
+    /// Exactly what will run, from the call itself, and the bot's reason. Tapping it opens the call in full.
+    private static func content(for entry: ApprovalEntry, topic: String) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = entry.bot.draft.name
+        content.subtitle = "Asks to run \(entry.approval.tool) on \(entry.approval.providerTitle)"
+        let input = entry.approval.inputLines.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
+        content.body = MessageSegment.notificationText([input, entry.approval.reason].filter { !$0.isEmpty }.joined(separator: "\n"))
+        content.sound = .default
+        content.categoryIdentifier = category
+        content.threadIdentifier = entry.approval.conversationID.uuidString
+        content.userInfo = [LinkPush.topicField: topic, LinkPush.conversationField: entry.approval.conversationID.uuidString,
+                            approvalKey: entry.approval.id.uuidString, botKey: entry.bot.id.uuidString]
+        return content
+    }
+
+    /// The call a notification is about, with the decision when one of its buttons was chosen.
+    static func decision(in response: UNNotificationResponse) -> (topic: String, decision: LinkApprovalDecision?, route: NotificationRoute)? {
+        let info = response.notification.request.content.userInfo
+        guard response.notification.request.content.categoryIdentifier == category,
+              let topic = info[LinkPush.topicField] as? String,
+              let conversation = (info[LinkPush.conversationField] as? String).flatMap(UUID.init(uuidString:)),
+              let approval = (info[approvalKey] as? String).flatMap(UUID.init(uuidString:)),
+              let bot = (info[botKey] as? String).flatMap(UUID.init(uuidString:)) else { return nil }
+        let approve: Bool? = switch response.actionIdentifier {
+        case approveAction: true
+        case declineAction: false
+        default: nil
+        }
+        return (topic, approve.map { LinkApprovalDecision(botID: bot, approvalID: approval, approve: $0) },
+                NotificationRoute(topic: topic, conversation: conversation, approval: approval))
+    }
+
+    /// Sends a button's decision to the Hub the call is on, with the app in the background. If the Hub cannot be
+    /// reached, a notification says so, as the call still waits.
+    @MainActor static func decide(_ decision: LinkApprovalDecision, topic: String) async {
+        guard let hubs = AppGroup.hubs, let directory = PushTopic.directory(of: topic, in: hubs) else { return }
+        do {
+            _ = try await HubPairing(directory: directory, deviceName: UIDevice.current.name).request(.decideApproval(decision))
+            AppBadge.setPendingApprovals(AppBadge.pendingApprovals(in: directory).subtracting([decision.approvalID]), in: directory)
+            await AppBadge.show(AppBadge.count(hubs: hubs))
+        } catch {
+            log.error("A decision could not reach the Hub: \(error.localizedDescription, privacy: .public)")
+            let content = UNMutableNotificationContent()
+            content.title = "Not decided"
+            content.body = "\(error.localizedDescription) The call still waits for you in Noodle."
+            content.sound = .default
+            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
     }
 }
 

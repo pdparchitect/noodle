@@ -20,6 +20,8 @@ struct NotificationRoute: Equatable, Sendable {
     let conversation: UUID
     /// Whether to call the bot once its conversation is open, as its widget's call button asks.
     var call = false
+    /// A call a bot holds for the person, to show once its conversation is open, as its notification asks.
+    var approval: UUID? = nil
 }
 
 /// What the phone gave each Hub to leave word of unread replies under.
