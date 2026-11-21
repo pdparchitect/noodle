@@ -34,7 +34,9 @@ public enum GoogleWorkspace {
         lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
         Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
         group, flagging outsiders, and devices every laptop, desktop and phone with its users and risks. Drive sharing \
-        changes are drive events change_document_visibility, change_document_access_scope and change_user_access. \
+        changes are drive events change_document_visibility, change_document_access_scope and change_user_access. When a \
+        tool is refused or something you need seems missing, run check-access and tell the champion exactly what it says \
+        to change. \
         Record each finding as evidence, citing the application, user \
         and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
@@ -53,7 +55,7 @@ public enum GoogleWorkspace {
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API** and the **Cloud Identity API**.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API** and the [Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com).",
         "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/cloud-identity.devices.readonly`.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
         "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to devices, and assign it to an admin account kept for Pion, never a super admin.",
@@ -62,7 +64,7 @@ public enum GoogleWorkspace {
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), Devices()], trigger: NewSecurityEvents(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), Devices(), CheckAccess()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -74,7 +76,7 @@ public enum GoogleWorkspace {
         Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
         an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
         app-passwords lists its app passwords; apps lists every app holding access to any account now, by client ID, \
-        with its scopes and holders. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
+        with its scopes and holders; check-access says what to change when something is refused. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
         for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
         it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working.
         """,
@@ -97,7 +99,7 @@ public enum GoogleWorkspace {
 
     /// Paced, as apps asks for each user's tokens in turn.
     public static let containmentAdapter = OperationAdapter(operations: [
-        UserState(), Tokens(), Apps(), AppPasswords(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
+        UserState(), Tokens(), Apps(), AppPasswords(), ContainmentCheckAccess(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
     ], simultaneousRequests: 8)
 
     /// The audit events that mean an account or the domain may be under attack, each asked for by name as the Reports
@@ -153,8 +155,8 @@ public enum GoogleWorkspace {
         struct Answer: Decodable { let items: [Item]? }
         var query = query
         if let event { query["eventName"] = event }
-        let items = try await service.at(host: "admin.googleapis.com").get(
-            ["admin", "reports", "v1", "activity", "users", user, "applications", application], query: query, as: Answer.self).items ?? []
+        let items = try await read(.reports) { try await service.at(host: "admin.googleapis.com").get(
+            ["admin", "reports", "v1", "activity", "users", user, "applications", application], query: query, as: Answer.self).items ?? [] }
         return items.flatMap { item in
             (item.events ?? []).compactMap { named -> Event? in
                 guard let name = named.name, event == nil || name == event else { return nil }
@@ -247,17 +249,12 @@ extension GoogleWorkspace {
     struct UserInput: Decodable, Sendable { let user: String }
     static let userSchema = JSONSchema.object(["user": .string("The user's primary email address.")], required: ["user"])
 
-    /// A Directory API request about one user, with Google's refusals explained by the role they come from.
-    static func directory<Answer>(_ user: String, _ path: [String] = [], _ request: ([String]) async throws -> Answer) async throws -> Answer {
+    /// A Directory API request about one user, with Google's refusal said as what to change. User Security Management
+    /// never covers admins, so it is refused for them whatever the role holds.
+    static func directory<Answer>(_ user: String, _ path: [String] = [], need: Need = .security,
+                                  _ request: ([String]) async throws -> Answer) async throws -> Answer {
         let path = ["admin", "directory", "v1", "users", try ServiceInput.email(user)] + path
-        do { return try await request(path) }
-        catch ServiceError.forbidden {
-            throw ServiceError.input("""
-                Google refused this for \(user): the admin this tool signs in as may not do it. Its role needs Users › Read and \
-                Users › Update › Suspend users for a user's state and suspending, and Security › User Security Management for \
-                sessions, apps and app passwords; User Security Management never covers admins. Ask the champion to check the role.
-                """)
-        }
+        return try await read(need) { try await request(path) }
     }
 
     struct UserState: ServiceOperation {
@@ -272,7 +269,7 @@ extension GoogleWorkspace {
                 let primaryEmail: String?, name: Name?, suspended: Bool?, suspensionReason: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?
                 let isEnrolledIn2Sv: Bool?, lastLoginTime: String?, orgUnitPath: String?
             }
-            let user = try await directory(input.user) { try await service.get($0, as: User.self) }
+            let user = try await directory(input.user, need: .containmentUsers) { try await service.get($0, as: User.self) }
             var parts = [user.suspended == true ? "suspended" + (user.suspensionReason.map { " (\($0))" } ?? "") : "active"]
             if user.isAdmin == true { parts.append("super admin") } else if user.isDelegatedAdmin == true { parts.append("delegated admin") }
             parts.append(user.isEnrolledIn2Sv == true ? "2-step verification on" : "2-step verification off")
@@ -400,7 +397,7 @@ extension GoogleWorkspace {
     }
 
     static func suspended(_ suspended: Bool, _ user: String, on service: ServiceClient) async throws {
-        _ = try await directory(user) {
+        _ = try await directory(user, need: .suspending) {
             try await service.data($0, method: "PATCH", body: try JSONEncoder().encode(["suspended": suspended]))
         }
     }
@@ -427,10 +424,12 @@ extension GoogleWorkspace {
             struct Roles: Decodable { let items: [Role]? }
             struct Assignment: Codable { let roleId: String; let assignedTo: String; let assigneeType: String?; let scopeType: String? }
             struct Assignments: Decodable { let items: [Assignment]? }
-            let (superAdmins, roles, assignments) = try await GoogleWorkspace.directoryRead { () async throws -> ([User], [Role], [Assignment]) in
-                (try await directory.get(base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true", "maxResults": "500"],
-                                         as: Users.self).users ?? [],
-                 try await directory.get(base + ["customer", "my_customer", "roles"], query: ["maxResults": "100"], as: Roles.self).items ?? [],
+            let superAdmins = try await GoogleWorkspace.read(.users) {
+                try await directory.get(base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true", "maxResults": "500"],
+                                        as: Users.self).users ?? []
+            }
+            let (roles, assignments) = try await GoogleWorkspace.read(.adminRoles) { () async throws -> ([Role], [Assignment]) in
+                (try await directory.get(base + ["customer", "my_customer", "roles"], query: ["maxResults": "100"], as: Roles.self).items ?? [],
                  try await directory.get(base + ["customer", "my_customer", "roleassignments"], query: ["maxResults": "200"],
                                          as: Assignments.self).items ?? [])
             }
@@ -489,7 +488,7 @@ extension GoogleWorkspace {
                 guard search.count <= 500 else { throw ServiceError.input("Keep the search short.") }
                 query["query"] = search
             }
-            let users = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+            let users = try await GoogleWorkspace.read(.users) { try await service.at(host: "admin.googleapis.com")
                 .get(["admin", "directory", "v1", "users"], query: query, as: Listed.self).users ?? [] }
             let text = users.isEmpty ? "No accounts match." : users.map { user in
                 let twoStep = user.isEnrolledIn2Sv != true ? "2-step verification off" : user.isEnforcedIn2Sv == false ? "2-step verification not enforced" : nil
@@ -523,7 +522,7 @@ extension GoogleWorkspace {
             struct Group: Codable { let id: String?; let email: String?; let name: String?; let directMembersCount: String? }
             struct Listed: Codable { let groups: [Group]? }
             let user = try ServiceInput.email(input.user)
-            let groups = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+            let groups = try await GoogleWorkspace.read(.groups) { try await service.at(host: "admin.googleapis.com")
                 .get(["admin", "directory", "v1", "groups"], query: ["userKey": user, "maxResults": "200"], as: Listed.self).groups ?? [] }
             let text = groups.isEmpty ? "\(user) is in no groups." : "\(user) is in: " + groups.map {
                 "\($0.name ?? $0.email ?? "?") <\($0.email ?? "?")>" + ($0.directMembersCount.map { " (\($0) members)" } ?? "")
@@ -548,7 +547,7 @@ extension GoogleWorkspace {
             struct Listed: Codable { let mobiledevices: [Device]? }
             let user = try ServiceInput.email(input.user)
             // The search matches addresses that start the same too, so only this user's are kept.
-            let devices = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+            let devices = try await GoogleWorkspace.read(.mobileDevices) { try await service.at(host: "admin.googleapis.com")
                 .get(["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"], query: ["query": "email:\(user)", "maxResults": "100"],
                      as: Listed.self).mobiledevices ?? [] }.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
             let text = devices.isEmpty ? "\(user) syncs no mobile devices." : devices.map { device in
@@ -559,15 +558,127 @@ extension GoogleWorkspace {
         }
     }
 
-    /// A read of the Directory, with Google's refusal explained by what the Audit admin's role lacks.
-    static func directoryRead<Value>(_ read: () async throws -> Value) async throws -> Value {
-        do { return try await read() } catch ServiceError.forbidden {
-            throw ServiceError.input("""
-                Google refused: the admin this tool signs in as may not read this. Its role needs Users › Read, Groups › Read and \
-                read access to admin roles and mobile devices besides Reports. Ask the champion to add them, and to sign the tool \
-                in again if it was connected before it asked for the Directory scopes.
-                """)
+    /// What one thing the tools read needs from the setup, to say exactly what to change when Google refuses it.
+    struct Need: Sendable {
+        let title: String, api: String, apiID: String, scope: String, privilege: String
+
+        static let reports = Need(title: "Audit reports", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                  scope: "https://www.googleapis.com/auth/admin.reports.audit.readonly", privilege: "Reports")
+        static let users = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                scope: "https://www.googleapis.com/auth/admin.directory.user.readonly", privilege: "Users › Read")
+        static let adminRoles = Need(title: "Admin roles", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                     scope: "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly", privilege: "read access to admin roles")
+        static let groups = Need(title: "Groups", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                 scope: "https://www.googleapis.com/auth/admin.directory.group.readonly", privilege: "Groups › Read")
+        static let mobileDevices = Need(title: "Mobile devices", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                        scope: "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly", privilege: "read access to devices")
+        static let devices = Need(title: "Devices", api: "Cloud Identity API", apiID: "cloudidentity.googleapis.com",
+                                  scope: "https://www.googleapis.com/auth/cloud-identity.devices.readonly", privilege: "read access to devices")
+        static let containmentUsers = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                           scope: "https://www.googleapis.com/auth/admin.directory.user", privilege: "Users › Read")
+        static let security = Need(title: "Sessions, apps and app passwords", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                   scope: "https://www.googleapis.com/auth/admin.directory.user.security",
+                                   privilege: "Security › User Security Management, which never covers admins,")
+        static let suspending = Need(title: "Suspending", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                     scope: "https://www.googleapis.com/auth/admin.directory.user", privilege: "Users › Update › Suspend users")
+    }
+
+    /// What to change when Google refused something, from what it said: a scope the sign-in lacks, an API turned off in
+    /// the project, a privilege the admin's role lacks, or a sign-in that expired; nil for any other failure.
+    static func fix(for error: Error, _ need: Need) -> String? {
+        let said: String
+        switch error {
+        case ServiceError.rejected: return "the sign-in expired or was revoked: sign the tool in again in Settings › Tools."
+        case ServiceError.forbidden(let reason): said = reason ?? ""
+        case ServiceError.refused(let reason): said = reason
+        case ServiceError.status(_, let reason): said = reason ?? ""
+        default: return nil
         }
+        let lower = said.lowercased()
+        if lower.contains("insufficient authentication scopes") || lower.contains("access_token_scope_insufficient") {
+            return "the sign-in lacks the scope \(need.scope): add it under Google Auth Platform › Data Access if it is missing, then sign the tool in again in Settings › Tools."
+        }
+        if lower.contains("has not been used in project") || lower.contains("service_disabled") || lower.contains("it is disabled") {
+            // Google names the page that turns it on, with the project.
+            let link = said.range(of: #"https://\S+"#, options: .regularExpression).map { String(said[$0]).trimmingCharacters(in: CharacterSet(charactersIn: ".,)")) }
+            return "the \(need.api) is turned off in the tool's Google Cloud project: enable it at \(link ?? "https://console.cloud.google.com/apis/library/" + need.apiID), then try again."
+        }
+        if case ServiceError.forbidden = error {
+            return "the admin this tool signs in as may not do this: add \(need.privilege) to its role in the Admin console, or check the role is assigned to them."
+        }
+        return nil
+    }
+
+    /// A request, with Google's refusal said as what to change, so an agent can tell the champion.
+    static func read<Value>(_ need: Need, _ body: () async throws -> Value) async throws -> Value {
+        do { return try await body() } catch {
+            guard let fix = fix(for: error, need) else { throw error }
+            throw ServiceError.input("Google refused \(need.title.lowercased()): \(fix) Running check-access shows everything this tool can and cannot do.")
+        }
+    }
+
+    /// Each thing a tool reads, tried once with the smallest request it takes, as a checklist of what works and what to
+    /// change for what does not.
+    static func check(_ probes: [(Need, () async throws -> Void)]) async -> [String] {
+        var lines: [String] = []
+        for (need, probe) in probes {
+            do { try await probe(); lines.append("✓ \(need.title)") }
+            catch { lines.append("✗ \(need.title): " + (fix(for: error, need) ?? error.localizedDescription)) }
+        }
+        return lines
+    }
+
+    /// Tries each thing Google Workspace Audit reads and says how to fix what it cannot.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a scope, an API or the admin's role. Run it when a tool is refused."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let admin = try service.at(host: "admin.googleapis.com"), identity = try service.at(host: "cloudidentity.googleapis.com")
+            let directory = ["admin", "directory", "v1"]
+            let lines = await GoogleWorkspace.check([
+                (.reports, { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "login"],
+                                                      query: ["startTime": ServiceInput.daysAgo(1), "maxResults": "1"]) }),
+                (.users, { _ = try await admin.data(directory + ["users"], query: ["customer": "my_customer", "maxResults": "1"]) }),
+                (.adminRoles, { _ = try await admin.data(directory + ["customer", "my_customer", "roles"], query: ["maxResults": "1"]) }),
+                (.groups, { _ = try await admin.data(directory + ["groups"], query: ["customer": "my_customer", "maxResults": "1"]) }),
+                (.mobileDevices, { _ = try await admin.data(directory + ["customer", "my_customer", "devices", "mobile"], query: ["maxResults": "1"]) }),
+                (.devices, { _ = try await identity.data(["v1", "devices"], query: ["customer": "customers/my_customer", "pageSize": "1"]) }),
+            ])
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
+        }
+    }
+
+    /// Tries what Google Workspace Containment can safely: reading users and one user's tokens. Suspending changes an
+    /// account, so it is only described.
+    struct ContainmentCheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let summary = "Tries reading users and one user's tokens and says what works and what to change for what does not; suspending is described, not tried. Run it when a tool is refused."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct User: Decodable { let primaryEmail: String? }
+            struct Users: Decodable { let users: [User]? }
+            let found = FoundUser()
+            var lines = await GoogleWorkspace.check([
+                (.containmentUsers, {
+                    found.email = try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "1"],
+                                                        as: Users.self).users?.first?.primaryEmail
+                }),
+            ])
+            if let email = found.email {
+                lines += await GoogleWorkspace.check([(.security, { _ = try await service.data(["admin", "directory", "v1", "users", email, "tokens"]) })])
+            } else {
+                lines.append("· \(Need.security.title): not tried, as no user could be read.")
+            }
+            lines.append("· Suspending: can only be confirmed by suspending someone; the admin's role needs \(Need.suspending.privilege).")
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
+        }
+
+        private final class FoundUser: @unchecked Sendable { var email: String? }
     }
 }
 
@@ -605,7 +716,7 @@ extension GoogleWorkspace {
             struct Listed: Codable { let members: [Member]? }
             let group = try ServiceInput.email(input.group)
             let domain = group.split(separator: "@").last.map(String.init) ?? ""
-            let members = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+            let members = try await GoogleWorkspace.read(.groups) { try await service.at(host: "admin.googleapis.com")
                 .get(["admin", "directory", "v1", "groups", group, "members"], query: ["maxResults": "200"], as: Listed.self).members ?? [] }
             let text = members.isEmpty ? "\(group) has no members." : "\(group) (\(members.count)): " + members.map { member in
                 if member.type == "CUSTOMER" { return "everyone in the domain" }
@@ -755,7 +866,7 @@ extension GoogleWorkspace {
             let identity = try service.at(host: "cloudidentity.googleapis.com")
             let user = try input.user.map(ServiceInput.email)
             var devices: [Device] = [], users: [DeviceUser] = [], token: String?
-            try await GoogleWorkspace.directoryRead {
+            try await GoogleWorkspace.read(.devices) {
                 for _ in 0..<10 {
                     let page = try await identity.get(["v1", "devices"], query: ["customer": "customers/my_customer", "pageSize": "100", "pageToken": token],
                                                       as: DevicePage.self)
@@ -808,8 +919,10 @@ extension GoogleWorkspace {
             struct Users: Decodable { let users: [User]? }
             struct Token: Decodable { let clientId: String?; let displayText: String?; let scopes: [String]? }
             struct Tokens: Decodable { let items: [Token]? }
-            let emails = try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "500"],
-                                               as: Users.self).users?.compactMap(\.primaryEmail) ?? []
+            let emails = try await read(.containmentUsers) {
+                try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "500"],
+                                      as: Users.self).users?.compactMap(\.primaryEmail) ?? []
+            }
             let held = try await withThrowingTaskGroup(of: (String, [Token]).self) { group in
                 for email in emails {
                     group.addTask { (email, try await directory(email, ["tokens"]) { try await service.get($0, as: Tokens.self) }.items ?? []) }

@@ -597,5 +597,61 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.contains("Reclaim.ai (111)") && $0.contains("2 users") }, apps.text)
         XCTAssertEqual(GoogleWorkspace.containmentAdapter.simultaneousRequests, 8)
     }
+
+    // MARK: Troubleshooting
+
+    static let scopeMissing = #"{"error":{"code":403,"message":"Request had insufficient authentication scopes.","status":"PERMISSION_DENIED","details":[{"reason":"ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}"#
+    static let notAuthorized = #"{"error":{"code":403,"message":"Not Authorized to access this resource/api","errors":[{"reason":"forbidden"}]}}"#
+    static let apiDisabled = #"{"error":{"code":403,"message":"Cloud Identity API has not been used in project 123456 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/cloudidentity.googleapis.com/overview?project=123456 then retry.","status":"PERMISSION_DENIED"}}"#
+
+    /// Each thing the tool reads is tried once, and what fails says exactly what to change: a scope the sign-in lacks,
+    /// an API turned off in the project, or a privilege the admin's role lacks.
+    func testCheckAccessSaysWhatWorksAndHowToFixWhatDoesNot() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (200, "{}")
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[]}"#)
+        service.answers["/admin/directory/v1/customer/my_customer/roles"] = (403, Self.scopeMissing)
+        service.answers["/admin/directory/v1/groups"] = (403, Self.notAuthorized)
+        service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (200, "{}")
+        service.answers["/v1/devices"] = (403, Self.apiDisabled)
+        let check = try await callTool(GoogleWorkspace.adapter, "check-access", "{}", on: service, in: workspace)
+        XCTAssertFalse(check.isError, check.text)
+        let lines = check.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.contains("✓ Audit reports"), check.text)
+        XCTAssertTrue(lines.contains("✓ Users"), check.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Admin roles") && $0.contains("admin.directory.rolemanagement.readonly") && $0.contains("sign the tool in again") }, check.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Groups") && $0.contains("Groups › Read") && $0.contains("role") }, check.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Devices") && $0.contains("Cloud Identity API is turned off")
+            && $0.contains("https://console.developers.google.com/apis/api/cloudidentity.googleapis.com/overview?project=123456") }, check.text)
+    }
+
+    /// A tool call that fails says the same, so an agent can tell the champion what to change without guessing.
+    func testARefusedCallSaysWhatToChange() async throws {
+        let service = FakeService()
+        service.answers["/v1/devices"] = (403, Self.apiDisabled)
+        let devices = try await callTool(GoogleWorkspace.adapter, "devices", "{}", on: service, in: workspace)
+        XCTAssertTrue(devices.isError)
+        XCTAssertTrue(devices.text.contains("Cloud Identity API is turned off") && devices.text.contains("project=123456"), devices.text)
+        service.answers["/admin/directory/v1/users"] = (401, #"{"error":{"code":401,"message":"Request had invalid authentication credentials."}}"#)
+        let users = try await callTool(GoogleWorkspace.adapter, "users", "{}", on: service, in: workspace)
+        XCTAssertTrue(users.isError && users.text.contains("sign the tool in again"), users.text)
+        service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (403, Self.scopeMissing)
+        let activity = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login"}"#, on: service, in: workspace)
+        XCTAssertTrue(activity.isError && activity.text.contains("admin.reports.audit.readonly"), activity.text)
+        XCTAssertTrue(GoogleWorkspace.setup.joined().contains("console.cloud.google.com/apis/library/cloudidentity.googleapis.com"))
+    }
+
+    /// Containment's check tries reading users and one user's tokens; suspending can only be confirmed by suspending.
+    func testContainmentCheckAccessTriesWhatItSafelyCan() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[{"primaryEmail":"pdp@kestrel.example"}]}"#)
+        service.answers["/admin/directory/v1/users/pdp@kestrel.example/tokens"] = (403, Self.notAuthorized)
+        let check = try await callTool(GoogleWorkspace.containmentAdapter, "check-access", "{}", on: service, in: containment)
+        let lines = check.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.contains("✓ Users"), check.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Sessions, apps and app passwords") && $0.contains("User Security Management") }, check.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("· Suspending") && $0.contains("Suspend users") }, check.text)
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "a check never changes anything")
+    }
 }
 

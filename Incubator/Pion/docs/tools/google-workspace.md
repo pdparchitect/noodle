@@ -73,8 +73,9 @@ Containment.
 
 **Least access:** an admin account kept for Pion, with a custom role holding only
 **Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles
-and devices. Its Google Cloud project needs the Admin SDK API and the Cloud
-Identity API enabled. A super admin works too, but gives a lost sign-in far more
+and devices. Its Google Cloud project needs the Admin SDK API and the
+[Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com)
+enabled. A super admin works too, but gives a lost sign-in far more
 reach than reading needs.
 
 Google does not say which Admin console privileges let a role read admin roles
@@ -133,3 +134,15 @@ the apps and app passwords that should not be there.
 - **One client serves both tools.** Add the scopes of both to the same Google
   Cloud client and paste its Client ID into each tool. Each tool still signs in
   on its own, and can use a different admin account.
+
+## When something does not work
+
+Both tools can check their own setup. Ask an agent to run **check-access**: it
+tries each thing the tool reads once and lists what works and, for what does
+not, exactly what to change: a scope missing from the sign-in (add it under
+Data Access and sign the tool in again), an API turned off in the Google Cloud
+project (with the link to turn it on), or a privilege missing from the admin's
+role. Any refused call says the same, so an agent can tell you the fix without
+running the check. Google Workspace Containment does not try suspending, as that
+would change an account.
+
