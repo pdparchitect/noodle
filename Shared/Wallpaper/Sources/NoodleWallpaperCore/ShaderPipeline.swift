@@ -149,7 +149,6 @@ public final class ShaderPipeline: @unchecked Sendable {
         }
     }
 }
-#endif
 
 /// Reads a shader file as text, refusing anything too large to be source.
 public enum ShaderSourceFile {
@@ -167,3 +166,4 @@ public enum ShaderSourceFile {
         return text
     }
 }
+#endif
