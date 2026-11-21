@@ -57,6 +57,26 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertEqual(since, alert("c", 80).time)
     }
 
+    /// A service that lists some alerts hours late says how far back to read: an alert listed late within that is found
+    /// once, and remembered so it is not new again.
+    func testALongerLookBackFindsAnAlertListedHoursLateOnce() async throws {
+        var watch = AlertWatch()
+        let lookBack: TimeInterval = 6 * 3_600
+        _ = try await watch.check(account, at: start, lookBack: lookBack) { _ in [] }
+        _ = try await watch.check(account, at: start.addingTimeInterval(9_000), lookBack: lookBack) { _ in [self.alert("recent", 120)] }
+        var since: Date?
+        let late = try await watch.check(account, at: start.addingTimeInterval(9_300), lookBack: lookBack) { from in
+            since = from
+            return [self.alert("recent", 120), self.alert("late", 10)]
+        }
+        XCTAssertEqual(since, start, "six hours back from the newest seen, but never before watching started")
+        XCTAssertEqual(late?.count, 1)
+        let again = try await watch.check(account, at: start.addingTimeInterval(9_600), lookBack: lookBack) { _ in
+            [self.alert("recent", 120), self.alert("late", 10)]
+        }
+        XCTAssertNil(again, "an alert listed late is news once")
+    }
+
     func testABurstAtTheLimitIsSaidToBeMore() async throws {
         var watch = AlertWatch()
         _ = try await watch.check(account, at: start) { _ in [] }

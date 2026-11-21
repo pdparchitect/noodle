@@ -37,6 +37,22 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertEqual(woken.count, 2, "A failed check wakes no one")
     }
 
+    /// Google lists a few audit events later than an hour, so Workspace's checks read six hours back.
+    @MainActor func testWorkspaceChecksReadSixHoursBack() async throws {
+        let workspace = try GoogleWorkspace.preset.makeConnection(name: "Workspace", values: ["clientID": "1234-abc.apps.googleusercontent.com"])
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let asked = SinceLog()
+        let watcher = AlertWatcher(file: file, alerts: { _, since in
+            asked.add(since)
+            return [ServiceAlert(id: "x", time: now.addingTimeInterval(7_200))]
+        })
+        watcher.adapters = PionAdapters.all
+        for minutes in [0.0, 150, 155] { _ = await watcher.check([(workspace, [UUID()])], keeping: [], at: now.addingTimeInterval(minutes * 60)) { _, _ in } }
+        XCTAssertEqual(asked.values.last, now, "read from six hours before the newest event, never before watching started")
+    }
+
     /// cve.now's board is read through its MCP server once an hour, and wakes the agents for CVEs newly on it.
     @MainActor func testTheWatcherReadsAnMCPServersBoardHourlyAndWakesForWhatIsNew() async throws {
         let entry = try XCTUnwrap(PionCatalogue.entries.first { $0.name == "cve.now" })
@@ -101,4 +117,11 @@ private final class Board: @unchecked Sendable {
         if refused { throw ToolConnectionServiceError.network(503) }
         return CVENowTests.ranking(ids)
     }
+}
+
+private final class SinceLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var kept: [Date] = []
+    func add(_ date: Date) { lock.withLock { kept.append(date) } }
+    var values: [Date] { lock.withLock { kept } }
 }

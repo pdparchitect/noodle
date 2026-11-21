@@ -367,7 +367,7 @@ final class GoogleTests: XCTestCase {
     func testContainmentActionsAreDestructiveAndEachSendsItsOneRequest() async throws {
         let listed = try JSONSerialization.jsonObject(with: try await GoogleWorkspace.containmentAdapter.tools(for: containment)) as! [String: Any]
         let tools = try XCTUnwrap(listed["tools"] as? [[String: Any]])
-        for name in ["sign-out", "revoke-token", "delete-app-password", "suspend", "unsuspend"] {
+        for name in ["sign-out", "revoke-token", "delete-app-password", "invalidate-backup-codes", "suspend", "unsuspend"] {
             let hints = try XCTUnwrap(tools.first { $0["name"] as? String == name }?["annotations"] as? [String: Any], name)
             XCTAssertEqual(hints["readOnlyHint"] as? Bool, false, name)
             XCTAssertEqual(hints["destructiveHint"] as? Bool, true, name)
@@ -379,7 +379,7 @@ final class GoogleTests: XCTestCase {
         }
         let service = FakeService()
         let user = "/admin/directory/v1/users/m.okafor@kestrel.example"
-        for path in [user, user + "/signOut", user + "/tokens/999-evil.apps.googleusercontent.com", user + "/asps/42"] {
+        for path in [user, user + "/signOut", user + "/tokens/999-evil.apps.googleusercontent.com", user + "/asps/42", user + "/verificationCodes/invalidate"] {
             service.answers[path] = (200, "{}")
         }
         let runs: [(String, String, String, String)] = [
@@ -388,6 +388,7 @@ final class GoogleTests: XCTestCase {
             ("delete-app-password", #"{"user":"m.okafor@kestrel.example","codeId":42}"#, "DELETE", user + "/asps/42"),
             ("suspend", #"{"user":"m.okafor@kestrel.example"}"#, "PATCH", user),
             ("unsuspend", #"{"user":"m.okafor@kestrel.example"}"#, "PATCH", user),
+            ("invalidate-backup-codes", #"{"user":"m.okafor@kestrel.example"}"#, "POST", user + "/verificationCodes/invalidate"),
         ]
         for (name, arguments, method, path) in runs {
             let result = try await callTool(GoogleWorkspace.containmentAdapter, name, arguments, on: service, in: containment)
@@ -643,7 +644,7 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Sessions, apps and app passwords") && $0.contains("User Security Management") }, check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("· Suspending") && $0.contains("Suspend users") }, check.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "a check never changes anything")
-        XCTAssertEqual(queryItems(service.requests.first)["query"], "isAdmin=false",
+        XCTAssertEqual(queryItems(service.requests.first)["query"], "isAdmin=false isDelegatedAdmin=false",
                        "User Security Management never covers admins, so an admin's tokens would fail a healthy setup")
         let none = FakeService()
         none.answers["/admin/directory/v1/users"] = (200, #"{"users":[]}"#)
@@ -1070,6 +1071,48 @@ final class GoogleTests: XCTestCase {
         }
         let refused = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service(login: (403, Self.notAuthorized)))
         XCTAssertEqual(refused.count, 1, "a report refused for good held back what the others found")
+    }
+
+    /// An action an app took for a user names the app's client ID and whether it impersonated them, so it can be tied to
+    /// the grant or delegation that let it.
+    func testAnEventKeepsTheAppThatActedAndWhetherItImpersonated() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/drive"] = (200, #"{"items":[{"id":{"time":"2026-11-15T03:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"ivana@kestrel.example","applicationInfo":{"applicationName":"Backup Tool","oauthClientId":"104857600000000000001","impersonation":true}},"events":[{"name":"download","parameters":[{"name":"doc_title","value":"Payroll"}]}]},{"id":{"time":"2026-11-15T02:00:00.000Z","uniqueQualifier":"2"},"actor":{"email":"nick@kestrel.example","applicationInfo":{"applicationName":"Backup Tool","oauthClientId":"222"}},"events":[{"name":"download","parameters":[]}]}]}"#)
+        let activity = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"drive"}"#, on: service, in: workspace)
+        XCTAssertFalse(activity.isError, activity.text)
+        XCTAssertTrue(activity.text.contains("via Backup Tool (client 104857600000000000001, impersonating the user)"), activity.text)
+        XCTAssertTrue(activity.text.contains("via Backup Tool (client 222)"), activity.text)
+        let events = try XCTUnwrap(activity.structured?["events"] as? [[String: Any]])
+        XCTAssertEqual(events.first?["viaClient"] as? String, "104857600000000000001")
+        XCTAssertEqual(events.first?["impersonated"] as? Bool, true)
+    }
+
+    /// Google calls suspicious_login a blocked sign-in; one that succeeded is a login_success marked suspicious. Role
+    /// changes that widen an admin role, and the Groups Enterprise report's member changes, are read too.
+    func testTheWatchCoversSuspiciousSignInsThatSucceededAndRolesWidened() async throws {
+        let admin = Set(GoogleWorkspace.watched.filter { $0.application == "admin" }.map(\.event))
+        XCTAssertTrue(admin.isSuperset(of: ["ASSIGN_ROLE", "ADD_PRIVILEGE"]), "\(admin)")
+        XCTAssertTrue(GoogleWorkspace.applications.contains("groups_enterprise"))
+        let reports = "/admin/reports/v1/activity/users/all/applications/"
+        let service = FakeService()
+        for application in Set(GoogleWorkspace.watched.map(\.application)) { service.answers[reports + application] = (200, #"{"items":[]}"#) }
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-14T00:00:00Z"))
+        _ = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service)
+        let success = try XCTUnwrap(service.requests.first { queryItems($0)["eventName"] == "login_success" })
+        XCTAssertEqual(queryItems(success)["filters"], "is_suspicious==true")
+        XCTAssertNil(service.requests.compactMap { queryItems($0)["filters"] }.first { $0 != "is_suspicious==true" }, "only that read is filtered")
+    }
+
+    /// Containment's agents are told what the least-access role cannot do to an admin, to keep the evidence before
+    /// suspending, and what restoring an account needs; Audit's, what to hand the champion to remediate.
+    func testInstructionsCoverAdminsEvidenceRestoringAndRemediation() {
+        let containment = GoogleWorkspace.containment.defaultInstructions
+        for expected in ["super admin", "before suspend", "invalidate-backup-codes", "before unsuspend"] {
+            XCTAssertTrue(containment.contains(expected), "Containment instructions lack \(expected)")
+        }
+        XCTAssertFalse(containment.contains("contain one with suspend"), "the least-access role cannot suspend an admin")
+        let audit = GoogleWorkspace.preset.defaultInstructions
+        for expected in ["file IDs", "Message-ID"] { XCTAssertTrue(audit.contains(expected), "Audit instructions lack \(expected)") }
     }
 }
 

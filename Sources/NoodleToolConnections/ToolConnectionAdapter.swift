@@ -17,6 +17,8 @@ public protocol ToolConnectionAdapter: Sendable {
     var watchedTool: String? { get }
     /// What the service raised from `since` on, at most `ServiceAlert.most` of it, newest first.
     func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert]
+    /// How far each check for alerts reads back from the newest one seen, as the service lists some after their time.
+    var alertLookBack: TimeInterval { get }
     /// How many requests the service takes at once from one connection, for a service known to refuse a burst
     /// beyond that; nil for no limit. The rest wait their turn.
     var simultaneousRequests: Int? { get }
@@ -25,6 +27,7 @@ public protocol ToolConnectionAdapter: Sendable {
 public extension ToolConnectionAdapter {
     var watchedTool: String? { nil }
     var simultaneousRequests: Int? { nil }
+    var alertLookBack: TimeInterval { AlertWatch.overlap }
     func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] { [] }
 }
 

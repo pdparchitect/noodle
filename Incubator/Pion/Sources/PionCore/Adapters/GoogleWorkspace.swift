@@ -16,7 +16,7 @@ import NoodleToolConnections
 public enum GoogleWorkspace {
     /// The reports agents read: sign-ins and accounts, admin actions and app grants, what was opened, shared or sent,
     /// and what left the domain through Takeout and Vault exports.
-    static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules", "gmail", "chat",
+    static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "groups_enterprise", "mobile", "rules", "gmail", "chat",
                                "meet", "calendar", "takeout", "vault", "context_aware_access", "chrome", "access_transparency", "gcp",
                                "data_studio"]
 
@@ -49,7 +49,9 @@ public enum GoogleWorkspace {
         the champion for an Admin console page when a setting matters, and say what you could not check. domains lists \
         the organisation's domains; their SPF, DKIM and DMARC are public DNS, which a DNS tool checks. \
         Record each finding as evidence, citing the application, user \
-        and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
+        and time window. Hand the champion what to remediate exactly: Drive file IDs, each with the outside people or link \
+        sharing to remove, and each phishing mail's Message-ID with who received it, for the Admin console's security \
+        investigation tool. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
         """,
         iconName: "google-workspace",
@@ -83,18 +85,22 @@ public enum GoogleWorkspace {
     /// signing-in admin's role, which the setup keeps to suspending and User Security Management.
     public static let containment = ToolDefinition(
         id: "b04472f4-fbd5-496e-b286-fa76c23dd08f", name: "Google Workspace Containment",
-        summary: "Sign a user out everywhere, revoke an app's access or an app password, and suspend or restore a user.",
+        summary: "Sign a user out everywhere, revoke an app's access, an app password or backup codes, and suspend or restore a user.",
         defaultInstructions: """
         Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
         an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
         app-passwords lists its app passwords; apps lists every app holding access to any account now, by client ID, \
         with its scopes and holders; check-access says what to change when something is refused. User Security Management \
-        never covers admins, so tokens, app passwords, sign-out, revoke-token and delete-app-password are refused for an \
-        admin: contain one with suspend, or ask the champion to act in the Admin console. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
-        for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
-        it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working, \
-        and revoking users' tokens leaves an app's domain-wide delegation in place: Google Workspace Audit's oauth-apps \
-        lists those, and only an admin can remove one in the Admin console.
+        never covers admins, and only a super admin can act on a super admin, so this tool cannot contain an admin: hand a \
+        compromised admin to a super admin, with exactly what to do in the Admin console. Read tokens and app-passwords \
+        before suspending, as the record of what the account had granted. invalidate-backup-codes ends the backup codes an \
+        attacker may have made. sign-out, revoke-token, delete-app-password, invalidate-backup-codes, suspend and \
+        unsuspend are held for the champion's approval: give the exact user, and in --approval-reason why, the expected \
+        effect and how to undo it, with the Investigation as --approval-conversation. Restoring is not simply undoing: \
+        before unsuspending, recommend the champion resets the password and checks the recovery email and phone, 2-step \
+        verification and the apps still granted access. Signing out alone leaves app access and the password working, and \
+        revoking users' tokens leaves an app's domain-wide delegation in place: Google Workspace Audit's oauth-apps lists \
+        those, and only an admin can remove one in the Admin console.
         """,
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
@@ -115,7 +121,8 @@ public enum GoogleWorkspace {
 
     /// Paced, as apps asks for each user's tokens in turn.
     public static let containmentAdapter = OperationAdapter(operations: [
-        UserState(), Tokens(), Apps(), AppPasswords(), ContainmentCheckAccess(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
+        UserState(), Tokens(), Apps(), AppPasswords(), ContainmentCheckAccess(), SignOut(), RevokeToken(), DeleteAppPassword(), InvalidateBackupCodes(),
+        Suspend(), Unsuspend(),
     ], simultaneousRequests: 8)
 
     /// The audit events that mean an account or the domain may be under attack, each asked for by name as the Reports
@@ -144,7 +151,15 @@ public enum GoogleWorkspace {
         // Security Settings admin events).
         ("admin", "AUTHORIZE_API_CLIENT_ACCESS", nil), ("admin", "ADD_TO_TRUSTED_OAUTH2_APPS", nil), ("admin", "REMOVE_FROM_BLOCKED_OAUTH2_APPS", nil),
         ("admin", "UNBLOCK_ALL_THIRD_PARTY_API_ACCESS", nil), ("admin", "ADD_TO_CAA_EXEMPT_OAUTH2_APPS", nil),
+        // A role given to someone, or widened for everyone who holds it (Google's Delegated Admin Settings events).
+        ("admin", "ASSIGN_ROLE", nil), ("admin", "ADD_PRIVILEGE", nil),
+        // Google calls suspicious_login a sign-in it blocked; one that succeeded is a login_success marked suspicious,
+        // read with the filter below.
+        ("login", "login_success", nil),
     ]
+
+    /// The filters a watched event is read with, by application/event, for an event that is serious only with them.
+    static let watchedFilters = ["login/login_success": "is_suspicious==true"]
 
     /// One audit event. Its ID is the report, the record's time and qualifier, which Google gives to tell records at the
     /// same time apart, the event's name and its place in the record, so no two events are taken for one.
@@ -152,8 +167,9 @@ public enum GoogleWorkspace {
         let id: String, time: String?, application: String, user: String?, ip: String?, event: String, parameters: [String: String]
         /// Where the address is, as Google places it: its autonomous system and region.
         var asn: String? = nil, region: String? = nil
-        /// The app that acted for the user, when one did.
-        var via: String? = nil
+        /// The app that acted for the user, when one did: its name, its OAuth client ID, which ties the action to a grant
+        /// or a domain-wide delegation, and whether it impersonated the user.
+        var via: String? = nil, viaClient: String? = nil, impersonated: Bool? = nil
 
         /// The details that matter for each kind of event, shown before the rest.
         static let keyDetails = [
@@ -167,7 +183,10 @@ public enum GoogleWorkspace {
         var line: String {
             var line = "\(time ?? "?") \(event)"
             if let user { line += " by \(user)" }
-            if let via { line += " via \(via)" }
+            if via != nil || viaClient != nil {
+                let notes = [viaClient.map { "client \($0)" }, impersonated == true ? "impersonating the user" : nil].compactMap { $0 }
+                line += " via \(via ?? "an app")" + (notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")
+            }
             if let ip { line += " from \(ip)" + ([asn.map { "AS\($0)" }, region].compactMap { $0 }.isEmpty ? "" : " (\([asn.map { "AS\($0)" }, region].compactMap { $0 }.joined(separator: ", ")))") }
             let rank = Dictionary(Self.keyDetails.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
             let details = parameters.sorted { (rank[$0.key] ?? Int.max, $0.key) < (rank[$1.key] ?? Int.max, $1.key) }.prefix(8)
@@ -213,7 +232,7 @@ public enum GoogleWorkspace {
     static func events(_ service: ServiceClient, application: String, user: String = "all", event: String? = nil,
                        query: [String: String?], limit: Int = 1000) async throws -> EventPage {
         struct ID: Decodable { let time: String?; let uniqueQualifier: String? }
-        struct Info: Decodable { let applicationName: String? }
+        struct Info: Decodable { let applicationName: String?; let oauthClientId: String?; let impersonation: Bool? }
         struct Actor: Decodable { let email: String?; let applicationInfo: Info? }
         struct Network: Decodable {
             let regionCode: String?, subdivisionCode: String?, asn: [String]
@@ -253,6 +272,8 @@ public enum GoogleWorkspace {
                 found.asn = item.networkInfo?.asn.first
                 found.region = item.networkInfo?.subdivisionCode ?? item.networkInfo?.regionCode
                 found.via = item.actor?.applicationInfo?.applicationName
+                found.viaClient = item.actor?.applicationInfo?.oauthClientId
+                found.impersonated = item.actor?.applicationInfo?.impersonation
                 return found
             }
         }
@@ -327,11 +348,20 @@ public enum GoogleWorkspace {
     /// event's exception names. The exceptions are applied here, once every report is read, rather than handed to the
     /// reads: a release build freed what such a filter captured while the reads still ran, and Pion crashed at launch.
     static func securityEvents(_ service: ServiceClient, since: String, until: String?, limit: Int) async -> Gathered {
-        var gathered = await gather(service, watched.map { (label: "\($0.application)/\($0.event)", application: $0.application, user: "all",
-                                                             event: $0.event, query: ["startTime": since, "endTime": until]) }, limit: limit)
+        var gathered = await gather(service, watched.map { watch in
+            let label = "\(watch.application)/\(watch.event)"
+            return (label: label, application: watch.application, user: "all", event: watch.event,
+                    query: ["startTime": since, "endTime": until, "filters": watchedFilters[label]])
+        }, limit: limit)
         let unless = Dictionary(watched.map { ("\($0.application)/\($0.event)", $0.unless) }, uniquingKeysWith: { first, _ in first })
         gathered.events.removeAll { event in
-            (unless["\(event.application)/\(event.event)"] ?? nil).map { event.parameters[$0.parameter] == $0.value } ?? false
+            let label = "\(event.application)/\(event.event)"
+            // A filter Google did not apply is applied here, so an ordinary successful sign-in never wakes anyone.
+            let filtered = watchedFilters[label].map { filter in
+                let pair = filter.components(separatedBy: "==")
+                return pair.count == 2 && event.parameters[pair[0]] != pair[1]
+            } ?? false
+            return filtered || ((unless[label] ?? nil).map { event.parameters[$0.parameter] == $0.value } ?? false)
         }
         return gathered
     }
@@ -438,6 +468,9 @@ extension GoogleWorkspace {
     /// report found is kept when another is refused; only when none can be read is the check a failure.
     struct NewSecurityEvents: ServiceTrigger {
         var tool: String { SecurityEvents.name }
+        /// Google lists the watched events within minutes, and says a few come later than its usual times
+        /// (https://knowledge.workspace.google.com/admin/reports/data-retention-and-lag-times), so six hours back.
+        var lookBack: TimeInterval { 6 * 3_600 }
         func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
             let gathered = await GoogleWorkspace.securityEvents(service, since: ISO8601DateFormatter().string(from: since), until: nil, limit: ServiceAlert.most)
             if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
@@ -541,6 +574,22 @@ extension GoogleWorkspace {
         func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
             _ = try await directory(input.user, ["signOut"]) { try await service.data($0, method: "POST") }
             return try ServiceResult(text: "Signed \(input.user) out of every session.", structured: ["user": input.user])
+        }
+    }
+
+    /// Ends the backup codes a user can sign in with in place of their second factor, which an attacker who held the
+    /// account may have made or copied; Google makes new ones only when someone asks.
+    struct InvalidateBackupCodes: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "invalidate-backup-codes"
+        static let summary = "End a user's backup codes for 2-step verification, which an attacker may have made or copied."
+        static let input = userSchema
+        static let readOnly = false
+        static let destructive = true
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            _ = try await directory(input.user, ["verificationCodes", "invalidate"]) { try await service.data($0, method: "POST") }
+            return try ServiceResult(text: "Ended \(input.user)'s backup codes.", structured: ["user": input.user])
         }
     }
 
@@ -1065,7 +1114,7 @@ extension GoogleWorkspace {
                 (.containmentUsers, {
                     // User Security Management never covers admins, so only a non-admin's tokens show whether it works.
                     found.email = try await service.get(["admin", "directory", "v1", "users"],
-                                                        query: ["customer": "my_customer", "maxResults": "1", "query": "isAdmin=false"],
+                                                        query: ["customer": "my_customer", "maxResults": "1", "query": "isAdmin=false isDelegatedAdmin=false"],
                                                         as: Users.self).users?.first?.primaryEmail
                 }),
             ])
@@ -1259,7 +1308,7 @@ extension GoogleWorkspace {
             "since": .string("The earliest time, in ISO 8601. The last 7 days when left out. Gmail is read only for windows of 30 days at most."),
             "until": .string("The latest time, in ISO 8601."),
         ], required: ["user"])
-        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups", "gmail", "calendar", "chat", "meet",
+        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups", "groups_enterprise", "gmail", "calendar", "chat", "meet",
                                    "takeout", "vault", "context_aware_access"]
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {

@@ -92,6 +92,12 @@ public protocol ServiceTrigger: Sendable {
     var tool: String { get }
     /// What is serious from `since` on, at most `ServiceAlert.most` of it, newest first.
     func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert]
+    /// How far each check reads back from the newest alert seen, as the service lists some after their time.
+    var lookBack: TimeInterval { get }
+}
+
+public extension ServiceTrigger {
+    var lookBack: TimeInterval { AlertWatch.overlap }
 }
 
 /// What an operation gives back: a sentence or two for the bot to read, and the fields it kept, as JSON.
@@ -510,6 +516,7 @@ public struct OperationAdapter: ToolConnectionAdapter {
     /// The operation that reads what its trigger finds, if its service has a feed of new and serious things to watch;
     /// a lookup service has none.
     public var watchedTool: String? { trigger?.tool }
+    public var alertLookBack: TimeInterval { trigger?.lookBack ?? AlertWatch.overlap }
 
     /// What the service raised from `since` on, as its trigger finds it, or nothing for an adapter without one.
     public func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
