@@ -32,7 +32,9 @@ public enum GoogleWorkspace {
         reaches through groups and which phones hold their data; and the takeout and vault reports show what was exported. \
         To investigate an account, start with user-timeline, everything it and admins did to it in one list; to follow an \
         address, ip-activity; for a deleted account, users with deleted true gives the profile ID to read its history by. \
-        activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. oauth-apps \
+        activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. In a \
+        phishing case, link-clicks says who clicked a link in mail, by the link's address or domain or the message's subject \
+        or ID. oauth-apps \
         lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
         Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
         group, flagging outsiders. Drive sharing \
@@ -73,7 +75,7 @@ public enum GoogleWorkspace {
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), Domains(), CheckAccess()], trigger: NewSecurityEvents(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), LinkClicks(), Domains(), CheckAccess()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -190,7 +192,9 @@ public enum GoogleWorkspace {
 
     /// What a Gmail event type means, for the ones Google's Gmail event page names; the number alone for the rest.
     static func mailEvent(_ code: String) -> String {
-        let said = ["1": "sent", "2": "received", "4": "flagged as spam after delivery", "10": "forwarded for the first time",
+        let said = ["1": "sent", "2": "received", "4": "flagged as spam after delivery", "7": "opened for the first time",
+                    "10": "forwarded for the first time", "15": "link in the body clicked", "16": "link in an attachment preview clicked",
+                    "30": "bounced", "31": "viewed",
                     "11": "autoforwarded by a forwarding setting", "33": "read by an app for the user", "34": "receive rate limited",
                     "35": "send started by the user or an app"][code]
         return said.map { "\(code) (\($0))" } ?? code
@@ -577,6 +581,75 @@ extension GoogleWorkspace {
 // MARK: - Who holds what
 
 extension GoogleWorkspace {
+    /// Who clicked links in mail, from Gmail's events of the types Google's Gmail event page gives for clicks: 15, a link
+    /// in the message body, and 16, a link in an attachment preview
+    /// (https://developers.google.com/workspace/admin/reports/v1/appendix/activity/gmail). The page does not say which
+    /// detail holds the address clicked, so `link` is matched against every detail that looks like one, an address or a
+    /// detail named for a URL, link or domain, but not the sender's, whose Message-ID often names the same domain; and
+    /// `message` against every detail.
+    struct LinkClicks: ServiceOperation {
+        struct Input: Decodable, Sendable { let link: String?, message: String?, user: String?, since: String?, until: String?, limit: Int? }
+        static let name = "link-clicks"
+        static let summary = "Who clicked links in mail, newest first: in the body or in an attachment preview, by the link's address or domain, the message's subject or ID, or the user."
+        static let input = JSONSchema.object([
+            "link": .string("Only clicks on links containing this, such as a domain or a full address."),
+            "message": .string("Only clicks in messages whose details contain this, such as the subject or the Message-ID."),
+            "user": .string("Only this user's clicks: their email, or the profile ID of a deleted account."),
+            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "until": .string("The latest time, in ISO 8601, at most 30 days after since. Now when left out."),
+            "limit": .integer("How many clicks of each kind to read, at most.", minimum: 1, maximum: 5000),
+        ])
+
+        static let kinds = ["15", "16"]
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let user = try input.user.map(GoogleWorkspace.reportUser) ?? "all"
+            let limit = input.limit ?? 2000
+            guard (1...5000).contains(limit) else { throw ServiceError.input("Ask for between 1 and 5000 clicks.") }
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7)]
+            if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
+            let wanted = [input.link, input.message].map { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .map { $0?.isEmpty == true ? nil : $0 }
+            // One kind after another, through the paced connection, not in a task group: see gather.
+            var clicks: [Event] = [], seen = Set<String>(), more = false
+            for kind in Self.kinds {
+                var asked = query
+                asked["filters"] = "event_info.mail_event_type==" + kind
+                let page = try await GoogleWorkspace.read(.report("Gmail report")) {
+                    try await GoogleWorkspace.events(service, application: "gmail", user: user, query: asked, limit: limit)
+                }
+                more = more || page.more
+                for event in page.events where seen.insert(event.id).inserted { clicks.append(event) }
+            }
+            func matches(_ event: Event, _ text: String?, links: Bool) -> Bool {
+                guard let text else { return true }
+                return event.parameters.contains { key, value in
+                    let key = key.lowercased(), value = value.lowercased()
+                    let link = value.contains("://") || ["url", "link", "domain"].contains { key.contains($0) }
+                    return (!links || link) && value.contains(text)
+                }
+            }
+            let read = clicks.count
+            clicks = clicks.filter { matches($0, wanted[0], links: true) && matches($0, wanted[1], links: false) }.sorted { ($0.time ?? "") > ($1.time ?? "") }
+            let people = Array(Set(clicks.compactMap(\.user))).sorted()
+            let what = [wanted[0].map { "on links matching \($0)" }, wanted[1].map { "in messages matching \($0)" }].compactMap { $0 }
+            var lines = ["\(clicks.count) click\(clicks.count == 1 ? "" : "s") \(what.isEmpty ? "on links in mail" : what.joined(separator: " "))"
+                + (people.isEmpty ? "." : " by \(people.count) \(people.count == 1 ? "person" : "people"): \(people.joined(separator: ", "))")]
+            if clicks.isEmpty && read > 0 { lines.append("\(read) clicks in the window matched nothing asked for; try the domain alone or the message's subject.") }
+            lines += clicks.prefix(60).map { event in
+                let shown = event.parameters.sorted { $0.key < $1.key }.filter { $0.key != "event_info.mail_event_type" }
+                    .map { "\($0.key)=\($0.value.count > 200 ? String($0.value.prefix(200)) + "…" : $0.value)" }
+                return "\(event.time ?? "?") \(event.user ?? "?") (\(event.parameters["event_info.mail_event_type"] ?? "?"))"
+                    + (event.ip.map { " from \($0)" } ?? "") + ": " + shown.joined(separator: ", ")
+            }
+            if clicks.count > 60 { lines.append("\(clicks.count - 60) more in the structured result.") }
+            if more { lines.append("There were more clicks than the \(limit) of each kind read; narrow the window, the user or the link.") }
+            lines.append("Google lists Gmail events minutes to hours late, and a link opened outside Gmail, such as copied into a browser, is not a click.")
+            struct Kept: Encodable { let clicks: [Event]; let people: [String]; let more: Bool }
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(clicks: clicks, people: people, more: more))
+        }
+    }
+
     /// The organisation's domains and aliases, as the Directory gives them: which is primary and which are not verified,
     /// since a domain added recently or left unverified may be how someone sends or receives as the organisation.
     struct Domains: ServiceOperation {

@@ -923,5 +923,42 @@ final class GoogleTests: XCTestCase {
         let refused = try await callTool(GoogleWorkspace.adapter, "domains", "{}", on: service, in: workspace)
         XCTAssertTrue(refused.text.contains("admin.directory.domain.readonly"), refused.text)
     }
+
+    /// Who clicked a link in mail, from Gmail's events of type 15 (a link in the body) and 16 (a link in an attachment
+    /// preview). Google does not say which detail holds the address, so a link is matched against all of them.
+    func testLinkClicksSayWhoClickedALinkInMail() async throws {
+        let service = FakeService()
+        func click(_ id: String, _ time: String, _ user: String, _ code: String, _ url: String) -> String {
+            #"{"id":{"time":"\#(time)","uniqueQualifier":"\#(id)"},"actor":{"email":"\#(user)"},"events":[{"name":"delivery","type":"delivery_type","parameters":[{"name":"event_info","messageValue":{"parameter":[{"name":"mail_event_type","intValue":"\#(code)"}]}},{"name":"message_info","messageValue":{"parameter":[{"name":"subject","value":"Invoice overdue"},{"name":"rfc2822_message_id","value":"<abc@evil.example>"},{"name":"link_click_info","multiMessageValue":[{"parameter":[{"name":"url","value":"\#(url)"}]}]}]}}]}]}"#
+        }
+        let path = "/admin/reports/v1/activity/users/all/applications/gmail"
+        let pages: [(Int, String)] = [
+            (200, #"{"items":[\#(click("1", "2026-11-20T09:00:00.000Z", "ivana@kestrel.example", "15", "https://login.evil.example/x")),\#(click("2", "2026-11-20T10:00:00.000Z", "nick@kestrel.example", "15", "https://news.example/a"))]}"#),
+            (200, #"{"items":[\#(click("3", "2026-11-21T08:00:00.000Z", "pdp@kestrel.example", "16", "https://login.evil.example/y"))]}"#),
+        ]
+        service.sequences[path] = pages
+        let clicks = try await callTool(GoogleWorkspace.adapter, "link-clicks",
+                                        #"{"link":"evil.example","since":"2026-11-01T00:00:00Z","until":"2026-11-21T12:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertFalse(clicks.isError, clicks.text)
+        let filters = service.requests.map { queryItems($0)["filters"] }
+        XCTAssertEqual(filters, ["event_info.mail_event_type==15", "event_info.mail_event_type==16"])
+        XCTAssertEqual(queryItems(service.requests.first)["endTime"], "2026-11-21T12:00:00Z")
+        for expected in ["2 clicks on links matching evil.example by 2 people: ivana@kestrel.example, pdp@kestrel.example",
+                         "2026-11-21T08:00:00.000Z", "16 (link in an attachment preview clicked)", "15 (link in the body clicked)",
+                         "https://login.evil.example/y", "Invoice overdue"] {
+            XCTAssertTrue(clicks.text.contains(expected), "\(expected) missing from:\n\(clicks.text)")
+        }
+        XCTAssertFalse(clicks.text.contains("nick@kestrel.example"), "a click on another link in the same mail, from the same sender, was listed")
+        service.sequences[path] = pages
+        let bySubject = try await callTool(GoogleWorkspace.adapter, "link-clicks",
+                                           #"{"message":"invoice overdue","since":"2026-11-01T00:00:00Z","until":"2026-11-21T12:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertTrue(bySubject.text.contains("3 clicks in messages matching invoice overdue by 3 people"), bySubject.text)
+        let newest = try XCTUnwrap(clicks.text.range(of: "08:00:00.000Z pdp@")), older = try XCTUnwrap(clicks.text.range(of: "09:00:00.000Z ivana@"))
+        XCTAssertLessThan(newest.lowerBound, older.lowerBound, "not newest first")
+
+        let window = try await callTool(GoogleWorkspace.adapter, "link-clicks", #"{"since":"2026-09-01T00:00:00Z","until":"2026-11-21T00:00:00Z"}"#,
+                                        on: service, in: workspace)
+        XCTAssertTrue(window.isError && window.text.contains("30 days"), window.text)
+    }
 }
 

@@ -76,6 +76,9 @@ roles, groups, mobile devices and domains. With it agents can investigate an acc
 - **OAuth apps:** every app people granted access in the last six months, by
   client ID and scopes, with who granted and revoked it, and what each app
   pulled through its API calls and how much data.
+- **Who clicked:** in a phishing case, who clicked a link in mail, in the
+  message or in an attachment preview, found by the link's address or domain,
+  or by the message's subject. A link copied into a browser is not counted.
 - **What left:** files opened, shared, downloaded or made public, and exports
   through Takeout or Vault.
 - **The domains:** every domain and alias the organisation has, which is
