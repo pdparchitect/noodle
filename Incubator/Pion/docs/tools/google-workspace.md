@@ -58,11 +58,17 @@ role is missing.
 ## Google Workspace Audit
 
 Pion asks only for read-only access: to audit reports, and to users, admin
-roles, groups and devices. With it agents can investigate an account:
+roles, groups and mobile devices. With it agents can investigate an account:
 
-- **Everything it did**, and what admins did to it, in one timeline: sign-ins,
-  password, recovery and 2-step verification changes, app grants, Drive and
-  admin activity.
+- **Its activity**, and what admins did to it, in one timeline across every
+  report it appears in: sign-ins, password, recovery and 2-step verification
+  changes, app grants, Drive, Gmail, Calendar, Chat, Meet, Takeout and Vault
+  exports, groups and admin actions. The timeline says which reports it
+  searched, which it could not read and which held more than it read. A
+  deleted account's history is read by its profile ID, which listing deleted
+  accounts gives.
+- **An address:** everything one IP address did, across every report and
+  account.
 - **Who it is:** admin roles, 2-step verification and whether it is enforced,
   recovery email and phone (flagged when they lead outside the domain), aliases.
 - **What it reaches:** its groups and who else reads them, flagging outside
@@ -150,11 +156,29 @@ the apps and app passwords that should not be there.
 ## When something does not work
 
 Both tools can check their own setup. Ask an agent to run **check-access**: it
-tries each thing the tool reads once and lists what works and, for what does
-not, exactly what to change: a scope missing from the sign-in (add it under
+tries each thing the tool reads once, including the Gmail and Takeout reports,
+which a working sign-in report does not prove, and lists what works and, for
+what does not, exactly what to change: a scope missing from the sign-in (add it under
 Data Access and sign the tool in again), an API turned off in the Google Cloud
 project (with the link to turn it on), or a privilege missing from the admin's
 role. Any refused call says the same, so an agent can tell you the fix without
 running the check. Google Workspace Containment does not try suspending, as that
 would change an account.
+
+## Reading results
+
+- **Results say when they are incomplete.** Every search reads page after page,
+  and says when there was more than it read or when a report or account could
+  not be read. What one report found is kept when another is refused.
+- **Silence is not proof.** Google lists events minutes to hours after they
+  happen and keeps most for 180 days. Gmail events can be read only for windows
+  of 30 days at most.
+- **What these tools cannot see:** current mail forwarding addresses, filters
+  and delegates, laptops and desktops, and Google's own Alert Center. Google
+  shows those only to a service account with domain-wide delegation, which
+  Pion does not use. Connect Proofpoint or Microsoft Defender for mail, and
+  CrowdStrike or Defender for endpoints.
+- **Containment cannot act on admins.** User Security Management never covers
+  admins, so their tokens, app passwords and sessions cannot be read or ended
+  here; suspend an admin, or act in the Admin console.
 

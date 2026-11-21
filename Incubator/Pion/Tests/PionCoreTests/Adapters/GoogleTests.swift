@@ -274,8 +274,9 @@ final class GoogleTests: XCTestCase {
         service.answers[reports + "rules"] = (200, #"{"items":[{"id":{"time":"2026-11-19T09:14:00.000Z","uniqueQualifier":"401","applicationName":"rules"},"events":[{"type":"rule_trigger_type","name":"rule_trigger","parameters":[{"name":"rule_name","value":"Mass download"},{"name":"severity","value":"HIGH"}]}]},{"id":{"time":"2026-11-19T09:13:00.000Z","uniqueQualifier":"402","applicationName":"rules"},"events":[{"type":"rule_trigger_type","name":"rule_trigger","parameters":[{"name":"rule_name","value":"External share"},{"name":"severity","value":"LOW"}]}]}]}"#)
         let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
         let found = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service)
-        XCTAssertEqual(found.map(\.id), ["login/101/suspicious_login", "admin/201/GRANT_ADMIN_PRIVILEGE", "mobile/301/DEVICE_COMPROMISED_EVENT",
-                                         "rules/401/rule_trigger"])
+        // Each ID carries the record's time and qualifier and the event's place in it, so no two events are taken for one.
+        XCTAssertEqual(found.map(\.id), ["login/2026-11-19T09:20:00.000Z/101/suspicious_login/0", "admin/2026-11-19T09:18:00.000Z/201/GRANT_ADMIN_PRIVILEGE/0",
+                                         "mobile/2026-11-19T09:16:00.000Z/301/DEVICE_COMPROMISED_EVENT/0", "rules/2026-11-19T09:14:00.000Z/401/rule_trigger/0"])
         XCTAssertEqual(found.first?.time, ISO8601DateFormatter().date(from: "2026-11-19T09:20:00Z"))
         let asked = Set(service.requests.compactMap { request in
             queryItems(request)["eventName"].map { (request.url!.lastPathComponent, $0) }.map { "\($0.0)/\($0.1)" }
@@ -654,6 +655,221 @@ final class GoogleTests: XCTestCase {
         for (tool, steps, wanted) in links {
             let text = steps.joined(separator: "\n")
             for link in wanted { XCTAssertTrue(text.contains("https://" + link), "\(tool) does not link \(link)") }
+        }
+    }
+
+    // MARK: Completeness
+
+    private static func item(_ n: Int, _ event: String = "login_success", parameters: String = "") -> String {
+        #"{"id":{"time":"2026-11-14T09:\#(String(format: "%02d", n % 60)):00.000Z","uniqueQualifier":"\#(n)"},"actor":{"email":"u\#(n)@kestrel.example"},"events":[{"name":"\#(event)","parameters":[\#(parameters)]}]}"#
+    }
+
+    /// An audit query reads every page up to what was asked, and says when there was more, so an agent never takes a
+    /// cut-short answer for the whole.
+    func testAuditQueriesReadEveryPageAndSayWhenCutShort() async throws {
+        let service = FakeService()
+        let login = "/admin/reports/v1/activity/users/all/applications/login"
+        service.sequences[login] = [
+            (200, #"{"items":[\#((0..<3).map { Self.item($0) }.joined(separator: ","))],"nextPageToken":"p2"}"#),
+            (200, #"{"items":[\#((3..<5).map { Self.item($0) }.joined(separator: ","))]}"#),
+        ]
+        let all = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login","limit":500}"#, on: service, in: workspace)
+        XCTAssertEqual((all.structured?["events"] as? [Any])?.count, 5, all.text)
+        XCTAssertEqual(queryItems(service.requests.last)["pageToken"], "p2")
+        XCTAssertFalse(all.text.contains("more"), all.text)
+        service.sequences[login] = [(200, #"{"items":[\#((0..<3).map { Self.item($0) }.joined(separator: ","))],"nextPageToken":"p2"}"#)]
+        let cut = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login","limit":3}"#, on: service, in: workspace)
+        XCTAssertTrue(cut.text.contains("There are more"), cut.text)
+    }
+
+    /// The details that matter for each kind of event come first, nested ones included, with where the address is.
+    func testEventsShowTheirKeyDetailsNestedOnesAndTheNetwork() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/drive"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"ivana@kestrel.example"},"ipAddress":"203.0.113.77","networkInfo":{"ipAsn":[16509],"regionCode":"NL","subdivisionCode":"NL-NH"},"events":[{"name":"change_user_access","parameters":[{"name":"actor_is_collaborator_account","boolValue":false},{"name":"billable","boolValue":true},{"name":"doc_id","value":"1AbC"},{"name":"doc_type","value":"spreadsheet"},{"name":"primary_event","boolValue":true},{"name":"doc_title","value":"Payroll 2026"},{"name":"target_user","value":"drop@mailbox.example"},{"name":"new_value","multiValue":["can_view"]}]}]}]}"#)
+        let drive = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"drive"}"#, on: service, in: workspace)
+        XCTAssertTrue(drive.text.contains("doc_title=Payroll 2026") && drive.text.contains("target_user=drop@mailbox.example")
+                      && drive.text.contains("new_value=can_view"), drive.text)
+        XCTAssertTrue(drive.text.contains("from 203.0.113.77 (AS16509, NL-NH)"), drive.text)
+        let since = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-86_400))
+        service.answers["/admin/reports/v1/activity/users/all/applications/gmail"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"2"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"delivery","parameters":[{"name":"message_info","messageValue":{"parameter":[{"name":"subject","value":"Invoice overdue"},{"name":"source","messageValue":{"parameter":[{"name":"address","value":"billing@evil.example"}]}}]}}]}]}]}"#)
+        let mail = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"gmail","since":"\#(since)"}"#, on: service, in: workspace)
+        XCTAssertFalse(mail.isError, mail.text)
+        XCTAssertTrue(mail.text.contains("message_info.subject=Invoice overdue") && mail.text.contains("message_info.source.address=billing@evil.example"), mail.text)
+    }
+
+    /// Google takes Gmail events only for a window of 30 days at most, with an end.
+    func testGmailEventsAreAskedForInAWindowGoogleTakes() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/gmail"] = (200, "{}")
+        _ = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"gmail"}"#, on: service, in: workspace)
+        XCTAssertNotNil(queryItems(service.requests.last)["endTime"])
+        let wide = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"gmail","since":"2026-01-01T00:00:00Z","until":"2026-03-01T00:00:00Z"}"#,
+                                      on: service, in: workspace)
+        XCTAssertTrue(wide.isError && wide.text.contains("30 days"), wide.text)
+    }
+
+    /// Directory lists read every page, so a large org's admins, members or users are not left out.
+    func testDirectoryListsReadEveryPage() async throws {
+        let service = FakeService()
+        service.sequences["/admin/directory/v1/users"] = [
+            (200, #"{"users":[{"primaryEmail":"a@kestrel.example"}],"nextPageToken":"n2"}"#),
+            (200, #"{"users":[{"primaryEmail":"b@kestrel.example"}]}"#),
+        ]
+        let users = try await callTool(GoogleWorkspace.adapter, "users", "{}", on: service, in: workspace)
+        XCTAssertTrue(users.text.contains("a@kestrel.example") && users.text.contains("b@kestrel.example"), users.text)
+        XCTAssertEqual(queryItems(service.requests.last)["pageToken"], "n2")
+        service.answers["/admin/directory/v1/groups/all@kestrel.example/members"] = (200, #"{"members":[]}"#)
+        _ = try await callTool(GoogleWorkspace.adapter, "group-members", #"{"group":"all@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertEqual(queryItems(service.requests.last)["includeDerivedMembership"], "true")
+    }
+
+    /// Everything one address did, in every report: how an attacker's IP is followed.
+    func testIPActivityFollowsAnAddressAcrossEveryReport() async throws {
+        let service = FakeService()
+        for application in GoogleWorkspace.IPActivity.applications { service.answers["/admin/reports/v1/activity/users/all/applications/" + application] = (200, "{}") }
+        service.answers["/admin/reports/v1/activity/users/all/applications/token"] = (200, ##"{"items":[\##(Self.item(1, "authorize", parameters: #"{"name":"app_name","value":"Mail Helper"}"#))]}"##)
+        service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (200, #"{"items":[\#(Self.item(2))]}"#)
+        let found = try await callTool(GoogleWorkspace.adapter, "ip-activity", #"{"ip":"203.0.113.77"}"#, on: service, in: workspace)
+        XCTAssertFalse(found.isError, found.text)
+        XCTAssertTrue(found.text.contains("token") && found.text.contains("app_name=Mail Helper") && found.text.contains("login"), found.text)
+        XCTAssertTrue(service.requests.allSatisfy { queryItems($0)["actorIpAddress"] == "203.0.113.77" })
+        XCTAssertTrue(Set(GoogleWorkspace.IPActivity.applications).isSuperset(of: ["login", "token", "drive", "admin", "takeout"]))
+        let bad = try await callTool(GoogleWorkspace.adapter, "ip-activity", #"{"ip":"not an ip"}"#, on: service, in: workspace)
+        XCTAssertTrue(bad.isError)
+    }
+
+    /// Events found by a detail: who opened one file, everyone who used one app.
+    func testActivityFiltersOnAnEventsDetails() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/drive"] = (200, "{}")
+        _ = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"drive","filters":"doc_id==1AbC"}"#, on: service, in: workspace)
+        XCTAssertEqual(queryItems(service.requests.last)["filters"], "doc_id==1AbC")
+    }
+
+    /// A user's own exports, calendar sharing and chats are part of their timeline.
+    func testATimelineCoversExportsCalendarAndChat() {
+        XCTAssertTrue(Set(GoogleWorkspace.UserTimeline.applications).isSuperset(of: ["takeout", "calendar", "chat", "meet"]))
+    }
+
+    /// Agents are told what silence does not mean, and what this tool cannot see.
+    func testInstructionsSayWhatSilenceDoesNotMeanAndWhereTheBlindSpotsAre() {
+        let audit = GoogleWorkspace.preset.defaultInstructions
+        XCTAssertTrue(audit.contains("hours late") && audit.contains("180 days") && audit.contains("forwarding"), audit)
+        XCTAssertTrue(GoogleWorkspace.containment.defaultInstructions.contains("never covers admins"))
+    }
+
+    // MARK: Review findings
+
+    /// One report refused leaves the rest of an account's history, and says which report could not be read.
+    func testOneRefusedReportLeavesTheRestOfTheTimeline() async throws {
+        let service = FakeService()
+        let user = "/admin/reports/v1/activity/users/ivana@kestrel.example/applications/"
+        for application in GoogleWorkspace.UserTimeline.applications { service.answers[user + application] = (200, "{}") }
+        service.answers["/admin/reports/v1/activity/users/all/applications/admin"] = (200, "{}")
+        service.answers[user + "login"] = (200, #"{"items":[\#(Self.item(1))]}"#)
+        service.answers[user + "drive"] = (403, Self.notAuthorized)
+        let timeline = try await callTool(GoogleWorkspace.adapter, "user-timeline", #"{"user":"ivana@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertFalse(timeline.isError, timeline.text)
+        XCTAssertTrue(timeline.text.contains("login_success"), timeline.text)
+        XCTAssertTrue(timeline.text.contains("Could not read: drive"), timeline.text)
+        XCTAssertTrue(timeline.text.contains("Searched:") && timeline.text.contains("takeout"), timeline.text)
+    }
+
+    /// Two events with the same qualifier at different times are two events.
+    func testEventsAtDifferentTimesAreNotMerged() async throws {
+        let service = FakeService()
+        let user = "/admin/reports/v1/activity/users/ivana@kestrel.example/applications/"
+        for application in GoogleWorkspace.UserTimeline.applications { service.answers[user + application] = (200, "{}") }
+        service.answers["/admin/reports/v1/activity/users/all/applications/admin"] = (200, "{}")
+        service.answers[user + "login"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"7"},"events":[{"name":"login_success"}]},{"id":{"time":"2026-11-14T10:00:00.000Z","uniqueQualifier":"7"},"events":[{"name":"login_success"}]}]}"#)
+        let timeline = try await callTool(GoogleWorkspace.adapter, "user-timeline", #"{"user":"ivana@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertEqual((timeline.structured?["events"] as? [Any])?.count, 2, timeline.text)
+    }
+
+    /// A deleted account is found with its profile ID, and its history is read by that ID.
+    func testDeletedAccountsAreFoundAndReadByProfileID() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[{"id":"104857600123456789012","primaryEmail":"leaver@kestrel.example"}]}"#)
+        let deleted = try await callTool(GoogleWorkspace.adapter, "users", #"{"deleted":true}"#, on: service, in: workspace)
+        XCTAssertTrue(deleted.text.contains("leaver@kestrel.example") && deleted.text.contains("104857600123456789012"), deleted.text)
+        XCTAssertEqual(queryItems(service.requests.last)["showDeleted"], "true")
+        let byID = "/admin/reports/v1/activity/users/104857600123456789012/applications/login"
+        service.answers[byID] = (200, #"{"items":[\#(Self.item(3))]}"#)
+        let history = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login","user":"104857600123456789012"}"#, on: service, in: workspace)
+        XCTAssertFalse(history.isError, history.text)
+        XCTAssertEqual(service.requests.last?.url?.path, byID)
+    }
+
+    /// The app inventory pages through every account, keeps what it found when one account is refused, and says how
+    /// many accounts it checked even when it found nothing.
+    func testTheAppInventoryCoversEveryAccountAndKeepsWhatItFound() async throws {
+        let service = FakeService()
+        service.sequences["/admin/directory/v1/users"] = [
+            (200, #"{"users":[{"primaryEmail":"admin@kestrel.example"}],"nextPageToken":"n2"}"#),
+            (200, #"{"users":[{"primaryEmail":"nick@kestrel.example"}]}"#),
+        ]
+        service.answers["/admin/directory/v1/users/admin@kestrel.example/tokens"] = (403, Self.notAuthorized)
+        service.answers["/admin/directory/v1/users/nick@kestrel.example/tokens"] = (200, #"{"items":[{"clientId":"222","displayText":"Mail Helper","scopes":["https://mail.google.com/"]}]}"#)
+        let apps = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
+        XCTAssertFalse(apps.isError, apps.text)
+        XCTAssertTrue(apps.text.contains("Mail Helper (222)"), apps.text)
+        XCTAssertTrue(apps.text.contains("Checked 2 accounts") && apps.text.contains("could not read admin@kestrel.example"), apps.text)
+        service.sequences["/admin/directory/v1/users"] = [(200, #"{"users":[{"primaryEmail":"a@kestrel.example"}]}"#)]
+        service.answers["/admin/directory/v1/users/a@kestrel.example/tokens"] = (200, "{}")
+        let none = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
+        XCTAssertTrue(none.text.contains("No app holds access to any of the 1 account checked"), none.text)
+    }
+
+    /// Gmail's nested event type, which tells receipt from forwarding, comes through with what it means.
+    func testGmailEventTypesSayWhatHappened() async throws {
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/gmail"] = (200, #"{"items":[{"id":{"time":"2026-11-14T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"delivery","parameters":[{"name":"event_info","messageValue":{"parameter":[{"name":"mail_event_type","intValue":"11"}]}}]}]}]}"#)
+        let mail = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"gmail"}"#, on: service, in: workspace)
+        XCTAssertTrue(mail.text.contains("event_info.mail_event_type=11 (autoforwarded by a forwarding setting)"), mail.text)
+    }
+
+    /// The access check tries the Gmail and Takeout reports too, as a working sign-in report does not prove them.
+    func testCheckAccessTriesGmailAndTakeoutReports() async throws {
+        let service = FakeService()
+        for path in ["/admin/reports/v1/activity/users/all/applications/login", "/admin/directory/v1/users", "/admin/directory/v1/customer/my_customer/roles",
+                     "/admin/directory/v1/groups", "/admin/directory/v1/customer/my_customer/devices/mobile",
+                     "/admin/reports/v1/activity/users/all/applications/takeout"] { service.answers[path] = (200, "{}") }
+        service.answers["/admin/reports/v1/activity/users/all/applications/gmail"] = (400, #"{"error":{"code":400,"message":"Gmail logs are not available"}}"#)
+        let check = try await callTool(GoogleWorkspace.adapter, "check-access", "{}", on: service, in: workspace)
+        XCTAssertTrue(check.text.contains("✓ Takeout report") && check.text.contains("✗ Gmail report"), check.text)
+        let gmail = service.requests.first { $0.url?.path.hasSuffix("/gmail") == true }
+        XCTAssertNotNil(queryItems(gmail)["endTime"])
+    }
+
+    // MARK: Scope guard
+
+    /// Every Google scope Pion asks for, with where it was checked. A scope can be accepted by an API's method and still
+    /// be refused at sign-in, as Cloud Identity's device scopes are, which take only a service account, and an invalid
+    /// one fails the whole sign-in. So a scope is added here only once it is on Google's list of scopes a sign-in can
+    /// request (developers.google.com/identity/protocols/oauth2/scopes) and the API's own guide allows an admin's
+    /// sign-in, or a live sign-in has taken it.
+    static let checkedScopes: [String: String] = [
+        "https://www.googleapis.com/auth/admin.reports.audit.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.user.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.group.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.user": "on Google's scope list",
+        "https://www.googleapis.com/auth/admin.directory.user.security": "on Google's scope list",
+        "https://www.googleapis.com/auth/logging.read": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/cloudasset": "not on Google's scope list, which gives only cloud-platform for Cloud Asset; taken by the champion's live sign-in",
+        "https://www.googleapis.com/auth/securitycenter": "not on Google's scope list, which gives only cloud-platform for Security Command Center; taken by the champion's live sign-in",
+    ]
+
+    func testEveryGoogleScopeAskedForHasBeenChecked() throws {
+        var tools = 0
+        defer { XCTAssertEqual(tools, 3, "Google Workspace Audit, Google Workspace Containment and Google Cloud") }
+        for preset in PionCatalogue.entries where preset.adapter?.hasPrefix("google-") == true {
+            guard case .connection(let configuration) = preset.configuration, let oauth = configuration.oauth else { continue }
+            tools += 1
+            for scope in oauth.scopes {
+                XCTAssertNotNil(Self.checkedScopes[scope], "\(preset.name) asks for \(scope), which nobody has checked a sign-in can request")
+            }
         }
     }
 }

@@ -30,13 +30,18 @@ public enum GoogleWorkspace {
         admin-roles lists the super admins and every admin role with what it allows and who holds it. For a breach's \
         scope, users finds accounts by search, such as isEnrolledIn2Sv=false; user-groups and user-devices show what a user \
         reaches through groups and which phones hold their data; and the takeout and vault reports show what was exported. \
-        To investigate an account, start with user-timeline, everything it and admins did to it in one list. oauth-apps \
+        To investigate an account, start with user-timeline, everything it and admins did to it in one list; to follow an \
+        address, ip-activity; for a deleted account, users with deleted true gives the profile ID to read its history by. \
+        activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. oauth-apps \
         lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
         Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
         group, flagging outsiders. Drive sharing \
         changes are drive events change_document_visibility, change_document_access_scope and change_user_access. When a \
         tool is refused or something you need seems missing, run check-access and tell the champion exactly what it says \
-        to change. \
+        to change. Silence is not proof: Google lists events minutes to hours late, keeps most for 180 days, and Gmail \
+        events only in windows of 30 days; results say what was cut short or could not be read. This tool cannot see \
+        current mail forwarding addresses, filters or delegates, laptops and desktops, or Google's Alert Center: use \
+        Proofpoint or Microsoft Defender for mail and CrowdStrike or Defender for endpoints, and say what you could not check. \
         Record each finding as evidence, citing the application, user \
         and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
@@ -64,7 +69,7 @@ public enum GoogleWorkspace {
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), CheckAccess()], trigger: NewSecurityEvents(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), CheckAccess()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -76,7 +81,9 @@ public enum GoogleWorkspace {
         Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
         an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
         app-passwords lists its app passwords; apps lists every app holding access to any account now, by client ID, \
-        with its scopes and holders; check-access says what to change when something is refused. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
+        with its scopes and holders; check-access says what to change when something is refused. User Security Management \
+        never covers admins, so tokens, app passwords, sign-out, revoke-token and delete-app-password are refused for an \
+        admin: contain one with suspend, or ask the champion to act in the Admin console. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
         for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
         it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working.
         """,
@@ -125,99 +132,253 @@ public enum GoogleWorkspace {
         ("rules", "rule_trigger", ("severity", "LOW")),
     ]
 
-    /// One audit event, with what tells it from the rest: its report's ID for the activity it was part of, and its name.
+    /// One audit event. Its ID is the report, the record's time and qualifier, which Google gives to tell records at the
+    /// same time apart, the event's name and its place in the record, so no two events are taken for one.
     struct Event: Encodable {
         let id: String, time: String?, application: String, user: String?, ip: String?, event: String, parameters: [String: String]
+        /// Where the address is, as Google places it: its autonomous system and region.
+        var asn: String? = nil, region: String? = nil
+        /// The app that acted for the user, when one did.
+        var via: String? = nil
+
+        /// The details that matter for each kind of event, shown before the rest.
+        static let keyDetails = [
+            "doc_title", "target_user", "visibility", "old_visibility", "new_value", "old_value", "target_domain", "owner", "doc_id",
+            "app_name", "client_id", "scope", "client_type", "api_name", "method_name", "num_response_bytes",
+            "login_type", "login_challenge_method", "login_challenge_status", "is_suspicious", "is_second_factor", "sensitive_action_name",
+            "USER_EMAIL", "SETTING_NAME", "NEW_VALUE", "OLD_VALUE", "EMAIL_MONITOR_DEST_EMAIL", "email_forwarding_destination_address",
+            "affected_email_address", "event_info.mail_event_type",
+        ]
 
         var line: String {
             var line = "\(time ?? "?") \(event)"
             if let user { line += " by \(user)" }
-            if let ip { line += " from \(ip)" }
-            let details = parameters.sorted { $0.key < $1.key }.prefix(4).map { "\($0.key)=\($0.value)" }
+            if let via { line += " via \(via)" }
+            if let ip { line += " from \(ip)" + ([asn.map { "AS\($0)" }, region].compactMap { $0 }.isEmpty ? "" : " (\([asn.map { "AS\($0)" }, region].compactMap { $0 }.joined(separator: ", ")))") }
+            let rank = Dictionary(Self.keyDetails.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+            let details = parameters.sorted { (rank[$0.key] ?? Int.max, $0.key) < (rank[$1.key] ?? Int.max, $1.key) }.prefix(8)
+                .map { "\($0.key)=\($0.value.count > 160 ? String($0.value.prefix(160)) + "…" : $0.value)" }
             if !details.isEmpty { line += " (\(details.joined(separator: ", ")))" }
             return line
         }
     }
 
-    /// A report's events, newest first, only those named `event` when it is given, as an activity may hold several.
-    static func events(_ service: ServiceClient, application: String, user: String = "all", event: String? = nil,
-                       query: [String: String?]) async throws -> [Event] {
-        struct Parameter: Decodable {
-            let name: String; let value: String?; let boolValue: Bool?; let intValue: String?; let multiValue: [String]?
-            var shown: String? {
-                value ?? boolValue.map(String.init) ?? intValue ?? multiValue?.joined(separator: ", ")
+    /// Events read from one report, and whether the report had more than were read.
+    struct EventPage { var events: [Event]; var more: Bool }
+
+    /// An event's details as Google sends them: values, lists, and details nested inside details, as Gmail's are.
+    fileprivate struct Parameter: Decodable {
+        struct Message: Decodable { let parameter: [Parameter]? }
+        let name: String?, value: String?, boolValue: Bool?, intValue: String?, multiValue: [String]?, multiIntValue: [String]?
+        let messageValue: Message?, multiMessageValue: [Message]?
+
+        /// Each value by its name, nested ones as parent.child.
+        func flattened(under prefix: String = "") -> [(String, String)] {
+            let key = prefix + (name ?? "?")
+            if let shown = value ?? boolValue.map(String.init) ?? intValue ?? multiValue?.joined(separator: ", ")
+                ?? multiIntValue?.joined(separator: ", ") {
+                return [(key, key == "event_info.mail_event_type" ? GoogleWorkspace.mailEvent(shown) : shown)]
             }
-        }
-        struct Named: Decodable { let name: String?; let parameters: [Parameter]? }
-        struct ID: Decodable { let time: String?; let uniqueQualifier: String? }
-        struct Actor: Decodable { let email: String? }
-        struct Item: Decodable { let id: ID?; let actor: Actor?; let ipAddress: String?; let events: [Named]? }
-        struct Answer: Decodable { let items: [Item]? }
-        var query = query
-        if let event { query["eventName"] = event }
-        let items = try await read(.reports) { try await service.at(host: "admin.googleapis.com").get(
-            ["admin", "reports", "v1", "activity", "users", user, "applications", application], query: query, as: Answer.self).items ?? [] }
-        return items.flatMap { item in
-            (item.events ?? []).compactMap { named -> Event? in
-                guard let name = named.name, event == nil || name == event else { return nil }
-                return Event(id: "\(application)/\(item.id?.uniqueQualifier ?? "?")/\(name)", time: item.id?.time, application: application,
-                             user: item.actor?.email, ip: item.ipAddress, event: name,
-                             parameters: Dictionary((named.parameters ?? []).compactMap { parameter in parameter.shown.map { (parameter.name, $0) } },
-                                                    uniquingKeysWith: { first, _ in first }))
-            }
+            let nested = (messageValue.map { [$0] } ?? []) + (multiMessageValue ?? [])
+            return nested.flatMap { message in (message.parameter ?? []).flatMap { $0.flattened(under: key + ".") } }
         }
     }
 
-    /// The watched events from `since` to `until`, newest first, up to `limit` of each.
-    static func securityEvents(_ service: ServiceClient, since: String, until: String?, limit: Int) async throws -> [Event] {
-        try await withThrowingTaskGroup(of: [Event].self) { group in
-            for watched in watched {
+    /// What a Gmail event type means, for the ones Google's Gmail event page names; the number alone for the rest.
+    static func mailEvent(_ code: String) -> String {
+        let said = ["1": "sent", "2": "received", "4": "flagged as spam after delivery", "10": "forwarded for the first time",
+                    "11": "autoforwarded by a forwarding setting", "33": "read by an app for the user", "34": "receive rate limited",
+                    "35": "send started by the user or an app"][code]
+        return said.map { "\(code) (\($0))" } ?? code
+    }
+
+    /// A report's events, newest first, only those named `event` when it is given, reading page after page up to
+    /// `limit`. A Gmail report takes only a window of 30 days at most, with an end.
+    static func events(_ service: ServiceClient, application: String, user: String = "all", event: String? = nil,
+                       query: [String: String?], limit: Int = 1000) async throws -> EventPage {
+        struct ID: Decodable { let time: String?; let uniqueQualifier: String? }
+        struct Info: Decodable { let applicationName: String? }
+        struct Actor: Decodable { let email: String?; let applicationInfo: Info? }
+        struct Network: Decodable {
+            let regionCode: String?, subdivisionCode: String?, asn: [String]
+            enum Keys: String, CodingKey { case ipAsn, regionCode, subdivisionCode }
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: Keys.self)
+                regionCode = try? container.decodeIfPresent(String.self, forKey: .regionCode)
+                subdivisionCode = try? container.decodeIfPresent(String.self, forKey: .subdivisionCode)
+                asn = (try? container.decodeIfPresent([Int].self, forKey: .ipAsn))?.map(String.init)
+                    ?? (try? container.decodeIfPresent([String].self, forKey: .ipAsn)) ?? []
+            }
+        }
+        struct Named: Decodable { let name: String?; let parameters: [Parameter]? }
+        struct Item: Decodable { let id: ID?; let actor: Actor?; let ipAddress: String?; let networkInfo: Network?; let events: [Named]? }
+        struct Answer: Decodable { let items: [Item]?; let nextPageToken: String? }
+        var query = query
+        if let event { query["eventName"] = event }
+        if application == "gmail" { query = try gmailWindow(query) }
+        var items: [Item] = [], token: String?, more = false
+        for _ in 0..<50 {
+            query["maxResults"] = String(min(1000, limit - items.count))
+            query["pageToken"] = token
+            let page = try await read(.reports) { try await service.at(host: "admin.googleapis.com").get(
+                ["admin", "reports", "v1", "activity", "users", user, "applications", application], query: query, as: Answer.self) }
+            items += page.items ?? []
+            guard let next = page.nextPageToken, !next.isEmpty else { break }
+            if items.count >= limit { more = true; break }
+            token = next
+        }
+        let events = items.flatMap { item in
+            (item.events ?? []).enumerated().compactMap { index, named -> Event? in
+                guard let name = named.name, event == nil || name == event else { return nil }
+                var found = Event(id: "\(application)/\(item.id?.time ?? "?")/\(item.id?.uniqueQualifier ?? "?")/\(name)/\(index)", time: item.id?.time,
+                                  application: application, user: item.actor?.email, ip: item.ipAddress, event: name,
+                                  parameters: Dictionary((named.parameters ?? []).flatMap { $0.flattened() }, uniquingKeysWith: { first, _ in first }))
+                found.asn = item.networkInfo?.asn.first
+                found.region = item.networkInfo?.subdivisionCode ?? item.networkInfo?.regionCode
+                found.via = item.actor?.applicationInfo?.applicationName
+                return found
+            }
+        }
+        return EventPage(events: events, more: more)
+    }
+
+    /// Google takes Gmail events only with both ends, at most 30 days apart: the end is now when left out.
+    static func gmailWindow(_ query: [String: String?]) throws -> [String: String?] {
+        var query = query
+        let end = (query["endTime"] ?? nil) ?? ISO8601DateFormatter().string(from: Date())
+        query["endTime"] = end
+        let parse: (String?) -> Date? = { value in value.flatMap { ServiceAlert.time($0) } }
+        if let start = parse(query["startTime"] ?? nil), let finish = parse(end), finish.timeIntervalSince(start) > 30 * 86_400 {
+            throw ServiceError.input("Google takes Gmail events for a window of 30 days at most; ask for a shorter one.")
+        }
+        return query
+    }
+
+    /// Several reports read at once, keeping what each found when another is refused, and saying what was searched,
+    /// what was cut short and what could not be read, so a gap is never taken for nothing having happened.
+    struct Gathered {
+        var events: [Event] = [], searched: [String] = [], cut: [String] = [], failed: [(String, String)] = []
+
+        var coverage: String {
+            var lines = ["Searched: \(searched.joined(separator: ", "))."]
+            if !cut.isEmpty { lines.append("Cut short, with more not read: \(cut.joined(separator: ", ")); narrow the window.") }
+            if !failed.isEmpty { lines.append("Could not read: " + failed.map { "\($0.0) (\($0.1))" }.joined(separator: "; ")) }
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    static func gather(_ service: ServiceClient, _ reads: [(label: String, application: String, user: String, event: String?, query: [String: String?])],
+                       limit: Int, keep: @escaping @Sendable (String, Event) -> Bool = { _, _ in true }) async -> Gathered {
+        let results = await withTaskGroup(of: (String, Result<EventPage, Error>).self) { group in
+            for read in reads {
                 group.addTask {
-                    try await events(service, application: watched.application, event: watched.event,
-                                     query: ["startTime": since, "endTime": until, "maxResults": String(limit)])
-                        .filter { event in watched.unless.map { event.parameters[$0.parameter] != $0.value } ?? true }
+                    do { return (read.label, .success(try await events(service, application: read.application, user: read.user, event: read.event,
+                                                                         query: read.query, limit: limit))) }
+                    catch { return (read.label, .failure(error)) }
                 }
             }
-            return try await group.reduce(into: []) { $0 += $1 }.sorted { ($0.time ?? "") > ($1.time ?? "") }
+            return await group.reduce(into: []) { $0.append($1) }
         }
+        var gathered = Gathered(), seen = Set<String>()
+        for (label, result) in results.sorted(by: { $0.0 < $1.0 }) {
+            switch result {
+            case .success(let page):
+                if !gathered.searched.contains(label) { gathered.searched.append(label) }
+                if page.more { gathered.cut.append(label) }
+                for event in page.events where keep(label, event) && seen.insert(event.id).inserted { gathered.events.append(event) }
+            case .failure(let error):
+                gathered.failed.append((label, error.localizedDescription))
+            }
+        }
+        gathered.events.sort { ($0.time ?? "") > ($1.time ?? "") }
+        return gathered
+    }
+
+    /// The watched events from `since` to `until`, newest first, up to `limit` of each.
+    static func securityEvents(_ service: ServiceClient, since: String, until: String?, limit: Int) async -> Gathered {
+        let unless = Dictionary(watched.map { ("\($0.application)/\($0.event)", $0.unless) }, uniquingKeysWith: { first, _ in first })
+        return await gather(service, watched.map { (label: "\($0.application)/\($0.event)", application: $0.application, user: "all", event: $0.event,
+                                                    query: ["startTime": since, "endTime": until]) }, limit: limit) { label, event in
+            (unless[label] ?? nil).map { event.parameters[$0.parameter] != $0.value } ?? true
+        }
+    }
+
+    /// One page of a Directory list, whichever list it is.
+    struct DirectoryPage<Item: Decodable>: Decodable {
+        let users: [Item]?, groups: [Item]?, members: [Item]?, items: [Item]?, mobiledevices: [Item]?, nextPageToken: String?
+        var listed: [Item] { users ?? groups ?? members ?? items ?? mobiledevices ?? [] }
+    }
+
+    /// A Directory list read page after page up to `limit`, and whether there was more, so a large org's admins,
+    /// members or users are not left out unsaid.
+    static func listAll<Item: Decodable>(_ client: ServiceClient, _ path: [String], query: [String: String?], pageSize: Int = 500,
+                                         limit: Int = 5000) async throws -> (items: [Item], more: Bool) {
+        var query = query, items: [Item] = []
+        for _ in 0..<100 {
+            query["maxResults"] = String(min(pageSize, limit - items.count))
+            let page = try await client.get(path, query: query, as: DirectoryPage<Item>.self)
+            items += page.listed
+            guard let next = page.nextPageToken, !next.isEmpty else { return (items, false) }
+            if items.count >= limit { return (items, true) }
+            query["pageToken"] = next
+        }
+        return (items, true)
+    }
+
+    /// A user for an audit report: their email, or the numeric profile ID that a deleted account is still found by.
+    static func reportUser(_ value: String) throws -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !value.isEmpty, value.count <= 30, value.allSatisfy(\.isNumber) { return value }
+        return try ServiceInput.email(value)
     }
 }
 
 extension GoogleWorkspace {
     struct Activity: ServiceOperation {
-        struct Input: Decodable, Sendable { let application: String, user: String?, eventName: String?, ip: String?, since: String?, until: String?, limit: Int? }
+        struct Input: Decodable, Sendable {
+            let application: String, user: String?, eventName: String?, ip: String?, filters: String?, since: String?, until: String?, limit: Int?
+        }
         static let name = "activity"
-        static let summary = "Audit events of one application, newest first, by user, event name, IP address and time, with each event's parameters."
+        static let summary = "Audit events of one report, newest first, by user, event name, IP address, an event's details and time, with each event's details and where its address is."
         static let input = JSONSchema.object([
             "application": .string("Which report.", oneOf: GoogleWorkspace.applications),
-            "user": .string("The user's email. Everyone when left out."),
+            "user": .string("The user's email, or the profile ID of a deleted account from users. Everyone when left out."),
             "eventName": .string("An event, such as login_failure, suspicious_login, authorize or download."),
             "ip": .string("Only events from this IP address."),
+            "filters": .string("Only events whose details match, as Google takes them: name==value, comma-separated, such as doc_id==1AbC, client_id==123 or target_user==someone@example.com. Each must belong to the event named in eventName or every event of the report."),
             "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
-            "until": .string("The latest time, in ISO 8601."), "limit": .integer("How many events, at most.", minimum: 1, maximum: 500),
+            "until": .string("The latest time, in ISO 8601. For Gmail, at most 30 days after since."),
+            "limit": .integer("How many events, at most.", minimum: 1, maximum: 5000),
         ], required: ["application"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let application = try ServiceInput.oneOf(input.application, GoogleWorkspace.applications, "application")
-            let user = try input.user.map(ServiceInput.email) ?? "all"
-            let limit = input.limit ?? 100
-            guard (1...500).contains(limit) else { throw ServiceError.input("Ask for between 1 and 500 events.") }
-            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7),
-                                            "maxResults": String(limit)]
+            let user = try input.user.map(GoogleWorkspace.reportUser) ?? "all"
+            let limit = input.limit ?? 500
+            guard (1...5000).contains(limit) else { throw ServiceError.input("Ask for between 1 and 5000 events.") }
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7)]
             if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
             if let event = input.eventName { query["eventName"] = try ServiceInput.quoted(event, "the event name") }
             if let ip = input.ip { query["actorIpAddress"] = try ServiceInput.ip(ip) }
-            struct Events: Encodable { let events: [Event] }
-            let events = try await GoogleWorkspace.events(service, application: application, user: user, query: query)
-            let text = events.isEmpty ? "No \(application) events match." : events.prefix(30).map(\.line).joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Events(events: events))
+            if let filters = input.filters?.trimmingCharacters(in: .whitespacesAndNewlines), !filters.isEmpty {
+                guard filters.count <= 500, !filters.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+                    throw ServiceError.input("Give filters as name==value pairs separated by commas, briefly.")
+                }
+                query["filters"] = filters
+            }
+            let page = try await GoogleWorkspace.events(service, application: application, user: user, query: query, limit: limit)
+            var text = page.events.isEmpty ? "No \(application) events match." : page.events.prefix(50).map(\.line).joined(separator: "\n")
+            if page.events.count > 50 { text += "\n\(page.events.count - 50) more in the structured result." }
+            if page.more { text += "\nThere are more events than the \(limit) read; narrow the window or raise limit." }
+            struct Events: Encodable { let events: [Event]; let more: Bool }
+            return try ServiceResult(text: text, structured: Events(events: page.events, more: page.more))
         }
     }
 
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
-        static let summary = "The audit events that mean an attack, newest first: suspicious and blocked sign-ins, accounts Google disabled, government-backed attack warnings, admin privileges, primary admin, SSO and 2-step verification changes, compromised devices and rules that fired above low."
+        static let summary = "The audit events that mean an attack or a takeover, newest first: suspicious and blocked sign-ins, accounts Google disabled, government-backed attack warnings, admin privileges, SSO and 2-step verification changes, recovery changes, mail forwarded out or monitored, compromised devices and rules that fired above low."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out."),
             "until": .string("The latest time, in ISO 8601."),
@@ -225,20 +386,24 @@ extension GoogleWorkspace {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let since = try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(1)
-            let events = try await GoogleWorkspace.securityEvents(service, since: since, until: try input.until.map(ServiceInput.time), limit: 100)
-            let text = events.isEmpty ? "No security events in this window." : events.prefix(50).map(\.line).joined(separator: "\n")
-                + (events.count > 50 ? "\n\(events.count - 50) more; narrow the window." : "")
-            struct Kept: Encodable { let events: [Event] }
-            return try ServiceResult(text: text, structured: Kept(events: events))
+            let gathered = await GoogleWorkspace.securityEvents(service, since: since, until: try input.until.map(ServiceInput.time), limit: 500)
+            if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
+            var text = gathered.events.isEmpty ? "No security events in this window." : gathered.events.prefix(80).map { "\($0.application) \($0.line)" }.joined(separator: "\n")
+            if gathered.events.count > 80 { text += "\n\(gathered.events.count - 80) more in the structured result." }
+            if !gathered.cut.isEmpty || !gathered.failed.isEmpty { text += "\n" + gathered.coverage }
+            struct Kept: Encodable { let events: [Event]; let cutShort: [String]; let couldNotRead: [String] }
+            return try ServiceResult(text: text, structured: Kept(events: gathered.events, cutShort: gathered.cut, couldNotRead: gathered.failed.map(\.0)))
         }
     }
 
-    /// Each watched event from `since` on. Google lists some audit events minutes to hours after their time.
+    /// Each watched event from `since` on. Google lists some audit events minutes to hours after their time. What one
+    /// report found is kept when another is refused; only when none can be read is the check a failure.
     struct NewSecurityEvents: ServiceTrigger {
         var tool: String { SecurityEvents.name }
         func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
-            try await GoogleWorkspace.securityEvents(service, since: ISO8601DateFormatter().string(from: since), until: nil, limit: ServiceAlert.most)
-                .prefix(ServiceAlert.most).compactMap { event in ServiceAlert.time(event.time).map { ServiceAlert(id: event.id, time: $0) } }
+            let gathered = await GoogleWorkspace.securityEvents(service, since: ISO8601DateFormatter().string(from: since), until: nil, limit: ServiceAlert.most)
+            if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
+            return gathered.events.prefix(ServiceAlert.most).compactMap { event in ServiceAlert.time(event.time).map { ServiceAlert(id: event.id, time: $0) } }
         }
     }
 }
@@ -424,17 +589,15 @@ extension GoogleWorkspace {
             struct Roles: Decodable { let items: [Role]? }
             struct Assignment: Codable { let roleId: String; let assignedTo: String; let assigneeType: String?; let scopeType: String? }
             struct Assignments: Decodable { let items: [Assignment]? }
-            let superAdmins = try await GoogleWorkspace.read(.users) {
-                try await directory.get(base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true", "maxResults": "500"],
-                                        as: Users.self).users ?? []
+            let superAdmins: [User] = try await GoogleWorkspace.read(.users) {
+                try await GoogleWorkspace.listAll(directory, base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true"]).items
             }
             let (roles, assignments) = try await GoogleWorkspace.read(.adminRoles) { () async throws -> ([Role], [Assignment]) in
-                (try await directory.get(base + ["customer", "my_customer", "roles"], query: ["maxResults": "100"], as: Roles.self).items ?? [],
-                 try await directory.get(base + ["customer", "my_customer", "roleassignments"], query: ["maxResults": "200"],
-                                         as: Assignments.self).items ?? [])
+                (try await GoogleWorkspace.listAll(directory, base + ["customer", "my_customer", "roles"], query: [:], pageSize: 100).items,
+                 try await GoogleWorkspace.listAll(directory, base + ["customer", "my_customer", "roleassignments"], query: [:], pageSize: 200).items)
             }
             var names = Dictionary(superAdmins.map { ($0.id, $0.primaryEmail ?? $0.id) }, uniquingKeysWith: { first, _ in first })
-            for id in Set(assignments.filter { $0.assigneeType != "group" }.map(\.assignedTo)).subtracting(names.keys).sorted().prefix(100) {
+            for id in Set(assignments.filter { $0.assigneeType != "group" }.map(\.assignedTo)).subtracting(names.keys).sorted().prefix(500) {
                 names[id] = (try? await directory.get(base + ["users", id], as: User.self).primaryEmail) ?? id
             }
             func holder(_ assignment: Assignment) -> String {
@@ -466,31 +629,34 @@ extension GoogleWorkspace {
 extension GoogleWorkspace {
     /// Accounts in the domain, by the Directory's own search, with what matters when one may be compromised.
     struct Users: ServiceOperation {
-        struct Input: Decodable, Sendable { let query: String?, limit: Int? }
+        struct Input: Decodable, Sendable { let query: String?, deleted: Bool?, limit: Int? }
         static let name = "users"
         static let summary = "Accounts in the domain, optionally by search such as isEnrolledIn2Sv=false, isSuspended=true or orgUnitPath=/Finance, with admin, 2-step verification and its enforcement, recovery email and phone, aliases and last sign-in."
         static let input = JSONSchema.object([
             "query": .string("A Directory search, such as isEnrolledIn2Sv=false, isAdmin=true, isSuspended=false or email:m.okafor*. Everyone when left out."),
-            "limit": .integer("How many accounts, at most.", minimum: 1, maximum: 500),
+            "deleted": .boolean("List accounts deleted in the last 20 days instead, with the profile ID their audit history is read by."),
+            "limit": .integer("How many accounts, at most.", minimum: 1, maximum: 10000),
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let limit = input.limit ?? 200
-            guard (1...500).contains(limit) else { throw ServiceError.input("Ask for between 1 and 500 accounts.") }
+            let limit = input.limit ?? 2000
+            guard (1...10000).contains(limit) else { throw ServiceError.input("Ask for between 1 and 10000 accounts.") }
             struct User: Codable {
-                let primaryEmail: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?, isEnrolledIn2Sv: Bool?, isEnforcedIn2Sv: Bool?, suspended: Bool?
+                let id: String?, primaryEmail: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?, isEnrolledIn2Sv: Bool?, isEnforcedIn2Sv: Bool?, suspended: Bool?
                 let lastLoginTime: String?, creationTime: String?, orgUnitPath: String?
                 let recoveryEmail: String?, recoveryPhone: String?, aliases: [String]?, isGuestUser: Bool?, archived: Bool?
             }
             struct Listed: Codable { let users: [User]? }
-            var query: [String: String?] = ["customer": "my_customer", "maxResults": String(limit), "viewType": "admin_view"]
+            var query: [String: String?] = ["customer": "my_customer", "viewType": "admin_view"]
             if let search = input.query?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
                 guard search.count <= 500 else { throw ServiceError.input("Keep the search short.") }
                 query["query"] = search
             }
-            let users = try await GoogleWorkspace.read(.users) { try await service.at(host: "admin.googleapis.com")
-                .get(["admin", "directory", "v1", "users"], query: query, as: Listed.self).users ?? [] }
-            let text = users.isEmpty ? "No accounts match." : users.map { user in
+            if input.deleted == true { query["showDeleted"] = "true" }
+            let (users, more): ([User], Bool) = try await GoogleWorkspace.read(.users) {
+                try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "users"], query: query, limit: limit)
+            }
+            var text = users.isEmpty ? (input.deleted == true ? "No accounts were deleted in the last 20 days." : "No accounts match.") : users.map { user in
                 let twoStep = user.isEnrolledIn2Sv != true ? "2-step verification off" : user.isEnforcedIn2Sv == false ? "2-step verification not enforced" : nil
                 var parts = [user.isAdmin == true ? "super admin" : user.isDelegatedAdmin == true ? "delegated admin" : nil, twoStep,
                              user.suspended == true ? "suspended" : nil, user.isGuestUser == true ? "guest" : nil, user.archived == true ? "archived" : nil]
@@ -505,8 +671,10 @@ extension GoogleWorkspace {
                 if let phone = user.recoveryPhone, !phone.isEmpty { parts.append("recovery phone set") }
                 if let aliases = user.aliases, !aliases.isEmpty { parts.append("aliases " + aliases.joined(separator: ", ")) }
                 parts.append(user.lastLoginTime.map { $0.hasPrefix("1970") ? "never signed in" : "last signed in \($0)" } ?? "")
+                if input.deleted == true, let id = user.id { parts.append("deleted; read its history with user \(id)") }
                 return "\(user.primaryEmail ?? "?"): " + parts.filter { !$0.isEmpty }.joined(separator: ", ")
             }.joined(separator: "\n")
+            if more { text += "\nThere are more accounts than the \(limit) read; narrow the search or raise limit." }
             return try ServiceResult(text: text, structured: Listed(users: users))
         }
     }
@@ -522,8 +690,10 @@ extension GoogleWorkspace {
             struct Group: Codable { let id: String?; let email: String?; let name: String?; let directMembersCount: String? }
             struct Listed: Codable { let groups: [Group]? }
             let user = try ServiceInput.email(input.user)
-            let groups = try await GoogleWorkspace.read(.groups) { try await service.at(host: "admin.googleapis.com")
-                .get(["admin", "directory", "v1", "groups"], query: ["userKey": user, "maxResults": "200"], as: Listed.self).groups ?? [] }
+            let groups: [Group] = try await GoogleWorkspace.read(.groups) {
+                try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "groups"],
+                                                  query: ["userKey": user], pageSize: 200).items
+            }
             let text = groups.isEmpty ? "\(user) is in no groups." : "\(user) is in: " + groups.map {
                 "\($0.name ?? $0.email ?? "?") <\($0.email ?? "?")>" + ($0.directMembersCount.map { " (\($0) members)" } ?? "")
             }.joined(separator: ", ")
@@ -531,8 +701,8 @@ extension GoogleWorkspace {
         }
     }
 
-    /// The phones and tablets that sync a user's mail and files, which keep their data after a password change.
-    /// Company-owned devices are in Cloud Identity instead and are not listed.
+    /// The phones and tablets that sync a user's mail and files, which keep their data after a password change. Laptops,
+    /// desktops and company-owned devices are in Cloud Identity, which takes only a service account, and are not listed.
     struct UserDevices: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-devices"
@@ -547,9 +717,10 @@ extension GoogleWorkspace {
             struct Listed: Codable { let mobiledevices: [Device]? }
             let user = try ServiceInput.email(input.user)
             // The search matches addresses that start the same too, so only this user's are kept.
-            let devices = try await GoogleWorkspace.read(.mobileDevices) { try await service.at(host: "admin.googleapis.com")
-                .get(["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"], query: ["query": "email:\(user)", "maxResults": "100"],
-                     as: Listed.self).mobiledevices ?? [] }.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
+            let devices: [Device] = try await GoogleWorkspace.read(.mobileDevices) {
+                try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"],
+                                                  query: ["query": "email:\(user)"], pageSize: 100).items
+            }.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
             let text = devices.isEmpty ? "\(user) syncs no mobile devices." : devices.map { device in
                 "\(device.model ?? "A device") (\([device.os, device.type, device.status].compactMap { $0 }.joined(separator: ", "))), last synced \(device.lastSync ?? "?")"
                     + (device.deviceCompromisedStatus.map { $0 == "No compromise detected" || $0.isEmpty ? "" : ", \($0)" } ?? "")
@@ -564,6 +735,9 @@ extension GoogleWorkspace {
 
         static let reports = Need(title: "Audit reports", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                   scope: "https://www.googleapis.com/auth/admin.reports.audit.readonly", privilege: "Reports")
+        static func report(_ title: String) -> Need {
+            Need(title: title, api: reports.api, apiID: reports.apiID, scope: reports.scope, privilege: reports.privilege)
+        }
         static let users = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                 scope: "https://www.googleapis.com/auth/admin.directory.user.readonly", privilege: "Users › Read")
         static let adminRoles = Need(title: "Admin roles", api: "Admin SDK API", apiID: "admin.googleapis.com",
@@ -643,6 +817,12 @@ extension GoogleWorkspace {
                 (.adminRoles, { _ = try await admin.data(directory + ["customer", "my_customer", "roles"], query: ["maxResults": "1"]) }),
                 (.groups, { _ = try await admin.data(directory + ["groups"], query: ["customer": "my_customer", "maxResults": "1"]) }),
                 (.mobileDevices, { _ = try await admin.data(directory + ["customer", "my_customer", "devices", "mobile"], query: ["maxResults": "1"]) }),
+                // A working sign-in report does not prove the others: Gmail's needs a window, and some editions lack it.
+                (Need.report("Takeout report"), { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "takeout"],
+                                                                       query: ["startTime": ServiceInput.daysAgo(1), "maxResults": "1"]) }),
+                (Need.report("Gmail report"), { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "gmail"],
+                                                                     query: ["startTime": ServiceInput.daysAgo(1), "endTime": ServiceInput.daysAgo(0),
+                                                                             "maxResults": "1"]) }),
             ])
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
@@ -713,8 +893,11 @@ extension GoogleWorkspace {
             struct Listed: Codable { let members: [Member]? }
             let group = try ServiceInput.email(input.group)
             let domain = group.split(separator: "@").last.map(String.init) ?? ""
-            let members = try await GoogleWorkspace.read(.groups) { try await service.at(host: "admin.googleapis.com")
-                .get(["admin", "directory", "v1", "groups", group, "members"], query: ["maxResults": "200"], as: Listed.self).members ?? [] }
+            // Members of groups inside the group read what it receives too.
+            let members: [Member] = try await GoogleWorkspace.read(.groups) {
+                try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "groups", group, "members"],
+                                                  query: ["includeDerivedMembership": "true"], pageSize: 200).items
+            }
             let text = members.isEmpty ? "\(group) has no members." : "\(group) (\(members.count)): " + members.map { member in
                 if member.type == "CUSTOMER" { return "everyone in the domain" }
                 let email = member.email ?? member.id ?? "?"
@@ -749,9 +932,10 @@ extension GoogleWorkspace {
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(180), "maxResults": "1000"]
             if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
-            async let granted = GoogleWorkspace.events(service, application: "token", event: "authorize", query: query)
-            async let revoked = GoogleWorkspace.events(service, application: "token", event: "revoke", query: query)
-            let (grants, revokes) = try await (granted, revoked)
+            async let granted = GoogleWorkspace.events(service, application: "token", event: "authorize", query: query, limit: 20000)
+            async let revoked = GoogleWorkspace.events(service, application: "token", event: "revoke", query: query, limit: 20000)
+            let (grantPage, revokePage) = try await (granted, revoked)
+            let grants = grantPage.events, revokes = revokePage.events
             let apps = Dictionary(grouping: grants) { $0.parameters["client_id"] ?? "?" }.map { client, events in
                 let scopes = Array(Set(events.flatMap { ($0.parameters["scope"] ?? "").components(separatedBy: ", ") }.filter { !$0.isEmpty })).sorted()
                 return App(clientId: client, name: events.compactMap { $0.parameters["app_name"] }.first ?? client,
@@ -763,12 +947,13 @@ extension GoogleWorkspace {
                 let ranks = (GoogleWorkspace.risk(first.scopes)?.rank ?? 9, GoogleWorkspace.risk(second.scopes)?.rank ?? 9)
                 return ranks.0 != ranks.1 ? ranks.0 < ranks.1 : (first.grantedBy.count, second.name) > (second.grantedBy.count, first.name)
             }
-            let text = apps.isEmpty ? "No app was granted access in this window." : apps.map { app in
+            var text = apps.isEmpty ? "No app was granted access in this window." : apps.map { app in
                 "\(app.name) (client \(app.clientId)\(app.type.map { ", \($0)" } ?? ""))" + (app.risk.map { ": \($0)" } ?? "")
                     + "; granted by \(app.grantedBy.joined(separator: ", ")), last \(app.lastGranted ?? "?")"
                     + (app.revokedBy.isEmpty ? "" : "; revoked by \(app.revokedBy.joined(separator: ", "))")
                     + "; scopes \(app.scopes.joined(separator: " "))"
             }.joined(separator: "\n")
+            if grantPage.more || revokePage.more { text += "\nThere are more grants or revocations than were read; narrow the window." }
             struct Kept: Encodable { let apps: [App] }
             return try ServiceResult(text: text, structured: Kept(apps: apps))
         }
@@ -791,8 +976,9 @@ extension GoogleWorkspace {
             var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7), "maxResults": "1000"]
             if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
             if let client = input.clientId { query["filters"] = "client_id==" + (try ServiceInput.quoted(client, "the client ID")) }
-            let user = try input.user.map(ServiceInput.email) ?? "all"
-            let calls = try await GoogleWorkspace.events(service, application: "token", user: user, event: "activity", query: query)
+            let user = try input.user.map(GoogleWorkspace.reportUser) ?? "all"
+            let page = try await GoogleWorkspace.events(service, application: "token", user: user, event: "activity", query: query, limit: 20000)
+            let calls = page.events
             struct Usage: Encodable { let app: String, clientId: String, user: String, method: String, calls: Int, bytes: Int }
             let usage = Dictionary(grouping: calls) { [$0.parameters["app_name"] ?? "?", $0.parameters["client_id"] ?? "?", $0.user ?? "?",
                                                       $0.parameters["method_name"] ?? "?"] }
@@ -805,42 +991,73 @@ extension GoogleWorkspace {
             }
             let text = usage.isEmpty ? "No API calls by apps match." : usage.prefix(60).map {
                 "\($0.app) (\($0.clientId)) as \($0.user): \($0.method) \($0.calls) call\($0.calls == 1 ? "" : "s"), \(size($0.bytes))"
-            }.joined(separator: "\n") + (calls.count >= 1000 ? "\nOnly the first 1000 calls were read; narrow the window or name the app." : "")
+            }.joined(separator: "\n") + (page.more ? "\nThere are more calls than the \(calls.count) read; narrow the window or name the app." : "")
             struct Kept: Encodable { let usage: [Usage] }
             return try ServiceResult(text: text, structured: Kept(usage: usage))
         }
     }
 
     /// One account's activity across the reports, and what admins did to it, merged newest first: where an
-    /// investigation of an account starts.
+    /// investigation of an account starts. It says which reports it searched, which it could not read and which held
+    /// more than it read, so a gap is never taken for nothing having happened.
     struct UserTimeline: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, since: String?, until: String? }
         static let name = "user-timeline"
-        static let summary = "Everything one account did, and admins did to it, newest first: sign-ins, account and recovery changes, app grants, Drive, SAML, devices, groups and admin actions."
+        static let summary = "One account's activity across every report it appears in, and what admins did to it, newest first: sign-ins, account and recovery changes, app grants, Drive, Gmail, Calendar, Chat, Meet, Takeout exports, groups and admin actions. It says which reports it searched and which it could not read."
         static let input = JSONSchema.object([
-            "user": .string("The user's email."),
-            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "user": .string("The user's email, or the profile ID of a deleted account from users."),
+            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out. Gmail is read only for windows of 30 days at most."),
             "until": .string("The latest time, in ISO 8601."),
         ], required: ["user"])
-        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups"]
+        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups", "gmail", "calendar", "chat", "meet",
+                                   "takeout", "vault", "context_aware_access"]
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let user = try ServiceInput.email(input.user)
-            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7), "maxResults": "200"]
+            let user = try GoogleWorkspace.reportUser(input.user)
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7)]
             if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
-            let asked = query, about = query.merging(["filters": "USER_EMAIL==\(user)"]) { $1 }
-            let events = try await withThrowingTaskGroup(of: [Event].self) { group in
-                for application in Self.applications {
-                    group.addTask { try await GoogleWorkspace.events(service, application: application, user: user, query: asked) }
-                }
-                // What admins did to the account, as they are the actors there.
-                group.addTask { try await GoogleWorkspace.events(service, application: "admin", query: about) }
-                return try await group.reduce(into: [String: Event]()) { found, events in for event in events { found[event.id] = event } }
-            }.values.sorted { ($0.time ?? "") > ($1.time ?? "") }
-            let text = events.isEmpty ? "Nothing for \(user) in this window." : events.prefix(150).map { "\($0.application) \($0.line)" }.joined(separator: "\n")
-                + (events.count > 150 ? "\n\(events.count - 150) more in the structured result." : "")
-            struct Kept: Encodable { let events: [Event] }
-            return try ServiceResult(text: text, structured: Kept(events: events))
+            // What admins did to the account, as they are the actors there.
+            let reads = Self.applications.map { (label: $0, application: $0, user: user, event: String?.none, query: query) }
+                + (user.contains("@") ? [(label: "admin, about them", application: "admin", user: "all", event: String?.none,
+                                          query: query.merging(["filters": "USER_EMAIL==\(user)"]) { $1 })] : [])
+            let gathered = await GoogleWorkspace.gather(service, reads, limit: 1000)
+            if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
+            var text = gathered.events.isEmpty ? "Nothing for \(user) in this window." : gathered.events.prefix(150).map { "\($0.application) \($0.line)" }.joined(separator: "\n")
+            if gathered.events.count > 150 { text += "\n\(gathered.events.count - 150) more in the structured result." }
+            text += "\n" + gathered.coverage
+            struct Kept: Encodable { let events: [Event]; let searched: [String]; let cutShort: [String]; let couldNotRead: [String] }
+            return try ServiceResult(text: text, structured: Kept(events: gathered.events, searched: gathered.searched, cutShort: gathered.cut,
+                                                                  couldNotRead: gathered.failed.map(\.0)))
+        }
+    }
+
+    /// Everything one address did, in every report: how an attacker's IP is followed across accounts.
+    struct IPActivity: ServiceOperation {
+        struct Input: Decodable, Sendable { let ip: String, since: String?, until: String? }
+        static let name = "ip-activity"
+        static let summary = "Everything one IP address did across every report and account, newest first: sign-ins, app grants, Drive, admin actions, exports and more. It says which reports it searched and which it could not read."
+        static let input = JSONSchema.object([
+            "ip": .string("The IPv4 or IPv6 address."),
+            "since": .string("The earliest time, in ISO 8601. The last 7 days when left out."),
+            "until": .string("The latest time, in ISO 8601."),
+        ], required: ["ip"])
+        static let applications = ["login", "user_accounts", "token", "drive", "admin", "saml", "mobile", "groups", "calendar", "chat", "meet",
+                                   "takeout", "vault", "context_aware_access", "gcp"]
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7),
+                                            "actorIpAddress": try ServiceInput.ip(input.ip)]
+            if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
+            let gathered = await GoogleWorkspace.gather(service, Self.applications.map {
+                (label: $0, application: $0, user: "all", event: String?.none, query: query)
+            }, limit: 1000)
+            if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
+            var text = gathered.events.isEmpty ? "Nothing from \(input.ip) in this window." : gathered.events.prefix(150).map { "\($0.application) \($0.line)" }.joined(separator: "\n")
+            if gathered.events.count > 150 { text += "\n\(gathered.events.count - 150) more in the structured result." }
+            text += "\n" + gathered.coverage
+            struct Kept: Encodable { let events: [Event]; let searched: [String]; let cutShort: [String]; let couldNotRead: [String] }
+            return try ServiceResult(text: text, structured: Kept(events: gathered.events, searched: gathered.searched, cutShort: gathered.cut,
+                                                                  couldNotRead: gathered.failed.map(\.0)))
         }
     }
 }
@@ -859,16 +1076,22 @@ extension GoogleWorkspace {
             struct Users: Decodable { let users: [User]? }
             struct Token: Decodable { let clientId: String?; let displayText: String?; let scopes: [String]? }
             struct Tokens: Decodable { let items: [Token]? }
-            let emails = try await read(.containmentUsers) {
-                try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "500"],
-                                      as: Users.self).users?.compactMap(\.primaryEmail) ?? []
+            let (users, more): ([User], Bool) = try await read(.containmentUsers) {
+                try await GoogleWorkspace.listAll(service, ["admin", "directory", "v1", "users"], query: ["customer": "my_customer"], limit: 10000)
             }
-            let held = try await withThrowingTaskGroup(of: (String, [Token]).self) { group in
+            let emails = users.compactMap(\.primaryEmail)
+            // One account refused, as an admin is under User Security Management, leaves the rest.
+            let results = await withTaskGroup(of: (String, Result<[Token], Error>).self) { group in
                 for email in emails {
-                    group.addTask { (email, try await directory(email, ["tokens"]) { try await service.get($0, as: Tokens.self) }.items ?? []) }
+                    group.addTask {
+                        do { return (email, .success(try await directory(email, ["tokens"]) { try await service.get($0, as: Tokens.self) }.items ?? [])) }
+                        catch { return (email, .failure(error)) }
+                    }
                 }
-                return try await group.reduce(into: []) { $0.append($1) }
+                return await group.reduce(into: []) { $0.append($1) }
             }
+            let held = results.compactMap { email, result in (try? result.get()).map { (email, $0) } }
+            let failed = results.compactMap { email, result -> String? in if case .failure = result { email } else { nil } }.sorted()
             struct App: Encodable { let clientId: String, name: String, scopes: [String], holders: [String], risk: String? }
             let apps = Dictionary(grouping: held.flatMap { email, tokens in tokens.map { (email, $0) } }) { $0.1.clientId ?? "?" }.map { client, pairs in
                 let scopes = Array(Set(pairs.flatMap { $0.1.scopes ?? [] })).sorted()
@@ -878,12 +1101,16 @@ extension GoogleWorkspace {
                 let ranks = (GoogleWorkspace.risk(first.scopes)?.rank ?? 9, GoogleWorkspace.risk(second.scopes)?.rank ?? 9)
                 return ranks.0 != ranks.1 ? ranks.0 < ranks.1 : (first.holders.count, second.name) > (second.holders.count, first.name)
             }
-            let text = apps.isEmpty ? "No app holds access to any account." : apps.map { app in
+            let checked = emails.count - failed.count
+            var text = apps.isEmpty ? "No app holds access to any of the \(checked) account\(checked == 1 ? "" : "s") checked." : apps.map { app in
                 "\(app.name) (\(app.clientId))" + (app.risk.map { ": \($0)" } ?? "")
                     + "; held by \(app.holders.count) user\(app.holders.count == 1 ? "" : "s"): \(app.holders.joined(separator: ", ")); scopes \(app.scopes.joined(separator: " "))"
-            }.joined(separator: "\n") + (emails.count >= 500 ? "\nOnly the first 500 accounts were read." : "")
-            struct Kept: Encodable { let apps: [App] }
-            return try ServiceResult(text: text, structured: Kept(apps: apps))
+            }.joined(separator: "\n")
+            text += "\nChecked \(emails.count) account\(emails.count == 1 ? "" : "s")"
+                + (failed.isEmpty ? "." : "; could not read \(failed.joined(separator: ", ")), as User Security Management never covers admins or the role lacks it.")
+            if more { text += "\nThere are more accounts than were read." }
+            struct Kept: Encodable { let apps: [App]; let accountsChecked: Int; let couldNotRead: [String] }
+            return try ServiceResult(text: text, structured: Kept(apps: apps, accountsChecked: emails.count, couldNotRead: failed))
         }
     }
 }
