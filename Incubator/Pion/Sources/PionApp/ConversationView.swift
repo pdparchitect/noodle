@@ -626,11 +626,7 @@ struct MessageBody: View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(MessageBodyRenderer.shared.render(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
-                case .prose(let blocks):
-                    // One text view for all of the prose, so a selection runs across it; the marker behind it lets a
-                    // selection be annotated.
-                    MessageTextView(blocks: blocks, fills: fills)
-                        .background { if let message { ConversationAnnotationText(message: message) } }
+                case .prose(let blocks): MessageBlocksView(blocks: blocks, message: message)
                 case .table(let table): MarkdownTable(table: table, failed: failed)
                 }
             }

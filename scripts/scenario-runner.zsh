@@ -280,7 +280,9 @@ for folder in "${folders[@]}"; do
                     fields=(${=line})
                     capture_options=(-x)
                     [[ "$shadow" == true ]] || capture_options+=(-o)
-                    drawn="${fields[(r)drawn=*]#drawn=}"
+                    # Only Pion and Rook say where they drew the window; a lookup that finds nothing would stop the run.
+                    drawn=""
+                    (( ${fields[(I)drawn=*]} )) && drawn="${fields[(r)drawn=*]#drawn=}"
                     shot_region="${fields[(r)rect=*]#rect=}"
                     # Over a background, the area around the window as it is on screen, so its glass shows what is
                     # behind it; otherwise the window alone. Needs Screen Recording permission for this terminal.
