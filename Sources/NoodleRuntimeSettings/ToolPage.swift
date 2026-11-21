@@ -2,6 +2,7 @@ import AppKit
 import NoodleCore
 import NoodleMCP
 import NoodleRuntime
+import NoodleWallpaper
 import SwiftUI
 
 /// One window per tool connection, showing its page, for an app whose main window has no place for it.
@@ -84,8 +85,15 @@ public struct ToolPage: View {
 
     public var body: some View {
         if let connection {
-            ScrollView { page(connection) }
-                .scrollEdgeEffectStyle(.soft, for: .top)
+            // A conversation's shade: the page fades as it passes under the toolbar, once there is something under it.
+            // It runs up behind the toolbar so the mask has content to fade there; the toolbar's height, read before
+            // that, rests its content below, as running up behind it takes that inset away.
+            GeometryReader { geometry in
+                ScrollView { page(connection) }
+                    .contentMargins(.top, geometry.safeAreaInsets.top, for: .scrollContent)
+                    .conversationTopFade()
+                    .ignoresSafeArea(edges: .top)
+            }
                 .task(id: connection.id) { await listTools(connection) }
                 .sheet(item: $editing) { ToolConnectionEditor(controller: controller, existing: $0).noodleSheetSizing() }
         }
