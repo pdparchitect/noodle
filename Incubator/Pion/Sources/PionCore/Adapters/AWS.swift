@@ -325,13 +325,15 @@ extension AWS {
     struct IAMAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "iam-access"
-        static let summary = "Who holds which permissions in an account: each IAM user, with its groups' policies, and each role, with full administrators first."
+        static let summary = "Who holds which permissions in an account: each IAM user, with its groups' policies, and each role, with who can assume it, full administrators first."
         static let input = JSONSchema.object(["account": AWS.accountInput])
 
         struct Principal: Encodable {
             let kind: String, name: String, arn: String?
             let policies: [String]
             let fullAdministrator: Bool
+            /// For a role: who may become it, as its trust policy says.
+            var assumableBy: [String] = []
         }
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -384,17 +386,48 @@ extension AWS {
             principals += roles.compactMap { role in
                 guard let name = role.value("RoleName") else { return nil }
                 let held = attached(role) + inline(role, "RolePolicyList")
-                return Principal(kind: "role", name: name, arn: role.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything })
+                let account = role.value("Arn").map(Self.account)
+                return Principal(kind: "role", name: name, arn: role.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything },
+                                 assumableBy: role.value("AssumeRolePolicyDocument").map { Self.trusted($0, account: account) } ?? [])
             }
             let admins = principals.filter(\.fullAdministrator), others = principals.filter { !$0.fullAdministrator }
             func line(_ principal: Principal) -> String {
                 "\(principal.kind) \(principal.name): \(principal.policies.isEmpty ? "no policies" : principal.policies.joined(separator: ", "))"
+                    + (principal.assumableBy.isEmpty ? "" : "; assumable by " + principal.assumableBy.joined(separator: ", "))
             }
             var text = ["Full administrators (\(admins.count)):"] + admins.map { "- " + line($0) }
             text += ["Everyone else (\(others.count)):"] + others.prefix(100).map { "- " + line($0) }
             if others.count > 100 { text.append("\(others.count - 100) more; read them from the structured result.") }
             struct Kept: Encodable { let principals: [Principal] }
             return try ServiceResult(text: text.joined(separator: "\n"), structured: Kept(principals: admins + others))
+        }
+
+        /// The account an ARN is in, its fifth field, after the region that IAM leaves empty; an account ID alone is itself.
+        static func account(_ arn: String) -> String {
+            let fields = arn.split(separator: ":", omittingEmptySubsequences: false)
+            return fields.count > 4 ? String(fields[4]) : arn
+        }
+
+        /// Who a role's trust policy, as IAM gives it URL-encoded, lets become the role: anyone, another account, a service
+        /// or an identity provider. Another account or anyone reaches whatever the role reaches.
+        static func trusted(_ encoded: String, account: String?) -> [String] {
+            guard let json = encoded.removingPercentEncoding,
+                  let document = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
+            let statements = (document["Statement"] as? [[String: Any]]) ?? (document["Statement"] as? [String: Any]).map { [$0] } ?? []
+            func values(_ value: Any?) -> [String] { (value as? [String]) ?? (value as? String).map { [$0] } ?? [] }
+            var trusted: [String] = []
+            for statement in statements where statement["Effect"] as? String == "Allow" {
+                if statement["Principal"] as? String == "*" { trusted.append("anyone"); continue }
+                guard let principal = statement["Principal"] as? [String: Any] else { continue }
+                for arn in values(principal["AWS"]) {
+                    let other = arn == "*" ? nil : Self.account(arn)
+                    if arn == "*" { trusted.append("anyone") }
+                    else if let other, other != account { trusted.append("another account \(other)") }
+                    else { trusted.append(arn) }
+                }
+                trusted += values(principal["Service"]) + values(principal["Federated"]).map { $0.split(separator: "/", maxSplits: 1).last.map(String.init) ?? $0 }
+            }
+            return Array(NSOrderedSet(array: trusted)) as? [String] ?? trusted
         }
 
         /// Whether a policy document, as IAM gives it URL-encoded, allows every action on every resource.

@@ -3,8 +3,9 @@
 Pion has two Google Workspace tools, each with its own sign-in:
 
 - **Google Workspace Audit** reads your audit reports: sign-ins, admin actions,
-  apps granted access, Drive activity and more. It wakes the agents it is
-  assigned to when an audit event means an attack. It cannot change anything.
+  apps granted access, Drive activity and more, and who holds which admin role.
+  It wakes the agents it is assigned to when an audit event means an attack. It
+  cannot change anything.
 - **Google Workspace Containment** shows an account's state and contains it:
   signing a user out everywhere, revoking an app's access, deleting an app
   password, and suspending or restoring a user. Agents can look at an account
@@ -44,11 +45,24 @@ role is missing.
 
 ## Google Workspace Audit
 
-Pion asks only for read-only access to audit reports.
+Pion asks only for read-only access: to audit reports, and to users, admin
+roles, groups and mobile devices. With it agents can audit who holds which admin
+role, including the accounts Pion itself signs in with, and in a breach work out
+what an account could reach and what it touched: the groups it is in, the phones
+that hold its mail and files, and what it opened, shared, sent or exported
+through Takeout or Vault.
 
 **Least access:** an admin account kept for Pion, with a custom role holding only
-the **Reports** privilege. A super admin works too, but gives a lost sign-in far
-more reach than reading reports needs.
+**Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles
+and mobile devices. A super admin works too, but gives a lost sign-in far more
+reach than reading needs.
+
+Google does not say which Admin console privileges let a role read admin roles
+and mobile devices. If agents are told something cannot be read, add the
+privilege for it to the role and try again; audit reports keep working
+meanwhile. Company-owned devices are managed in Cloud Identity and are not
+listed. A connection made before this
+access was asked for needs to sign in again.
 
 ## Google Workspace Containment
 

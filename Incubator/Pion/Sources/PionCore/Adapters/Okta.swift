@@ -9,7 +9,9 @@ public enum Okta {
         id: "bdc65def-9c77-4503-9d57-eac000822cce", name: "Okta", summary: "Users, groups, sign-in factors and the System Log of an Okta org.",
         defaultInstructions: """
         Use Okta to learn who an identity is and what happened to it: find the user, then their groups, assigned apps and \
-        enrolled sign-in factors, and the System Log's sign-in events by user, IP address, event type or time. \
+        enrolled sign-in factors, and the System Log's sign-in events by user, IP address, event type or time. For a \
+        breach's scope, user-grants shows the apps a user let act for them, which keep working after a password change; \
+        admin-roles who holds which admin role; and api-tokens every API token, who made it and where it works from. \
         Record what you find as evidence, citing the org, the user and the time window you searched. \
         These tools only read. Never ask for a user to be suspended, their sessions cleared or their factors reset through \
         this connection; recommend it to the champion with the user's login, why, and how to undo it.
@@ -28,10 +30,14 @@ public enum Okta {
         "Under **Security › Administrators**, give that user the **Read-Only Administrator** role.",
         "Sign in to the Admin Console as that user, open **Security › API › Tokens** and choose **Create Token**. A token has its creator's access, so this one can only read.",
         "Copy the token and paste it here. Okta revokes tokens left unused for 30 days.",
+        "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Audit** with only **View roles, resources, and admin assignments** and **View API tokens**, and assign it to the same user, for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
         "For the domain, give your org's address, such as `acme.okta.com`, not its `-admin` address.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents()])
+    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents(),
+                                                              UserGrants(), AdminRoles(), APITokens()],
+                                                 // Paced, as admin-roles asks for each admin's roles in turn.
+                                                 simultaneousRequests: 8)
 
     /// A user named by its ID or login, as Okta's paths take it.
     static func user(_ value: String) throws -> String {
@@ -218,3 +224,113 @@ extension Okta {
         }
     }
 }
+
+// MARK: - Breach scope
+
+extension Okta {
+    /// A read the Read-Only Administrator cannot make, with Okta's refusal explained by the custom role it needs.
+    static func auditRead<Value>(_ read: () async throws -> Value) async throws -> Value {
+        do { return try await read() } catch ServiceError.forbidden {
+            throw ServiceError.input("""
+                Okta refused: the admin this token belongs to may not see admins or API tokens. Give them a custom role with \
+                View roles, resources, and admin assignments and View API tokens, as Okta's Setup Steps say, besides the \
+                Read-Only Administrator.
+                """)
+        }
+    }
+
+    /// A user's login by their ID, for naming admins and token owners; the ID when Okta does not say.
+    static func login(_ id: String, on service: ServiceClient) async -> String {
+        (try? await service.get(["users", id], as: User.self).profile?.login) ?? id
+    }
+
+    /// The apps a user let act for them through OAuth, and what each may do. A grant outlives a password change.
+    struct UserGrants: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String }
+        static let name = "user-grants"
+        static let summary = "The apps a user let act for them through OAuth, with the scopes each holds and whether the user or an admin granted it."
+        static let input = JSONSchema.object(["user": .string("The user's Okta ID or login.")], required: ["user"])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let user = try Okta.user(input.user)
+            struct Scope: Codable { let name: String? }
+            struct Embedded: Codable { let scope: Scope? }
+            struct Grant: Codable {
+                let id: String, clientId: String?, scopeId: String?, status: String?, source: String?, created: String?, issuer: String?
+                let _embedded: Embedded?
+            }
+            let grants = try await service.get(["users", user, "grants"], query: ["expand": "scope", "limit": "200"], as: [Grant].self)
+            let text = grants.isEmpty ? "\(user) has granted no apps access." : Dictionary(grouping: grants) { $0.clientId ?? "?" }
+                .sorted { $0.key < $1.key }.map { client, held in
+                    let scopes = held.map { $0._embedded?.scope?.name ?? $0.scopeId ?? "?" }.joined(separator: ", ")
+                    let by = held.contains { $0.source == "ADMIN" } ? "granted by an admin" : "granted by the user"
+                    return "\(client): \(scopes) (\(by), since \(held.compactMap(\.created).min() ?? "?"))"
+                }.joined(separator: "\n")
+            struct Kept: Encodable { let grants: [Grant] }
+            return try ServiceResult(text: text, structured: Kept(grants: grants))
+        }
+    }
+
+    /// Who holds which admin role, directly or through a group: the accounts that can change the org.
+    struct AdminRoles: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "admin-roles"
+        static let summary = "Everyone who holds an admin role, with which roles and whether through a group, super administrators first."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Assignee: Decodable { let id: String }
+            struct Assignees: Decodable { let value: [Assignee]? }
+            struct Role: Codable { let type: String?; let label: String?; let status: String?; let assignmentType: String? }
+            let ids = try await Okta.auditRead {
+                try await service.get(["iam", "assignees", "users"], query: ["limit": "200"], as: Assignees.self).value ?? []
+            }.map(\.id)
+            let admins = try await withThrowingTaskGroup(of: (String, String, [Role]).self) { group in
+                for id in ids {
+                    group.addTask {
+                        let roles = try await Okta.auditRead { try await service.get(["users", id, "roles"], as: [Role].self) }
+                        return (id, await Okta.login(id, on: service), roles)
+                    }
+                }
+                return try await group.reduce(into: []) { $0.append($1) }
+            }.sorted { first, second in
+                let superAdmin = (first.2.contains { $0.type == "SUPER_ADMIN" }, second.2.contains { $0.type == "SUPER_ADMIN" })
+                return superAdmin.0 != superAdmin.1 ? superAdmin.0 : first.1 < second.1
+            }
+            struct Admin: Encodable { let id: String; let login: String; let roles: [Role] }
+            let text = admins.isEmpty ? "Nobody holds an admin role." : admins.map { id, login, roles in
+                "\(login): " + roles.map { ($0.label ?? $0.type ?? "?") + ($0.assignmentType == "GROUP" ? " (through a group)" : "") }.joined(separator: ", ")
+            }.joined(separator: "\n")
+            return try ServiceResult(text: text, structured: ["admins": admins.map { Admin(id: $0.0, login: $0.1, roles: $0.2) }])
+        }
+    }
+
+    /// Every API token: each acts as the admin who made it, from anywhere unless its network is limited.
+    struct APITokens: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "api-tokens"
+        static let summary = "Every API token, with who made it, when it expires and where it may be used from."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Network: Codable { let connection: String? }
+            struct Token: Codable {
+                let id: String, name: String?, userId: String?, clientName: String?, created: String?, expiresAt: String?, lastUpdated: String?
+                let network: Network?
+            }
+            let tokens = try await Okta.auditRead { try await service.get(["api-tokens"], as: [Token].self) }
+            var owners: [String: String] = [:]
+            for id in Set(tokens.compactMap(\.userId)).sorted().prefix(50) { owners[id] = await Okta.login(id, on: service) }
+            let text = tokens.isEmpty ? "The org has no API tokens." : tokens.map { token in
+                let from = switch token.network?.connection {
+                case "ANYWHERE", nil: "from anywhere"
+                case let other?: "from \(other.lowercased().replacingOccurrences(of: "_", with: " ")) networks only"
+                }
+                return "\(token.name ?? token.id), made by \(token.userId.map { owners[$0] ?? $0 } ?? "?") on \(token.created ?? "?"), \(from), expires \(token.expiresAt ?? "?")"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let tokens: [Token] }
+            return try ServiceResult(text: text, structured: Kept(tokens: tokens))
+        }
+    }
+}
+

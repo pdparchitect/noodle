@@ -110,4 +110,16 @@ final class GitHubTests: XCTestCase {
         XCTAssertTrue(people.text.contains("1 owner: mallory"), people.text)
         XCTAssertEqual(people.structured?["owners"] as? [String], ["mallory"])
     }
+
+    /// Teams carry access to repositories, so who is in which team says what a member reaches.
+    func testTeamsListTheirMembersAndParents() async throws {
+        let service = FakeService()
+        service.answers["/orgs/kestrel-labs/teams"] = (200, #"[{"slug":"platform","name":"Platform","privacy":"closed","parent":null},{"slug":"payments","name":"Payments","privacy":"secret","parent":{"slug":"platform"}}]"#)
+        service.answers["/orgs/kestrel-labs/teams/platform/members"] = (200, #"[{"login":"avery"}]"#)
+        service.answers["/orgs/kestrel-labs/teams/payments/members"] = (200, #"[{"login":"mallory"},{"login":"jo"}]"#)
+        let teams = try await callTool(GitHub.adapter, "teams", "{}", on: service, in: github)
+        XCTAssertFalse(teams.isError, teams.text)
+        XCTAssertTrue(teams.text.contains("Platform (1): avery"), teams.text)
+        XCTAssertTrue(teams.text.contains("Payments, within Platform, secret (2): mallory, jo"), teams.text)
+    }
 }

@@ -60,4 +60,37 @@ final class CloudflareTests: XCTestCase {
         XCTAssertTrue(events.isError)
         XCTAssertTrue(events.text.contains("does not have access"), events.text)
     }
+
+    /// Who is in the account and with which roles, administrators first, every page of them, and who has no 2FA.
+    func testMembersListEveryoneWithTheirRolesAdministratorsFirst() async throws {
+        let service = FakeService()
+        let path = "/client/v4/accounts/023e105f4ecef8ad9ca31a8372d0c353/members"
+        service.sequences[path] = [
+            (200, #"{"result":[{"id":"m1","status":"accepted","user":{"email":"dev@kestrel.example","two_factor_authentication_enabled":true},"roles":[{"id":"r2","name":"Analytics"}]}],"result_info":{"page":1,"per_page":50,"count":1,"total_count":2}}"#),
+            (200, #"{"result":[{"id":"m2","status":"accepted","user":{"email":"ops@kestrel.example","two_factor_authentication_enabled":false},"roles":[{"id":"r1","name":"Super Administrator - All Privileges"}]}],"result_info":{"page":2,"per_page":50,"count":1,"total_count":2}}"#),
+        ]
+        let members = try await callTool(Cloudflare.adapter, "members", "{}", on: service, in: cloudflare)
+        XCTAssertFalse(members.isError, members.text)
+        let lines = members.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("ops@kestrel.example") && lines[0].contains("Super Administrator") && lines[0].contains("no 2FA"), members.text)
+        XCTAssertTrue(lines.contains { $0.contains("dev@kestrel.example") && $0.contains("Analytics") }, members.text)
+        XCTAssertEqual(service.requests.map { queryItems($0)["page"] }, ["1", "2"])
+        XCTAssertEqual(queryItems(service.requests.first)["per_page"], "50")
+    }
+
+    func testItsSetupAsksToReadAccountMembers() {
+        XCTAssertTrue(Cloudflare.setup.joined().contains("Account Settings › Read"))
+    }
+
+    /// The account's own API tokens: what each may do, from where, and when it was last used.
+    func testAPITokensSayWhatEachMayDoFromWhereAndWhenLastUsed() async throws {
+        let service = FakeService()
+        service.answers["/client/v4/accounts/023e105f4ecef8ad9ca31a8372d0c353/tokens"] = (200, #"{"result":[{"id":"t1","name":"ci-deploy","status":"active","issued_on":"2025-01-01T00:00:00Z","last_used_on":"2026-11-14T09:00:00Z","expires_on":null,"policies":[{"effect":"allow","permission_groups":[{"name":"DNS Write"},{"name":"Zone Read"}]}],"condition":{"request_ip":{"in":["203.0.113.0/24"]}}},{"id":"t2","name":"old","status":"active","issued_on":"2023-01-01T00:00:00Z","policies":[{"effect":"allow","permission_groups":[{"name":"Account Settings Write"}]}]}],"result_info":{"page":1,"per_page":50,"count":2,"total_count":2}}"#)
+        let tokens = try await callTool(Cloudflare.adapter, "api-tokens", "{}", on: service, in: cloudflare)
+        XCTAssertFalse(tokens.isError, tokens.text)
+        XCTAssertTrue(tokens.text.contains("ci-deploy") && tokens.text.contains("DNS Write") && tokens.text.contains("from 203.0.113.0/24")
+                      && tokens.text.contains("last used 2026-11-14T09:00:00Z") && tokens.text.contains("never expires"), tokens.text)
+        XCTAssertTrue(tokens.text.contains("old") && tokens.text.contains("from anywhere") && tokens.text.contains("never used"), tokens.text)
+        XCTAssertTrue(Cloudflare.setup.joined().contains("Account API Tokens › Read"))
+    }
 }

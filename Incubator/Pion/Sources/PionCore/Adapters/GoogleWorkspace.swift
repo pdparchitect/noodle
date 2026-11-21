@@ -14,7 +14,11 @@ import NoodleToolConnections
 /// Why each tool asks for what it does, the least access to set each up with, and their caveats:
 /// Incubator/Pion/docs/tools/google-workspace.md. Change it with the scopes, setup steps or operations here.
 public enum GoogleWorkspace {
-    static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules"]
+    /// The reports agents read: sign-ins and accounts, admin actions and app grants, what was opened, shared or sent,
+    /// and what left the domain through Takeout and Vault exports.
+    static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules", "gmail", "chat",
+                               "meet", "calendar", "takeout", "vault", "context_aware_access", "chrome", "access_transparency", "gcp",
+                               "data_studio"]
 
     public static let preset = ToolDefinition(
         id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", name: "Google Workspace Audit", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
@@ -22,27 +26,36 @@ public enum GoogleWorkspace {
         Use Google Workspace Audit to see what happened in the domain: sign-ins, including suspicious ones and their IP \
         addresses; admin actions; OAuth tokens granted to apps; Drive sharing and downloads; SAML sign-ins; account changes. \
         Filter by user, event name, IP address and time; security-events lists those that mean an attack, such as \
-        suspicious sign-ins, leaked passwords, admin privileges granted and compromised devices. Record each finding as evidence, citing the application, user \
+        suspicious sign-ins, leaked passwords, admin privileges granted and compromised devices. To audit who holds what, \
+        admin-roles lists the super admins and every admin role with what it allows and who holds it. For a breach's \
+        scope, users finds accounts by search, such as isEnrolledIn2Sv=false; user-groups and user-devices show what a user \
+        reaches through groups and which phones hold their data; and the takeout and vault reports show what was exported. \
+        Record each finding as evidence, citing the application, user \
         and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
         """,
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
             fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly"], clients: []),
+            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and mobile devices.
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
+                                    "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
+                                    "https://www.googleapis.com/auth/admin.directory.user.readonly",
+                                    "https://www.googleapis.com/auth/admin.directory.group.readonly",
+                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"], clients: []),
             oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API**.",
-        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/admin.reports.audit.readonly`.",
+        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly` and `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly`.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to mobile devices, and assign it to an admin account kept for Pion, never a super admin.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
-    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents()], trigger: NewSecurityEvents(),
+    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -376,3 +389,158 @@ extension GoogleWorkspace {
         }
     }
 }
+
+// MARK: - Who holds what
+
+extension GoogleWorkspace {
+    /// The super admins, then every admin role someone holds, with its privileges and its holders, from the Directory
+    /// API's read-only scopes. A delegated admin is named by asking for them; a group holding a role is named by its ID.
+    struct AdminRoles: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "admin-roles"
+        static let summary = "The super admins, and every admin role with what it allows and who holds it."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let directory = try service.at(host: "admin.googleapis.com")
+            let base = ["admin", "directory", "v1"]
+            struct User: Codable { let id: String; let primaryEmail: String?; let isEnrolledIn2Sv: Bool?; let suspended: Bool? }
+            struct Users: Decodable { let users: [User]? }
+            struct Privilege: Codable { let privilegeName: String }
+            struct Role: Codable { let roleId: String; let roleName: String?; let isSuperAdminRole: Bool?; let rolePrivileges: [Privilege]? }
+            struct Roles: Decodable { let items: [Role]? }
+            struct Assignment: Codable { let roleId: String; let assignedTo: String; let assigneeType: String?; let scopeType: String? }
+            struct Assignments: Decodable { let items: [Assignment]? }
+            let (superAdmins, roles, assignments) = try await GoogleWorkspace.directoryRead { () async throws -> ([User], [Role], [Assignment]) in
+                (try await directory.get(base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true", "maxResults": "500"],
+                                         as: Users.self).users ?? [],
+                 try await directory.get(base + ["customer", "my_customer", "roles"], query: ["maxResults": "100"], as: Roles.self).items ?? [],
+                 try await directory.get(base + ["customer", "my_customer", "roleassignments"], query: ["maxResults": "200"],
+                                         as: Assignments.self).items ?? [])
+            }
+            var names = Dictionary(superAdmins.map { ($0.id, $0.primaryEmail ?? $0.id) }, uniquingKeysWith: { first, _ in first })
+            for id in Set(assignments.filter { $0.assigneeType != "group" }.map(\.assignedTo)).subtracting(names.keys).sorted().prefix(100) {
+                names[id] = (try? await directory.get(base + ["users", id], as: User.self).primaryEmail) ?? id
+            }
+            func holder(_ assignment: Assignment) -> String {
+                let who = assignment.assigneeType == "group" ? "group \(assignment.assignedTo)" : names[assignment.assignedTo] ?? assignment.assignedTo
+                return who + (assignment.scopeType == "ORG_UNIT" ? " (in one organisational unit)" : "")
+            }
+            struct Held: Encodable { let role: String; let superAdmin: Bool; let privileges: [String]; let holders: [String] }
+            let held = roles.compactMap { role -> Held? in
+                let holders = assignments.filter { $0.roleId == role.roleId }.map(holder)
+                guard !holders.isEmpty, role.isSuperAdminRole != true else { return nil }
+                return Held(role: role.roleName ?? role.roleId, superAdmin: false, privileges: (role.rolePrivileges ?? []).map(\.privilegeName), holders: holders)
+            }
+            let admins = superAdmins.map { user in
+                (user.primaryEmail ?? user.id) + (user.isEnrolledIn2Sv == false ? " (2-step verification off)" : "") + (user.suspended == true ? " (suspended)" : "")
+            }
+            var lines = ["Super admins (\(admins.count)): " + (admins.isEmpty ? "none listed" : admins.joined(separator: ", "))]
+            lines += held.map { role in
+                let privileges = role.privileges.prefix(12).joined(separator: ", ") + (role.privileges.count > 12 ? " and \(role.privileges.count - 12) more" : "")
+                return "\(role.role) (\(role.holders.count)): \(role.holders.joined(separator: ", ")); allows \(privileges.isEmpty ? "nothing listed" : privileges)"
+            }
+            struct Kept: Encodable { let superAdmins: [String]; let roles: [Held] }
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(superAdmins: superAdmins.map { $0.primaryEmail ?? $0.id }, roles: held))
+        }
+    }
+}
+
+// MARK: - Breach scope
+
+extension GoogleWorkspace {
+    /// Accounts in the domain, by the Directory's own search, with what matters when one may be compromised.
+    struct Users: ServiceOperation {
+        struct Input: Decodable, Sendable { let query: String?, limit: Int? }
+        static let name = "users"
+        static let summary = "Accounts in the domain, optionally by search such as isEnrolledIn2Sv=false, isSuspended=true or orgUnitPath=/Finance, with admin, 2-step verification and last sign-in."
+        static let input = JSONSchema.object([
+            "query": .string("A Directory search, such as isEnrolledIn2Sv=false, isAdmin=true, isSuspended=false or email:m.okafor*. Everyone when left out."),
+            "limit": .integer("How many accounts, at most.", minimum: 1, maximum: 500),
+        ])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let limit = input.limit ?? 200
+            guard (1...500).contains(limit) else { throw ServiceError.input("Ask for between 1 and 500 accounts.") }
+            struct User: Codable {
+                let primaryEmail: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?, isEnrolledIn2Sv: Bool?, suspended: Bool?
+                let lastLoginTime: String?, creationTime: String?, orgUnitPath: String?
+            }
+            struct Listed: Codable { let users: [User]? }
+            var query: [String: String?] = ["customer": "my_customer", "maxResults": String(limit), "viewType": "admin_view"]
+            if let search = input.query?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
+                guard search.count <= 500 else { throw ServiceError.input("Keep the search short.") }
+                query["query"] = search
+            }
+            let users = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+                .get(["admin", "directory", "v1", "users"], query: query, as: Listed.self).users ?? [] }
+            let text = users.isEmpty ? "No accounts match." : users.map { user in
+                var parts = [user.isAdmin == true ? "super admin" : user.isDelegatedAdmin == true ? "delegated admin" : nil,
+                             user.isEnrolledIn2Sv == true ? nil : "2-step verification off", user.suspended == true ? "suspended" : nil].compactMap { $0 }
+                if let unit = user.orgUnitPath { parts.append("in \(unit)") }
+                parts.append(user.lastLoginTime.map { $0.hasPrefix("1970") ? "never signed in" : "last signed in \($0)" } ?? "")
+                return "\(user.primaryEmail ?? "?"): " + parts.filter { !$0.isEmpty }.joined(separator: ", ")
+            }.joined(separator: "\n")
+            return try ServiceResult(text: text, structured: Listed(users: users))
+        }
+    }
+
+    /// The groups a user is in: what they reach through shared drives, mailing lists and access granted to groups.
+    struct UserGroups: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String }
+        static let name = "user-groups"
+        static let summary = "The groups a user is a member of, and so the shared drives, lists and access granted to them."
+        static let input = userSchema
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Group: Codable { let id: String?; let email: String?; let name: String?; let directMembersCount: String? }
+            struct Listed: Codable { let groups: [Group]? }
+            let user = try ServiceInput.email(input.user)
+            let groups = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+                .get(["admin", "directory", "v1", "groups"], query: ["userKey": user, "maxResults": "200"], as: Listed.self).groups ?? [] }
+            let text = groups.isEmpty ? "\(user) is in no groups." : "\(user) is in: " + groups.map {
+                "\($0.name ?? $0.email ?? "?") <\($0.email ?? "?")>" + ($0.directMembersCount.map { " (\($0) members)" } ?? "")
+            }.joined(separator: ", ")
+            return try ServiceResult(text: text, structured: Listed(groups: groups))
+        }
+    }
+
+    /// The phones and tablets that sync a user's mail and files, which keep their data after a password change.
+    /// Company-owned devices are in Cloud Identity instead and are not listed.
+    struct UserDevices: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String }
+        static let name = "user-devices"
+        static let summary = "The phones and tablets that sync a user's mail and files, with their model, OS, status, last sync and whether Google finds them compromised."
+        static let input = userSchema
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Device: Codable {
+                let resourceId: String?, email: [String]?, model: String?, os: String?, type: String?, status: String?
+                let firstSync: String?, lastSync: String?, deviceCompromisedStatus: String?
+            }
+            struct Listed: Codable { let mobiledevices: [Device]? }
+            let user = try ServiceInput.email(input.user)
+            // The search matches addresses that start the same too, so only this user's are kept.
+            let devices = try await GoogleWorkspace.directoryRead { try await service.at(host: "admin.googleapis.com")
+                .get(["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"], query: ["query": "email:\(user)", "maxResults": "100"],
+                     as: Listed.self).mobiledevices ?? [] }.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
+            let text = devices.isEmpty ? "\(user) syncs no mobile devices." : devices.map { device in
+                "\(device.model ?? "A device") (\([device.os, device.type, device.status].compactMap { $0 }.joined(separator: ", "))), last synced \(device.lastSync ?? "?")"
+                    + (device.deviceCompromisedStatus.map { $0 == "No compromise detected" || $0.isEmpty ? "" : ", \($0)" } ?? "")
+            }.joined(separator: "\n")
+            return try ServiceResult(text: text, structured: Listed(mobiledevices: devices))
+        }
+    }
+
+    /// A read of the Directory, with Google's refusal explained by what the Audit admin's role lacks.
+    static func directoryRead<Value>(_ read: () async throws -> Value) async throws -> Value {
+        do { return try await read() } catch ServiceError.forbidden {
+            throw ServiceError.input("""
+                Google refused: the admin this tool signs in as may not read this. Its role needs Users › Read, Groups › Read and \
+                read access to admin roles and mobile devices besides Reports. Ask the champion to add them, and to sign the tool \
+                in again if it was connected before it asked for the Directory scopes.
+                """)
+        }
+    }
+}
+

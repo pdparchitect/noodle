@@ -9,7 +9,10 @@ public enum Sentinel {
         id: "812bf7c3-d2a3-4121-9026-a2e503ad1182", name: "Microsoft Sentinel", summary: "Query a Sentinel workspace's logs with KQL.",
         defaultInstructions: """
         Use Microsoft Sentinel to query the logs in its Log Analytics workspace with KQL, such as SigninLogs, \
-        SecurityEvent, AzureActivity, CommonSecurityLog or SecurityAlert. Filter by time and end with take or summarize \
+        SecurityEvent, AzureActivity, CommonSecurityLog or SecurityAlert. For what an account touched, OfficeActivity holds \
+        its Microsoft 365 activity, such as Operation "FileDownloaded", "FileAccessed" or "MailItemsAccessed"; AuditLogs holds \
+        directory changes, such as roles granted or app secrets added; SigninLogs and AADNonInteractiveUserSignInLogs its \
+        sign-ins. Each table is there only if its connector is on. Filter by time and end with take or summarize \
         to keep results small. Record each query and what it returned as evidence, with the query itself as the method. \
         KQL only reads.
         """,

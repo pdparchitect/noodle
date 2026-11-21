@@ -27,7 +27,11 @@ final class GoogleTests: XCTestCase {
     func testBothSignInWithGoogleThroughTheOrganisationsOwnClientWithTheNarrowestScopesTheirAPIsTake() throws {
         // The narrowest each API takes: Logging's read-only scope, Cloud Asset's own, whose methods only read, and
         // Security Command Center's own, as it has no read-only one. Never all of Google Cloud.
-        let scopes = [(GoogleWorkspace.preset, workspace, ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]),
+        let scopes = [(GoogleWorkspace.preset, workspace, ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
+                                                           "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
+                                                           "https://www.googleapis.com/auth/admin.directory.user.readonly",
+                                                           "https://www.googleapis.com/auth/admin.directory.group.readonly",
+                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"]),
                       (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
                                                    "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
@@ -402,4 +406,75 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(refused.text.contains("User Security Management"), refused.text)
         XCTAssertTrue(refused.text.contains("admin"), refused.text)
     }
+
+    // MARK: Who holds what
+
+    /// Every admin role with what it allows and who holds it, super admins first, read with read-only scopes.
+    func testAdminRolesShowEachRoleWhatItAllowsAndWhoHoldsIt() async throws {
+        let service = FakeService()
+        let directory = "/admin/directory/v1"
+        service.answers[directory + "/users"] = (200, #"{"users":[{"id":"u-1","primaryEmail":"ceo@kestrel.example","isAdmin":true,"isEnrolledIn2Sv":false},{"id":"u-2","primaryEmail":"it@kestrel.example","isAdmin":true,"isEnrolledIn2Sv":true}]}"#)
+        service.answers[directory + "/customer/my_customer/roles"] = (200, #"{"items":[{"roleId":"r-super","roleName":"_SEED_ADMIN_ROLE","isSystemRole":true,"isSuperAdminRole":true,"rolePrivileges":[{"privilegeName":"SUPER_ADMIN","serviceId":"x"}]},{"roleId":"r-pion","roleName":"Pion Containment","rolePrivileges":[{"privilegeName":"USERS_RETRIEVE","serviceId":"x"},{"privilegeName":"USERS_SUSPEND","serviceId":"x"}]},{"roleId":"r-unused","roleName":"Groups Reader","rolePrivileges":[]}]}"#)
+        service.answers[directory + "/customer/my_customer/roleassignments"] = (200, #"{"items":[{"roleAssignmentId":"a1","roleId":"r-super","assignedTo":"u-1","assigneeType":"user","scopeType":"CUSTOMER"},{"roleAssignmentId":"a2","roleId":"r-super","assignedTo":"u-2","assigneeType":"user","scopeType":"CUSTOMER"},{"roleAssignmentId":"a3","roleId":"r-pion","assignedTo":"u-3","assigneeType":"user","scopeType":"ORG_UNIT","orgUnitId":"ou-1"},{"roleAssignmentId":"a4","roleId":"r-pion","assignedTo":"g-1","assigneeType":"group","scopeType":"CUSTOMER"}]}"#)
+        service.answers[directory + "/users/u-3"] = (200, #"{"id":"u-3","primaryEmail":"pion@kestrel.example","isDelegatedAdmin":true}"#)
+        let roles = try await callTool(GoogleWorkspace.adapter, "admin-roles", "{}", on: service, in: workspace)
+        XCTAssertFalse(roles.isError, roles.text)
+        let lines = roles.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].hasPrefix("Super admins (2):") && lines[0].contains("ceo@kestrel.example (2-step verification off)"), roles.text)
+        XCTAssertTrue(lines.contains { $0.contains("Pion Containment") && $0.contains("USERS_SUSPEND") && $0.contains("pion@kestrel.example (in one organisational unit)")
+            && $0.contains("group g-1") }, roles.text)
+        XCTAssertFalse(roles.text.contains("Groups Reader"), "a role nobody holds says nothing")
+        XCTAssertEqual(queryItems(service.requests.first { $0.url?.path == directory + "/users" })["query"], "isAdmin=true")
+    }
+
+    /// A refusal says what the Audit admin's role lacks, as Google answers 403 for anything outside it.
+    func testAdminRolesExplainARefusalByTheAdminsRole() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (403, #"{"error":{"code":403,"message":"Not Authorized to access this resource/api"}}"#)
+        let refused = try await callTool(GoogleWorkspace.adapter, "admin-roles", "{}", on: service, in: workspace)
+        XCTAssertTrue(refused.isError)
+        XCTAssertTrue(refused.text.contains("Users › Read"), refused.text)
+    }
+
+    // MARK: Breach scope
+
+    /// What left the domain and how: exports through Takeout and Vault, mail, chat and meetings are audited too.
+    func testActivityCoversExportsMailChatAndMeetings() async throws {
+        let service = FakeService()
+        for application in ["takeout", "vault", "gmail", "chat", "meet"] {
+            service.answers["/admin/reports/v1/activity/users/all/applications/" + application] = (200, "{}")
+            let read = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"\#(application)"}"#, on: service, in: workspace)
+            XCTAssertFalse(read.isError, "\(application): \(read.text)")
+        }
+    }
+
+    /// Everyone in the domain, or those a search picks, such as who has 2-step verification off, with when each last
+    /// signed in.
+    func testUsersAreListedBySearchWithWhatMattersForABreach() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[{"id":"u-1","primaryEmail":"m.okafor@kestrel.example","isAdmin":false,"isEnrolledIn2Sv":false,"suspended":false,"lastLoginTime":"2026-11-20T08:00:00.000Z","creationTime":"2024-01-02T00:00:00.000Z","orgUnitPath":"/Finance"}]}"#)
+        let users = try await callTool(GoogleWorkspace.adapter, "users", #"{"query":"isEnrolledIn2Sv=false"}"#, on: service, in: workspace)
+        XCTAssertFalse(users.isError, users.text)
+        XCTAssertTrue(users.text.contains("m.okafor@kestrel.example") && users.text.contains("2-step verification off")
+                      && users.text.contains("last signed in 2026-11-20T08:00:00.000Z") && users.text.contains("/Finance"), users.text)
+        let sent = queryItems(service.requests.last)
+        XCTAssertEqual(sent["query"], "isEnrolledIn2Sv=false")
+        XCTAssertEqual(sent["customer"], "my_customer")
+    }
+
+    /// What a user reaches through groups, and the phones and tablets that hold their mail and files.
+    func testAUsersGroupsAndDevices() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/groups"] = (200, #"{"groups":[{"id":"g-1","email":"finance@kestrel.example","name":"Finance","directMembersCount":"12"}]}"#)
+        service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (200, #"{"mobiledevices":[{"resourceId":"d-1","email":["m.okafor@kestrel.example"],"model":"Pixel 8","os":"Android 15","type":"ANDROID","status":"APPROVED","lastSync":"2026-11-20T09:00:00.000Z","deviceCompromisedStatus":"Compromised"},{"resourceId":"d-2","email":["m.okafor.sabia@kestrel.example"],"model":"iPhone"}]}"#)
+        let groups = try await callTool(GoogleWorkspace.adapter, "user-groups", #"{"user":"m.okafor@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertTrue(groups.text.contains("Finance <finance@kestrel.example>"), groups.text)
+        XCTAssertEqual(queryItems(service.requests.last)["userKey"], "m.okafor@kestrel.example")
+        let devices = try await callTool(GoogleWorkspace.adapter, "user-devices", #"{"user":"m.okafor@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertFalse(devices.isError, devices.text)
+        XCTAssertTrue(devices.text.contains("Pixel 8") && devices.text.contains("Compromised"), devices.text)
+        XCTAssertFalse(devices.text.contains("iPhone"), "another user whose address starts the same is not theirs")
+        XCTAssertEqual(queryItems(service.requests.last)["query"], "email:m.okafor@kestrel.example")
+    }
 }
+

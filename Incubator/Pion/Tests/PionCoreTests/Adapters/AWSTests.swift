@@ -260,4 +260,30 @@ final class AWSTests: XCTestCase {
         let principals = try XCTUnwrap(access.structured?["principals"] as? [[String: Any]])
         XCTAssertEqual(principals.filter { $0["fullAdministrator"] as? Bool == true }.compactMap { $0["name"] as? String }.sorted(), ["deploy", "mallory"])
     }
+
+    /// Who can become each role: another account, or anyone, reaches whatever the role reaches.
+    func testIAMAccessSaysWhoCanAssumeEachRole() async throws {
+        let service = FakeService()
+        func encoded(_ json: String) -> String { json.addingPercentEncoding(withAllowedCharacters: .alphanumerics)! }
+        let vendor = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::999999999999:root"},"Action":"sts:AssumeRole"}]}"#)
+        let lambda = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#)
+        let open = encoded(#"{"Statement":[{"Effect":"Allow","Principal":"*","Action":"sts:AssumeRole"}]}"#)
+        let github = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity"}]}"#)
+        func role(_ name: String, _ trust: String) -> String {
+            "<member><RoleName>\(name)</RoleName><Arn>arn:aws:iam::111111111111:role/\(name)</Arn><AssumeRolePolicyDocument>\(trust)</AssumeRolePolicyDocument><AttachedManagedPolicies/><RolePolicyList/></member>"
+        }
+        service.answers["action:GetAccountAuthorizationDetails"] = (200, """
+        <GetAccountAuthorizationDetailsResponse><GetAccountAuthorizationDetailsResult><UserDetailList/><GroupDetailList/>
+        <RoleDetailList>\(role("vendor-audit", vendor))\(role("worker", lambda))\(role("open", open))\(role("deploy", github))</RoleDetailList>
+        <IsTruncated>false</IsTruncated></GetAccountAuthorizationDetailsResult></GetAccountAuthorizationDetailsResponse>
+        """)
+        let access = try await callTool(AWS.adapter, "iam-access", "{}", on: service, in: aws)
+        XCTAssertFalse(access.isError, access.text)
+        let lines = access.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.contains { $0.contains("role vendor-audit") && $0.contains("assumable by another account 999999999999") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role worker") && $0.contains("assumable by lambda.amazonaws.com") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role open") && $0.contains("assumable by anyone") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role deploy") && $0.contains("token.actions.githubusercontent.com") }, access.text)
+    }
 }
+

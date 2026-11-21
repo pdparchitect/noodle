@@ -65,4 +65,12 @@ final class DefenderTests: XCTestCase {
         XCTAssertTrue(Defender.preset.defaultInstructions.contains("IdentityInfo"))
         XCTAssertTrue(Defender.preset.defaultInstructions.contains("AssignedRoles"))
     }
+
+    /// What a compromised account touched is in Defender's hunting tables: files on devices, and files and mail in
+    /// Microsoft 365 apps.
+    func testItsInstructionsSayWhereDownloadsAndFileAccessAre() {
+        for table in ["DeviceFileEvents", "CloudAppEvents", "FileDownloaded", "EmailEvents"] {
+            XCTAssertTrue(Defender.preset.defaultInstructions.contains(table), table)
+        }
+    }
 }

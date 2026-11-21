@@ -9,7 +9,9 @@ public enum Cloudflare {
         id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", name: "Cloudflare Security", summary: "DNS records, the account audit log, and firewall events at the edge.",
         defaultInstructions: """
         Use Cloudflare to see a domain from the edge: its DNS records, who changed what in the account and from where, \
-        and the firewall events for a zone, such as blocked requests by IP address, country, path and rule source. \
+        and the firewall events for a zone, such as blocked requests by IP address, country, path and rule source; and to \
+        audit who holds what, members lists everyone in the account with their roles and whether they use 2FA, and \
+        api-tokens the account's own API tokens, what each may do, from where and when it was last used. \
         Record each finding as evidence, citing the zone and time window. These tools only read: recommend blocking an \
         address or changing a rule to the champion.
         """,
@@ -36,12 +38,12 @@ public enum Cloudflare {
 
     static let setup = [
         "In the Cloudflare dashboard, open **My Profile › API Tokens** and choose **Create Token › Create Custom Token**.",
-        "Add the permissions **Account › Audit Logs › Read**, **Zone › Zone › Read**, **Zone › DNS › Read** and **Zone › Analytics › Read**.",
+        "Add the permissions **Account › Audit Logs › Read**, **Account › Account Settings › Read**, **Account › Account API Tokens › Read**, **Zone › Zone › Read**, **Zone › DNS › Read** and **Zone › Analytics › Read**.",
         "Limit **Account Resources** to your account and **Zone Resources** to its zones, then create the token, copy it and paste it here.",
         "The Account ID is in the **API** section of any zone's **Overview** page.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [ZoneDNS(), AuditLog(), FirewallEvents()])
+    public static let adapter = OperationAdapter(operations: [ZoneDNS(), AuditLog(), FirewallEvents(), Members(), APITokens()])
 
     /// Cloudflare wraps its answers in their result.
     struct Envelope<Result: Decodable>: Decodable { let result: Result? }
@@ -156,3 +158,80 @@ extension Cloudflare {
         }
     }
 }
+
+extension Cloudflare {
+    /// Who is in the account and with which roles, from Account Settings Read: administrators first, then the rest,
+    /// each with whether they sign in with 2FA, which does not cover API tokens.
+    struct Members: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "members"
+        static let summary = "Everyone in the account with their roles and whether they use 2FA, administrators first."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct User: Codable { let email: String?; let two_factor_authentication_enabled: Bool? }
+            struct Role: Codable { let id: String?; let name: String? }
+            struct Member: Codable { let id: String; let status: String?; let user: User?; let email: String?; let roles: [Role]? }
+            struct Info: Decodable { let total_count: Int? }
+            struct Page: Decodable { let result: [Member]?; let result_info: Info? }
+            let account = try service.setting("account")
+            var members: [Member] = []
+            // Fifty a page at most; an account with more than a thousand members is cut short.
+            for page in 1...20 {
+                let answer = try await service.get(["accounts", account, "members"], query: ["page": String(page), "per_page": "50"], as: Page.self)
+                members += answer.result ?? []
+                guard (answer.result ?? []).count == 50 || members.count < (answer.result_info?.total_count ?? 0), !(answer.result ?? []).isEmpty else { break }
+            }
+            func administrator(_ member: Member) -> Bool { (member.roles ?? []).contains { ($0.name ?? "").contains("Administrator") } }
+            let ordered = members.filter(administrator) + members.filter { !administrator($0) }
+            let text = ordered.isEmpty ? "The account has no members listed." : ordered.map { member in
+                let who = member.user?.email ?? member.email ?? member.id
+                let roles = (member.roles ?? []).compactMap(\.name).joined(separator: ", ")
+                let twoFactor = member.user?.two_factor_authentication_enabled == false ? ", no 2FA" : ""
+                return "\(who)\(member.status == "pending" ? " (invited)" : ""): \(roles.isEmpty ? "no roles" : roles)\(twoFactor)"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let members: [Member] }
+            return try ServiceResult(text: text, structured: Kept(members: ordered))
+        }
+    }
+}
+
+extension Cloudflare {
+    /// The account's own API tokens, from Account API Tokens Read: what each may do, from where, and when it was last
+    /// used. Tokens people made under their own profiles are theirs alone and are not listed.
+    struct APITokens: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "api-tokens"
+        static let summary = "The account's own API tokens: what each may do, from which addresses, when it was last used and when it expires."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Group: Codable { let name: String? }
+            struct Policy: Codable { let effect: String?; let permission_groups: [Group]? }
+            struct Addresses: Codable { let `in`: [String]?; let not_in: [String]? }
+            struct Condition: Codable { let request_ip: Addresses? }
+            struct Token: Codable {
+                let id: String, name: String?, status: String?, issued_on: String?, last_used_on: String?, expires_on: String?
+                let policies: [Policy]?, condition: Condition?
+            }
+            struct Info: Decodable { let total_count: Int? }
+            struct Page: Decodable { let result: [Token]?; let result_info: Info? }
+            let account = try service.setting("account")
+            var tokens: [Token] = []
+            for page in 1...20 {
+                let answer = try await service.get(["accounts", account, "tokens"], query: ["page": String(page), "per_page": "50"], as: Page.self)
+                tokens += answer.result ?? []
+                guard !(answer.result ?? []).isEmpty, tokens.count < (answer.result_info?.total_count ?? 0) else { break }
+            }
+            let text = tokens.isEmpty ? "The account has no API tokens of its own." : tokens.map { token in
+                let allowed = (token.policies ?? []).filter { $0.effect != "deny" }.flatMap { $0.permission_groups ?? [] }.compactMap(\.name)
+                let from = token.condition?.request_ip?.in.map { "from " + $0.joined(separator: ", ") } ?? "from anywhere"
+                return "\(token.name ?? token.id) (\(token.status ?? "?")): \(allowed.isEmpty ? "no permissions listed" : allowed.joined(separator: ", ")), \(from), "
+                    + (token.last_used_on.map { "last used \($0)" } ?? "never used") + ", " + (token.expires_on.map { "expires \($0)" } ?? "never expires")
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let tokens: [Token] }
+            return try ServiceResult(text: text, structured: Kept(tokens: tokens))
+        }
+    }
+}
+
