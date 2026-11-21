@@ -418,14 +418,19 @@ final class GoogleTests: XCTestCase {
         let directory = "/admin/directory/v1"
         service.answers[directory + "/users"] = (200, #"{"users":[{"id":"u-1","primaryEmail":"ceo@kestrel.example","isAdmin":true,"isEnrolledIn2Sv":false},{"id":"u-2","primaryEmail":"it@kestrel.example","isAdmin":true,"isEnrolledIn2Sv":true}]}"#)
         service.answers[directory + "/customer/my_customer/roles"] = (200, #"{"items":[{"roleId":"r-super","roleName":"_SEED_ADMIN_ROLE","isSystemRole":true,"isSuperAdminRole":true,"rolePrivileges":[{"privilegeName":"SUPER_ADMIN","serviceId":"x"}]},{"roleId":"r-pion","roleName":"Pion Containment","rolePrivileges":[{"privilegeName":"USERS_RETRIEVE","serviceId":"x"},{"privilegeName":"USERS_SUSPEND","serviceId":"x"}]},{"roleId":"r-unused","roleName":"Groups Reader","rolePrivileges":[]}]}"#)
-        service.answers[directory + "/customer/my_customer/roleassignments"] = (200, #"{"items":[{"roleAssignmentId":"a1","roleId":"r-super","assignedTo":"u-1","assigneeType":"user","scopeType":"CUSTOMER"},{"roleAssignmentId":"a2","roleId":"r-super","assignedTo":"u-2","assigneeType":"user","scopeType":"CUSTOMER"},{"roleAssignmentId":"a3","roleId":"r-pion","assignedTo":"u-3","assigneeType":"user","scopeType":"ORG_UNIT","orgUnitId":"ou-1"},{"roleAssignmentId":"a4","roleId":"r-pion","assignedTo":"g-1","assigneeType":"group","scopeType":"CUSTOMER"}]}"#)
+        service.answers[directory + "/customer/my_customer/roleassignments"] = (200, #"{"items":[{"roleAssignmentId":"a1","roleId":"r-super","assignedTo":"u-1","assigneeType":"USER","scopeType":"CUSTOMER"},{"roleAssignmentId":"a2","roleId":"r-super","assignedTo":"u-2","assigneeType":"USER","scopeType":"CUSTOMER"},{"roleAssignmentId":"a3","roleId":"r-pion","assignedTo":"u-3","assigneeType":"USER","scopeType":"ORG_UNIT","orgUnitId":"03ph8a2z1"},{"roleAssignmentId":"a4","roleId":"r-pion","assignedTo":"g-1","assigneeType":"GROUP","scopeType":"CUSTOMER","condition":"api.getAttribute('cloudidentity.googleapis.com/groups.labels', []).hasAny(['groups.security'])"}]}"#)
         service.answers[directory + "/users/u-3"] = (200, #"{"id":"u-3","primaryEmail":"pion@kestrel.example","isDelegatedAdmin":true}"#)
+        service.answers[directory + "/groups/g-1"] = (200, #"{"id":"g-1","email":"helpdesk@kestrel.example","name":"Helpdesk"}"#)
+        service.answers[directory + "/groups/g-1/members"] = (200, #"{"members":[{"email":"sam@kestrel.example","type":"USER"},{"email":"temp@agency.example","type":"USER"}]}"#)
         let roles = try await callTool(GoogleWorkspace.adapter, "admin-roles", "{}", on: service, in: workspace)
         XCTAssertFalse(roles.isError, roles.text)
         let lines = roles.text.split(separator: "\n").map(String.init)
         XCTAssertTrue(lines[0].hasPrefix("Super admins (2):") && lines[0].contains("ceo@kestrel.example (2-step verification off)"), roles.text)
-        XCTAssertTrue(lines.contains { $0.contains("Pion Containment") && $0.contains("USERS_SUSPEND") && $0.contains("pion@kestrel.example (in one organisational unit)")
-            && $0.contains("group g-1") }, roles.text)
+        XCTAssertTrue(lines.contains { $0.contains("Pion Containment") && $0.contains("USERS_SUSPEND")
+            && $0.contains("pion@kestrel.example (only in organisational unit 03ph8a2z1)")
+            && $0.contains("group helpdesk@kestrel.example (members: sam@kestrel.example, temp@agency.example (outside the domain))")
+            && $0.contains("only when api.getAttribute") }, roles.text)
+        XCTAssertFalse(roles.text.contains("g-1"), "the group is named, not given by its ID")
         XCTAssertFalse(roles.text.contains("Groups Reader"), "a role nobody holds says nothing")
         XCTAssertEqual(queryItems(service.requests.first { $0.url?.path == directory + "/users" })["query"], "isAdmin=true")
     }
@@ -515,6 +520,7 @@ final class GoogleTests: XCTestCase {
         let token = "/admin/reports/v1/activity/users/all/applications/token"
         service.answers[token + "?eventName=authorize&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[{"id":{"time":"2026-11-10T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"pdp@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"},{"name":"client_type","value":"WEB"},{"name":"scope","multiValue":["https://www.googleapis.com/auth/calendar"]}]}]},{"id":{"time":"2026-11-11T09:00:00.000Z","uniqueQualifier":"2"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"},{"name":"scope","multiValue":["https://www.googleapis.com/auth/calendar"]}]}]},{"id":{"time":"2026-11-12T09:00:00.000Z","uniqueQualifier":"3"},"actor":{"email":"nick@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Mail Helper"},{"name":"client_id","value":"222.apps.googleusercontent.com"},{"name":"scope","multiValue":["https://mail.google.com/"]}]}]}]}"#)
         service.answers[token + "?eventName=revoke&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[{"id":{"time":"2026-11-13T09:00:00.000Z","uniqueQualifier":"4"},"actor":{"email":"ivana@kestrel.example"},"events":[{"name":"revoke","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"}]}]}]}"#)
+        service.answers["/admin/reports/v1/activity/users/all/applications/admin"] = (200, #"{"items":[]}"#)
         let apps = try await callTool(GoogleWorkspace.adapter, "oauth-apps", #"{"since":"2026-06-01T00:00:00Z"}"#, on: service, in: workspace)
         XCTAssertFalse(apps.isError, apps.text)
         let lines = apps.text.split(separator: "\n").map(String.init)
@@ -637,6 +643,12 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Sessions, apps and app passwords") && $0.contains("User Security Management") }, check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("· Suspending") && $0.contains("Suspend users") }, check.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "a check never changes anything")
+        XCTAssertEqual(queryItems(service.requests.first)["query"], "isAdmin=false",
+                       "User Security Management never covers admins, so an admin's tokens would fail a healthy setup")
+        let none = FakeService()
+        none.answers["/admin/directory/v1/users"] = (200, #"{"users":[]}"#)
+        let unchecked = try await callTool(GoogleWorkspace.containmentAdapter, "check-access", "{}", on: none, in: containment)
+        XCTAssertTrue(unchecked.text.contains("not tried, as no account that is not an admin could be read"), unchecked.text)
     }
 
     /// Every page and API the Setup Steps name is a link to it, so nobody has to search Google's consoles.
@@ -814,7 +826,9 @@ final class GoogleTests: XCTestCase {
         let apps = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
         XCTAssertFalse(apps.isError, apps.text)
         XCTAssertTrue(apps.text.contains("Mail Helper (222)"), apps.text)
-        XCTAssertTrue(apps.text.contains("Checked 2 accounts") && apps.text.contains("could not read admin@kestrel.example"), apps.text)
+        XCTAssertTrue(apps.text.contains("Checked 1 of 2 accounts") && apps.text.contains("could not read admin@kestrel.example"), apps.text)
+        XCTAssertEqual(apps.structured?["accountsChecked"] as? Int, 1, "an account that could not be read was not checked")
+        XCTAssertEqual(apps.structured?["accountsTried"] as? Int, 2)
         service.sequences["/admin/directory/v1/users"] = [(200, #"{"users":[{"primaryEmail":"a@kestrel.example"}]}"#)]
         service.answers["/admin/directory/v1/users/a@kestrel.example/tokens"] = (200, "{}")
         let none = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
@@ -928,13 +942,15 @@ final class GoogleTests: XCTestCase {
     /// preview). Google does not say which detail holds the address, so a link is matched against all of them.
     func testLinkClicksSayWhoClickedALinkInMail() async throws {
         let service = FakeService()
-        func click(_ id: String, _ time: String, _ user: String, _ code: String, _ url: String) -> String {
-            #"{"id":{"time":"\#(time)","uniqueQualifier":"\#(id)"},"actor":{"email":"\#(user)"},"events":[{"name":"delivery","type":"delivery_type","parameters":[{"name":"event_info","messageValue":{"parameter":[{"name":"mail_event_type","intValue":"\#(code)"}]}},{"name":"message_info","messageValue":{"parameter":[{"name":"subject","value":"Invoice overdue"},{"name":"rfc2822_message_id","value":"<abc@evil.example>"},{"name":"link_click_info","multiMessageValue":[{"parameter":[{"name":"url","value":"\#(url)"}]}]}]}}]}]}"#
+        // The sender's domain and Message-ID name the same domain as the bad link, as phishing mail's often do.
+        func click(_ id: String, _ time: String, _ user: String, _ code: String, _ urls: String...) -> String {
+            let links = urls.map { #"{"parameter":[{"name":"url","value":"\#($0)"}]}"# }.joined(separator: ",")
+            return #"{"id":{"time":"\#(time)","uniqueQualifier":"\#(id)"},"actor":{"email":"\#(user)"},"events":[{"name":"delivery","type":"delivery_type","parameters":[{"name":"event_info","messageValue":{"parameter":[{"name":"mail_event_type","intValue":"\#(code)"}]}},{"name":"message_info","messageValue":{"parameter":[{"name":"subject","value":"Invoice overdue"},{"name":"rfc2822_message_id","value":"<abc@evil.example>"},{"name":"source","messageValue":{"parameter":[{"name":"domain","value":"evil.example"}]}},{"name":"link_click_info","multiMessageValue":[\#(links)]}]}}]}]}"#
         }
         let path = "/admin/reports/v1/activity/users/all/applications/gmail"
         let pages: [(Int, String)] = [
             (200, #"{"items":[\#(click("1", "2026-11-20T09:00:00.000Z", "ivana@kestrel.example", "15", "https://login.evil.example/x")),\#(click("2", "2026-11-20T10:00:00.000Z", "nick@kestrel.example", "15", "https://news.example/a"))]}"#),
-            (200, #"{"items":[\#(click("3", "2026-11-21T08:00:00.000Z", "pdp@kestrel.example", "16", "https://login.evil.example/y"))]}"#),
+            (200, #"{"items":[\#(click("3", "2026-11-21T08:00:00.000Z", "pdp@kestrel.example", "16", "https://login.evil.example/y")),\#(click("4", "2026-11-21T07:00:00.000Z", "maria@kestrel.example", "15", "https://news.example/b", "https://login.evil.example/z"))]}"#),
         ]
         service.sequences[path] = pages
         let clicks = try await callTool(GoogleWorkspace.adapter, "link-clicks",
@@ -949,16 +965,111 @@ final class GoogleTests: XCTestCase {
             XCTAssertTrue(clicks.text.contains(expected), "\(expected) missing from:\n\(clicks.text)")
         }
         XCTAssertFalse(clicks.text.contains("nick@kestrel.example"), "a click on another link in the same mail, from the same sender, was listed")
+        XCTAssertTrue(clicks.text.contains("1 more click in a message that also links to evil.example, where Google's event lists several links and not which was clicked: maria@kestrel.example"), clicks.text)
+        XCTAssertTrue(clicks.text.contains("https://news.example/b | https://login.evil.example/z"), "every link an event lists is kept:\n\(clicks.text)")
         service.sequences[path] = pages
         let bySubject = try await callTool(GoogleWorkspace.adapter, "link-clicks",
                                            #"{"message":"invoice overdue","since":"2026-11-01T00:00:00Z","until":"2026-11-21T12:00:00Z"}"#, on: service, in: workspace)
-        XCTAssertTrue(bySubject.text.contains("3 clicks in messages matching invoice overdue by 3 people"), bySubject.text)
+        XCTAssertTrue(bySubject.text.contains("4 clicks in messages matching invoice overdue by 4 people"), bySubject.text)
         let newest = try XCTUnwrap(clicks.text.range(of: "08:00:00.000Z pdp@")), older = try XCTUnwrap(clicks.text.range(of: "09:00:00.000Z ivana@"))
         XCTAssertLessThan(newest.lowerBound, older.lowerBound, "not newest first")
 
         let window = try await callTool(GoogleWorkspace.adapter, "link-clicks", #"{"since":"2026-09-01T00:00:00Z","until":"2026-11-21T00:00:00Z"}"#,
                                         on: service, in: workspace)
         XCTAssertTrue(window.isError && window.text.contains("30 days"), window.text)
+    }
+
+    /// Roles a user holds directly or through a group, from Google's own indirect listing.
+    func testAdminRolesForOneUserIncludeThoseHeldThroughAGroup() async throws {
+        let service = FakeService()
+        let directory = "/admin/directory/v1"
+        service.answers[directory + "/users"] = (200, #"{"users":[]}"#)
+        service.answers[directory + "/customer/my_customer/roles"] = (200, #"{"items":[{"roleId":"r-help","roleName":"Help Desk Admin","rolePrivileges":[{"privilegeName":"USERS_RESET_PASSWORD"}]}]}"#)
+        service.answers[directory + "/customer/my_customer/roleassignments"] = (200, #"{"items":[{"roleId":"r-help","assignedTo":"g-1","assigneeType":"GROUP","scopeType":"CUSTOMER"}]}"#)
+        service.answers[directory + "/groups/g-1"] = (200, #"{"email":"helpdesk@kestrel.example"}"#)
+        service.answers[directory + "/groups/g-1/members"] = (200, #"{"members":[{"email":"sam@kestrel.example"}]}"#)
+        let roles = try await callTool(GoogleWorkspace.adapter, "admin-roles", #"{"user":"sam@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertFalse(roles.isError, roles.text)
+        let asked = queryItems(service.requests.first { $0.url?.path.hasSuffix("/roleassignments") == true })
+        XCTAssertEqual(asked["userKey"], "sam@kestrel.example")
+        XCTAssertEqual(asked["includeIndirectRoleAssignments"], "true")
+        XCTAssertTrue(roles.text.contains("Help Desk Admin") && roles.text.contains("group helpdesk@kestrel.example"), roles.text)
+    }
+
+    /// A Directory list longer than was read says so, in its text and its structured result, so a large group or a
+    /// busy user is never taken for fully listed.
+    func testDirectoryListsThatWereCutShortSaySo() async throws {
+        let directory = "/admin/directory/v1"
+        let cases: [(String, String, String, (Int, String))] = [
+            ("group-members", #"{"group":"all@kestrel.example"}"#, directory + "/groups/all@kestrel.example/members",
+             (200, #"{"members":[{"email":"a@kestrel.example"}],"nextPageToken":"more"}"#)),
+            ("user-groups", #"{"user":"a@kestrel.example"}"#, directory + "/groups",
+             (200, #"{"groups":[{"email":"g@kestrel.example"}],"nextPageToken":"more"}"#)),
+            ("user-devices", #"{"user":"a@kestrel.example"}"#, directory + "/customer/my_customer/devices/mobile",
+             (200, #"{"mobiledevices":[{"email":["a@kestrel.example"],"model":"Pixel"}],"nextPageToken":"more"}"#)),
+            ("admin-roles", "{}", directory + "/customer/my_customer/roleassignments",
+             (200, #"{"items":[{"roleId":"r","assignedTo":"u","assigneeType":"USER"}],"nextPageToken":"more"}"#)),
+        ]
+        for (tool, arguments, path, endless) in cases {
+            let service = FakeService()
+            service.answers[path] = endless
+            service.answers[directory + "/users"] = (200, #"{"users":[]}"#)
+            service.answers[directory + "/customer/my_customer/roles"] = (200, #"{"items":[{"roleId":"r","roleName":"Reader"}]}"#)
+            let result = try await callTool(GoogleWorkspace.adapter, tool, arguments, on: service, in: workspace)
+            XCTAssertFalse(result.isError, "\(tool): \(result.text)")
+            XCTAssertTrue(result.text.contains("incomplete"), "\(tool) did not say it was cut short:\n\(result.text)")
+            XCTAssertEqual(result.structured?["incomplete"] as? Bool, true, tool)
+        }
+    }
+
+    /// Domain-wide delegation lets a client act as anyone without their consent, so no user's tokens show it: the
+    /// admin log's grants and removals do (Google's Domain Settings events), and the alert watch wakes agents for a grant
+    /// and for apps trusted or unblocked.
+    func testDomainWideDelegationIsWatchedAndListedWithTheApps() async throws {
+        let watched = Set(GoogleWorkspace.watched.filter { $0.application == "admin" }.map(\.event))
+        for event in ["AUTHORIZE_API_CLIENT_ACCESS", "ADD_TO_TRUSTED_OAUTH2_APPS", "REMOVE_FROM_BLOCKED_OAUTH2_APPS",
+                      "UNBLOCK_ALL_THIRD_PARTY_API_ACCESS", "ADD_TO_CAA_EXEMPT_OAUTH2_APPS"] {
+            XCTAssertTrue(watched.contains(event), "\(event) is not watched")
+        }
+        let service = FakeService()
+        let since = "maxResults=1000&startTime=2026-06-01T00:00:00Z"
+        let token = "/admin/reports/v1/activity/users/all/applications/token", admin = "/admin/reports/v1/activity/users/all/applications/admin"
+        service.answers[token + "?eventName=authorize&" + since] = (200, #"{"items":[]}"#)
+        service.answers[token + "?eventName=revoke&" + since] = (200, #"{"items":[]}"#)
+        service.answers[admin + "?eventName=AUTHORIZE_API_CLIENT_ACCESS&" + since] = (200, #"{"items":[{"id":{"time":"2026-11-15T03:00:00.000Z","uniqueQualifier":"9"},"actor":{"email":"it@kestrel.example"},"events":[{"type":"DOMAIN_SETTINGS","name":"AUTHORIZE_API_CLIENT_ACCESS","parameters":[{"name":"API_CLIENT_NAME","value":"104857600000000000001"},{"name":"API_SCOPES","value":"https://mail.google.com/"},{"name":"DOMAIN_NAME","value":"kestrel.example"}]}]}]}"#)
+        service.answers[admin + "?eventName=REMOVE_API_CLIENT_ACCESS&" + since] = (200, #"{"items":[]}"#)
+        let apps = try await callTool(GoogleWorkspace.adapter, "oauth-apps", #"{"since":"2026-06-01T00:00:00Z"}"#, on: service, in: workspace)
+        XCTAssertFalse(apps.isError, apps.text)
+        for expected in ["Domain-wide delegation", "client 104857600000000000001", "reads and sends mail", "authorized by it@kestrel.example at 2026-11-15T03:00:00.000Z",
+                         "not removed since", "admin.google.com/ac/owl/domainwidedelegation"] {
+            XCTAssertTrue(apps.text.contains(expected), "\(expected) missing from:\n\(apps.text)")
+        }
+        XCTAssertFalse(apps.text.contains("No app was granted access"), "a delegation grant is an app granted access:\n\(apps.text)")
+        let delegated = try XCTUnwrap(apps.structured?["delegated"] as? [[String: Any]])
+        XCTAssertEqual(delegated.first?["client"] as? String, "104857600000000000001")
+    }
+
+    /// A report that fails for a passing reason fails the whole check, so the watch does not move past what that report
+    /// would have found and the next check reads the same window again. A report refused for good, such as one the
+    /// edition lacks, does not hold the rest back.
+    func testAReportFailingForNowFailsTheAlertCheckSoNothingIsSkipped() async throws {
+        let reports = "/admin/reports/v1/activity/users/all/applications/"
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-14T00:00:00Z"))
+        func service(login: (Int, String)) -> FakeService {
+            let service = FakeService()
+            for application in Set(GoogleWorkspace.watched.map(\.application)) { service.answers[reports + application] = (200, #"{"items":[]}"#) }
+            service.answers[reports + "admin"] = (200, #"{"items":[\#(Self.item(5, "GRANT_ADMIN_PRIVILEGE"))]}"#)
+            service.answers[reports + "login"] = login
+            return service
+        }
+        do {
+            _ = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service(login: (503, #"{"error":{"code":503,"message":"Backend Error"}}"#)))
+            XCTFail("a check that could not read the sign-in report succeeded, and the watch would move past it")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("login"), error.localizedDescription)
+        }
+        let refused = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service(login: (403, Self.notAuthorized)))
+        XCTAssertEqual(refused.count, 1, "a report refused for good held back what the others found")
     }
 }
 

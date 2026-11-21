@@ -85,6 +85,7 @@ final class OutOfOrderTests: XCTestCase {
         let token = "/admin/reports/v1/activity/users/all/applications/token"
         service.answers[token + "?eventName=authorize&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[{"id":{"time":"2026-11-10T09:00:00.000Z","uniqueQualifier":"1"},"actor":{"email":"pdp@kestrel.example"},"events":[{"name":"authorize","parameters":[{"name":"app_name","value":"Reclaim.ai"},{"name":"client_id","value":"111.apps.googleusercontent.com"},{"name":"scope","multiValue":["https://www.googleapis.com/auth/calendar"]}]}]}]}"#)
         service.answers[token + "?eventName=revoke&maxResults=1000&startTime=2026-06-01T00:00:00Z"] = (200, #"{"items":[]}"#)
+        service.answers["/admin/reports/v1/activity/users/all/applications/admin"] = (200, #"{"items":[]}"#)
         for _ in 0..<Self.rounds {
             let apps = try await callTool(GoogleWorkspace.adapter, "oauth-apps", #"{"since":"2026-06-01T00:00:00Z"}"#, on: service, in: connection)
             XCTAssertTrue(apps.text.contains("111.apps.googleusercontent.com"), apps.text)

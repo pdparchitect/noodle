@@ -35,7 +35,8 @@ public enum GoogleWorkspace {
         activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. In a \
         phishing case, link-clicks says who clicked a link in mail, by the link's address or domain or the message's subject \
         or ID. oauth-apps \
-        lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
+        lists every app people granted access in a window, by client ID and scopes, and every app an admin gave domain-wide \
+        delegation, which acts as anyone without consent and no user's tokens show; app-activity shows what an app pulled; \
         Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
         group, flagging outsiders. Drive sharing \
         changes are drive events change_document_visibility, change_document_access_scope and change_user_access. When a \
@@ -91,7 +92,9 @@ public enum GoogleWorkspace {
         never covers admins, so tokens, app passwords, sign-out, revoke-token and delete-app-password are refused for an \
         admin: contain one with suspend, or ask the champion to act in the Admin console. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
         for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
-        it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working.
+        it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working, \
+        and revoking users' tokens leaves an app's domain-wide delegation in place: Google Workspace Audit's oauth-apps \
+        lists those, and only an admin can remove one in the Admin console.
         """,
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
@@ -136,6 +139,11 @@ public enum GoogleWorkspace {
         ("login", "account_disabled_generic", nil),
         ("mobile", "DEVICE_COMPROMISED_EVENT", ("DEVICE_COMPROMISED_STATE", "NOT_COMPROMISED")), ("mobile", "SUSPICIOUS_ACTIVITY_EVENT", nil),
         ("rules", "rule_trigger", ("severity", "LOW")),
+        // A way back in that no user's tokens show: an app given domain-wide delegation acts as anyone without consent,
+        // and an app trusted, unblocked or exempted gets past the domain's app controls (Google's Domain Settings and
+        // Security Settings admin events).
+        ("admin", "AUTHORIZE_API_CLIENT_ACCESS", nil), ("admin", "ADD_TO_TRUSTED_OAUTH2_APPS", nil), ("admin", "REMOVE_FROM_BLOCKED_OAUTH2_APPS", nil),
+        ("admin", "UNBLOCK_ALL_THIRD_PARTY_API_ACCESS", nil), ("admin", "ADD_TO_CAA_EXEMPT_OAUTH2_APPS", nil),
     ]
 
     /// One audit event. Its ID is the report, the record's time and qualifier, which Google gives to tell records at the
@@ -153,7 +161,7 @@ public enum GoogleWorkspace {
             "app_name", "client_id", "scope", "client_type", "api_name", "method_name", "num_response_bytes",
             "login_type", "login_challenge_method", "login_challenge_status", "is_suspicious", "is_second_factor", "sensitive_action_name",
             "USER_EMAIL", "SETTING_NAME", "NEW_VALUE", "OLD_VALUE", "EMAIL_MONITOR_DEST_EMAIL", "email_forwarding_destination_address",
-            "affected_email_address", "event_info.mail_event_type",
+            "affected_email_address", "event_info.mail_event_type", "API_CLIENT_NAME", "API_SCOPES", "OAUTH2_APP_NAME", "OAUTH2_APP_ID",
         ]
 
         var line: String {
@@ -240,7 +248,8 @@ public enum GoogleWorkspace {
                 guard let name = named.name, event == nil || name == event else { return nil }
                 var found = Event(id: "\(application)/\(item.id?.time ?? "?")/\(item.id?.uniqueQualifier ?? "?")/\(name)/\(index)", time: item.id?.time,
                                   application: application, user: item.actor?.email, ip: item.ipAddress, event: name,
-                                  parameters: Dictionary((named.parameters ?? []).flatMap { $0.flattened() }, uniquingKeysWith: { first, _ in first }))
+                                  // A detail given more than once, as each link of a Gmail message is, keeps every value.
+                                  parameters: Dictionary((named.parameters ?? []).flatMap { $0.flattened() }, uniquingKeysWith: { "\($0) | \($1)" }))
                 found.asn = item.networkInfo?.asn.first
                 found.region = item.networkInfo?.subdivisionCode ?? item.networkInfo?.regionCode
                 found.via = item.actor?.applicationInfo?.applicationName
@@ -266,6 +275,8 @@ public enum GoogleWorkspace {
     /// what was cut short and what could not be read, so a gap is never taken for nothing having happened.
     struct Gathered {
         var events: [Event] = [], searched: [String] = [], cut: [String] = [], failed: [(String, String)] = []
+        /// The reads among `failed` that failed for a passing reason, and would likely work if tried again.
+        var passing: [String] = []
 
         var coverage: String {
             var lines = ["Searched: \(searched.joined(separator: ", "))."]
@@ -294,10 +305,22 @@ public enum GoogleWorkspace {
                 for event in page.events where seen.insert(event.id).inserted { gathered.events.append(event) }
             case .failure(let error):
                 gathered.failed.append((label, error.localizedDescription))
+                if isPassing(error) { gathered.passing.append(label) }
             }
         }
         gathered.events.sort { ($0.time ?? "") > ($1.time ?? "") }
         return gathered
+    }
+
+    /// Whether a read failed for a reason that passes, such as Google being busy, a rate limit or the network, rather
+    /// than one that will keep failing, such as a report the edition or the role lacks.
+    static func isPassing(_ error: Error) -> Bool {
+        switch error {
+        case ServiceError.rateLimited, ServiceError.unreadable: true
+        case ServiceError.status(let status, _): status >= 500 || status == 408
+        case is URLError: true
+        default: false
+        }
     }
 
     /// The watched events from `since` to `until`, newest first, up to `limit` of each, leaving out those a watched
@@ -333,6 +356,11 @@ public enum GoogleWorkspace {
             query["pageToken"] = next
         }
         return (items, true)
+    }
+
+    /// What a list says when there was more of it than was read, so it is never taken for complete.
+    static func incomplete(_ what: String) -> String {
+        "This list is incomplete: there were more \(what) than were read."
     }
 
     /// A user for an audit report: their email, or the numeric profile ID that a deleted account is still found by.
@@ -413,6 +441,11 @@ extension GoogleWorkspace {
         func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
             let gathered = await GoogleWorkspace.securityEvents(service, since: ISO8601DateFormatter().string(from: since), until: nil, limit: ServiceAlert.most)
             if gathered.searched.isEmpty, let first = gathered.failed.first { throw ServiceError.input(first.1) }
+            // A report that could not be read for now fails the whole check, so the watch stays where it is and the
+            // next check reads the same window again, rather than moving past what that report would have found.
+            if !gathered.passing.isEmpty {
+                throw ServiceError.input("Could not read \(gathered.passing.joined(separator: ", ")) for now; the next check reads the same window again.")
+            }
             return gathered.events.prefix(ServiceAlert.most).compactMap { event in ServiceAlert.time(event.time).map { ServiceAlert(id: event.id, time: $0) } }
         }
     }
@@ -585,8 +618,9 @@ extension GoogleWorkspace {
     /// in the message body, and 16, a link in an attachment preview
     /// (https://developers.google.com/workspace/admin/reports/v1/appendix/activity/gmail). The page does not say which
     /// detail holds the address clicked, so `link` is matched against every detail that looks like one, an address or a
-    /// detail named for a URL, link or domain, but not the sender's, whose Message-ID often names the same domain; and
-    /// `message` against every detail.
+    /// detail named for a URL or link, never a domain or Message-ID, which name the sender as often as the link; and
+    /// `message` against every detail. When an event lists several links, Google has not said which was clicked, and the
+    /// result says only that the click was in a message linking there.
     struct LinkClicks: ServiceOperation {
         struct Input: Decodable, Sendable { let link: String?, message: String?, user: String?, since: String?, until: String?, limit: Int? }
         static let name = "link-clicks"
@@ -621,32 +655,47 @@ extension GoogleWorkspace {
                 more = more || page.more
                 for event in page.events where seen.insert(event.id).inserted { clicks.append(event) }
             }
-            func matches(_ event: Event, _ text: String?, links: Bool) -> Bool {
-                guard let text else { return true }
-                return event.parameters.contains { key, value in
-                    let key = key.lowercased(), value = value.lowercased()
-                    let link = value.contains("://") || ["url", "link", "domain"].contains { key.contains($0) }
-                    return (!links || link) && value.contains(text)
-                }
+            /// The links an event lists: every value of a detail named for a URL or link, or that is an address.
+            func links(_ event: Event) -> Set<String> {
+                Set(event.parameters.flatMap { key, value in
+                    value.components(separatedBy: " | ").filter { part in
+                        part.contains("://") || key.lowercased().contains("url") || key.lowercased().contains("link")
+                    }.map { $0.lowercased() }
+                })
             }
             let read = clicks.count
-            clicks = clicks.filter { matches($0, wanted[0], links: true) && matches($0, wanted[1], links: false) }.sorted { ($0.time ?? "") > ($1.time ?? "") }
-            let people = Array(Set(clicks.compactMap(\.user))).sorted()
+            clicks = clicks.filter { event in
+                let inMessage = wanted[1].map { text in event.parameters.values.contains { $0.lowercased().contains(text) } } ?? true
+                let onLink = wanted[0].map { text in links(event).contains { $0.contains(text) } } ?? true
+                return inMessage && onLink
+            }.sorted { ($0.time ?? "") > ($1.time ?? "") }
+            // A click is on the link asked for only when every link its event lists matches; otherwise Google has not
+            // said which of them was clicked.
+            let uncertain = Set(wanted[0].map { text in clicks.filter { !links($0).allSatisfy { $0.contains(text) } }.map(\.id) } ?? [])
+            let certain = clicks.filter { !uncertain.contains($0.id) }
+            let people = Array(Set(certain.compactMap(\.user))).sorted()
             let what = [wanted[0].map { "on links matching \($0)" }, wanted[1].map { "in messages matching \($0)" }].compactMap { $0 }
-            var lines = ["\(clicks.count) click\(clicks.count == 1 ? "" : "s") \(what.isEmpty ? "on links in mail" : what.joined(separator: " "))"
+            var lines = ["\(certain.count) click\(certain.count == 1 ? "" : "s") \(what.isEmpty ? "on links in mail" : what.joined(separator: " "))"
                 + (people.isEmpty ? "." : " by \(people.count) \(people.count == 1 ? "person" : "people"): \(people.joined(separator: ", "))")]
+            if let text = wanted[0], !uncertain.isEmpty {
+                let unsure = clicks.filter { uncertain.contains($0.id) }, who = Array(Set(unsure.compactMap(\.user))).sorted()
+                lines.append("\(unsure.count) more click\(unsure.count == 1 ? " in a message that also links" : "s in messages that also link") to \(text), "
+                    + "where Google's event lists several links and not which was clicked: \(who.joined(separator: ", "))")
+            }
             if clicks.isEmpty && read > 0 { lines.append("\(read) clicks in the window matched nothing asked for; try the domain alone or the message's subject.") }
             lines += clicks.prefix(60).map { event in
                 let shown = event.parameters.sorted { $0.key < $1.key }.filter { $0.key != "event_info.mail_event_type" }
-                    .map { "\($0.key)=\($0.value.count > 200 ? String($0.value.prefix(200)) + "…" : $0.value)" }
+                    .map { "\($0.key)=\($0.value.count > 300 ? String($0.value.prefix(300)) + "…" : $0.value)" }
                 return "\(event.time ?? "?") \(event.user ?? "?") (\(event.parameters["event_info.mail_event_type"] ?? "?"))"
+                    + (uncertain.contains(event.id) ? " (which link is not certain)" : "")
                     + (event.ip.map { " from \($0)" } ?? "") + ": " + shown.joined(separator: ", ")
             }
             if clicks.count > 60 { lines.append("\(clicks.count - 60) more in the structured result.") }
             if more { lines.append("There were more clicks than the \(limit) of each kind read; narrow the window, the user or the link.") }
             lines.append("Google lists Gmail events minutes to hours late, and a link opened outside Gmail, such as copied into a browser, is not a click.")
-            struct Kept: Encodable { let clicks: [Event]; let people: [String]; let more: Bool }
-            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(clicks: clicks, people: people, more: more))
+            struct Kept: Encodable { let clicks: [Event]; let people: [String]; let notCertainWhichLink: [String]; let more: Bool }
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(clicks: clicks, people: people,
+                                                                                             notCertainWhichLink: uncertain.sorted(), more: more))
         }
     }
 
@@ -697,12 +746,16 @@ extension GoogleWorkspace {
     }
 
     /// The super admins, then every admin role someone holds, with its privileges and its holders, from the Directory
-    /// API's read-only scopes. A delegated admin is named by asking for them; a group holding a role is named by its ID.
+    /// API's read-only scopes. A delegated admin is named by asking for them; a group holding a role is named, with
+    /// its members, who hold the role through it. Google gives assignees as USER and GROUP
+    /// (https://developers.google.com/workspace/admin/directory/reference/rest/v1/roleAssignments).
     struct AdminRoles: ServiceOperation {
-        struct Input: Decodable, Sendable {}
+        struct Input: Decodable, Sendable { let user: String? }
         static let name = "admin-roles"
-        static let summary = "The super admins, and every admin role with what it allows and who holds it."
-        static let input = JSONSchema.object([:])
+        static let summary = "The super admins, and every admin role with what it allows and who holds it, with groups' members, organisational units and conditions; or the roles one user holds, directly or through a group."
+        static let input = JSONSchema.object([
+            "user": .string("Only the roles this user holds, directly or through a group, by email. Every role when left out."),
+        ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let directory = try service.at(host: "admin.googleapis.com")
@@ -712,39 +765,76 @@ extension GoogleWorkspace {
             struct Privilege: Codable { let privilegeName: String }
             struct Role: Codable { let roleId: String; let roleName: String?; let isSuperAdminRole: Bool?; let rolePrivileges: [Privilege]? }
             struct Roles: Decodable { let items: [Role]? }
-            struct Assignment: Codable { let roleId: String; let assignedTo: String; let assigneeType: String?; let scopeType: String? }
-            struct Assignments: Decodable { let items: [Assignment]? }
-            let superAdmins: [User] = try await GoogleWorkspace.read(.users) {
-                try await GoogleWorkspace.listAll(directory, base + ["users"], query: ["customer": "my_customer", "query": "isAdmin=true"]).items
+            struct Assignment: Codable {
+                let roleId: String; let assignedTo: String; let assigneeType: String?; let scopeType: String?; let orgUnitId: String?; let condition: String?
+                var group: Bool { assigneeType?.uppercased() == "GROUP" }
+            }
+            struct Group: Decodable { let email: String? }
+            struct Member: Decodable { let email: String?; let id: String? }
+            let user = try input.user.map(ServiceInput.email)
+            var incomplete = false
+            // One user's roles come from Google's indirect listing, which adds those held through a group.
+            let superAdmins: [User] = user != nil ? [] : try await GoogleWorkspace.read(.users) {
+                let listed: (items: [User], more: Bool) = try await GoogleWorkspace.listAll(directory, base + ["users"],
+                                                                                            query: ["customer": "my_customer", "query": "isAdmin=true"])
+                incomplete = incomplete || listed.more
+                return listed.items
             }
             let (roles, assignments) = try await GoogleWorkspace.read(.adminRoles) { () async throws -> ([Role], [Assignment]) in
-                (try await GoogleWorkspace.listAll(directory, base + ["customer", "my_customer", "roles"], query: [:], pageSize: 100).items,
-                 try await GoogleWorkspace.listAll(directory, base + ["customer", "my_customer", "roleassignments"], query: [:], pageSize: 200).items)
+                let roles: (items: [Role], more: Bool) = try await GoogleWorkspace.listAll(directory, base + ["customer", "my_customer", "roles"],
+                                                                                           query: [:], pageSize: 100)
+                let assignments: (items: [Assignment], more: Bool) = try await GoogleWorkspace.listAll(
+                    directory, base + ["customer", "my_customer", "roleassignments"],
+                    query: user.map { ["userKey": $0, "includeIndirectRoleAssignments": "true"] } ?? [:], pageSize: 200)
+                incomplete = incomplete || roles.more || assignments.more
+                return (roles.items, assignments.items)
             }
             var names = Dictionary(superAdmins.map { ($0.id, $0.primaryEmail ?? $0.id) }, uniquingKeysWith: { first, _ in first })
-            for id in Set(assignments.filter { $0.assigneeType != "group" }.map(\.assignedTo)).subtracting(names.keys).sorted().prefix(500) {
+            for id in Set(assignments.filter { !$0.group }.map(\.assignedTo)).subtracting(names.keys).sorted().prefix(500) {
                 names[id] = (try? await directory.get(base + ["users", id], as: User.self).primaryEmail) ?? id
             }
+            // A group is named with its members, nested groups' included, as each of them holds the role.
+            var groups: [String: String] = [:]
+            for id in Set(assignments.filter(\.group).map(\.assignedTo)).sorted().prefix(100) {
+                let email = (try? await directory.get(base + ["groups", id], as: Group.self).email) ?? id
+                let domain = email.split(separator: "@").last.map { String($0).lowercased() }
+                let listed: (items: [Member], more: Bool)? = try? await GoogleWorkspace.listAll(
+                    directory, base + ["groups", id, "members"], query: ["includeDerivedMembership": "true"], pageSize: 200, limit: 200)
+                let members = (listed?.items ?? []).map { member -> String in
+                    let address = member.email ?? member.id ?? "?"
+                    let outside = domain.map { domain in address.split(separator: "@").last.map { !($0.lowercased() == domain || $0.lowercased().hasSuffix("." + domain)) } ?? false } ?? false
+                    return address + (outside ? " (outside the domain)" : "")
+                }
+                let shown = members.prefix(25).joined(separator: ", ") + (members.count > 25 ? " and \(members.count - 25) more" : "")
+                    + (listed?.more == true ? " and more" : "")
+                groups[id] = "group \(email)" + (listed == nil ? " (its members could not be read)" : members.isEmpty ? " (no members)" : " (members: \(shown))")
+            }
             func holder(_ assignment: Assignment) -> String {
-                let who = assignment.assigneeType == "group" ? "group \(assignment.assignedTo)" : names[assignment.assignedTo] ?? assignment.assignedTo
-                return who + (assignment.scopeType == "ORG_UNIT" ? " (in one organisational unit)" : "")
+                var who = assignment.group ? groups[assignment.assignedTo] ?? "group \(assignment.assignedTo)" : names[assignment.assignedTo] ?? assignment.assignedTo
+                if assignment.scopeType == "ORG_UNIT" { who += " (only in organisational unit \(assignment.orgUnitId ?? "unnamed"))" }
+                if let condition = assignment.condition, !condition.isEmpty { who += " (only when \(condition))" }
+                return who
             }
             struct Held: Encodable { let role: String; let superAdmin: Bool; let privileges: [String]; let holders: [String] }
             let held = roles.compactMap { role -> Held? in
                 let holders = assignments.filter { $0.roleId == role.roleId }.map(holder)
-                guard !holders.isEmpty, role.isSuperAdminRole != true else { return nil }
-                return Held(role: role.roleName ?? role.roleId, superAdmin: false, privileges: (role.rolePrivileges ?? []).map(\.privilegeName), holders: holders)
+                guard !holders.isEmpty, user != nil || role.isSuperAdminRole != true else { return nil }
+                return Held(role: role.roleName ?? role.roleId, superAdmin: role.isSuperAdminRole == true,
+                            privileges: (role.rolePrivileges ?? []).map(\.privilegeName), holders: holders)
             }
             let admins = superAdmins.map { user in
                 (user.primaryEmail ?? user.id) + (user.isEnrolledIn2Sv == false ? " (2-step verification off)" : "") + (user.suspended == true ? " (suspended)" : "")
             }
-            var lines = ["Super admins (\(admins.count)): " + (admins.isEmpty ? "none listed" : admins.joined(separator: ", "))]
+            var lines = user.map { user in [held.isEmpty ? "\(user) holds no admin role." : "\(user)'s admin roles, directly or through a group:"] }
+                ?? ["Super admins (\(admins.count)): " + (admins.isEmpty ? "none listed" : admins.joined(separator: ", "))]
             lines += held.map { role in
                 let privileges = role.privileges.prefix(12).joined(separator: ", ") + (role.privileges.count > 12 ? " and \(role.privileges.count - 12) more" : "")
-                return "\(role.role) (\(role.holders.count)): \(role.holders.joined(separator: ", ")); allows \(privileges.isEmpty ? "nothing listed" : privileges)"
+                return "\(role.role) (\(role.holders.count)): \(role.holders.joined(separator: "; ")); allows \(privileges.isEmpty ? "nothing listed" : privileges)"
             }
-            struct Kept: Encodable { let superAdmins: [String]; let roles: [Held] }
-            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(superAdmins: superAdmins.map { $0.primaryEmail ?? $0.id }, roles: held))
+            if incomplete { lines.append(GoogleWorkspace.incomplete("admins, roles or assignments")) }
+            struct Kept: Encodable { let superAdmins: [String]; let roles: [Held]; let incomplete: Bool }
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(superAdmins: superAdmins.map { $0.primaryEmail ?? $0.id },
+                                                                                             roles: held, incomplete: incomplete))
         }
     }
 }
@@ -813,16 +903,17 @@ extension GoogleWorkspace {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Group: Codable { let id: String?; let email: String?; let name: String?; let directMembersCount: String? }
-            struct Listed: Codable { let groups: [Group]? }
+            struct Listed: Encodable { let groups: [Group]; let incomplete: Bool }
             let user = try ServiceInput.email(input.user)
-            let groups: [Group] = try await GoogleWorkspace.read(.groups) {
+            let (groups, more): ([Group], Bool) = try await GoogleWorkspace.read(.groups) {
                 try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "groups"],
-                                                  query: ["userKey": user], pageSize: 200).items
+                                                  query: ["userKey": user], pageSize: 200)
             }
-            let text = groups.isEmpty ? "\(user) is in no groups." : "\(user) is in: " + groups.map {
+            var text = groups.isEmpty ? "\(user) is in no groups." : "\(user) is in: " + groups.map {
                 "\($0.name ?? $0.email ?? "?") <\($0.email ?? "?")>" + ($0.directMembersCount.map { " (\($0) members)" } ?? "")
             }.joined(separator: ", ")
-            return try ServiceResult(text: text, structured: Listed(groups: groups))
+            if more { text += "\n" + GoogleWorkspace.incomplete("groups") }
+            return try ServiceResult(text: text, structured: Listed(groups: groups, incomplete: more))
         }
     }
 
@@ -839,18 +930,20 @@ extension GoogleWorkspace {
                 let resourceId: String?, email: [String]?, model: String?, os: String?, type: String?, status: String?
                 let firstSync: String?, lastSync: String?, deviceCompromisedStatus: String?
             }
-            struct Listed: Codable { let mobiledevices: [Device]? }
+            struct Listed: Encodable { let mobiledevices: [Device]; let incomplete: Bool }
             let user = try ServiceInput.email(input.user)
             // The search matches addresses that start the same too, so only this user's are kept.
-            let devices: [Device] = try await GoogleWorkspace.read(.mobileDevices) {
+            let (listed, more): ([Device], Bool) = try await GoogleWorkspace.read(.mobileDevices) {
                 try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"],
-                                                  query: ["query": "email:\(user)"], pageSize: 100).items
-            }.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
-            let text = devices.isEmpty ? "\(user) syncs no mobile devices." : devices.map { device in
+                                                  query: ["query": "email:\(user)"], pageSize: 100)
+            }
+            let devices = listed.filter { ($0.email ?? []).contains { $0.lowercased() == user } }
+            var text = devices.isEmpty ? "\(user) syncs no mobile devices." : devices.map { device in
                 "\(device.model ?? "A device") (\([device.os, device.type, device.status].compactMap { $0 }.joined(separator: ", "))), last synced \(device.lastSync ?? "?")"
                     + (device.deviceCompromisedStatus.map { $0 == "No compromise detected" || $0.isEmpty ? "" : ", \($0)" } ?? "")
             }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Listed(mobiledevices: devices))
+            if more { text += "\n" + GoogleWorkspace.incomplete("devices") }
+            return try ServiceResult(text: text, structured: Listed(mobiledevices: devices, incomplete: more))
         }
     }
 
@@ -961,7 +1054,7 @@ extension GoogleWorkspace {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
-        static let summary = "Tries reading users and one user's tokens and says what works and what to change for what does not; suspending is described, not tried. Run it when a tool is refused."
+        static let summary = "Tries reading users and one non-admin's tokens and says what works and what to change for what does not; suspending is described, not tried. Run it when a tool is refused."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -970,14 +1063,16 @@ extension GoogleWorkspace {
             let found = FoundUser()
             var lines = await GoogleWorkspace.check([
                 (.containmentUsers, {
-                    found.email = try await service.get(["admin", "directory", "v1", "users"], query: ["customer": "my_customer", "maxResults": "1"],
+                    // User Security Management never covers admins, so only a non-admin's tokens show whether it works.
+                    found.email = try await service.get(["admin", "directory", "v1", "users"],
+                                                        query: ["customer": "my_customer", "maxResults": "1", "query": "isAdmin=false"],
                                                         as: Users.self).users?.first?.primaryEmail
                 }),
             ])
             if let email = found.email {
                 lines += await GoogleWorkspace.check([(.security, { _ = try await service.data(["admin", "directory", "v1", "users", email, "tokens"]) })])
             } else {
-                lines.append("· \(Need.security.title): not tried, as no user could be read.")
+                lines.append("· \(Need.security.title): not tried, as no account that is not an admin could be read.")
             }
             lines.append("· Suspending: can only be confirmed by suspending someone; the admin's role needs \(Need.suspending.privilege).")
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
@@ -1018,15 +1113,15 @@ extension GoogleWorkspace {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Member: Codable { let email: String?; let id: String?; let role: String?; let type: String?; let status: String? }
-            struct Listed: Codable { let members: [Member]? }
+            struct Listed: Encodable { let members: [Member]; let incomplete: Bool }
             let group = try ServiceInput.email(input.group)
             let domain = group.split(separator: "@").last.map(String.init) ?? ""
             // Members of groups inside the group read what it receives too.
-            let members: [Member] = try await GoogleWorkspace.read(.groups) {
+            let (members, more): ([Member], Bool) = try await GoogleWorkspace.read(.groups) {
                 try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"), ["admin", "directory", "v1", "groups", group, "members"],
-                                                  query: ["includeDerivedMembership": "true"], pageSize: 200).items
+                                                  query: ["includeDerivedMembership": "true"], pageSize: 200)
             }
-            let text = members.isEmpty ? "\(group) has no members." : "\(group) (\(members.count)): " + members.map { member in
+            var text = members.isEmpty ? "\(group) has no members." : "\(group) (\(members.count)): " + members.map { member in
                 if member.type == "CUSTOMER" { return "everyone in the domain" }
                 let email = member.email ?? member.id ?? "?"
                 var notes: [String] = []
@@ -1036,7 +1131,8 @@ extension GoogleWorkspace {
                 if !theirs { notes.append("outside the domain") }
                 return email + (notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")
             }.joined(separator: ", ")
-            return try ServiceResult(text: text, structured: Listed(members: members))
+            if more { text += "\n" + GoogleWorkspace.incomplete("members") }
+            return try ServiceResult(text: text, structured: Listed(members: members, incomplete: more))
         }
     }
 
@@ -1046,7 +1142,7 @@ extension GoogleWorkspace {
     struct OAuthApps: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "oauth-apps"
-        static let summary = "Every app people granted access to their accounts in a window, by client ID, with its scopes and who granted or revoked it, those that read mail or files or administer first."
+        static let summary = "Every app people granted access to their accounts in a window, by client ID, with its scopes and who granted or revoked it, those that read mail or files or administer first; and every app an admin gave domain-wide delegation, which acts as anyone without their consent."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 180 days when left out, as far back as Google keeps."),
             "until": .string("The latest time, in ISO 8601."),
@@ -1060,9 +1156,14 @@ extension GoogleWorkspace {
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             var query: [String: String?] = ["startTime": try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(180), "maxResults": "1000"]
             if let until = input.until { query["endTime"] = try ServiceInput.time(until) }
-            async let granted = GoogleWorkspace.events(service, application: "token", event: "authorize", query: query, limit: 20000)
-            async let revoked = GoogleWorkspace.events(service, application: "token", event: "revoke", query: query, limit: 20000)
-            let (grantPage, revokePage) = try await (granted, revoked)
+            // One after another, through the paced connection, not as child tasks: see gather.
+            func read(_ application: String, _ event: String) async throws -> EventPage {
+                try await GoogleWorkspace.read(.reports) {
+                    try await GoogleWorkspace.events(service, application: application, event: event, query: query, limit: 20000)
+                }
+            }
+            let grantPage = try await read("token", "authorize"), revokePage = try await read("token", "revoke")
+            let delegationPage = try await read("admin", "AUTHORIZE_API_CLIENT_ACCESS"), undelegationPage = try await read("admin", "REMOVE_API_CLIENT_ACCESS")
             let grants = grantPage.events, revokes = revokePage.events
             let apps = Dictionary(grouping: grants) { $0.parameters["client_id"] ?? "?" }.map { client, events in
                 let scopes = Array(Set(events.flatMap { ($0.parameters["scope"] ?? "").components(separatedBy: ", ") }.filter { !$0.isEmpty })).sorted()
@@ -1075,15 +1176,36 @@ extension GoogleWorkspace {
                 let ranks = (GoogleWorkspace.risk(first.scopes)?.rank ?? 9, GoogleWorkspace.risk(second.scopes)?.rank ?? 9)
                 return ranks.0 != ranks.1 ? ranks.0 < ranks.1 : (first.grantedBy.count, second.name) > (second.grantedBy.count, first.name)
             }
-            var text = apps.isEmpty ? "No app was granted access in this window." : apps.map { app in
+            // Domain-wide delegation: the latest grant of each client, and whether a removal came after it.
+            struct Delegated: Encodable { let client: String, scopes: [String], authorizedBy: String?, authorized: String?, removedBy: String?, removed: String?, risk: String? }
+            let delegated = Dictionary(grouping: delegationPage.events) { $0.parameters["API_CLIENT_NAME"] ?? "?" }.map { client, events -> Delegated in
+                let latest = events.max { ($0.time ?? "") < ($1.time ?? "") }
+                let scopes = (latest?.parameters["API_SCOPES"] ?? "").split(whereSeparator: { $0 == "," || $0 == " " || $0 == "|" }).map(String.init)
+                let removal = undelegationPage.events.filter { $0.parameters["API_CLIENT_NAME"] == client && ($0.time ?? "") > (latest?.time ?? "") }
+                    .max { ($0.time ?? "") < ($1.time ?? "") }
+                return Delegated(client: client, scopes: scopes, authorizedBy: latest?.user, authorized: latest?.time, removedBy: removal?.user,
+                                 removed: removal?.time, risk: GoogleWorkspace.risk(scopes)?.said)
+            }.sorted { ($0.authorized ?? "") > ($1.authorized ?? "") }
+            var text = apps.isEmpty ? (delegated.isEmpty ? "No app was granted access in this window." : "No user granted an app access in this window.") : apps.map { app in
                 "\(app.name) (client \(app.clientId)\(app.type.map { ", \($0)" } ?? ""))" + (app.risk.map { ": \($0)" } ?? "")
                     + "; granted by \(app.grantedBy.joined(separator: ", ")), last \(app.lastGranted ?? "?")"
                     + (app.revokedBy.isEmpty ? "" : "; revoked by \(app.revokedBy.joined(separator: ", "))")
                     + "; scopes \(app.scopes.joined(separator: " "))"
             }.joined(separator: "\n")
-            if grantPage.more || revokePage.more { text += "\nThere are more grants or revocations than were read; narrow the window." }
-            struct Kept: Encodable { let apps: [App] }
-            return try ServiceResult(text: text, structured: Kept(apps: apps))
+            if !delegated.isEmpty {
+                text += "\nDomain-wide delegation, which lets an app act as anyone in the domain without their consent:\n" + delegated.map { grant in
+                    "client \(grant.client)" + (grant.risk.map { ": \($0)" } ?? "") + "; authorized by \(grant.authorizedBy ?? "an admin") at \(grant.authorized ?? "?")"
+                        + (grant.removed.map { "; removed by \(grant.removedBy ?? "an admin") at \($0)" } ?? "; not removed since")
+                        + "; scopes \(grant.scopes.joined(separator: " "))"
+                }.joined(separator: "\n")
+            }
+            text += "\nDelegation granted before this window is not listed, and revoking users' tokens leaves it in place: the Admin console's "
+                + "Domain-wide delegation page lists every app that holds it now, https://admin.google.com/ac/owl/domainwidedelegation"
+            if grantPage.more || revokePage.more || delegationPage.more || undelegationPage.more {
+                text += "\nThere are more grants or revocations than were read; narrow the window."
+            }
+            struct Kept: Encodable { let apps: [App]; let delegated: [Delegated] }
+            return try ServiceResult(text: text, structured: Kept(apps: apps, delegated: delegated))
         }
     }
 
@@ -1234,11 +1356,12 @@ extension GoogleWorkspace {
                 "\(app.name) (\(app.clientId))" + (app.risk.map { ": \($0)" } ?? "")
                     + "; held by \(app.holders.count) user\(app.holders.count == 1 ? "" : "s"): \(app.holders.joined(separator: ", ")); scopes \(app.scopes.joined(separator: " "))"
             }.joined(separator: "\n")
-            text += "\nChecked \(emails.count) account\(emails.count == 1 ? "" : "s")"
+            text += "\nChecked \(checked) of \(emails.count) account\(emails.count == 1 ? "" : "s")"
                 + (failed.isEmpty ? "." : "; could not read \(failed.joined(separator: ", ")), as User Security Management never covers admins or the role lacks it.")
-            if more { text += "\nThere are more accounts than were read." }
-            struct Kept: Encodable { let apps: [App]; let accountsChecked: Int; let couldNotRead: [String] }
-            return try ServiceResult(text: text, structured: Kept(apps: apps, accountsChecked: emails.count, couldNotRead: failed))
+            if more { text += "\n" + GoogleWorkspace.incomplete("accounts") }
+            struct Kept: Encodable { let apps: [App]; let accountsChecked: Int; let accountsTried: Int; let couldNotRead: [String]; let incomplete: Bool }
+            return try ServiceResult(text: text, structured: Kept(apps: apps, accountsChecked: checked, accountsTried: emails.count, couldNotRead: failed,
+                                                                  incomplete: more))
         }
     }
 }
