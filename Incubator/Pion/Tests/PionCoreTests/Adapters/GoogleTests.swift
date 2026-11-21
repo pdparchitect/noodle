@@ -872,5 +872,33 @@ final class GoogleTests: XCTestCase {
             }
         }
     }
+
+    /// The alert check reads every watched report at once, and they answer out of order; it must come back with what
+    /// they found every time. Pion crashed at launch when a report finished after its group was gone.
+    func testReadingManyReportsThatAnswerOutOfOrderIsSafe() async throws {
+        let service = FakeService()
+        service.answerDelay = 0.02
+        for application in Set(GoogleWorkspace.watched.map(\.application)) {
+            service.answers["/admin/reports/v1/activity/users/all/applications/" + application] = (200, #"{"items":[\#(Self.item(1, "suspicious_login"))]}"#)
+        }
+        let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-14T00:00:00Z"))
+        for _ in 0..<40 {
+            let found = try await GoogleWorkspace.adapter.alerts(since: since, connection: workspace, access: service)
+            XCTAssertFalse(found.isEmpty)
+        }
+    }
+
+    /// The app inventory asks every account at once, and they answer out of order.
+    func testTheAppInventoryIsSafeWhenAccountsAnswerOutOfOrder() async throws {
+        let service = FakeService()
+        service.answerDelay = 0.02
+        let emails = (0..<30).map { "u\($0)@kestrel.example" }
+        service.answers["/admin/directory/v1/users"] = (200, #"{"users":[\#(emails.map { #"{"primaryEmail":"\#($0)"}"# }.joined(separator: ","))]}"#)
+        for email in emails { service.answers["/admin/directory/v1/users/\(email)/tokens"] = (200, #"{"items":[{"clientId":"1","displayText":"App"}]}"#) }
+        for _ in 0..<20 {
+            let apps = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
+            XCTAssertTrue(apps.text.contains("held by 30 users"), apps.text)
+        }
+    }
 }
 

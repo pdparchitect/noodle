@@ -268,16 +268,14 @@ public enum GoogleWorkspace {
     }
 
     static func gather(_ service: ServiceClient, _ reads: [(label: String, application: String, user: String, event: String?, query: [String: String?])],
-                       limit: Int, keep: @escaping @Sendable (String, Event) -> Bool = { _, _ in true }) async -> Gathered {
-        let results = await withTaskGroup(of: (String, Result<EventPage, Error>).self) { group in
-            for read in reads {
-                group.addTask {
-                    do { return (read.label, .success(try await events(service, application: read.application, user: read.user, event: read.event,
-                                                                         query: read.query, limit: limit))) }
-                    catch { return (read.label, .failure(error)) }
-                }
-            }
-            return await group.reduce(into: []) { $0.append($1) }
+                       limit: Int) async -> Gathered {
+        // One after another: a release build freed what the reads captured when they ran in a task group, and Pion
+        // crashed at launch. The connection's requests are paced anyway, so little is lost.
+        var results: [(String, Result<EventPage, Error>)] = []
+        for read in reads {
+            do { results.append((read.label, .success(try await events(service, application: read.application, user: read.user, event: read.event,
+                                                                         query: read.query, limit: limit)))) }
+            catch { results.append((read.label, .failure(error))) }
         }
         var gathered = Gathered(), seen = Set<String>()
         for (label, result) in results.sorted(by: { $0.0 < $1.0 }) {
@@ -285,7 +283,7 @@ public enum GoogleWorkspace {
             case .success(let page):
                 if !gathered.searched.contains(label) { gathered.searched.append(label) }
                 if page.more { gathered.cut.append(label) }
-                for event in page.events where keep(label, event) && seen.insert(event.id).inserted { gathered.events.append(event) }
+                for event in page.events where seen.insert(event.id).inserted { gathered.events.append(event) }
             case .failure(let error):
                 gathered.failed.append((label, error.localizedDescription))
             }
@@ -294,13 +292,17 @@ public enum GoogleWorkspace {
         return gathered
     }
 
-    /// The watched events from `since` to `until`, newest first, up to `limit` of each.
+    /// The watched events from `since` to `until`, newest first, up to `limit` of each, leaving out those a watched
+    /// event's exception names. The exceptions are applied here, once every report is read, rather than handed to the
+    /// reads: a release build freed what such a filter captured while the reads still ran, and Pion crashed at launch.
     static func securityEvents(_ service: ServiceClient, since: String, until: String?, limit: Int) async -> Gathered {
+        var gathered = await gather(service, watched.map { (label: "\($0.application)/\($0.event)", application: $0.application, user: "all",
+                                                             event: $0.event, query: ["startTime": since, "endTime": until]) }, limit: limit)
         let unless = Dictionary(watched.map { ("\($0.application)/\($0.event)", $0.unless) }, uniquingKeysWith: { first, _ in first })
-        return await gather(service, watched.map { (label: "\($0.application)/\($0.event)", application: $0.application, user: "all", event: $0.event,
-                                                    query: ["startTime": since, "endTime": until]) }, limit: limit) { label, event in
-            (unless[label] ?? nil).map { event.parameters[$0.parameter] != $0.value } ?? true
+        gathered.events.removeAll { event in
+            (unless["\(event.application)/\(event.event)"] ?? nil).map { event.parameters[$0.parameter] == $0.value } ?? false
         }
+        return gathered
     }
 
     /// One page of a Directory list, whichever list it is.

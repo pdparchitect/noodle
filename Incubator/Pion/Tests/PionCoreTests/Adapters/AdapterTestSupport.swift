@@ -23,7 +23,13 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
         return self
     }
 
+    /// How long each answer takes, at most, picked at random, so requests sent together finish out of order as a real
+    /// service's do.
+    var answerDelay: Double = 0
+
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let delay = lock.withLock { answerDelay }
+        if delay > 0 { try await Task.sleep(nanoseconds: UInt64(Double.random(in: 0...delay) * 1_000_000_000)) }
         lock.withLock { requests.append(request) }
         let key = request.url!.path + (request.url!.query.map { "?" + $0 } ?? "")
         let action = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "Action" }?.value
