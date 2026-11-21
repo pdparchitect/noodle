@@ -1,6 +1,6 @@
 import XCTest
 import NoodleCore
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 final class MCPServiceLifecycleTests: XCTestCase {
     func testHeldResponseSucceedsOnlyAfterFixtureRelease() async throws {

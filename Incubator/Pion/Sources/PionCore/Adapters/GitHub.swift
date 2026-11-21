@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// GitHub: an organisation's audit log, its people, and its security alerts. Each account is one
 /// organisation, read as the person who signs in through an OAuth app the organisation registered, with a code:

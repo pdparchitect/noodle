@@ -54,7 +54,7 @@ let package = Package(
         .library(name: "NoodleAgentBridge", targets: ["NoodleAgentBridge"]),
         .library(name: "NoodleToolScripting", targets: ["NoodleToolScripting"]),
         .library(name: "NoodleAppleRuntime", targets: ["NoodleAppleRuntime"]),
-        .library(name: "NoodleMCP", targets: ["NoodleMCP"]),
+        .library(name: "NoodleToolConnections", targets: ["NoodleToolConnections"]),
         .library(name: "NoodleSharing", targets: ["NoodleSharing"]),
         .library(name: "NoodleAudioCapture", targets: ["NoodleAudioCapture"]),
         .library(name: "NoodleVoicePeer", targets: ["NoodleVoicePeer"]),
@@ -122,9 +122,9 @@ let package = Package(
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
-        .target(name: "NoodleMCP", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
+        .target(name: "NoodleToolConnections", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
-        .target(name: "NoodleToolProbe", dependencies: ["NoodleCore", "NoodleMCP"]),
+        .target(name: "NoodleToolProbe", dependencies: ["NoodleCore", "NoodleToolConnections"]),
         .executableTarget(name: "NoodleToolProbeCommand", dependencies: ["NoodleCore", "NoodleToolProbe"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product")]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
@@ -136,18 +136,18 @@ let package = Package(
         /// Calls' WebRTC connection to a harness's voice service, fed and played by whoever holds the call.
         .target(name: "NoodleVoicePeer", dependencies: ["NoodleCore", .product(name: "LiveKitWebRTC", package: "webrtc-xcframework")]),
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
-        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleMCP", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleToolConnections", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
                                                 .product(name: "AppletBridge", package: "Protocol"),
                                                 .product(name: "HubWire", package: "HubLink")]),
         /// HubCore on a Mac: with Noodle Computer, Browser and Applet, image generation, calls and CloudKit.
-        .target(name: "HubMac", dependencies: ["HubCore", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleMCP", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools", "NoodleImagesTools",
+        .target(name: "HubMac", dependencies: ["HubCore", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleToolConnections", "NoodleAppletTools", "NoodleComputerTools", "NoodleBrowserTools", "NoodleImagesTools",
                                                .product(name: "ComputerBridge", package: "Bridge"),
                                                .product(name: "BrowserBridge", package: "BrowserProtocol"),
                                                .product(name: "AppletBridge", package: "Protocol"),
                                                .product(name: "HubLink", package: "HubLink")]),
         .target(name: "NoodleRuntimeSettings",
                 dependencies: ["NoodleCore", "NoodleRuntime", "HubCore", "HubMac", .product(name: "NoodleSettingsUI", package: "SettingsUI"),
-                               .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleMCP",
+                               .product(name: "NoodleWallpaper", package: "Wallpaper"), "NoodleComputerTools", "NoodleToolConnections",
                                .product(name: "ComputerBridge", package: "Bridge"), .product(name: "AppletBridge", package: "Protocol"),
                                .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "Sparkle", package: "Sparkle"),
                                .product(name: "NoodleBrand", package: "Brand")],
@@ -160,7 +160,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleMCP", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleToolConnections", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -184,11 +184,11 @@ let package = Package(
         ),
         /// NoodleCore's tests that also run on Linux.
         .testTarget(name: "NoodleCorePortableTests", dependencies: ["NoodleCore"]),
-        /// NoodleMCP's tests that also run on Linux.
-        .testTarget(name: "NoodleMCPPortableTests", dependencies: ["NoodleMCP", "NoodleCore"]),
+        /// The tool connections' tests that also run on Linux.
+        .testTarget(name: "NoodleToolConnectionsPortableTests", dependencies: ["NoodleToolConnections", "NoodleCore"]),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleContextFieldsTools", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleMCP", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: ["Noodle", "NoodleContextFieldsTools", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleToolConnections", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: developmentHooks
         ),
         .testTarget(
@@ -203,13 +203,13 @@ let package = Package(
         .testTarget(name: "NoodleAgentBridgeTests", dependencies: ["NoodleAgentBridge"]),
         .testTarget(
             name: "HubCoreTests",
-            dependencies: ["HubCore", "HubMac", "NoodleCore", "NoodleHubClient", "NoodleMCP", "NoodleRuntime", "NoodleVoicePeer", .product(name: "HubLink", package: "HubLink"),
+            dependencies: ["HubCore", "HubMac", "NoodleCore", "NoodleHubClient", "NoodleToolConnections", "NoodleRuntime", "NoodleVoicePeer", .product(name: "HubLink", package: "HubLink"),
                            .product(name: "ComputerBridge", package: "Bridge"), .product(name: "BrowserBridge", package: "BrowserProtocol"),
                            .product(name: "AppletBridge", package: "Protocol")]
         ),
         .testTarget(
-            name: "NoodleMCPTests",
-            dependencies: ["NoodleMCP", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
+            name: "NoodleToolConnectionsTests",
+            dependencies: ["NoodleToolConnections", "NoodleCore", .product(name: "MCP", package: "swift-sdk")]
         )
     ],
     swiftLanguageModes: [.v5]
@@ -236,7 +236,7 @@ if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
 
 #if os(Linux)
 // Only the Hub engine builds on Linux, with the tests that run there.
-let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests", "NoodleMCPPortableTests"]
+let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests", "NoodleToolConnectionsPortableTests"]
 package.targets.removeAll { !linux.contains($0.name) }
-package.products.removeAll { !["NoodleCore", "NoodleMCP", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }
+package.products.removeAll { !["NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }
 #endif

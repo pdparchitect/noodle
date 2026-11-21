@@ -3,7 +3,7 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import MCP
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 final class MCPIconTests: XCTestCase {
     private let endpoint = URL(string: "https://service.invalid/mcp")!

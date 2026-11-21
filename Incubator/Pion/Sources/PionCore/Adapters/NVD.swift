@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// The National Vulnerability Database: CVEs by product, keyword and date, with their CVSS scores and, from CISA's
 /// catalogue NVD carries, whether they are being exploited. It answers without a key, five requests in 30 seconds.

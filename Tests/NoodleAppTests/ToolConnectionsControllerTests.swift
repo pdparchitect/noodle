@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 @testable import NoodleRuntimeSettings
 
 /// Exercise the app controller and real workspace IPC. The service uses an empty

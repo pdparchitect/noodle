@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Elasticsearch: queries in ES|QL over the indices an API key can read. Each account is one deployment.
 public enum Elastic {

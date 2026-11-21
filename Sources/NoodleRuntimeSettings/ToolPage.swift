@@ -1,6 +1,6 @@
 import AppKit
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 import NoodleWallpaper
 import SwiftUI

@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// CrowdSec's CTI: what the machines in CrowdSec's network have seen an IP address do, from the behaviours and attacks
 /// that caught it to how aggressive it has been lately.

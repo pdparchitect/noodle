@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// cve.now, Sazabi's free vulnerability catalogue: CVE, GHSA and OSV entries, feeds and dependency checks, through an
 /// open MCP server. Pion watches its Index, the week's worst CVEs ranked, and wakes agents for those newly at its top.

@@ -195,7 +195,7 @@ let project = Project(
                 .package(product: "NoodleComputerTools"),
                 .package(product: "NoodleRemindersTools"),
                 .package(product: "NoodleImagesTools"),
-                .package(product: "NoodleMCP"),
+                .package(product: "NoodleToolConnections"),
                 .package(product: "NoodleSharing"),
                 .package(product: "NoodleRuntime"),
                 .package(product: "NoodleRuntimeSettings"),

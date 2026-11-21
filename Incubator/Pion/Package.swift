@@ -16,10 +16,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "PionCore", dependencies: [.product(name: "NoodleCore", package: "noodle"),
-                                                .product(name: "NoodleMCP", package: "noodle")]),
+                                                .product(name: "NoodleToolConnections", package: "noodle")]),
         .executableTarget(name: "PionToolProbe", dependencies: ["PionCore", .product(name: "NoodleToolProbe", package: "noodle")]),
         .testTarget(name: "PionCoreTests", dependencies: ["PionCore", .product(name: "NoodleCore", package: "noodle"),
-                                                          .product(name: "NoodleMCP", package: "noodle")]),
+                                                          .product(name: "NoodleToolConnections", package: "noodle")]),
     ],
     swiftLanguageModes: [.v6]
 )

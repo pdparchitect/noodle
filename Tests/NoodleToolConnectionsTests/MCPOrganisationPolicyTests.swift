@@ -1,7 +1,7 @@
 import Foundation
 import NoodleCore
 import XCTest
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 /// The service itself refuses a connection the organisation blocks, so no path around Settings reaches it.
 final class MCPOrganisationPolicyTests: XCTestCase {

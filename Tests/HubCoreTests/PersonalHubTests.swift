@@ -9,7 +9,7 @@ import HubMac
 import NoodleCore
 import NoodleRuntime
 import XCTest
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 /// Noodle serving its own owner's devices: the bots already on the Mac, with nobody else to share them.
 @MainActor final class PersonalHubTests: XCTestCase {

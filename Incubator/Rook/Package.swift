@@ -14,9 +14,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "RookCore", dependencies: [.product(name: "NoodleCore", package: "noodle"),
-                                                .product(name: "NoodleMCP", package: "noodle")]),
+                                                .product(name: "NoodleToolConnections", package: "noodle")]),
         .testTarget(name: "RookCoreTests", dependencies: ["RookCore", .product(name: "NoodleCore", package: "noodle"),
-                                                          .product(name: "NoodleMCP", package: "noodle")]),
+                                                          .product(name: "NoodleToolConnections", package: "noodle")]),
     ],
     swiftLanguageModes: [.v6]
 )

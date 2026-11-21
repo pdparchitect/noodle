@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// AWS, as a defender reads it: who did what in CloudTrail, what GuardDuty, Security Hub and Access Analyzer found,
 /// who an access key belongs to, every user's credentials, what instances and open security groups exist, and

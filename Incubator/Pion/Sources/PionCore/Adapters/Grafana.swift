@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Grafana, read through its HTTP API with a service account's token: dashboards and the queries behind their
 /// panels, queries over its data sources, firing alerts and annotations. Grafana Cloud and a Grafana the person runs,

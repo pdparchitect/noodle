@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Microsoft Entra ID: who an identity is, what it belongs to, how it signs in, its sign-in log and risk.
 public enum Entra {

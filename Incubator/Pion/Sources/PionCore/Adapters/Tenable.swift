@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Tenable Vulnerability Management: what it knows of an asset and its vulnerabilities, read with an access key and
 /// secret key.

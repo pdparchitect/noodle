@@ -6,7 +6,7 @@ import HubLink
 import NoodleBrowserTools
 import NoodleComputerTools
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 import NoodleVoicePeer
 

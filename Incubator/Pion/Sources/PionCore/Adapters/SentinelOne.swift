@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// SentinelOne: its agents and the threats they found, read with an API token. Each account is one console.
 public enum SentinelOne {

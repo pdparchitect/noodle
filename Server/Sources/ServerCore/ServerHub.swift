@@ -7,7 +7,7 @@ import Foundation
 import HubCore
 import HubWire
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 
 /// A Hub's core as Noodle Server runs it: people, plans, bots and their tools, served over `listen`,

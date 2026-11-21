@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 /// What the watcher every app runs keeps of each watched account, and the note that wakes its agents.
 final class AlertWatchTests: XCTestCase {

@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// CrowdStrike Falcon: its hosts and the alerts its sensors raised, read with an API client's ID and secret.
 /// Each account is one Falcon cloud and customer.

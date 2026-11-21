@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// AlienVault OTX: the community threat reports, called pulses, that mention an indicator.
 public enum OTX {

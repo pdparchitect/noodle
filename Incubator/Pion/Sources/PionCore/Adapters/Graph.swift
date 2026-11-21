@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// What Entra and Defender share: Microsoft Graph, reached as an app registered in the person's tenant, with
 /// its client ID and secret exchanged for tokens at Microsoft's sign-in service. Each account is one tenant.

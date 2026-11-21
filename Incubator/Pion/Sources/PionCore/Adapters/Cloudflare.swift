@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Cloudflare: an account's zones and DNS records, its audit log, and the firewall events at a zone's edge,
 /// read with an API token. Each account is one Cloudflare account.

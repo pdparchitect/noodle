@@ -3,7 +3,7 @@ import Foundation
 import MCP
 import NoodleCore
 import Security
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 private final class TestVault: MCPCredentialStorage, @unchecked Sendable {
     private let lock = NSLock()

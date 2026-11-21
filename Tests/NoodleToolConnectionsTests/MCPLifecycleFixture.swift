@@ -2,7 +2,7 @@ import XCTest
 import Foundation
 import MCP
 import NoodleCore
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 final class LifecycleVault: MCPCredentialStorage, @unchecked Sendable {
     private let lock = NSLock()

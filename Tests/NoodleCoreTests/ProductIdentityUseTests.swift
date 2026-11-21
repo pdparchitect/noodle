@@ -24,7 +24,7 @@ final class ProductIdentityUseTests: XCTestCase {
     func testSharedCodeNamesNoNoodleIdentifier() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let shared = ["Sources/NoodleCore", "Sources/NoodleRuntime", "Sources/NoodleAgentBridge", "Sources/NoodleAgentHost",
-                      "Sources/NoodleMCP", "Computer/Sources/ComputerEngine", "Computer/Bridge/Sources/ComputerBridge",
+                      "Sources/NoodleToolConnections", "Computer/Sources/ComputerEngine", "Computer/Bridge/Sources/ComputerBridge",
                       "Shared/Product/Sources"]
         var found: [String] = []
         for folder in shared {
@@ -48,7 +48,7 @@ final class ProductIdentityUseTests: XCTestCase {
     func testSharedSentencesNameTheProduct() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let shared = ["Sources/NoodleCore", "Sources/NoodleRuntime", "Sources/NoodleAgentBridge", "Sources/NoodleAgentHost",
-                      "Sources/NoodleMCP", "Computer/Sources/ComputerEngine"]
+                      "Sources/NoodleToolConnections", "Computer/Sources/ComputerEngine"]
         let quoted = try NSRegularExpression(pattern: #""([^"\\]|\\.)*""#)
         let product = try NSRegularExpression(
             pattern: #"(?<![\w.$/-])Noodle(?![\w.\-/])(?! (Computer|Browser|Applet|Hub|Mobile|Terminal|Push|Messenger|File|Agent)\b)"#)

@@ -1,7 +1,7 @@
 import Foundation
 import HubCore
 import NoodleCore
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 import NoodleRuntime
 import XCTest
 

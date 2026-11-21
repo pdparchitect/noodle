@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Proofpoint Targeted Attack Protection: the threats in mail it delivered or blocked, and the clicks on them,
 /// read with a service principal and its secret.

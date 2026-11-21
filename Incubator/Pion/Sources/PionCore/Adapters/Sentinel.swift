@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Microsoft Sentinel: KQL over its Log Analytics workspace, reached as an app registered in the tenant.
 /// Each account is one workspace.

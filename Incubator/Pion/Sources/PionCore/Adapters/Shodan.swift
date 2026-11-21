@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Shodan's view of what an internet address exposes, and DNS both ways, with the person's API key, which
 /// Shodan takes only in the address.

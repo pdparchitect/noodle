@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Splunk: searches in SPL, run once and returned, with an authentication token. Each account is one deployment.
 public enum Splunk {

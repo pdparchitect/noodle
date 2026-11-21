@@ -10,7 +10,7 @@ import NoodleBrowserTools
 import NoodleComputerTools
 import NoodleCore
 import NoodleImagesTools
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 import NoodleVoicePeer
 

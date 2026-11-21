@@ -1,5 +1,5 @@
 import Foundation
-import NoodleMCP
+import NoodleToolConnections
 import XCTest
 @testable import Noodle
 @testable import NoodleRuntimeSettings

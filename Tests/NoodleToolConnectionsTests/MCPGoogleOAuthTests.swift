@@ -2,7 +2,7 @@ import XCTest
 import CryptoKit
 import MCP
 import NoodleCore
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 private enum GmailPreset {
     static let configuration: ToolConnectionConfiguration = {

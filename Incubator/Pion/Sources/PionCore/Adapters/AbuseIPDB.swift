@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// AbuseIPDB: how often an IP address has been reported for abuse, with the person's API key.
 public enum AbuseIPDB {

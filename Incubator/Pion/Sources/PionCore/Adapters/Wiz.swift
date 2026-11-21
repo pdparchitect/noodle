@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Wiz: the cloud security issues it found, and read-only GraphQL queries over its graph, reached as a service
 /// account. Each account is one tenant, in its region.

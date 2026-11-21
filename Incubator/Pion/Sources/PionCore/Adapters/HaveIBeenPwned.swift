@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Have I Been Pwned: the data breaches and pastes an email address appears in, with the person's API key.
 public enum HaveIBeenPwned {

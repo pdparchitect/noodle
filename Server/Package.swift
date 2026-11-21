@@ -24,7 +24,7 @@ let package = Package(
         .target(name: "ServerCore", dependencies: [
             .product(name: "HubCore", package: "Noodle"),
             .product(name: "NoodleCore", package: "Noodle"),
-            .product(name: "NoodleMCP", package: "Noodle"),
+            .product(name: "NoodleToolConnections", package: "Noodle"),
             .product(name: "NoodleRuntime", package: "Noodle"),
             .product(name: "HubWire", package: "HubLink"),
             .product(name: "HubLink", package: "HubLink"),

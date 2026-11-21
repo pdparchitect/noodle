@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// An Okta org's users, their groups, apps and sign-in factors, and its System Log, read with an API token.
 /// Each account is its own org, named by its domain. Nothing here changes the org.

@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Censys: what an internet host exposes, from its Platform API, with a personal access token.
 public enum Censys {

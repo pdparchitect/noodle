@@ -1,5 +1,5 @@
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// The services Pion offers in Settings › Tools › Add Tools: its own security services, which its adapters answer,
 /// the open security MCP servers that need no account, and the few of Noodle's presets that help an investigation.

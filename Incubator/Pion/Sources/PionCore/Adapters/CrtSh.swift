@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// crt.sh, Sectigo's search over the public Certificate Transparency logs: every certificate issued for a domain's
 /// names, which shows the hosts an organisation has, including ones it has forgotten. It answers without a key, slowly

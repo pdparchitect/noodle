@@ -2,7 +2,7 @@ import Foundation
 import HubCore
 import NoodleCore
 import XCTest
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 /// A removed connection's sign-in leaves the Hub's Keychain even when the first attempt fails.
 @MainActor final class HubConnectionDeletionTests: XCTestCase {

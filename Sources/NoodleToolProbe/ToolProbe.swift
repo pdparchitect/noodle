@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-@_spi(ToolProbe) import NoodleMCP
+@_spi(ToolProbe) import NoodleToolConnections
 
 /// A developer's tool probe: runs one of an app's catalogue tools against its real service with the sign-in or key
 /// that app keeps, through the same tool connection service the app uses, so a change can be tried without

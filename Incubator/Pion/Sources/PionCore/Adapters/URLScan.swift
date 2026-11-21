@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// urlscan.io: earlier scans of pages, searched by domain, IP address, URL or hash, with the person's API key.
 /// Nothing is submitted for scanning.

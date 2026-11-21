@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Sentry, read through its web API with a personal or internal integration token: an organisation's projects, its issues and
 /// the latest event behind one. Sentry's own service and a self-hosted Sentry are two entries over the same operations.

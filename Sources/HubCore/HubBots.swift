@@ -2,7 +2,7 @@ import AppletBridge
 import Foundation
 import HubWire
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 
 /// A bot that cannot answer because its owner's plan stopped lending its model, though it still lends the harness.

@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Microsoft Defender XDR: its alerts and incidents, and advanced hunting across devices, email, identities and apps.
 public enum Defender {

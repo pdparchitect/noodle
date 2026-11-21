@@ -4,7 +4,7 @@ import HubCore
 import HubLink
 import HubMac
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 import Observation
 

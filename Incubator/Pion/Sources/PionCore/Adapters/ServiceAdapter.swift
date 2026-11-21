@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// How an adapter's operations reach their service. In the app it is the connection's guarded access, which
 /// adds its credentials and reaches only its host.

@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Google Cloud, as a defender reads it: who did what in the audit logs, what Security Command Center found, who has
 /// access to what, and where resources are. Each account is one organisation, folder or project, read as the person

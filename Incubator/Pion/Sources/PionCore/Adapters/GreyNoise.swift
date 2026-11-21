@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// GreyNoise: whether an IP address is background noise scanning the internet, or a known benign service.
 public enum GreyNoise {

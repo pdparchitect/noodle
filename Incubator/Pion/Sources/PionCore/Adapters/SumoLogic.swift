@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// Sumo Logic: log searches run as search jobs, read with an access ID and key. Each account is one deployment.
 public enum SumoLogic {

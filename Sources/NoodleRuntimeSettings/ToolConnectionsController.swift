@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 import ProductIdentity
 

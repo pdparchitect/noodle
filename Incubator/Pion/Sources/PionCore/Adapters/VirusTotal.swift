@@ -1,6 +1,6 @@
 import Foundation
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 
 /// VirusTotal's reputation lookups for files, domains, IP addresses and URLs, with the person's API key.
 public enum VirusTotal {

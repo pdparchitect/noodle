@@ -3,7 +3,7 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-@testable import NoodleMCP
+@testable import NoodleToolConnections
 
 final class MCPGuardedHTTPTests: XCTestCase {
     private let endpoint = URL(string: "https://guard-fixture.invalid/mcp")!

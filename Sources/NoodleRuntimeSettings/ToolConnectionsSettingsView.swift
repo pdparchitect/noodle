@@ -2,7 +2,7 @@ import AppKit
 import CoreImage
 import SwiftUI
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import ProductIdentity
 
 public struct ToolConnectionsSettingsView: View {

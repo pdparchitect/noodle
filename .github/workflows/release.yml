@@ -412,7 +412,7 @@ jobs:
   test-server-linux:
     needs: [versions]
     if: contains(fromJSON(needs.versions.outputs.suites), 'server-linux')
-    # Noodle Server on Linux and what it builds on: the wire, NoodleCore and NoodleMCP, with the tests that run there.
+    # Noodle Server on Linux and what it builds on: the wire, NoodleCore and NoodleToolConnections, with the tests that run there.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The toolchain image Noodle Push builds with.

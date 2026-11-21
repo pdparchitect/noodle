@@ -4,7 +4,7 @@ import HubWire
 import ImageIO
 #endif
 import NoodleCore
-import NoodleMCP
+import NoodleToolConnections
 import NoodleRuntime
 
 /// The tool connections people keep on the Hub, kept in the shared `ToolConnections` that Noodle keeps its own in too.
