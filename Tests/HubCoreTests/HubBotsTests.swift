@@ -748,6 +748,23 @@ import XCTest
         XCTAssertEqual(after?.approvals, [])
     }
 
+    /// Someone a bot is shared with talks with it and nothing else: its owner's held calls never reach them.
+    func testSomeoneABotIsSharedWithNeverSeesItsHeldCalls() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        _ = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Phished"))
+        let owners = try await bots(of: f.device).first { $0.id == bot.id }
+        XCTAssertEqual(owners?.approvals.count, 1)
+        let theirs = try await bots(of: grace.device).first { $0.id == bot.id }
+        XCTAssertNotNil(theirs, "the bot is shared with them")
+        XCTAssertEqual(theirs?.approvals, [])
+        XCTAssertEqual(f.hub.bots.pendingApprovalIDs(of: grace.user.id), [])
+    }
+
     /// Writing from a task carries it to the bot, and back to devices for the label.
     func testAMessageAboutATaskCarriesIt() async throws {
         let f = try await fixture()
