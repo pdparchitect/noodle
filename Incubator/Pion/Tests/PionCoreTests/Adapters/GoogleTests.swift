@@ -31,8 +31,7 @@ final class GoogleTests: XCTestCase {
                                                            "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
-                                                           "https://www.googleapis.com/auth/cloud-identity.devices.readonly"]),
+                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"]),
                       (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
                                                    "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
@@ -555,23 +554,6 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(queryItems(aboutThem)["filters"], "USER_EMAIL==ivana@kestrel.example")
     }
 
-    /// Laptops, desktops and phones the organisation knows, with who uses each and whether it is compromised,
-    /// unencrypted or unmanaged.
-    func testDevicesListEveryDeviceWithItsUsersAndRisks() async throws {
-        let service = FakeService()
-        service.answers["/v1/devices"] = (200, #"{"devices":[{"name":"devices/d1","deviceType":"MAC_OS","model":"MacBook Pro","osVersion":"MacOS 15.1","ownerType":"COMPANY","encryptionState":"NOT_ENCRYPTED","managementState":"APPROVED","compromisedState":"UNCOMPROMISED","lastSyncTime":"2026-11-20T09:00:00Z","serialNumber":"C02X"},{"name":"devices/d2","deviceType":"ANDROID","model":"Pixel 8","compromisedState":"COMPROMISED","lastSyncTime":"2026-11-19T09:00:00Z"}]}"#)
-        service.answers["/v1/devices/-/deviceUsers"] = (200, #"{"deviceUsers":[{"name":"devices/d1/deviceUsers/u1","userEmail":"ivana@kestrel.example","managementState":"APPROVED"},{"name":"devices/d2/deviceUsers/u2","userEmail":"nick@kestrel.example"}]}"#)
-        let all = try await callTool(GoogleWorkspace.adapter, "devices", "{}", on: service, in: workspace)
-        XCTAssertFalse(all.isError, all.text)
-        let lines = all.text.split(separator: "\n").map(String.init)
-        XCTAssertTrue(lines[0].contains("Pixel 8") && lines[0].contains("compromised") && lines[0].contains("nick@kestrel.example"), all.text)
-        XCTAssertTrue(lines.contains { $0.contains("MacBook Pro") && $0.contains("not encrypted") && $0.contains("ivana@kestrel.example") }, all.text)
-        XCTAssertEqual(service.requests.first?.url?.host, "cloudidentity.googleapis.com")
-        XCTAssertEqual(queryItems(service.requests.first)["customer"], "customers/my_customer")
-        let hers = try await callTool(GoogleWorkspace.adapter, "devices", #"{"user":"ivana@kestrel.example"}"#, on: service, in: workspace)
-        XCTAssertTrue(hers.text.contains("MacBook Pro") && !hers.text.contains("Pixel 8"), hers.text)
-    }
-
     /// The signs of an account being taken over wake the agents: 2-step verification turned off, recovery changed,
     /// mail forwarded out or monitored, backup codes made for someone, a mailbox dumped.
     func testTheTriggerWatchesForAccountTakeover() {
@@ -612,8 +594,7 @@ final class GoogleTests: XCTestCase {
         service.answers["/admin/directory/v1/users"] = (200, #"{"users":[]}"#)
         service.answers["/admin/directory/v1/customer/my_customer/roles"] = (403, Self.scopeMissing)
         service.answers["/admin/directory/v1/groups"] = (403, Self.notAuthorized)
-        service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (200, "{}")
-        service.answers["/v1/devices"] = (403, Self.apiDisabled)
+        service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (403, Self.apiDisabled)
         let check = try await callTool(GoogleWorkspace.adapter, "check-access", "{}", on: service, in: workspace)
         XCTAssertFalse(check.isError, check.text)
         let lines = check.text.split(separator: "\n").map(String.init)
@@ -621,24 +602,26 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains("✓ Users"), check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Admin roles") && $0.contains("admin.directory.rolemanagement.readonly") && $0.contains("sign the tool in again") }, check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Groups") && $0.contains("Groups › Read") && $0.contains("role") }, check.text)
-        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Devices") && $0.contains("Cloud Identity API is turned off")
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Mobile devices") && $0.contains("is turned off")
             && $0.contains("https://console.developers.google.com/apis/api/cloudidentity.googleapis.com/overview?project=123456") }, check.text)
+        XCTAssertFalse(service.requests.contains { $0.url?.host == "cloudidentity.googleapis.com" }, "Cloud Identity needs a service account")
     }
 
     /// A tool call that fails says the same, so an agent can tell the champion what to change without guessing.
     func testARefusedCallSaysWhatToChange() async throws {
         let service = FakeService()
-        service.answers["/v1/devices"] = (403, Self.apiDisabled)
-        let devices = try await callTool(GoogleWorkspace.adapter, "devices", "{}", on: service, in: workspace)
+        service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (403, Self.apiDisabled)
+        let devices = try await callTool(GoogleWorkspace.adapter, "user-devices", #"{"user":"ivana@kestrel.example"}"#, on: service, in: workspace)
         XCTAssertTrue(devices.isError)
-        XCTAssertTrue(devices.text.contains("Cloud Identity API is turned off") && devices.text.contains("project=123456"), devices.text)
+        XCTAssertTrue(devices.text.contains("is turned off") && devices.text.contains("project=123456"), devices.text)
         service.answers["/admin/directory/v1/users"] = (401, #"{"error":{"code":401,"message":"Request had invalid authentication credentials."}}"#)
         let users = try await callTool(GoogleWorkspace.adapter, "users", "{}", on: service, in: workspace)
         XCTAssertTrue(users.isError && users.text.contains("sign the tool in again"), users.text)
         service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (403, Self.scopeMissing)
         let activity = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login"}"#, on: service, in: workspace)
         XCTAssertTrue(activity.isError && activity.text.contains("admin.reports.audit.readonly"), activity.text)
-        XCTAssertTrue(GoogleWorkspace.setup.joined().contains("console.cloud.google.com/apis/library/cloudidentity.googleapis.com"))
+        // Cloud Identity's device API takes only a service account, so the admin's sign-in never asks for it.
+        XCTAssertFalse(GoogleWorkspace.setup.joined().contains("cloud-identity"))
     }
 
     /// Containment's check tries reading users and one user's tokens; suspending can only be confirmed by suspending.
@@ -652,6 +635,26 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Sessions, apps and app passwords") && $0.contains("User Security Management") }, check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("· Suspending") && $0.contains("Suspend users") }, check.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "a check never changes anything")
+    }
+
+    /// Every page and API the Setup Steps name is a link to it, so nobody has to search Google's consoles.
+    func testSetupStepsLinkEveryPageAndAPITheyName() {
+        let links: [(String, [String], [String])] = [
+            ("Google Workspace Audit", GoogleWorkspace.setup, ["console.cloud.google.com/apis/library/admin.googleapis.com",
+                                                              "console.cloud.google.com/auth/overview", "console.cloud.google.com/auth/scopes",
+                                                              "console.cloud.google.com/auth/clients", "admin.google.com/ac/roles"]),
+            ("Google Workspace Containment", GoogleWorkspace.containmentSetup, ["admin.google.com/ac/roles", "console.cloud.google.com/apis/library/admin.googleapis.com",
+                                                                               "console.cloud.google.com/auth/scopes", "console.cloud.google.com/auth/clients",
+                                                                               "admin.google.com/ac/owl"]),
+            ("Google Cloud", GoogleCloud.setup, ["console.cloud.google.com/apis/library/logging.googleapis.com", "console.cloud.google.com/apis/library/securitycenter.googleapis.com",
+                                                 "console.cloud.google.com/apis/library/cloudasset.googleapis.com", "console.cloud.google.com/auth/overview",
+                                                 "console.cloud.google.com/auth/scopes", "console.cloud.google.com/auth/clients",
+                                                 "console.cloud.google.com/iam-admin/iam"]),
+        ]
+        for (tool, steps, wanted) in links {
+            let text = steps.joined(separator: "\n")
+            for link in wanted { XCTAssertTrue(text.contains("https://" + link), "\(tool) does not link \(link)") }
+        }
     }
 }
 

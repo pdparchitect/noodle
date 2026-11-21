@@ -33,7 +33,7 @@ public enum GoogleWorkspace {
         To investigate an account, start with user-timeline, everything it and admins did to it in one list. oauth-apps \
         lists every app people granted access in a window, by client ID and scopes, and app-activity what an app pulled; \
         Google Workspace Containment's tokens and apps list the access apps hold now. group-members shows who reads a \
-        group, flagging outsiders, and devices every laptop, desktop and phone with its users and risks. Drive sharing \
+        group, flagging outsiders. Drive sharing \
         changes are drive events change_document_visibility, change_document_access_scope and change_user_access. When a \
         tool is refused or something you need seems missing, run check-access and tell the champion exactly what it says \
         to change. \
@@ -44,27 +44,27 @@ public enum GoogleWorkspace {
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
             fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and devices.
+            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and mobile devices. Laptops and
+            // desktops are in Cloud Identity's device API, which takes only a service account with domain-wide delegation.
             oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
-                                    "https://www.googleapis.com/auth/cloud-identity.devices.readonly"], clients: []),
+                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"], clients: []),
             oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API** and the [Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com).",
-        "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/cloud-identity.devices.readonly`.",
-        "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to devices, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and enable the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) in it.",
+        "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly` and `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly`. Data Access takes a scope only once its API is enabled.",
+        "Under [Clients](https://console.cloud.google.com/auth/clients), choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
+        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to devices, and assign it to an admin account kept for Pion, never a super admin.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), Devices(), CheckAccess()], trigger: NewSecurityEvents(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), CheckAccess()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -89,11 +89,11 @@ public enum GoogleWorkspace {
         setup: containmentSetup)
 
     static let containmentSetup = [
-        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Containment** with only **Users › Read**, **Users › Update › Suspend users** and **Security › User Security Management**.",
+        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Containment** with only **Users › Read**, **Users › Update › Suspend users** and **Security › User Security Management**.",
         "Assign it to an admin account kept for Pion, never a super admin. Its role, not the sign-in, limits what Pion can do.",
-        "In the Google Cloud project of your Google Workspace Audit client, enable the **Admin SDK API** and add the scopes `https://www.googleapis.com/auth/admin.directory.user` and `https://www.googleapis.com/auth/admin.directory.user.security` under **Google Auth Platform › Data Access**.",
-        "Paste that same iOS client's **Client ID** here, or create one of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev).",
-        "If your organisation limits API access, mark the client **Trusted** under **Security › Access and data control › API controls**.",
+        "In the Google Cloud project of your Google Workspace Audit client, check the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) is enabled and add the scopes `https://www.googleapis.com/auth/admin.directory.user` and `https://www.googleapis.com/auth/admin.directory.user.security` under [Data Access](https://console.cloud.google.com/auth/scopes).",
+        "Paste that same iOS client's **Client ID** here, or create one under [Clients](https://console.cloud.google.com/auth/clients) of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev).",
+        "If your organisation limits API access, mark the client **Trusted** in the Admin console's [API controls](https://admin.google.com/ac/owl).",
         "Choose **Add & Connect** and sign in as the admin with the Pion Containment role.",
     ]
 
@@ -572,8 +572,6 @@ extension GoogleWorkspace {
                                  scope: "https://www.googleapis.com/auth/admin.directory.group.readonly", privilege: "Groups › Read")
         static let mobileDevices = Need(title: "Mobile devices", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                         scope: "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly", privilege: "read access to devices")
-        static let devices = Need(title: "Devices", api: "Cloud Identity API", apiID: "cloudidentity.googleapis.com",
-                                  scope: "https://www.googleapis.com/auth/cloud-identity.devices.readonly", privilege: "read access to devices")
         static let containmentUsers = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                            scope: "https://www.googleapis.com/auth/admin.directory.user", privilege: "Users › Read")
         static let security = Need(title: "Sessions, apps and app passwords", api: "Admin SDK API", apiID: "admin.googleapis.com",
@@ -636,7 +634,7 @@ extension GoogleWorkspace {
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let admin = try service.at(host: "admin.googleapis.com"), identity = try service.at(host: "cloudidentity.googleapis.com")
+            let admin = try service.at(host: "admin.googleapis.com")
             let directory = ["admin", "directory", "v1"]
             let lines = await GoogleWorkspace.check([
                 (.reports, { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "login"],
@@ -645,7 +643,6 @@ extension GoogleWorkspace {
                 (.adminRoles, { _ = try await admin.data(directory + ["customer", "my_customer", "roles"], query: ["maxResults": "1"]) }),
                 (.groups, { _ = try await admin.data(directory + ["groups"], query: ["customer": "my_customer", "maxResults": "1"]) }),
                 (.mobileDevices, { _ = try await admin.data(directory + ["customer", "my_customer", "devices", "mobile"], query: ["maxResults": "1"]) }),
-                (.devices, { _ = try await identity.data(["v1", "devices"], query: ["customer": "customers/my_customer", "pageSize": "1"]) }),
             ])
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
@@ -844,63 +841,6 @@ extension GoogleWorkspace {
                 + (events.count > 150 ? "\n\(events.count - 150) more in the structured result." : "")
             struct Kept: Encodable { let events: [Event] }
             return try ServiceResult(text: text, structured: Kept(events: events))
-        }
-    }
-
-    /// Every device the organisation knows, from Cloud Identity: laptops and desktops with Endpoint Verification,
-    /// company-owned devices and phones, with who uses each, compromised, unencrypted or unmanaged ones first.
-    struct Devices: ServiceOperation {
-        struct Input: Decodable, Sendable { let user: String? }
-        static let name = "devices"
-        static let summary = "Every laptop, desktop and phone the organisation knows, with who uses it and whether it is compromised, unencrypted or not approved; or only one user's."
-        static let input = JSONSchema.object(["user": .string("Only this user's devices, by email.")])
-
-        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            struct Device: Codable {
-                let name: String, deviceType: String?, model: String?, osVersion: String?, ownerType: String?, encryptionState: String?
-                let managementState: String?, compromisedState: String?, lastSyncTime: String?, serialNumber: String?, hostname: String?
-            }
-            struct DevicePage: Decodable { let devices: [Device]?; let nextPageToken: String? }
-            struct DeviceUser: Codable { let name: String; let userEmail: String?; let managementState: String?; let lastSyncTime: String? }
-            struct UserPage: Decodable { let deviceUsers: [DeviceUser]?; let nextPageToken: String? }
-            let identity = try service.at(host: "cloudidentity.googleapis.com")
-            let user = try input.user.map(ServiceInput.email)
-            var devices: [Device] = [], users: [DeviceUser] = [], token: String?
-            try await GoogleWorkspace.read(.devices) {
-                for _ in 0..<10 {
-                    let page = try await identity.get(["v1", "devices"], query: ["customer": "customers/my_customer", "pageSize": "100", "pageToken": token],
-                                                      as: DevicePage.self)
-                    devices += page.devices ?? []
-                    guard let next = page.nextPageToken, !next.isEmpty else { break }
-                    token = next
-                }
-                token = nil
-                // Twenty a page at most, so a large fleet is read in part.
-                for _ in 0..<25 {
-                    let page = try await identity.get(["v1", "devices", "-", "deviceUsers"],
-                                                      query: ["customer": "customers/my_customer", "pageSize": "20", "pageToken": token], as: UserPage.self)
-                    users += page.deviceUsers ?? []
-                    guard let next = page.nextPageToken, !next.isEmpty else { break }
-                    token = next
-                }
-            }
-            let owners = Dictionary(grouping: users) { $0.name.components(separatedBy: "/deviceUsers/").first ?? "" }
-            struct Kept: Encodable { let device: Device; let users: [String]; let risks: [String] }
-            let kept = devices.map { device -> Kept in
-                var risks: [String] = []
-                if device.compromisedState == "COMPROMISED" { risks.append("compromised") }
-                if device.encryptionState == "NOT_ENCRYPTED" { risks.append("not encrypted") }
-                if let state = device.managementState, !["APPROVED"].contains(state) { risks.append(state.lowercased().replacingOccurrences(of: "_", with: " ")) }
-                return Kept(device: device, users: (owners[device.name] ?? []).compactMap(\.userEmail), risks: risks)
-            }.filter { item in user.map { email in item.users.contains { $0.lowercased() == email } } ?? true }
-                .sorted { ($0.risks.contains("compromised") ? 0 : $0.risks.isEmpty ? 2 : 1, $0.device.model ?? "") < ($1.risks.contains("compromised") ? 0 : $1.risks.isEmpty ? 2 : 1, $1.device.model ?? "") }
-            let text = kept.isEmpty ? (user.map { "\($0) uses no devices the organisation knows." } ?? "The organisation knows no devices.") : kept.map { item in
-                let device = item.device
-                let what = [device.deviceType, device.osVersion, device.ownerType.map { $0 == "COMPANY" ? "company-owned" : "personal" }].compactMap { $0 }.joined(separator: ", ")
-                return "\(device.model ?? device.hostname ?? device.name) (\(what)), used by \(item.users.isEmpty ? "nobody listed" : item.users.joined(separator: ", "))"
-                    + ", last synced \(device.lastSyncTime ?? "?")" + (item.risks.isEmpty ? "" : " [\(item.risks.joined(separator: ", "))]")
-            }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: ["devices": kept])
         }
     }
 }

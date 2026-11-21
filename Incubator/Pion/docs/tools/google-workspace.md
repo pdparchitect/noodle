@@ -21,6 +21,18 @@ account.
 The quick steps for each are under **Setup Steps** in **Settings → Tools**. This
 guide explains them.
 
+The pages they use:
+
+- [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com),
+  to enable in the Google Cloud project. Enable it first: Data Access takes a
+  scope only once its API is enabled.
+- [Google Auth Platform](https://console.cloud.google.com/auth/overview), its
+  [Data Access](https://console.cloud.google.com/auth/scopes) scopes and its
+  [Clients](https://console.cloud.google.com/auth/clients).
+- The Admin console's [Admin roles](https://admin.google.com/ac/roles) for the
+  roles, and [API controls](https://admin.google.com/ac/owl) to mark Pion's client
+  Trusted.
+
 ## How Google limits what Pion can do
 
 Two things decide what a Google sign-in can do, and Google checks both on every
@@ -54,8 +66,7 @@ roles, groups and devices. With it agents can investigate an account:
 - **Who it is:** admin roles, 2-step verification and whether it is enforced,
   recovery email and phone (flagged when they lead outside the domain), aliases.
 - **What it reaches:** its groups and who else reads them, flagging outside
-  members; the laptops, desktops and phones it uses, with compromised,
-  unencrypted or unapproved ones flagged.
+  members; the phones and tablets that sync its mail and files.
 - **OAuth apps:** every app people granted access in the last six months, by
   client ID and scopes, with who granted and revoked it, and what each app
   pulled through its API calls and how much data.
@@ -73,16 +84,17 @@ Containment.
 
 **Least access:** an admin account kept for Pion, with a custom role holding only
 **Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles
-and devices. Its Google Cloud project needs the Admin SDK API and the
-[Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com)
+and mobile devices. Its Google Cloud project needs the
+[Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com)
 enabled. A super admin works too, but gives a lost sign-in far more
 reach than reading needs.
 
 Google does not say which Admin console privileges let a role read admin roles
-and devices. If agents are told something cannot be read, add the
+and mobile devices. If agents are told something cannot be read, add the
 privilege for it to the role and try again; audit reports keep working
-meanwhile. Company-owned devices are managed in Cloud Identity and are not
-listed. A connection made before this
+meanwhile. Laptops, desktops and company-owned devices are not listed: Google
+lets only a service account with domain-wide delegation read them, which Pion
+does not use. A connection made before this
 access was asked for needs to sign in again.
 
 ## Google Workspace Containment
@@ -129,8 +141,8 @@ the apps and app passwords that should not be there.
   as seeing, adding, editing and deleting users. That is the broad access
   described above; the admin role is what narrows it.
 - **Your organisation may block the sign-in.** If it limits which apps may reach
-  Google's APIs, mark Pion's client as **Trusted** under **Security › Access and
-  data control › API controls** in the Admin console.
+  Google's APIs, mark Pion's client as **Trusted** in the Admin console's
+  [API controls](https://admin.google.com/ac/owl).
 - **One client serves both tools.** Add the scopes of both to the same Google
   Cloud client and paste its Client ID into each tool. Each tool still signs in
   on its own, and can use a different admin account.
