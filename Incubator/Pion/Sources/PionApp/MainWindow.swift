@@ -201,7 +201,7 @@ struct Sidebar: View {
             rows(sections.groups, header: "Groups", line: line)
             rows(sections.agents, header: "Agents", line: line)
             if showsTools {
-                SidebarTools(controller: model.connectionsController, inList: true, selected: window.selectedTool) { tool in
+                SidebarTools(controller: model.connectionsController, inList: true, showsOriginalIcons: true, selected: window.selectedTool) { tool in
                     window.selectedTool = tool.id
                     model.selection = nil
                 }

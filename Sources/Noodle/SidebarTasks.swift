@@ -204,6 +204,7 @@ struct SidebarTools: View {
     let controller: ToolConnectionsController
     /// In a list, a section; in the icon grid, icons under a title.
     let inList: Bool
+    var showsOriginalIcons = false
     /// The tool whose page is shown, marked as a selected row is.
     var selected: UUID?
     /// Shows a tool's page where the app shows it; without it, the page opens in a window of its own.
@@ -234,7 +235,7 @@ struct SidebarTools: View {
     private var grid: some View {
         ConversationIconGrid(minimumWidth: 56) {
             ForEach(controller.registry.connections) { connection in
-                ToolTile(controller: controller, connection: connection, selected: selected == connection.id) {
+                ToolTile(controller: controller, connection: connection, selected: selected == connection.id, showsOriginalIcon: showsOriginalIcons) {
                     if let open { open(connection) } else { controller.showPage(connection) }
                 }
             }
@@ -255,16 +256,21 @@ private struct ToolTile: View {
     let controller: ToolConnectionsController
     let connection: ToolConnection
     let selected: Bool
+    let showsOriginalIcon: Bool
     let open: () -> Void
 
     var body: some View {
         let status = controller.status(of: connection)
         Button(action: open) {
             VStack(spacing: 3) {
-                // Flat and in the text colour, as the agents' marks around it are, so the red dot of one that needs you is
-                // what stands out.
-                FlatToolIcon(connection: connection, size: 30)
-                    .opacity(status == .managed ? 0.4 : 1)
+                Group {
+                    if showsOriginalIcon {
+                        ToolConnectionIcon(connection: connection, size: 30, frameless: true)
+                    } else {
+                        FlatToolIcon(connection: connection, size: 30)
+                            .opacity(status == .managed ? 0.4 : 1)
+                    }
+                }
                     .overlay(alignment: .topTrailing) {
                         if status.needsAttention {
                             Circle().fill(Color.red).frame(width: 8, height: 8)

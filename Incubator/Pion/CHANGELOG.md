@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Sidebar tools show their original colours without a tile. AWS, NVD and CVE.NOW have brighter icons with transparent backgrounds.
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
 - Google Workspace is called Google Workspace Audit, and its Setup Steps have you sign in as an admin kept for Pion whose role holds only Reports, never a super admin.
 - Google Cloud is called Google Cloud Audit, as it only reads.
