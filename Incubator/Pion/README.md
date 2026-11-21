@@ -120,7 +120,7 @@ to the agents that should use it.
 | | |
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
-| **Attack surface** | crt.sh, NVD, cve.now, Tenable |
+| **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
 | **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |

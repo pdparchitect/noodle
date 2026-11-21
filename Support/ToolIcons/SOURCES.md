@@ -42,6 +42,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | cvenow.icon (2026-11-20) | https://cve.now/mcp/icons/logo.png (512×512, resized to 180×180) |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | defender.icon (2026-11-18) | https://security.microsoft.com/favicon.ico |
+| dns.icon (2026-11-21) | https://dns.google/static/93dd5954/favicon.png (Google Public DNS) |
 | dropbox.icon (2026-10-06) | https://cfl.dropboxstatic.com/static/metaserver/static/images/favicon.ico |
 | elastic.icon (2026-11-18) | https://www.elastic.co/apple-touch-icon.png |
 | elevenlabs.icon (2026-10-06) | https://elevenlabs.io/apple-icon.png |

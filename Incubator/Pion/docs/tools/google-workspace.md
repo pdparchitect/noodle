@@ -58,7 +58,7 @@ role is missing.
 ## Google Workspace Audit
 
 Pion asks only for read-only access: to audit reports, and to users, admin
-roles, groups and mobile devices. With it agents can investigate an account:
+roles, groups, mobile devices and domains. With it agents can investigate an account:
 
 - **Its activity**, and what admins did to it, in one timeline across every
   report it appears in: sign-ins, password, recovery and 2-step verification
@@ -78,6 +78,9 @@ roles, groups and mobile devices. With it agents can investigate an account:
   pulled through its API calls and how much data.
 - **What left:** files opened, shared, downloaded or made public, and exports
   through Takeout or Vault.
+- **The domains:** every domain and alias the organisation has, which is
+  primary and which are not verified. Whether others can send mail as them
+  (SPF, DKIM, DMARC) is public, and Pion's DNS tool checks it with no setup.
 
 It also wakes the agents for the signs of an account being taken over: 2-step
 verification turned off, recovery details changed, mail forwarded outside the
@@ -89,14 +92,14 @@ read with the access that also signs people out, so it is in Google Workspace
 Containment.
 
 **Least access:** an admin account kept for Pion, with a custom role holding only
-**Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles
-and mobile devices. Its Google Cloud project needs the
+**Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles,
+mobile devices and domains. Its Google Cloud project needs the
 [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com)
 enabled. A super admin works too, but gives a lost sign-in far more
 reach than reading needs.
 
-Google does not say which Admin console privileges let a role read admin roles
-and mobile devices. If agents are told something cannot be read, add the
+Google does not say which Admin console privileges let a role read admin roles,
+mobile devices and domains. If agents are told something cannot be read, add the
 privilege for it to the role and try again; audit reports keep working
 meanwhile. Laptops, desktops and company-owned devices are not listed: Google
 lets only a service account with domain-wide delegation read them, which Pion
@@ -178,6 +181,12 @@ would change an account.
   shows those only to a service account with domain-wide delegation, which
   Pion does not use. Connect Proofpoint or Microsoft Defender for mail, and
   CrowdStrike or Defender for endpoints.
+- **Settings are seen only when they change.** The Admin console's current
+  settings, such as password and session rules, sharing limits and which apps
+  may be granted access, cannot be read; the admin events show every change to
+  them. Google's API for current settings is documented only for a service
+  account with domain-wide delegation. When a setting matters, agents ask you
+  for that Admin console page.
 - **Containment cannot act on admins.** User Security Management never covers
   admins, so their tokens, app passwords and sessions cannot be read or ended
   here; suspend an admin, or act in the Admin console.

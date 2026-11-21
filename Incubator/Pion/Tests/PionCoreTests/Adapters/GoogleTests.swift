@@ -31,7 +31,8 @@ final class GoogleTests: XCTestCase {
                                                            "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"]),
+                                                           "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
+                                                   "https://www.googleapis.com/auth/admin.directory.domain.readonly"]),
                       (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
                                                    "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
@@ -854,6 +855,7 @@ final class GoogleTests: XCTestCase {
         "https://www.googleapis.com/auth/admin.directory.user.readonly": "on Google's scope list; live on the champion's tenant",
         "https://www.googleapis.com/auth/admin.directory.group.readonly": "on Google's scope list; live on the champion's tenant",
         "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly": "on Google's scope list; live on the champion's tenant",
+        "https://www.googleapis.com/auth/admin.directory.domain.readonly": "on Google's scope list; Directory API, which takes an admin's own sign-in; domains.list accepts it",
         "https://www.googleapis.com/auth/admin.directory.user": "on Google's scope list",
         "https://www.googleapis.com/auth/admin.directory.user.security": "on Google's scope list",
         "https://www.googleapis.com/auth/logging.read": "on Google's scope list; live on the champion's tenant",
@@ -899,6 +901,27 @@ final class GoogleTests: XCTestCase {
             let apps = try await callTool(GoogleWorkspace.containmentAdapter, "apps", "{}", on: service, in: containment)
             XCTAssertTrue(apps.text.contains("held by 30 users"), apps.text)
         }
+    }
+
+    func testDomainsListEachDomainAndAliasWithWhatIsUnverified() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/customer/my_customer/domains"] = (200, #"""
+        {"domains":[
+          {"domainName":"kestrel.example","isPrimary":true,"verified":true,"creationTime":"1577934000000",
+           "domainAliases":[{"domainAliasName":"kestrel-mail.example","parentDomainName":"kestrel.example","verified":false,"creationTime":"1763164800000"}]},
+          {"domainName":"kestrel-labs.example","isPrimary":false,"verified":true,"creationTime":1700000000000}
+        ]}
+        """#)
+        let result = try await callTool(GoogleWorkspace.adapter, "domains", "{}", on: service, in: workspace)
+        XCTAssertFalse(result.isError, result.text)
+        for expected in ["3 domains", "kestrel.example: primary, verified, added 2020-01-02",
+                         "kestrel-labs.example: secondary, verified, added 2023-11-14",
+                         "kestrel-mail.example: alias of kestrel.example, NOT verified, added 2025-11-15"] {
+            XCTAssertTrue(result.text.contains(expected), "\(expected) missing from:\n\(result.text)")
+        }
+        service.answers["/admin/directory/v1/customer/my_customer/domains"] = (403, #"{"error":{"code":403,"message":"Request had insufficient authentication scopes.","status":"PERMISSION_DENIED"}}"#)
+        let refused = try await callTool(GoogleWorkspace.adapter, "domains", "{}", on: service, in: workspace)
+        XCTAssertTrue(refused.text.contains("admin.directory.domain.readonly"), refused.text)
     }
 }
 

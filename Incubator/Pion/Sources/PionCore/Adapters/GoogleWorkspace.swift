@@ -40,8 +40,11 @@ public enum GoogleWorkspace {
         tool is refused or something you need seems missing, run check-access and tell the champion exactly what it says \
         to change. Silence is not proof: Google lists events minutes to hours late, keeps most for 180 days, and Gmail \
         events only in windows of 30 days; results say what was cut short or could not be read. This tool cannot see \
-        current mail forwarding addresses, filters or delegates, laptops and desktops, or Google's Alert Center: use \
-        Proofpoint or Microsoft Defender for mail and CrowdStrike or Defender for endpoints, and say what you could not check. \
+        current mail forwarding addresses, filters or delegates, laptops and desktops, Google's Alert Center, or the \
+        Admin console's current settings, such as password, session, sharing and app access rules, only changes to them \
+        in the admin events: use Proofpoint or Microsoft Defender for mail and CrowdStrike or Defender for endpoints, ask \
+        the champion for an Admin console page when a setting matters, and say what you could not check. domains lists \
+        the organisation's domains; their SPF, DKIM and DMARC are public DNS, which a DNS tool checks. \
         Record each finding as evidence, citing the application, user \
         and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
         changing sharing to the champion.
@@ -49,27 +52,28 @@ public enum GoogleWorkspace {
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
             fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups and mobile devices. Laptops and
+            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups, mobile devices and domains. Laptops and
             // desktops are in Cloud Identity's device API, which takes only a service account with domain-wide delegation.
             oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.group.readonly",
-                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly"], clients: []),
+                                    "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
+                                    "https://www.googleapis.com/auth/admin.directory.domain.readonly"], clients: []),
             oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and enable the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) in it.",
-        "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly` and `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly`. Data Access takes a scope only once its API is enabled.",
+        "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/admin.directory.domain.readonly`. Data Access takes a scope only once its API is enabled.",
         "Under [Clients](https://console.cloud.google.com/auth/clients), choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles and to devices, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles, devices and domains, and assign it to an admin account kept for Pion, never a super admin.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), CheckAccess()], trigger: NewSecurityEvents(),
+                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), Domains(), CheckAccess()], trigger: NewSecurityEvents(),
                                                  simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
@@ -573,6 +577,52 @@ extension GoogleWorkspace {
 // MARK: - Who holds what
 
 extension GoogleWorkspace {
+    /// The organisation's domains and aliases, as the Directory gives them: which is primary and which are not verified,
+    /// since a domain added recently or left unverified may be how someone sends or receives as the organisation.
+    struct Domains: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "domains"
+        static let summary = "The organisation's domains and domain aliases: primary or secondary, verified or not, and when each was added."
+        static let input = JSONSchema.object([:])
+
+        /// A time the Directory gives as milliseconds since 1970, as a string or a number.
+        struct Millis: Decodable {
+            let date: Date?
+            init(from decoder: Decoder) throws {
+                let container = try decoder.singleValueContainer()
+                let value = (try? container.decode(Double.self)) ?? (try? container.decode(String.self)).flatMap(Double.init)
+                date = value.map { Date(timeIntervalSince1970: $0 / 1000) }
+            }
+        }
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Alias: Decodable { let domainAliasName: String; let parentDomainName: String?; let verified: Bool?; let creationTime: Millis? }
+            struct Domain: Decodable {
+                let domainName: String; let isPrimary: Bool?; let verified: Bool?; let creationTime: Millis?; let domainAliases: [Alias]?
+            }
+            struct Listed: Decodable { let domains: [Domain]? }
+            let directory = try service.at(host: "admin.googleapis.com")
+            let domains = try await GoogleWorkspace.read(.domains) {
+                try await directory.get(["admin", "directory", "v1", "customer", "my_customer", "domains"], as: Listed.self).domains ?? []
+            }
+            struct Kept: Encodable { let name: String, kind: String, verified: Bool, added: String? }
+            let day = { (millis: Millis?) in millis?.date.map { ISO8601DateFormatter().string(from: $0).prefix(10) }.map(String.init) }
+            var kept: [Kept] = []
+            for domain in domains.sorted(by: { ($0.isPrimary == true ? 0 : 1, $0.domainName) < ($1.isPrimary == true ? 0 : 1, $1.domainName) }) {
+                kept.append(Kept(name: domain.domainName, kind: domain.isPrimary == true ? "primary" : "secondary", verified: domain.verified == true,
+                                 added: day(domain.creationTime)))
+                for alias in domain.domainAliases ?? [] {
+                    kept.append(Kept(name: alias.domainAliasName, kind: "alias of \(alias.parentDomainName ?? domain.domainName)",
+                                     verified: alias.verified == true, added: day(alias.creationTime)))
+                }
+            }
+            let lines = ["\(kept.count) domain\(kept.count == 1 ? "" : "s") in the organisation:"] + kept.map {
+                "\($0.name): \($0.kind), \($0.verified ? "verified" : "NOT verified")\($0.added.map { ", added " + $0 } ?? "")"
+            }
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["domains": kept])
+        }
+    }
+
     /// The super admins, then every admin role someone holds, with its privileges and its holders, from the Directory
     /// API's read-only scopes. A delegated admin is named by asking for them; a group holding a role is named by its ID.
     struct AdminRoles: ServiceOperation {
@@ -748,6 +798,8 @@ extension GoogleWorkspace {
                                  scope: "https://www.googleapis.com/auth/admin.directory.group.readonly", privilege: "Groups › Read")
         static let mobileDevices = Need(title: "Mobile devices", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                         scope: "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly", privilege: "read access to devices")
+        static let domains = Need(title: "Domains", api: "Admin SDK API", apiID: "admin.googleapis.com",
+                                  scope: "https://www.googleapis.com/auth/admin.directory.domain.readonly", privilege: "read access to domains")
         static let containmentUsers = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                            scope: "https://www.googleapis.com/auth/admin.directory.user", privilege: "Users › Read")
         static let security = Need(title: "Sessions, apps and app passwords", api: "Admin SDK API", apiID: "admin.googleapis.com",
@@ -819,6 +871,7 @@ extension GoogleWorkspace {
                 (.adminRoles, { _ = try await admin.data(directory + ["customer", "my_customer", "roles"], query: ["maxResults": "1"]) }),
                 (.groups, { _ = try await admin.data(directory + ["groups"], query: ["customer": "my_customer", "maxResults": "1"]) }),
                 (.mobileDevices, { _ = try await admin.data(directory + ["customer", "my_customer", "devices", "mobile"], query: ["maxResults": "1"]) }),
+                (.domains, { _ = try await admin.data(directory + ["customer", "my_customer", "domains"]) }),
                 // A working sign-in report does not prove the others: Gmail's needs a window, and some editions lack it.
                 (Need.report("Takeout report"), { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "takeout"],
                                                                        query: ["startTime": ServiceInput.daysAgo(1), "maxResults": "1"]) }),
