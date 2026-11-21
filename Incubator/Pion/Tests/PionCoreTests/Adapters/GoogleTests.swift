@@ -114,7 +114,7 @@ final class GoogleTests: XCTestCase {
         limited.answers["/v1/projects/kestrel-prod:analyzeIamPolicy"] = (429, #"{"error":{"code":429,"message":"Quota exceeded for quota metric 'AnalyzeIamPolicy requests' and limit 'AnalyzeIamPolicy requests per minute' of service 'cloudasset.googleapis.com' for consumer 'project_number:604757830675'.","status":"RESOURCE_EXHAUSTED"}}"#)
         let access = try await callTool(GoogleCloud.adapter, "iam-policies", #"{"member":"mallory@kestrel.example"}"#, on: limited, in: project)
         XCTAssertTrue(access.isError)
-        XCTAssertTrue(access.text.contains("HTTP 429") && access.text.contains("for consumer 'project_number:604757830675'"), access.text)
+        XCTAssertTrue(access.text.contains("rate limiting") && access.text.contains("for consumer 'project_number:604757830675'"), access.text)
         XCTAssertEqual(limited.requests.count, 1, "a quota was spent again at once")
     }
 
@@ -299,6 +299,18 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(service.requests.allSatisfy { queryItems($0)["endTime"] == "2026-11-19T10:00:00Z" })
         let none = try await callTool(GoogleWorkspace.adapter, "security-events", #"{"since":"yesterday"}"#, on: service, in: workspace)
         XCTAssertTrue(none.isError)
+    }
+
+    /// The Reports API turns part of a burst away, so a connection sends it only so many requests at once; a quota
+    /// that still refuses, which Google says with a 403, is told as rate limiting rather than missing permission.
+    func testWorkspaceTakesItsRequestsInTurnAndToldAQuotaFromAMissingPermission() async throws {
+        XCTAssertEqual(GoogleWorkspace.adapter.simultaneousRequests, 8)
+        let service = FakeService()
+        service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (403, #"{"error":{"code":403,"message":"Request rate higher than configured.","errors":[{"message":"Request rate higher than configured.","domain":"usageLimits","reason":"quotaExceeded"}]}}"#)
+        let limited = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login"}"#, on: service, in: workspace)
+        XCTAssertTrue(limited.isError)
+        XCTAssertTrue(limited.text.contains("rate limiting") && limited.text.contains("Request rate higher than configured."), limited.text)
+        XCTAssertFalse(limited.text.contains("permissions"), limited.text)
     }
 
     // MARK: Containment

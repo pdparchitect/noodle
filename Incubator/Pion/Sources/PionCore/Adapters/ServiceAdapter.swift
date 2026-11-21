@@ -111,7 +111,8 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     case rejected(String?)
     /// The service accepted the credentials, but they may not do this (HTTP 403), saying why when it did.
     case forbidden(String?)
-    /// Too many requests (HTTP 429), saying why when it did, such as which quota of which project ran out.
+    /// Too many requests (HTTP 429, or a 403 that names a quota), saying why when it did, such as which quota of which
+    /// project ran out.
     case rateLimited(String? = nil)
     /// Any other failure, with the service's reason when it gave one.
     case status(Int, String? = nil)
@@ -130,7 +131,7 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
             "The service accepted this connection's credentials, but they may not do this\(reason.map { " (it said: \($0))" } ?? ""). "
                 + "Ask the person to check the permissions they were given, and the organisation, project or account the connection names, in Settings › Tools."
         case .rateLimited(let reason):
-            "The service is rate limiting requests (HTTP 429)\(reason.map { "; it said: \($0)" } ?? ""). Wait before trying again, and make fewer requests."
+            "The service is rate limiting requests\(reason.map { "; it said: \($0)" } ?? ""). Wait before trying again, and make fewer requests."
         case .status(let status, let reason): "The service could not answer (HTTP \(status))\(reason.map { "; it said: \($0)" } ?? "")."
         case .unreadable: "The service answered with something that could not be read."
         case .input(let reason): reason
@@ -465,6 +466,8 @@ public struct ServiceClient: Sendable {
         }
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
+        // Google says a quota ran out with a 403, which is no missing permission.
+        if ToolConnectionAccess.isQuotaRefusal(response.statusCode, data) { throw ServiceError.rateLimited(Self.reason(data)) }
         if explainsRefusals, response.statusCode == 401 || response.statusCode == 403, let reason = Self.reason(data) {
             throw ServiceError.refused(reason)
         }
@@ -492,10 +495,13 @@ public struct OperationAdapter: ToolConnectionAdapter {
     }
     private let entries: [(name: String, entry: Entry)]
     private let trigger: (any ServiceTrigger)?
+    public let simultaneousRequests: Int?
 
-    public init(operations: [any ServiceOperation], trigger: (any ServiceTrigger)? = nil) {
+    /// `simultaneousRequests` is for a service known to turn away a burst beyond that many requests from one connection.
+    public init(operations: [any ServiceOperation], trigger: (any ServiceTrigger)? = nil, simultaneousRequests: Int? = nil) {
         entries = operations.map { Self.entry($0) }
         self.trigger = trigger
+        self.simultaneousRequests = simultaneousRequests
     }
 
     /// The operation that reads what its trigger finds, if its service has a feed of new and serious things to watch;

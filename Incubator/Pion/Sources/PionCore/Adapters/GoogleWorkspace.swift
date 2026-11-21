@@ -41,7 +41,9 @@ public enum GoogleWorkspace {
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents()], trigger: NewSecurityEvents())
+    /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
+    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents()], trigger: NewSecurityEvents(),
+                                                 simultaneousRequests: 8)
 
     /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
     /// signing-in admin's role, which the setup keeps to suspending and User Security Management.

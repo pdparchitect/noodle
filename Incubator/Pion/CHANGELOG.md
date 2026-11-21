@@ -11,6 +11,10 @@
 
 - Google Workspace is called Google Workspace Audit, and its Setup Steps have you sign in as an admin kept for Pion whose role holds only Reports, never a super admin.
 
+### Fixed
+
+- Google Workspace Audit no longer fails its alert checks with "Request rate higher than configured": it sends Google at most 8 requests at once, and a request a tool's service rate limits is tried again after a pause, for up to 30 seconds. A quota that still refuses is shown as rate limiting, not as missing permissions.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added
