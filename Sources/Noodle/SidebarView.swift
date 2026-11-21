@@ -21,6 +21,9 @@ struct SidebarView: View {
         // that AppKit lays out again whenever this body runs.
         SidebarList(kickRequest: $kickRequest, newSessionAgent: $newSessionAgent, searchIsFocused: searchIsFocused,
             focusComposer: focusComposer, focusRequest: focusRequest)
+        // An empty space's list takes a sliver of the column; framed, its tint and empty state span the column
+        // rather than standing in the middle as a dark stripe.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .modifier(AgentKickConfirmation(store: store, request: $kickRequest))
         .modifier(NewSessionConfirmation(store: store, agent: $newSessionAgent))
         .scrollContentBackground(.hidden)
