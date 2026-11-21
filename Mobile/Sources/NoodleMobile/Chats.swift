@@ -337,6 +337,20 @@ final class ChatsCacheFile: @unchecked Sendable {
         keep(kept, for: conversation.conversationID)
     }
 
+    /// A Metal shader file, checked and compiled here first, for every device.
+    func setBackground(shader file: URL, for conversation: some HubConversation) async throws {
+        let prepared = try await PreparedBackgroundFile.prepare(file)
+        let kept = try await pairing.uploadBackground(prepared.url, to: conversation.conversationID)
+        // The phone already has what it sent.
+        if kept.mediaKind == BackgroundMediaKind.shader.rawValue, let name = kept.compactFilename {
+            try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
+            try FileManager.default.copyItem(at: prepared.url, to: backgroundsFolder.appendingPathComponent(name))
+            fetchedBackgrounds.insert(name)
+        }
+        keep(kept, for: conversation.conversationID)
+    }
+
     private func thread(of conversationID: UUID) -> HubThread? {
         // One not listed yet is looked for in, and observed with, the whole list, so it shows once it is.
         guard let id = threadIDs[conversationID] else { return threads.first { $0.conversationID == conversationID } }

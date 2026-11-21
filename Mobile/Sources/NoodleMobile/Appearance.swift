@@ -6,8 +6,8 @@ import NoodleWallpaperCore
 import PhotosUI
 import SwiftUI
 
-/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient, or a photo or
-/// a silent video dimmed so the bubbles stay readable.
+/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient, or a photo,
+/// a silent video or a Metal shader dimmed so the bubbles stay readable.
 struct ConversationBackdrop: View {
     let background: ConversationBackground
     var imageURL: URL?
@@ -24,10 +24,14 @@ struct ConversationBackdrop: View {
                     if background.mediaKind == .video, let imageURL, !reduceMotion {
                         LoopingVideo(url: imageURL).frame(width: geometry.size.width, height: geometry.size.height)
                     }
+                    // The shader holds a still itself with Reduce Motion or Low Power Mode.
+                    if background.mediaKind == .shader, let imageURL {
+                        ShaderBackground(url: imageURL).frame(width: geometry.size.width, height: geometry.size.height)
+                    }
                 } else if let preset = background.preset {
                     PresetGradient(preset)
                 }
-                // Presets are drawn to sit behind bubbles; photos and videos are dimmed for them.
+                // Presets are drawn to sit behind bubbles; photos, videos and shaders are dimmed for them.
                 if background.imageFilename != nil { Color.black.opacity(0.25) }
             }
             .clipped()

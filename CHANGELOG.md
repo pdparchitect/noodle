@@ -6,6 +6,11 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- A Metal shader can be a conversation's background, playing behind the messages: right-click a `.metal` file in a conversation and choose Use as Background, or choose or drop one in the background editor. Ask any bot for a shader; SwiftUI colour shaders and fragment shaders both work, and one that doesn't compile shows the compiler's message. It plays at up to 30 frames a second, stops while the window is hidden, and holds still with Reduce Motion or Low Power Mode. It reaches your phone through your Noodle Hub as pictures and videos do.
+- Quick Look plays `.metal` shader files, in conversations and in Finder, and shows a still of each as its thumbnail.
+
 ## [0.92.0] - 2026-11-21
 
 ### Added

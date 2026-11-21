@@ -32,7 +32,7 @@ public enum BackgroundDrop {
         // Prefer the actual media over a browser's page link or HTML fallback.
         // Videos come before images so a poster cannot replace a dropped movie.
         let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
-            .filter { $0.conforms(to: .image) || $0.conforms(to: .movie) }
+            .filter { $0.conforms(to: .image) || $0.conforms(to: .movie) || $0.conforms(to: .metalShader) }
             .sorted { priority($0) < priority($1) }
         for type in types {
             try Task.checkCancellation()
@@ -157,7 +157,7 @@ private enum BackgroundDropError: LocalizedError {
     case directMediaRequired, downloadFailed, noFileRepresentation
     var errorDescription: String? {
         switch self {
-        case .directMediaRequired, .noFileRepresentation: return "Drop a readable image or MP4, M4V or MOV video, or a direct link to one."
+        case .directMediaRequired, .noFileRepresentation: return "Drop a readable image, an MP4, M4V or MOV video or a Metal shader, or a direct link to one."
         case .downloadFailed: return "The background couldn’t be downloaded. Try dropping the image or video itself."
         }
     }

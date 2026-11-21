@@ -27,7 +27,7 @@ private struct BackgroundDropTarget: ViewModifier {
                 .strokeBorder(isTargeted && !isBusy ? Color.accentColor : .clear, lineWidth: 3)
                 .allowsHitTesting(false)
         }
-        .help("Drop an image or video to use as the background")
+        .help("Drop an image, video or Metal shader to use as the background")
         .onDisappear { importTask?.cancel(); importTask = nil }
     }
 

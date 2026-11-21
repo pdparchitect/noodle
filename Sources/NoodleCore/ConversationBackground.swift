@@ -11,7 +11,7 @@ extension WorkspaceRepository {
     public func backgroundImageURL(_ background: ConversationBackground, conversationID: UUID) -> URL? {
         guard let name = background.imageFilename,
               name == (name as NSString).lastPathComponent,
-              ["jpg", "heic", "heif", "mov", "mp4", "m4v"].contains((name as NSString).pathExtension),
+              ["jpg", "heic", "heif", "mov", "mp4", "m4v", "metal"].contains((name as NSString).pathExtension),
               UUID(uuidString: (name as NSString).deletingPathExtension) != nil else { return nil }
         return conversationDirectory(id: conversationID).appendingPathComponent("Backgrounds", isDirectory: true)
             .appendingPathComponent(name)
@@ -29,11 +29,11 @@ extension WorkspaceRepository {
     }
 
     /// Where the small copy a phone shows is kept, beside the background and deleted with it.
-    /// A still picture is its own small copy.
+    /// A still picture or a shader is its own small copy.
     public func compactBackgroundURL(_ background: ConversationBackground, conversationID: UUID) -> URL? {
         guard let url = backgroundImageURL(background, conversationID: conversationID) else { return nil }
         switch background.mediaKind ?? .image {
-        case .image: return url
+        case .image, .shader: return url
         case .video: return url.deletingPathExtension().appendingPathExtension("compact.mp4")
         case .dynamicImage: return url.deletingPathExtension().appendingPathExtension("compact.jpg")
         }

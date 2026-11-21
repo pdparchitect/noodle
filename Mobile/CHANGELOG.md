@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- A Metal shader can be a conversation's background, playing behind the messages: touch and hold a `.metal` file in a conversation and choose Use as Background. Shaders chosen on the Mac show here too. It holds still with Reduce Motion or Low Power Mode.
+- Quick Look plays `.metal` shader files and shows a still of each as its thumbnail.
+
+### What to Test
+
+- Ask a bot to make you a Metal shader for a background, touch and hold the `.metal` file it sends, and choose Use as Background. The shader plays behind the conversation, on your other devices too.
+- Tap a `.metal` file: Quick Look plays it. A shader that doesn't compile shows why.
+- Turn on Reduce Motion or Low Power Mode: the background holds still.
+
 ## [0.58.0] - 2026-11-18
 
 ### Changed

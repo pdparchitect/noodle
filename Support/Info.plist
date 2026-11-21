@@ -144,5 +144,25 @@
 	<false/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
 	<true/>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.source-code</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Metal Shader</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.apple.metal</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>metal</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>
