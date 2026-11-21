@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-21
+
 ### Changed
 
 - Unrestricted access is off until turned on with `defaults write com.pdparchitect.rook AllowUnrestrictedAccess -bool true`; until then Settings › Bots hides it, and agents that had it run restricted, keeping it for when it is turned on.

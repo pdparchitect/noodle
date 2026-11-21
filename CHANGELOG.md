@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.92.0] - 2026-11-21
+
 ### Added
 
 - `scripts/readme-shots.sh` photographs a scenario for an app's README over the app's own artwork, blurred, and writes the rounded, optimised images, so README screenshots are retaken the same way every time.

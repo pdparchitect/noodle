@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-11-21
+
 ### Changed
 
 - Unrestricted access is off until turned on with `defaults write com.pdparchitect.noodle.hub AllowUnrestrictedAccess -bool true`; until then Settings › Bots hides it, and bots that had it run restricted, keeping it for when it is turned on.

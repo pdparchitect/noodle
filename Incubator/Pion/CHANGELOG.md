@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
 ### Added
 
 - An Investigation an agent opens shows a notification as soon as it is opened, even with Pion in front, naming the agent, the Investigation and its objective; clicking it opens the Investigation.

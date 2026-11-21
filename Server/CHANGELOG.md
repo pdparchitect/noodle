@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-21
+
 ### Changed
 
 - Removing a tool revokes its sign-in at the service, where the service allows it, before forgetting it here, as Noodle does.
