@@ -300,8 +300,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     ) {
         let click = AgentNotifications.click(in: response)
         let conversationID = click.conversationID, messageID = click.messageID, signIn = click.isSignIn
+        let approval = click.approval, approve = click.approve
 
         Task { @MainActor in
+            // A held call's Approve or Decline decides it without opening anything.
+            if let approval, let approve {
+                NoodleStore.active?.approvals.decide(approval.id, of: approval.agent, approve: approve)
+                completionHandler()
+                return
+            }
             if signIn {
                 NoodleStore.active?.showHarnessSettings()
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

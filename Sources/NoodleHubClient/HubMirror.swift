@@ -80,6 +80,8 @@ import Observation
     private var pauses: [UUID: LinkBotPause] = [:]
     /// Each bot's open tasks as the Hub last listed them, by its ID there.
     @ObservationIgnored private var listedTasks: [UUID: [LinkTask]] = [:]
+    /// Each bot's calls held for this Mac's user, as the Hub last listed them, by its ID there.
+    @ObservationIgnored private var listedApprovals: [UUID: [LinkApproval]] = [:]
     /// Computers being made, waiting for the Hub to say they are done.
     @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
@@ -808,6 +810,7 @@ import Observation
         await pairing.fetchPictures(listed)
         let bots = pairing.keptPictures(listed)
         listedTasks = Dictionary(bots.map { ($0.id, $0.tasks) }, uniquingKeysWith: { first, _ in first })
+        listedApprovals = Dictionary(bots.map { ($0.id, $0.approvals) }, uniquingKeysWith: { first, _ in first })
         var changed = false
         for bot in bots {
             if let entry = entries.first(where: { $0.remote == bot.id }) {
@@ -849,8 +852,24 @@ import Observation
                           note: task.note, createdAt: task.updatedAt)
             }
             if (try? repository.replaceTasks(agentID: entry.agent, with: tasks)) == true { changed = true }
+            // The Hub runs a held call and keeps how it ended; here they show only while they wait.
+            let approvals = (listedApprovals[entry.remote] ?? []).map { approval in
+                AgentApproval(id: approval.id, conversationID: localConversation(remote: approval.conversationID) ?? entry.conversation,
+                              provider: "", providerTitle: approval.providerTitle, tool: approval.tool,
+                              toolDescription: approval.toolDescription, input: approval.input, reason: approval.reason,
+                              createdAt: approval.createdAt)
+            }
+            if (try? repository.replaceApprovals(agentID: entry.agent, with: approvals)) == true { changed = true }
         }
         if changed { onChange?() }
+    }
+
+    /// The user's decision on a call a bot on the Hub holds. The Hub runs it and wakes the bot; its list here follows.
+    public func decideApproval(_ id: UUID, localAgentID: UUID, approve: Bool) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        _ = try await pairing.request(.decideApproval(LinkApprovalDecision(botID: entry.remote, approvalID: id, approve: approve)))
+        listedApprovals[entry.remote]?.removeAll { $0.id == id }
+        copyTasks()
     }
 
     private func syncGroups() async throws {

@@ -167,6 +167,8 @@ struct Sidebar: View {
             window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
             model.selection = id
         })) {
+            // Noodle's Approvals section, always shown while an agent waits on the champion to approve a call.
+            SidebarApprovals(store: model, agents: model.agents, inList: true)
             // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
             SidebarTasks(store: model, filter: taskFilter, inList: true)
             // As Noodle's, and a section shows only once it has something in it.
@@ -441,6 +443,12 @@ extension PionModel: AttachmentOpeningHost {}
 
 /// Noodle's patch review windows, one per patch, kept for the whole app.
 @MainActor let patchReviews = PatchReviewWindows()
+
+extension PionModel: AgentApprovalHost {
+    func openConversation(for approval: AgentApproval, of agentID: UUID) {
+        selection = approval.conversationID.flatMap { conversation($0)?.id } ?? agent(agentID).flatMap { directConversation(of: $0)?.id }
+    }
+}
 
 extension PionModel: AgentTaskHost {
     func taskAgentName(_ id: UUID) -> String? { agent(id)?.displayName }

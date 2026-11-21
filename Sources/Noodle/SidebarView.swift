@@ -80,6 +80,7 @@ private struct SidebarList: View {
                 // Not a list: in a list a whole grid is one row, which gives every picture the first one's menu.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        SidebarApprovals(store: store, agents: store.agents, inList: false)
                         SidebarTasks(store: store, filter: taskFilter, inList: false)
                         grid("Pinned", sections.pinned)
                         grid("Unread", sections.unread)
@@ -92,6 +93,7 @@ private struct SidebarList: View {
                 }
             } else {
                 List(selection: Binding(get: { store.selectedConversationID }, set: select)) {
+                    SidebarApprovals(store: store, agents: store.agents, inList: true)
                     SidebarTasks(store: store, filter: taskFilter, inList: true)
                     section("Pinned", sections.pinned)
                     section("Unread", sections.unread)

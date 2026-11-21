@@ -675,6 +675,20 @@
     "version" : 1,
     "waitsWhilePacking" : true
   },
+  "request.decideApproval" : {
+    "fetchesPictures" : true,
+    "request" : {
+      "decideApproval" : {
+        "_0" : {
+          "approvalID" : "00000000-0000-0000-0000-000000000043",
+          "approve" : true,
+          "botID" : "00000000-0000-0000-0000-000000000001"
+        }
+      }
+    },
+    "version" : 1,
+    "waitsWhilePacking" : true
+  },
   "request.declineCall" : {
     "fetchesPictures" : true,
     "request" : {
@@ -1918,6 +1932,18 @@
   "response.bot" : {
     "bot" : {
       "_0" : {
+        "approvals" : [
+          {
+            "conversationID" : "00000000-0000-0000-0000-000000000011",
+            "createdAt" : 1700000040,
+            "id" : "00000000-0000-0000-0000-000000000043",
+            "input" : "{\"user\":\"m.okafor@kestrel.example\"}",
+            "providerTitle" : "Google Workspace Containment",
+            "reason" : "Signed in from a known-bad IP",
+            "tool" : "suspend",
+            "toolDescription" : "Suspend a user"
+          }
+        ],
         "archivedAt" : 1700000200,
         "background" : {
           "media" : "00000000-0000-0000-0000-000000000030.jpg",
@@ -1998,6 +2024,9 @@
   "response.bot.minimal" : {
     "bot" : {
       "_0" : {
+        "approvals" : [
+
+        ],
         "canCall" : false,
         "conversationID" : "00000000-0000-0000-0000-000000000012",
         "createdAt" : 1700000000,
@@ -2023,6 +2052,18 @@
     "bots" : {
       "_0" : [
         {
+          "approvals" : [
+            {
+              "conversationID" : "00000000-0000-0000-0000-000000000011",
+              "createdAt" : 1700000040,
+              "id" : "00000000-0000-0000-0000-000000000043",
+              "input" : "{\"user\":\"m.okafor@kestrel.example\"}",
+              "providerTitle" : "Google Workspace Containment",
+              "reason" : "Signed in from a known-bad IP",
+              "tool" : "suspend",
+              "toolDescription" : "Suspend a user"
+            }
+          ],
           "archivedAt" : 1700000200,
           "background" : {
             "media" : "00000000-0000-0000-0000-000000000030.jpg",
@@ -2099,6 +2140,9 @@
           ]
         },
         {
+          "approvals" : [
+
+          ],
           "canCall" : false,
           "conversationID" : "00000000-0000-0000-0000-000000000012",
           "createdAt" : 1700000000,
@@ -2119,6 +2163,9 @@
           ]
         },
         {
+          "approvals" : [
+
+          ],
           "canCall" : true,
           "conversationID" : "00000000-0000-0000-0000-000000000013",
           "createdAt" : 1700000000,

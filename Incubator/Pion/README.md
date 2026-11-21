@@ -104,7 +104,8 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Sentinel, CrowdStrike,
   SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
-- **Read-only lookups**: agents investigate; changes to a system are yours to make.
+- **Approvals**: agents investigate freely; a change that cuts off access or deletes something
+  waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
 - **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
 - **Restricted by default**: each agent works in a sandbox of its own on your Mac.
 - **Native and fast**: voice input, attachments, annotations, Quick Look, notifications.
@@ -113,7 +114,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 
 Connect your stack in **Settings → Tools**. Each service's form has **Setup Steps**: where in
 the service's console to make its key or account, and the least access to give it. Pion's
-own lookups only read. Add two accounts of the same service side by side, and assign each
+own lookups only read, and their actions wait for your approval. Add two accounts of the same service side by side, and assign each
 to the agents that should use it.
 
 | | |

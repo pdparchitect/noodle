@@ -63,14 +63,18 @@ public protocol ServiceOperation: Sendable {
     static var name: String { get }
     static var summary: String { get }
     static var input: JSONSchema { get }
-    /// Whether it only reads. One that changes something is held: a bot's call never runs it, as data a bot reads,
-    /// such as a phishing mail, could have asked for it. Bots are told through the tool's hints.
+    /// Whether it only reads. Bots are told through the tool's hints.
     static var readOnly: Bool { get }
+    /// Whether it cuts off or restores someone's access, or deletes something. Noodle's tool broker then holds a bot's
+    /// call for the champion's approval, as data a bot reads, such as a phishing mail, could have asked for it; an
+    /// ordinary change, which is neither, runs on the bot's call.
+    static var destructive: Bool { get }
     func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult
 }
 
 public extension ServiceOperation {
     static var readOnly: Bool { true }
+    static var destructive: Bool { false }
 }
 
 extension ServiceAlert {
@@ -490,7 +494,6 @@ public struct OperationAdapter: ToolConnectionAdapter {
     private struct Entry: Sendable {
         /// The tool as listed, in JSON.
         let tool: Data
-        let held: Bool
         let run: @Sendable (Data, ServiceClient) async throws -> ServiceResult
     }
     private let entries: [(name: String, entry: Entry)]
@@ -521,11 +524,11 @@ public struct OperationAdapter: ToolConnectionAdapter {
     private static func entry<Operation: ServiceOperation>(_ operation: Operation) -> (name: String, entry: Entry) {
         let description: [String: Any] = [
             "name": Operation.name, "description": Operation.summary,
-            "annotations": Operation.readOnly ? ["readOnlyHint": true] : ["readOnlyHint": false, "destructiveHint": true],
+            "annotations": Operation.readOnly ? ["readOnlyHint": true] : ["readOnlyHint": false, "destructiveHint": Operation.destructive],
             "inputSchema": Operation.input.json,
         ]
         let tool = (try? JSONSerialization.data(withJSONObject: description, options: [.sortedKeys])) ?? Data("{}".utf8)
-        return (Operation.name, Entry(tool: tool, held: !Operation.readOnly) { arguments, client in
+        return (Operation.name, Entry(tool: tool) { arguments, client in
             let input: Operation.Input
             do { input = try JSONDecoder().decode(Operation.Input.self, from: arguments) }
             catch { throw ServiceError.input(Self.reason(error)) }
@@ -546,12 +549,6 @@ public struct OperationAdapter: ToolConnectionAdapter {
     func run(_ tool: String, arguments: Data, connection: ToolConnection, access: any ServiceAccess) async throws -> Data {
         guard let entry = entries.first(where: { $0.name == tool })?.entry else {
             throw ToolConnectionError.message("This connection does not offer \(tool).")
-        }
-        if entry.held {
-            return try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": """
-                \(tool) changes the account, so Pion never runs it on a bot's call. Recommend it to the champion instead, \
-                naming the exact target, why, the expected effect and how to undo it.
-                """]], "isError": true], options: [.sortedKeys])
         }
         do {
             let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))

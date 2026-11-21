@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Approvals: a call one of your bots holds for you, such as suspending a user, shows in a new Approvals section at the top of the conversation list, with exactly what will run and the bot's reason. Tap it to approve or decline. The section shows every Hub's, whatever space is shown.
+
+### What to Test
+
+- Give a bot a tool whose service marks a tool destructive, and ask the bot to use it. Check the call shows under Approvals with what it will do and the bot's reason, that Decline leaves it undone and Approve runs it, and that the bot then says how it went.
+
 ## [0.58.0] - 2026-11-18
 
 ### Changed

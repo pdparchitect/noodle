@@ -46,6 +46,8 @@ final class NoodleStore {
     private(set) var agents: [AgentRecord] = []
     /// Each bot's tasks here, as it keeps them through Messenger.
     private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
+    /// The bots' calls held for the person's approval.
+    let approvals: AgentApprovalDesk
     private(set) var conversations: [BotConversation] = [] {
         didSet {
             let old = conversationsByID
@@ -325,7 +327,12 @@ final class NoodleStore {
         self.toolAssignments = toolAssignments
         // The broker exists before the controllers, so revocations reach them through this box.
         let revocations = ToolRevocations()
-        let toolHost = ToolHostServices.repository(self.repository, revoked: { revocations.handle($0, $1, $2) }) { toolAssignments.assignments(for: $0) }
+        let approvals = AgentApprovalDesk()
+        self.approvals = approvals
+        let toolHost = ToolHostServices.repository(self.repository, revoked: { revocations.handle($0, $1, $2) },
+                                                   approvalsChanged: { id in Task { @MainActor in approvals.reload(agent: id) } }) {
+            toolAssignments.assignments(for: $0)
+        }
         self.toolHost = toolHost
         tools = ToolBridgeBroker(registry: toolProviders, host: toolHost) { toolAssignments.assignments(for: $0) }
         connectionsController = ToolConnectionsController(repository: self.repository)
@@ -407,6 +414,7 @@ final class NoodleStore {
             Task { @MainActor in self?.reloadTasks(of: id); self?.thisMac.hub?.bots.tasksChanged(of: id) }
         }
         messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
+        connectApprovals()
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         // A call from a bot here was answered, declined or missed on the owner's phone.
         thisMac.onCallStopped = { [weak self] in self?.stopRinging($0) }
@@ -970,6 +978,7 @@ final class NoodleStore {
             }
             conversations = try repository.loadConversations().filter(\.isShownHere)
             tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
+            approvals.reload(Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentApprovals(agentID: $0.id)) ?? []) }))
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
             })
@@ -2223,9 +2232,47 @@ final class NoodleStore {
         unread.badged(notifications(of:))
     }
 
+    /// Conversations waiting to be read, and calls waiting for the person's approval.
     func updateDockBadge() {
-        let badged = badgedConversationIDs
-        NSApplication.shared.dockTile.badgeLabel = badged.isEmpty ? nil : String(badged.count)
+        let count = badgedConversationIDs.count + approvals.pendingCount
+        NSApplication.shared.dockTile.badgeLabel = count == 0 ? nil : String(count)
+    }
+
+    /// Where a held call shows, how it is decided, and who hears of it.
+    private func connectApprovals() {
+        approvals.agent = { [weak self] id in self?.agents.first { $0.id == id } }
+        approvals.load = { [repository] id in (try? repository.currentApprovals(agentID: id)) ?? [] }
+        approvals.decide = { [weak self] approval, agent, approve in
+            guard let self else { return approval }
+            // A bot on a Hub holds its calls there, which runs them and tells the bot.
+            if let mirror = self.hubMirror(forAgent: agent.id) {
+                try await mirror.decideApproval(approval.id, localAgentID: agent.id, approve: approve)
+                var decided = approval
+                decided.state = approve ? .running : .declined
+                return decided
+            }
+            return try await self.tools.decide(approval: approval.id, of: agent.id, approve: approve, by: self.ownerName(),
+                                               repository: self.repository)
+        }
+        approvals.onPending = { approval, agent in AgentNotifications.postApproval(approval, from: agent) }
+        approvals.onDecided = { [weak self] approval, agent in
+            guard let self, self.hubMirror(forAgent: agent.id) == nil else { return }
+            self.runtime.wake(agent.id, note: approval.outcomeNote, repository: self.repository)
+        }
+        approvals.onCountChanged = { [weak self] in self?.updateDockBadge() }
+        approvals.onError = { [weak self] in self?.errorMessage = $0 }
+        // The owner's devices this Mac serves list a bot's held calls with it, and can decide them.
+        approvals.onAgentChanged = { [weak self] id in self?.thisMac.hub?.bots.approvalsChanged(of: id) }
+        thisMac.decideApproval = { [weak self] id, agent, approve in
+            guard let self else { throw AgentApprovalError("Noodle is closing.") }
+            return try await self.approvals.settle(id, of: agent, approve: approve)
+        }
+    }
+
+    func openConversation(for approval: AgentApproval, of agentID: UUID) {
+        let conversation = approval.conversationID.flatMap { id in conversations.first { $0.id == id } }
+            ?? conversations.first { $0.kind == .direct && $0.participantIDs == [agentID] }
+        if let conversation { selectedConversationID = conversation.id }
     }
 
     func markConversationRead(_ conversationID: UUID?) {

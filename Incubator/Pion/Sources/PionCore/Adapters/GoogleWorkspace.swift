@@ -53,9 +53,9 @@ public enum GoogleWorkspace {
         defaultInstructions: """
         Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
         an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
-        app-passwords lists its app passwords. sign-out, revoke-token, delete-app-password, suspend and unsuspend change \
-        the account, so they never run on your call: recommend each to the champion with the exact user, why, the \
-        expected effect and how to undo it. Signing out alone leaves app access and the password working.
+        app-passwords lists its app passwords. sign-out, revoke-token, delete-app-password, suspend and unsuspend are held \
+        for the champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo \
+        it, with the Investigation as --approval-conversation. Signing out alone leaves app access and the password working.
         """,
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
@@ -299,9 +299,10 @@ extension GoogleWorkspace {
     struct SignOut: ServiceOperation {
         typealias Input = UserInput
         static let name = "sign-out"
-        static let summary = "Sign a user out of every web and device session. Held for the champion's approval."
+        static let summary = "Sign a user out of every web and device session."
         static let input = userSchema
         static let readOnly = false
+        static let destructive = true
 
         func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
             _ = try await directory(input.user, ["signOut"]) { try await service.data($0, method: "POST") }
@@ -312,10 +313,11 @@ extension GoogleWorkspace {
     struct RevokeToken: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, clientId: String }
         static let name = "revoke-token"
-        static let summary = "Revoke every token a user granted one app, by its client ID from tokens. Held for the champion's approval."
+        static let summary = "Revoke every token a user granted one app, by its client ID from tokens."
         static let input = JSONSchema.object(["user": .string("The user's primary email address."),
                                               "clientId": .string("The app's client ID, as tokens lists it.")], required: ["user", "clientId"])
         static let readOnly = false
+        static let destructive = true
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             _ = try await directory(input.user, ["tokens", input.clientId]) { try await service.data($0, method: "DELETE") }
@@ -326,11 +328,12 @@ extension GoogleWorkspace {
     struct DeleteAppPassword: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, codeId: Int }
         static let name = "delete-app-password"
-        static let summary = "Delete one of a user's app passwords, by its ID from app-passwords. Held for the champion's approval."
+        static let summary = "Delete one of a user's app passwords, by its ID from app-passwords."
         static let input = JSONSchema.object(["user": .string("The user's primary email address."),
                                               "codeId": .integer("The app password's ID, as app-passwords lists it.", minimum: 0)],
                                              required: ["user", "codeId"])
         static let readOnly = false
+        static let destructive = true
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             _ = try await directory(input.user, ["asps", String(input.codeId)]) { try await service.data($0, method: "DELETE") }
@@ -338,13 +341,14 @@ extension GoogleWorkspace {
         }
     }
 
-    /// Suspending blocks sign-in and ends access; unsuspend undoes it.
+    /// Suspending blocks sign-in and ends access; unsuspend undoes it, and is as serious, as it could let an attacker back in.
     struct Suspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "suspend"
-        static let summary = "Suspend a user, so they cannot sign in until restored with unsuspend. Held for the champion's approval."
+        static let summary = "Suspend a user, so they cannot sign in until restored with unsuspend."
         static let input = userSchema
         static let readOnly = false
+        static let destructive = true
 
         func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
             try await suspended(true, input.user, on: service)
@@ -355,9 +359,10 @@ extension GoogleWorkspace {
     struct Unsuspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "unsuspend"
-        static let summary = "Restore a suspended user. Held for the champion's approval."
+        static let summary = "Restore a suspended user."
         static let input = userSchema
         static let readOnly = false
+        static let destructive = true
 
         func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
             try await suspended(false, input.user, on: service)

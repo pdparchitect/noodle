@@ -330,7 +330,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             let host = ToolHostServices.repository(repository, revoked: { [weak self] kind, id, agent in
                 guard kind == "computer", let computer = UUID(uuidString: id) else { return }
                 Task { @MainActor in self?.computers?.revoke(computer: computer, agent: agent) }
-            }) { assignments.assignments(for: $0) }
+            }, approvalsChanged: { [weak self] id in Task { @MainActor in self?.approvalsChanged(of: id) } }) { assignments.assignments(for: $0) }
             let broker = ToolBridgeBroker(registry: connections.tools, host: host) { assignments.assignments(for: $0) }
             // A bot's AGENTS.md lists its tool skills once they are written.
             broker.onSkillsChanged = { [weak self] id in
@@ -902,6 +902,42 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public func tasksChanged(of agentID: UUID) {
         guard let owner = access.owner(ofBot: agentID) else { return }
         onChange?(owner, .botsChanged)
+    }
+
+    /// A bot held a call for its owner, or one was decided; their devices list the bots again to see it.
+    public func approvalsChanged(of agentID: UUID) {
+        guard let owner = access.owner(ofBot: agentID) else { return }
+        onChange?(owner, .botsChanged)
+    }
+
+    /// Carries out the owner's decision for bots something else runs, as Noodle serving its own owner, which then
+    /// wakes the bot itself. Nil where the Hub runs its bots' tools.
+    public var decideElsewhere: ((_ approval: UUID, _ agent: UUID, _ approve: Bool) async throws -> AgentApproval)?
+
+    /// The owner's decision on a call one of their bots holds: an approved one runs here, once, and the bot hears how
+    /// it went. Only the bot's owner decides; someone it is shared with never sees its approvals.
+    public func decideApproval(_ decision: LinkApprovalDecision, for user: HubUser) async throws {
+        guard access.owner(ofBot: decision.botID) == user.id, access.host(ofBot: decision.botID) == nil else {
+            throw LinkError("There is no such bot.")
+        }
+        do {
+            if let decideElsewhere {
+                _ = try await decideElsewhere(decision.approvalID, decision.botID, decision.approve)
+            } else {
+                let decided: AgentApproval
+                if let toolBroker {
+                    decided = try await toolBroker.decide(approval: decision.approvalID, of: decision.botID, approve: decision.approve,
+                                                          by: user.name, repository: repository)
+                } else if !decision.approve {
+                    // Declining runs nothing, so it needs no tools.
+                    decided = try repository.claimApproval(agentID: decision.botID, id: decision.approvalID, approve: false, by: user.name)
+                } else {
+                    throw LinkError("This Hub is not running its bots' tools.")
+                }
+                runtime.wake(decision.botID, note: decided.outcomeNote, repository: repository)
+            }
+        } catch let error as AgentApprovalError { throw LinkError(error.errorDescription ?? "") }
+        approvalsChanged(of: decision.botID)
     }
 
     /// `taskID` names a task of one of the conversation's bots that the message is about.
@@ -2012,7 +2048,18 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                        canCall: agent.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))?.voices.isEmpty == false,
                        pinnedAt: pins[conversation.id], pause: pause(of: agent),
                        suspendedUntil: agent.isSuspended() ? agent.suspendedUntil : nil,
-                       tasks: tasks(of: agent, direct: conversation.id, conversations: conversations))
+                       tasks: tasks(of: agent, direct: conversation.id, conversations: conversations),
+                       approvals: approvals(of: agent, direct: conversation.id, conversations: conversations))
+    }
+
+    /// The calls the bot holds for its owner's approval, each with the conversation it was asked in.
+    private func approvals(of agent: AgentRecord, direct: UUID, conversations: [BotConversation]) -> [LinkApproval] {
+        let threads = Set(conversations.filter { $0.guest == nil }.map(\.id))
+        return ((try? repository.currentApprovals(agentID: agent.id)) ?? []).filter { $0.state == .pending }.map { approval in
+            LinkApproval(id: approval.id, conversationID: approval.conversationID.flatMap { threads.contains($0) ? $0 : nil } ?? direct,
+                         providerTitle: approval.providerTitle, tool: approval.tool, toolDescription: approval.toolDescription,
+                         input: approval.input, reason: approval.reason, createdAt: approval.createdAt)
+        }
     }
 
     /// The bot's open and waiting tasks, each with the conversation to write about it in.

@@ -175,6 +175,13 @@ public final class ToolBridgeBroker: @unchecked Sendable {
         queue.sync { timer?.cancel(); timer = nil; mailboxMonitor.reset(); sessions.removeAll(); agents.removeAll() }
     }
 
+    /// The person's decision on a call one of its bots had held: an approved one runs once, with the bot's tools as
+    /// they are now.
+    public func decide(approval id: UUID, of agent: UUID, approve: Bool, by person: String, repository: WorkspaceRepository) async throws -> AgentApproval {
+        try await ToolBroker.decide(approval: id, of: agent, approve: approve, by: person, repository: repository, registry: registry,
+                                    assignments: { [assignments] in assignments(agent) }, workspace: repository.directory(forAgentID: agent), host: host)
+    }
+
     private func scan() {
         guard running < 16, mailboxMonitor.hasChanges() else { return }
         claimed = claimed.filter { $0.value > Date() }

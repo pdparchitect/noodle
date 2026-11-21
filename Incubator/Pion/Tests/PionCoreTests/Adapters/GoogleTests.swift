@@ -355,31 +355,42 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(bad.isError)
     }
 
-    /// Every action changes an account, so a bot's call never reaches Google: it is held for the champion.
-    func testContainmentActionsAreHeldAndSendNothing() async throws {
-        let service = FakeService()
+    /// Every action is marked destructive, so Pion's broker holds a bot's call for the champion; once approved, each
+    /// sends exactly its one request.
+    func testContainmentActionsAreDestructiveAndEachSendsItsOneRequest() async throws {
         let listed = try JSONSerialization.jsonObject(with: try await GoogleWorkspace.containmentAdapter.tools(for: containment)) as! [String: Any]
         let tools = try XCTUnwrap(listed["tools"] as? [[String: Any]])
-        let actions = ["sign-out", "revoke-token", "delete-app-password", "suspend", "unsuspend"]
-        for name in actions {
-            let tool = try XCTUnwrap(tools.first { $0["name"] as? String == name }, name)
-            let hints = try XCTUnwrap(tool["annotations"] as? [String: Any])
+        for name in ["sign-out", "revoke-token", "delete-app-password", "suspend", "unsuspend"] {
+            let hints = try XCTUnwrap(tools.first { $0["name"] as? String == name }?["annotations"] as? [String: Any], name)
             XCTAssertEqual(hints["readOnlyHint"] as? Bool, false, name)
             XCTAssertEqual(hints["destructiveHint"] as? Bool, true, name)
         }
         for name in ["user", "tokens", "app-passwords"] {
-            let tool = try XCTUnwrap(tools.first { $0["name"] as? String == name }, name)
-            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true, name)
+            let hints = try XCTUnwrap(tools.first { $0["name"] as? String == name }?["annotations"] as? [String: Any], name)
+            XCTAssertEqual(hints["readOnlyHint"] as? Bool, true, name)
+            XCTAssertNil(hints["destructiveHint"], name)
         }
-        for (name, arguments) in [("sign-out", #"{"user":"m.okafor@kestrel.example"}"#),
-                                  ("revoke-token", #"{"user":"m.okafor@kestrel.example","clientId":"999-evil.apps.googleusercontent.com"}"#),
-                                  ("delete-app-password", #"{"user":"m.okafor@kestrel.example","codeId":42}"#),
-                                  ("suspend", #"{"user":"m.okafor@kestrel.example"}"#), ("unsuspend", #"{"user":"m.okafor@kestrel.example"}"#)] {
-            let held = try await callTool(GoogleWorkspace.containmentAdapter, name, arguments, on: service, in: containment)
-            XCTAssertTrue(held.isError, name)
-            XCTAssertTrue(held.text.contains("champion"), held.text)
+        let service = FakeService()
+        let user = "/admin/directory/v1/users/m.okafor@kestrel.example"
+        for path in [user, user + "/signOut", user + "/tokens/999-evil.apps.googleusercontent.com", user + "/asps/42"] {
+            service.answers[path] = (200, "{}")
         }
-        XCTAssertTrue(service.requests.isEmpty, "an action reached Google")
+        let runs: [(String, String, String, String)] = [
+            ("sign-out", #"{"user":"m.okafor@kestrel.example"}"#, "POST", user + "/signOut"),
+            ("revoke-token", #"{"user":"m.okafor@kestrel.example","clientId":"999-evil.apps.googleusercontent.com"}"#, "DELETE", user + "/tokens/999-evil.apps.googleusercontent.com"),
+            ("delete-app-password", #"{"user":"m.okafor@kestrel.example","codeId":42}"#, "DELETE", user + "/asps/42"),
+            ("suspend", #"{"user":"m.okafor@kestrel.example"}"#, "PATCH", user),
+            ("unsuspend", #"{"user":"m.okafor@kestrel.example"}"#, "PATCH", user),
+        ]
+        for (name, arguments, method, path) in runs {
+            let result = try await callTool(GoogleWorkspace.containmentAdapter, name, arguments, on: service, in: containment)
+            XCTAssertFalse(result.isError, "\(name): \(result.text)")
+            XCTAssertEqual(service.requests.last?.httpMethod, method, name)
+            XCTAssertEqual(service.requests.last?.url?.path, path, name)
+        }
+        XCTAssertEqual(service.requests.count, runs.count)
+        XCTAssertEqual(try json(service.requests[3])["suspended"] as? Bool, true)
+        XCTAssertEqual(try json(service.requests[4])["suspended"] as? Bool, false)
     }
 
     /// A refusal names what the signed-in admin's role lacks, as Google answers 403 for anything outside it.

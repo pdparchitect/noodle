@@ -173,6 +173,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case markRead(LinkReadMark)
     /// Pins or unpins one of this user's conversations, for all their devices. The Hub pushes `pinChanged`.
     case pin(LinkPin)
+    /// Approves or declines a call one of this user's bots is holding for them, listed in `LinkBot.approvals`.
+    /// An approved one runs on the Hub before this answers `done`; the bot is woken with the outcome.
+    case decideApproval(LinkApprovalDecision)
     /// Sets how one of this user's groups notifies them, for all their devices. The Hub pushes
     /// `notificationsChanged`. Only a Hub whose status says `mutesGroups` knows it.
     case setNotifications(LinkNotificationsChange)
@@ -1393,11 +1396,14 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var suspendedUntil: Date?
     /// For its owner: the tasks it has open or waiting, oldest first. Empty for someone it is shared with.
     public var tasks: [LinkTask]
+    /// For its owner: the calls it is holding for their approval, oldest first. Empty for someone it is shared with,
+    /// and from a Hub without approvals.
+    public var approvals: [LinkApproval]
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
                 sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil,
-                suspendedUntil: Date? = nil, tasks: [LinkTask] = []) {
+                suspendedUntil: Date? = nil, tasks: [LinkTask] = [], approvals: [LinkApproval] = []) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1414,11 +1420,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.pause = pause
         self.suspendedUntil = suspendedUntil
         self.tasks = tasks
+        self.approvals = approvals
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
-             suspendedUntil, tasks
+             suspendedUntil, tasks, approvals
     }
 
     public init(from decoder: Decoder) throws {
@@ -1439,7 +1446,49 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         pause = (try? c.decodeIfPresent(LinkBotPause.self, forKey: .pause)) ?? nil
         suspendedUntil = try c.decodeIfPresent(Date.self, forKey: .suspendedUntil)
         tasks = try c.decode(.tasks, or: [])
+        approvals = try c.decode(.approvals, or: [])
     }
+}
+
+/// A call a bot holds for its owner's approval, as their devices show it: exactly what will run, from the call
+/// itself, and the bot's reason, which is its own words. The owner decides with `decideApproval`.
+public struct LinkApproval: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    /// Where the bot asked: the conversation it named, or its own.
+    public var conversationID: UUID
+    /// The tool's connection, such as Google Workspace Containment, the tool and its own description.
+    public var providerTitle: String
+    public var tool: String
+    public var toolDescription: String
+    /// The call's input exactly as it will be sent, as JSON.
+    public var input: String
+    public var reason: String
+    public var createdAt: Date
+
+    public init(id: UUID, conversationID: UUID, providerTitle: String, tool: String, toolDescription: String = "", input: String,
+                reason: String, createdAt: Date) {
+        self.id = id; self.conversationID = conversationID; self.providerTitle = providerTitle; self.tool = tool
+        self.toolDescription = toolDescription; self.input = input; self.reason = reason; self.createdAt = createdAt
+    }
+
+    /// The input as one line per value, for the person to read before deciding.
+    public var inputLines: [(name: String, value: String)] {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any] else { return [] }
+        return object.keys.sorted().map { key in
+            if let text = object[key] as? String { return (key, text) }
+            let data = object[key].flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .fragmentsAllowed]) }
+            return (key, data.map { String(decoding: $0, as: UTF8.self) } ?? "")
+        }
+    }
+}
+
+/// The owner's decision on a call one of their bots holds.
+public struct LinkApprovalDecision: Codable, Equatable, Sendable {
+    public var botID: UUID
+    public var approvalID: UUID
+    public var approve: Bool
+
+    public init(botID: UUID, approvalID: UUID, approve: Bool) { self.botID = botID; self.approvalID = approvalID; self.approve = approve }
 }
 
 /// A piece of work a bot keeps, as its owner's devices show it. Only the bot changes it; a device

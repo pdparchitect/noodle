@@ -7,8 +7,10 @@ Pion has two Google Workspace tools, each with its own sign-in:
   assigned to when an audit event means an attack. It cannot change anything.
 - **Google Workspace Containment** shows an account's state and contains it:
   signing a user out everywhere, revoking an app's access, deleting an app
-  password, and suspending or restoring a user. Agents can look, but never take
-  these actions themselves: they recommend each one to the champion.
+  password, and suspending or restoring a user. Agents can look at an account
+  freely, but every action waits under **Approvals** for the champion, showing
+  exactly what it will do and the agent's reason, and runs only once approved.
+  The Investigation's Audit Log records each request and how it was decided.
 
 They are separate so that the access to change accounts is given on purpose, to
 the agents you choose. An agent with only the audit tool has no way to ask for

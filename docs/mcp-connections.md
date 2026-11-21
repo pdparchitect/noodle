@@ -21,7 +21,11 @@ sign-in. Reconnecting can change the account while keeping bot assignments.
 Editing a connection's instructions affects every bot assigned to it.
 
 Assigned bots can use the permissions you approved at sign-in without asking you
-again for each use. Noodle must remain open. Removing an assignment stops future
+again for each use, except for tools the service marks as destructive, such as
+suspending a user or deleting something. A bot's call to one of those waits under
+**Approvals** at the top of the sidebar, and in a notification, showing exactly
+what it will do and why the bot asks; it runs only once you approve it, and the
+bot hears how it went. Noodle must remain open. Removing an assignment stops future
 access; removing a connection deletes its sign-in from this Mac. Revoke access at
 the provider too when needed. If a change timed out, check whether it happened
 before trying again.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Approvals: a bot's call to a tool its service marks destructive waits on the Hub for its owner instead of running. The owner's devices list it with the bot and approve or decline it; an approved one runs on the Hub once, and the bot is told the outcome. Someone a bot is shared with never sees its approvals.
+
 ## [0.58.0] - 2026-11-21
 
 ### Changed

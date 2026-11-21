@@ -1826,6 +1826,8 @@ struct AgentsView: View {
     @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
     /// The task being written about, from the Tasks section.
     @State private var feedbackTask: TaskEntry?
+    /// The held call being decided, from the Approvals section.
+    @State private var decidingApproval: ApprovalEntry?
     @State private var showsAllTasks = false
     @State private var showingConsole = false
     @State private var creating = false
@@ -2083,6 +2085,7 @@ struct AgentsView: View {
         let (searching, pinned, unread, rest) = (listing.searching, listing.pinned, listing.unread, listing.rest)
         let mentions = shownMentions(listing, rows: rows)
         let tasks = TaskEntry.listed(in: rows.map { (chats: $0.chats, thread: $0.thread) }, filter: taskFilter)
+        let approvals = ApprovalEntry.listed(in: chats)
         return Group {
             if ConversationListStyle(rawValue: listStyle) == .icons {
                 // As on the Mac: each section a grid of pictures, with what each bot is doing under its name. Not a
@@ -2090,6 +2093,15 @@ struct AgentsView: View {
                 // first one's menu and preview.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        if !approvals.isEmpty {
+                            Text("Approvals")
+                                .font(.headline)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 8)
+                            VStack(spacing: 10) { approvalRows(approvals) }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                        }
                         if !tasks.isEmpty {
                             Text("Tasks")
                                 .font(.headline)
@@ -2112,6 +2124,7 @@ struct AgentsView: View {
                 }
             } else {
                 List {
+                    if !approvals.isEmpty { Section("Approvals") { approvalRows(approvals) } }
                     if !tasks.isEmpty { Section("Tasks") { taskRows(tasks) } }
                     if !pinned.isEmpty, layout.pinsInList {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
@@ -2275,6 +2288,12 @@ struct AgentsView: View {
                     navigation.open(ChatLink(hub: CurrentHub.name(of: entry.chats.pairing), thread: entry.thread.id), in: layout)
                 }
             }
+            .sheet(item: $decidingApproval) { entry in
+                ApprovalSheet(entry: entry) {
+                    guard let thread = entry.thread else { return }
+                    navigation.open(ChatLink(hub: CurrentHub.name(of: entry.chats.pairing), thread: thread.id), in: layout)
+                }
+            }
             .fullScreenCover(isPresented: $showingConsole) { ConsoleView(hubs: chats) }
             // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
@@ -2417,6 +2436,14 @@ struct AgentsView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    /// Every held call, never cut short. Tapping one shows it in full to decide.
+    private func approvalRows(_ approvals: [ApprovalEntry]) -> some View {
+        ForEach(approvals) { entry in
+            Button { decidingApproval = entry } label: { ApprovalListRow(entry: entry) }
+                .buttonStyle(.plain)
         }
     }
 

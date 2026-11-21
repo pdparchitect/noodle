@@ -261,7 +261,7 @@ final class MessengerDocumentationTests: XCTestCase {
             case .call: options = ["--reason", "Checking in"]
             case .addTask: options = ["Write the notes"] + conversation
             case .updateTask: options = [taskID, "--state", "waiting", "--on", "user"]
-            case .listTasks: options = []
+            case .listTasks, .listApprovals: options = []
             }
             let result = MessengerCLI.runDirect(arguments: prefix + [command.rawValue] + options, environment: [:])
             XCTAssertEqual(result.exitCode, 0, "\(command): \(result.standardError)")

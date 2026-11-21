@@ -1,4 +1,5 @@
 import Foundation
+import NoodleCore
 
 /// One line of an Investigation's audit log. The log is only ever appended to.
 public struct AuditEntry: Codable, Hashable, Sendable {
@@ -143,6 +144,34 @@ public final class PionStore: @unchecked Sendable {
     }
 
     // MARK: Audit log
+
+    /// A call an agent held for the champion's approval, or how it was decided, logged in the Investigation it was held
+    /// in, closed or not. Returns false where it was held in no Investigation.
+    @discardableResult
+    public func logApproval(_ approval: AgentApproval, agent: UUID, agentName: String, now: Date = Date()) -> Bool {
+        guard let id = approval.conversationID, investigation(id) != nil else { return false }
+        let call = ([approval.tool] + approval.inputLines.map { "\($0.name): \($0.value)" }).joined(separator: " ")
+        let actor: CaseActor, detail: String
+        switch approval.state {
+        case .pending, .running:
+            actor = .agent(agent)
+            detail = "\(agentName) asked to run \(call) on \(approval.providerTitle): \(approval.reason)"
+        case .done, .failed, .declined, .expired:
+            actor = approval.decidedBy.map(CaseActor.champion) ?? .agent(agent)
+            let decided = switch approval.state {
+            case .done: "Approved by \(approval.decidedBy ?? "the champion"); it ran"
+            case .failed: "Approved by \(approval.decidedBy ?? "the champion"), but it did not succeed"
+            case .declined: "Declined by \(approval.decidedBy ?? "the champion")"
+            default: "Expired without an answer"
+            }
+            detail = "\(decided): \(call) on \(approval.providerTitle)" + (approval.result.map { ". \($0)" } ?? "")
+        }
+        do {
+            try lock.withLock { try unlockedAppend(AuditEntry(at: now, actor: actor, event: "approval", detail: detail), to: id) }
+        } catch { return false }
+        onChange?()
+        return true
+    }
 
     public func audit(_ id: UUID) -> [AuditEntry] {
         lock.withLock {

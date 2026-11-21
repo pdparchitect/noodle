@@ -190,6 +190,9 @@ public enum MessengerCLI {
             case .listTasks:
                 return .json(try repository.listTasks(agentID: agentID))
 
+            case .listApprovals:
+                return .json(try repository.currentApprovals(agentID: agentID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -374,6 +377,8 @@ public enum MessengerCLI {
                 action = .updateTask(id: id, state: state, waitingOn: waitingOn, title: title, note: note)
             case .listTasks:
                 action = .listTasks
+            case .listApprovals:
+                action = .listApprovals
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -589,6 +594,7 @@ public enum MessengerAction: Codable, Sendable {
         /// Nil fields stay as they are; see `WorkspaceRepository.updateTask`.
         case updateTask(id: UUID, state: AgentTask.State?, waitingOn: MessageAuthor?, title: String?, note: String?)
         case listTasks
+        case listApprovals
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

@@ -685,6 +685,43 @@ import XCTest
         XCTAssertEqual(tasks.first?.conversationID, bot.conversationID)
     }
 
+    /// A call a bot holds reaches its owner's devices with the bot, exactly as it will run; only the owner decides it,
+    /// and once decided it leaves the list.
+    func testBotsCarryTheCallsTheyHoldForTheirOwnerToDecide() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        XCTAssertEqual(bot.approvals, [])
+        let events = try await f.device.subscribe()
+        _ = try await f.device.request(.bots)
+        let held = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            toolDescription: "Suspend a user", input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Signed in from a known-bad IP"))
+        f.hub.bots.approvalsChanged(of: bot.id)
+        for try await event in events { if case .botsChanged = event { break } }
+
+        let first = try await bots(of: f.device).first
+        let listed = try XCTUnwrap(first?.approvals)
+        XCTAssertEqual(listed, [LinkApproval(id: held.id, conversationID: bot.conversationID, providerTitle: "Google Workspace Containment",
+                                             tool: "suspend", toolDescription: "Suspend a user", input: #"{"user":"m.okafor@kestrel.example"}"#,
+                                             reason: "Signed in from a known-bad IP", createdAt: held.createdAt)])
+        XCTAssertEqual(listed.first?.inputLines.first?.value, "m.okafor@kestrel.example")
+
+        let grace = try await person("Grace", f)
+        do {
+            _ = try await grace.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: true)))
+            XCTFail("someone else decided")
+        } catch {}
+        XCTAssertEqual(try f.hub.repository.currentApprovals(agentID: bot.id).first?.state, .pending)
+
+        let answer = try await f.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: false)))
+        XCTAssertEqual(answer, .done)
+        let decided = try XCTUnwrap(try f.hub.repository.currentApprovals(agentID: bot.id).first)
+        XCTAssertEqual(decided.state, .declined)
+        XCTAssertEqual(decided.decidedBy, "Ada")
+        let after = try await bots(of: f.device).first
+        XCTAssertEqual(after?.approvals, [])
+    }
+
     /// Writing from a task carries it to the bot, and back to devices for the label.
     func testAMessageAboutATaskCarriesIt() async throws {
         let f = try await fixture()

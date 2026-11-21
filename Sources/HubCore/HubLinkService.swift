@@ -701,6 +701,9 @@ import os
         case .stop(let botID):
             try hubBots().stop(botID, for: try user(key))
             return .done
+        case .decideApproval(let decision):
+            try await hubBots().decideApproval(decision, for: try user(key))
+            return .done
         case .kick(let botID):
             return try hubBots().kick(botID, for: try user(key)).map(LinkResponse.kickConfirmation) ?? .done
         case .confirmKick(let botID, let confirmationID):

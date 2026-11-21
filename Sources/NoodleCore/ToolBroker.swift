@@ -58,7 +58,7 @@ public enum ToolBroker {
     /// this agent; it is read again after a call, and nothing in the request can widen it.
     public static func perform(_ request: ToolBridgeRequest, registry: ToolProviderRegistry,
                                assignments current: @escaping @Sendable () -> ToolAssignments,
-                               context base: ToolCallContext, host: ToolHostServices = .none) async throws -> Data {
+                               context base: ToolCallContext, host: ToolHostServices = .none, approved: Bool = false) async throws -> Data {
         let assignments = current()
         let context = ToolCallContext(agentID: base.agentID, workspace: base.workspace, assignments: assignments)
         if request.action == .providers {
@@ -88,6 +88,11 @@ public enum ToolBroker {
                                                assignments: assignments)
         let (arguments, conversation) = try conversation(descriptor, arguments: authorized, agent: context.agentID, host: host)
         let links = try linked(descriptor, arguments: arguments, conversation: conversation, agent: context.agentID, host: host)
+        // A connection's destructive tool waits for the person; `approved` is their decision, made in the app.
+        if descriptor.destructive, provider.kind == .connection, !approved {
+            return try hold(descriptor, provider: provider.manifest, arguments: arguments, conversation: conversation,
+                            currentDirectory: request.currentDirectory, agent: context.agentID, host: host)
+        }
         let directory = request.currentDirectory.isEmpty ? context.workspace
             : context.workspace.appendingPathComponent(try ComputerWorkspaceFiles.relativePath(
                 request.currentDirectory, currentDirectory: context.workspace, workspace: context.workspace))
