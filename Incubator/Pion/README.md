@@ -102,7 +102,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Sentinel, CrowdStrike,
-  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace Audit and GitHub, and CVEs joining the top of the
+  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -124,10 +124,10 @@ to the agents that should use it.
 | **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Security, Google Cloud, Cloudflare Security, Wiz, GitHub |
+| **Cloud and code** | AWS Security, Google Cloud Audit, Cloudflare Security, Wiz, GitHub |
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
-Center and covers every account you are assigned; Google Cloud and both Google Workspace
+Center and covers every account you are assigned; Google Cloud Audit and both Google Workspace
 tools sign in with your Google account; GitHub signs in with a code, through an OAuth app your
 organisation registers.
 

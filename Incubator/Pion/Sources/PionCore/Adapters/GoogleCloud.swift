@@ -8,9 +8,9 @@ import NoodleToolConnections
 /// Workspace is.
 public enum GoogleCloud {
     public static let preset = ToolDefinition(
-        id: "371912f8-7145-4096-a763-2c3ce3af0e55", name: "Google Cloud", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
+        id: "371912f8-7145-4096-a763-2c3ce3af0e55", name: "Google Cloud Audit", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
         defaultInstructions: """
-        Use Google Cloud to investigate an organisation, folder or project: search the Cloud Audit Logs by principal, \
+        Use Google Cloud Audit to investigate an organisation, folder or project: search the Cloud Audit Logs by principal, \
         method, resource and time; list Security Command Center findings by severity and category; find who has access \
         to what, for a member, including through groups, or for a resource; and list resources by type, by name too. Record each finding as evidence, citing the scope \
         and time window. These tools only read: recommend removing access or changing a resource to the champion.
