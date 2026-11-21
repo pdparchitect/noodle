@@ -268,8 +268,8 @@ public struct ToolConnectionEditor: View {
                     }
                 }
                 if onSecret != nil {
-                    // An adapter connection proves itself the way its adapter expects; only its values change here.
-                    if existing?.adapter == nil {
+                    // A catalogue or adapter connection proves itself one way, so only its values change here.
+                    if existing?.choosesSignIn ?? true {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Sign-in").font(.caption.weight(.semibold))
                             Picker("Sign-in", selection: $signIn) {

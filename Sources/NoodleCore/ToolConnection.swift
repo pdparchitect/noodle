@@ -77,6 +77,9 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     /// True for an MCP server that answers without a sign-in or a key, as its catalogue entry says or connecting it
     /// found; it is then called with no authorization at all.
     public var open: Bool?
+    /// Whether the person picks how it proves itself: only for a server they added, which needs something. A catalogue
+    /// entry's accounts prove themselves as the entry says, and an adapter's as its adapter expects.
+    public var choosesSignIn: Bool { open != true && adapter == nil && ToolCatalog.definition(for: self) == nil }
     /// The app adapter that answers for it, in place of an MCP server at `endpoint`, which is then the
     /// address of the service the adapter calls. Only the app that has that adapter serves it.
     public var adapter: String?

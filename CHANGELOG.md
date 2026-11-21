@@ -13,7 +13,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
-- The sign-in choice when adding or editing a tool is a menu under its own heading, like the fields around it.
+- Editing a tool asks how it signs in only for an MCP server you added yourself, as a menu under its own heading; a catalogue tool signs in the one way its service supports, and one that needs no sign-in shows none.
 
 ## [0.92.0] - 2026-11-21
 

@@ -144,6 +144,22 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertNil(ToolConnectionConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
     }
 
+    func testOnlyAServerThePersonAddedLetsThemChooseHowItSignsIn() throws {
+        let atlassian = try XCTUnwrap(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.atlassian.com/v1/mcp")!))
+        XCTAssertFalse(try atlassian.makeConnection(name: "Atlassian").choosesSignIn)
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        let keyed = ToolDefinition(id: "keys", name: "Keys", summary: "", defaultInstructions: "", iconName: "keys",
+                                   configuration: .connection(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
+        ToolCatalog.use(ToolCatalog.noodle + [keyed])
+        XCTAssertFalse(try keyed.makeConnection(name: "Keys").choosesSignIn)
+        let endpoint = URL(string: "https://custom.example/mcp")!
+        XCTAssertFalse(try ToolConnectionConfiguration(endpoint: endpoint, open: true).makeConnection(name: "Open").choosesSignIn)
+        var custom = try ToolConnectionConfiguration(endpoint: endpoint).makeConnection(name: "Custom")
+        XCTAssertTrue(custom.choosesSignIn)
+        custom.open = true
+        XCTAssertFalse(custom.choosesSignIn, "a server found to need nothing has nothing to choose")
+    }
+
     func testATokenPresetMakesTokenConnectionsAndOthersSignIn() throws {
         let endpoint = URL(string: "https://keys.example/mcp")!
         let keyed = try ToolConnectionConfiguration(endpoint: endpoint, tokenHeader: "x-apikey").makeConnection(name: "Keys")
