@@ -293,6 +293,40 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(remade.tokenHeader, "Authorization")
     }
 
+    func testAnAccountFollowsItsPresetsTextUntilThePersonWritesTheirOwn() throws {
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        func errors(_ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "errors", name: "Errors", summary: summary, defaultInstructions: instructions, iconName: "errors",
+                           configuration: .connection(.init(endpointTemplate: "https://errors.example/api", fields: [], tokenHeader: "Authorization",
+                                                            adapter: "errors")))
+        }
+        func notes(_ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "notes", name: "Notes", summary: summary, defaultInstructions: instructions, iconName: "notes",
+                           configuration: .connection(.init(endpointTemplate: "https://notes.example/mcp", fields: [])))
+        }
+        ToolCatalog.use([errors("Issues.", "Read."), notes("Pages.", "Search first.")])
+        let untouched = try errors("Issues.", "Read.").makeConnection(name: "Errors")
+        var edited = try errors("Issues.", "Read.").makeConnection(name: "Errors — Mine")
+        edited.instructions = "Mine."
+        var restored = try errors("Issues.", "Read.").makeConnection(name: "Errors — Restored")
+        restored.instructions = "Mine."
+        restored.instructions = "Read."
+        // As a Hub keeps one sent from a device, by address only, with the text it was shown.
+        let sent = try ToolConnection(name: "Notes", endpoint: URL(string: "https://notes.example/mcp")!,
+                                      description: "Pages.", instructions: "Search first.")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var registry = ToolConnectionRegistry()
+        registry.connections = [untouched, edited, restored, sent]
+        try registry.save(root: root)
+
+        // A later release rewrites the presets' text.
+        ToolCatalog.use([errors("Issues and releases.", "Read them."), notes("Pages and databases.", "Search before adding.")])
+        let loaded = try ToolConnectionRegistry.load(root: root).connections
+        XCTAssertEqual(loaded.map(\.description), ["Issues and releases.", "Issues and releases.", "Issues and releases.", "Pages and databases."])
+        XCTAssertEqual(loaded.map(\.instructions), ["Read them.", "Mine.", "Read them.", "Search before adding."])
+    }
+
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {
         defer { ToolCatalog.use(ToolCatalog.noodle) }
         let notion = try XCTUnwrap(ToolCatalog.noodle.first { $0.iconName == "notion" })

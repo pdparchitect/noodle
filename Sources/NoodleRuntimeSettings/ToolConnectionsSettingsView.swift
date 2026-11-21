@@ -328,6 +328,7 @@ public struct ToolConnectionEditor: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description").font(.caption.weight(.semibold))
                     TextField("Optional", text: $description, axis: .vertical).lineLimit(2...3)
+                        .overlay(alignment: .topTrailing) { resetButton($description, to: existing?.defaultDescription) }
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Instructions").font(.caption.weight(.semibold))
@@ -336,6 +337,7 @@ public struct ToolConnectionEditor: View {
                         .roundedBorderEditor()
                         .frame(height: 130)
                         .help("Optional guidance on using this connection. Do not include passwords or tokens.")
+                        .overlay(alignment: .topTrailing) { resetButton($instructions, to: existing?.defaultInstructions) }
                 }
                 if onBack != nil { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
@@ -345,6 +347,15 @@ public struct ToolConnectionEditor: View {
                 }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
+    }
+    /// Puts its preset's text back in a field the person changed; saved so, the account follows that text's updates.
+    @ViewBuilder private func resetButton(_ text: Binding<String>, to fallback: String?) -> some View {
+        if let fallback, !fallback.isEmpty, text.wrappedValue != fallback {
+            Button { text.wrappedValue = fallback } label: { Image(systemName: "arrow.counterclockwise") }
+                .buttonStyle(.borderless)
+                .help("Reset to Default; it then follows the default's updates")
+                .padding(4)
+        }
     }
     /// Whether the app's own adapter answers it, through the service's API rather than an MCP server.
     private var servedByApp: Bool { existing?.adapter != nil }

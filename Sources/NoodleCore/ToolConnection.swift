@@ -33,8 +33,23 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var name: String
     public let endpoint: URL
-    public var description: String
-    public var instructions: String
+    /// The person's own description and instructions; nil follows the catalogue's current text, so an untouched
+    /// account picks up a newer release's.
+    public private(set) var ownDescription: String?
+    public private(set) var ownInstructions: String?
+    /// Its description, the person's or else its preset's. Setting the preset's text again follows the preset.
+    public var description: String {
+        get { ownDescription ?? defaultDescription }
+        set { ownDescription = newValue == defaultDescription ? nil : String(newValue.prefix(1_000)) }
+    }
+    /// Its instructions, the person's or else its preset's. Setting the preset's text again follows the preset.
+    public var instructions: String {
+        get { ownInstructions ?? defaultInstructions }
+        set { ownInstructions = newValue == defaultInstructions ? nil : String(newValue.prefix(20_000)) }
+    }
+    /// Its preset's text, empty for an account added by address alone.
+    public var defaultDescription: String { ToolCatalog.definition(for: self)?.summary ?? "" }
+    public var defaultInstructions: String { ToolCatalog.definition(for: self)?.defaultInstructions ?? "" }
     public fileprivate(set) var skillName: String
     public var iconData: Data?
     /// The request header a token connection sends its token in, such as Authorization or x-apikey.
@@ -64,6 +79,12 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
     /// What was filled in for the preset's fields, such as its domain; nil when it has none.
     public var settings: [String: String]?
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, endpoint, skillName, iconData, tokenHeader, tokenParameter, tokenScheme, clientCredentials,
+             awsIdentityCenter, open, adapter, catalogueID, settings
+        case ownDescription = "description", ownInstructions = "instructions"
+    }
+
     /// This account as its preset makes it from new details, such as another address or organisation: what `fresh`
     /// says it reaches and how, keeping the name bots know it by, its icon and the person's own text.
     public func remade(as fresh: ToolConnection) -> ToolConnection {
@@ -71,8 +92,8 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         record.skillName = skillName
         record.iconData = iconData
         record.name = name
-        record.description = description
-        record.instructions = instructions
+        record.ownDescription = ownDescription
+        record.ownInstructions = ownInstructions
         return record
     }
 
@@ -101,13 +122,14 @@ public struct ToolConnection: Codable, Identifiable, Equatable, Sendable {
         }
         self.name = try ConversationName.validated(name)
         self.endpoint = try Self.validatedEndpoint(endpoint, adapter: self.adapter)
-        self.description = String(description.prefix(1_000))
-        self.instructions = String(instructions.prefix(20_000))
         let slug = name.lowercased().unicodeScalars.map {
             CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").contains($0) ? String($0) : "-"
         }.joined().split(separator: "-").joined(separator: "-")
         let prefix = String(slug.prefix(20)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         self.skillName = "mcp-" + (prefix.isEmpty ? "connection" : prefix)
+        // Text sent with it, as a device sends a Hub, is the person's only where it differs from its preset's.
+        if !description.isEmpty { self.description = description }
+        if !instructions.isEmpty { self.instructions = instructions }
     }
 
     /// A header name a token may go in: letters, digits and the other characters HTTP allows in a name,
@@ -354,7 +376,7 @@ public struct ToolConnectionRegistry: Codable, Equatable, Sendable {
             guard connection.skillName.hasPrefix("mcp-"), connection.skillName.count > 4,
                   connection.skillName.utf8.count <= 64,
                   connection.skillName.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) }),
-                  connection.description.count <= 1_000, connection.instructions.count <= 20_000,
+                  (connection.ownDescription?.count ?? 0) <= 1_000, (connection.ownInstructions?.count ?? 0) <= 20_000,
                   (connection.iconData?.count ?? 0) <= 131_072 else {
                 throw ToolConnectionError.message("Invalid saved MCP connection.")
             }

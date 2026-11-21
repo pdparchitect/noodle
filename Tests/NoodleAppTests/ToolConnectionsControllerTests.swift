@@ -40,6 +40,8 @@ import XCTest
         let configuration = ToolConnectionConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
         let tool = ToolDefinition(id: "fixture", name: "Fixture", summary: "Fixture tools",
             defaultInstructions: "Keep accounts separate", iconName: "tools", configuration: .connection(configuration))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [tool])
         let first = try f.controller.addPreset(tool, configuration: configuration)
         let second = try f.controller.addPreset(tool, configuration: configuration)
         XCTAssertNotEqual(first.id, second.id)

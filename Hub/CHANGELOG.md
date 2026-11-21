@@ -6,6 +6,10 @@
 
 - Approvals: a bot's call to a tool its service marks destructive waits on the Hub for its owner instead of running. The owner's devices list it with the bot and approve or decline it; an approved one runs on the Hub once, and the bot is told the outcome. Someone a bot is shared with never sees its approvals. The owner's phones away from the Hub are notified of each one, and the notification is taken back once it is decided.
 
+### Changed
+
+- A tool's description and instructions follow its catalogue entry's current text until you change them, so tools you have not edited pick up improved defaults. A field you changed has a reset button in its corner that puts the default back.
+
 ## [0.58.0] - 2026-11-21
 
 ### Changed

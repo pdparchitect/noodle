@@ -311,8 +311,8 @@ public struct ToolDefinition: Identifiable, Equatable, Sendable {
             let center = try configuration.signsInWithAWSIdentityCenter ? ConnectionAWSIdentityCenter(
                 startURL: ToolConnection.validatedAWSStartURL(account.settings?["startURL"] ?? ""),
                 role: account.settings?["role"] ?? "", region: account.settings?["region"] ?? "us-east-1") : nil
-            var record = try ToolConnection(id: id, name: name, endpoint: account.endpoint, description: summary,
-                                                 instructions: defaultInstructions, tokenHeader: configuration.tokenHeader,
+            // Its text is left to follow this entry's, so a later release's reaches it.
+            var record = try ToolConnection(id: id, name: name, endpoint: account.endpoint, tokenHeader: configuration.tokenHeader,
                                                  tokenScheme: configuration.tokenScheme, tokenParameter: configuration.tokenParameter,
                                                  clientCredentials: account.clientCredentials,
                                                  awsIdentityCenter: center,
