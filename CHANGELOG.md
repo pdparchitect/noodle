@@ -12,6 +12,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Tool icons in Settings are drawn at the display's own resolution, so they stay sharp on standard and Retina screens, and Sentry's icon has higher-resolution artwork.
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
 - Editing a tool asks how it signs in only for an MCP server you added yourself, as a menu under its own heading; a catalogue tool signs in the one way its service supports, and one that needs no sign-in shows none.
 

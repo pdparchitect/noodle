@@ -522,6 +522,7 @@ private struct ConnectedStatus: View {
 }
 
 public struct ToolConnectionIcon: View {
+    @Environment(\.displayScale) private var displayScale
     let connection: ToolConnection
     let size: CGFloat
     let frameless: Bool
@@ -529,9 +530,9 @@ public struct ToolConnectionIcon: View {
     public var body: some View {
         if frameless {
             Group {
-                if let image = connection.iconData.flatMap(NSImage.init(data:))
-                    ?? ToolCatalog.definition(for: connection).flatMap(ToolCatalogIcon.image(for:)) {
-                    Image(nsImage: image).renderingMode(.original).resizable().scaledToFit()
+                if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale)
+                    ?? ToolCatalogIcon.thumbnail(tool: ToolCatalog.definition(for: connection), size: size, scale: displayScale) {
+                    Image(nsImage: image).renderingMode(.original).resizable().interpolation(.high).scaledToFit()
                 } else {
                     Image(systemName: "puzzlepiece.extension.fill").resizable().scaledToFit()
                         .foregroundStyle(.secondary).padding(size * 0.15)
@@ -546,8 +547,8 @@ public struct ToolConnectionIcon: View {
 
     private var tile: some View {
         Group {
-            if let data = connection.iconData, let image = NSImage(data: data) {
-                Image(nsImage: image).resizable().scaledToFit()
+            if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale) {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             } else if let tool = ToolCatalog.definition(for: connection) {
                 ToolCatalogIcon(tool: tool, size: size)
             } else {

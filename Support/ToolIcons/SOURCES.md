@@ -2,7 +2,7 @@
 
 Retrieved 2026-09-09 from the provider's public website or its linked asset CDN.
 Brand marks are owned by the respective providers and are included solely to identify
-connections; no endorsement is implied. Files retain their original raster/ICO bytes
+connections; no endorsement is implied. Most retain their original raster/ICO bytes
 under a uniform `.icon` extension. They are bundled, never remotely fetched by the catalogue.
 
 | Asset | Source |
@@ -16,7 +16,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | asana.icon (2026-10-06) | https://asana.com/assets/img/brand/asana-logo-favicon.ico |
 | atlassian.icon (2026-10-06) | https://www.atlassian.com/apple-touch-icon.png |
 | attio.icon | https://attio.com/favicon.ico?favicon.0t61hvyp-jaev.ico |
-| aws.icon (2026-11-18) | https://a0.awsstatic.com/libra-css/images/site/touch-icon-iphone-114-smile.png |
+| aws.icon (2026-11-18) | https://a0.awsstatic.com/libra-css/images/site/touch-icon-iphone-114-smile.png AWS wordmark and smile from [Font Awesome Free (CC BY 4.0)](https://github.com/FortAwesome/Font-Awesome/blob/6.x/js-packages/@fortawesome/free-brands-svg-icons/faAws.js), recoloured and rendered at 512 px. |
 | axiom.icon (2026-10-06) | https://axiom.co/favicon.ico |
 | basecamp.icon (2026-10-22) | https://basecamp.com/favicon.ico |
 | buildkite.icon | https://buildkite.com/_site/favicon.png |
@@ -39,7 +39,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | crowdsec.icon (2026-11-18) | https://github.com/crowdsecurity.png (CrowdSec's GitHub organisation picture, 256×256; its website offers only a 48×48 favicon) |
 | crowdstrike.icon (2026-11-18) | https://www.crowdstrike.com/etc.clientlibs/crowdstrike/clientlibs/crowdstrike-common/resources/favicon.ico |
 | crtsh.icon (2026-11-18) | https://crt.sh/favicon.ico (Sectigo, which runs crt.sh; 48×48 frame, converted to PNG) |
-| cvenow.icon (2026-11-20) | https://cve.now/mcp/icons/logo.png (512×512, resized to 180×180) |
+| cvenow.icon (2026-11-20) | https://cve.now/mcp/icons/logo.png (512×512, resized to 180×180) CVE.NOW ribbon redrawn in orange and violet at 512 px. |
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | defender.icon (2026-11-18) | https://security.microsoft.com/favicon.ico |
 | dns.icon (2026-11-21) | https://dns.google/static/93dd5954/favicon.png (Google Public DNS) |
@@ -59,7 +59,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | google-cloud.icon (2026-11-18) | https://cloud.google.com/_static/cloud/images/favicons/onecloud/apple-icon.png |
 | google-docs.icon (2026-09-16) | https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico |
 | google-drive.icon (2026-09-16) | https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png |
-| google-workspace.icon (2026-11-18) | https://workspace.google.com/favicon.ico |
+| google-workspace.icon (2026-11-18) | https://workspace.google.com/favicon.ico Four-colour Google G on white redrawn at 512 px. |
 | grafana.icon (2026-10-06) | https://grafana.com/static/assets/img/apple-touch-icon.png |
 | granola.icon | https://www.granola.ai/favicon/favicon-96x96.png |
 | greynoise.icon (2026-11-18) | https://cdn.prod.website-files.com/625f93b2923b4f2b1f2e7b64/625f93b2923b4f7fb02e7c32_gn_favicon_256.png |
@@ -87,7 +87,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | motherduck.icon (2026-10-06) | https://motherduck.com/apple-touch-icon.png |
 | neon.icon | https://neon.com/favicon.ico |
 | netlify.icon | https://www.netlify.com/favicon/favicon.ico |
-| nvd.icon (2026-11-18) | https://nvd.nist.gov/favicon.ico (48×48 frame, converted to PNG) |
+| nvd.icon (2026-11-18) | https://nvd.nist.gov/favicon.ico (48×48 frame, converted to PNG) NVD monogram redrawn in blue and teal at 512 px. |
 | notion.icon | https://www.notion.com/front-static/favicon.ico |
 | okta.icon (2026-11-18) | https://www.okta.com/apple-touch-icon.png |
 | otter.icon (2026-10-06) | https://otter.ai (apple-icon on its Webflow CDN) |
@@ -114,7 +114,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | semgrep.icon (2026-10-06) | https://semgrep.dev/build/assets/favicon-32x32.png |
 | sentinel.icon (2026-11-18) | https://azure.microsoft.com/favicon.ico?v2 |
 | sentinelone.icon (2026-11-18) | https://www.sentinelone.com/apple-touch-icon.png |
-| sentry.icon | https://sentry.io/favicon.ico |
+| sentry.icon | https://sentry.io/favicon.ico Sentry mark and violet background redrawn at 512 px. |
 | shodan.icon (2026-11-18) | https://www.shodan.io/static/img/apple-touch-icon-192.png |
 | socket.icon (2026-10-06) | https://socket.dev/apple-touch-icon.png |
 | sourcegraph.icon (2026-10-06) | https://sourcegraph.com (inline icon in its page) |
