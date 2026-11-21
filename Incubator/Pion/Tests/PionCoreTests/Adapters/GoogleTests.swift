@@ -300,4 +300,83 @@ final class GoogleTests: XCTestCase {
         let none = try await callTool(GoogleWorkspace.adapter, "security-events", #"{"since":"yesterday"}"#, on: service, in: workspace)
         XCTAssertTrue(none.isError)
     }
+
+    // MARK: Containment
+
+    private let containment = try! GoogleWorkspace.containment.makeConnection(name: "Workspace Containment",
+                                                                             values: ["clientID": "1234-abc.apps.googleusercontent.com"])
+
+    /// The containment tool signs in on its own, through the same client, asking only for the two Directory scopes
+    /// suspending and ending sessions take; the audit tool keeps its one read-only scope.
+    func testContainmentSignsInSeparatelyWithOnlyTheScopesItsActionsTake() throws {
+        XCTAssertNotNil(PionAdapters.all["google-workspace-containment"])
+        XCTAssertEqual(containment.endpoint.absoluteString, "https://admin.googleapis.com")
+        guard case .connection(let configuration) = GoogleWorkspace.containment.configuration, let oauth = configuration.oauth else {
+            return XCTFail("no sign-in")
+        }
+        XCTAssertEqual(oauth.scopes, ["https://www.googleapis.com/auth/admin.directory.user",
+                                      "https://www.googleapis.com/auth/admin.directory.user.security"])
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        XCTAssertNotEqual(GoogleWorkspace.containment.id, GoogleWorkspace.preset.id)
+        XCTAssertEqual(GoogleWorkspace.preset.name, "Google Workspace Audit")
+        XCTAssertEqual(GoogleWorkspace.containment.name, "Google Workspace Containment")
+    }
+
+    func testContainmentReadsAUsersStateTheirAppsAndAppPasswords() async throws {
+        let service = FakeService()
+        let user = "/admin/directory/v1/users/m.okafor@kestrel.example"
+        service.answers[user] = (200, #"{"primaryEmail":"m.okafor@kestrel.example","name":{"fullName":"Mara Okafor"},"suspended":false,"isAdmin":false,"isDelegatedAdmin":false,"isEnrolledIn2Sv":true,"lastLoginTime":"2026-11-20T08:00:00.000Z","orgUnitPath":"/Finance"}"#)
+        service.answers[user + "/tokens"] = (200, #"{"items":[{"clientId":"999-evil.apps.googleusercontent.com","displayText":"Docs Helper","scopes":["https://mail.google.com/"],"anonymous":false,"nativeApp":false}]}"#)
+        service.answers[user + "/asps"] = (200, #"{"items":[{"codeId":42,"name":"Old mail client","creationTime":"1763625600000","lastTimeUsed":"1763712000000"}]}"#)
+        let state = try await callTool(GoogleWorkspace.containmentAdapter, "user", #"{"user":"M.Okafor@kestrel.example"}"#, on: service, in: containment)
+        XCTAssertFalse(state.isError, state.text)
+        XCTAssertTrue(state.text.contains("active"), state.text)
+        XCTAssertTrue(state.text.contains("2-step verification on"), state.text)
+        XCTAssertTrue(state.text.contains("/Finance"), state.text)
+        XCTAssertEqual(service.requests.last?.httpMethod, "GET")
+        let tokens = try await callTool(GoogleWorkspace.containmentAdapter, "tokens", #"{"user":"m.okafor@kestrel.example"}"#, on: service, in: containment)
+        XCTAssertTrue(tokens.text.contains("Docs Helper (999-evil.apps.googleusercontent.com)"), tokens.text)
+        XCTAssertTrue(tokens.text.contains("https://mail.google.com/"), tokens.text)
+        let passwords = try await callTool(GoogleWorkspace.containmentAdapter, "app-passwords", #"{"user":"m.okafor@kestrel.example"}"#, on: service, in: containment)
+        XCTAssertTrue(passwords.text.contains("42: Old mail client"), passwords.text)
+        let bad = try await callTool(GoogleWorkspace.containmentAdapter, "user", #"{"user":"../../domains"}"#, on: service, in: containment)
+        XCTAssertTrue(bad.isError)
+    }
+
+    /// Every action changes an account, so a bot's call never reaches Google: it is held for the champion.
+    func testContainmentActionsAreHeldAndSendNothing() async throws {
+        let service = FakeService()
+        let listed = try JSONSerialization.jsonObject(with: try await GoogleWorkspace.containmentAdapter.tools(for: containment)) as! [String: Any]
+        let tools = try XCTUnwrap(listed["tools"] as? [[String: Any]])
+        let actions = ["sign-out", "revoke-token", "delete-app-password", "suspend", "unsuspend"]
+        for name in actions {
+            let tool = try XCTUnwrap(tools.first { $0["name"] as? String == name }, name)
+            let hints = try XCTUnwrap(tool["annotations"] as? [String: Any])
+            XCTAssertEqual(hints["readOnlyHint"] as? Bool, false, name)
+            XCTAssertEqual(hints["destructiveHint"] as? Bool, true, name)
+        }
+        for name in ["user", "tokens", "app-passwords"] {
+            let tool = try XCTUnwrap(tools.first { $0["name"] as? String == name }, name)
+            XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true, name)
+        }
+        for (name, arguments) in [("sign-out", #"{"user":"m.okafor@kestrel.example"}"#),
+                                  ("revoke-token", #"{"user":"m.okafor@kestrel.example","clientId":"999-evil.apps.googleusercontent.com"}"#),
+                                  ("delete-app-password", #"{"user":"m.okafor@kestrel.example","codeId":42}"#),
+                                  ("suspend", #"{"user":"m.okafor@kestrel.example"}"#), ("unsuspend", #"{"user":"m.okafor@kestrel.example"}"#)] {
+            let held = try await callTool(GoogleWorkspace.containmentAdapter, name, arguments, on: service, in: containment)
+            XCTAssertTrue(held.isError, name)
+            XCTAssertTrue(held.text.contains("champion"), held.text)
+        }
+        XCTAssertTrue(service.requests.isEmpty, "an action reached Google")
+    }
+
+    /// A refusal names what the signed-in admin's role lacks, as Google answers 403 for anything outside it.
+    func testContainmentExplainsARefusalByTheAdminsRole() async throws {
+        let service = FakeService()
+        service.answers["/admin/directory/v1/users/ceo@kestrel.example/tokens"] = (403, #"{"error":{"code":403,"message":"Not Authorized to access this resource/api"}}"#)
+        let refused = try await callTool(GoogleWorkspace.containmentAdapter, "tokens", #"{"user":"ceo@kestrel.example"}"#, on: service, in: containment)
+        XCTAssertTrue(refused.isError)
+        XCTAssertTrue(refused.text.contains("User Security Management"), refused.text)
+        XCTAssertTrue(refused.text.contains("admin"), refused.text)
+    }
 }

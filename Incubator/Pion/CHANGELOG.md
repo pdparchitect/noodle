@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Google Workspace Containment in Settings › Tools, a tool of its own beside Google Workspace Audit with a sign-in of its own: agents see whether a user is suspended, an admin or enrolled in 2-step verification, the apps they granted access and their app passwords. Signing a user out everywhere, revoking an app's access, deleting an app password, and suspending or restoring a user are listed for agents to recommend, but never run on their call. Its Setup Steps make an admin role with only Users › Read, Suspend users and User Security Management.
+- A guide to both Google Workspace tools in `docs/tools`: the access each asks for, the least access to set it up with, and their caveats.
+
+### Changed
+
+- Google Workspace is called Google Workspace Audit, and its Setup Steps have you sign in as an admin kept for Pion whose role holds only Reports, never a super admin.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added

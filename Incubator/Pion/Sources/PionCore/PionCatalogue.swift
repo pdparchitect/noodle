@@ -31,7 +31,7 @@ public enum PionCatalogue {
     public static let entries: [ToolDefinition] = [
         VirusTotal.preset, Shodan.preset, Okta.preset, Entra.preset, Defender.preset, CrowdStrike.preset, SentinelOne.preset,
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Cloudflare.radar, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
-        URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, CVENow.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset,
+        URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, CVENow.preset, HaveIBeenPwned.preset, AWS.preset, GoogleCloud.preset, GoogleWorkspace.preset, GoogleWorkspace.containment,
         Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

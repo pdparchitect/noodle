@@ -102,7 +102,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Sentinel, CrowdStrike,
-  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace and GitHub, and CVEs joining the top of the
+  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Read-only lookups**: agents investigate; changes to a system are yours to make.
 - **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
@@ -120,15 +120,18 @@ to the agents that should use it.
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, NVD, cve.now, Tenable |
-| **Identity** | Okta, Microsoft Entra ID, Google Workspace |
+| **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
 | **Cloud and code** | AWS Security, Google Cloud, Cloudflare Security, Wiz, GitHub |
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
-Center and covers every account you are assigned; Google Cloud and Google Workspace sign
-in with your Google account; GitHub signs in with a code, through an OAuth app your
+Center and covers every account you are assigned; Google Cloud and both Google Workspace
+tools sign in with your Google account; GitHub signs in with a code, through an OAuth app your
 organisation registers.
+
+Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
+the least access to set it up with, and its caveats.
 
 ## License
 

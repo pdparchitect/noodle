@@ -7,18 +7,24 @@ import NoodleToolConnections
 /// Pion's bundle ID. Each account is one admin's Workspace. Its Alert Center is not read: only a service account
 /// acting for an admin may, and an admin's own sign-in is refused its scope. The audit events behind most of its alerts
 /// are watched instead.
+///
+/// Containment is a second tool with a sign-in of its own, so only the bots given it can even ask for an action, and
+/// the audit sign-in never carries a scope that can change accounts.
+///
+/// Why each tool asks for what it does, the least access to set each up with, and their caveats:
+/// Incubator/Pion/docs/tools/google-workspace.md. Change it with the scopes, setup steps or operations here.
 public enum GoogleWorkspace {
     static let applications = ["login", "admin", "token", "drive", "saml", "user_accounts", "groups", "mobile", "rules"]
 
     public static let preset = ToolDefinition(
-        id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", name: "Google Workspace", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
+        id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", name: "Google Workspace Audit", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
         defaultInstructions: """
-        Use Google Workspace to see what happened in the domain: sign-ins, including suspicious ones and their IP \
+        Use Google Workspace Audit to see what happened in the domain: sign-ins, including suspicious ones and their IP \
         addresses; admin actions; OAuth tokens granted to apps; Drive sharing and downloads; SAML sign-ins; account changes. \
         Filter by user, event name, IP address and time; security-events lists those that mean an attack, such as \
         suspicious sign-ins, leaked passwords, admin privileges granted and compromised devices. Record each finding as evidence, citing the application, user \
-        and time window. These tools only read: recommend suspending a user, revoking a token or changing sharing to the \
-        champion.
+        and time window. These tools only read: recommend suspending a user, signing them out, revoking a token or \
+        changing sharing to the champion.
         """,
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
@@ -31,10 +37,44 @@ public enum GoogleWorkspace {
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and under **APIs & Services › Library** enable the **Admin SDK API**.",
         "Open **Google Auth Platform**, set it up with the audience **Internal**, and under **Data Access** add the scope `https://www.googleapis.com/auth/admin.reports.audit.readonly`.",
         "Under **Clients**, choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "Choose **Add & Connect** and sign in as a super admin, or an admin whose role includes Reports.",
+        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Audit** with only **Reports**, and assign it to an admin account kept for Pion, never a super admin.",
+        "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents()], trigger: NewSecurityEvents())
+
+    /// Suspending takes the broad user scope, as Google has none narrower; what the token can really do is set by the
+    /// signing-in admin's role, which the setup keeps to suspending and User Security Management.
+    public static let containment = ToolDefinition(
+        id: "b04472f4-fbd5-496e-b286-fa76c23dd08f", name: "Google Workspace Containment",
+        summary: "Sign a user out everywhere, revoke an app's access or an app password, and suspend or restore a user.",
+        defaultInstructions: """
+        Use Google Workspace Containment to see an account's state and contain it: user shows whether it is suspended, \
+        an admin or enrolled in 2-step verification; tokens lists the apps it has granted access, with their scopes; \
+        app-passwords lists its app passwords. sign-out, revoke-token, delete-app-password, suspend and unsuspend change \
+        the account, so they never run on your call: recommend each to the champion with the exact user, why, the \
+        expected effect and how to undo it. Signing out alone leaves app access and the password working.
+        """,
+        iconName: "google-workspace",
+        configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
+            fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
+            oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.directory.user",
+                                    "https://www.googleapis.com/auth/admin.directory.user.security"], clients: []),
+            oauthClientField: "clientID", adapter: "google-workspace-containment")),
+        setup: containmentSetup)
+
+    static let containmentSetup = [
+        "In the [Admin console](https://admin.google.com), under **Account › Admin roles**, create a role such as **Pion Containment** with only **Users › Read**, **Users › Update › Suspend users** and **Security › User Security Management**.",
+        "Assign it to an admin account kept for Pion, never a super admin. Its role, not the sign-in, limits what Pion can do.",
+        "In the Google Cloud project of your Google Workspace Audit client, enable the **Admin SDK API** and add the scopes `https://www.googleapis.com/auth/admin.directory.user` and `https://www.googleapis.com/auth/admin.directory.user.security` under **Google Auth Platform › Data Access**.",
+        "Paste that same iOS client's **Client ID** here, or create one of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev).",
+        "If your organisation limits API access, mark the client **Trusted** under **Security › Access and data control › API controls**.",
+        "Choose **Add & Connect** and sign in as the admin with the Pion Containment role.",
+    ]
+
+    public static let containmentAdapter = OperationAdapter(operations: [
+        UserState(), Tokens(), AppPasswords(), SignOut(), RevokeToken(), DeleteAppPassword(), Suspend(), Unsuspend(),
+    ])
 
     /// The audit events that mean an account or the domain may be under attack, each asked for by name as the Reports
     /// API takes one at a time, with a parameter value that makes one not count: Google's suspicious and blocked
@@ -166,6 +206,166 @@ extension GoogleWorkspace {
         func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
             try await GoogleWorkspace.securityEvents(service, since: ISO8601DateFormatter().string(from: since), until: nil, limit: ServiceAlert.most)
                 .prefix(ServiceAlert.most).compactMap { event in ServiceAlert.time(event.time).map { ServiceAlert(id: event.id, time: $0) } }
+        }
+    }
+}
+
+// MARK: - Containment
+
+extension GoogleWorkspace {
+    struct UserInput: Decodable, Sendable { let user: String }
+    static let userSchema = JSONSchema.object(["user": .string("The user's primary email address.")], required: ["user"])
+
+    /// A Directory API request about one user, with Google's refusals explained by the role they come from.
+    static func directory<Answer>(_ user: String, _ path: [String] = [], _ request: ([String]) async throws -> Answer) async throws -> Answer {
+        let path = ["admin", "directory", "v1", "users", try ServiceInput.email(user)] + path
+        do { return try await request(path) }
+        catch ServiceError.forbidden {
+            throw ServiceError.input("""
+                Google refused this for \(user): the admin this tool signs in as may not do it. Its role needs Users › Read and \
+                Users › Update › Suspend users for a user's state and suspending, and Security › User Security Management for \
+                sessions, apps and app passwords; User Security Management never covers admins. Ask the champion to check the role.
+                """)
+        }
+    }
+
+    struct UserState: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "user"
+        static let summary = "Whether a user is suspended, an admin or enrolled in 2-step verification, their organisational unit and last sign-in."
+        static let input = userSchema
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            struct Name: Codable { let fullName: String? }
+            struct User: Codable {
+                let primaryEmail: String?, name: Name?, suspended: Bool?, suspensionReason: String?, isAdmin: Bool?, isDelegatedAdmin: Bool?
+                let isEnrolledIn2Sv: Bool?, lastLoginTime: String?, orgUnitPath: String?
+            }
+            let user = try await directory(input.user) { try await service.get($0, as: User.self) }
+            var parts = [user.suspended == true ? "suspended" + (user.suspensionReason.map { " (\($0))" } ?? "") : "active"]
+            if user.isAdmin == true { parts.append("super admin") } else if user.isDelegatedAdmin == true { parts.append("delegated admin") }
+            parts.append(user.isEnrolledIn2Sv == true ? "2-step verification on" : "2-step verification off")
+            if let unit = user.orgUnitPath { parts.append("in \(unit)") }
+            // Google gives the epoch for an account that never signed in.
+            if let last = user.lastLoginTime, !last.hasPrefix("1970") { parts.append("last signed in \(last)") }
+            let who = [user.name?.fullName, user.primaryEmail.map { "<\($0)>" }].compactMap { $0 }.joined(separator: " ")
+            return try ServiceResult(text: "\(who.isEmpty ? input.user : who): \(parts.joined(separator: ", ")).", structured: user)
+        }
+    }
+
+    struct Tokens: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "tokens"
+        static let summary = "The apps a user has granted access to their account, with each app's client ID and scopes."
+        static let input = userSchema
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            struct Token: Codable { let clientId: String?, displayText: String?, scopes: [String]?, nativeApp: Bool? }
+            struct Answer: Codable { let items: [Token]? }
+            let tokens = try await directory(input.user, ["tokens"]) { try await service.get($0, as: Answer.self) }.items ?? []
+            let text = tokens.isEmpty ? "\(input.user) has granted no apps access." : tokens.map { token in
+                "\(token.displayText ?? "An app") (\(token.clientId ?? "?")): \((token.scopes ?? []).joined(separator: ", "))"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let tokens: [Token] }
+            return try ServiceResult(text: text, structured: Kept(tokens: tokens))
+        }
+    }
+
+    struct AppPasswords: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "app-passwords"
+        static let summary = "A user's app passwords, which sign in without 2-step verification, with when each was made and last used."
+        static let input = userSchema
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            struct Password: Codable { let codeId: Int?, name: String?, creationTime: String?, lastTimeUsed: String? }
+            struct Answer: Codable { let items: [Password]? }
+            let passwords = try await directory(input.user, ["asps"]) { try await service.get($0, as: Answer.self) }.items ?? []
+            func time(_ milliseconds: String?) -> String {
+                guard let value = milliseconds.flatMap(Double.init), value > 0 else { return "never" }
+                return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: value / 1000))
+            }
+            let text = passwords.isEmpty ? "\(input.user) has no app passwords." : passwords.map {
+                "\($0.codeId.map(String.init) ?? "?"): \($0.name ?? "unnamed"), made \(time($0.creationTime)), last used \(time($0.lastTimeUsed))"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let appPasswords: [Password] }
+            return try ServiceResult(text: text, structured: Kept(appPasswords: passwords))
+        }
+    }
+
+    /// Ends every web and device session and resets sign-in cookies; app access and the password keep working.
+    struct SignOut: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "sign-out"
+        static let summary = "Sign a user out of every web and device session. Held for the champion's approval."
+        static let input = userSchema
+        static let readOnly = false
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            _ = try await directory(input.user, ["signOut"]) { try await service.data($0, method: "POST") }
+            return try ServiceResult(text: "Signed \(input.user) out of every session.", structured: ["user": input.user])
+        }
+    }
+
+    struct RevokeToken: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String, clientId: String }
+        static let name = "revoke-token"
+        static let summary = "Revoke every token a user granted one app, by its client ID from tokens. Held for the champion's approval."
+        static let input = JSONSchema.object(["user": .string("The user's primary email address."),
+                                              "clientId": .string("The app's client ID, as tokens lists it.")], required: ["user", "clientId"])
+        static let readOnly = false
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            _ = try await directory(input.user, ["tokens", input.clientId]) { try await service.data($0, method: "DELETE") }
+            return try ServiceResult(text: "Revoked \(input.clientId)'s access to \(input.user).", structured: ["user": input.user, "clientId": input.clientId])
+        }
+    }
+
+    struct DeleteAppPassword: ServiceOperation {
+        struct Input: Decodable, Sendable { let user: String, codeId: Int }
+        static let name = "delete-app-password"
+        static let summary = "Delete one of a user's app passwords, by its ID from app-passwords. Held for the champion's approval."
+        static let input = JSONSchema.object(["user": .string("The user's primary email address."),
+                                              "codeId": .integer("The app password's ID, as app-passwords lists it.", minimum: 0)],
+                                             required: ["user", "codeId"])
+        static let readOnly = false
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            _ = try await directory(input.user, ["asps", String(input.codeId)]) { try await service.data($0, method: "DELETE") }
+            return try ServiceResult(text: "Deleted app password \(input.codeId) of \(input.user).", structured: ["user": input.user])
+        }
+    }
+
+    /// Suspending blocks sign-in and ends access; unsuspend undoes it.
+    struct Suspend: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "suspend"
+        static let summary = "Suspend a user, so they cannot sign in until restored with unsuspend. Held for the champion's approval."
+        static let input = userSchema
+        static let readOnly = false
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            try await suspended(true, input.user, on: service)
+            return try ServiceResult(text: "Suspended \(input.user). Restore them with unsuspend.", structured: ["user": input.user])
+        }
+    }
+
+    struct Unsuspend: ServiceOperation {
+        typealias Input = UserInput
+        static let name = "unsuspend"
+        static let summary = "Restore a suspended user. Held for the champion's approval."
+        static let input = userSchema
+        static let readOnly = false
+
+        func run(_ input: UserInput, on service: ServiceClient) async throws -> ServiceResult {
+            try await suspended(false, input.user, on: service)
+            return try ServiceResult(text: "Restored \(input.user).", structured: ["user": input.user])
+        }
+    }
+
+    static func suspended(_ suspended: Bool, _ user: String, on service: ServiceClient) async throws {
+        _ = try await directory(user) {
+            try await service.data($0, method: "PATCH", body: try JSONEncoder().encode(["suspended": suspended]))
         }
     }
 }
