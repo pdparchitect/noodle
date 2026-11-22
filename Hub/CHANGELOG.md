@@ -11,6 +11,7 @@
 ### Changed
 
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
+- Local models and image generation run on a newer MLX, with its fixes to Qwen and Gemma tool calls and Qwen's reasoning across turns, and faster prompt reading for Qwen3.5, Qwen3.6 and Qwen3.8.
 
 ## [0.58.0] - 2026-11-21
 

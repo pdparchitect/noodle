@@ -9,6 +9,7 @@
 ### Changed
 
 - View › Sidebar offers As List and As Icons. Missions, agents, groups and optional tool connections use compact pictures in Noodle’s sidebar rows and icon grid.
+- Local models and image generation run on a newer MLX, with its fixes to Qwen and Gemma tool calls and Qwen's reasoning across turns, and faster prompt reading for Qwen3.5, Qwen3.6 and Qwen3.8.
 
 ## [0.2.0] - 2026-11-21
 

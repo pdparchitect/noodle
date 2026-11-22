@@ -84,10 +84,8 @@ let package = Package(
         .package(path: "Applet/Protocol"),
         .package(path: "Browser/BrowserProtocol"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
-        // The macOS 27 Foundation Models adapter is not in an MLX release yet.
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", revision: "3e6ea1ede1596f05c1715d6b82567619276e98f0"),
-        // Stable Diffusion XL in MLX, for the Images tool. Not released as a version.
-        .package(url: "https://github.com/ml-explore/mlx-swift-examples", revision: "378f2449c257788c5067b9f8b086731d76b39b33"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.33.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.33.0")),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
         .package(path: "Shared/Product"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1"),
@@ -103,9 +101,14 @@ let package = Package(
         .target(name: "NoodleAppleRuntime", dependencies: ["NoodleCore",
             .product(name: "MLXFoundationModels", package: "mlx-swift-lm"),
             .product(name: "MLXLLM", package: "mlx-swift-lm"),
-            .product(name: "StableDiffusion", package: "mlx-swift-examples"),
+            "StableDiffusion",
             .product(name: "Tokenizers", package: "swift-transformers")],
             exclude: ["FoundationModelsUtilities/AGENTS.md", "FoundationModelsUtilities/CLAUDE.md"]),
+        /// Stable Diffusion XL in MLX, for the Images tool: a copy of Libraries/StableDiffusion from
+        /// github.com/ml-explore/mlx-swift-examples at ef1084dd5692611a8758b24b07efdad5404ac3ce, MIT
+        /// licensed (Support/ThirdParty/StableDiffusion), changed to load from a local model folder.
+        .target(name: "StableDiffusion", dependencies: [.product(name: "MLX", package: "mlx-swift"),
+                                                        .product(name: "MLXNN", package: "mlx-swift")]),
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
