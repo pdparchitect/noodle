@@ -18,6 +18,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | attio.icon | https://attio.com/favicon.ico?favicon.0t61hvyp-jaev.ico |
 | aws.icon (2026-11-18) | https://a0.awsstatic.com/libra-css/images/site/touch-icon-iphone-114-smile.png AWS wordmark and smile from [Font Awesome Free (CC BY 4.0)](https://github.com/FortAwesome/Font-Awesome/blob/6.x/js-packages/@fortawesome/free-brands-svg-icons/faAws.js), recoloured and rendered at 512 px. |
 | axiom.icon (2026-10-06) | https://axiom.co/favicon.ico |
+| azure.icon (2026-11-22) | https://azure.microsoft.com/favicon.ico?v2 |
 | basecamp.icon (2026-10-22) | https://basecamp.com/favicon.ico |
 | buildkite.icon | https://buildkite.com/_site/favicon.png |
 | cal-com.icon (2026-10-06) | https://framerusercontent.com/images/63tSo3fa0ylcjt88Er8WTEPS6Dw.png |
