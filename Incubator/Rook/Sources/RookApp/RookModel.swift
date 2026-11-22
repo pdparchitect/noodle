@@ -130,6 +130,9 @@ import UniformTypeIdentifiers
         defaults = harnessDefaults
         messenger = MessengerBroker(repository: repository)
         messenger.refusingPosts = { [store] id in Self.postsRefused(in: id, store: store) }
+        messenger.onGroupMembersChanged = { [weak self] before, after, lead in
+            Task { @MainActor in self?.leadChangedMembers(from: before, to: after, by: lead) }
+        }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadRook() } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
         messenger.onWakesChanged = { [weak self] id in
@@ -1289,6 +1292,25 @@ import UniformTypeIdentifiers
         return updated
     }
 
+    /// After a group's lead added or removed a member through Messenger: a Mission's audit log says which,
+    /// in the lead's name, and the members are woken as after the champion's edit.
+    func leadChangedMembers(from before: BotConversation, to after: BotConversation, by lead: UUID) {
+        let names = { (ids: Set<UUID>) in ids.compactMap { self.agent($0)?.displayName }.sorted().joined(separator: ", ") }
+        let added = names(Set(after.participantIDs).subtracting(before.participantIDs))
+        let removed = names(Set(before.participantIDs).subtracting(after.participantIDs))
+        if store.mission(after.id) != nil {
+            do {
+                try store.update(after.id, by: .agent(lead), now: now) { _ in
+                    (added.isEmpty ? [] : [("staff", "Added \(added).")]) + (removed.isEmpty ? [] : [("staff", "Removed \(removed).")])
+                }
+            } catch { problem = error.localizedDescription }
+        }
+        reload()
+        readTranscript(after.id)
+        synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: after))
+        wakeMembersAfterEdit(from: before, to: after)
+    }
+
     /// When each agent last opened Missions, so one cannot open them without end.
     private var agentOpenings: [UUID: [Date]] = [:]
 
@@ -1301,14 +1323,7 @@ import UniformTypeIdentifiers
         guard recent.count < 3 else {
             throw CaseError("You have opened three Missions in the last hour. Ask the champion before opening another.")
         }
-        var staff: Set<UUID> = []
-        for name in opening.team {
-            guard let member = agents.first(where: { $0.displayName.caseInsensitiveCompare(name) == .orderedSame }) else {
-                throw CaseError("No agent is called \(name). The agents are " + agents.map(\.displayName).sorted().joined(separator: ", ") + ".")
-            }
-            staff.insert(member.id)
-        }
-        let mission = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID, staff: staff),
+        let mission = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID),
                                      openedBy: .agent(agentID))
         agentOpenings[agentID] = recent + [now]
         return mission

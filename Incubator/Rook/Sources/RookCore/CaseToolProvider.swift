@@ -13,20 +13,18 @@ public struct CaseToolProvider: ToolProvider {
 
         Every result also carries its data as JSON in structuredContent, such as the new item's id, for scripts that chain calls with tool --run. Record as you work, not at the end. entity records a host, service, account, credential or artifact by its exact name, and link joins two of them into the attack graph, such as a credential that unlocks an account, or a host you pivoted to from another — so the whole path you took can be rebuilt and read back. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
-        When a problem needs a record of its own, such as one you found in a direct conversation or in another Mission, open a Mission for it with open rather than waiting to be asked: you lead it, the champion owns it, and anyone you name in --team joins it. Then post what started it there, with what you have found so far. Open one only for a real problem to track, not for a question you can answer where you are.
+        When a problem needs a record of its own, such as one you found in a direct conversation or in another Mission, open a Mission for it with open rather than waiting to be asked: you lead it and the champion owns it. Then post what started it there, with what you have found so far. Open one only for a real problem to track, not for a question you can answer where you are.
 
-        The champion may make one agent the lead; read says who it is, or that there is none. The lead runs the Mission: it hears the champion's messages a few seconds before the others, splits the work among the team with @mentions by what each agent does, keeps the case record coherent, and gives the champion one summary with its recommendations rather than leaving them to piece replies together. Only the lead sets the severity with severity, once the evidence lets you judge it and again when that changes, and moves the status to active or proven with status, each with a note. If you are not the lead, work what it hands you, record what you find, and report back to it in the Mission; raise anything urgent or anything it has missed. Without a lead, severity and status stay as they are: ask the champion to choose one if it matters. Only the champion closes a Mission.
+        The champion may make one agent the lead; read says who it is, or that there is none. The lead runs the Mission: it hears the champion's messages a few seconds before the others, brings in the agents the work needs and takes out those whose part is done, with Messenger's --list-bots, --add-participant and --remove-participant (it can add only agents it already shares a group with), splits the work among the team with @mentions by what each agent does, keeps the case record coherent, and gives the champion one summary with its recommendations rather than leaving them to piece replies together. Only the lead sets the severity with severity, once the evidence lets you judge it and again when that changes, and moves the status to active or proven with status, each with a note. If you are not the lead, work what it hands you, record what you find, and report back to it in the Mission; raise anything urgent or anything it has missed. Without a lead, severity and status stay as they are: ask the champion to choose one if it matters. Only the champion closes a Mission.
         """,
         activation: .always)
 
-    /// What an agent asks for when it opens a Mission.
+    /// What an agent asks for when it opens a Mission. It leads it alone, and brings others in as a lead does.
     public struct Opening: Sendable {
         public let title: String
         public let objective: String
-        /// Other agents to join it, by name.
-        public let team: [String]
-        public init(title: String, objective: String, team: [String]) {
-            self.title = title; self.objective = objective; self.team = team
+        public init(title: String, objective: String) {
+            self.title = title; self.objective = objective
         }
     }
 
@@ -65,7 +63,6 @@ public struct CaseToolProvider: ToolProvider {
             tool("open", "Open a new Mission for a problem that needs its own record, which you lead and the champion owns. Returns its conversation ID.", [
                 "title": string("What it is about, in a few words, such as Domain-wide project creation."),
                 "objective": string("What it should establish or fix, in a sentence."),
-                "team": list("Other agents to join it, by name. Repeat --team for each."),
             ], required: ["title", "objective"], inMission: false),
         ]
         return try JSONSerialization.data(withJSONObject: ["tools": opening + [
@@ -122,11 +119,12 @@ public struct CaseToolProvider: ToolProvider {
             let title = try required("title"), objective = try required("objective")
             guard title.count <= 200 else { throw ToolProviderError("--title is too long; keep it to a few words.") }
             let opened: Mission
-            do { opened = try await open(context.agentID, Opening(title: title, objective: objective, team: strings("team"))) }
+            do { opened = try await open(context.agentID, Opening(title: title, objective: objective)) }
             catch let error as CaseError { throw ToolProviderError(error.message) }
             return try Self.result("""
                 Opened \(opened.reference): \(opened.title). You lead it, and the champion owns it. Its conversation is \(opened.id.uuidString): \
-                post what started it there, with what you have found so far, and record evidence and findings in it as you go.
+                post what started it there, with what you have found so far, bring in the agents it needs with Messenger's --add-participant, \
+                and record evidence and findings in it as you go.
                 """, ["reference": opened.reference, "conversation": opened.id.uuidString])
         }
         guard let id = UUID(uuidString: text("conversation")), let mission = store.mission(id) else {
