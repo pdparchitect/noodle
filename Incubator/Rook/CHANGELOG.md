@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- View › Sidebar offers As List and As Icons. Missions, agents, groups and optional tool connections use compact pictures in Noodle’s sidebar rows and icon grid.
+
 ## [0.2.0] - 2026-11-21
 
 ### Changed

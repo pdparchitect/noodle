@@ -176,6 +176,7 @@ let project = Project(
                 "../../Sources/Noodle/MessageLinkPreview.swift",
                 "../../Sources/Noodle/MessageParts.swift",
                 "../../Sources/Noodle/MessageContextMenu.swift",
+                "../../Sources/Noodle/SidebarItemLayout.swift",
                 "../../Sources/Noodle/SidebarTasks.swift",
                 "../../Sources/Noodle/AgentApprovalDesk.swift",
                 "../../Sources/Noodle/SidebarApprovals.swift",

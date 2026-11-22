@@ -530,12 +530,12 @@ public struct ToolConnectionIcon: View {
     public var body: some View {
         if frameless {
             Group {
-                if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale)
-                    ?? ToolCatalogIcon.thumbnail(tool: ToolCatalog.definition(for: connection), size: size, scale: displayScale) {
+                if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale, trimMargins: true)
+                    ?? ToolCatalogIcon.thumbnail(tool: ToolCatalog.definition(for: connection), size: size, scale: displayScale, trimMargins: true) {
                     Image(nsImage: image).renderingMode(.original).resizable().interpolation(.high).scaledToFit()
                 } else {
                     Image(systemName: "puzzlepiece.extension.fill").resizable().scaledToFit()
-                        .foregroundStyle(.secondary).padding(size * 0.15)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: size, height: size)

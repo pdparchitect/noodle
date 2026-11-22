@@ -396,6 +396,7 @@ private struct FrostedWindowBackground: NSViewRepresentable {
 /// View › Background (Frosted or Solid, and the effect), View › Sidebar and View › Conversation, in Noodle's order, kept per
 /// person as Noodle keeps its view options.
 struct ViewOptions: View {
+    @AppStorage(ConversationListStyle.key) private var sidebarStyle = ConversationListStyle.standard.rawValue
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
@@ -419,7 +420,14 @@ struct ViewOptions: View {
         }
         Divider()
         Menu("Sidebar") {
+            Picker("Style", selection: $sidebarStyle) {
+                ForEach(ConversationListStyle.allCases) { Text($0.name).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            Divider()
             Toggle("Show Closed Missions", isOn: $showsClosed)
+            SidebarToolsToggle()
             Divider()
             // Noodle's: the line under each name, the order and the agents' tasks.
             SidebarListPickers()

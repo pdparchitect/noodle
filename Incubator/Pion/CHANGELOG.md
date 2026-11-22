@@ -27,6 +27,7 @@
 
 ### Changed
 
+- Investigations, agents, groups and tools use compact pictures in Noodle’s sidebar rows and icon grid.
 - Tools appear as selectable rows alongside investigations, groups and agents in the sidebar. Choose View › Sidebar › As Icons to switch the sidebar to a grid.
 - Sidebar tools show their original colours without a tile. Sidebar and Settings icons are sized to the display’s pixels. AWS, NVD, CVE.NOW, Google Workspace and Sentry have higher-resolution artwork.
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.

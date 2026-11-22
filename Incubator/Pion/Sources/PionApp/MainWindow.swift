@@ -31,7 +31,7 @@ struct MainWindow: View {
         @Bindable var model = model
         NavigationSplitView {
             Sidebar(model: model, window: window)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+                .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let tool = window.selectedTool.flatMap({ id in model.connectionsController.registry.connections.first { $0.id == id } }) {
                 ToolPage(controller: model.connectionsController, connectionID: tool.id,
@@ -114,7 +114,7 @@ struct Sidebar: View {
         Group {
             if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions, mentions: window.mentions) {
                 SidebarSearchResults(
-                    sections: [("Investigations", search.investigations), ("Groups", search.groups), ("Agents", search.agents)],
+                    sections: [("Investigations", search.investigations), ("Agents", search.agents), ("Groups", search.groups)],
                     mentions: search.mentions, hiddenMentions: search.hiddenMentions, term: ConversationSearch(window.searchText),
                     selection: model.selection, select: { model.selection = $0 },
                     pickMessage: { match in
@@ -123,9 +123,9 @@ struct Sidebar: View {
                     },
                     showAll: { showsAllMentions = true },
                     conversation: { model.conversation($0) },
-                    mentionPicture: { AnyView(ConversationPicture(model: model, conversation: $0, size: 42)) },
+                    mentionPicture: { AnyView(ConversationPicture(model: model, conversation: $0, size: SidebarItemDensity.compact.rowPicture)) },
                     mentionTitle: { model.title(of: $0) },
-                    row: { ConversationChoiceRow(model: model, conversation: $0, line: line) },
+                    row: { ConversationChoiceRow(model: model, conversation: $0, line: line).sidebarItemInsets() },
                     menu: { ConversationRowMenu(model: model, window: window, conversation: $0) })
                 .overlay { if search.isEmpty { ContentUnavailableView.search(text: window.searchText) } }
             } else {
@@ -144,6 +144,7 @@ struct Sidebar: View {
                 }
             }
         }
+        .environment(\.sidebarItemDensity, .compact)
         // As in Noodle: Tab in the list goes to the message field, and Shift-Tab there comes back.
         .modifier(ConversationListKeyboardNavigation(hasSelection: model.selection != nil, searchIsFocused: searchFocused,
             focusComposer: { window.composerFocusRequest = UUID() }, focusRequest: window.sidebarFocusRequest))
@@ -189,7 +190,7 @@ struct Sidebar: View {
                     ConversationIconGrid { closedItems(closed, icons: true) }
                         .padding(.vertical, 4)
                     showMoreClosed(total: closed.count)
-                } label: { heading("Closed") }
+                } label: { SidebarGridHeading(title: "Closed") }
             } else {
                 Section(isExpanded: $closedExpanded) {
                     closedItems(closed, icons: false)
@@ -197,32 +198,19 @@ struct Sidebar: View {
                 } header: { Text("Closed") }
             }
         }
-        conversations(sections.groups, header: "Groups", line: line, icons: icons)
         conversations(sections.agents, header: "Agents", line: line, icons: icons)
+        conversations(sections.groups, header: "Groups", line: line, icons: icons)
         if showsTools, !model.connectionsController.registry.connections.isEmpty {
             if icons {
-                SidebarTools(controller: model.connectionsController, inList: false, showsOriginalIcons: true, selected: window.selectedTool) {
+                SidebarTools(controller: model.connectionsController, inList: false, selected: window.selectedTool) {
                     select(.tool($0.id))
                 }
             } else {
                 Section("Tools") {
                     ForEach(model.connectionsController.registry.connections) { tool in
-                        let status = model.connectionsController.status(of: tool)
-                        HStack(spacing: 8) {
-                            ToolConnectionIcon(connection: tool, size: 22, frameless: true)
-                            Text(tool.name).font(.callout).lineLimit(1)
-                            Spacer(minLength: 4)
-                            if status.needsAttention {
-                                Circle().fill(.red).frame(width: 7, height: 7).accessibilityLabel("Needs attention")
-                            } else if case .signingIn = status {
-                                ProgressView().controlSize(.mini).accessibilityLabel("Signing in")
-                            }
-                        }
-                        .padding(.vertical, 2)
-                        .contentShape(Rectangle())
-                        .help(tool.name)
-                        .accessibilityElement(children: .combine)
-                        .tag(WindowState.SidebarItem.tool(tool.id))
+                        SidebarToolItem(controller: model.connectionsController, connection: tool, icons: false)
+                            .sidebarItemInsets()
+                            .tag(WindowState.SidebarItem.tool(tool.id))
                     }
                 }
             }
@@ -233,11 +221,11 @@ struct Sidebar: View {
         ForEach(closed.prefix(closedLimit)) { investigation in
             Group {
                 if icons {
-                    tile(id: investigation.id, name: investigation.title) {
-                        SeverityGlyph(severity: investigation.severity, closed: true).scaleEffect(1.65)
+                    tile(id: investigation.id, name: investigation.title, detail: investigation.sidebarDetail) { size in
+                        SeverityGlyph(severity: investigation.severity, closed: true).scaleEffect(size / 18).frame(width: size, height: size)
                     }
                 } else {
-                    InvestigationRow(model: model, investigation: investigation)
+                    InvestigationRow(model: model, investigation: investigation).sidebarItemInsets()
                 }
             }
             .tag(WindowState.SidebarItem.conversation(investigation.id))
@@ -261,7 +249,7 @@ struct Sidebar: View {
     @ViewBuilder private func conversations(_ items: [BotConversation], header: String, line: ConversationRowDetail, icons: Bool) -> some View {
         if !items.isEmpty {
             if icons {
-                heading(header)
+                SidebarGridHeading(title: header)
                 ConversationIconGrid { conversationItems(items, line: line, icons: true) }
                     .padding(.vertical, 4)
             } else {
@@ -274,17 +262,16 @@ struct Sidebar: View {
         ForEach(items) { conversation in
             Group {
                 if icons {
-                    tile(id: conversation.id, name: model.title(of: conversation)) {
-                        if let investigation = model.investigation(conversation.id) {
-                            SeverityGlyph(severity: investigation.severity).scaleEffect(1.65)
-                        } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
-                            AgentMark(agent: agent, size: 36, phase: model.phase(of: agent))
-                        } else {
-                            ConversationPicture(model: model, conversation: conversation, size: 36)
-                        }
+                    let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
+                    let pause = agent.flatMap { model.interruption(of: $0) }
+                    let working = agent.map { model.phase(of: $0) == .working } ?? false
+                    let detail = model.investigation(conversation.id)?.sidebarDetail ?? model.rowDetail(for: conversation, showing: line)
+                    tile(id: conversation.id, name: model.title(of: conversation),
+                         detail: pause ?? (working ? "Working" : detail), paused: pause != nil, working: working) { size in
+                        ConversationPicture(model: model, conversation: conversation, size: size)
                     }
                 } else {
-                    ConversationChoiceRow(model: model, conversation: conversation, line: line)
+                    ConversationChoiceRow(model: model, conversation: conversation, line: line).sidebarItemInsets()
                 }
             }
             .tag(WindowState.SidebarItem.conversation(conversation.id))
@@ -293,23 +280,19 @@ struct Sidebar: View {
         }
     }
 
-    private func heading(_ title: String) -> some View {
-        Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            .padding(.leading, 4).padding(.top, 10).padding(.bottom, 2)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private func tile(id: UUID, name: String, @ViewBuilder picture: () -> some View) -> some View {
+    private func tile<Picture: View>(id: UUID, name: String, detail: String, paused: Bool = false, working: Bool = false,
+                                     @ViewBuilder picture: @escaping (CGFloat) -> Picture) -> some View {
         let selected = model.selection == id && window.selectedTool == nil
         return Button { select(.conversation(id)) } label: {
-            VStack(spacing: 4) {
-                picture().frame(width: 36, height: 36).modifier(UnreadMark(model: model, id: id))
-                Text(name).font(.caption.weight(model.countsAsUnread(id) ? .semibold : .regular))
-                    .lineLimit(2).multilineTextAlignment(.center)
+            SidebarItemTile(title: name, detail: detail,
+                            tone: paused ? AnyShapeStyle(.orange) : working ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary),
+                            emphasized: paused || working, selected: selected) { size in
+                picture(size).overlay(alignment: .topLeading) {
+                    if model.isUnread(id) {
+                        UnreadDot(isMuted: model.notifications(of: id) == .muted, size: 10, ringed: true).offset(x: -2, y: -2)
+                    }
+                }
             }
-            .padding(4).frame(maxWidth: .infinity)
-            .background(Color.primary.opacity(selected ? 0.1 : 0), in: .rect(cornerRadius: 8))
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -326,9 +309,10 @@ struct ConversationPicture: View {
 
     var body: some View {
         if let investigation = model.investigation(conversation.id) {
-            SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed).frame(width: size, height: size)
+            SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
+                .scaleEffect(size / 18).frame(width: size, height: size)
         } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
-            AgentMark(agent: agent, size: size)
+            AgentMark(agent: agent, size: size, phase: model.phase(of: agent))
         } else {
             GroupSigil(members: model.members(of: conversation).map(\.id), size: size)
         }
@@ -438,31 +422,20 @@ struct InvestigationRow: View {
     let investigation: Investigation
 
     var body: some View {
-        let unread = model.countsAsUnread(investigation.id)
-        HStack(alignment: .top, spacing: 8) {
+        SidebarItemRow(title: investigation.title, detail: investigation.sidebarDetail,
+                       timestamp: SidebarTimestamp.text(for: investigation.updatedAt)) { size in
             SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
-                .padding(.top, 3)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(investigation.reference).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Text(investigation.updatedAt.pionShort).font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
-                }
-                Text(investigation.title)
-                    .font(.callout.weight(unread ? .semibold : .regular))
-                    .lineLimit(2)
-                Text(investigation.outcome?.title ?? investigation.status.title)
-                    .font(.caption)
-                    .foregroundStyle(investigation.isClosed ? Color.secondary : investigation.status.color)
-            }
+                .scaleEffect(size / 18).frame(width: size, height: size)
         }
-        .padding(.vertical, 3)
         .modifier(UnreadMark(model: model, id: investigation.id))
     }
 }
 
+private extension Investigation {
+    var sidebarDetail: String { "\(reference) · \(outcome?.title ?? status.title)" }
+}
+
 /// Noodle's blue dot on an unread row, in the leading inset 5 points before its mark; a muted group's is dimmed.
-/// Smaller than Noodle's, to suit Pion's smaller marks, which also keeps it clear of the sidebar's edge.
 struct UnreadMark: ViewModifier {
     let unread: Bool
     var muted = false
@@ -475,7 +448,7 @@ struct UnreadMark: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .leading) {
-            if unread { UnreadDot(isMuted: muted, size: 6).offset(x: -11) }
+            if unread { UnreadDot(isMuted: muted).offset(x: -13) }
         }
     }
 }
@@ -486,19 +459,11 @@ struct GroupRow: View {
     var line = ConversationRowDetail.standard
 
     var body: some View {
-        let unread = model.countsAsUnread(group.id)
-        HStack(spacing: 8) {
-            GroupSigil(members: model.members(of: group).map(\.id), size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.title(of: group)).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
-                Text(model.rowDetail(for: group, showing: line))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
+        SidebarItemRow(title: model.title(of: group), detail: model.rowDetail(for: group, showing: line),
+                       timestamp: SidebarTimestamp.text(for: group.updatedAt)) { size in
+            GroupSigil(members: model.members(of: group).map(\.id), size: size)
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(UnreadMark(model: model, id: group.id))
-        .contentShape(Rectangle())
     }
 }
 
@@ -511,21 +476,13 @@ struct AgentRow: View {
     var line = ConversationRowDetail.standard
 
     var body: some View {
-        let phase = model.phase(of: agent)
-        HStack(spacing: 8) {
-            AgentMark(agent: agent, size: 22, phase: phase)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(agent.displayName).font(.callout.weight(unread ? .semibold : .regular))
-                if let detail = model.interruption(of: agent) ?? conversation.map({ model.rowDetail(for: $0, showing: line) })
-                    ?? model.phaseDetail(of: agent) ?? agent.publicDescription {
-                    Text(detail).font(.caption).foregroundStyle(phase == .failed ? Color.red : Color.secondary).lineLimit(1)
-                }
-            }
+        let detail = conversation.map { model.rowDetail(for: $0, showing: line) } ?? model.phaseDetail(of: agent) ?? agent.publicDescription ?? ""
+        SidebarItemRow(title: agent.displayName, detail: detail,
+                       timestamp: conversation.map { SidebarTimestamp.text(for: $0.updatedAt) } ?? "",
+                       pause: model.interruption(of: agent)) { size in
+            AgentMark(agent: agent, size: size, phase: model.phase(of: agent))
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(UnreadMark(unread: unread))
-        .contentShape(Rectangle())
     }
 }
 

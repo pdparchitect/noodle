@@ -408,16 +408,16 @@ public struct ToolCatalogIcon: View {
         return cache
     }()
 
-    static func thumbnail(data: Data? = nil, tool: ToolDefinition? = nil, size: CGFloat, scale: CGFloat) -> NSImage? {
+    static func thumbnail(data: Data? = nil, tool: ToolDefinition? = nil, size: CGFloat, scale: CGFloat, trimMargins: Bool = false) -> NSImage? {
         let pixels = max(1, Int((size * scale).rounded()))
         let key: NSArray
         let source: CGImageSource?
         if let data {
-            key = [data as NSData, pixels]
+            key = [data as NSData, pixels, trimMargins]
             if let cached = thumbnails.object(forKey: key) { return cached }
             source = CGImageSourceCreateWithData(data as CFData, nil)
         } else if let tool, let url = Bundle.main.url(forResource: tool.iconName, withExtension: "icon", subdirectory: "ToolIcons") {
-            key = [url as NSURL, pixels]
+            key = [url as NSURL, pixels, trimMargins]
             if let cached = thumbnails.object(forKey: key) { return cached }
             source = CGImageSourceCreateWithURL(url as CFURL, nil)
         } else {
@@ -440,8 +440,9 @@ public struct ToolCatalogIcon: View {
             }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                              kCGImageSourceCreateThumbnailWithTransform: true,
-                                             kCGImageSourceThumbnailMaxPixelSize: pixels]
-            if let cg = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) {
+                                             kCGImageSourceThumbnailMaxPixelSize: trimMargins ? max(256, pixels * 2) : pixels]
+            if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) {
+                let cg = trimMargins ? visibleArtwork(thumbnail) : thumbnail
                 let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
                 thumbnails.setObject(image, forKey: key, cost: cg.bytesPerRow * cg.height)
                 return image
@@ -449,6 +450,28 @@ public struct ToolCatalogIcon: View {
         }
         // AppKit also accepts vector artwork supplied by a custom connection.
         return data.flatMap(NSImage.init(data:)) ?? tool.flatMap(image(for:))
+    }
+
+    /// Fit the painted artwork, ignoring transparent padding supplied by the vendor.
+    /// Measuring alpha keeps opaque artwork intact and preserves the proportions of wordmarks.
+    private static func visibleArtwork(_ image: CGImage) -> CGImage {
+        let w = image.width, h = image.height
+        guard let mask = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                   space: CGColorSpaceCreateDeviceRGB(),
+                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
+              let bytes = mask.data?.assumingMemoryBound(to: UInt8.self) else { return image }
+        mask.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var left = w, right = -1, top = h, bottom = -1
+        for y in 0..<h {
+            for x in 0..<w where bytes[y * mask.bytesPerRow + x * 4 + 3] > 8 {
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = y
+            }
+        }
+        guard right >= left, bottom >= top else { return image }
+        return image.cropping(to: CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)) ?? image
     }
 
     public var body: some View {

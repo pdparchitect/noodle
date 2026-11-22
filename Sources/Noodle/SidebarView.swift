@@ -163,22 +163,14 @@ private struct SidebarList: View {
             content: ConversationRowContent(conversation, store: store, detail: ConversationRowDetail(rawValue: rowDetail) ?? .standard))
             .equatable()
             // Outside the equatable row, where the list can see them.
-            .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 10))
-            .listRowSeparator(.visible, edges: .bottom)
-            .listRowSeparatorTint(Color.primary.opacity(0.12))
+            .sidebarItemInsets()
     }
 
     /// A section as a grid of pictures under its title, set like a list's section header.
     @ViewBuilder
     private func grid(_ title: String, _ conversations: [BotConversation]) -> some View {
         if !conversations.isEmpty {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 4)
-                .padding(.top, 10)
-                .padding(.bottom, 2)
-                .accessibilityAddTraits(.isHeader)
+            SidebarGridHeading(title: title)
             ConversationIconGrid {
                 ForEach(conversations) { conversation in
                     ConversationIcon(conversationID: conversation.id, isGroup: conversation.kind == .group,
@@ -301,14 +293,14 @@ private struct ConversationRow: View, Equatable {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        SidebarItemRow(title: content.title, detail: detail, timestamp: timestamp, pause: pause) { size in
             ZStack(alignment: .bottomTrailing) {
                 ConversationAvatar(
                     participants: content.participants,
                     isGroup: isGroup,
-                    size: 42
+                    size: size
                 )
-                .runtimeLook(content.runtimeStatus, size: 42)
+                .runtimeLook(content.runtimeStatus, size: size)
                 if content.runtimeStatus.hasMark {
                     RuntimeStatusMark(status: content.runtimeStatus, size: 10)
                         .padding(2)
@@ -317,36 +309,7 @@ private struct ConversationRow: View, Equatable {
                 }
             }
             .help(runtimeHelp)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(content.title)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .lineLimit(1)
-
-                    Spacer(minLength: 4)
-
-                    Text(timestamp)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.tertiary)
-                }
-
-                // In place of the preview's first line, so the row keeps its height.
-                if let pause {
-                    Text(pause)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.red)
-                        .lineLimit(1)
-                }
-
-                Text(detail)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(pause == nil ? 2 : 1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
-        .frame(height: 66)
         .conversationDropTarget { store.drop($0, onConversation: conversationID) }
         .overlay(alignment: .leading) {
             if content.isUnread {
@@ -388,10 +351,11 @@ private struct ConversationIcon: View, Equatable {
 
     var body: some View {
         let label = SidebarIconLabel(pause: content.pause, status: content.runtimeStatus, detail: content.detail)
-        VStack(spacing: 4) {
+        SidebarItemTile(title: content.title, detail: label.text, tone: label.tone.style,
+                        emphasized: label.tone != .detail, selected: isSelected, targeted: isDropTargeted) { size in
             ZStack(alignment: .bottomTrailing) {
-                ConversationAvatar(participants: content.participants, isGroup: isGroup, size: 60)
-                    .runtimeLook(content.runtimeStatus, size: 60)
+                ConversationAvatar(participants: content.participants, isGroup: isGroup, size: size)
+                    .runtimeLook(content.runtimeStatus, size: size)
                 if content.runtimeStatus.hasMark {
                     RuntimeStatusMark(status: content.runtimeStatus, size: 12)
                         .padding(2)
@@ -405,30 +369,7 @@ private struct ConversationIcon: View, Equatable {
                 }
             }
             .help(content.runtimeHelp)
-            .padding(.top, 4)
-
-            Text(content.title)
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
-
-            Text(label.text)
-                .font(.system(size: 10.5, weight: label.tone == .detail ? .regular : .medium))
-                .foregroundStyle(label.tone.style)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(height: 28, alignment: .top)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity)
-        .background {
-            if isSelected || isDropTargeted {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor.opacity(isDropTargeted ? 0.25 : 0.18))
-                    .accessibilityHidden(true)
-            }
-        }
-        .contentShape(Rectangle())
         // A file dropped here goes to this conversation, as on a row.
         .onDrop(of: AttachmentTransfer.dropContentTypes, isTargeted: $isDropTargeted) { providers in
             store.drop(providers, onConversation: conversationID)
