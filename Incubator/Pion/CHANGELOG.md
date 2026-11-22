@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Tools appear as selectable rows alongside investigations, groups and agents in the sidebar. Choose View › Sidebar › As Icons to switch the sidebar to a grid.
 - Sidebar tools show their original colours without a tile. Sidebar and Settings icons are sized to the display’s pixels. AWS, NVD, CVE.NOW, Google Workspace and Sentry have higher-resolution artwork.
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
 - Google Workspace is called Google Workspace Audit, and its Setup Steps have you sign in as an admin kept for Pion whose role holds only Reports, never a super admin.

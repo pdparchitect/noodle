@@ -83,10 +83,9 @@ struct MainWindow: View {
         .focusedSceneValue(\.pionConversation, ConversationCommandContext(selection: $model.selection, window: window,
             search: { window.searchFocusRequest = UUID() }))
         .onChange(of: model.selection) { _, id in
-            if let id {
-                window.selectedTool = nil
-                model.markRead(id)
-            }
+            guard let id else { window.selectedFromKeyboard = false; return }
+            window.selectedTool = nil
+            model.markRead(id)
             guard !window.selectedFromKeyboard else { window.selectedFromKeyboard = false; return }
             window.composerFocusRequest = UUID()
         }
@@ -100,6 +99,7 @@ struct Sidebar: View {
     @Bindable var window: WindowState
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @AppStorage(SidebarTools.key) private var showsTools = false
+    @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
     @State private var closedLimit = SidebarOptions.closedShown
     @FocusState private var searchFocused: Bool
     @SceneStorage("PionClosedExpanded") private var closedExpanded = true
@@ -129,7 +129,19 @@ struct Sidebar: View {
                     menu: { ConversationRowMenu(model: model, window: window, conversation: $0) })
                 .overlay { if search.isEmpty { ContentUnavailableView.search(text: window.searchText) } }
             } else {
-                list(line: line)
+                if ConversationListStyle(rawValue: style) == .icons {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) { sections(line: line, icons: true) }
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 10)
+                            .focusSection()
+                    }
+                } else {
+                    List(selection: Binding(get: { window.sidebarItem(in: model) }, set: select)) {
+                        sections(line: line, icons: false)
+                    }
+                    .listStyle(.sidebar)
+                }
             }
         }
         // As in Noodle: Tab in the list goes to the message field, and Shift-Tab there comes back.
@@ -159,69 +171,149 @@ struct Sidebar: View {
         }
     }
 
-    /// The sidebar when nothing is searched for.
-    private func list(line: ConversationRowDetail) -> some View {
-        let sections = model.sidebarSections(ConversationOrder(rawValue: order) ?? .standard)
-        let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
-        return List(selection: Binding(get: { model.selection }, set: { id in
-            window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
-            model.selection = id
-        })) {
-            // Noodle's Approvals section, always shown while an agent waits on the champion to approve a call.
-            SidebarApprovals(store: model, agents: model.agents, inList: true)
-            // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
-            SidebarTasks(store: model, filter: taskFilter, inList: true)
-            // As Noodle's, and a section shows only once it has something in it.
-            rows(sections.pinned, header: "Pinned", line: line)
-            rows(sections.unread, header: "Unread", line: line)
-            rows(sections.investigations, header: "Investigations", line: line)
-            // Closed ones only when asked for, a few at a time, to look back at.
-            if showsClosed, !closed.isEmpty {
-                Section(isExpanded: $closedExpanded) {
-                    ForEach(closed.prefix(closedLimit)) { investigation in
-                        InvestigationRow(model: model, investigation: investigation).tag(investigation.id)
-                            .contextMenu {
-                                if let conversation = model.conversation(investigation.id) {
-                                    ConversationRowMenu(model: model, window: window, conversation: conversation)
-                                }
-                            }
-                    }
-                    if closed.count > closedLimit {
-                        Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
-                            closedLimit += SidebarOptions.closedShown
-                        }
-                        .buttonStyle(.accentLink)
-                        .font(.caption)
-                        .selectionDisabled()
-                    }
-                } header: {
-                    Text("Closed")
-                }
-            }
-            rows(sections.groups, header: "Groups", line: line)
-            rows(sections.agents, header: "Agents", line: line)
-            if showsTools {
-                SidebarTools(controller: model.connectionsController, inList: true, showsOriginalIcons: true, selected: window.selectedTool) { tool in
-                    window.selectedTool = tool.id
-                    model.selection = nil
-                }
-            }
-        }
-        .listStyle(.sidebar)
+    private func select(_ item: WindowState.SidebarItem?) {
+        window.selectSidebarItem(item, in: model, fromKeyboard: NSApp.currentEvent?.type == .keyDown)
     }
 
-    @ViewBuilder private func rows(_ conversations: [BotConversation], header: String, line: ConversationRowDetail) -> some View {
-        if !conversations.isEmpty {
-            Section {
-                ForEach(conversations) { conversation in
-                    ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(conversation.id)
-                        .conversationDropTarget { model.drop($0, onConversation: conversation.id) }
-                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
-                }
-            } header: {
-                Text(header)
+    @ViewBuilder private func sections(line: ConversationRowDetail, icons: Bool) -> some View {
+        let sections = model.sidebarSections(ConversationOrder(rawValue: order) ?? .standard)
+        let closed = model.investigations.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
+        SidebarApprovals(store: model, agents: model.agents, inList: !icons)
+        SidebarTasks(store: model, filter: taskFilter, inList: !icons)
+        conversations(sections.pinned, header: "Pinned", line: line, icons: icons)
+        conversations(sections.unread, header: "Unread", line: line, icons: icons)
+        conversations(sections.investigations, header: "Investigations", line: line, icons: icons)
+        if showsClosed, !closed.isEmpty {
+            if icons {
+                DisclosureGroup(isExpanded: $closedExpanded) {
+                    ConversationIconGrid { closedItems(closed, icons: true) }
+                        .padding(.vertical, 4)
+                    showMoreClosed(total: closed.count)
+                } label: { heading("Closed") }
+            } else {
+                Section(isExpanded: $closedExpanded) {
+                    closedItems(closed, icons: false)
+                    showMoreClosed(total: closed.count)
+                } header: { Text("Closed") }
             }
         }
+        conversations(sections.groups, header: "Groups", line: line, icons: icons)
+        conversations(sections.agents, header: "Agents", line: line, icons: icons)
+        if showsTools, !model.connectionsController.registry.connections.isEmpty {
+            if icons {
+                SidebarTools(controller: model.connectionsController, inList: false, showsOriginalIcons: true, selected: window.selectedTool) {
+                    select(.tool($0.id))
+                }
+            } else {
+                Section("Tools") {
+                    ForEach(model.connectionsController.registry.connections) { tool in
+                        let status = model.connectionsController.status(of: tool)
+                        HStack(spacing: 8) {
+                            ToolConnectionIcon(connection: tool, size: 22, frameless: true)
+                            Text(tool.name).font(.callout).lineLimit(1)
+                            Spacer(minLength: 4)
+                            if status.needsAttention {
+                                Circle().fill(.red).frame(width: 7, height: 7).accessibilityLabel("Needs attention")
+                            } else if case .signingIn = status {
+                                ProgressView().controlSize(.mini).accessibilityLabel("Signing in")
+                            }
+                        }
+                        .padding(.vertical, 2)
+                        .contentShape(Rectangle())
+                        .help(tool.name)
+                        .accessibilityElement(children: .combine)
+                        .tag(WindowState.SidebarItem.tool(tool.id))
+                    }
+                }
+            }
+        }
+    }
+
+    private func closedItems(_ closed: [Investigation], icons: Bool) -> some View {
+        ForEach(closed.prefix(closedLimit)) { investigation in
+            Group {
+                if icons {
+                    tile(id: investigation.id, name: investigation.title) {
+                        SeverityGlyph(severity: investigation.severity, closed: true).scaleEffect(1.65)
+                    }
+                } else {
+                    InvestigationRow(model: model, investigation: investigation)
+                }
+            }
+            .tag(WindowState.SidebarItem.conversation(investigation.id))
+            .contextMenu {
+                if let conversation = model.conversation(investigation.id) {
+                    ConversationRowMenu(model: model, window: window, conversation: conversation)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func showMoreClosed(total: Int) -> some View {
+        if total > closedLimit {
+            Button("Show \(min(total - closedLimit, SidebarOptions.closedShown)) More") { closedLimit += SidebarOptions.closedShown }
+                .buttonStyle(.accentLink)
+                .font(.caption)
+                .selectionDisabled()
+        }
+    }
+
+    @ViewBuilder private func conversations(_ items: [BotConversation], header: String, line: ConversationRowDetail, icons: Bool) -> some View {
+        if !items.isEmpty {
+            if icons {
+                heading(header)
+                ConversationIconGrid { conversationItems(items, line: line, icons: true) }
+                    .padding(.vertical, 4)
+            } else {
+                Section(header) { conversationItems(items, line: line, icons: false) }
+            }
+        }
+    }
+
+    private func conversationItems(_ items: [BotConversation], line: ConversationRowDetail, icons: Bool) -> some View {
+        ForEach(items) { conversation in
+            Group {
+                if icons {
+                    tile(id: conversation.id, name: model.title(of: conversation)) {
+                        if let investigation = model.investigation(conversation.id) {
+                            SeverityGlyph(severity: investigation.severity).scaleEffect(1.65)
+                        } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
+                            AgentMark(agent: agent, size: 36, phase: model.phase(of: agent))
+                        } else {
+                            ConversationPicture(model: model, conversation: conversation, size: 36)
+                        }
+                    }
+                } else {
+                    ConversationChoiceRow(model: model, conversation: conversation, line: line)
+                }
+            }
+            .tag(WindowState.SidebarItem.conversation(conversation.id))
+            .conversationDropTarget { model.drop($0, onConversation: conversation.id) }
+            .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
+        }
+    }
+
+    private func heading(_ title: String) -> some View {
+        Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            .padding(.leading, 4).padding(.top, 10).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func tile(id: UUID, name: String, @ViewBuilder picture: () -> some View) -> some View {
+        let selected = model.selection == id && window.selectedTool == nil
+        return Button { select(.conversation(id)) } label: {
+            VStack(spacing: 4) {
+                picture().frame(width: 36, height: 36).modifier(UnreadMark(model: model, id: id))
+                Text(name).font(.caption.weight(model.countsAsUnread(id) ? .semibold : .regular))
+                    .lineLimit(2).multilineTextAlignment(.center)
+            }
+            .padding(4).frame(maxWidth: .infinity)
+            .background(Color.primary.opacity(selected ? 0.1 : 0), in: .rect(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help(name)
     }
 }
 

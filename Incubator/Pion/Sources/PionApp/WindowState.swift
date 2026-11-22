@@ -48,6 +48,36 @@ import SwiftUI
     var sheet: Sheet?
     /// The tool whose page is shown where a conversation would be, picked in the sidebar; picking a conversation clears it.
     var selectedTool: UUID?
+
+    enum SidebarItem: Hashable {
+        case conversation(UUID), tool(UUID)
+    }
+
+    func sidebarItem(in model: PionModel) -> SidebarItem? {
+        selectedTool.map(SidebarItem.tool) ?? model.selection.map(SidebarItem.conversation)
+    }
+
+    func selectSidebarItem(_ item: SidebarItem?, in model: PionModel, fromKeyboard: Bool) {
+        switch item {
+        case .conversation(let id):
+            selectedTool = nil
+            if model.selection != id {
+                selectedFromKeyboard = fromKeyboard
+                model.selection = id
+            } else if !fromKeyboard {
+                composerFocusRequest = UUID()
+            }
+        case .tool(let id):
+            selectedFromKeyboard = false
+            selectedTool = id
+            model.selection = nil
+        case nil:
+            selectedFromKeyboard = false
+            selectedTool = nil
+            model.selection = nil
+        }
+    }
+
     var showsInspector = true
     var inspectorTab: InspectorTab = .caseRecord
     /// Asks the composer of the selected conversation to take the keyboard.
