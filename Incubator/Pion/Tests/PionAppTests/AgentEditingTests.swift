@@ -216,19 +216,39 @@ import XCTest
     func testAnAgentOpensAnInvestigationItLeads() throws {
         let avery = try agent("Avery"), morgan = try agent("Morgan")
         let opened = try model.open(byAgent: avery.id, .init(title: "Domain-wide project creation",
-                                                             objective: "Restrict who can create projects.", team: ["morgan"]))
+                                                             objective: "Restrict who can create projects."))
         XCTAssertEqual(model.conversation(opened.id)?.lead, avery.id)
-        XCTAssertEqual(Set(model.conversation(opened.id)?.participantIDs ?? []), [avery.id, morgan.id])
+        XCTAssertEqual(model.conversation(opened.id)?.participantIDs, [avery.id], "the opener brings in others itself, as its lead")
         XCTAssertEqual(opened.champion, model.champion)
         XCTAssertEqual(model.store.audit(opened.id).first?.actor, .agent(avery.id))
         XCTAssertTrue(model.messages(in: opened.id).isEmpty, "a message was posted in the champion's name")
 
-        XCTAssertThrowsError(try model.open(byAgent: avery.id, .init(title: "Other", objective: "x", team: ["Nobody"])))
-        for index in 1...2 { _ = try model.open(byAgent: avery.id, .init(title: "Lead \(index)", objective: "x", team: [])) }
-        XCTAssertThrowsError(try model.open(byAgent: avery.id, .init(title: "One too many", objective: "x", team: [])),
+        for index in 1...2 { _ = try model.open(byAgent: avery.id, .init(title: "Lead \(index)", objective: "x")) }
+        XCTAssertThrowsError(try model.open(byAgent: avery.id, .init(title: "One too many", objective: "x")),
                              "an agent opened a fourth Investigation within the hour")
-        XCTAssertNoThrow(try model.open(byAgent: morgan.id, .init(title: "Morgan's", objective: "x", team: [])))
-        XCTAssertThrowsError(try model.open(byAgent: UUID(), .init(title: "Stranger", objective: "x", team: [])))
+        XCTAssertNoThrow(try model.open(byAgent: morgan.id, .init(title: "Morgan's", objective: "x")))
+        XCTAssertThrowsError(try model.open(byAgent: UUID(), .init(title: "Stranger", objective: "x")))
+    }
+
+    /// An Investigation's lead brings in an agent it works with and takes one out; the audit log says the lead did,
+    /// and Pion's own view of the team follows.
+    func testALeadsChangesToTheTeamAreAudited() throws {
+        let avery = try agent("Avery"), morgan = try agent("Morgan")
+        _ = try model.createGroup(name: "Triage", description: nil, members: [avery.id, morgan.id])
+        let opened = try model.open(byAgent: avery.id, .init(title: "Beacon", objective: "Find the beacon."))
+
+        let added = try model.repository.changeGroupMembers(conversationID: opened.id, by: avery.id, adding: morgan.id)
+        model.leadChangedMembers(from: added.before, to: added.after, by: avery.id)
+        XCTAssertEqual(Set(model.conversation(opened.id)?.participantIDs ?? []), [avery.id, morgan.id])
+        let invited = try XCTUnwrap(model.store.audit(opened.id).last)
+        XCTAssertEqual(invited.actor, .agent(avery.id))
+        XCTAssertEqual(invited.event, "staff")
+        XCTAssertTrue(invited.detail.contains("Morgan"), invited.detail)
+
+        let removed = try model.repository.changeGroupMembers(conversationID: opened.id, by: avery.id, removing: morgan.id)
+        model.leadChangedMembers(from: removed.before, to: removed.after, by: avery.id)
+        XCTAssertEqual(model.conversation(opened.id)?.participantIDs, [avery.id])
+        XCTAssertTrue(try XCTUnwrap(model.store.audit(opened.id).last).detail.contains("Removed Morgan"))
     }
 
     /// The champion hears of an Investigation an agent opens as soon as it is opened, whether or not the agent posts
@@ -239,7 +259,7 @@ import XCTest
         model.onAgentOpenedInvestigation = { announced.append(($0, $1)) }
         _ = try model.open(.init(title: "Champion's own", lead: avery.id))
         XCTAssertTrue(announced.isEmpty, "the champion was told of an Investigation they opened")
-        let opened = try model.open(byAgent: avery.id, .init(title: "Beacon", objective: "Find the beacon.", team: []))
+        let opened = try model.open(byAgent: avery.id, .init(title: "Beacon", objective: "Find the beacon."))
         XCTAssertEqual(announced.map(\.0.id), [opened.id])
         XCTAssertEqual(announced.map(\.1.id), [avery.id])
     }

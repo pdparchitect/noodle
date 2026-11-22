@@ -81,7 +81,9 @@ tools, with a red dot on any that needs you to sign in.
 
 An Investigation is a conversation with its team, with an objective, a status, a severity
 and a case record. One agent leads it; you own it. It starts unassessed until the lead sets
-its severity from the evidence. The toolbar sets its status and edits its title, objective
+its severity from the evidence. The lead can bring in agents it already works with in
+another group or Investigation, and take out those whose part is done; the Audit Log says
+who it added or removed. The toolbar sets its status and edits its title, objective
 and team. **Investigation → Close Investigation…** closes it as a false positive, resolved
 or handed off, with a note; its agents can still read it, but no longer post or record in it.
 

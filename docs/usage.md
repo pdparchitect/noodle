@@ -29,6 +29,11 @@ answer or hand the message to one of them before they all reply. A bot you @ment
 hears it straight away. A group has no lead until you choose one, and groups on a
 Noodle Hub can't have one yet.
 
+A lead can also add a bot to the group when its work is needed, and take a member out
+once its part is done. It can add only bots it already shares a group with, so a bot
+you keep apart from it is never brought in, and it never removes itself. The group
+shows each change as it happens, and you can still change the members yourself.
+
 ## Keep conversations in separate windows
 
 Right-click a bot or group in the sidebar and choose **Open in New Window**.

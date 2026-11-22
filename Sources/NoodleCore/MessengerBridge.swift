@@ -75,6 +75,9 @@ public final class MessengerBroker: @unchecked Sendable {
     /// Why a conversation takes nothing from bots, for one the app has closed to them; nil for one that takes posts.
     /// Bots can still read it.
     public var refusingPosts: (@Sendable (UUID) -> String?)?
+    /// Called on the broker's queue once a group's lead added or removed a member, with the group before and after
+    /// and the lead, so the app wakes the members and starts the new one. Without one, leads change no one here.
+    public var onGroupMembersChanged: (@Sendable (BotConversation, BotConversation, UUID) -> Void)?
 
     public init(repository: WorkspaceRepository) { self.repository = repository }
     deinit { timer?.cancel() }
@@ -152,7 +155,8 @@ public final class MessengerBroker: @unchecked Sendable {
 
     private func perform(_ request: MessengerBridgeRequest, for agent: AgentRecord) -> MessengerCommandResult {
         let posting: UUID? = switch request.action {
-        case .send(let id, _, _), .react(let id, _, _, _), .effect(let id, _, _): id
+        case .send(let id, _, _), .react(let id, _, _, _), .effect(let id, _, _),
+             .addParticipant(let id, _), .removeParticipant(let id, _): id
         default: nil
         }
         if let posting, let reason = refusingPosts?(posting) {
@@ -160,6 +164,14 @@ public final class MessengerBroker: @unchecked Sendable {
         }
         if case .requestCall = request.action, onCallRequested == nil {
             return .init(exitCode: 2, standardError: "messenger: Calls are not available where you run. Send a message instead.\n")
+        }
+        switch request.action {
+        case .listBots, .addParticipant, .removeParticipant:
+            guard let onGroupMembersChanged else {
+                return .init(exitCode: 2, standardError: "messenger: Leads cannot change a group's members where you run. Ask the person instead.\n")
+            }
+            return changeMembers(request.action, for: agent, then: onGroupMembersChanged)
+        default: break
         }
         let response = MessengerCLI.perform(request.action, repository: repository, agentID: agent.id, brokered: true)
         if case .setStatus = request.action, response.exitCode == 0 { onAgentChanged?(agent.id) }
@@ -170,6 +182,21 @@ public final class MessengerBroker: @unchecked Sendable {
         default: break
         }
         return response
+    }
+
+    /// Done here rather than in `MessengerCLI.perform`, which cannot hand the app the group as it was.
+    private func changeMembers(_ action: MessengerAction, for agent: AgentRecord,
+                               then changed: @Sendable (BotConversation, BotConversation, UUID) -> Void) -> MessengerCommandResult {
+        do {
+            let edit: (before: BotConversation, after: BotConversation)
+            switch action {
+            case .addParticipant(let id, let bot): edit = try repository.changeGroupMembers(conversationID: id, by: agent.id, adding: bot)
+            case .removeParticipant(let id, let bot): edit = try repository.changeGroupMembers(conversationID: id, by: agent.id, removing: bot)
+            default: return MessengerCLI.perform(action, repository: repository, agentID: agent.id, brokered: true)
+            }
+            if edit.before.participantIDs != edit.after.participantIDs { changed(edit.before, edit.after, agent.id) }
+            return .json(try repository.participantRoster(for: agent.id, conversationID: edit.after.id))
+        } catch { return .init(exitCode: 2, standardError: "messenger: \(error.localizedDescription)\n") }
     }
 
     private func respond(_ response: MessengerCommandResult, stem: String, in mailbox: WorkspaceMailbox) {

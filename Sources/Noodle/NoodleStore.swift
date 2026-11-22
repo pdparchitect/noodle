@@ -414,6 +414,11 @@ final class NoodleStore {
             Task { @MainActor in self?.reloadTasks(of: id); self?.thisMac.hub?.bots.tasksChanged(of: id) }
         }
         messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
+        messenger.onGroupMembersChanged = { [weak self] before, after, _ in
+            Task { @MainActor in
+                do { try self?.groupEdited(from: before, to: after) } catch { self?.errorMessage = error.localizedDescription }
+            }
+        }
         connectApprovals()
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         // A call from a bot here was answered, declined or missed on the owner's phone.
@@ -1776,25 +1781,27 @@ final class NoodleStore {
                 existingAgents: agents,
                 folders: folders
             )
-            let before = conversations.first { $0.id == conversation.id } ?? conversation
-            if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
-                conversations[index] = updated
-                conversations.sort { $0.updatedAt > $1.updatedAt }
-            }
-            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
-            if BotConversation.editWakesMembers(from: before, to: updated) {
-                messagesByConversation[conversation.id] = try repository.loadMessages(
-                    conversationID: conversation.id
-                )
-                runtime.notify(participants(for: updated), repository: repository)
-            }
+            try groupEdited(from: conversations.first { $0.id == conversation.id } ?? conversation, to: updated)
             groupBeingEdited = nil
-            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// After a group's edit is saved, by the person or by its lead: its bots learn of it, as a new member does.
+    private func groupEdited(from before: BotConversation, to updated: BotConversation) throws {
+        if let index = conversations.firstIndex(where: { $0.id == updated.id }) {
+            conversations[index] = updated
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+        }
+        restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
+        if BotConversation.editWakesMembers(from: before, to: updated) {
+            messagesByConversation[updated.id] = try repository.loadMessages(conversationID: updated.id)
+            runtime.notify(participants(for: updated), repository: repository)
+        }
+        refreshAppShortcuts()
     }
 
     @discardableResult

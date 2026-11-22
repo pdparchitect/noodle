@@ -150,7 +150,7 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual((open["inputSchema"] as? [String: Any])?["required"] as? [String], ["title", "objective"], "opening one needs no Investigation")
 
         let data = try await provider.call("open", arguments: JSONSerialization.data(withJSONObject: [
-            "title": "Domain-wide project creation", "objective": "Restrict it.", "team": ["Morgan"]]), files: [],
+            "title": "Domain-wide project creation", "objective": "Restrict it."]), files: [],
             context: ToolCallContext(agentID: opener, workspace: root))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let text = ((object["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
@@ -158,7 +158,9 @@ final class PionCoreTests: XCTestCase {
         let conversation = try XCTUnwrap((object["structuredContent"] as? [String: Any])?["conversation"] as? String)
         XCTAssertEqual(store.audit(try XCTUnwrap(UUID(uuidString: conversation))).first?.actor, .agent(opener))
         XCTAssertEqual(asked.agent, opener)
-        XCTAssertEqual(asked.opening?.team, ["Morgan"])
+        XCTAssertEqual(asked.opening?.title, "Domain-wide project creation")
+        XCTAssertNil((open["inputSchema"] as? [String: Any]).flatMap { ($0["properties"] as? [String: Any])?["team"] },
+                     "an opener could name any agent to join")
 
         // Without the Pion's say, agents may not.
         let closed = CaseToolProvider(store: store, leadOf: { _ in nil }) { _ in "Rafe" }

@@ -248,6 +248,7 @@ final class MessengerDocumentationTests: XCTestCase {
             switch command {
             case .help, .listEffects, .getLatest, .listConversations: options = []
             case .tool: continue // Needs the app's tool bridge; covered by ToolCLITests.
+            case .listBots, .addParticipant, .removeParticipant: continue // Needs a group lead; covered by LeadMembershipTests.
             case .effect: options = ["confetti"] + conversation
             case .listMessages, .listParticipants: options = conversation
             case .react, .unreact: options = conversation + ["--message", message.id.uuidString, "--emoji", "✅"]
