@@ -118,6 +118,11 @@ public struct ServiceResult: Sendable {
         self.text = text
         self.structured = try JSONEncoder().encode(structured)
     }
+
+    private init(text: String, encoded: Data?) { self.text = text; structured = encoded }
+
+    /// The same result with `notice` after its text, such as what a search left out.
+    func adding(_ notice: String) -> ServiceResult { ServiceResult(text: text + notice, encoded: structured) }
 }
 
 /// Why an operation could not finish, said so the bot can act on it.
@@ -318,10 +323,10 @@ public enum ServiceInput {
     }
 
     /// A value that goes inside quotes in a service's filter, refused when it holds a quote, backslash or line
-    /// break that could end it early.
-    public static func quoted(_ value: String, _ name: String) throws -> String {
+    /// break that could end it early. `limit` is for values that run long, such as a full resource ID.
+    public static func quoted(_ value: String, _ name: String, limit: Int = 200) throws -> String {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, value.count <= 200, !value.contains(where: { $0 == "'" || $0 == "\"" || $0 == "\\" || $0.isNewline }) else {
+        guard !value.isEmpty, value.count <= limit, !value.contains(where: { $0 == "'" || $0 == "\"" || $0 == "\\" || $0.isNewline }) else {
             throw ServiceError.input("Give \(name) without quotes or backslashes.")
         }
         return value
@@ -458,10 +463,11 @@ public struct ServiceClient: Sendable {
     }
 
     /// A request and its answer with the response, for an operation that needs its headers, such as a cookie that
-    /// later requests of the same job must carry.
+    /// later requests of the same job must carry. An answer whose status is in `returning`, such as 412 for a
+    /// condition not met, comes back for the operation to read rather than failing.
     public func exchange(_ path: [String], query: [String: String?] = [:], repeated: [String: [String]] = [:], method: String = "GET", body: Data? = nil,
                          contentType: String = "application/json; charset=utf-8", trailingSlash: Bool = false,
-                         headers: [String: String] = [:]) async throws -> (data: Data, response: HTTPURLResponse) {
+                         headers: [String: String] = [:], returning: Set<Int> = []) async throws -> (data: Data, response: HTTPURLResponse) {
         for part in path where part.isEmpty || part == "." || part == ".." || part.contains(where: { "/?#\\".contains($0) }) {
             throw ServiceError.input("\"\(part)\" is not a valid value here.")
         }
@@ -485,6 +491,7 @@ public struct ServiceClient: Sendable {
         }
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
+        if returning.contains(response.statusCode) { return (data, response) }
         // Google says a quota ran out with a 403, which is no missing permission.
         if ToolConnectionAccess.isQuotaRefusal(response.statusCode, data) { throw ServiceError.rateLimited(Self.reason(data)) }
         if explainsRefusals, response.statusCode == 401 || response.statusCode == 403, let reason = Self.reason(data) {
@@ -600,7 +607,8 @@ public enum PionAdapters {
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
-                                                                  "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "google-workspace": GoogleWorkspace.adapter,
+                                                                  "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "azure-containment": Azure.containmentAdapter,
+                                                                  "google-workspace": GoogleWorkspace.adapter,
                                                                   "google-workspace-containment": GoogleWorkspace.containmentAdapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
                                                                   "tenable": Tenable.adapter, "censys": Censys.adapter, "grafana": Grafana.adapter, "sentry": Sentry.adapter]

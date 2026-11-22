@@ -126,13 +126,14 @@ to the agents that should use it.
 | **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Security, Google Cloud Audit, Microsoft Azure, Cloudflare Security, Wiz, GitHub |
+| **Cloud and code** | AWS Security, Google Cloud Audit, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Security, Wiz, GitHub |
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
 Center and covers every account you are assigned; Google Cloud Audit and both Google Workspace
 tools sign in with your Google account; GitHub signs in with a code, through an OAuth app your
-organisation registers. Microsoft Azure uses an app registration's client ID and secret, with
-read-only access to one subscription per account.
+organisation registers. Microsoft Azure Audit and Microsoft Azure Containment each use an app
+registration's client ID and secret, one subscription per account: the audit app only reads, and
+the containment app holds a custom role with only the actions it takes.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.
