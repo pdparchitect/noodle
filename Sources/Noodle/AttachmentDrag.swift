@@ -22,7 +22,7 @@ enum AttachmentDrag {
     ) throws -> (provider: NSItemProvider, file: URL) {
         let exportedURL = try exportedFile(for: attachment, fileURL: fileURL, temporaryDirectory: temporaryDirectory)
         let provider = NSItemProvider()
-        provider.suggestedName = filename
+        provider.suggestedName = exportedURL.lastPathComponent
         let mediaType = UTType(mimeType: attachment.mediaType)
         let contentType = mediaType.flatMap { $0 == .data || $0.isDynamic ? nil : $0 }
             ?? UTType(filenameExtension: exportedURL.pathExtension)
