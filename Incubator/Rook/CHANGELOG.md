@@ -2,10 +2,11 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
 ### Added
 
 - Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
-
 - A Mission's lead can bring in agents it already works with in another group or Mission, and take out those whose part is done, so a Mission an agent opens no longer stays with that agent alone. The Audit Log records each change in the lead's name. A group's lead can do the same in its group.
 
 ### Changed

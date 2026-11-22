@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.93.0] - 2026-11-22
+
 ### Added
 
 - Approvals: a bot's call to a tool its service marks destructive, such as suspending a user or deleting something, waits for you instead of running. It shows in a new Approvals section at the top of the sidebar, which stays there while anything waits, with exactly what will run and the bot's reason; approve or decline it there or from its notification, which comes through even with Noodle in front. The Dock counts it too. The bot is told the outcome. Ordinary changes, and tools whose service does not mark them destructive, run as before. Bots on a Hub you joined, and those your phone reaches through This Mac as a Hub, ask the same way, and This Mac as a Hub notifies your phone of each one while it is away.

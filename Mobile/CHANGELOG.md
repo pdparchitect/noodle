@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-11-22
+
 ### Added
 
 - Approvals: a call one of your bots holds for you, such as suspending a user, shows in a new Approvals section at the top of the conversation list, with exactly what will run and the bot's reason. Tap it to approve or decline. The section shows every Hub's, whatever space is shown.
@@ -9,7 +11,6 @@
 - A Metal shader can be a conversation's background, playing behind the messages: touch and hold a `.metal` file in a conversation and choose Use as Background, or choose Copy File and paste it in the conversation's Background settings. Shaders chosen on the Mac show here too. It holds still with Reduce Motion or Low Power Mode.
 - Quick Look plays `.metal` shader files and shows a still of each as its thumbnail.
 - Paste in a conversation's Background settings sets a copied picture, video or Metal shader as its background, for every device.
-
 - A group can have a lead: in Group Info, touch and hold a member and choose Make Lead. A star marks it. The lead hears your messages a moment before the other bots, and can bring in bots it already works with in another group and take members out; the group shows each change.
 
 ### What to Test

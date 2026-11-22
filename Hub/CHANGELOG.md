@@ -2,12 +2,13 @@
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-11-22
+
 ### Added
 
 - Approvals: a bot's call to a tool its service marks destructive waits on the Hub for its owner instead of running. The owner's devices list it with the bot and approve or decline it; an approved one runs on the Hub once, and the bot is told the outcome. Someone a bot is shared with never sees its approvals. The owner's phones away from the Hub are notified of each one, and the notification is taken back once it is decided.
 - A conversation's background can be a Metal shader, set from Noodle on the Mac or Noodle Mobile; the Hub checks that it compiles and passes it to every device.
 - Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
-
 - A group can have a lead, chosen in Group Info on the Mac or on iPhone: it hears its person's messages a moment before the other bots, and can add bots it already shares a group with and take members out. Your devices show who leads, and hear of each change.
 
 ### Changed
