@@ -6,6 +6,7 @@ let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.0.0"
 
 /// Quick Look's preview or thumbnail of Metal shader files, which conversations use as backgrounds; the Mac has the same two.
+/// Not built into the app yet: each needs its App ID and App Store provisioning profile first.
 func quickLookExtension(_ kind: String, point: String, principal: String, attributes: [String: Plist.Value] = [:]) -> Target {
     .target(
         name: "NoodleMobileShader\(kind)",
@@ -105,8 +106,7 @@ let project = Project(
             dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore"), .package(product: "NoodleBrand"),
                            .package(product: "NoodletRuntime"), .package(product: "NoodlePatch"),
                            .target(name: "NoodleMobileNotifications"), .target(name: "NoodleMobileShare"),
-                           .target(name: "NoodleMobileWidgets"), .target(name: "NoodleMobileShaderPreview"),
-                           .target(name: "NoodleMobileShaderThumbnail")],
+                           .target(name: "NoodleMobileWidgets")],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(MOBILE_APP_BUNDLE_ID)",
                 "CODE_SIGN_STYLE": "Automatic",
@@ -201,9 +201,6 @@ let project = Project(
                 "CODE_SIGN_STYLE": "Automatic",
             ])
         ),
-        quickLookExtension("Preview", point: "com.apple.quicklook.preview", principal: "ShaderPreviewController"),
-        quickLookExtension("Thumbnail", point: "com.apple.quicklook.thumbnail", principal: "ShaderThumbnailProvider",
-                           attributes: ["QLThumbnailMinimumDimension": 0]),
         // Runs inside the app, so it sees the bundle as the phone does.
         .target(
             name: "NoodleMobileTests",
