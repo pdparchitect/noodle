@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Microsoft Azure in Settings › Tools › Add Tools, each subscription added with an app registration's client ID and secret: agents read its activity log, Microsoft Defender for Cloud alerts, resources and role assignments. New high-severity Defender for Cloud alerts wake the agents it is assigned to.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added

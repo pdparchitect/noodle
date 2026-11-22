@@ -101,7 +101,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **An Audit Log** of every change to the case, only ever added to.
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
-- **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Sentinel, CrowdStrike,
+- **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike,
   SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Read-only lookups**: agents investigate; changes to a system are yours to make.
@@ -123,12 +123,13 @@ to the agents that should use it.
 | **Identity** | Okta, Microsoft Entra ID, Google Workspace |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Security, Google Cloud, Cloudflare Security, Wiz, GitHub |
+| **Cloud and code** | AWS Security, Google Cloud, Microsoft Azure, Cloudflare Security, Wiz, GitHub |
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
 Center and covers every account you are assigned; Google Cloud and Google Workspace sign
 in with your Google account; GitHub signs in with a code, through an OAuth app your
-organisation registers.
+organisation registers. Microsoft Azure uses an app registration's client ID and secret, with
+read-only access to one subscription per account.
 
 ## License
 

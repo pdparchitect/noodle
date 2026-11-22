@@ -569,7 +569,7 @@ public enum PionAdapters {
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
-                                                                  "google-cloud": GoogleCloud.adapter, "google-workspace": GoogleWorkspace.adapter,
+                                                                  "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "google-workspace": GoogleWorkspace.adapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
                                                                   "tenable": Tenable.adapter, "censys": Censys.adapter, "grafana": Grafana.adapter, "sentry": Sentry.adapter]
 }
