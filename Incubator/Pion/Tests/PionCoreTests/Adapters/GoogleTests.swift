@@ -62,18 +62,22 @@ final class GoogleTests: XCTestCase {
         service.sequences["/v2/entries:list"] = [
             (200, #"{"entries":[{"timestamp":"2026-11-14T09:00:00Z","logName":"organizations/123456789/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"methodName":"SetIamPolicy","serviceName":"cloudresourcemanager.googleapis.com","resourceName":"projects/kestrel-prod","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"requestMetadata":{"callerIp":"203.0.113.77"},"status":{}}}],"nextPageToken":"page-2"}"#),
             (200, #"{"entries":[{"timestamp":"2026-11-14T08:00:00Z","logName":"projects/kestrel-prod/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"methodName":"google.iam.admin.v1.CreateServiceAccountKey","resourceName":"projects/-/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"requestMetadata":{"callerIp":"203.0.113.77"},"status":{}}}]}"#),
+            // The project pending deletion, searched on its own.
+            (200, #"{"entries":[]}"#),
         ]
         let logs = try await callTool(GoogleCloud.adapter, "audit-logs", #"{"principal":"mallory@kestrel.example","since":"2026-11-13T00:00:00Z","limit":20}"#, on: service, in: cloud)
         XCTAssertFalse(logs.isError, logs.text)
         XCTAssertTrue(logs.text.contains("SetIamPolicy by mallory@kestrel.example from 203.0.113.77"), logs.text)
         XCTAssertTrue(logs.text.contains("CreateServiceAccountKey by mallory@kestrel.example from 203.0.113.77 on projects/-/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com in projects/kestrel-prod"), logs.text)
         let searches = service.requests.filter { $0.url?.host == "logging.googleapis.com" }
-        XCTAssertEqual(searches.count, 2, "the second page was not read")
+        XCTAssertEqual(searches.count, 3, "the second page, or the project pending deletion, was not read")
         let body = try json(searches.first)
         XCTAssertEqual(body["resourceNames"] as? [String], ["organizations/123456789", "projects/kestrel-prod"], "a live project's logs were left out, or a deleted one's put in")
+        XCTAssertEqual(try json(searches.last)["resourceNames"] as? [String], ["projects/kestrel-old"], "a project pending deletion was not searched apart")
+        XCTAssertTrue(logs.text.contains("Searched, though pending deletion: projects/kestrel-old"), logs.text)
         // Named logs, which Logging finds by index, rather than a search through every log's name.
         XCTAssertEqual(body["filter"] as? String,
-            #"(log_id("cloudaudit.googleapis.com/activity") OR log_id("cloudaudit.googleapis.com/data_access") OR log_id("cloudaudit.googleapis.com/system_event") OR log_id("cloudaudit.googleapis.com/policy") OR log_id("cloudaudit.googleapis.com/access_transparency")) AND protoPayload.authenticationInfo.principalEmail="mallory@kestrel.example" AND timestamp>="2026-11-13T00:00:00Z""#)
+            #"(log_id("cloudaudit.googleapis.com/activity") OR log_id("cloudaudit.googleapis.com/data_access") OR log_id("cloudaudit.googleapis.com/system_event") OR log_id("cloudaudit.googleapis.com/policy") OR log_id("cloudaudit.googleapis.com/access_transparency")) AND (protoPayload.authenticationInfo.principalEmail="mallory@kestrel.example" OR protoPayload.authenticationInfo.serviceAccountDelegationInfo.firstPartyPrincipal.principalEmail="mallory@kestrel.example") AND timestamp>="2026-11-13T00:00:00Z""#)
         XCTAssertEqual(body["orderBy"] as? String, "timestamp desc")
         XCTAssertEqual(body["pageSize"] as? Int, 20)
         XCTAssertEqual(try json(searches.dropFirst().first)["pageToken"] as? String, "page-2")
@@ -152,24 +156,26 @@ final class GoogleTests: XCTestCase {
         XCTAssertFalse(findings.isError, findings.text)
         XCTAssertTrue(findings.text.contains("PUBLIC_BUCKET_ACL"), findings.text)
         XCTAssertTrue(findings.text.contains("payroll-exports"), findings.text)
-        XCTAssertEqual(queryItems(service.requests.first)["filter"], #"state="ACTIVE" AND (severity="HIGH" OR severity="CRITICAL")"#)
+        XCTAssertEqual(queryItems(service.requests.first)["filter"], #"state="ACTIVE" AND NOT mute="MUTED" AND (severity="HIGH" OR severity="CRITICAL")"#)
         XCTAssertEqual(service.requests.first?.url?.host, "securitycenter.googleapis.com")
     }
 
     func testCloudsTriggerFindsHighAndCriticalFindingsSinceATime() async throws {
         let service = FakeService()
-        service.answers["/v2/organizations/123456789/sources/-/findings"] = (200, #"{"listFindingsResults":[{"finding":{"name":"organizations/123456789/sources/1/findings/f2","eventTime":"2026-11-19T09:14:22.500Z"}},{"finding":{"name":"organizations/123456789/sources/1/findings/f1","eventTime":"2026-11-19T09:11:00Z"}}]}"#)
+        service.answers["/v2/organizations/123456789/sources/-/findings"] = (200, #"{"listFindingsResults":[{"finding":{"name":"organizations/123456789/sources/1/findings/f2","severity":"HIGH","eventTime":"2026-11-19T09:14:22.500Z"}},{"finding":{"name":"organizations/123456789/sources/1/findings/f1","severity":"HIGH","eventTime":"2026-11-19T09:11:00Z"}}]}"#)
+        service.answers["/v1/organizations/123456789/assets"] = (200, #"{"assets":[]}"#)
+        service.answers["/v2/entries:list"] = (200, "{}")
         let since = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-19T09:00:00Z"))
         let findings = try await GoogleCloud.adapter.alerts(since: since, connection: cloud, access: service)
         XCTAssertEqual(findings.map(\.id), ["organizations/123456789/sources/1/findings/f2", "organizations/123456789/sources/1/findings/f1"])
-        let query = queryItems(service.requests.last)
-        XCTAssertEqual(query["filter"], #"state="ACTIVE" AND (severity="HIGH" OR severity="CRITICAL") AND event_time>="2026-11-19T09:00:00Z""#)
+        let query = queryItems(service.requests.first { $0.url?.host == "securitycenter.googleapis.com" })
+        XCTAssertEqual(query["filter"], #"state="ACTIVE" AND NOT mute="MUTED" AND (create_time>="2026-11-19T09:00:00Z" OR event_time>="2026-11-19T09:00:00Z") AND severity="CRITICAL""#)
         XCTAssertEqual(query["pageSize"], String(ServiceAlert.most))
-        XCTAssertEqual(GoogleCloud.adapter.watchedTool, "scc-findings")
+        XCTAssertEqual(GoogleCloud.adapter.watchedTool, "security-events")
 
-        // The window a wake names can be read back with the findings operation.
+        // The window a wake names can be read back with the findings operation too.
         _ = try await callTool(GoogleCloud.adapter, "scc-findings", #"{"since":"2026-11-19T09:00:00Z"}"#, on: service, in: cloud)
-        XCTAssertEqual(queryItems(service.requests.last)["filter"], #"state="ACTIVE" AND (severity="CRITICAL" OR severity="HIGH") AND event_time>="2026-11-19T09:00:00Z""#)
+        XCTAssertEqual(queryItems(service.requests.last)["filter"], #"state="ACTIVE" AND NOT mute="MUTED" AND (severity="CRITICAL" OR severity="HIGH") AND event_time>="2026-11-19T09:00:00Z""#)
     }
 
     func testWhoHasAccessAndWhereAResourceIsThroughCloudAssetsReadOnlyMethods() async throws {
@@ -194,7 +200,8 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(access.text.contains("group:admins@kestrel.example"), "access through a group was not shown: \(access.text)")
         let asked = queryItems(service.requests.first)
         XCTAssertEqual(asked["analysisQuery.identitySelector.identity"], "user:mallory@kestrel.example")
-        XCTAssertEqual(asked["analysisQuery.options.expandGroups"], "true")
+        // The member's groups are analysed with it; Google takes no group expansion alongside a member.
+        XCTAssertNil(asked["analysisQuery.options.expandGroups"])
         let onResource = try await callTool(GoogleCloud.adapter, "iam-policies",
             #"{"resource":"//cloudresourcemanager.googleapis.com/projects/kestrel-prod","role":"roles/owner"}"#, on: service, in: project)
         XCTAssertFalse(onResource.isError, onResource.text)
@@ -219,7 +226,7 @@ final class GoogleTests: XCTestCase {
 
     func testWhatSitsInAProjectPendingDeletionIsMarkedSoItIsNotTakenForLive() async throws {
         let service = FakeService()
-        service.answers["/v1/organizations/123456789/assets?assetTypes=cloudresourcemanager.googleapis.com/Project&contentType=RESOURCE&pageSize=500"] = (200, #"""
+        service.answers["/v1/organizations/123456789/assets?assetTypes=cloudresourcemanager.googleapis.com/Project&contentType=RESOURCE&pageSize=1000"] = (200, #"""
         {"assets":[{"name":"//cloudresourcemanager.googleapis.com/projects/1001","resource":{"data":{"projectId":"kestrel-prod","lifecycleState":"ACTIVE"}}},
                    {"name":"//cloudresourcemanager.googleapis.com/projects/1002","resource":{"data":{"projectId":"kestrel-old","lifecycleState":"DELETE_REQUESTED"}}}]}
         """#)
@@ -673,7 +680,8 @@ final class GoogleTests: XCTestCase {
             ("Google Cloud", GoogleCloud.setup, ["console.cloud.google.com/apis/library/logging.googleapis.com", "console.cloud.google.com/apis/library/securitycenter.googleapis.com",
                                                  "console.cloud.google.com/apis/library/cloudasset.googleapis.com", "console.cloud.google.com/auth/overview",
                                                  "console.cloud.google.com/auth/scopes", "console.cloud.google.com/auth/clients",
-                                                 "console.cloud.google.com/iam-admin/iam"]),
+                                                 "console.cloud.google.com/iam-admin/iam", "console.cloud.google.com/iam-admin/audit",
+                                                 "admin.google.com/ac/roles"]),
         ]
         for (tool, steps, wanted) in links {
             let text = steps.joined(separator: "\n")

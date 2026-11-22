@@ -360,6 +360,9 @@ public struct ServiceClient: Sendable {
     /// request down, as AWS does for a service that is not enabled or a permission the role lacks, and that has no key
     /// to blame.
     var explainsRefusals = false
+    /// The connection it reads for, for an operation that reads what the connection's trigger kept, such as what the
+    /// watch found; nil where none is known.
+    var account: UUID? = nil
 
     /// One of the account's details, by its field's key.
     public func setting(_ key: String) throws -> String {
@@ -400,7 +403,7 @@ public struct ServiceClient: Sendable {
     /// connection's access still decides which hosts may be reached.
     public func at(host: String) throws -> ServiceClient {
         guard let base = URL(string: "https://\(host)") else { throw ServiceError.input("\(host) is not a valid host.") }
-        return ServiceClient(base: base, access: access, settings: settings, explainsRefusals: explainsRefusals)
+        return ServiceClient(base: base, access: access, settings: settings, explainsRefusals: explainsRefusals, account: account)
     }
 
     /// Sends `form` URL-encoded, for services that take their parameters that way.
@@ -531,7 +534,8 @@ public struct OperationAdapter: ToolConnectionAdapter {
 
     func alerts(since: Date, connection: ToolConnection, access: any ServiceAccess) async throws -> [ServiceAlert] {
         guard let trigger else { return [] }
-        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]),
+        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:],
+                                                                       account: connection.id),
                                        account: connection.id)
     }
 
@@ -565,7 +569,8 @@ public struct OperationAdapter: ToolConnectionAdapter {
             throw ToolConnectionError.message("This connection does not offer \(tool).")
         }
         do {
-            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
+            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:],
+                                                                      account: connection.id))
             var object: [String: Any] = ["content": [["type": "text", "text": result.text]], "isError": false]
             if let structured = result.structured { object["structuredContent"] = try JSONSerialization.jsonObject(with: structured) }
             return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])

@@ -53,6 +53,35 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertEqual(asked.values.last, now, "read from six hours before the newest event, never before watching started")
     }
 
+    /// Google Cloud's watch, where Security Command Center is not activated, wakes the agents once to say so, pointing
+    /// them at security-events, and goes on watching the audit logs rather than failing every check; the telling moves
+    /// the watch past nothing.
+    @MainActor func testGoogleCloudTellsOnceThatSecurityCommandCenterCannotBeReadAndKeepsWatchingTheAuditLogs() async throws {
+        let cloud = try GoogleCloud.preset.makeConnection(name: "Google Cloud", values: ["level": "projects", "id": "kestrel-prod", "clientID": "1234-abc.apps.googleusercontent.com"])
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let start = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-21T00:00:00Z"))
+        let service = FakeService()
+        service.answers["/v2/projects/kestrel-prod/sources/-/findings"] = (400, #"{"error":{"code":400,"message":"Security Command Center is not activated for this resource.","status":"FAILED_PRECONDITION"}}"#)
+        service.answers["/v2/entries:list"] = (200, #"{"entries":[{"insertId":"key","timestamp":"2026-11-21T08:00:00Z","logName":"projects/kestrel-prod/logs/cloudaudit.googleapis.com%2Factivity","protoPayload":{"serviceName":"iam.googleapis.com","methodName":"google.iam.admin.v1.CreateServiceAccountKey","resourceName":"projects/-/serviceAccounts/1","authenticationInfo":{"principalEmail":"mallory@kestrel.example"},"status":{}}}]}"#)
+        let asked = SinceLog()
+        let watcher = AlertWatcher(file: file, alerts: { connection, since in
+            asked.add(since)
+            return try await GoogleCloud.adapter.alerts(since: since, connection: connection, access: service)
+        })
+        watcher.adapters = PionAdapters.all
+        var woken: [String] = []
+        var checked = await watcher.check([(cloud, [UUID()])], keeping: [], at: start) { woken.append($1) }
+        XCTAssertEqual(checked, [cloud.id: .started])
+        checked = await watcher.check([(cloud, [UUID()])], keeping: [], at: start.addingTimeInterval(20 * 3_600)) { woken.append($1) }
+        XCTAssertEqual(checked, [cloud.id: .found("2 new alerts")], "the key made and Security Command Center that cannot be read")
+        XCTAssertTrue(woken.first?.contains(#"tool="security-events""#) == true && woken.first?.contains(#"since="2026-11-21T00:00:00Z""#) == true, "\(woken)")
+        XCTAssertTrue(watcher.skillText(for: cloud)?.contains("Read them with `security-events`") == true)
+        checked = await watcher.check([(cloud, [UUID()])], keeping: [], at: start.addingTimeInterval(20 * 3_600 + 300)) { woken.append($1) }
+        XCTAssertEqual(checked, [cloud.id: .nothingNew], "told again, or the check failed")
+        XCTAssertEqual(asked.values.last, start.addingTimeInterval(2 * 3_600), "read from six hours before the newest event, not from now")
+    }
+
     /// A Workspace report the watch is refused for good wakes the agents once, so they learn the watch cannot read it,
     /// and the checks after it go on rather than failing every time.
     @MainActor func testWorkspaceTellsOnceOfAReportItCannotRead() async throws {
