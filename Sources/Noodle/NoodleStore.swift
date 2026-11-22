@@ -2254,6 +2254,7 @@ final class NoodleStore {
             return try await self.tools.decide(approval: approval.id, of: agent.id, approve: approve, by: self.ownerName(),
                                                repository: self.repository)
         }
+        approvals.withdrawNotification = { AgentNotifications.withdrawApproval($0) }
         approvals.onPending = { approval, agent in AgentNotifications.postApproval(approval, from: agent) }
         approvals.onDecided = { [weak self] approval, agent in
             guard let self, self.hubMirror(forAgent: agent.id) == nil else { return }

@@ -19,6 +19,7 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
             AgentNotifications.post(replies: messages, agent: { model.agent($0) }, conversation: { model.conversation($0) })
         }
         model.onNotificationsNarrowed = { AgentNotifications.withdraw(conversation: $0) }
+        model.approvals.withdrawNotification = { AgentNotifications.withdrawApproval($0) }
         model.onApprovalHeld = { AgentNotifications.postApproval($0, from: $1) }
         // An agent opening an Investigation shows even with Pion in front, whether or not the agent posts in it.
         model.onAgentOpenedInvestigation = { investigation, agent in
