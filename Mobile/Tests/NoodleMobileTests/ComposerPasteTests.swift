@@ -1,5 +1,6 @@
 import Foundation
 import HubLink
+import NoodleWallpaperCore
 @testable import NoodleMobile
 import Testing
 import UIKit
@@ -35,6 +36,35 @@ import UniformTypeIdentifiers
         #expect(file.filename == "Pasted Text.txt")
         #expect(file.mediaType == "text/plain")
         #expect(try String(contentsOf: file.url, encoding: .utf8) == long)
+    }
+
+    /// Copy File on a Metal shader in the conversation pastes into its Background settings as the shader.
+    @Test func aCopiedShaderPastesAsTheBackground() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("Aurora.metal")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+            #include <metal_stdlib>
+            #include <SwiftUI/SwiftUI_Metal.h>
+            using namespace metal;
+
+            [[ stitchable ]] half4 aurora(float2 position, half4 color, float2 size, float time) {
+                float2 uv = position / size;
+                return half4(half3(uv.y, 0.5h + 0.5h * half(sin(uv.x * 6.0 + time)), 1.0h - uv.y), 1.0h) * color.a;
+            }
+            """.write(to: url, atomically: true, encoding: .utf8)
+        #expect(AttachmentClipboard.isText(LinkAttachment(id: UUID(), filename: "Aurora.metal", mediaType: "application/octet-stream", byteCount: 1)))
+        let board = pasteboard()
+        defer { UIPasteboard.remove(withName: board.name) }
+
+        AttachmentClipboard.copyFile(url, named: "Aurora.metal", to: board)
+
+        let provider = try #require(board.itemProviders.first)
+        let pasted: PastedBackground = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: PastedBackground.self) { continuation.resume(with: $0) }
+        }
+        #expect(try await pasted.prepare().kind == .shader)
     }
 
     /// Copy File on a text file in the conversation pastes back as that file, named as it was, not as its text.

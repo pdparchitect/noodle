@@ -339,10 +339,15 @@ final class ChatsCacheFile: @unchecked Sendable {
 
     /// A Metal shader file, checked and compiled here first, for every device.
     func setBackground(shader file: URL, for conversation: some HubConversation) async throws {
-        let prepared = try await PreparedBackgroundFile.prepare(file)
+        try await setBackground(file: PreparedBackgroundFile.prepare(file), for: conversation)
+    }
+
+    /// A picture, video or Metal shader, checked and converted here as the Mac does, for every device.
+    func setBackground(file prepared: PreparedBackgroundFile, for conversation: some HubConversation) async throws {
         let kept = try await pairing.uploadBackground(prepared.url, to: conversation.conversationID)
-        // The phone already has what it sent.
-        if kept.mediaKind == BackgroundMediaKind.shader.rawValue, let name = kept.compactFilename {
+        // The phone already has a picture or shader it sent; a video comes down as the Hub's small copy.
+        if [BackgroundMediaKind.image, .shader].contains(prepared.kind), kept.mediaKind == prepared.kind.rawValue,
+           let name = kept.compactFilename {
             try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
             try FileManager.default.copyItem(at: prepared.url, to: backgroundsFolder.appendingPathComponent(name))

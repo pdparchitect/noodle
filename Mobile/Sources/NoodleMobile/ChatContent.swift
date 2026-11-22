@@ -1044,6 +1044,8 @@ final class PastingTextView: UITextView {
 @MainActor enum AttachmentClipboard {
     static func isText(_ attachment: LinkAttachment) -> Bool {
         guard attachment.annotation == nil else { return false }
+        // A shader copies as its file too, to paste as a conversation's background.
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) { return true }
         let ext = (attachment.filename as NSString).pathExtension
         return [UTType(mimeType: attachment.mediaType), ext.isEmpty ? nil : UTType(filenameExtension: ext)]
             .contains { $0?.conforms(to: .text) == true }

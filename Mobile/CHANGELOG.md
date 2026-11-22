@@ -4,14 +4,17 @@
 
 ### Added
 
-- A Metal shader can be a conversation's background, playing behind the messages: touch and hold a `.metal` file in a conversation and choose Use as Background. Shaders chosen on the Mac show here too. It holds still with Reduce Motion or Low Power Mode.
+- A Metal shader can be a conversation's background, playing behind the messages: touch and hold a `.metal` file in a conversation and choose Use as Background, or choose Copy File and paste it in the conversation's Background settings. Shaders chosen on the Mac show here too. It holds still with Reduce Motion or Low Power Mode.
 - Quick Look plays `.metal` shader files and shows a still of each as its thumbnail.
+- Paste in a conversation's Background settings sets a copied picture, video or Metal shader as its background, for every device.
 
 ### What to Test
 
 - Ask a bot to make you a Metal shader for a background, touch and hold the `.metal` file it sends, and choose Use as Background. The shader plays behind the conversation, on your other devices too.
 - Tap a `.metal` file: Quick Look plays it. A shader that doesn't compile shows why.
 - Turn on Reduce Motion or Low Power Mode: the background holds still.
+- Touch and hold a `.metal` file in a conversation and choose Copy File, then open the conversation's Background settings and tap Paste: the shader becomes the background, on the Mac too.
+- Copy a photo in Photos and tap Paste there: the photo becomes the background. With only text copied, Paste is off.
 
 ## [0.58.0] - 2026-11-18
 

@@ -8,8 +8,10 @@ All notable changes to Noodle are documented here, following
 
 ### Added
 
-- A Metal shader can be a conversation's background, playing behind the messages: right-click a `.metal` file in a conversation and choose Use as Background, or choose or drop one in the background editor. Ask any bot for a shader; SwiftUI colour shaders and fragment shaders both work, and one that doesn't compile shows the compiler's message. It plays at up to 30 frames a second, stops while the window is hidden, and holds still with Reduce Motion or Low Power Mode. It reaches your phone through your Noodle Hub as pictures and videos do.
+- A Metal shader can be a conversation's background, playing behind the messages: right-click a `.metal` file in a conversation and choose Use as Background, or choose, drop or paste one in the background editor. Ask any bot for a shader; SwiftUI colour shaders and fragment shaders both work, and one that doesn't compile shows the compiler's message. It plays at up to 30 frames a second, stops while the window is hidden, and holds still with Reduce Motion or Low Power Mode. It reaches your phone through your Noodle Hub as pictures and videos do.
 - Quick Look plays `.metal` shader files, in conversations and in Finder, and shows a still of each as its thumbnail.
+- Paste a background into the Conversation Background sheet: while it is open, ⌘V, or Paste in the preview's right-click menu, takes a copied picture, video or `.metal` file, or a copied image, and shows it there to apply, as a drop does. Paste is off when nothing copied can be a background, and ⌘V no longer attaches it to the conversation behind the sheet.
+- Copy on a `.metal` file in a conversation copies the file under its own name, ready to paste into the background editor, into Finder or into another conversation.
 
 ## [0.92.0] - 2026-11-21
 

@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Resolve browser and Finder drops into the same owned media used by the picker.
 public enum BackgroundDrop {
-    public static let contentTypes: [UTType] = [.fileURL, .image, .movie, .url]
+    public static let contentTypes: [UTType] = [.fileURL, .image, .movie, .metalShader, .url]
     public static let imageContentTypes: [UTType] = [.fileURL, .image, .url]
     static let maximumBytes: Int64 = 1_073_741_824
 
@@ -67,7 +67,7 @@ public enum BackgroundDrop {
                                             prepare: (URL) async throws -> Prepared) async throws -> Prepared {
         let directory = try stagingDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let suffix = type.preferredFilenameExtension
+        let suffix = type.conforms(to: .metalShader) ? "metal" : type.preferredFilenameExtension
             ?? URL(fileURLWithPath: provider.suggestedName ?? "").pathExtension
         let target = directory.appendingPathComponent("media").appendingPathExtension(suffix)
         do {

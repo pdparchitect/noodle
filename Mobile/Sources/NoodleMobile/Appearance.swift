@@ -83,8 +83,8 @@ private struct LoopingVideo: UIViewRepresentable {
     }
 }
 
-/// Picks a conversation's backdrop: the presets, a photo, or an image made with Image Playground.
-/// It applies as it is chosen, on the Hub, for every device.
+/// Picks a conversation's backdrop: the presets, a photo, an image made with Image Playground, or a
+/// picture, video or Metal shader pasted. It applies as it is chosen, on the Hub, for every device.
 struct BackgroundEditor: View {
     let chats: HubChats
     let thread: HubThread
@@ -127,6 +127,12 @@ struct BackgroundEditor: View {
                 if supportsImagePlayground {
                     Button { creating = true } label: { Label("Create Image", systemImage: "apple.image.playground") }
                 }
+                // The system's Paste control: it reads the clipboard without asking, and is off when nothing
+                // copied can be a background.
+                PasteButton(payloadType: PastedBackground.self) { pasted in
+                    guard let pasted = pasted.first else { return }
+                    Task { @MainActor in await apply(pasted) }
+                }
             }
             if busy { ProgressView() }
             if let problem { Text(problem).foregroundStyle(.red) }
@@ -159,6 +165,18 @@ struct BackgroundEditor: View {
         do {
             guard let data = try await load() else { throw ConversationBackgroundError.invalidImage }
             try await chats.setBackground(photo: data, for: thread)
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
+    /// Checked and converted as on the Mac, where it would be dropped or pasted.
+    private func apply(_ pasted: PastedBackground) async {
+        busy = true
+        problem = nil
+        defer { busy = false }
+        do {
+            try await chats.setBackground(file: pasted.prepare(), for: thread)
         } catch {
             problem = error.localizedDescription
         }
